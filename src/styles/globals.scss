@@ -510,6 +510,17 @@ span[data-label="task"] {
   max-height: calc(100svh - 107px - var(--quick-tips-h, 0px));
   height: calc(100svh - 107px - var(--quick-tips-h, 0px));
 }
+
+// HTPR-5749: the rail-off boot script (layout.tsx) sets data-rail="off" on
+// <html> before first paint so the SSR-rendered rail element (default-true
+// appShellRailAtom, no localStorage on the server) doesn't flash before
+// hydration removes it. AppShellRail's own mount effect clears the
+// attribute the instant it actually renders, so a live toggle from off to
+// on is never hidden by a stale attribute.
+html[data-rail="off"] .app-shell-rail {
+  display: none;
+}
+
 // The rail shell is a viewport-height flex column. Header rows keep their
 // intrinsic height and the board takes all remaining space, including its
 // horizontal scrollbar.
