@@ -120,6 +120,9 @@ function main() {
     const [stamp, author, subject] = metadata.trimEnd().split("\0");
     const ageSeconds = now - Number(stamp);
     if (ageSeconds > RECENT_SECONDS) continue;
+    // Repo-bootstrap commits (the open-source squash and snapshot mirrors)
+    // make ALL code look 0 days old; they are not anyone's recent work.
+    if (/^(Initial open-source release|Mirror staging @)/.test(subject)) continue;
 
     const files = new Map();
     for (const line of lines) files.set(line.file, (files.get(line.file) || 0) + 1);
