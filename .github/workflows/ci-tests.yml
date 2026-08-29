@@ -1,0 +1,496 @@
+name: CI Tests
+
+# Correctness gate that runs on free GitHub-hosted runners without using a Vercel
+# build slot. Purpose: let PRs be verified for merge without competing for the
+# Vercel build slot. This is the intended required check; the preview is not.
+#
+# It also runs on every push to `staging`. A PR can be green against the base it
+# branched from and still break once squash-merged onto a staging that has moved
+# (HTPR-4632: PR #1959 merged with ci-build SUCCESS, then failed the production
+# build). Nothing typechecked the merge result, so the first signal was a failed
+# Vercel prod deploy blocking every later release. This makes the merge commit
+# itself a checked artifact.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+  push:
+    branches: [staging]
+
+concurrency:
+  group: ci-tests-${{ github.event.pull_request.number || github.ref }}
+  # Superseded PR runs are waste, but a cancelled staging run never arms the
+  # rollback below and would strand a failing commit on production's branch.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci-tests:
+    name: ci-tests
+    # Skip drafts and bot-authored PRs (Vercel bot, dependabot); pushes always run.
+    # Review-first gate (owner, 2026-08-26): a PR run also needs the full-ci
+    # label, which the pr-feedback timer applies once claude-review is green.
+    # This makes the typecheck+test gate run once per ready PR (plus once per
+    # fix-up push after that) instead of on open and on every label event.
+    # ci-build stays a required automerge check, so an unlabeled PR simply
+    # waits: review first, then the gate, then the merge.
+    if: github.event_name == 'push' || (github.event.pull_request.draft == false && !endsWith(github.event.pull_request.user.login, '[bot]') && contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # This job checks out and executes pull request code, so it never holds a
+    # write token. The staging auto-revert is a separate push-only job.
+    permissions:
+      contents: read
+      # The fail-fast step reads the PR's labels live (see revert-guard.yml).
+      # Without this the gh call 403s, PR_LABELS falls back to [], and an
+      # intentional-revert label is silently ignored.
+      pull-requests: read
+      # "Skip the build when the review is already red" reads commit statuses
+      # for claude-review; without this the gh call 403s and aborts the job.
+      statuses: read
+    outputs:
+      test_failed: ${{ steps.test-outcome.outputs.failed }}
+    steps:
+      # Never build a commit whose review already failed (owner, 2026-08-26).
+      # This does NOT wait: a pending or absent verdict builds in parallel as
+      # normal; only an existing red verdict stops the build before it starts.
+      - name: Skip the build when the review is already red
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '[.statuses[] | select(.context=="claude-review")][0].state // "none"')
+          [ "$STATE" != "failure" ] || { echo "::error::claude-review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      # ci-build is a required status check, so path-filtered PRs must still
+      # report success (paths-ignore at the trigger level would leave it
+      # pending forever). Instead: diff against the PR base here and skip the
+      # Next.js build/test steps when every changed file is doc/worker-only.
+      # Pushes to staging always run the full build.
+      - name: Determine change scope
+        id: scope
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA" "$HEAD_SHA"
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          printf '%s\n' "$CHANGED" > "$RUNNER_TEMP/changed-files.txt"
+          echo "$CHANGED"
+          # A change to this gate itself (or the CI scripts) always runs the
+          # full pipeline once, so the edited workflow is exercised end to end.
+          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|openwiki/|docs/|\.claude/|\.github/)' \
+            || echo "$CHANGED" | grep -qE '^\.github/(workflows/ci-tests\.yml|scripts/)'; then
+            echo "build_needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        with:
+          node-version: 20
+
+      # revert-guard.yml is the authoritative check and stays untouched. This
+      # duplicates its exact invocation so a doomed PR fails in seconds instead
+      # of occupying a hosted runner for a full 20-minute build.
+      # Runs the head sha through a temporary checkout, then restores the
+      # original ref so the build steps below still build the merge commit.
+      - name: Fail fast if revert-guard would fail
+        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          # Live fetch, not the event payload: the payload freezes labels at
+          # trigger time, so intentional-revert added after the run fires (or
+          # before a rerun) was invisible and cost a retrigger commit every time.
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          PR_LABELS=$(gh api "repos/${{ github.repository }}/issues/$PR_NUMBER/labels" --jq '[.[] | {name}]') || PR_LABELS="[]"
+          export PR_LABELS
+          ORIG_SHA=$(git rev-parse HEAD)
+          git fetch --unshallow --quiet || git fetch --quiet
+          git fetch --quiet origin "$GITHUB_BASE_REF" "$PR_HEAD_SHA"
+          git checkout --quiet "$PR_HEAD_SHA"
+          STATUS=0
+          node .github/scripts/revert-guard.mjs || STATUS=$?
+          git checkout --quiet "$ORIG_SHA"
+          if [ "$STATUS" -ne 0 ]; then
+            echo "::error::revert-guard would fail; fix that first (or add intentional-revert), then re-run"
+            exit 1
+          fi
+
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Restore ESLint cache
+        id: restore-eslint-cache
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/eslint
+          key: eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-
+
+      - name: Relocate ESLint cache
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        run: node .github/scripts/relocate-eslint-cache.mjs .cache/eslint/.eslintcache "$GITHUB_WORKSPACE"
+
+      - name: Install dependencies
+        if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Save node_modules cache
+        # PRs restore the trusted staging cache, but only staging pushes save.
+        if: github.event_name == 'push' && steps.restore-node-modules.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: ${{ steps.restore-node-modules.outputs.cache-primary-key }}
+
+      - name: Generate Prisma client
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        run: npx prisma generate
+
+      - name: Restore TypeScript cache
+        id: restore-tsc-cache
+        # A stale tsbuildinfo is safe: tsc validates it against file hashes and
+        # falls back to a full check when they differ.
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/tsc
+          key: tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
+          restore-keys: |
+            tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
+
+      - name: Typecheck
+        # Next.js generates route-handler signature checks outside ordinary tsc.
+        # Generate them first so CI catches the same errors as the Vercel build.
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        run: npx next typegen && npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
+
+      - name: Save TypeScript cache
+        # PRs may restore the trusted staging cache, but only staging pushes save.
+        if: github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/tsc
+          key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
+
+      - name: Lint
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
+
+      - name: Save ESLint cache
+        # PRs may restore the trusted base-branch cache, but only staging pushes
+        # may refresh it. This prevents untrusted PR cache data from becoming a
+        # production input while still accelerating every subsequent PR.
+        # cache-hit is true only for an exact primary-key match. Restoring the
+        # previous staging SHA through restore-keys returns false, so every new
+        # staging commit saves a refreshed cache; only same-SHA reruns skip it.
+        if: github.event_name == 'push' && steps.restore-eslint-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .cache/eslint
+          key: ${{ steps.restore-eslint-cache.outputs.cache-primary-key }}
+
+      # Every PR body claims "npm test N passed" and nothing checked it, so a
+      # broken suite sat green on staging for days (HTPR-5161).
+      # HT_REQUIRE_PG_TESTS turns the real-PostgreSQL suites' "docker missing"
+      # skip into a hard failure. Locally a developer without docker still gets a
+      # clean skip; here a skip would be the same false green that let PR #2789's
+      # task-write outage through (HTPR-5467).
+      # PR lane: run only the tests that reference something this PR touched.
+      # The full suite is the staging lane's job (below), where a red run
+      # auto-reverts and Vercel keeps the previous deployment live. Selection
+      # falls back to the whole suite whenever it cannot be confident
+      # (dependency/schema change, wide fan-out, nothing matched).
+      - name: Select tests for changed files
+        id: select
+        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Run the selector from the BASE branch, not the PR workspace: a PR
+          # must not be able to edit the thing deciding which of its tests run.
+          # The selector still reads the PR's own tests (cwd is the workspace).
+          SEL="$RUNNER_TEMP/selector"
+          mkdir -p "$SEL/.github/scripts" "$SEL/scripts"
+          git fetch --depth=1 --quiet origin "$GITHUB_BASE_REF"
+          if git show "FETCH_HEAD:.github/scripts/select-tests.mjs" > "$SEL/.github/scripts/select-tests.mjs" \
+            && git show "FETCH_HEAD:scripts/test-inventory.mjs" > "$SEL/scripts/test-inventory.mjs"; then
+            SELECTED=$(node "$SEL/.github/scripts/select-tests.mjs" < "$RUNNER_TEMP/changed-files.txt")
+          else
+            # No trusted selector on the base branch yet: run everything.
+            SELECTED=ALL
+          fi
+          echo "$SELECTED"
+          if [ "$SELECTED" = "ALL" ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            echo "require_pg=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "files=$(echo "$SELECTED" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+            if echo "$SELECTED" | grep -q -- '-postgres\.test\.cjs'; then
+              echo "require_pg=1" >> "$GITHUB_OUTPUT"
+            else
+              echo "require_pg=" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Test
+        if: github.event_name != 'push' && steps.scope.outputs.build_needed == 'true'
+        env:
+          HT_REQUIRE_PG_TESTS: ${{ steps.select.outputs.require_pg }}
+        run: npm test -- ${{ steps.select.outputs.files }}
+
+      - name: Test with coverage collection
+        id: push-test
+        if: github.event_name == 'push'
+        env:
+          NODE_V8_COVERAGE: coverage/raw
+          HT_REQUIRE_PG_TESTS: "1"
+        run: npm test
+
+      - name: Record push test outcome
+        id: test-outcome
+        if: always() && github.event_name == 'push'
+        run: echo "failed=${{ steps.push-test.outcome == 'failure' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build report-only coverage baseline
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: npm run coverage:report
+
+      - name: Upload coverage baseline
+        if: always() && github.event_name == 'push'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: automated-test-coverage-${{ github.sha }}
+          path: |
+            coverage/report/
+            coverage/critical-domains.json
+            coverage/critical-domains.md
+          if-no-files-found: warn
+          retention-days: 30
+
+  auto-revert-staging:
+    name: auto-revert-staging
+    # The PR lane only ran a scoped subset, so staging is where the full suite
+    # first sees the merged result. A red suite on production's branch gets
+    # undone automatically instead of waiting for someone to notice. Only the
+    # test step arms this: an npm ci or runner hiccup must not revert a good
+    # commit.
+    needs: ci-tests
+    if: always() && github.event_name == 'push' && needs.ci-tests.outputs.test_failed == 'true'
+    # This push-only job holds the merge token; PR code never runs in it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Revert the failing commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+
+          # Emergency path: git couldn't undo the bad commit (dirty revert or
+          # a refused push), so production gets an instant Vercel rollback
+          # requested instead of staying red until a human fixes the git
+          # state. The check-then-promote logic lives in
+          # .github/scripts/emergency-rollback.mjs (tested in
+          # tests/emergency-rollback.test.cjs) rather than inline bash, so its
+          # control flow is unambiguous. Design choice: fire-and-alert, not
+          # fire-and-confirm — the script never polls to prove the promotion
+          # landed; it fires the request and this always tells a human to
+          # verify production themselves. Sets
+          # ROLLBACK_STATUS=requested|skip|failed and ROLLBACK_TEXT (a
+          # ready-to-use sentence) for callers, and always sends the Telegram
+          # alert regardless of outcome.
+          emergency_rollback() {
+            RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA" 2>/dev/null) || true
+            ACTION=$(printf '%s' "${RESULT:-}" | jq -r '.action // empty' 2>/dev/null) || true
+            REASON=$(printf '%s' "${RESULT:-}" | jq -r '.reason // empty' 2>/dev/null) || true
+            DEPLOY_ID=$(printf '%s' "${RESULT:-}" | jq -r '.deploymentId // empty' 2>/dev/null) || true
+            INSPECTOR_URL=$(printf '%s' "${RESULT:-}" | jq -r '.inspectorUrl // "https://vercel.com/dashboard"' 2>/dev/null) || true
+            HTTP_STATUS=$(printf '%s' "${RESULT:-}" | jq -r '.httpStatus // empty' 2>/dev/null) || true
+            ROLLBACK_STATUS="${ACTION:-failed}"
+
+            case "$ROLLBACK_STATUS" in
+              requested)
+                ROLLBACK_TEXT="Emergency rollback REQUESTED (deployment $DEPLOY_ID, HTTP ${HTTP_STATUS:-none}) - verify production NOW: $INSPECTOR_URL"
+                ;;
+              skip)
+                ROLLBACK_TEXT="${REASON:-Production already moved on}. Verify production manually."
+                ;;
+              *)
+                ROLLBACK_STATUS="failed"
+                ROLLBACK_TEXT="Emergency rollback could not be requested (${REASON:-the script produced no result}) - the bad deployment is still live in production, act now."
+                ;;
+            esac
+            echo "::notice::Emergency rollback: $RESULT"
+
+            if [ "$ROLLBACK_STATUS" = "failed" ]; then
+              MSG="🔴🔴 hypertasks: staging red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
+            else
+              MSG="🔴 hypertasks: staging red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
+            fi
+            TG_CODE=$(curl -s --connect-timeout 10 --max-time 60 -o /tmp/tg.json -w '%{http_code}' -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d chat_id="$TG_CHAT" --data-urlencode text="$MSG" 2>/dev/null) || true
+            if [ "${TG_CODE:-}" != "200" ]; then
+              echo "::error::Emergency rollback: Telegram alert failed (HTTP ${TG_CODE:-none}): $(cat /tmp/tg.json 2>/dev/null || true)"
+            fi
+          }
+
+          # Our own revert commits are committed by this identity. A commit
+          # merged through GitHub's PR flow never is, so this cannot be forged
+          # by a PR author.
+          if [ "$(git log -1 --format=%cE "$GITHUB_SHA")" = "ci@hypertask.ai" ]; then
+            echo "::notice::Already an auto-revert; not reverting again."
+            exit 0
+          fi
+          SUBJECT=$(git log -1 --format=%s "$GITHUB_SHA")
+          PR_NUMBER=$(printf '%s' "$SUBJECT" | grep -oE '\(#[0-9]+\)$' | tr -dc '0-9' || true)
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          git config user.name "hypertask-ci"
+          git config user.email "ci@hypertask.ai"
+          # Squash merges have one parent; a real merge commit needs -m 1.
+          MAINLINE=""
+          if [ "$(git rev-list --parents -n1 "$GITHUB_SHA" | wc -w)" -ge 3 ]; then
+            MAINLINE="-m 1"
+          fi
+          # A conflicting revert is the case that most needs a human, so say so
+          # on the PR rather than dying with a git conflict nobody reads.
+          if ! git revert $MAINLINE --no-commit "$GITHUB_SHA"; then
+            git revert --abort || true
+            emergency_rollback "does not revert cleanly"
+            if [ -n "$PR_NUMBER" ]; then
+              gh pr comment "$PR_NUMBER" --body "The full test suite failed on staging for \`$GITHUB_SHA\` and the commit does not revert cleanly. $ROLLBACK_TEXT $RUN_URL"
+            fi
+            echo "::error::$GITHUB_SHA does not revert cleanly; $ROLLBACK_TEXT"
+            exit 1
+          fi
+          git commit --quiet -m "Revert \"$SUBJECT\"" -m "Auto-revert-of: $GITHUB_SHA"
+          BODY="The full test suite failed on staging for \`$GITHUB_SHA\` after merge, so it was reverted to stop production shipping a red build. Run: $RUN_URL"
+          # --force-with-lease is the compare-and-swap: the push is refused
+          # unless the branch is still exactly the commit that failed, so a
+          # revert can never land on top of newer work. The credential helper
+          # keeps the token out of argv and out of .git/config on a reused
+          # workspace.
+          # Single quotes: the helper text stays literal so git expands
+          # $GH_TOKEN from the environment when it runs. Interpolating here
+          # would put the token in git's argv.
+          HELPER='!f(){ echo username=x-access-token; echo "password=$GH_TOKEN"; };f'
+          if git -c "credential.helper=$HELPER" push --force-with-lease="refs/heads/$GITHUB_REF_NAME:$GITHUB_SHA" \
+            origin "HEAD:refs/heads/$GITHUB_REF_NAME"; then
+            echo "::warning::Reverted $GITHUB_SHA on $GITHUB_REF_NAME."
+            if [ -n "$PR_NUMBER" ]; then
+              gh pr comment "$PR_NUMBER" --body "$BODY"
+            fi
+            exit 0
+          fi
+          # Refused: either the branch ruleset requires a pull request, or it
+          # moved. Both need a human, so leave the revert ready for review
+          # rather than pretending production is fixed. revert-guard blocks PRs
+          # deleting recent staging work, hence the label.
+          # Roll back immediately, before any of the branch/PR fallback work
+          # below, so a gh/git failure in that fallback can never skip it.
+          emergency_rollback "push refused, newer work landed on $GITHUB_REF_NAME"
+          BRANCH="auto-revert/${GITHUB_SHA:0:7}"
+          git -c "credential.helper=$HELPER" push --force origin "HEAD:refs/heads/$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base "$GITHUB_REF_NAME" --head "$BRANCH" \
+              --title "Revert \"$SUBJECT\"" --body "$BODY" \
+              --label intentional-revert
+          fi
+          # Two reasons the swap can be refused. If the branch is still the
+          # commit that failed, the ruleset required a pull request, so arm the
+          # merge. If it moved, a human decides what to do with newer work.
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          if [ "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA" ]; then
+            gh pr merge "$BRANCH" --squash --auto
+          fi
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body "$BODY $ROLLBACK_TEXT See $BRANCH."
+          fi
+          echo "::error::could not revert $GITHUB_SHA directly; $ROLLBACK_TEXT opened $BRANCH for review"
+          exit 1
+
+  production-cli-parity:
+    name: production-cli-parity
+    # Candidate PRs are verified by parity-contract-trusted using the protected
+    # base verifier. Install and execute this repository's locked runner only
+    # after it has merged to staging, so the code executed here is already trusted.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
+      TRUSTED_CLI_VERSION: "1.13.24"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Verify production CLI parity inventory
+        run: |
+          CONTRACT_PACKAGE=$(node -p "require('./config/parity/contract.json').cliPackage.name")
+          CONTRACT_VERSION=$(node -p "require('./config/parity/contract.json').cliPackage.version")
+          if [ "$CONTRACT_PACKAGE" != "$TRUSTED_CLI_PACKAGE" ]; then
+            echo "Parity contract selected untrusted package $CONTRACT_PACKAGE"
+            exit 1
+          fi
+          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
+            echo "Parity contract selected untrusted version $CONTRACT_VERSION"
+            exit 1
+          fi
+          LATEST_VERSION=$(npm view "$TRUSTED_CLI_PACKAGE" version)
+          if [ "$LATEST_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
+            echo "Parity contract pins $CONTRACT_VERSION but production is $LATEST_VERSION"
+            exit 1
+          fi
+          PARITY_TMP=$(mktemp -d "$RUNNER_TEMP/hypertask-parity.XXXXXX")
+          cp config/parity/runner/package.json config/parity/runner/package-lock.json "$PARITY_TMP/"
+          npm ci --prefix "$PARITY_TMP" --ignore-scripts --no-audit --no-fund
+          env -u GITHUB_TOKEN -u GH_TOKEN "$PARITY_TMP/node_modules/.bin/hypertask" capabilities --json > "$PARITY_TMP/capabilities.json"
+          node scripts/parity-contract.mjs \
+            --check \
+            --cli-capabilities "$PARITY_TMP/capabilities.json" \
+            --typescript "$PARITY_TMP/node_modules/typescript/lib/typescript.js"

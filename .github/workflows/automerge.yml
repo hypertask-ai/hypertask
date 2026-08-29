@@ -1,0 +1,324 @@
+name: Auto-merge low-risk PRs
+
+# Merges green, low-risk PRs to staging automatically, from ANY session (local
+# or the claude.ai app), so waved-through changes don't pile up. High-risk
+# changes (auth, billing, schema, security, workflows, deps) are parked with a
+# `valentin-review` label for a human. Opt out of any PR with a `hold` label.
+#
+# Trigger model: runs only from `workflow_run` (which ALWAYS executes the
+# default-branch copy of this file, never a PR's modified copy) and manual
+# dispatch. It re-scans EVERY open PR, so it also clears the backlog. This is
+# deliberate: a `pull_request` trigger would run a PR's own edited workflow with
+# write permissions, letting a PR that edits this file merge itself.
+
+on:
+  workflow_run:
+    workflows: ["CI Tests", "Revert Guard"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to evaluate (blank = scan all open PRs)"
+        required: false
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: automerge
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate and merge green low-risk PRs
+        env:
+          # Dedicated PAT (repo secret), NOT the built-in github.token: the
+          # built-in token shares a low secondary rate limit that merge churn
+          # exhausts, after which every `gh pr view` 403s and the bot silently
+          # skips every PR. A PAT has its own bucket. Falls back to github.token
+          # if the secret is ever missing.
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          DISP_PR: ${{ github.event.inputs.pr }}
+          RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          set -uo pipefail
+
+          # Self-hosted runners share the host's /tmp. A fixed filename can be
+          # left behind by another runner user and become unwritable, silently
+          # disabling every merge. Keep all scratch state private to this job.
+          if ! AUTOMERGE_TMP=$(mktemp -d "${RUNNER_TEMP:-/tmp}/hypertask-automerge.XXXXXX"); then
+            echo "::error::Cannot create job-private auto-merge scratch space."
+            exit 1
+          fi
+          trap 'rm -rf "$AUTOMERGE_TMP"' EXIT
+          PR_JSON="$AUTOMERGE_TMP/pr.json"
+          PR_FILES="$AUTOMERGE_TMP/pr.files"
+          SPEED_STATUS_JSON="$AUTOMERGE_TMP/speed-status.json"
+          infra_failures=0
+          merge_failures=0
+
+          # gh reads, retried with backoff. The built-in token has a low secondary
+          # rate limit, so a burst of check completions can transiently 403 a read;
+          # a retry clears it instead of silently skipping a mergeable PR.
+          retry() { local a; for a in 1 2 3; do "$@" && return 0; sleep $((a*4)); done; return 1; }
+
+          # Required checks that must ALL be green before an auto-merge.
+          # A MISSING result counts as not-green below, so every name here
+          # must belong to a job that reports on EVERY pull request
+          # (visual-regression reports success when it skips, HTPR-5652).
+          REQUIRED="ci-tests claude-review next-public-secrets revert-guard pr-title vercel-build"
+
+          # Any changed file matching this (case-insensitive) parks the PR for a
+          # human: auth/identity, billing, Prisma schema+migrations, security
+          # middleware, CI itself, dependency manifests (supply chain), and
+          # build/env config. Deliberately conservative and broad: over-parking
+          # is a manual merge, a wrong auto-merge is production.
+          RISK_RE='(^|/)prisma/|prisma\.config\.|(^|/)middleware\.[tj]sx?$|(^|/)proxy\.[tj]sx?$|(^|/)auth/|/auth\.[tj]sx?$|auth(service|provider|context|guard|middleware|helper|check|z|n)|better-auth|oauth|firebase|(^|/)login/|login\.[tj]sx?$|session(manager|store|service|provider|context|helper)|stripe|billing|invoice|checkout|subscription|paywall|(^|/)pricing/|pricing\.[tj]sx?$|credential|(^|/)\.github/|(^|/)scripts/check-speed-pr-evidence\.mjs$|(^|/)config/app-project-performance-baseline\.json$|(^|/)package(-lock)?\.json$|(^|/)npm-shrinkwrap\.json$|(^|/)pnpm-lock|(^|/)yarn\.lock$|(^|/)\.npmrc$|(^|/)next\.config\.|(^|/)vercel\.json$|(^|/)\.env'
+
+          # Labels that stop an auto-merge outright.
+          HOLD_LABELS="hold do-not-merge valentin-review wip probation"
+
+          OWNER="${REPO%%/*}"
+
+          # Which PRs to evaluate:
+          #  - workflow_run (a check finished): ONLY the PR for that branch, so we
+          #    make ~1 read instead of re-scanning the whole backlog on every check
+          #    completion (which is what tripped the secondary rate limit).
+          #  - workflow_dispatch: a specific PR, or the whole open backlog.
+          #  - schedule: sweep the backlog so a lost completion event cannot strand a PR.
+          if [ "$EVENT" != "workflow_run" ]; then
+            if [ "$EVENT" = "workflow_dispatch" ] && [ -n "${DISP_PR:-}" ]; then
+              PRS="$DISP_PR"
+            else
+              list_all_prs() { gh pr list --repo "$REPO" --base staging --state open --json number -q '.[].number'; }
+              if ! PRS=$(retry list_all_prs); then
+                echo "::error::Cannot discover open staging PRs after retries; merge evaluation did not run."
+                exit 1
+              fi
+            fi
+          else
+            [ "${RUN_REPO:-}" = "$REPO" ] || { echo "workflow_run from a fork ($RUN_REPO); ignoring."; exit 0; }
+            list_branch_prs() { gh pr list --repo "$REPO" --base staging --state open --head "$RUN_BRANCH" --json number -q '.[].number'; }
+            if ! PRS=$(retry list_branch_prs); then
+              echo "::error::Cannot discover the staging PR for branch $RUN_BRANCH after retries; merge evaluation did not run."
+              exit 1
+            fi
+            [ -z "${PRS:-}" ] && { echo "No open staging PR for branch $RUN_BRANCH."; exit 0; }
+          fi
+          [ -z "${PRS:-}" ] && { echo "No open PRs to staging."; exit 0; }
+
+          has_hold() {  # $1 = newline list of lowercased labels ; returns 0 if a hold label present
+            local labels="$1" L
+            for L in $HOLD_LABELS; do echo "$labels" | grep -qx "$L" && return 0; done
+            return 1
+          }
+
+          is_speed_title() {
+            [[ "$1" == '[SPEED]'* || "$1" =~ ^HTPR-[0-9]+[[:space:]]+\[SPEED\]([[:space:]]|$) ]]
+          }
+
+          park() {  # $1=pr  $2=reason
+            gh pr edit "$1" --repo "$REPO" --add-label "valentin-review" >/dev/null 2>&1 || true
+            body="Auto-merge parked this PR for your review: $2. Remove the \`valentin-review\` label and merge manually when you're happy."
+            # Every sweep re-parks a still-parked PR; posting the same comment
+            # each time buried real reviews under dozens of duplicates.
+            if [ -s "$PR_JSON" ] && jq -e --arg body "$body" '[.comments[].body] | index($body)' "$PR_JSON" >/dev/null 2>&1; then
+              return 0
+            fi
+            gh pr comment "$1" --repo "$REPO" --body "$body" >/dev/null 2>&1 || true
+          }
+
+          for PR in $PRS; do
+            echo "::group::PR #$PR"
+            sleep 1  # gentle pacing so a multi-PR sweep doesn't burst the token
+            gh_view() { gh pr view "$PR" --repo "$REPO" --json number,title,isDraft,isCrossRepository,mergeStateStatus,mergeable,baseRefName,headRefOid,headRepositoryOwner,labels,statusCheckRollup,comments >"$PR_JSON"; }
+            if ! retry gh_view; then
+              echo "::error::Cannot read PR #$PR after retries; merge evaluation is incomplete."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+            J=$(cat "$PR_JSON")
+            if ! jq -e '
+              (.number | type == "number") and
+              (.title | type == "string") and
+              (.isDraft | type == "boolean") and
+              (.isCrossRepository | type == "boolean") and
+              (.baseRefName | type == "string") and
+              (.headRefOid | type == "string" and test("^[0-9a-f]{40}$")) and
+              (.headRepositoryOwner.login | type == "string") and
+              (.mergeable | type == "string") and
+              (.labels | type == "array") and
+              (.statusCheckRollup | type == "array") and
+              (.comments | type == "array")
+            ' <<<"$J" >/dev/null; then
+              echo "::error::PR #$PR metadata is malformed or incomplete; refusing to evaluate it."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+
+            base=$(jq -r '.baseRefName' <<<"$J")
+            draft=$(jq -r '.isDraft' <<<"$J")
+            crossRepo=$(jq -r '.isCrossRepository' <<<"$J")
+            mergeable=$(jq -r '.mergeable' <<<"$J")
+            headOwner=$(jq -r '.headRepositoryOwner.login // ""' <<<"$J")
+            headOid=$(jq -r '.headRefOid' <<<"$J")
+            title=$(jq -r '.title' <<<"$J")
+            required_for_pr="$REQUIRED"
+            # Speed gates retired 2026-08-23 (Valentin): the Speed Engineer is
+            # gone and no agent can produce owner-signed evidence. The realtime
+            # regression guard (HTPR-5650) replaces them as a normal CI check.
+            speed_pr=0
+            # GitHub computes mergeability lazily, so the first read is usually
+            # UNKNOWN in a runner. Without this the conflict park never fires: an
+            # UNKNOWN PR falls through to the merge, which then fails. Each read
+            # nudges GitHub to compute it, so re-poll a few times until it settles.
+            mtries=0
+            mergeability_failed=0
+            while [ "$mergeable" = "UNKNOWN" ] && [ "$mtries" -lt 5 ]; do
+              sleep 3; mtries=$((mtries+1))
+              gh_mergeability() { gh pr view "$PR" --repo "$REPO" --json mergeable -q '.mergeable'; }
+              if ! mergeable=$(retry gh_mergeability); then
+                echo "::error::Cannot resolve mergeability for PR #$PR after retries; refusing to merge."
+                infra_failures=$((infra_failures+1))
+                mergeability_failed=1
+                break
+              fi
+            done
+            if [ "$mergeability_failed" = "1" ]; then echo "::endgroup::"; continue; fi
+            if [ "$mergeable" = "UNKNOWN" ]; then
+              echo "::error::Mergeability for PR #$PR stayed UNKNOWN after $mtries polls; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+
+            [ "$base" = "staging" ]     || { echo "skip: base=$base"; echo "::endgroup::"; continue; }
+            [ "$draft" = "false" ]      || { echo "skip: draft"; echo "::endgroup::"; continue; }
+            # Same-repo branches only. Only someone with push access can create one,
+            # so this is also the author-trust gate; fork PRs are never auto-merged.
+            [ "$crossRepo" = "false" ]  || { echo "skip: fork/cross-repo PR"; echo "::endgroup::"; continue; }
+            [ "$headOwner" = "$OWNER" ] || { echo "skip: head owner $headOwner"; echo "::endgroup::"; continue; }
+
+            # Hold / park labels (checked BEFORE the conflict park below so an
+            # already-parked PR is skipped early and never re-comments).
+            labels=$(jq -r '.labels[].name' <<<"$J" | tr '[:upper:]' '[:lower:]')
+            has_hold "$labels" && { echo "skip: hold/park label present"; echo "::endgroup::"; continue; }
+
+            # Merge conflicts -> park for a human (needs a rebase; the bot cannot
+            # resolve conflicts). Parked AFTER the hold check so it labels + comments
+            # exactly once, then the has_hold gate above skips it on later sweeps.
+            if [ "$mergeable" = "CONFLICTING" ]; then
+              echo "PARK: has conflicts"
+              park "$PR" "it has merge conflicts with \`staging\` and needs a rebase before it can auto-merge"
+              echo "::endgroup::"; continue
+            fi
+
+            # Risk paths -> park for a human. `gh pr diff --name-only` returns ALL
+            # changed files (the JSON files field caps at 100).
+            gh_diff() { gh pr diff "$PR" --repo "$REPO" --name-only >"$PR_FILES"; }
+            if ! retry gh_diff; then
+              echo "::error::Cannot read the diff for PR #$PR after retries; merge evaluation is incomplete."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+            files=$(cat "$PR_FILES")
+            risky=$(echo "$files" | grep -iE "$RISK_RE" || true)
+            if [ -n "$risky" ]; then
+              echo "PARK: risky paths:"; echo "$risky"
+              park "$PR" "it touches sensitive paths ($(echo "$risky" | head -3 | paste -sd, -))"
+              echo "::endgroup::"; continue
+            fi
+
+            # Use the newest result for each required check. This matters during a
+            # provider migration: the same head can retain an obsolete failed
+            # Claude check and receive a newer DeepSeek compatibility check. The
+            # exact-head APPROVE marker below remains the trusted review defense.
+            ok=1
+            for c in $required_for_pr; do
+              state=$(jq -r --arg n "$c" '
+                ([.statusCheckRollup[]
+                  | ((.name // .context)) as $cn
+                  | select($cn == $n or ($n == "ci-tests" and $cn == "ci-build"))
+                  | {name: $cn, state: ((.conclusion // .state) // "PENDING"), at: (.startedAt // .createdAt // "")}]) as $all
+                | (if $n == "ci-tests" and ([$all[] | select(.name == "ci-tests")] | length) > 0
+                   then [$all[] | select(.name == "ci-tests")] else $all end)
+                | sort_by(.at) | last | .state // "MISSING"
+              ' <<<"$J")
+              if [ "$state" != "SUCCESS" ]; then echo "check $c = $state"; ok=0
+              else echo "check $c = SUCCESS"; fi
+            done
+            # For non-required checks (for example preview smoke), only the newest
+            # result with a given name is current. Older retries must not block a
+            # later successful rerun forever.
+            failed=$(jq -r --arg required "$required_for_pr" '
+              [.statusCheckRollup[]
+                | {name: (.name // .context), state: ((.conclusion // .state) // ""), at: (.startedAt // .createdAt // "")}]
+              | sort_by(.at) | group_by(.name) | map(last)[] as $entry
+              | select((($required + " ci-build") | split(" ") | index($entry.name)) == null)
+              | select($entry.state | test("FAILURE|CANCELLED|TIMED_OUT|ERROR|STARTUP_FAILURE|ACTION_REQUIRED"))
+              | $entry.name
+            ' <<<"$J")
+            [ -n "$failed" ] && { echo "skip: failed checks: $(echo "$failed" | paste -sd, -)"; ok=0; }
+            [ "$ok" = "1" ] || { echo "skip: not all required checks green"; echo "::endgroup::"; continue; }
+
+            # Defense in depth: the required check must correspond to an APPROVE
+            # comment for the exact head SHA. This catches a misconfigured or
+            # accidentally green check without trusting a stale review comment.
+            marker="reviewed-commit: ${headOid}"
+            current_review=$(jq -r --arg marker "$marker" \
+              '[.comments[].body | select(contains($marker)) | select(test("^(APPROVE|CONCERNS)"))] | last // ""' <<<"$J")
+            if ! grep -q '^APPROVE' <<<"$current_review"; then
+              echo "PARK: no current-commit APPROVE review comment"
+              park "$PR" "the required review check is green but its current-commit APPROVE comment is missing"
+              echo "::endgroup::"; continue
+            fi
+
+            # Only the current review matters; blockers from older commits are stale.
+            if grep -qiE '\bblocker\b' <<<"$current_review"; then
+              echo "PARK: AI review flagged a blocker"
+              park "$PR" "the automated review flagged a blocker"
+              echo "::endgroup::"; continue
+            fi
+
+            # Re-check labels immediately before merging to shrink the window where
+            # a hold label added mid-run could be missed.
+            gh_labels() { gh pr view "$PR" --repo "$REPO" --json labels -q '.labels[].name'; }
+            if ! nowlabels=$(retry gh_labels); then
+              echo "::error::Cannot recheck hold labels for PR #$PR after retries; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+            nowlabels=$(printf '%s\n' "$nowlabels" | tr '[:upper:]' '[:lower:]')
+            has_hold "$nowlabels" && { echo "skip: hold label added during run"; echo "::endgroup::"; continue; }
+
+            # --match-head-commit binds the merge to the exact SHA we inspected, so
+            # a push landing mid-run can't sneak in unreviewed (merge just fails and
+            # retries on the next trigger).
+            echo "MERGING #$PR @ ${headOid:0:9}"
+            if gh pr merge "$PR" --repo "$REPO" --squash --match-head-commit "$headOid"; then
+              echo "MERGED #$PR"
+            else
+              echo "::error::Merge failed for PR #$PR; it will retry on the next trigger."
+              merge_failures=$((merge_failures+1))
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ "$infra_failures" -gt 0 ] || [ "$merge_failures" -gt 0 ]; then
+            echo "::error::Auto-merge finished with $infra_failures infrastructure read failure(s) and $merge_failures merge failure(s)."
+            exit 1
+          fi

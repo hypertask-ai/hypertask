@@ -1,0 +1,331 @@
+name: Prod Health Check + Auto-Rollback
+
+# After every push to staging (= production deploy), wait for the Vercel
+# deployment to finish, health-check the live app, and if the app is broken
+# promote the previous READY deployment (instant rollback) + notify Telegram.
+on:
+  push:
+    branches: [staging]
+  schedule:
+    # Every 30 min, catch production silently serving an older commit than the
+    # staging tip (HTPR-4781). Concurrent sessions each deploy from their own
+    # worktree, so an older build can take the production alias minutes after a
+    # newer merge went READY and nothing warns you.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: prod-health
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf
+  TEAM_ID: team_yureFlJZ6ibwebaOOkKc5whs
+
+jobs:
+  health:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Wait for deploy, health-check, rollback if broken
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+
+          api() { curl -s -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+          notify() {
+            curl -s -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d chat_id="$TG_CHAT" --data-urlencode text="$1" || true
+          }
+
+          # ── 1. Find the production deployment for this commit ──────────────
+          DEPLOY_JSON=""
+          STATE="NOTFOUND"
+          for i in $(seq 1 60); do  # up to 20 min
+            DEPLOY_JSON=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=10" \
+              | jq -c --arg sha "$SHA" '.deployments[] | select(.meta.githubCommitSha == $sha)' | head -1)
+            STATE=$(echo "$DEPLOY_JSON" | jq -r '.state // "NOTFOUND"')
+            echo "[$i] deployment state: $STATE"
+            case "$STATE" in
+              READY|ERROR|CANCELED) break ;;
+              NOTFOUND) [ "$i" -ge 12 ] && break ;;  # 4 min without a deploy = ignored build step
+            esac
+            sleep 20
+          done
+
+          if [ "$STATE" = "NOTFOUND" ] || [ "$STATE" = "CANCELED" ]; then
+            echo "No production deployment for $SHA (ignored build step or canceled). Nothing to check."
+            exit 0
+          fi
+
+          if [ "$STATE" = "ERROR" ]; then
+            # Build failed -> Vercel never switched domains, old deploy still serves.
+            notify "⚠️ hypertasks: production BUILD FAILED for $SHA. Live site still on the previous deploy. https://github.com/${{ github.repository }}/commit/$SHA"
+            echo "::error::Production build failed (live site unaffected)"
+            exit 1
+          fi
+
+          # ── 2. Health-check the live app (3 attempts, 20s apart) ───────────
+          # Vercel sometimes bot-challenges the hosted runner's IP
+          # (x-vercel-mitigated: challenge). A challenged response proves nothing
+          # about the app, so it must never trigger a rollback.
+          # Fresh response files for every attempt (HTPR-5467). `curl -o FILE`
+          # does NOT truncate FILE when the connection fails, so a stale healthy
+          # body or a stale challenge header from an earlier attempt would leak
+          # into this attempt's verdict. A unique per-run dir + per-attempt
+          # filenames make each attempt read only what this attempt actually
+          # wrote and keeps each attempt isolated in this job.
+          HC_DIR=$(mktemp -d) || { echo "::error::mktemp -d failed"; exit 1; }
+          trap 'rm -rf "$HC_DIR"' EXIT
+
+          healthy=false
+          unchallenged_failure=false
+          earlier_unchallenged_failure=false
+          # The probe verdict that decides the outcome is the FINAL attempt's
+          # ($probe_status after the loop), never a run-wide sticky flag: a bot
+          # challenge on an earlier attempt parses as http-403, and a sticky
+          # "broken" from that would swallow the final attempt's real verdict.
+          for i in 1 2 3; do
+            home=$(curl -s -o /dev/null -D "$HC_DIR/home-$i.h" -w '%{http_code}' -L --max-time 30 "https://app.hypertask.ai/" || echo 000)
+            apic=$(curl -s -o /dev/null -D "$HC_DIR/api-$i.h" -w '%{http_code}' --max-time 30 \
+              -H "Authorization: Bearer $MCP_TOKEN" \
+              "https://app.hypertask.ai/api/mcp/projects?limit=1" || echo 000)
+            # Task-write probe (HTPR-5467): a real DB write that always rolls
+            # back. It goes through the same advisory-lock helper every task
+            # write uses, so a deploy that breaks task writes FAILS here instead
+            # of being declared healthy by the read-only checks above.
+            probe_code=$(curl -s -o "$HC_DIR/probe-$i.json" -D "$HC_DIR/probe-$i.h" -w '%{http_code}' --max-time 30 \
+              -H "Authorization: Bearer $MCP_TOKEN" \
+              "https://app.hypertask.ai/api/ops/task-write-probe" || echo 000)
+            # The verdict lives in the JSON body. If the body isn't parseable
+            # (bot challenge, platform error, missing route) fall back to the
+            # HTTP code; a challenge is handled below and never rolls back.
+            probe_status=$(jq -r '.probe.status // empty' "$HC_DIR/probe-$i.json" 2>/dev/null)
+            if [ -z "$probe_status" ]; then probe_status="http-$probe_code"; fi
+
+            echo "[$i] home=$home api=$apic probe=$probe_code ($probe_status)"
+
+            # A parseable healthy body on a non-200 response must never count as
+            # healthy: require BOTH the probe HTTP code and the verdict.
+            if [ "$home" = "200" ] && [ "$apic" = "200" ] && [ "$probe_code" = "200" ] && [ "$probe_status" = "healthy" ]; then
+              healthy=true
+              break
+            fi
+
+            # Challenge state is PER ENDPOINT PER ATTEMPT (HTPR-5467): a
+            # challenge on one endpoint must not mask an unchallenged failure on
+            # a different endpoint in the SAME attempt. A challenge proves
+            # nothing, but it only excuses the specific response whose header
+            # actually carries it.
+            home_challenged=false
+            api_challenged=false
+            probe_challenged=false
+            if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/home-$i.h" 2>/dev/null; then
+              home_challenged=true
+            fi
+            if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/api-$i.h" 2>/dev/null; then
+              api_challenged=true
+            fi
+            if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/probe-$i.h" 2>/dev/null; then
+              probe_challenged=true
+            fi
+            if $home_challenged || $api_challenged || $probe_challenged; then
+              echo "[$i] bot challenge detected (x-vercel-mitigated)"
+            fi
+
+            # A definitive failure is a broken read (home/api non-200) or a
+            # broken probe verdict. Inconclusive (reads pass + probe inconclusive)
+            # is NOT a definitive failure: it never rolls back on its own. The
+            # probe is only genuinely healthy when BOTH its HTTP code is 200 AND
+            # its verdict is healthy, so a healthy-looking body on a non-200 (or
+            # a broken read) is still a broken probe.
+            home_failed=false
+            api_failed=false
+            probe_failed=false
+            if [ "$home" != "200" ]; then
+              home_failed=true
+            fi
+            if [ "$apic" != "200" ]; then
+              api_failed=true
+            fi
+            if [ "$probe_status" != "inconclusive" ] && [ "$probe_status" != "misconfigured" ] && { [ "$probe_code" != "200" ] || [ "$probe_status" != "healthy" ]; }; then
+              # Not inconclusive and not genuinely healthy -> broken probe.
+              probe_failed=true
+            fi
+
+            # Track THIS attempt's unchallenged definitive failure separately.
+            # `unchallenged_failure` below holds only the FINAL attempt's
+            # verdict; an unchallenged failure from an earlier attempt is
+            # remembered as context (earlier_unchallenged_failure) but never
+            # rolls back on its own.
+            attempt_unchallenged_failure=false
+            if $home_failed && ! $home_challenged; then
+              attempt_unchallenged_failure=true
+            fi
+            if $api_failed && ! $api_challenged; then
+              attempt_unchallenged_failure=true
+            fi
+            if $probe_failed && ! $probe_challenged; then
+              attempt_unchallenged_failure=true
+            fi
+
+            # The FINAL attempt decides rollback (HTPR-5467): the retry loop
+            # exists to filter transients, so rollback needs the failure signal
+            # to still be standing when retries are exhausted. A challenge on
+            # one endpoint still never masks an unchallenged failure elsewhere
+            # in that same final attempt. Each attempt's verdict displaces the
+            # previous one; any displaced unchallenged failure becomes
+            # earlier-attempt context.
+            if $unchallenged_failure; then
+              earlier_unchallenged_failure=true
+            fi
+            unchallenged_failure=$attempt_unchallenged_failure
+            sleep 20
+          done
+
+          if $healthy; then
+            echo "Production healthy on $SHA"
+            exit 0
+          fi
+
+          # The FINAL attempt decides rollback (HTPR-5467). An unchallenged
+          # definitive failure (broken read or broken probe) on the final
+          # attempt means production is provably broken when retries are
+          # exhausted and must roll back. Only fall through to the
+          # skip-rollback branches below when the final attempt had no
+          # unchallenged failure (purely challenged, purely inconclusive, or an
+          # earlier failure that did not recur).
+          if ! $unchallenged_failure; then
+            # The write gate never ran: no probe fixture exists for the health
+            # identity. Rolling back cannot create one, but this must not pass as
+            # a warning either — an unprovisioned gate that only warns is how a
+            # write outage stays invisible, which is the whole point of
+            # HTPR-5467. Fail the job so somebody runs
+            # scripts/ensure-task-write-probe-fixture.mjs.
+            #
+            # This sits INSIDE the no-unchallenged-failure branch on purpose: a
+            # definitive failure standing on the final attempt still rolls back,
+            # so a setup problem can never mask a proven outage.
+            if [ "$probe_status" = "misconfigured" ]; then
+              notify "🔴 hypertasks: the task-write probe for $SHA is NOT PROVISIONED, so the write health gate is not running. Run scripts/ensure-task-write-probe-fixture.mjs for the health identity. NOT rolling back."
+              echo "::error::Task-write probe fixture missing; the write gate is inactive"
+              exit 1
+            fi
+
+            # An earlier attempt saw an unchallenged definitive failure but the
+            # final attempt was only challenged and/or inconclusive: the retry
+            # loop filtered the transient, so do not roll back. This is NOT
+            # healthy either — the failure was real at least once — so it gets a
+            # distinct warning instead of the healthy path.
+            if $earlier_unchallenged_failure; then
+              notify "⚠️ hypertasks: an earlier health-check attempt for $SHA saw a definitive failure that did NOT recur on the final attempt (final attempt challenged or inconclusive). NOT rolling back and NOT declaring healthy. Verify manually: https://app.hypertask.ai"
+              echo "::warning::Earlier definitive failure not confirmed on final attempt; skipping rollback"
+              exit 0
+            fi
+
+            # Reads pass but the write probe never reached a verdict. This is NOT
+            # healthy (a silently-masked write outage is exactly what HTPR-5467
+            # fixes), but an unproven probe must never roll production back.
+            # Fails the job (exit 1) without rolling back: the gate must not go
+            # green on a deployment whose write path was never proven, but an
+            # unproven probe is not grounds to promote the previous deployment.
+            if [ "$home" = "200" ] && [ "$apic" = "200" ] && [ "$probe_status" = "inconclusive" ]; then
+              notify "⚠️ hypertasks: READ checks pass for $SHA but the task-write probe was INCONCLUSIVE. NOT rolling back and NOT declaring healthy. Verify the write path manually: https://app.hypertask.ai"
+              echo "::error::Task-write probe inconclusive; not healthy, skipping rollback"
+              exit 1
+            fi
+
+            # Every definitive failure in this run was Vercel-challenged. A
+            # challenge proves nothing about the app, so a genuinely
+            # challenged-only run never rolls back.
+            notify "⚠️ hypertasks: health check INCONCLUSIVE for $SHA — Vercel bot-challenged the runner IP. NOT rolling back. Verify manually: https://app.hypertask.ai"
+            echo "::warning::Bot-challenged responses only; skipping rollback"
+            exit 0
+          fi
+
+          # ── 3. Rollback: promote the previous READY production deployment ──
+          CURRENT_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
+          PREV_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=10" \
+            | jq -r --arg cur "$CURRENT_UID" '[.deployments[] | select(.uid != $cur)][0].uid // empty')
+
+          if [ -z "$PREV_UID" ]; then
+            notify "🔴 hypertasks: production UNHEALTHY after $SHA and NO previous deployment found to roll back to. Manual action needed NOW."
+            echo "::error::Unhealthy and no rollback target"
+            exit 1
+          fi
+
+          echo "Rolling back: promoting $PREV_UID"
+          code=$(curl -s -o /tmp/promote.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$PREV_UID?teamId=$TEAM_ID")
+          echo "promote -> $code"; cat /tmp/promote.json
+
+          if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
+            notify "🔴 hypertasks: $SHA deployed but FAILED health checks. Auto-rolled back to previous deployment ($PREV_UID). Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+            echo "::error::Health check failed — rolled back to $PREV_UID"
+          else
+            notify "🔴🔴 hypertasks: $SHA UNHEALTHY and auto-rollback FAILED (HTTP $code). Promote previous deployment manually in Vercel NOW."
+            echo "::error::Health check failed AND rollback failed"
+          fi
+          exit 1
+
+  # ── Deploy drift: is production actually serving the staging tip? ──────────
+  # A newer merge can go READY and then an older build from another session's
+  # worktree takes the production alias, silently reverting shipped work
+  # (HTPR-4781: two features disappeared for ~20 minutes and only a manual API
+  # check caught it). Nothing else notices, so this asks every 30 minutes.
+  drift:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: staging
+          fetch-depth: 50
+
+      - name: Compare the live production deployment against the staging tip
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -uo pipefail
+
+          TIP=$(git rev-parse HEAD)
+          LIVE=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=1" \
+            | jq -r '.deployments[0].meta.githubCommitSha // empty')
+
+          if [ -z "$LIVE" ]; then
+            echo "No READY production deployment reported; nothing to compare."
+            exit 0
+          fi
+
+          echo "staging tip: $TIP"
+          echo "live deploy: $LIVE"
+          [ "$TIP" = "$LIVE" ] && { echo "Production is on the staging tip."; exit 0; }
+
+          # A deploy in flight is normal: the tip is only a problem once its own
+          # build has had time to finish, so ignore a tip pushed in the last 15
+          # minutes and only complain about a live commit that is genuinely older.
+          AGE=$(( $(date +%s) - $(git log -1 --format=%ct "$TIP") ))
+          [ "$AGE" -lt 900 ] && { echo "Staging tip is ${AGE}s old; a deploy is probably still in flight."; exit 0; }
+
+          if git merge-base --is-ancestor "$LIVE" "$TIP" 2>/dev/null; then
+            BEHIND=$(git rev-list --count "$LIVE..$TIP" 2>/dev/null || echo "?")
+            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the staging tip ${TIP:0:9}. Shipped work is silently missing from the live app. Promote the newest deployment in Vercel."
+          else
+            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the staging tip ${TIP:0:9}. The live app is on a commit that is not on staging at all."
+          fi
+
+          curl -s -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+            -d chat_id="$TG_CHAT" --data-urlencode text="$MSG" || true
+          echo "::error::$MSG"
+          exit 1
