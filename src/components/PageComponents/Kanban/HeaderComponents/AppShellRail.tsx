@@ -144,6 +144,7 @@ const AppShellRail = ({
   // gated behind the same page's own rail-on flag, so a value left over from
   // the previous page is never read before the next AppShellRail overwrites it.
   useLayoutEffect(() => {
+    document.documentElement.removeAttribute("data-rail");
     document.documentElement.style.setProperty(
       "--app-shell-rail-w",
       wide ? "130px" : "48px",

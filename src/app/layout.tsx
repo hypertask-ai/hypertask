@@ -109,17 +109,20 @@ export default async function RootLayout(
           effect sets it, so a cold load paints every rail-padded container at
           the CSS fallback (48px, collapsed) first. Users with the rail
           expanded (130px) or turned off saw that mount animate into place
-          (HTPR-5725). This reads the same localStorage the appShellRail(Expanded)
-          atoms persist to and sets the var before first paint; AppShellRail's
-          own effect then confirms it, or leaves it unread where the rail
-          isn't rendered (mobile, rail off). Rail-off is checked first: the
-          two persisted flags are independent, so a user who expanded the
-          rail and then turned it off entirely must not get 130px.
+          (HTPR-5725). For rail-off, it also seeds data-rail="off" so CSS hides
+          the default-true SSR rail before hydration removes it (HTPR-5749).
+          This reads the same localStorage the appShellRail(Expanded) atoms
+          persist to and sets the var before first paint; AppShellRail's own
+          effect then confirms the width and clears data-rail if the rail
+          actually renders, or leaves the width unread where the rail isn't
+          rendered (mobile, rail off). Rail-off is checked first: the two
+          persisted flags are independent, so a user who expanded the rail
+          and then turned it off entirely must not get 130px.
         */}
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){try{var s=JSON.parse(localStorage.getItem('recoil-persist')||'{}');var el=document.documentElement;if(s.appShellRail===false){el.style.setProperty('--app-shell-rail-w','0px');}else if(s.appShellRailExpanded===true){el.style.setProperty('--app-shell-rail-w','130px');}}catch(e){}})();",
+              "(function(){try{var s=JSON.parse(localStorage.getItem('recoil-persist')||'{}');var el=document.documentElement;if(s.appShellRail===false){el.style.setProperty('--app-shell-rail-w','0px');el.setAttribute('data-rail','off');}else if(s.appShellRailExpanded===true){el.style.setProperty('--app-shell-rail-w','130px');}}catch(e){}})();",
           }}
         />
         {/* <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=no,viewport-fit=cover"/> */}
