@@ -1,0 +1,38 @@
+.attachment-upload-container{
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+
+    .attachment-button{
+        margin-left: auto;
+        
+    }
+    img{
+        height: 60px !important;
+        width: 60px !important;
+        object-fit: cover !important;
+    }
+    .attachment-others{
+        padding: 20px;
+    }
+    .attachment-image{
+        padding: 4px;
+    }
+
+    #waveform-image{
+        width: 16px !important;
+        height: 16px !important;
+    }
+}
+
+
+// ======================================== for mobile devices
+@media (max-width:767px){
+    .attachment-upload-container{
+        width: unset;
+        .attachment-button{
+            margin:0px;
+            
+        }
+    }
+}

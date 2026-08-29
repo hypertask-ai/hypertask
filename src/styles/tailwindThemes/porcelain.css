@@ -1,0 +1,193 @@
+/* "Light (New)" theme. Same recipe as AMOLED (elevation ladder, IBM Plex,
+   muted ticket IDs, hairline cards, compact type) applied to a white base.
+   Additive: light.css (:root) is untouched. Accent is a tinted grey, not
+   brand purple — kept darker than the marker grey so white button text
+   still clears 4.5:1 contrast. */
+
+.porcelain {
+  --primary: 228 10% 40%;
+
+  --bg-pageBackground: #ffffff;
+  --bg-taskDetailPage: #fafafc;
+  --bg-containerBackground: #f5f5f6;
+  --bg-containerBackground-inverted: #262a30;
+  --bg-taskDetail-container: #ffffff;
+  --bg-cardBackground: #ffffff;
+  --bg-modalBackground: #ffffff;
+  --bg-hover-active: #eeeef1;
+  --bg-comment-description: #f9f9fa;
+  --bg-newComment-container: #f9f9fa;
+  --bg-ai-chat-tiptap: #f9f9fa;
+  --bg-ai-chat: #ffffff;
+  --bg-label-span: #ececef;
+  --bg-back-button: #ffffff;
+  --bg-tooltip: #dcdce1;
+  --bg-task-tag: rgb(160, 160, 160);
+  --bg-sidebar: #fafafa;
+  --bg-self-comment: #ffffff;
+  --bg-dropdown: #ffffff;
+  --bg-mention: #ffffff;
+  --bg-reactions: #ececef;
+  --bg-horizontal-scrollbar: #ffffff;
+  --bg-mention-highlight: #f9efcb;
+}
+
+.porcelain {
+  --hover-cardBackground: #e2e2e6;
+}
+
+.porcelain {
+  --active-cardBackground: #e2e2e6;
+  --active-elementBg: #e2e2e6;
+  --active-modal-element: #e2e2e6;
+  --active-kanbanCardbg: #e8e8eb;
+  --active-mentionList: #e2e2e6;
+  --active-list-element: #e2e2e6;
+}
+
+.porcelain {
+  --color-page-background: var(--bg-pageBackground);
+  --color-white-black: #18181b;
+  --color-white-black-inverted: #ffffff;
+  --color-text-light-gray: #727279;
+  --color-border: 240 6% 88%;
+  --color-border-comment-description: var(--bg-comment-description);
+  --bg-newcomment-well: #ececef;
+  --color-my-comment: var(--color-white-black-inverted);
+  --em-rgb-color: white;
+  --color-text-labelComponent: #3f3f46;
+  --shadcn-primary: 228 10% 40%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 5% 94%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 0deg 0.48% 49.52%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 228 10% 40%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 72.22% 50.59%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 6% 88%;
+  --border-self-comment: 0,0,0,0.40;
+  --border-light-gray-thin: #e2e2e6;
+  --input: 240 6% 88%;
+  --ring: 228 10% 40%;
+  --button-arrow-disabled: rgb(220, 219, 219);
+  --button-arrow: rgb(134, 132, 132);
+  --color-kanban-column-scrollbar: transparent;
+  --color-horizontal-scrollbar-track: #ececef;
+  --color-mention-highlight: #1365a3;
+  --color-archived-state: #166534;
+}
+
+.porcelain {
+  --focus-ring: #9a9daa;
+  --border-active: #9a9daa;
+}
+
+@media (max-width: 767px) {
+  .porcelain {
+    --bg-taskDetailPage: #ffffff;
+    --bg-containerBackground: #f5f5f6;
+    --bg-comment-description: #f9f9fa;
+    --bg-newComment-container: #f9f9fa;
+  }
+}
+
+.porcelain .kanban-task-card .task-ticket-id {
+  color: #727279;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.porcelain .kanban-column-count {
+  color: #727279;
+}
+
+.porcelain .inbox-indicator-dot {
+  color: #5c6070;
+}
+
+/* White cards on a white page need a boundary — a hairline, not a fill
+   contrast (that's the AMOLED/graphite move; here it'd be invisible). */
+.porcelain .kanban-task-card {
+  border: 1px solid #e2e2e6;
+}
+
+.porcelain .kanban-task-card:hover {
+  border-color: #d2d2d8;
+}
+
+.porcelain .section-container {
+  border: 1px solid #e2e2e6;
+}
+
+.porcelain .section-container:focus {
+  border-color: #b8b8c0;
+}
+
+.porcelain .table-view-header {
+  border-bottom: 1px solid #e2e2e6;
+}
+
+.porcelain .table-view-row:not(:last-child) {
+  border-bottom: 1px solid #ececef;
+}
+
+.porcelain .kanban-task-card .label-pill {
+  font-size: 11px !important;
+}
+
+.porcelain .app-shell-rail {
+  border-color: #dcdce1;
+}
+
+.porcelain .left-sidebar-flyout {
+  border-right: 1px solid #dcdce1;
+}
+
+.porcelain .right-sidebar-flyout {
+  border-left: 1px solid #dcdce1;
+}
+
+.porcelain .quick-tips-bar {
+  background: #ececef;
+}
+
+/* emoji-mart reads these via rgb(var(--…)); emojipicker.scss supplies a hex,
+   which is invalid there, so inner bars otherwise use emoji-mart defaults. */
+.porcelain em-emoji-picker {
+  --rgb-background: 255, 255, 255;
+  --rgb-input: 240, 241, 243;
+  --rgb-color: 24, 24, 27;
+  --color-border: rgba(0, 0, 0, 0.06);
+}
+
+/* html.porcelain so this outranks the next/font Inter className on <html>
+   (equal-specificity source order is not guaranteed). */
+html.porcelain {
+  font-family: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+}
+
+.porcelain .attachment-tile {
+  background: #f5f5f6 !important;
+  border: 1px solid #e2e2e6;
+  color: #18181b;
+}
+
+.porcelain .attachment-tile:hover {
+  background: #ececef !important;
+}
+
+.porcelain .attachment-tile-name {
+  color: #18181b;
+}
+
+.porcelain .ai-chat-sidebar {
+  border-left: 1px solid #dcdce1;
+}
+
+/* Core themes run thin 1.5 glyphs (HTPR-4931). CSS stroke-width beats the
+   SVG attribute so remaining Lucide call sites thin without edits. */
+.porcelain svg.lucide:not(.keep-stroke) {
+  stroke-width: 1.5;
+}

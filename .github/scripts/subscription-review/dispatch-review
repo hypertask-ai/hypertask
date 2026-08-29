@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] || { echo "usage: hypertask-dispatch-review <pr-number> [head-sha]" >&2; exit 64; }
+pr_number=$1
+requested_sha=${2:-}
+[[ "$pr_number" =~ ^[1-9][0-9]*$ ]] || { echo "PR number must be a positive integer" >&2; exit 64; }
+if [ -n "$requested_sha" ]; then
+  [[ "$requested_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "head SHA must be 40 lowercase hexadecimal characters" >&2; exit 64; }
+fi
+
+curl_config=${HYPERTASK_REVIEW_CURL_CONFIG:-/etc/hypertask-ai-review/reviewer-curl.conf}
+[ -r "$curl_config" ] || { echo "Reviewer dispatch credential is unavailable" >&2; exit 78; }
+
+state_root=${HYPERTASK_REVIEW_STATE_ROOT:-/var/lib/hypertask-ai-review}
+lock_file="$state_root/locks/pr-${pr_number}.lock"
+exec 9>"$lock_file"
+flock -w 30 9 || { echo "Another dispatch is validating PR #${pr_number}" >&2; exit 75; }
+
+payload=$(curl -fsS \
+  --config "$curl_config" \
+  -H "Accept: application/vnd.github+json" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/valentinyeo/hypertasks/pulls/${pr_number}")
+
+actual_sha=$(jq -r '.head.sha' <<<"$payload")
+[ "$(jq -r '.state' <<<"$payload")" = open ] || { echo "PR #${pr_number} is not open" >&2; exit 65; }
+[ "$(jq -r '.base.ref' <<<"$payload")" = staging ] || { echo "PR #${pr_number} does not target staging" >&2; exit 65; }
+[ "$(jq -r '.head.repo.full_name' <<<"$payload")" = valentinyeo/hypertasks ] || { echo "Fork PRs cannot use the subscription reviewer" >&2; exit 65; }
+[[ "$actual_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "GitHub returned an invalid head SHA" >&2; exit 69; }
+[ -z "$requested_sha" ] || [ "$requested_sha" = "$actual_sha" ] || { echo "Requested head is no longer current" >&2; exit 75; }
+
+state_file="$state_root/dispatched/${actual_sha}"
+completed_file="$state_root/completed/${actual_sha}"
+automatic_attempts=0
+if [ -e "$state_file" ]; then
+  recorded_attempts=$(tr -d '[:space:]' <"$state_file")
+  if [[ "$recorded_attempts" =~ ^[1-9][0-9]*$ ]]; then
+    automatic_attempts=$recorded_attempts
+  else
+    # Compatibility with the original empty marker format.
+    automatic_attempts=1
+  fi
+fi
+
+review_state=$(curl -fsS \
+  --config "$curl_config" \
+  -H "Accept: application/vnd.github+json" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/valentinyeo/hypertasks/commits/${actual_sha}/status" \
+  | jq -r '[.statuses[] | select(.context == "claude-review")][0].state // "missing"')
+if [ "$review_state" = success ] || [ "$review_state" = failure ]; then
+  completed_tmp=$(mktemp "$state_root/completed/.${actual_sha}.XXXXXX")
+  trap 'rm -f -- "$completed_tmp"' EXIT
+  printf '%s\n' "$review_state" >"$completed_tmp"
+  chmod 600 "$completed_tmp"
+  mv -f -- "$completed_tmp" "$completed_file"
+  trap - EXIT
+  echo "Review already completed for ${actual_sha}"
+  exit 0
+fi
+
+# Contract with hypertask-reviewer:.github/workflows/review.yml: its run-name
+# renders this exact value from repository_dispatch.client_payload. This gives
+# the poller a stable, non-secret reconciliation key without relying on a
+# branch-selectable workflow input or GitHub's default event title.
+run_title="Review hypertasks PR #${pr_number} @ ${actual_sha}"
+run_state=$(curl -fsS \
+  --config "$curl_config" \
+  -H "Accept: application/vnd.github+json" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/valentinyeo/hypertask-reviewer/actions/workflows/review.yml/runs?event=repository_dispatch&per_page=100" \
+  | jq -r --arg title "$run_title" \
+      '[.workflow_runs[] | select(.display_title == $title)][0].status // "missing"')
+if [ "$run_state" = queued ] || [ "$run_state" = in_progress ]; then
+  echo "Private review is still ${run_state} for ${actual_sha}"
+  exit 0
+fi
+
+if [ "$automatic_attempts" -ge 2 ]; then
+  echo "Automatic review retry limit reached for ${actual_sha}; use a trusted repository dispatch retry"
+  exit 0
+fi
+
+if [ -e "$state_file" ]; then
+  marker_age=$(( $(date +%s) - $(stat -c %Y "$state_file") ))
+  if [ "$run_state" = missing ] && [ "$marker_age" -lt 300 ]; then
+    echo "Waiting for GitHub to expose the private run for ${actual_sha}"
+    exit 0
+  fi
+  echo "No active private review remains for ${actual_sha}; retrying"
+fi
+
+jq -n --arg pr "$pr_number" --arg sha "$actual_sha" \
+  '{event_type:"review_pr",client_payload:{pr:$pr,head_sha:$sha}}' \
+  | curl -fsS -o /dev/null -X POST \
+      --config "$curl_config" \
+      -H "Accept: application/vnd.github+json" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      -H "Content-Type: application/json" \
+      -d @- \
+      "https://api.github.com/repos/valentinyeo/hypertask-reviewer/dispatches"
+
+next_attempt=$((automatic_attempts + 1))
+printf '%s\n' "$next_attempt" | install -m 600 /dev/stdin "$state_file"
+echo "Dispatched trusted review attempt ${next_attempt}/2 for PR #${pr_number} at ${actual_sha}"

@@ -1,0 +1,262 @@
+/* AMOLED Theme Background Colors */
+.amoled {
+  --primary: 222 9% 46%;
+
+  --bg-pageBackground: #000000;
+  --bg-taskDetailPage: #000000;
+  --bg-label-span: #2d2d2d;
+  /* Hover must sit ABOVE the resting surfaces it hovers (#2d2d2d buttons,
+     #282828 active cards) or hover reads as darkening; grey-tinted. */
+  --bg-hover-active: #34363d;
+  --bg-cardBackground: #1d1d1d;
+  --bg-modalBackground: #141414;
+  --bg-taskDetail-container: #000000;
+  --bg-containerBackground: #101010;
+  --bg-containerBackground-inverted: #cccccc;
+  --bg-comment-description: #121212;
+  --bg-back-button: #0c0c0c;
+  --bg-tooltip: #141414;
+  --bg-newComment-container: #121212;
+  --bg-task-tag: #0f2a0d;
+  --bg-sidebar: #000000;
+  --bg-dropdown: #141414;
+  --bg-self-comment: #121212;
+  --bg-mention: #141414;
+  --bg-reactions: #0c0c0c;
+  --bg-horizontal-scrollbar: #333333;
+  /* The composer is borderless (AI_Tiptap_Container renders it with
+     `border-0`), so its fill is the only cue for where you type. #0c0c0c
+     on the #000000 AMOLED page is 1.07:1 and reads as no field at all.
+     #1d1d1d matches the dark theme's composer contrast and reuses the
+     --bg-cardBackground value already in this file. HTPR-5684. */
+  --bg-ai-chat-tiptap: #1d1d1d;
+  --bg-ai-chat: #000000;
+  --bg-mention-highlight: #232210;
+}
+
+/* AMOLED Theme Hover Backgrounds */
+.amoled {
+  --hover-cardBackground: #232323;
+}
+
+/* AMOLED Theme Active Backgrounds */
+.amoled {
+  --active-kanbanCardbg: #282828;
+  --active-elementBg: #1d1e23;
+  --active-modal-element: #303239;
+  --active-mentionList: #34363d;
+  --active-list-element: #303239;
+}
+
+/* AMOLED Theme Colors */
+.amoled {
+  --color-page-background: var(--bg-pageBackground);
+  /* ChatGPT-dark near-white: body text on pure black reads crisper at
+     #ececec than the old #cccccc (HTPR-4919). */
+  --color-white-black: #ececec;
+  --color-white-black-inverted: #0c0c0c;
+  --color-text-light-gray: #8a8a8a;
+  --color-border: 0 0% 20%;
+  --color-border-comment-description: #333333;
+  --bg-newcomment-well: #000000;
+  --color-my-comment: #ffffff;
+  --color-kanban-column-scrollbar: transparent;
+  --em-rgb-color: #ffffff;
+  --color-text-labelComponent: #9a9a9a;
+  --shadcn-primary: 222 9% 46%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 0 0% 8%;
+  --secondary-foreground: 0 0% 80%;
+  --muted: 0 0% 20%;
+  --muted-foreground: 0 0% 80%;
+  --accent: 222 9% 46%;
+  --accent-foreground: 0 0% 0%;
+  --destructive: 354 78% 59%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 222 9% 46%;
+  --button-arrow-disabled: #333333;
+  --button-arrow: #ffffff;
+  --border-self-comment: 51, 51, 51;
+  --border-light-gray-thin: #333333;
+  --color-mention-highlight: #f9f267;
+  --color-horizontal-scrollbar-track: #0c0c0c;
+  --color-archived-state: #4ade80;
+}
+
+/* AMOLED Theme Focus Rings */
+.amoled {
+  --focus-ring: #6b7180;
+  --border-active: #6b7180;
+}
+
+@media (max-width: 767px) {
+  .amoled {
+    --bg-taskDetailPage: #000000;
+    --bg-newComment-container: #121212;
+  }
+}
+
+.amoled .modal-content,
+.amoled .linksModal .modal-content {
+  border: 1px solid #333;
+}
+
+/* Muted IDs are a board-card treatment only — in the detail properties
+   column the ID must match the other property values (HTPR-4915). */
+.amoled .kanban-task-card .task-ticket-id {
+  color: #8a8a8a;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.amoled .kanban-column-count {
+  color: #8a8a8a;
+}
+
+.amoled .inbox-indicator-dot {
+  color: #6b7180;
+}
+
+/* Kanban column well: stable 1px border so empty columns read as a normal
+   well instead of blending into the page background. Also overrides the
+   section container's keyboard-focus border (focus:border-white-black ->
+   --color-white-black, #cccccc for amoled), which otherwise renders as a
+   bright outline around the whole column height once a column is focused
+   (KanbanSectionComponents/section.tsx sectionRef.current?.focus() in
+   useSections.ts) -- most visible on empty columns with no cards to draw
+   the eye away from it. */
+.amoled .section-container {
+  border: 1px solid #343434;
+}
+
+/* Keep keyboard focus visible: one step brighter than the resting well. */
+.amoled .section-container:focus {
+  border-color: #555555;
+}
+
+/* Compact card type (amoled kanban cards only; 11px is the floor of the
+   app's type scale, and LabelWrapper sets fontSize:12 inline, hence
+   !important). Card titles are already 13px via text-dense. */
+.amoled .kanban-task-card .label-pill {
+  font-size: 11px !important;
+}
+
+/* Table view: on true black, rows have nothing separating them (other
+   themes lean on the lighter page background). Quiet row hairlines, a
+   firmer line under the sticky header. */
+.amoled .table-view-header {
+  border-bottom: 1px solid #343434;
+}
+
+.amoled .table-view-row:not(:last-child) {
+  border-bottom: 1px solid #1f1f1f;
+}
+
+/* Sidebar edges (icon rail, board-switcher flyout, account/notifications
+   flyout) share a hardcoded rgba(0,0,0,0.10) border (border-light-black-border-1)
+   on the rail; that's invisible against near-black surfaces (HTPR-4906), so
+   override its color here. The two flyouts carry no border utility at all
+   (kept that way for every other theme) — give them one only on this theme,
+   scoped here rather than as an unconditional Tailwind class on the
+   component, so light/dark/dia don't pick up an edge they never had. */
+.amoled .app-shell-rail {
+  border-color: #3a3a3a;
+}
+
+.amoled .left-sidebar-flyout {
+  border-right: 1px solid #3a3a3a;
+}
+
+.amoled .right-sidebar-flyout {
+  border-left: 1px solid #3a3a3a;
+}
+
+/* Card border for POSTED comments. The description field and the new-comment
+   composer (#comment) stay borderless; the AI writer keeps its own purple accent
+   border. On mobile the composer's input sits in a darker recessed well
+   (--bg-newcomment-well) instead of a border, so it reads as a clear tap target. */
+.amoled .bg-comment-description:not(.main-attachment-container):not(.ai-task-writer-panel):not(.description-container):not(.description-edit-container):not(.comment-edit-container):not(.comment-body):not(#comment),
+.amoled .bg-self-comment {
+  border: 1px solid #2a2a2a;
+}
+
+.amoled .quick-tips-bar {
+  background: #1d1e23;
+}
+
+.amoled em-emoji-picker {
+  --rgb-background: 20, 20, 20;
+  --rgb-input: 38, 38, 38;
+  --rgb-color: 255, 255, 255;
+  --color-border: #343434;
+}
+
+/* html.amoled so this outranks the next/font Inter className on the same
+   <html> element (equal-specificity source order is not guaranteed). */
+html.amoled {
+  font-family: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* The outer new-comment card owns the single hairline: drop the inner
+   editor's own border so the comment field isn't double-ringed. */
+.amoled #comment #comment-input.bg-comment-description {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* The AI writer is an overlay panel, not the composer's inner editor, so it
+   keeps its own purple accent border (see the note above). */
+.amoled #comment .ai-task-writer-panel {
+  box-shadow: none;
+}
+
+/* Attachments sit inside the comment card, so they get the card's surface,
+   not the hardcoded dark-theme tile. */
+.amoled .main-attachment-container {
+  background: transparent;
+}
+
+.amoled .attachment-tile {
+  background: #141414 !important;
+  border: 1px solid #2a2a2a;
+  color: #ececec;
+}
+
+.amoled .attachment-tile:hover {
+  background: #1a1a1a !important;
+}
+
+.amoled .attachment-tile-name {
+  color: #ececec;
+}
+
+/* AI chat panel: pure-black panel on a pure-black page needs an edge, same
+   reasoning as the sidebar flyouts above (HTPR-4930). */
+.amoled .ai-chat-sidebar {
+  border-left: 1px solid #3a3a3a;
+}
+
+/* Core themes run thin 1.5 glyphs (HTPR-4931). CSS stroke-width beats the
+   SVG attribute so remaining Lucide call sites thin without edits. */
+.amoled svg.lucide:not(.keep-stroke) {
+  stroke-width: 1.5;
+}
+
+/* ChatGPT dark: body text #ececec, bold/headings pure white (HTPR-4936). */
+/* :not(:disabled) keeps disabled:text-* working; .bold-pop-exempt opts an element out (theme CSS is unlayered and beats variant utilities). */
+.amoled :is(.font-bold, .font-semibold).text-white-black:not(:disabled):not(.bold-pop-exempt) {
+  color: #ffffff;
+}
+
+/* Pitch-black chrome (HTPR-4943): on AMOLED the icon rail and the inbox well
+   drop their #101010 fill and sit directly on the black page. Hairline
+   borders above keep the edges readable. */
+.amoled .app-shell-rail {
+  background: #000000;
+}
+
+.amoled .inbox-split-panel {
+  background: #000000;
+}

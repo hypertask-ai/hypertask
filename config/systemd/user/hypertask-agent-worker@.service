@@ -1,0 +1,32 @@
+[Unit]
+Description=Hypertask %i autonomous provider worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/hypertask-agents/%i.env
+EnvironmentFile=%h/.config/hypertask-agents/%i.conf
+Environment=HT_AGENT_SLUG=%i
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TMPDIR=%h/.local/state/hypertask-%i/tmp
+Environment=XDG_CACHE_HOME=%h/.local/state/hypertask-%i/cache
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStartPre=/usr/bin/test -r %h/.local/lib/hypertask-agent-worker/authenticated_probe.mjs
+ExecStartPre=/usr/bin/aa-exec -p codex-brokered-worker-%i -- /usr/bin/python3 %h/.local/lib/hypertask-agent-worker/verify_worker_profile.py --slug %i --directory %h/.config/hypertask-agents --git-probe-slug speed-engineer --repository %h/projects/hypertasks
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/hypertask-%i/tmp %h/.local/state/hypertask-%i/cache
+ExecStartPre=/usr/bin/chmod 700 %h/.local/state/hypertask-%i/tmp %h/.local/state/hypertask-%i/cache
+ExecStart=/usr/bin/aa-exec -p codex-brokered-worker-%i -- /usr/bin/python3 %h/.local/lib/hypertask-agent-worker/worker.py work
+Restart=always
+RestartSec=5
+# Ubuntu's generic unprivileged_userns profile blocks a later AppArmor
+# transition, so the worker's equivalent read-only host boundary is enforced
+# by an instance-specific worker profile instead of systemd mount namespaces.
+# The profile uses an explicit executable allowlist, so every unlisted host
+# setuid/setgid binary fails closed. bwrap sets no-new-privileges after the
+# transition into codex-brokered-provider.
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

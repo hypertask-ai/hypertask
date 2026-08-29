@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ai.hypertask.app",
+      "sha256_cert_fingerprints": [
+        "A7:CE:65:3F:BC:B7:37:E9:AE:51:E0:C0:26:E6:28:A5:2B:8C:14:92:61:46:C2:75:B6:76:EC:E2:9F:35:A3:32"
+      ]
+    }
+  }
+]

@@ -1,0 +1,1 @@
+export const TrashKeyPrefix = "trash-project"

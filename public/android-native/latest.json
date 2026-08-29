@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "versionCode": 39,
+  "versionName": "0.39.0",
+  "minimumSupportedVersionCode": 1,
+  "apkUrl": "https://github.com/valentinyeo/hypertask-app-releases/releases/download/android-native-v0.39.0/hypertask-android-native-v0.39.0.apk",
+  "sha256": "bc5fb1f17c9c7d15ecd417527cc2e37442df940cd0b44ce02d3f0849d7e7abbe",
+  "sizeBytes": 808980,
+  "releaseNotes": [
+    "Task Detail now follows the production mobile hierarchy with title actions, a compact task summary, and an inset rich description.",
+    "Activity rows and the comment composer are denser and closer to mobile web while preserving 48 dp Android touch targets.",
+    "Cached offline loading, tappable external links, editing, dictation, sharing, and archiving remain native and fast."
+  ],
+  "publishedAt": "2026-08-17T14:10:06Z"
+}

@@ -1,0 +1,49 @@
+/* Establish cascade layer order before Tailwind declares its own layers below.
+   Native CSS @layer rules always lose to unlayered CSS regardless of source
+   order, so v4's layered preflight was losing to Bootstrap Reboot's unlayered
+   `a { text-decoration: underline }` etc. (v3's preflight was unlayered too, so
+   plain source order used to decide it). Layering Bootstrap here, below Tailwind's
+   layers, restores v3's win-order. See HTPR-3960. */
+@layer bootstrap, theme, base, components, utilities;
+@import "bootstrap/dist/css/bootstrap.min.css" layer(bootstrap);
+
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+/* Replaces the removed `safelist` in tailwind.config.ts (v4's Config type dropped it).
+   Forces these classes to always generate even though they're only referenced via a
+   JS variable (taskDetailSpacing.mobile.descriptionContainer) the content scanner can't
+   follow. See tailwind.config.ts and src/lib/configs/taskDetail.config.ts. */
+@source inline("xs:py-2 xs:px-[10px] py-2 px-[10px]");
+
+/* Tailwind v4 ships container queries natively (replaces @tailwindcss/container-queries).
+   Override the native --container-* scale to match the removed plugin's `containers`
+   config (see tailwind.config.ts) so @xs/@sm/@md/@lg/@xl/@2xl keep resolving to the
+   same widths as before the v4 migration (HTPR-3960). */
+@theme {
+  --container-xs: 280px;
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1300px;
+  --container-2xl: 1536px;
+  --container-3xl: 48rem;
+  --container-4xl: 56rem;
+  --container-5xl: 64rem;
+  --container-6xl: 72rem;
+  --container-7xl: 80rem;
+}
+
+/* Tailwind v4's preflight resets borders with plain `border: 0 solid;` (no color),
+   so an unqualified `border` utility now renders currentColor instead of v3's
+   gray-200 default. Restore the old default globally (official v4 upgrade-guide fix)
+   so existing `border`-only usages (e.g. bulk-actions-inbox.tsx) don't shift color. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+}

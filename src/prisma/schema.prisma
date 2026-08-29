@@ -1,0 +1,2131 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres", "relationJoins"]
+  // HTPR-4034: always emit the Vercel-lambda (rhel) engine alongside the
+  // local (native) one. Without rhel-openssl-3.0.x, a client generated on the
+  // VPS (debian) ships only the debian engine, so a prebuilt deploy promoted
+  // to the lambda crashes with "Query Engine for rhel-openssl-3.0.x not found".
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+// datasource db {
+//   provider = "mongodb"
+//   url      = env("DATABASE_URL")
+// }
+
+// HTPR-4119: Prisma 7 no longer allows `url` in the schema's datasource block
+// (P1012). The connection string now lives in prisma.config.ts (CLI commands)
+// and is passed to the driver adapter at runtime (src/lib/prisma.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+enum Status {
+  Normal
+  Archive
+  Deleted
+}
+
+enum EventType {
+  TeamEvent
+  UserEvent
+  UserAndTeamEvent
+}
+
+enum MentionPreference {
+  all
+  direct
+  nothing
+}
+
+enum ViewVisibility {
+  Public
+  Private
+}
+
+enum TaskRelation {
+  RelatedTo
+  BlockedBy
+  BlockedTo
+  Duplicate
+}
+
+// Kinds of proof-of-work an agent can attach to a ticket (HTPR-4443).
+enum EvidenceType {
+  TestRun
+  Screenshot
+  Deploy
+  Diff
+  Link
+  Other
+}
+
+enum RiskLevel {
+  Low
+  Medium
+  High
+}
+
+// Repeat cadence for recurring tasks (HTPR-4885). The rule lives on the
+// active occurrence; completing it moves the rule to the freshly spawned copy
+// (see src/utils/controllers/tasks/spawnRecurrence.ts).
+enum RecurrenceRule {
+  Daily
+  Weekdays
+  Weekly
+  Biweekly
+  Monthly
+}
+
+// Lifecycle of an agent work-session attached to a ticket (HTPR-4436).
+enum SessionStatus {
+  Active
+  Idle
+  Dead
+}
+
+//Note: Domain translates to "Invited"
+enum TaskShareType {
+  Anyone
+  Domain
+}
+
+enum DraftType {
+  Description
+  Comment
+}
+
+enum DecisionRequestStatus {
+  Pending
+  Answered
+  Cancelled
+}
+
+enum LogType {
+  Board
+  Task
+  Comment
+  Team
+  Invite
+  Signup
+  Error
+}
+
+enum NotificationType {
+  Assigned
+  Comment
+  Invited
+  Reacted
+  TaskArchived
+  TaskMoved
+  TaskDueDate
+  AddedToFollowerInTask
+  TaskReminder
+  TaskMovedToInbox
+  TaskUpdateDescription
+  TaskOverdue
+  Mentioned
+  AgentMessage
+}
+
+enum SortingMode {
+  Manual
+  Priority
+  DueDate
+  Size
+  CreatedAt
+  UpdatedAt
+  SectionChangedAt
+  LastCommentAt
+  Assignee
+  Title
+  TicketNumber
+  TimeInColumn
+  TimeOnBoard
+  TimeWithoutComment
+}
+
+enum EmptySections {
+  Show
+  Hidden
+}
+
+enum SubtaskSetting {
+  None
+  Parent
+  Flattened
+  Card
+  Flattened_Card
+}
+
+enum SortingOrder {
+  Ascending
+  Descending
+}
+
+enum ReminderConditions {
+  DurationComplete
+  NewNotification
+}
+
+enum SubscriptionPlanStatus {
+  Free
+  AwaitingPayment
+  Paid
+  Expired
+  active
+  past_due
+  unpaid
+  canceled
+  incomplete
+  incomplete_expired
+  trialing
+  paused
+  all
+  ended
+}
+
+enum InviteStatus {
+  Invited
+  Accepted
+}
+
+enum MemberRole {
+  Admin
+  Member
+}
+
+enum ScrollSetting {
+  None
+  Bottom
+  Inbox
+}
+
+enum ChatRole {
+  human
+  assistant
+}
+
+enum AgentRuntimeType {
+  EXTERNAL
+  NATIVE
+}
+
+enum DisplayAvatar {
+  Show
+  Hidden
+}
+
+enum CustomFieldType {
+  Text
+  Number
+  Date
+  Select
+  Checkbox
+}
+
+// model Activity {
+//   id              Int             @id @default(autoincrement())
+//   user_activities User_Activity[]
+//   team_activities Team_Activity[]
+// }
+
+model User {
+  id                 Int            @id @default(autoincrement())
+  uid                String         @unique
+  displayName        String?
+  photoURL           String?        @default("https://files.hypertask.app/tasks/attachments/1757584422625image.png")
+  email              String
+  joinedAt           DateTime       @default(now())
+  // HTPR-4146: Better Auth phase 0 columns, unused until BETTER_AUTH_ENABLED=1.
+  emailVerified      Boolean        @default(false)
+  updatedAt          DateTime       @default(now()) @updatedAt
+  mcpTokensRevokedAt DateTime?     // Timestamp when all MCP tokens were revoked for this user
+  tasks              Task[]
+  comments           Comment[]
+  assignees          Assignees[]    @relation("assignees")
+  assigners          Assignees[]    @relation("assigners")
+  projects           Project[]
+  notifications      Notification[] @relation("toUser")
+  fromNotificaitons  Notification[] @relation("fromUser")
+  members            Member[]
+  members_teams      Member_Team[]
+  stripe_customer_id String?
+
+  UserSettingId String?
+  UserSetting   UserSetting?
+  userPicture   UserPicture?
+
+  invites                   Invite[]
+  unreadMessages            ReadStatus[]
+  taskReadStates            TaskReadState[]
+  followers                 Follower[]                  @relation("FollowersUser")
+  // account   GoogleAccount 
+  accountId                 String?
+  devices                   SubscribedDevices[]
+  descriptions              Description[]
+  logs                      Logs[]
+  Priority                  Priority[]
+  Reaction                  Reaction[]
+  Reminders                 Reminder[]
+  Estimate                  Estimate[]
+  drafts                    Drafts[]
+  // notification_invitesFromSelf Notification_Invite[] @relation("userTo")
+  user_notification_invites User_Notification_Invites[]
+  user_activity             User_Activity?
+  userAnnouncements         UserAnnouncement[]
+  project_views             View[]
+  calendar_views            Calendar_View[]
+  ViewLastUsed              View_Last_Used[]
+  tasksSharing              TaskSharing[]
+  savedContent              SavedContent[]
+  webhookEvents             WebhookEvent[]
+  oauthAuthorizationCodes  OAuthAuthorizationCode[]
+  oauthRefreshTokens       OAuthRefreshToken[]
+  revokedTokens             RevokedToken[]
+  apiKeys                   ApiKey[]
+  chatSessions              ChatSession[]
+  agents                    Agent[]
+  timeEntries               TimeEntry[]
+  taskMutes                 TaskMute[]
+  projectMutes              ProjectMute[]
+  pagesCreated              Page[]                      @relation("PageCreatedBy")
+  docVersions              DocVersion[]                @relation("DocVersionAuthor")
+  taskLeases               TaskLease[]
+  taskEvidence             TaskEvidence[]
+  taskSessions             TaskSession[]
+  taskSectionEvents        TaskSectionEvent[]
+  decisionRequestsCreated  DecisionRequest[]             @relation("DecisionRequestCreatedBy")
+  decisionRequestsAnswered DecisionRequest[]             @relation("DecisionRequestAnsweredBy")
+  webhookSubscriptions     WebhookSubscription[]
+  aiSkills                  AI_Skill[]                  @relation("AI_SkillOwner")
+  createdAiSkills           AI_Skill[]                  @relation("AI_SkillCreator")
+  slackInstalls             SlackInstall[]
+  slackUserLinks            SlackUserLink[]
+  reportsCreated            Report[]                    @relation("ReportCreator")
+  projectMilestonesCreated  ProjectMilestone[]          @relation("ProjectMilestoneCreator")
+  projectStatusUpdates      ProjectStatusUpdate[]       @relation("ProjectStatusUpdateAuthor")
+  // HTPR-4146: Better Auth phase 0 relations, unused until BETTER_AUTH_ENABLED=1.
+  betterAuthSessions        BetterAuthSession[]
+  betterAuthAccounts        BetterAuthAccount[]
+  passkeys                  Passkey[]
+  betterAuthApiKeys         BetterAuthApiKey[]
+}
+
+// HTPR-4146: Better Auth phase 0 tables, inert until BETTER_AUTH_ENABLED=1.
+model BetterAuthSession {
+  id        Int      @id @default(autoincrement())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model BetterAuthAccount {
+  id                    Int       @id @default(autoincrement())
+  accountId             String
+  providerId            String
+  userId                Int
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model BetterAuthVerification {
+  id         Int      @id @default(autoincrement())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Passkey {
+  id           Int       @id @default(autoincrement())
+  name         String?
+  publicKey    String
+  userId       Int
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime? @default(now())
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+}
+
+// HTPR-4340: account-scoped management API keys (htmk_), managed by the
+// better-auth apiKey plugin. Key material is stored hashed in `key`.
+model BetterAuthApiKey {
+  id                  Int       @id @default(autoincrement())
+  configId            String    @default("default")
+  name                String?
+  start               String?
+  prefix              String?
+  key                 String
+  userId              Int
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refillInterval      Int?
+  refillAmount        Int?
+  lastRefillAt        DateTime?
+  enabled             Boolean   @default(true)
+  rateLimitEnabled    Boolean   @default(true)
+  rateLimitTimeWindow Int?
+  rateLimitMax        Int?
+  requestCount        Int       @default(0)
+  remaining           Int?
+  lastRequest         DateTime?
+  expiresAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  permissions         String?
+  metadata            String?
+
+  @@index([configId])
+  @@index([key])
+  @@index([userId])
+}
+
+//Using this model for User Profile. Creating another model for name would be weird given both
+//have the same purpose. Live with the name.
+model UserPicture {
+  id           String  @id @default(uuid())
+  userId       Int     @unique
+  user         User    @relation(fields: [userId], references: [id])
+  photoSet     Boolean @default(false)
+  basePhotoURL String?
+  nameSet      Boolean @default(false)
+  displayName  String?
+}
+
+model User_Activity {
+  id              Int @id @default(autoincrement())
+  totalTeamsOwned Int
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  lastActiveAt   DateTime?
+  activityStatus String    @default("inactive")
+  metadata       Json?
+  events         Events[]
+
+  // activityId Int
+  // activity   Activity @relation(fields: [activityId], references: [id])
+}
+
+model User_Notification_Invites {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  notificationInviteBy Notification_Invite[] @relation("userBy")
+  notificationInviteTo Notification_Invite[] @relation("userTo")
+}
+
+model SubscribedDevices {
+  id                String  @id @default(uuid())
+  firebaseId        String
+  sendNotifications Boolean @default(true)
+  userId            Int
+  user              User    @relation(fields: [userId], references: [id])
+
+  @@unique([firebaseId])
+}
+
+model UserSetting {
+  id                       String        @id @default(uuid())
+  userId                   Int           @unique
+  user                     User          @relation(fields: [userId], references: [id])
+  notification             Boolean
+  notificationPreference   MentionPreference        @default(all)
+  commentsStacked          Boolean       @default(true)
+  shareReadReceipts        Boolean       @default(false)
+  scrollSetting            ScrollSetting @default(Bottom)
+  displayAvatar            DisplayAvatar @default(Hidden)      
+  favorites                Favorites[]
+  onboardingTourStatus     Boolean       @default(false)
+  onboardingTutorialStatus Boolean       @default(false)
+  trialStatus              Boolean       @default(false)
+  isVerified               Boolean       @default(true)
+  productTours             Json          @default("{}")
+  aiModelPreferences       Json?
+  snippets                 Json          @default("[]")
+  muteAnnouncements        Boolean       @default(false)
+  // All Tasks date-range selector (HTPR-5678). Null = never chosen; the view
+  // then opens on the Last 7 days default. Chosen value syncs across devices.
+  allTasksDateRange        String?
+  playGifs                 Boolean       @default(true)
+  notificationMatrix       Json          @default("{}")
+  // Per-user voice-dictation language (Deepgram Nova-3 code, or "multi" for
+  // auto code-switching). Defaults to English. See @/lib/dictationProvider.
+  dictationLanguage        String        @default("en")
+  // Inbox behaviour: sending a comment on a task that carries an inbox
+  // notification archives that notification and moves on to the next task.
+  inboxAdvanceOnSend       Boolean       @default(true)
+  // Mirror of emoji-mart's frequently-used {emojiId: count} map, so the picker's Frequently row persists across devices.
+  emojiFrequency           Json?
+  calendarViews            Json?
+}
+
+model Favorites {
+  id            String      @id @default(uuid())
+  userSettingId String
+  userSetting   UserSetting @relation(fields: [userSettingId], references: [id])
+  projectId     Int
+  project       Project     @relation(fields: [projectId], references: [id])
+  index         Int
+  // {'0':{projectId:2}}
+}
+
+// organzation account basically
+
+model GoogleAccount {
+  id                 String             @id @default(uuid())
+  userId             Int
+  stripe_customer_id String
+  // user User      @relation(fields: [userId], references: [id])
+  subscriptionPlans  SubscriptionPlan[]
+  teams              Team[]
+  members            Member_Team[]
+  projects           Project[]
+}
+
+// a team can have one active subscription plan id.
+// but there can be x number of subscription plans, only ONE active, rest all expired. 
+model Team {
+  id                           String             @id @default(uuid())
+  title                        String?
+  description                  String?
+  projects                     Project[]
+  members                      Member_Team[]
+  totalSeats                   Int
+  activeSubscriptionPlanItemId String?
+  activeSubscriptionPlanId     String?
+  compedUntil                  DateTime?
+  subscriptionPlan             SubscriptionPlan[]
+  stripe_customer_id           String?
+  createdAt                    DateTime           @default(now())
+  invites                      Invite[]
+  survey                       Json?
+  googleAccountId              String
+  googleAccount                GoogleAccount      @relation(fields: [googleAccountId], references: [id])
+  team_activity                Team_Activity?
+  byokApiKeys                  TeamByokApiKey[]
+  slackInstall                 SlackInstall?
+  aiProviderSettings           Json?
+  // HTPR-2572: signups on these email domains auto-join this team, billed a seat like an invite.
+  allowedEmailDomains          String[]           @default([])
+}
+
+/// Team-scoped BYOK secrets (ciphertext). provider matches byokAiProviders.source in app code.
+/// Future: add nullable personalUserId + new unique constraint for per-user keys (migration).
+model TeamByokApiKey {
+  id           String   @id @default(uuid())
+  teamId       String
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  provider     String
+  ciphertext   String?  @db.Text
+  enabled      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([teamId, provider])
+  @@index([teamId])
+}
+
+model SlackInstall {
+  id                String               @id @default(uuid())
+  slackTeamId       String               @unique
+  slackTeamName     String
+  encryptedBotToken String               @db.Text
+  botUserId         String
+  teamId            String               @unique
+  team              Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  defaultProjectId  Int?
+  defaultProject    Project?             @relation("SlackDefaultProject", fields: [defaultProjectId], references: [id], onDelete: SetNull)
+  installedByUserId Int
+  installedBy       User                 @relation(fields: [installedByUserId], references: [id], onDelete: Cascade)
+  createdAt         DateTime             @default(now())
+  watchedThreads    SlackWatchedThread[]
+  userLinks         SlackUserLink[]
+
+  @@index([installedByUserId])
+  @@index([defaultProjectId])
+}
+
+model SlackUserLink {
+  id          String       @id @default(uuid())
+  installId   String
+  install     SlackInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
+  slackUserId String
+  userId      Int
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+
+  @@unique([installId, slackUserId])
+  @@unique([installId, userId])
+  @@index([userId])
+}
+
+model SlackEventReceipt {
+  eventId   String   @id
+  createdAt DateTime @default(now())
+}
+
+model SlackWatchedThread {
+  id               String       @id @default(uuid())
+  installId        String
+  install          SlackInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
+  channelId        String
+  threadTs         String
+  matchedTaskIds   Int[]        @default([])
+  lastMessageTs    String
+  lastSummarizedTs String?
+  createdAt        DateTime     @default(now())
+
+  @@unique([installId, channelId, threadTs])
+  @@index([lastMessageTs])
+}
+
+model Team_Activity {
+  id     String   @id @default(uuid())
+  teamId String   @unique
+  team   Team     @relation(fields: [teamId], references: [id])
+  events Events[]
+
+  total_tasks       Int       @default(0)
+  lastActiviyAt     DateTime?
+  activityStatus    String    @default("inactive")
+  hasCompletedTrial Boolean   @default(false)
+
+  metadata Json?
+
+  // activityId Int
+  // activity   Activity @relation(fields: [activityId], references: [id])
+}
+
+model Events {
+  id        String    @id @default(uuid())
+  eventType EventType
+  createdAt DateTime  @default(now())
+
+  team_activity_id String?
+  team_activity    Team_Activity? @relation(fields: [team_activity_id], references: [id])
+
+  user_activity_id Int?
+  user_activity    User_Activity? @relation(fields: [user_activity_id], references: [id])
+
+  metadata         Json? // this contains metadata about the event, such as type, content, origin etc, define them locally in code.
+  keyboardShortcut String?
+}
+
+model Project {
+  id                     Int                      @id @default(autoincrement())
+  name                   String                   @unique
+  title                  String?
+  description            String?
+  ownerId                Int
+  owner                  User                     @relation(fields: [ownerId], references: [id])
+  tasks                  Task[]
+  pages                  Page[]
+  createdAt              DateTime                 @default(now())
+  members                Member[]
+  sections               String[]                 @default(["Todo", "Doing", "Done"])
+  section                Section[]
+  invites                Invite[]
+  notifications          Notification[]
+  status                 Status                   @default(Normal)
+  googleAccountId        String?
+  googleAccount          GoogleAccount?           @relation(fields: [googleAccountId], references: [id])
+  favorites              Favorites[]
+  teamId                 String?
+  priorities             Priority[]
+  team                   Team?                    @relation(fields: [teamId], references: [id])
+  sorting_mode           SortingMode              @default(Priority)
+  estimates              Estimate[]
+  labels                 Label[]
+  Reminders              Reminder[]
+  uniqueIdentifier       String?
+  project_view           Project_View?
+  ai_custom_instructions AI_Custom_Instructions[]
+  tasksSharing           TaskSharing[]
+  savedContent           SavedContent[]
+  timeTrackingEnabled    Boolean                  @default(false)
+  showTimeTotals         Boolean                  @default(false)
+  stalenessEnabled       Boolean                  @default(false)
+  staleWarnDays          Int?
+  staleHotDays           Int?
+  staleNudgeEnabled      Boolean                  @default(false)
+  // null = auto-archive off; N = archive tasks untouched (no edit, no comment) for N days.
+  autoArchiveAfterDays   Int?
+  aiSkills               AI_Skill[]
+  reports                Report[]
+  // Per-board playbook agents fetch: working rules + a definition-of-done
+  // checklist they must satisfy before marking work done (HTPR-4442). null = unset.
+  playbook               Json?
+  webhookSubscriptions   WebhookSubscription[]
+  agentWebhookSubscriptions AgentWebhookSubscription[]
+  slackDefaultInstalls   SlackInstall[]           @relation("SlackDefaultProject")
+  taskTemplates          TaskTemplate[]
+  customFields           CustomField[]
+  projectMutes           ProjectMute[]
+  targetDate             DateTime?
+  milestones             ProjectMilestone[]
+  statusUpdates          ProjectStatusUpdate[]
+
+  // @@index([status, teamId]) // For WHERE status="Normal" AND teamId IS NOT NULL
+  // @@index([ownerId, status]) // For owner-based queries
+  
+}
+
+enum ProjectHealth {
+  OnTrack
+  AtRisk
+  OffTrack
+}
+
+model ProjectMilestone {
+  id          String    @id @default(cuid())
+  projectId   Int
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  targetDate  DateTime
+  completedAt DateTime?
+  createdById Int
+  createdBy   User      @relation("ProjectMilestoneCreator", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  @@index([projectId, targetDate])
+}
+
+model ProjectStatusUpdate {
+  id        String        @id @default(cuid())
+  projectId Int
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  health    ProjectHealth
+  message   String
+  authorId  Int
+  author    User          @relation("ProjectStatusUpdateAuthor", fields: [authorId], references: [id])
+  createdAt DateTime      @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+model AI_Custom_Instructions {
+  id                Int            @id @default(autoincrement())
+  visibility        ViewVisibility @default(Public)
+  projectId         Int
+  project           Project        @relation(fields: [projectId], references: [id])
+  customInstruction String
+  source_selected   String?
+  model_selected    String?
+  lastUpdatedAt     DateTime       @default(now())
+  attachments       Attachment[] // usually for RAG
+}
+
+model AI_Skill {
+  id           Int      @id @default(autoincrement())
+  projectId    Int?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId       Int?
+  user         User?    @relation("AI_SkillOwner", fields: [userId], references: [id], onDelete: Cascade)
+  slug         String
+  name         String
+  description  String?
+  argumentHint String?
+  body         String   @db.Text
+  sourceUrl    String?
+  enabled      Boolean  @default(true)
+  createdById  Int?
+  createdBy    User?    @relation("AI_SkillCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([projectId, slug])
+  @@unique([userId, slug])
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  projectId   Int
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  slug        String
+  title       String
+  description String?
+  bodyHtml    String   @db.Text
+  bodyText    String   @db.Text @default("")
+  createdById Int?
+  createdBy   User?    @relation("ReportCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  agentId     String?
+  agent       Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([projectId, slug])
+  @@index([projectId, updatedAt])
+}
+
+model View_Last_Used {
+  id         String    @id @default(uuid())
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id])
+  viewId     String
+  view       View      @relation(fields: [viewId], references: [id])
+
+  @@unique([userId, viewId], name: "user_view_last_used")
+}
+
+model View {
+  id                      String        @id @default(uuid())
+  userId                  Int
+  owner                   User          @relation(fields: [userId], references: [id])
+  createdAt               DateTime      @default(now())
+  applied_in_project_view Project_View?
+
+  user_project_views        User_Project_View[]
+  unsaved_User_Project_View User_Project_View[] @relation(name: "unsaved_view")
+
+  visibility      ViewVisibility @default(Public)
+  title           String?
+  project_view_id String
+  project_view    Project_View   @relation(name: "ProjectViewViews", fields: [project_view_id], references: [id])
+  slug            String?
+
+  lastUsedAt            DateTime?
+  board_sorting_mode    SortingMode      @default(Manual)
+  board_sorting_order   SortingOrder     @default(Descending)
+  board_subtask_setting SubtaskSetting   @default(Flattened_Card)
+  board_empty_sections  EmptySections    @default(Show)
+  // null inherits the board's Project.stalenessEnabled; true/false overrides per view.
+  board_staleness       Boolean?
+  // null inherits the browser-level "show archived tasks" preference; true/false
+  // pins the choice to this view so it survives navigation.
+  board_show_archived   Boolean?
+  board_filters         Json?
+  board_columns_view    Json?
+  // Optional tie-break sort levels 2..3, shape [{ mode: SortingMode, order: SortingOrder }].
+  // null/absent = single-level sort (level 1 is board_sorting_mode/board_sorting_order).
+  board_sorting_stack   Json?
+  // Table-view sort; app-level column keys (see TABLE_COLUMN_KEYS), not a DB enum.
+  table_sort_column     String?
+  table_sort_direction  String?
+  // Optional saved surface preference. App-validated to Board/Table; null inherits
+  // the user's persisted browser preference.
+  board_layout          String?
+  ViewLastUsed          View_Last_Used[]
+
+  // @@index([project_view_id, visibility]) // For finding views by project
+  // @@index([userId, visibility]) // For finding user's views
+}
+
+model Calendar_View {
+  id         String         @id @default(uuid())
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  userId     Int
+  owner      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  visibility ViewVisibility @default(Private)
+  // Boards the view includes. A Public view is visible only to users who can
+  // access every one of these.
+  projectIds Int[]
+  taskFilters Json
+  settings    Json
+  sort        Json?
+
+  @@index([userId])
+  @@index([visibility])
+}
+
+model Project_View {
+  id                 String              @id @default(uuid())
+  createdAt          DateTime            @default(now())
+  projectId          Int                 @unique
+  project            Project             @relation(fields: [projectId], references: [id])
+  allViews           View[]              @relation("ProjectViewViews")
+  user_project_views User_Project_View[]
+  default_view_order Json?
+
+  default_view_id String? @unique
+  default_view    View?   @relation(fields: [default_view_id], references: [id])
+}
+
+model User_Project_View {
+  id         String   @id @default(uuid())
+  createdAt  DateTime @default(now())
+  userId     Int
+  view_order Json?
+
+  appliedViewId String?
+  appliedView   View?   @relation(fields: [appliedViewId], references: [id])
+  unsavedViewId String?
+  unsavedView   View?   @relation(name: "unsaved_view", fields: [unsavedViewId], references: [id])
+
+  project_view_id String
+  project_view    Project_View @relation(fields: [project_view_id], references: [id])
+  @@index([userId, project_view_id]) // For user's project views
+  @@unique([userId, project_view_id], name: "user_project")
+}
+
+model Section {
+  id            Int        @id @default(autoincrement())
+  section_title String     @db.VarChar(255)
+  projectId     Int
+  visibility    Boolean    @default(true)
+  deleted       Boolean    @default(false)
+  ranking       String     @default("A0200")
+  isDone        Boolean?
+  autoAssignUserId Int?
+  autoAssignAgentId String?
+  project       Project    @relation(fields: [projectId], references: [id])
+  priorities    Priority[]
+  estimates     Estimate[]
+  @@index([projectId, deleted, ranking]) // For project sections with ordering
+
+}
+
+model Task {
+  id                  Int             @id @default(autoincrement())
+  uniqueIndex         Int
+  ticketNumber        String?
+  ranking             String          @default("")
+  section             String
+  title               String
+  description         String
+  projectId           Int
+  project             Project         @relation(fields: [projectId], references: [id])
+  status              Status          @default(Normal)
+  userId              Int
+  user                User            @relation(fields: [userId], references: [id])
+  comments            Comment[]
+  assignees           Assignees[]
+  followers           Follower[]
+  createdAt           DateTime        @default(now())
+  sectionChangedAt    DateTime        @default(now())
+  lastCommentAt       DateTime?
+  staleNudgedAt       DateTime?
+  waitingOnUserId     Int?
+  waitingOnSetById    Int?
+  waitingOnSetAt      DateTime?
+  dueDate             DateTime?
+  // Optional planned start (HTPR-4884). Display + My Tasks grouping only —
+  // no sweep or notification fires off it.
+  startDate           DateTime?
+  // Repeat cadence (HTPR-4885); null = not recurring. Moving the task to a
+  // done column or archiving it spawns the next occurrence and moves the rule.
+  recurrence          RecurrenceRule?
+  riskLevel           RiskLevel?
+  acceptanceCriteria  String?
+  verifyCommand       String?
+  // Set once the overdue notification has fired for the current dueDate value.
+  // Reset to null whenever dueDate changes (see setDueDate.ts / createGlobally.ts).
+  // Guards invokeDueDate + the sweep (src/pages/api/queues/sweep.ts) against double-firing.
+  dueDateNotifiedAt   DateTime?
+  deletedAt           DateTime?
+  archivedAt          DateTime?
+  updatedAt           DateTime?
+  permanentlyDeleteAt DateTime?
+  // Set by the hard-delete sweep while a row is being processed. A stale value is
+  // retryable, which prevents overlapping sweeps from processing the same task.
+  hardDeleteProcessingAt DateTime?
+  totalComments       Int             @default(0)
+  sectionId           Int?
+  descriptionJson     Json?           @default("{\"content\": [], \"type\": \"\"}")
+  ReadStatus          ReadStatus[]
+  taskReadStates      TaskReadState[]
+  notifications       Notification[]
+  attachments         Attachment[]
+  descriptionId       String?
+  description_        Description?
+  priority            Priority?
+  reactions           Reaction[]
+  // Comment_Reactions Comment_Reactions[]
+  estimate            Estimate?
+  taskLabels          TaskLabel[]
+  Reminders           Reminder[]
+  drafts              Drafts[]
+  decisionRequests    DecisionRequest[]
+  Task_Summary        Task_Summary[]
+  parentTaskId        Int?
+  parentTask          Task?           @relation("SubTasks", fields: [parentTaskId], references: [id])
+  subTasks            Task[]          @relation("SubTasks")
+  tasksSharing        TaskSharing[]
+  savedContent        SavedContent[]
+  relatedToTasks      TaskRelations[] @relation("RelatedToTasks")
+  relatedFromTasks    TaskRelations[] @relation("RelatedFromTasks")
+  evidence            TaskEvidence[]
+  taskSessions        TaskSession[]
+  sectionEvents       TaskSectionEvent[]
+  customFieldValues   CustomFieldValue[]
+  updatedByUserIds    Int[]
+  //If provided, task is created by an agent
+  agentId             String?
+  agent               Agent?          @relation(fields: [agentId], references: [id])
+  // Written with the task row, then cleared by the task.created outbox handoff.
+  // The sweep retries rows left pending if post-create work never runs.
+  agentTaskCreatedPendingAt DateTime?
+  // Set only after post-create column auto-assignment has completed. Recovery
+  // must not emit task.created from the pending marker before this point.
+  agentTaskCreatedReadyAt DateTime?
+  agentTaskCreatedEmittedAt DateTime?
+  timeEntries         TimeEntry[]
+  taskMutes           TaskMute[]
+  pages               Page[]
+  taskLease           TaskLease?
+
+  // @@index([projectId, deletedAt, updatedAt]) // Composite index for your exact query
+  // @@index([updatedAt]) // For ordering
+  // @@index([deletedAt]) // For filtering deleted tasks
+  // @@index([status]) // If you filter by status frequently
+  @@index([projectId, status])
+  @@index([projectId, status, archivedAt])
+  @@index([parentTaskId, status])
+  // Back the minute-ly sweep (src/pages/api/queues/sweep.ts) so its due-date and
+  // permanent-delete scans don't full-scan the table every tick.
+  @@index([status, permanentlyDeleteAt])
+  @@index([status, permanentlyDeleteAt, hardDeleteProcessingAt])
+  @@index([dueDate, dueDateNotifiedAt])
+  @@index([waitingOnUserId])
+  @@index([agentTaskCreatedPendingAt, agentTaskCreatedReadyAt, agentTaskCreatedEmittedAt])
+  // Backs the ticketNumber lookup in linkifyTicketRefs.ts (AI responses linkify
+  // ticket refs on most turns); applied to prod Neon via CREATE INDEX CONCURRENTLY.
+  @@index([ticketNumber])
+  @@unique([projectId, uniqueIndex])
+}
+
+model TaskSectionEvent {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  from      String   @db.VarChar(255)
+  to        String   @db.VarChar(255)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  timestamp DateTime @default(now())
+
+  @@index([taskId, timestamp])
+}
+
+// Reusable task shape saved per board (HTPR-4886). Instantiated through
+// createTaskCore; labels are project-scoped so plain ids are enough.
+model TaskTemplate {
+  id              Int      @id @default(autoincrement())
+  projectId       Int
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById     Int?
+  name            String
+  title           String
+  descriptionHtml String   @default("") @db.Text
+  priorityIndex   Int?
+  estimateIndex   Int?
+  labelIds        String[] @default([])
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model TaskLease {
+  taskId      Int      @unique
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  holder      Int
+  holderUser  User     @relation(fields: [holder], references: [id], onDelete: Cascade)
+  agentId     String?
+  // HTPR-5656: per-lease instance identity. Explicit claims leave it null;
+  // only adoptions mint one, so a release can prove it deletes its own lease.
+  token       String?
+  // Active in-process adoption scopes sharing this token. Explicit claims stay 0.
+  adoptionCount Int      @default(0)
+  adoptionRefs  String[] @default([])
+  expiresAt   DateTime
+  heartbeatAt DateTime
+  createdAt   DateTime @default(now())
+}
+
+model TaskMute {
+  id        String   @id @default(uuid())
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id])
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+}
+
+model ProjectMute {
+  id        String   @id @default(uuid())
+  projectId Int
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model TimeEntry {
+  id        Int       @id @default(autoincrement())
+  taskId    Int
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  note      String?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  pausedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, endedAt])
+  @@index([taskId])
+}
+
+model Page {
+  id           Int       @id @default(autoincrement())
+  publicId     String    @unique @default(cuid())
+  title        String    @default("Untitled")
+  contentHtml  String    @db.Text @default("")
+  contentText  String    @db.Text @default("")
+  taskId       Int
+  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  parentPageId Int?
+  parentPage   Page?     @relation("SubPages", fields: [parentPageId], references: [id])
+  subPages     Page[]    @relation("SubPages")
+  projectId    Int
+  project      Project   @relation(fields: [projectId], references: [id])
+  version      Int       @default(1)
+  createdById  Int
+  createdBy    User      @relation("PageCreatedBy", fields: [createdById], references: [id])
+  agentId      String?
+  agent        Agent?    @relation(fields: [agentId], references: [id])
+  archived     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime? @updatedAt
+
+  @@index([taskId, archived])
+  @@index([projectId])
+  @@index([parentPageId])
+}
+
+model DocVersion {
+  id          Int      @id @default(autoincrement())
+  entityType  String
+  entityId    Int
+  version     Int
+  contentHtml String   @db.Text @default("")
+  contentText String   @db.Text @default("")
+  title       String?
+  authorId    Int?
+  author      User?    @relation("DocVersionAuthor", fields: [authorId], references: [id])
+  agentId     String?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId, version])
+}
+
+model TaskRelations {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  sourceTaskId Int
+  sourceTask   Task @relation("RelatedFromTasks", fields: [sourceTaskId], references: [id])
+
+  targetTaskId Int
+  targetTask   Task @relation("RelatedToTasks", fields: [targetTaskId], references: [id])
+
+  relationType TaskRelation @default(RelatedTo)
+
+  @@unique([sourceTaskId, targetTaskId])
+}
+
+model Task_Summary {
+  id        Int       @id @default(autoincrement())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+  content   String
+  taskId    Int       @unique
+  task      Task      @relation(fields: [taskId], references: [id])
+}
+
+model Drafts {
+  id        Int       @id @default(autoincrement())
+  taskId    Int
+  task      Task      @relation(fields: [taskId], references: [id])
+  updatedAt DateTime  @default(now())
+  projectId Int
+  content   String    @default("")
+  saved     Boolean
+  type      DraftType
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([taskId, type, userId])
+}
+
+model DecisionRequest {
+  id           Int                   @id @default(autoincrement())
+  taskId       Int
+  task         Task                  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  question     String                @db.Text
+  options      Json
+  status       DecisionRequestStatus @default(Pending)
+  answer       String?
+  answerNote   String?               @db.Text
+  createdById  Int?
+  createdBy    User?                 @relation("DecisionRequestCreatedBy", fields: [createdById], references: [id])
+  agentId      String?
+  agent        Agent?                @relation(fields: [agentId], references: [id])
+  answeredById Int?
+  answeredBy   User?                 @relation("DecisionRequestAnsweredBy", fields: [answeredById], references: [id])
+  answeredAt   DateTime?
+  commentId    Int?
+  comment      Comment?              @relation(fields: [commentId], references: [id])
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime?             @updatedAt
+
+  @@index([taskId, status])
+}
+
+model TaskLabel {
+  id      Int    @id @default(autoincrement())
+  taskId  Int
+  task    Task   @relation(fields: [taskId], references: [id])
+  labelId String
+  label   Label  @relation(fields: [labelId], references: [id])
+
+  @@unique([taskId, labelId])
+}
+
+model Label {
+  id        String      @id @default(uuid())
+  createdAt DateTime    @default(now())
+  value     String?
+  ai_prompt String?
+  projectId Int?
+  project   Project?    @relation(fields: [projectId], references: [id])
+  task      TaskLabel[]
+}
+
+model SubscriptionPlan {
+  id                    String                 @id @default(uuid())
+  subscriptionStatus    SubscriptionPlanStatus @default(Free)
+  ownerId               String
+  owner                 GoogleAccount          @relation(fields: [ownerId], references: [id])
+  projectIds            Int[]
+  teamId                String
+  team                  Team                   @relation(fields: [teamId], references: [id])
+  productId             String
+  priceId               String
+  subscriptionItemId    String
+  subscriptionId        String
+  totalSeats            Int
+  interval              String
+  subscriptionStaretdAt DateTime
+  subscriptionEndsAt    DateTime
+  nextIntervalAt        DateTime
+  subscriptionObject    Json?
+}
+
+model Invite {
+  id        String    @id @default(uuid())
+  key       String
+  userId    Int
+  invitedBy User      @relation(fields: [userId], references: [id])
+  invitedAt DateTime  @default(now())
+  expiresAt DateTime?
+  project   Project   @relation(fields: [projectId], references: [id])
+  projectId Int
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id])
+
+  uses                Int                   @default(1)
+  emails              String[]
+  expired             Boolean               @default(false)
+  Notification_Invite Notification_Invite[]
+}
+
+model Member {
+  id            Int            @id @default(autoincrement())
+  projectId     Int
+  project       Project        @relation(fields: [projectId], references: [id])
+  userId        Int
+  user          User           @relation(fields: [userId], references: [id])
+  agentId       String?
+  agent         Agent?         @relation(fields: [agentId], references: [id])
+  status        InviteStatus   @default(Accepted)
+  role          MemberRole     @default(Member)
+  invitedAt     DateTime?
+  acceptedAt    DateTime?
+  notifications Notification[]
+
+  @@unique([projectId, agentId])
+  @@index([userId, projectId]) // For finding user's projects
+}
+
+model Member_Team {
+  id            String         @id @default(uuid())
+  userId        Int
+  user          User           @relation(fields: [userId], references: [id])
+  status        InviteStatus   @default(Accepted)
+  invitedAt     DateTime?
+  acceptedAt    DateTime?
+  notifications Notification[]
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id])
+
+  // which organization it belongs to basically, might not use it but add it just incase.
+  googleAccountId String
+  googleAccount   GoogleAccount @relation(fields: [googleAccountId], references: [id])
+
+  @@unique([userId, teamId])
+}
+
+model Priority {
+  id             String   @id @default(uuid())
+  priority_index Int
+  Priority_Value String
+  createdAt      DateTime @default(now())
+
+  sectionId     Int
+  projectId     Int
+  taskId        Int @unique
+  addedByUserId Int
+
+  addedByUser User    @relation(fields: [addedByUserId], references: [id])
+  addedByAgentId String?
+  addedByAgent Agent? @relation(fields: [addedByAgentId], references: [id])
+  task        Task    @relation(fields: [taskId], references: [id])
+  section     Section @relation(fields: [sectionId], references: [id])
+  project     Project @relation(fields: [projectId], references: [id])
+}
+
+model Estimate {
+  id             String    @id @default(uuid())
+  estimate_index Int
+  estimate_value String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime?
+
+  sectionId     Int
+  projectId     Int
+  taskId        Int @unique
+  addedByUserId Int
+
+  addedByUser User    @relation(fields: [addedByUserId], references: [id])
+  addedByAgentId String?
+  addedByAgent Agent? @relation(fields: [addedByAgentId], references: [id], name: "addedByAgent")
+  task        Task    @relation(fields: [taskId], references: [id])
+  section     Section @relation(fields: [sectionId], references: [id])
+  project     Project @relation(fields: [projectId], references: [id])
+}
+
+// User-defined fields per board. Definition only — values live in CustomFieldValue.
+model CustomField {
+  id        String             @id @default(uuid())
+  projectId Int
+  project   Project            @relation(fields: [projectId], references: [id])
+  name      String
+  type      CustomFieldType    @default(Text)
+  options   Json? // Select only: [{ id, label, color? }]
+  ranking   String             @default("A0200") // column/field order — same scheme as Section.ranking
+  showInRail  Boolean?         @default(true) // null/true = visible; only explicit false hides (manage-fields modal)
+  showInTable Boolean?         @default(true)
+  createdAt DateTime           @default(now())
+  values    CustomFieldValue[]
+
+  @@unique([projectId, name]) // no two fields with the same name on a board
+  @@index([projectId])
+}
+
+// One row per (field, task). value is canonical display; numericValue is the sort/filter key for Number/Date.
+model CustomFieldValue {
+  id           String      @id @default(uuid())
+  fieldId      String
+  field        CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  taskId       Int
+  task         Task        @relation(fields: [taskId], references: [id])
+  value        String // Text/Select(label)/Checkbox("true"|"false")/Number(as text)/Date(ISO-8601)
+  numericValue Float? // Number = the number; Date = epoch ms; else null. Native orderBy avoids lexical string sort.
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([fieldId, taskId])
+  @@index([taskId])
+  @@index([fieldId, numericValue]) // sort/filter a board by one field (e.g. ICE desc)
+}
+
+model ReadStatus {
+  id             String       @id @default(uuid())
+  taskId         Int          @unique
+  task           Task         @relation(fields: [taskId], references: [id])
+  unreadCount    Int          @default(0)
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id])
+  readStatusId   Int
+  notificationId Int
+  notification   Notification @relation(fields: [notificationId], references: [id])
+}
+
+model TaskReadState {
+  id         Int      @id @default(autoincrement())
+  taskId     Int
+  task       Task     @relation(fields: [taskId], references: [id])
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  lastReadAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+}
+
+model Url {
+  id         Int      @id @default(autoincrement())
+  urlString  String
+  title      String?
+  commentId  Int?
+  TaskId     Int
+  Attachment Boolean? @default(false)
+}
+
+model Assignees {
+  id              Int            @id @default(autoincrement())
+  assignerId      Int?
+  assigner        User?          @relation(name: "assigners", fields: [assignerId], references: [id])
+  taskId          Int
+  task            Task           @relation(fields: [taskId], references: [id])
+  userId          Int
+  user            User           @relation(name: "assignees", fields: [userId], references: [id])
+  agentAssignerId String?
+  agentAssigner   Agent?         @relation(name: "agentAssigners", fields: [agentAssignerId], references: [id])
+  agentId         String?
+  agent           Agent?         @relation(name: "agentAssignees", fields: [agentId], references: [id])
+  assignedAt      DateTime       @default(now())
+  notifications   Notification[]
+
+  @@index([taskId]) // Already good for task assignees
+}
+
+model Follower {
+  id                    String   @id @default(uuid())
+  mentionById           Int?
+  taskId                Int
+  task                  Task     @relation(fields: [taskId], references: [id])
+  userId                Int
+  mentionAt             DateTime @default(now())
+  user                  User     @relation("FollowersUser", fields: [userId], references: [id])
+  agentId               String?   //Mentioned agent
+  agent                 Agent?   @relation(fields: [agentId], references: [id])
+}
+
+model Comment {
+  id            Int            @id @default(autoincrement())
+  text          String
+  summary       String?
+  taskId        Int
+  task          Task           @relation(fields: [taskId], references: [id])
+  creatorId     Int?
+  creator       User?          @relation(fields: [creatorId], references: [id])
+  //If provided comment is created by agent
+  agentId             String?
+  agent               Agent?          @relation(fields: [agentId], references: [id])
+
+  createdAt     DateTime       @default(now())
+  notifications Notification[]
+  commentText   String         @default("") // just text no html
+  seen          Int[]          @default([])
+  attachments   Attachment[]
+  reactions     Reaction[] //normally dont use
+  savedContent  SavedContent[]
+  decisionRequests DecisionRequest[]
+  activity      Json?
+  inboundEmailReceipt InboundEmailReceipt?
+
+  @@index([agentId, createdAt])
+  // comment_Reactions Comment_Reactions[]
+
+  // @@index([taskId, createdAt])
+  @@index([taskId, creatorId]) // For comment counting
+}
+
+model InboundEmailReceipt {
+  emailId            String    @id @db.VarChar(128)
+  taskId             Int
+  commentId          Int?      @unique
+  comment             Comment?  @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  processingStartedAt DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+}
+
+model Reaction {
+  id      String   @id @default(uuid())
+  unified String
+  size    Int?
+  emoji   String
+  names   String[]
+
+  isDeleted Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+
+  descriptionId String?
+  description   Description? @relation(fields: [descriptionId], references: [id])
+
+  commentId Int?
+  comment   Comment? @relation(fields: [commentId], references: [id])
+
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  Notification Notification[]
+
+  @@index([commentId, isDeleted, emoji, unified])
+}
+
+// model Comment_Reactions {
+//   id String @id @default(uuid())
+
+//   commentId Int
+//   comment   Comment @relation(fields: [commentId], references: [id])
+
+//   taskId    Int
+//   task      Task       @relation(fields: [taskId], references: [id])
+//   reactions Reaction[]
+// }
+
+model Description {
+  id      String @id @default(uuid())
+  content String @default("")
+
+  attachments       Attachment[]
+  reactions         Reaction[]
+  flaggedIncomplete Boolean      @default(true)
+  creatorId         Int
+  creator           User         @relation(fields: [creatorId], references: [id])
+  //If provided description is created by agent
+  agentId             String?
+  agent               Agent?          @relation(fields: [agentId], references: [id])
+
+  taskId Int  @unique
+  task   Task @relation(fields: [taskId], references: [id])
+}
+
+model Attachment {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  fileType   String
+  fileSource String
+  fileName   String
+  fileSize   String?
+
+  descriptionId String?
+  description   Description? @relation(fields: [descriptionId], references: [id])
+
+  commentId Int?
+  comment   Comment? @relation(fields: [commentId], references: [id])
+
+  chatMessageId String?
+  chatMessage   ChatMessage? @relation(fields: [chatMessageId], references: [id])
+
+  AI_Custom_Instructions_id Int?
+  AI_Custom_Instructions    AI_Custom_Instructions? @relation(fields: [AI_Custom_Instructions_id], references: [id])
+
+  taskId Int?
+  task   Task? @relation(fields: [taskId], references: [id])
+
+  @@index([commentId])
+}
+
+model Notification_Invite {
+  id             Int            @id @default(autoincrement())
+  inviteURL      String
+  notificationId Int            @unique
+  notification   Notification[]
+  inviteId       String
+  invite         Invite         @relation(fields: [inviteId], references: [id])
+  createdAt      DateTime       @default(now())
+
+  userIdTo Int
+  userTo   User_Notification_Invites @relation(fields: [userIdTo], references: [id], name: "userTo")
+
+  userIdBy Int
+  userBy   User_Notification_Invites @relation(fields: [userIdBy], references: [id], name: "userBy")
+}
+
+model Notification {
+  id     Int              @id @default(autoincrement())
+  type   NotificationType @default(Comment)
+  userId Int
+  user   User             @relation(fields: [userId], references: [id], name: "toUser")
+  //If provided notification is created for the agent
+  agentId             String?
+  agent               Agent?          @relation(fields: [agentId], references: [id], name: "toAgent")
+
+  archivedAt            DateTime?
+  returnedFromReminders Boolean?
+  // Retained for rollback compatibility and raw-SQL bridging.
+  // @ignore excludes it from Prisma Client.
+  tutorialKey           String?   @unique @ignore
+  // A response to a person's explicit agent invocation. Unlike routine agent
+  // output, this is addressed to that requester and belongs in Important.
+  directReply           Boolean          @default(false)
+  // Agent-targeted Mentioned notifications double as durable invocations.
+  agentReplyConsumedAt  DateTime?
+  agentReplyCommentId   Int?
+
+  createdAt  DateTime @default(now())
+  seen       Boolean  @default(false)
+  status     Status   @default(Normal)
+  fromUserId Int?
+  fromUser   User?    @relation(fields: [fromUserId], references: [id], name: "fromUser")
+  //If provided notification is created by the agent
+  fromAgentId             String?
+  fromAgent               Agent?          @relation(fields: [fromAgentId], references: [id], name: "fromAgent")
+
+  ReadStatus ReadStatus[]
+
+  reactionId String?
+  reaction   Reaction? @relation(fields: [reactionId], references: [id])
+
+  projectId Int?     @default(1)
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  memberId Int?
+  member   Member? @relation(fields: [memberId], references: [id])
+
+  assignId Int?
+  assignee Assignees? @relation(fields: [assignId], references: [id])
+
+  commentId Int?
+  comment   Comment? @relation(fields: [commentId], references: [id])
+
+  member_team_Id String?
+  member_team    Member_Team? @relation(fields: [member_team_Id], references: [id])
+
+  taskId Int?  @default(1)
+  task   Task? @relation(fields: [taskId], references: [id])
+
+  notification_inviteId Int?
+  notification_invite   Notification_Invite? @relation(fields: [notification_inviteId], references: [id])
+
+  // Free-text body for AgentMessage notifications. Every other type derives
+  // its display text from a related entity (comment/task/reaction); a
+  // proactive agent message has none of those, so it needs its own text.
+  message String? @db.Text
+
+  @@index([taskId, userId, status, createdAt])
+  @@index([userId, status, agentId, createdAt])
+  @@index([userId, status, archivedAt])
+  @@index([agentId, taskId, type, agentReplyConsumedAt])
+}
+
+model Reminder {
+  id              Int                @id @default(autoincrement())
+  createdAt       DateTime           @default(now())
+  status          Status             @default(Normal)
+  invokeCondition ReminderConditions @default(DurationComplete)
+  updatedAt       DateTime?
+
+  remindAt DateTime?
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  projectId Int
+  project   Project @relation(fields: [projectId], references: [id])
+
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id])
+
+  @@index([taskId, status])
+  // Backs the sweep's due-reminder claim (src/pages/api/queues/sweep.ts).
+  @@index([status, remindAt])
+}
+
+model Logs {
+  id   Int     @id @default(autoincrement())
+  log  String
+  type LogType
+
+  createdAt  DateTime @default(now())
+  LoggedById Int?
+  LoggedBy   User?    @relation(fields: [LoggedById], references: [id])
+  status     Status
+}
+
+model Announcments {
+  id                Int                @id @default(autoincrement())
+  createdAt         DateTime           @default(now())
+  isActive          Boolean            @default(true)
+  isWelcome         Boolean            @default(false)
+  body              Json
+  userAnnouncements UserAnnouncement[]
+}
+
+model UserAnnouncement {
+  id             String       @id @default(uuid())
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id])
+  announcementId Int
+  announcement   Announcments @relation(fields: [announcementId], references: [id])
+  readAt         DateTime? // Nullable, as initially it will be null
+  createdAt      DateTime     @default(now())
+
+  @@unique([userId, announcementId]) // To ensure a user can't have duplicate records for the same announcement
+}
+
+model TaskSharing {
+  id        String        @id @default(uuid())
+  userId    Int
+  user      User          @relation(fields: [userId], references: [id])
+  createdAt DateTime      @default(now())
+  expiredAt DateTime?
+  task      Task          @relation(fields: [taskId], references: [id])
+  taskId    Int
+  project   Project       @relation(fields: [projectId], references: [id])
+  projectId Int
+  expired   Boolean       @default(false)
+  shareType TaskShareType @default(Anyone)
+}
+
+model SavedContent {
+  id        String         @id @default(uuid())
+  userId    Int
+  user      User           @relation(fields: [userId], references: [id])
+  createdAt DateTime       @default(now())
+  task      Task           @relation(fields: [taskId], references: [id])
+  taskId    Int
+  comment   Comment?       @relation(fields: [commentId], references: [id])
+  commentId Int?
+  project   Project        @relation(fields: [projectId], references: [id])
+  projectId Int
+  type      ViewVisibility @default(Private)
+
+  @@index([taskId, userId, commentId]) // For saved content lookup
+  @@index([commentId, taskId, userId, type]) 
+}
+
+model VerificationCode {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  email     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  used      Boolean  @default(false)
+
+  @@index([email]) // For quick email lookups
+  @@index([expiresAt]) // For cleanup queries
+  @@index([used]) // For verification queries
+}
+
+model WebhookEvent {
+  id          String   @id @default(uuid())
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType   String   // "Lead" | "CompleteRegistration" | "StartTrial" | "Subscribe"
+  success     Boolean  @default(false)
+  response    Json?    // Store the response from make.com
+  error       String?  // Store error message if failed
+  utmData     Json?    // Store UTM data for reference
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, eventType]) // Prevent duplicates for same user + event
+  @@index([userId, eventType])
+  @@index([success])
+}
+
+// Outbound webhook subscription: an agent/operator registers a URL to receive
+// signed HTTP callbacks when board events happen (HTPR-4434). Delivery is
+// fire-and-forget and HMAC-signed with `secret`. Scoped to one board.
+model WebhookSubscription {
+  id             String    @id @default(uuid())
+  projectId      Int
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url            String
+  secret         String
+  events         String[]  // e.g. ["comment.created","task.escalated"]; empty = all
+  active         Boolean   @default(true)
+  createdById    Int?
+  createdBy      User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  agentId        String?
+  agent          Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdAt      DateTime  @default(now())
+  lastDeliveryAt DateTime?
+  lastDeliveryOk Boolean?
+  deliveries     BoardWebhookDelivery[]
+
+  @@index([projectId, active])
+}
+
+// Durable outbox for board-wide subscriptions (HTPR-4530). Mirrors
+// AgentWebhookDelivery: the row is written in the same transaction as the domain
+// change, and the row id is the stable deliveryId every retry re-sends so
+// receivers can deduplicate.
+model BoardWebhookDelivery {
+  id             String              @id @default(uuid())
+  subscriptionId String
+  subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  event          String
+  payload        Json
+  status         String              @default("pending")
+  attemptCount   Int                 @default(0)
+  processingAt   DateTime?
+  nextAttemptAt  DateTime            @default(now())
+  lastAttemptAt  DateTime?
+  statusCode     Int?
+  error          String?             @db.Text
+  deliveredAt    DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([subscriptionId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+}
+
+// One addressed outbound endpoint per managed agent (HTPR-5388). Unlike the
+// board-wide WebhookSubscription above, this only receives events whose target
+// is this exact agent. projectId is an optional delivery filter; deleting a
+// filtered project deletes the subscription rather than widening it globally.
+model AgentWebhookSubscription {
+  id             String   @id @default(uuid())
+  agentId        String   @unique
+  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  projectId      Int?
+  project        Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url            String
+  secret         String
+  events         String[]
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lastDeliveryAt DateTime?
+  lastDeliveryOk Boolean?
+  deliveries     AgentWebhookDelivery[]
+
+  @@index([projectId, active])
+}
+
+// Durable outbox + operator-visible attempt history. The row id is also the
+// stable deliveryId sent on every retry so receivers can deduplicate safely.
+model AgentWebhookDelivery {
+  id             String   @id @default(uuid())
+  subscriptionId String
+  subscription   AgentWebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  event          String
+  payload        Json
+  status         String   @default("pending")
+  attemptCount   Int      @default(0)
+  processingAt   DateTime?
+  nextAttemptAt  DateTime @default(now())
+  lastAttemptAt  DateTime?
+  statusCode     Int?
+  responseBody   String?  @db.Text
+  error          String?  @db.Text
+  deliveredAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([subscriptionId, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+}
+
+model OAuthClient {
+  client_id     String   @id @db.VarChar(64)
+  client_name   String?
+  redirect_uris Json     // Array of redirect URIs
+  grant_types   Json     @default("[\"authorization_code\"]")
+  token_endpoint_auth_method String @default("none")
+  createdAt     DateTime @default(now())
+
+  authorizationCodes OAuthAuthorizationCode[]
+  refreshTokens      OAuthRefreshToken[]
+
+  @@index([client_id])
+}
+
+model OAuthAuthorizationCode {
+  code          String   @id @db.VarChar(64)
+  client_id     String   @db.VarChar(64)
+  client        OAuthClient @relation(fields: [client_id], references: [client_id], onDelete: Cascade)
+  redirect_uri  String   @db.VarChar(512)
+  code_challenge String  @db.VarChar(128)
+  firebase_uid  String   @db.VarChar(128)
+  user_id       Int
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  agent_id      String?
+  agent         Agent?   @relation(fields: [agent_id], references: [id], onDelete: SetNull)
+  used          Boolean  @default(false)
+  expires_at    DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([code])
+  @@index([expires_at])
+  @@index([used])
+  @@index([user_id])
+  @@index([client_id])
+  @@index([agent_id])
+}
+
+model OAuthRefreshToken {
+  id                   String    @id @default(uuid()) @db.Uuid
+  familyId             String    @db.Uuid
+  tokenHash            String    @unique @db.VarChar(64)
+  clientId             String    @db.VarChar(64)
+  client               OAuthClient @relation(fields: [clientId], references: [client_id], onDelete: Cascade)
+  userId               Int
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firebaseUid          String    @db.VarChar(128)
+  accessTokenJti       String    @db.VarChar(64)
+  accessTokenExpiresAt DateTime
+  expiresAt            DateTime
+  revokedAt            DateTime?
+  replacedByHash       String?   @db.VarChar(64)
+  createdAt            DateTime  @default(now())
+
+  @@index([clientId])
+  @@index([familyId, revokedAt])
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model RevokedToken {
+  jti         String   @id @db.VarChar(255) // JWT ID (token identifier)
+  user_id     Int
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  revoked_at  DateTime @default(now())
+  expires_at  DateTime // Token expiration time (for cleanup)
+
+  @@index([user_id])
+  @@index([revoked_at])
+  @@index([expires_at])
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique @db.VarChar(64)
+  keyPrefix  String    @db.VarChar(12)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  expiresAt  DateTime?
+
+  @@index([userId])
+  @@index([userId, revokedAt])
+}
+
+model ChatSession {
+  id String @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId Int
+  user User @relation(fields: [userId], references: [id])
+  taskId Int? // Deliberately no FK: tasks can be hard-deleted while chat history remains.
+  projectId Int? // Deliberately no FK: projects can be deleted while chat history remains.
+  agentId String? // Set when this session's conversation target is a native agent.
+  agent Agent? @relation(fields: [agentId], references: [id])
+  title String @default("New AI Chat")
+  messages ChatMessage[]
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([projectId])
+  // One thread per agent: enforced in the DB (not just app-level dedup) so
+  // two concurrent "open this agent's chat" requests can't create two
+  // sessions. Postgres treats NULL as distinct, so plain (taskId-only or
+  // blank) sessions are unaffected.
+  @@unique([userId, agentId])
+  // Backs the sweep's stale-session scan (src/pages/api/queues/sweep.ts).
+  @@index([updatedAt])
+}
+
+model ChatMessage {
+  id String @id @default(uuid())
+  createdAt DateTime @default(now())
+  content String
+  role ChatRole
+  sessionId String
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  isDelivered Boolean @default(false)
+  attachments   Attachment[]
+
+  @@index([sessionId])
+}
+
+model Agent {
+  id                        String @id @default(uuid())
+  displayName               String
+  photoURL                  String? @default("https://files.hypertask.app/tasks/attachments/1757584422625image.png")
+  createdAt                 DateTime @default(now())
+  revokedAt                 DateTime?
+  // Archived is about the register, not about power: revokedAt switches an
+  // agent off, archivedAt files it away. An archived agent keeps its history,
+  // its comments and its board memberships, so this stays separate from delete.
+  archivedAt                DateTime?
+  // The plaintext credential is never stored. `mcpTokenHash` is the sha256 of
+  // the issued bearer token, so a database leak hands out a digest instead of a
+  // live key; `mcpTokenJti` is that token's jti, the revocation generation an
+  // OAuth access token carries in place of the bearer token itself.
+  mcpTokenHash              String?   @db.VarChar(64)
+  mcpTokenJti               String?
+  mcpTokenExpiresAt         DateTime?
+  // Monotonic credential/runtime generation. Heartbeats from a destroyed or
+  // rotated token can never replace state from a newer generation.
+  runtimeGeneration         Int       @default(1)
+
+  runtimeType               AgentRuntimeType @default(EXTERNAL)
+  prompt                    String?   @db.Text
+  heartbeatAt               DateTime?
+  // A TAiModelOptionId this agent runs on, so a sweeper can use a cheap model
+  // and a coordinator an expensive one. Null means the team default. Kept as a
+  // plain string, like every other stored model choice, because the option list
+  // changes with the model lineup and a DB enum would need a migration per model.
+  modelOptionId             String?
+
+  userId                    Int
+  user                      User @relation(fields: [userId], references: [id])
+
+  tasks                     Task[]
+  comments                  Comment[]
+  pages                     Page[]
+  reports                   Report[]
+  taskEvidence              TaskEvidence[]
+  taskSessions              TaskSession[]
+  decisionRequests          DecisionRequest[]
+  assignees                 Assignees[]    @relation("agentAssignees")
+  assigners                 Assignees[]    @relation("agentAssigners")
+  notificationsToAgent      Notification[] @relation("toAgent")
+  notificationsFromAgent    Notification[] @relation("fromAgent")
+  descriptions              Description[]
+  priority                  Priority[]
+  estimate                  Estimate[] @relation("addedByAgent")
+  oauthAuthorizationCodes   OAuthAuthorizationCode[]
+  permissions               Json? @default("{}")
+  followers                 Follower[]
+  members                   Member[]
+  webhookSubscriptions      WebhookSubscription[]
+  agentWebhookSubscription  AgentWebhookSubscription?
+  chatSessions              ChatSession[]
+  byokApiKeys               AgentByokApiKey[]
+
+  @@index([userId])
+  @@index([userId, revokedAt])
+}
+
+/// Agent-scoped BYOK secrets (ciphertext), same shape as TeamByokApiKey.
+/// An agent with its own key spends on that provider account instead of the
+/// team pot, so its cost is a real invoice rather than an estimate (HTPR-5389).
+model AgentByokApiKey {
+  id         String   @id @default(uuid())
+  agentId    String
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  provider   String
+  ciphertext String?  @db.Text
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([agentId, provider])
+  @@index([agentId])
+}
+
+model AiUsage {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  userId       Int
+  teamId       String?
+  projectId    Int?
+  // Historical attribution only: intentionally no foreign keys, so metering
+  // survives a task hard-delete or an agent being revoked/deleted.
+  taskId       Int?
+  agentId      String?
+  provider     String
+  model        String
+  feature      String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+
+  @@index([teamId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([agentId, createdAt])
+  @@index([userId, createdAt])
+}
+
+// Typed proof-of-work attached to a ticket (HTPR-4443): a test run, screenshot,
+// deploy link, or diff — so evidence isn't buried in comment threads.
+model TaskEvidence {
+  id        Int          @id @default(autoincrement())
+  createdAt DateTime     @default(now())
+  taskId    Int
+  task      Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  type      EvidenceType @default(Other)
+  title     String?
+  url       String?
+  summary   String?
+  // Who attached it: a human user and/or the MCP session agent. FK-backed like
+  // Comment, so ids can't go stale and a creator/agent include is available.
+  creatorId Int?
+  creator   User?        @relation(fields: [creatorId], references: [id])
+  agentId   String?
+  agent     Agent?       @relation(fields: [agentId], references: [id])
+
+  @@index([taskId])
+}
+
+// A structured agent work-session on a ticket (HTPR-4436): the resume command to
+// pick up where it left off, its liveness, and who started it. Keyed by the
+// session UUID so repeated heartbeats upsert one row instead of piling up.
+model TaskSession {
+  id            Int           @id @default(autoincrement())
+  sessionId     String        @unique
+  taskId        Int
+  task          Task          @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  resumeCommand String?
+  status        SessionStatus @default(Active)
+  agentId       String?
+  agent         Agent?        @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  startedById   Int?
+  startedBy     User?         @relation(fields: [startedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime      @default(now())
+  lastSeenAt    DateTime      @default(now())
+
+  @@index([taskId])
+}

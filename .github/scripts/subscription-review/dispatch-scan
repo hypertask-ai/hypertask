@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[ "$#" -eq 0 ] || exit 64
+curl_config=${HYPERTASK_REVIEW_CURL_CONFIG:-/etc/hypertask-ai-review/reviewer-curl.conf}
+[ -r "$curl_config" ] || { echo "Reviewer dispatch credential is unavailable" >&2; exit 78; }
+state_root=${HYPERTASK_REVIEW_STATE_ROOT:-/var/lib/hypertask-ai-review}
+completed_dir="$state_root/completed"
+dispatch_review_bin=${HYPERTASK_DISPATCH_REVIEW_BIN:-/usr/local/libexec/hypertask-dispatch-review}
+
+curl -fsS \
+  --config "$curl_config" \
+  -H "Accept: application/vnd.github+json" \
+  -H "X-GitHub-Api-Version: 2022-11-28" \
+  "https://api.github.com/repos/valentinyeo/hypertasks/pulls?state=open&base=staging&per_page=100" \
+  | jq -r '.[] | select(.draft == false and .head.repo.full_name == "valentinyeo/hypertasks") | [.number, .head.sha] | @tsv' \
+  | while IFS=$'\t' read -r pr_number head_sha; do
+      if ! [[ "$pr_number" =~ ^[1-9][0-9]*$ && "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+        echo "Review discovery received invalid pull request metadata" >&2
+        continue
+      fi
+      if [ -e "$completed_dir/$head_sha" ]; then
+        continue
+      fi
+      if ! "$dispatch_review_bin" "$pr_number" "$head_sha"; then
+        echo "Review discovery could not process PR #${pr_number}; the next timer run will retry" >&2
+      fi
+    done

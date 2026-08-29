@@ -1,0 +1,80 @@
+# Enforce the host boundary for brokered Codex provider processes while
+# permitting the user namespace used by Codex's inner bwrap sandbox.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile codex-brokered-provider-speed-engineer flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+
+  userns,
+  capability sys_admin,
+  capability net_admin,
+  capability setpcap,
+  capability sys_ptrace,
+  capability dac_override,
+  capability sys_resource,
+  network inet stream,
+  network netlink raw,
+  signal (receive) peer=codex-brokered-worker-speed-engineer,
+  deny ptrace,
+
+  / r,
+  /bin/** rixm,
+  /usr/** rixm,
+  /lib/** rixm,
+  /lib64/** rixm,
+  /etc/** r,
+  /run/systemd/resolve/stub-resolv.conf r,
+  /sys/devices/system/** r,
+  /proc/sys/kernel/overflowuid r,
+  /proc/sys/kernel/overflowgid r,
+  /proc/sys/user/max_user_namespaces rw,
+  owner /proc/*/uid_map rw,
+  owner /proc/*/gid_map rw,
+  owner /proc/*/setgroups rw,
+  owner /proc/*/fd/ r,
+  owner /proc/*/mountinfo r,
+  /home/valentin/.npm-global/bin/codex rix,
+  /home/valentin/.npm-global/lib/node_modules/@openai/codex/** rixm,
+  owner /home/valentin/.local/lib/hypertask-agent-worker/** rixm,
+  owner /tmp/** rwkixm,
+  owner /newroot/** rw,
+  /dev/{null,zero,full,random,urandom,tty} rw,
+  owner /dev/shm/** rwkixm,
+  # The glob rules below authorize possible bind-mount sources. bwrap first
+  # replaces both parent directories with tmpfs and exposes only the active
+  # worktree, its provider home, and its read-only Unix-socket directory.
+  # The provider home contains no real model or Hypertask credential. Model
+  # traffic crosses the trusted local proxy, which injects its API key outside
+  # this namespace.
+  owner /home/valentin/.local/state/hypertask-speed-engineer/provider-home/** rwkixm,
+  owner /home/valentin/.local/state/hypertask-speed-engineer/provider-homes/ r,
+  owner /home/valentin/.local/state/hypertask-speed-engineer/provider-homes/** rwkixm,
+  owner /home/valentin/.local/state/hypertask-speed-engineer/provider-runtime/** rw,
+  owner /home/valentin/projects/hypertasks-worker-trees/speed-engineer-*/** rwkixm,
+
+  # bubblewrap builds the provider's private mount namespace before Codex
+  # starts. It then drops every capability and disables nested user namespaces;
+  # the provider launcher verifies CapEff=0 and the absence of /oldroot before
+  # starting provider-controlled code. The mount permissions below are usable
+  # only during namespace construction.
+  mount options=(rw silent rslave) -> /,
+  mount fstype=tmpfs options=(rw nosuid nodev) tmpfs -> /newroot/,
+  mount fstype=tmpfs options=(rw nosuid nodev) tmpfs -> /newroot/tmp/,
+  mount fstype=tmpfs options=(rw nosuid nodev) tmpfs -> /newroot/home/valentin/,
+  mount fstype=tmpfs options=(rw nosuid nodev) tmpfs -> /tmp/,
+  mount options=(rw rbind silent) /tmp/newroot/ -> /tmp/newroot/,
+  pivot_root,
+  mount options=(rw rbind silent) /oldroot/ -> /newroot/,
+  mount options=(ro nosuid nodev remount bind silent relatime) -> /newroot/,
+  mount options in (ro nosuid nodev noexec remount bind silent relatime) -> /newroot/**,
+  mount options=(rw rbind silent) /oldroot/** -> /newroot/**,
+  mount options=(rw bind silent) /oldroot/dev/** -> /newroot/dev/**,
+  mount options=(rw silent rprivate) -> /oldroot/,
+  umount,
+
+  deny /proc/*/environ r,
+
+  include if exists <local/codex-brokered-provider-speed-engineer>
+}

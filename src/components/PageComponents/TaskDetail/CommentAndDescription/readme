@@ -1,0 +1,5 @@
+You might think since both uploadingComment and uploadingDescription have similar code they could be one
+You might be right but this is done keeping in light how different the changes for either might get at any stage
+
+So both have been kept different for future changes, and so to keep their own respective code independent. 
+Also for description we have an auto save sort of concept, sooooo thats a reason as well

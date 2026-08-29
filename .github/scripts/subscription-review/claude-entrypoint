@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$#" -eq 0 ] || exit 64
+exec sudo -n -H -u aireviewer -- /usr/local/libexec/hypertask-claude-subscription-review

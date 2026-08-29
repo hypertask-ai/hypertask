@@ -1,0 +1,4 @@
+node_modules/
+midscene_run/
+.env
+flake-state.json

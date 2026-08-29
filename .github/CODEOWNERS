@@ -1,0 +1,5 @@
+/.github/workflows/ci-build.yml @valentinyeo
+/.github/workflows/parity-contract-trusted.yml @valentinyeo
+/config/parity/ @valentinyeo
+/scripts/parity-contract.mjs @valentinyeo
+/scripts/parity-ai-chat-inventory.mjs @valentinyeo

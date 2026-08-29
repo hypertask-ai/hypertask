@@ -1,0 +1,31 @@
+import { resumeTimer, TimeTrackingDisabledError } from "@/lib/timeTracking";
+import { NextRequest, NextResponse } from "next/server";
+import { resolveMcpTimeTask } from "../_lib";
+
+export async function POST(request: NextRequest) {
+  const resolved = await resolveMcpTimeTask(request);
+  if (resolved.response) return resolved.response;
+
+  try {
+    const entry = await resumeTimer(
+      resolved.ctx.user.id,
+      resolved.task.id,
+      resolved.ctx.agentId
+    );
+    if (!entry) {
+      return NextResponse.json(
+        { success: false, error: "There is no paused timer on that task." },
+        { status: 404 }
+      );
+    }
+    return NextResponse.json({ success: true, entry });
+  } catch (error) {
+    if (error instanceof TimeTrackingDisabledError) {
+      return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 403 }
+      );
+    }
+    throw error;
+  }
+}

@@ -1,0 +1,7 @@
+ALTER TABLE "Project"
+ADD COLUMN "staleWarnDays" INTEGER,
+ADD COLUMN "staleHotDays" INTEGER,
+ADD COLUMN "staleNudgeEnabled" BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE "Task"
+ADD COLUMN "staleNudgedAt" TIMESTAMP(3);

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "baseBranches": ["staging"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "Europe/London",
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 3,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch", "minor"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true,
+      "groupName": "minor and patch updates"
+    },
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major-upgrade"]
+    },
+    {
+      "matchPackageNames": ["react", "react-dom", "next", "prisma", "@prisma/client", "stripe", "firebase", "typescript"],
+      "automerge": false,
+      "labels": ["dependencies", "framework-upgrade"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "security"],
+    "automerge": false
+  },
+  "prCreation": "not-pending",
+  "rangeStrategy": "bump"
+}

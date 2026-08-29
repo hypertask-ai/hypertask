@@ -1,0 +1,12 @@
+[Unit]
+Description=Fallback reconciliation for Hypertask %i
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Persistent=true
+RandomizedDelaySec=10
+Unit=hypertask-agent-reconcile@%i.service
+
+[Install]
+WantedBy=timers.target

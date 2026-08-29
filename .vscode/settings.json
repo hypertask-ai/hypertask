@@ -1,0 +1,15 @@
+{
+    "WillLuke.nextjs.addTypesOnSave": true,
+    "WillLuke.nextjs.hasPrompted": true,
+    "css.customData": [".vscode/tailwind.json"],
+    "scss.lint.unknownAtRules": "ignore",
+    "github.copilot.enable": {
+        "*": true,
+        "plaintext": false,
+        "markdown": false,
+        "scminput": false
+    },
+    "prisma.pinToPrisma6": true
+
+
+}

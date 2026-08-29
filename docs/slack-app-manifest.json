@@ -1,0 +1,59 @@
+{
+  "display_information": {
+    "name": "Hypertask",
+    "description": "Manage Hypertask work from Slack",
+    "background_color": "#6441D5"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Hypertask",
+      "always_online": false
+    },
+    "slash_commands": [
+      {
+        "command": "/ht",
+        "url": "https://app.hypertask.ai/api/slack/commands",
+        "description": "Manage Hypertask from Slack",
+        "usage_hint": "help",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "https://app.hypertask.ai/api/slack/oauth_redirect"
+    ],
+    "scopes": {
+      "bot": [
+        "app_mentions:read",
+        "assistant:write",
+        "channels:history",
+        "chat:write",
+        "commands",
+        "groups:history",
+        "im:history",
+        "team:read",
+        "users:read",
+        "users:read.email"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://app.hypertask.ai/api/slack/events",
+      "bot_events": [
+        "app_mention",
+        "assistant_thread_started",
+        "message.channels",
+        "message.groups",
+        "message.im"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": false
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

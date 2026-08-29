@@ -1,0 +1,68 @@
+[
+  {
+    "area": "auth",
+    "flowIds": ["login-screen"],
+    "priority": "high",
+    "notes": "Login/signup (feature-map #1). login-screen checks the screen renders; no flow logs in, since that needs a real account."
+  },
+  {
+    "area": "board",
+    "flowIds": ["board-demo", "task-detail-demo", "task-create-demo"],
+    "priority": "high",
+    "notes": "Task and comment mutations, board/table view (feature-map #2, #8). Covered read-only plus one guest-safe write on the disposable demo board."
+  },
+  {
+    "area": "reminders",
+    "flowIds": [],
+    "priority": "medium",
+    "notes": "Reminders and notifications (feature-map #3). No anonymous surface to test against; needs an authenticated flow."
+  },
+  {
+    "area": "ai",
+    "flowIds": [],
+    "priority": "medium",
+    "notes": "Native AI chat, editor, task writer (feature-map #5). Needs an authenticated session and would incur AI gateway spend; not covered yet."
+  },
+  {
+    "area": "search",
+    "flowIds": [],
+    "priority": "medium",
+    "notes": "Search and ranking (feature-map #6). No anonymous surface; needs an authenticated flow."
+  },
+  {
+    "area": "sharing",
+    "flowIds": [],
+    "priority": "low",
+    "notes": "Public sharing and redirects (feature-map #7). Not covered yet."
+  },
+  {
+    "area": "calendar",
+    "flowIds": [],
+    "priority": "low",
+    "notes": "Calendar view configuration (feature-map #9). Not covered yet."
+  },
+  {
+    "area": "mcp-cli",
+    "flowIds": [],
+    "priority": "low",
+    "notes": "MCP and CLI-style access (feature-map #10). Not a browser UI surface, out of scope for Midscene."
+  },
+  {
+    "area": "realtime",
+    "flowIds": [],
+    "priority": "low",
+    "notes": "Real-time sync / Pusher protocol (feature-map #9 second). Not covered yet; would need two concurrent sessions."
+  },
+  {
+    "area": "scheduling",
+    "flowIds": [],
+    "priority": "low",
+    "notes": "Start dates, repeat rules, templates, My Tasks (feature-map #11). Needs an authenticated flow; not covered yet."
+  },
+  {
+    "area": "marketing",
+    "flowIds": ["landing"],
+    "priority": "medium",
+    "notes": "Marketing site render check, not in feature-map.md but part of the public surface."
+  }
+]

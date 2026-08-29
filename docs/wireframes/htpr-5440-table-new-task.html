@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HTPR-5440 Table View new task control</title>
+<style>
+  :root {
+    --bg-pageBackground: #0e0e0e;
+    --bg-taskDetailPage: #0e0e0e;
+    --bg-containerBackground: #212429;
+    --bg-modalBackground: #333B47;
+    --bg-label-span: #4F5766;
+    --bg-hover-active: #4c5362;
+    --active-elementBg: #2F343C;
+    --color-white-black: #ffffff;
+    --color-text-light-gray: #8e9093;
+    --color-text-labelComponent: #d3d3d3;
+    --color-icon-dark-gray: #999a9d;
+    --color-border-labelComponent: #6f6f6f;
+    --hypertasks-purple: #4455BB;
+    --hypertasks-green: #C2CFA5;
+    --border-active: #ffffff;
+    --text-micro: 11px;
+    --text-meta: 12px;
+    --text-dense: 13px;
+    --text-content: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 24px 40px;
+    background: var(--bg-pageBackground);
+    color: var(--color-white-black);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: var(--text-content);
+  }
+  .caption {
+    font-size: var(--text-meta);
+    color: var(--color-text-light-gray);
+    margin: 0 0 10px;
+  }
+  .frame {
+    background: var(--bg-taskDetailPage);
+    padding: 12px 16px 24px;
+    max-width: 1080px;
+    margin: 0 0 34px;
+  }
+  /* New task control, the subject of this ticket */
+  .toolbar { display: flex; justify-content: flex-end; padding: 0 20px 8px; }
+  .new-task {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    font-size: var(--text-dense);
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--color-text-light-gray);
+    cursor: pointer;
+  }
+  .new-task.is-hover { background: var(--bg-hover-active); color: var(--color-white-black); }
+  .new-task.is-focus { outline: 1px solid var(--border-active); outline-offset: 0; }
+  .new-task:disabled { opacity: .5; cursor: not-allowed; }
+  /* Table */
+  .grid {
+    display: grid;
+    grid-template-columns: 90px minmax(200px, 1fr) 110px 64px 100px 80px 104px 96px;
+    align-items: center;
+    gap: 8px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .head {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    font-size: var(--text-micro);
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-light-gray);
+  }
+  .head .right { text-align: right; display: block; }
+  .card {
+    background: var(--bg-containerBackground);
+    border-radius: 6px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,.35);
+    padding: 8px 0;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 4px 10px 2px 15px;
+    font-size: var(--text-content);
+    color: var(--color-white-black);
+  }
+  .section-title span { font-size: var(--text-micro); color: var(--color-text-light-gray); }
+  .row {
+    padding-top: 8px;
+    padding-bottom: 8px;
+    border-left: 4px solid transparent;
+    border-radius: 6px;
+    font-size: var(--text-dense);
+  }
+  .row.selected { background: var(--active-elementBg); border-left-color: var(--border-active); }
+  .ticket { font-weight: 700; color: var(--color-icon-dark-gray); white-space: nowrap; }
+  .title { font-weight: 500; color: var(--color-white-black); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status, .days, .date { font-size: var(--text-micro); color: var(--color-text-light-gray); }
+  .date { text-align: right; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 20px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: var(--bg-label-span);
+    color: var(--color-text-labelComponent);
+    font-size: var(--text-micro);
+    font-weight: 500;
+    line-height: 1;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--active-elementBg);
+    color: var(--color-text-light-gray);
+    font-size: var(--text-micro);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 1px var(--bg-containerBackground);
+  }
+  .more { padding: 8px 20px; font-size: var(--text-dense); color: var(--color-text-light-gray); }
+  /* Creation modal, opened by the control, unchanged by this ticket */
+  .modal {
+    background: var(--bg-modalBackground);
+    border-radius: 5px;
+    padding: 16px;
+    max-width: 460px;
+    box-shadow: 0 10px 20px rgba(0,0,0,.45);
+  }
+  .modal .field {
+    font-size: var(--text-content);
+    color: var(--color-text-light-gray);
+    padding-bottom: 10px;
+  }
+  .modal .row-meta { display: flex; gap: 8px; align-items: center; padding-top: 8px; }
+  .modal .target { font-size: var(--text-micro); color: var(--color-text-light-gray); }
+</style>
+</head>
+<body>
+
+<p class="caption">HTPR-5440 &middot; Table View, board with a selected row. Resting state of the control.</p>
+<div class="frame">
+  <div class="toolbar">
+    <button type="button" class="new-task" aria-label="Create task in the selected column">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+      <span>New task</span>
+    </button>
+  </div>
+
+  <div class="grid head">
+    <div>Ticket</div><div>Title</div><div>Status</div><div>Assignee</div><div>Priority</div><div>Size</div><div>Due</div><div><span class="right">Created</span></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Improvements <span>24</span></div>
+    <div class="grid row selected">
+      <div class="ticket">HTPR-5440</div>
+      <div class="title">Table View: Add a Mouse-Accessible Control for Creating New Tasks</div>
+      <div class="status">Improvements</div>
+      <div><span class="avatar">VY</span></div>
+      <div><span class="pill">Medium</span></div>
+      <div><span class="pill">S</span></div>
+      <div></div>
+      <div class="date">17 Aug</div>
+    </div>
+    <div class="grid row">
+      <div class="ticket">HTPR-5129</div>
+      <div class="title">Table view: show a real date in the Created column</div>
+      <div class="status">Improvements</div>
+      <div><span class="avatar">VY</span></div>
+      <div><span class="pill"><span class="dot" style="background:#e5484d"></span>High</span></div>
+      <div><span class="pill">M</span></div>
+      <div><span class="pill">22 Aug</span></div>
+      <div class="date">02 Aug</div>
+    </div>
+    <div class="grid row">
+      <div class="ticket">HTPR-4993</div>
+      <div class="title">Excel style column reorder and resize</div>
+      <div class="status">In Progress</div>
+      <div><span class="avatar">VY</span></div>
+      <div><span class="pill">Low</span></div>
+      <div><span class="pill">L</span></div>
+      <div></div>
+      <div class="date">28 Jul</div>
+    </div>
+    <div class="more">Show 4 more</div>
+  </div>
+</div>
+
+<p class="caption">Hover and keyboard focus states of the same control.</p>
+<div class="frame" style="padding-bottom:14px">
+  <div class="toolbar" style="gap:12px">
+    <button type="button" class="new-task is-hover" aria-label="Create task in the selected column" title="Create task in the selected column (C)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+      <span>New task</span>
+    </button>
+    <button type="button" class="new-task is-focus" aria-label="Create task in the selected column" title="Create task in the selected column (C)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+      <span>New task</span>
+    </button>
+  </div>
+</div>
+
+<p class="caption">In the selected-row state, clicking opens the existing create task modal targeted at that row's column. Nothing in this modal changes.</p>
+<div class="modal">
+  <div class="field">Task title</div>
+  <div class="row-meta">
+    <span class="pill">Medium</span>
+    <span class="pill">S</span>
+    <span class="avatar">VY</span>
+  </div>
+  <div class="row-meta"><span class="target">Creating in Improvements</span></div>
+</div>
+
+<p class="caption">When no row or section is selected, the same control stays visible but disabled until a column can be targeted.</p>
+<div class="frame" style="padding-bottom:14px">
+  <div class="toolbar">
+    <button type="button" class="new-task" disabled aria-label="Create task" title="Create task (C)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>
+      <span>New task</span>
+    </button>
+  </div>
+</div>
+
+</body>
+</html>

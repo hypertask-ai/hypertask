@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll for Hypertask PRs needing trusted AI review
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

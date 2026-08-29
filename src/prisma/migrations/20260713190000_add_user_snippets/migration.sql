@@ -1,0 +1,2 @@
+ALTER TABLE "UserSetting"
+ADD COLUMN "snippets" JSONB NOT NULL DEFAULT '[]';

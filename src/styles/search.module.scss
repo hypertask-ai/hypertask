@@ -1,0 +1,27 @@
+.links_modal {
+  // border-radius: 20px;
+  // background-color: red;
+
+  .list_container {
+    overflow-wrap: normal;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  @media (min-width: 768px) {
+    .list_container {
+      display: grid;
+      grid-template-columns: minmax(5%, 15%) 29% 6fr 1fr minmax(30px, 55px);
+      flex-direction: row;
+    }
+  }
+
+  .links_list {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

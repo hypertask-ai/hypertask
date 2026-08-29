@@ -1,0 +1,17 @@
+[Unit]
+Description=Reconcile Hypertask %i queue and autonomous cycle
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/hypertask-agents/%i.env
+EnvironmentFile=%h/.config/hypertask-agents/%i.conf
+Environment=HT_AGENT_SLUG=%i
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask-agent-worker/worker.py reconcile
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state
+RestrictSUIDSGID=true
+LockPersonality=true

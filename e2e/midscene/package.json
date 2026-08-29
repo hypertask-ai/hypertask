@@ -1,0 +1,16 @@
+{
+  "name": "hypertask-midscene-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Midscene AI-driven E2E smoke test for the Hypertask demo board (HTPR-5715)",
+  "type": "module",
+  "scripts": {
+    "smoke": "./guarded-run.sh --all",
+    "run": "./guarded-run.sh",
+    "cleanup": "./cleanup.sh"
+  },
+  "dependencies": {
+    "@midscene/web": "^0.18.0",
+    "puppeteer": "^23.0.0"
+  }
+}

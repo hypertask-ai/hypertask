@@ -1,0 +1,48 @@
+{
+  "contractVersion": 1,
+  "schemaVersion": 1,
+  "accountId": 6,
+  "projectId": 15,
+  "savedAt": "2026-08-09T08:00:00.000Z",
+  "project": {
+    "id": 15,
+    "name": "project-15",
+    "title": "Hypertask Product",
+    "status": "Normal",
+    "sorting_mode": "Manual",
+    "project_view": {
+      "id": "project-view-15",
+      "projectId": 15,
+      "user_project_views": []
+    }
+  },
+  "tasks": [
+    {
+      "id": 26723,
+      "uniqueIndex": 5217,
+      "ticketNumber": "HTPR-5217",
+      "projectId": 15,
+      "sectionId": 4307,
+      "section": "Features",
+      "title": "Pilot a synchronized IndexedDB read model for the active board",
+      "description": "",
+      "status": "Normal",
+      "ranking": "a0",
+      "createdAt": "2026-08-09T07:48:31.941Z",
+      "updatedAt": "2026-08-09T07:59:20.312Z"
+    }
+  ],
+  "allViews": [
+    {
+      "id": "speed-view",
+      "title": "Speed",
+      "slug": "speed",
+      "project_view_id": "project-view-15",
+      "board_filters": {
+        "labels": ["SPEED OPTIMIZATION ⏩"]
+      }
+    }
+  ],
+  "tombstones": [],
+  "nextCursor": null
+}

@@ -1,0 +1,16 @@
+{
+  "appManager": {
+    "array": {
+      "apps": [
+        {
+          "id": "app-id",
+          "key": "app-key",
+          "secret": "app-secret",
+          "maxConnections": -1,
+          "enableClientMessages": false,
+          "maxBackpressure": -1
+        }
+      ]
+    }
+  }
+}

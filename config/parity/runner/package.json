@@ -1,0 +1,9 @@
+{
+  "name": "hypertask-parity-runner",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "@hypertask/hypertask_cli": "1.13.24",
+    "typescript": "6.0.3"
+  }
+}

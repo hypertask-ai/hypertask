@@ -1,0 +1,29 @@
+// ===================== TOUR STYLING =====================
+// Styles for react-joyride tour components
+
+// Remove focus outlines from react-joyride tour buttons
+.react-joyride__button,
+.react-joyride__button:focus,
+.react-joyride__button:focus-visible,
+.react-joyride__button:active {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+// Hide floater arrow
+.__floater__arrow {
+  display: none !important;
+}
+
+// Tooltip styling
+.react-joyride__tooltip {
+  border: 1px solid #5d5b5b8f !important;
+}
+
+// Spotlight overlay styling
+// Uses theme-aware color: dark gray (#262525) on light theme, white on dark theme
+.react-joyride__spotlight {
+  border: 1px solid color-mix(in srgb, var(--color-white-black) 65%, transparent) !important;
+}
+

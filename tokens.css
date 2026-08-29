@@ -1,0 +1,34 @@
+/* Hallmark · shared tokens: Hypertask tutorial footer coach */
+:root {
+  --color-tutorial-page: var(--bg-pageBackground);
+  --color-tutorial-surface: var(--bg-containerBackground);
+  --color-tutorial-surface-active: var(--active-modal-element);
+  --color-tutorial-text: var(--color-white-black);
+  --color-tutorial-text-muted: var(--color-text-light-gray);
+  --color-tutorial-rule: var(--border-light-gray-thin);
+  --font-tutorial-display: inherit;
+  --font-tutorial-body: inherit;
+  --space-tutorial-2xs: 0.25rem;
+  --space-tutorial-xs: 0.5rem;
+  --space-tutorial-sm: 0.75rem;
+  --space-tutorial-md: 1rem;
+  --space-tutorial-lg: 1.5rem;
+  --space-tutorial-xl: 2.5rem;
+  --text-tutorial-meta: 0.75rem;
+  --text-tutorial-body: 0.875rem;
+  --text-tutorial-title: 1.25rem;
+  --ease-tutorial-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-tutorial-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --dur-tutorial-press: 100ms;
+  --dur-tutorial-nudge: 3200ms;
+  --rule-tutorial: 1px solid var(--color-tutorial-rule);
+  --radius-tutorial-key: 0.125rem;
+  --tutorial-footer-height: clamp(9rem, 15.75svh, 11rem);
+  --z-tutorial-backdrop: 297;
+  --z-tutorial-footer: 298;
+}
+
+:root[data-learn-tutorial="active"],
+:root[data-learn-tutorial="active"] body {
+  overflow-x: clip !important;
+}

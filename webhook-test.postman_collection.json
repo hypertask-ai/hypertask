@@ -1,0 +1,243 @@
+{
+  "info": {
+    "name": "Webhook Deduplication Tests",
+    "description": "Test collection for webhook deduplication system",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "testUserId",
+      "value": "1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get Test Users",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/test/users?limit=10",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "users"],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Get list of users to use for testing. Copy a userId from the response."
+      }
+    },
+    {
+      "name": "2. Check Webhook Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook?userId={{testUserId}}&eventType=lead",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"],
+          "query": [
+            {
+              "key": "userId",
+              "value": "{{testUserId}}"
+            },
+            {
+              "key": "eventType",
+              "value": "lead"
+            }
+          ]
+        },
+        "description": "Check if a webhook event exists and its status"
+      }
+    },
+    {
+      "name": "3. Trigger Lead Webhook (First Call)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": {{testUserId}},\n  \"eventType\": \"lead\",\n  \"utmData\": {\n    \"utm_source\": \"postman_test\",\n    \"utm_medium\": \"test\",\n    \"utm_campaign\": \"deduplication_test\",\n    \"utm_content\": \"first_call\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"]
+        },
+        "description": "First webhook call - should send successfully"
+      }
+    },
+    {
+      "name": "4. Trigger Lead Webhook (Duplicate - Should Skip)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": {{testUserId}},\n  \"eventType\": \"lead\",\n  \"utmData\": {\n    \"utm_source\": \"postman_test\",\n    \"utm_medium\": \"test\",\n    \"utm_campaign\": \"deduplication_test\",\n    \"utm_content\": \"duplicate_call\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"]
+        },
+        "description": "Duplicate call - should be skipped (check for skipped: true in response)"
+      }
+    },
+    {
+      "name": "5. Trigger Subscribed Webhook",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": {{testUserId}},\n  \"eventType\": \"subscribed\",\n  \"utmData\": {\n    \"utm_source\": \"postman_test\",\n    \"utm_medium\": \"test\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"]
+        },
+        "description": "Test different event type - should send even if lead was already sent"
+      }
+    },
+    {
+      "name": "6. Trigger Onboarded Webhook",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": {{testUserId}},\n  \"eventType\": \"onboarded\",\n  \"utmData\": {\n    \"utm_source\": \"postman_test\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"]
+        },
+        "description": "Test onboarded event type"
+      }
+    },
+    {
+      "name": "7. Get All Webhook Events",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook?userId={{testUserId}}&all=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"],
+          "query": [
+            {
+              "key": "userId",
+              "value": "{{testUserId}}"
+            },
+            {
+              "key": "all",
+              "value": "true"
+            }
+          ]
+        },
+        "description": "Get all webhook events for a user"
+      }
+    },
+    {
+      "name": "8. Reset Lead Event",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook?userId={{testUserId}}&eventType=lead",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"],
+          "query": [
+            {
+              "key": "userId",
+              "value": "{{testUserId}}"
+            },
+            {
+              "key": "eventType",
+              "value": "lead"
+            }
+          ]
+        },
+        "description": "Delete/reset a specific webhook event to retest"
+      }
+    },
+    {
+      "name": "9. Reset All Events",
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook?userId={{testUserId}}&all=true",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"],
+          "query": [
+            {
+              "key": "userId",
+              "value": "{{testUserId}}"
+            },
+            {
+              "key": "all",
+              "value": "true"
+            }
+          ]
+        },
+        "description": "Delete all webhook events for a user"
+      }
+    },
+    {
+      "name": "10. Race Condition Test (Run Multiple Times)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": {{testUserId}},\n  \"eventType\": \"lead\",\n  \"utmData\": {\n    \"utm_source\": \"race_test\"\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/test/webhook",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "test", "webhook"]
+        },
+        "description": "Run this request multiple times simultaneously using Postman's 'Run Collection' feature. Only one should succeed, others should be skipped."
+      }
+    }
+  ]
+}
+

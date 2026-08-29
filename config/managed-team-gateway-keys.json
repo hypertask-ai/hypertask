@@ -1,0 +1,16 @@
+[
+  { "teamId": "08f79efd-770e-4e32-9728-65e6d29ec893", "credentialEnv": "GATEWAY_KEY_HYPERTASK" },
+  { "teamId": "b660876d-acb2-4128-9b8d-98b2d9d02b25", "credentialEnv": "GATEWAY_KEY_INNE" },
+  { "teamId": "a85701ec-47c3-4585-88a6-a46491ba30ae", "credentialEnv": "GATEWAY_KEY_VETSAK" },
+  { "teamId": "2b8a811d-2987-4300-a9c8-bd3e0bf5a38e", "credentialEnv": "GATEWAY_KEY_VETSAK" },
+  { "teamId": "99bbe346-62f1-41c3-b830-ddbd8d18d022", "credentialEnv": "GATEWAY_KEY_BAYBELLA" },
+  { "teamIdPrefix": "f533c54b", "ownerEmail": "nask@rodrigonask.com", "credentialEnv": "GATEWAY_KEY_RODRIGO" },
+  { "teamIdPrefix": "4cd3406b", "ownerEmail": "anatoly@d2law.ca", "credentialEnv": "GATEWAY_KEY_D2LAW" },
+  { "teamIdPrefix": "92c25c5d", "ownerEmail": "perry.lawrence@gmail.com", "credentialEnv": "GATEWAY_KEY_PERRY" },
+  { "teamIdPrefix": "d0c3ef29", "ownerEmail": "brandon@purologix.com", "credentialEnv": "GATEWAY_KEY_PUROLOGIX" },
+  { "teamIdPrefix": "e46da609", "ownerEmail": "kvwulp@gmail.com", "credentialEnv": "GATEWAY_KEY_KVWULP" },
+  { "teamIdPrefix": "fde44a30", "ownerEmail": "michael@allocator.one", "credentialEnv": "GATEWAY_KEY_ALLOCATOR" },
+  { "teamId": "da1167a2-79d2-4582-9845-c775bf1f0e38", "credentialEnv": "GATEWAY_KEY_VALENTIN" },
+  { "teamId": "35c2b765-44c1-45d0-bcb0-ecc0789e2bfc", "credentialEnv": "GATEWAY_KEY_VALENTIN" },
+  { "teamId": "02f13a92-ac93-4379-a1e4-4cafb116d606", "credentialEnv": "GATEWAY_KEY_VALENTIN" }
+]

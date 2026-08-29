@@ -1,0 +1,407 @@
+{
+  "schemaVersion": 1,
+  "title": "Hypertask five-surface catalog parity contract",
+  "cliPackage": {
+    "name": "@hypertask/hypertask_cli",
+    "version": "1.13.24"
+  },
+  "jobs": [
+    {
+      "id": "identity.context",
+      "title": "Discover identity and accessible workspace context",
+      "matches": {
+        "api": ["^(GET|POST) /api/mcp/hello$", "^GET /api/mcp/user/context$"],
+        "mcp": ["^hypertask_(hello|get_user_context)$"],
+        "cli": ["^(context|status)$"],
+        "ai_chat": ["^hypertask_get_user_context$"],
+        "hyperai": ["^hypertask_(hello|get_user_context)$"]
+      }
+    },
+    {
+      "id": "identity.profile",
+      "title": "Update the human profile",
+      "matches": {
+        "api": ["^(GET|PATCH) /api/mcp/user/profile$"],
+        "mcp": ["^hypertask_update_profile$"],
+        "cli": ["^user update$"],
+        "ai_chat": ["^hypertask_update_profile$"],
+        "hyperai": ["^hypertask_update_profile$"]
+      }
+    },
+    {
+      "id": "agents.observe",
+      "title": "List, inspect, and contact board agents",
+      "matches": {
+        "api": [
+          "^GET /api/mcp/agents($|/\\[agentId\\]$|/analytics$|/presence$)",
+          "^POST /api/mcp/agents/runtime-heartbeat$"
+        ],
+        "mcp": ["^hypertask_(agent_presence|list_agents)$"],
+        "cli": ["^presence$", "^agents list$"],
+        "ai_chat": ["^hypertask_(agent_presence|ask_agent)$", "^hypertask_list_agents$"],
+        "hyperai": ["^hypertask_(agent_presence|list_agents)$"]
+      }
+    },
+    {
+      "id": "agents.manage",
+      "title": "Create, revoke, and rotate managed agents or keys",
+      "matches": {
+        "api": [
+          "^(GET|POST|DELETE|PATCH) /api/mcp/(admin/(keys|team-gateway-keys)|agents/(create|revoke|rotate-token)|agents/\\[agentId\\])$",
+          "^GET /api/mcp/admin/agents$",
+          "^POST /api/mcp/admin/agents$",
+          "^DELETE /api/mcp/admin/agents$",
+          "^POST /api/mcp/admin/agents/\\[agentId\\]/token$",
+          "^POST /api/mcp/admin/tokens$",
+          "^DELETE /api/mcp/admin/tokens$",
+          "^GET /api/mcp/admin/connections$"
+        ],
+        "mcp": [
+          "^hypertask_create_agent$",
+          "^hypertask_revoke_agent$",
+          "^hypertask_mint_token$",
+          "^hypertask_revoke_token$",
+          "^hypertask_list_connections$"
+        ],
+        "cli": [
+          "^(admin keys (create|list|revoke)|agents (create|revoke|rotate-token)|token set-management-key)$",
+          "^admin agents list$",
+          "^admin agents create$",
+          "^admin agents revoke$",
+          "^admin agents rotate-token$",
+          "^admin tokens mint$",
+          "^admin tokens revoke$",
+          "^admin connections list$"
+        ],
+        "ai_chat": [
+          "^hypertask_create_agent$",
+          "^hypertask_revoke_agent$",
+          "^hypertask_mint_token$",
+          "^hypertask_revoke_token$",
+          "^hypertask_list_connections$"
+        ],
+        "hyperai": [
+          "^hypertask_create_agent$",
+          "^hypertask_revoke_agent$",
+          "^hypertask_mint_token$",
+          "^hypertask_revoke_token$",
+          "^hypertask_list_connections$"
+        ]
+      }
+    },
+    {
+      "id": "auth.session",
+      "title": "Create, refresh, inspect, or clear a CLI/API session",
+      "matches": {
+        "api": ["^(GET|POST|DELETE) /api/mcp/token(/refresh)?$"],
+        "cli": ["^(login|logout|token refresh|update)$"]
+      },
+      "exclusions": {
+        "mcp": "MCP clients receive credentials out of band and do not manage interactive login.",
+        "ai_chat": "The signed-in web session is managed by the app shell.",
+        "hyperai": "The embedded agent inherits the invoking human session."
+      }
+    },
+    {
+      "id": "tasks.read",
+      "title": "List, inspect, and filter tasks",
+      "matches": {
+        "api": ["^GET /api/mcp/tasks$", "^GET /api/mcp/tasks/mine$"],
+        "mcp": ["^hypertask_(list_tasks|get_tasks)$"],
+        "cli": ["^task (list|get)$"],
+        "ai_chat": ["^hypertask_(list_tasks|get_tasks|my_tasks)$"],
+        "hyperai": ["^hypertask_(list_tasks|get_tasks)$"]
+      }
+    },
+    {
+      "id": "tasks.context",
+      "title": "Read task context, hierarchy, and description history",
+      "matches": {
+        "api": ["^(GET|POST) /api/mcp/tasks/(context|tree|description-versions|description-restore|evidence)$"],
+        "mcp": ["^hypertask_(task_context|get_task_tree|task_description_history)$"],
+        "cli": ["^task (context|tree|description-history|description-restore)( |$)"],
+        "ai_chat": ["^hypertask_(task_context|get_task_tree|task_description_history)$"],
+        "hyperai": ["^hypertask_(task_context|get_task_tree|task_description_history)$"]
+      }
+    },
+    {
+      "id": "tasks.discover",
+      "title": "Search, retrieve, and find related tasks",
+      "matches": {
+        "api": ["^(GET|POST) /api/mcp/tasks/(search|related)$"],
+        "mcp": ["^hypertask_(search_tasks|rag_retrieval|find_related_tasks)$"],
+        "cli": ["^(search|task (search|related))$"],
+        "ai_chat": ["^hypertask_(search_tasks|find_related_tasks)$", "^rag_retrieval$"],
+        "hyperai": ["^hypertask_(search_tasks|rag_retrieval|find_related_tasks)$"]
+      }
+    },
+    {
+      "id": "tasks.queue",
+      "title": "Pull, lease, and coordinate the next task",
+      "matches": {
+        "api": ["^(GET|POST) /api/mcp/tasks/(next|lease/(claim|heartbeat|release)|session)$"],
+        "mcp": ["^hypertask_next_tasks$"],
+        "cli": ["^task next$"],
+        "ai_chat": ["^hypertask_next_tasks$"],
+        "hyperai": ["^hypertask_next_tasks$"]
+      }
+    },
+    {
+      "id": "tasks.mutate",
+      "title": "Create, update, move, batch, or escalate tasks",
+      "matches": {
+        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$"],
+        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
+        "cli": ["^task (create|update|move|move-board)$"],
+        "ai_chat": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
+        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$"]
+      }
+    },
+    {
+      "id": "tasks.assignment",
+      "title": "Assign people and attach files",
+      "matches": {
+        "api": ["^POST /api/mcp/(assignees/assign|tasks/attachments)$", "^GET /api/mcp/tasks/attachments$"],
+        "mcp": ["^hypertask_(assign_user|attach_files)$"],
+        "cli": ["^task (assign|unassign)$"],
+        "ai_chat": ["^hypertask_(assign_user|unassign_user|attach_files)$"],
+        "hyperai": ["^hypertask_(assign_user|attach_files)$"]
+      }
+    },
+    {
+      "id": "tasks.relations",
+      "title": "Link, unlink, and inspect task relations",
+      "matches": {
+        "api": ["^(GET|POST|DELETE) /api/mcp/tasks/relations$"],
+        "mcp": ["^hypertask_link_tasks$"],
+        "cli": ["^task (link|unlink|relations)$"],
+        "ai_chat": ["^hypertask_link_tasks$"],
+        "hyperai": ["^hypertask_link_tasks$"]
+      }
+    },
+    {
+      "id": "boards.read",
+      "title": "List boards, teams, members, manifests, and playbooks",
+      "matches": {
+        "api": ["^GET /api/mcp/(projects|teams/\\[teamId\\]/boards|projects/\\[projectId\\]/(members|manifest|playbook))$"],
+        "mcp": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"],
+        "cli": ["^(teams list|project (list|show|members|manifest|playbook|sections|labels))$"],
+        "ai_chat": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"],
+        "hyperai": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"]
+      }
+    },
+    {
+      "id": "boards.manage",
+      "title": "Create, archive, invite to, and configure boards",
+      "matches": {
+        "api": ["^(POST|PATCH) /api/mcp/projects$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
+        "mcp": ["^hypertask_(create_board|project_admin|board_config)$"],
+        "cli": ["^project (create-board|archive|invite|instructions)( |$)"],
+        "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$"],
+        "hyperai": ["^hypertask_(create_board|project_admin|board_config)$"]
+      }
+    },
+    {
+      "id": "boards.structure",
+      "title": "Manage labels, columns, and custom fields",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/(projects/\\[projectId\\]/labels|projects/\\[projectId\\]/sections($|/\\[sectionId\\]$)|custom-fields($|/\\[fieldId\\]$|/value$))"],
+        "mcp": ["^hypertask_(create_label|list_labels|section|list_custom_fields|set_custom_field_value)$", "^hypertask_update_label$"],
+        "cli": ["^(labels (list|create)|project label create|section (list|create|rename|reorder|done|delete)|fields (list|create|get|set|delete))$", "^labels update$", "^project label update$"],
+        "ai_chat": ["^hypertask_(create_label|list_labels|section|list_custom_fields|set_custom_field_value)$", "^hypertask_update_label$"],
+        "hyperai": ["^hypertask_(create_label|list_labels|section|list_custom_fields|set_custom_field_value)$", "^hypertask_update_label$"]
+      },
+      "planned": {
+        "mcp": {
+          "issue": "https://app.hypertask.ai/detail/project-15/5127",
+          "expires": "2026-09-15",
+          "entries": ["hypertask_update_label"]
+        },
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/5127",
+          "expires": "2026-09-15",
+          "entries": ["labels update", "project label update"]
+        },
+        "ai_chat": {
+          "issue": "https://app.hypertask.ai/detail/project-15/5127",
+          "expires": "2026-09-15",
+          "entries": ["hypertask_update_label"]
+        },
+        "hyperai": {
+          "issue": "https://app.hypertask.ai/detail/project-15/5127",
+          "expires": "2026-09-15",
+          "entries": ["hypertask_update_label"]
+        }
+      }
+    },
+    {
+      "id": "comments.manage",
+      "title": "Read, add, edit, and delete task comments",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/comments($|/\\[comment_id\\]$)", "^POST /api/mcp/comments/\\[comment_id\\]/reactions$"],
+        "mcp": ["^hypertask_(get_comments_for_task|add_comment_to_task|update_comment|delete_comment)$"],
+        "cli": ["^comment (list|add|update|delete)$"],
+        "ai_chat": ["^hypertask_(get_comments_for_task|add_comment|update_comment|delete_comment)$"],
+        "hyperai": ["^hypertask_(get_comments_for_task|add_comment_to_task|update_comment|delete_comment)$"]
+      }
+    },
+    {
+      "id": "inbox.manage",
+      "title": "Read and triage inbox notifications",
+      "matches": {
+        "api": ["^(GET|POST) /api/mcp/inbox/(list|composition|archive|unarchive|seen|move)$"],
+        "mcp": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"],
+        "cli": ["^(inbox (list|composition|archive|unarchive)|task move-to-inbox)$"],
+        "ai_chat": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"],
+        "hyperai": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"]
+      }
+    },
+    {
+      "id": "pages.manage",
+      "title": "Create, read, search, update, archive, and restore pages",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/pages/(create|get|list|search|update|archive|versions|restore)$"],
+        "mcp": ["^hypertask_(create_page|get_page|update_page|list_pages|search_pages|page_history)$"],
+        "cli": ["^pages (create|get|append|update|list|search|archive|history|restore)( |$)"],
+        "ai_chat": ["^hypertask_(create_page|get_page|update_page|list_pages|search_pages|page_history)$"],
+        "hyperai": ["^hypertask_(create_page|get_page|update_page|list_pages|search_pages|page_history)$"]
+      }
+    },
+    {
+      "id": "reports.manage",
+      "title": "Create, read, update, and delete saved reports",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/reports/(list|get|create|update|delete)$"],
+        "mcp": ["^hypertask_report$"],
+        "cli": ["^report (list|get|create|update|delete)$"],
+        "ai_chat": ["^hypertask_(list_reports|get_report|create_report|update_report|delete_report)$"],
+        "hyperai": ["^hypertask_report$"]
+      }
+    },
+    {
+      "id": "views.manage",
+      "title": "Create, read, update, delete, and switch saved views",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/view($|/\\[viewId\\]$|/\\[viewId\\]/apply$)"],
+        "mcp": ["^hypertask_(list_views|get_view|create_view|update_view|delete_view|switch_view)$"],
+        "cli": ["^view (list|get|create|update|delete|switch)$"],
+        "ai_chat": ["^hypertask_(list_views|get_view|create_view|update_view|delete_view|switch_view)$"],
+        "hyperai": ["^hypertask_(list_views|get_view|create_view|update_view|delete_view|switch_view)$"]
+      }
+    },
+    {
+      "id": "skills.manage",
+      "title": "Create, read, update, delete, and import skills",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/skills($|/\\[skill_id\\]$|/import$)"],
+        "mcp": ["^hypertask_(list_skills|get_skill|create_skill|update_skill|delete_skill|import_skills)$"],
+        "cli": ["^skills (list|get|create|update|delete|import)$"],
+        "ai_chat": ["^hypertask_(list_skills|get_skill|create_skill|update_skill|delete_skill|import_skills)$"],
+        "hyperai": ["^hypertask_(list_skills|get_skill|create_skill|update_skill|delete_skill|import_skills)$"]
+      }
+    },
+    {
+      "id": "decisions.manage",
+      "title": "Create, read, answer, and cancel decision requests",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/decisions($|/\\[id\\]$)"],
+        "mcp": ["^hypertask_decision_request$"],
+        "cli": ["^decision (answer|cancel|create|get|list)$"],
+        "ai_chat": ["^hypertask_decision_request$"],
+        "hyperai": ["^hypertask_decision_request$"]
+      }
+    },
+    {
+      "id": "drafts.manage",
+      "title": "Create, read, update, publish, and delete drafts",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/drafts($|/\\[draft_id\\]$|/\\[draft_id\\]/publish$)"],
+        "mcp": ["^hypertask_draft$"],
+        "cli": ["^draft (list|create|update|publish|delete)$"],
+        "ai_chat": ["^hypertask_draft$"],
+        "hyperai": ["^hypertask_draft$"]
+      }
+    },
+    {
+      "id": "time.manage",
+      "title": "Start, stop, pause, resume, log, and report time",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/time/(start|stop|pause|resume|log|status|running|report|update|delete)$"],
+        "mcp": ["^hypertask_(time|pause_timer|resume_timer)$"],
+        "cli": ["^time (start|stop|pause|resume|log|status|running|report)$"],
+        "ai_chat": ["^hypertask_(start_timer|stop_timer|pause_timer|resume_timer|log_time|time_status|running_timers|time_report)$"],
+        "hyperai": ["^hypertask_(time|pause_timer|resume_timer)$"]
+      }
+    },
+    {
+      "id": "ai.write",
+      "title": "Draft, improve, and inspect AI usage",
+      "matches": {
+        "api": ["^(GET|POST) /api/mcp/ai/(improve|task-writer|usage)$", "^GET /api/mcp/ai/sessions$", "^POST /api/mcp/ai/sessions$", "^PATCH /api/mcp/ai/sessions/\\[sessionId\\]$", "^DELETE /api/mcp/ai/sessions/\\[sessionId\\]$"],
+        "cli": ["^ai (write|improve)$"]
+      },
+      "exclusions": {
+        "mcp": "AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only.",
+        "ai_chat": "AI Chat itself is the writing surface rather than a nested tool.",
+        "hyperai": "HyperAI itself is the writing surface rather than a nested tool."
+      }
+    },
+    {
+      "id": "help.search",
+      "title": "Search Hypertask product help",
+      "matches": {
+        "mcp": ["^hypertask_search_help_docs$"],
+        "ai_chat": ["^search_help_docs$"],
+        "hyperai": ["^hypertask_search_help_docs$"]
+      },
+      "exclusions": {
+        "api": "Help search uses the public documentation service, not a user-data API route.",
+        "cli": "The CLI exposes command help locally instead of remote help-center search."
+      }
+    },
+    {
+      "id": "web.search",
+      "title": "Search the public web for current information",
+      "matches": {
+        "ai_chat": ["^web_search$"]
+      },
+      "exclusions": {
+        "api": "Public web search is an AI-runtime capability, not a board data endpoint.",
+        "mcp": "MCP clients can provide their own web-search capability.",
+        "cli": "The board CLI does not proxy public web search.",
+        "hyperai": "HyperAI does not receive the AI Chat web-search provider."
+      }
+    },
+    {
+      "id": "webhooks.manage",
+      "title": "Create, inspect, test, and delete webhooks",
+      "matches": {
+        "api": ["^(GET|POST|DELETE) /api/mcp/webhooks($|/\\[id\\]/test$)"],
+        "mcp": ["^hypertask_agent_webhook$"],
+        "cli": [
+          "^webhook get$",
+          "^webhook configure$",
+          "^webhook test$",
+          "^webhook replay$",
+          "^webhook rotate-secret$",
+          "^webhook delete$"
+        ],
+        "ai_chat": ["^hypertask_agent_webhook$"],
+        "hyperai": ["^hypertask_agent_webhook$"]
+      }
+    },
+    {
+      "id": "system.catalog",
+      "title": "Inspect client capabilities and reject unknown routes",
+      "matches": {
+        "api": ["^(GET|POST|PATCH|PUT|DELETE) /api/mcp/\\[...notFound\\]$"],
+        "cli": ["^capabilities$"]
+      },
+      "exclusions": {
+        "mcp": "MCP protocol discovery already returns the live tool catalog.",
+        "ai_chat": "AI Chat tool discovery is internal to the model runtime.",
+        "hyperai": "HyperAI inherits the canonical MCP registry at runtime."
+      }
+    }
+  ]
+}

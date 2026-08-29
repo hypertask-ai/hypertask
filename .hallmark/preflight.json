@@ -1,0 +1,16 @@
+{
+  "date": "2026-08-09",
+  "scope": "component",
+  "target": "src/components/PageComponents/LearnTutorial/TutorialOverlay.tsx",
+  "framework": "Next.js 16 with React 19",
+  "styling": "Tailwind CSS 4 plus SCSS modules",
+  "designAuthority": "docs/DESIGN.md and incumbent theme tokens",
+  "themes": ["porcelain", "graphite", "amoled"],
+  "font": "inherited Hypertask system UI stack",
+  "motion": "CSS transform-only key guidance with reduced-motion fallback",
+  "constraints": [
+    "No new palette, font, gradient, pill, or decorative asset",
+    "No file deletions",
+    "Keep the tutorial keyboard-first and preserve real product behavior"
+  ]
+}

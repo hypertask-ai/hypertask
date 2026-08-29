@@ -1,0 +1,25 @@
+[Unit]
+Description=Hypertask %i durable queue notifier
+After=network-online.target hypertask-agent-webhook@%i.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/hypertask-agents/%i.env
+EnvironmentFile=%h/.config/hypertask-agents/%i.conf
+Environment=HT_AGENT_SLUG=%i
+Environment=PATH=%h/.npm-global/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask-agent-worker/worker.py notify
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state
+RestrictSUIDSGID=true
+LockPersonality=true
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-08-09T11:36:00.000Z",
+  "fixtureUrl": "https://app.hypertask.ai/project?id=15&view=speed",
+  "cacheDisabled": true,
+  "regressionPercent": 5,
+  "releaseGate": {
+    "minimumRuns": 5,
+    "baselineTotalBlockingTimeMs": 996,
+    "baselineLongestTaskMs": 1300,
+    "totalBlockingTimeTargetMs": 1050,
+    "longTaskTargetMs": 1300
+  },
+  "field": {
+    "minimumSamplesPerMetric": 75,
+    "mobileLcpTargetMs": 2500,
+    "inpTargetMs": 200,
+    "baselineWindowDays": 30,
+    "baselineObservedAt": "2026-08-09T11:49:00.000Z",
+    "baselineEvent": "$web_vitals",
+    "baselineScope": "exact app.hypertask.ai + /project",
+    "devices": {
+      "mobile": {
+        "lcpP75Ms": 2965,
+        "lcpSamples": 17,
+        "inpP75Ms": 128,
+        "inpSamples": 17
+      },
+      "desktop": {
+        "lcpP75Ms": 2425,
+        "lcpSamples": 280,
+        "inpP75Ms": 72,
+        "inpSamples": 325
+      }
+    }
+  },
+  "devices": {
+    "mobile": {
+      "viewport": "390x844",
+      "cpuThrottle": 4,
+      "scriptCount": 62,
+      "scriptDecodedBytes": 2279884,
+      "apiRequestCount": 19,
+      "apiDecodedBytes": 743263
+    },
+    "desktop": {
+      "viewport": "1440x900",
+      "cpuThrottle": 1,
+      "scriptCount": 57,
+      "scriptDecodedBytes": 2233901,
+      "apiRequestCount": 19,
+      "apiDecodedBytes": 743263
+    }
+  }
+}

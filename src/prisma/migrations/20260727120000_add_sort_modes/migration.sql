@@ -1,0 +1,6 @@
+ALTER TYPE "SortingMode" ADD VALUE IF NOT EXISTS 'Assignee';
+ALTER TYPE "SortingMode" ADD VALUE IF NOT EXISTS 'Title';
+ALTER TYPE "SortingMode" ADD VALUE IF NOT EXISTS 'TicketNumber';
+ALTER TYPE "SortingMode" ADD VALUE IF NOT EXISTS 'TimeInColumn';
+ALTER TYPE "SortingMode" ADD VALUE IF NOT EXISTS 'TimeOnBoard';
+ALTER TYPE "SortingMode" ADD VALUE IF NOT EXISTS 'TimeWithoutComment';

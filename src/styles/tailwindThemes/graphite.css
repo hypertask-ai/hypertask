@@ -1,0 +1,205 @@
+/* "Dark Grey (New)" theme. Same recipe as AMOLED (elevation ladder, IBM
+   Plex, muted ticket IDs, tinted-grey accent) applied to the current dark theme's
+   blue-grey card/well surfaces (page background itself is the same
+   near-black #0e0e0e as dark.css and amoled.css). Additive: dark.css is
+   untouched. */
+
+/* Graphite Theme Background Colors */
+.graphite {
+  --primary: 225 10% 49%;
+
+  --bg-pageBackground: #0e0e0e;
+  --bg-taskDetailPage: #0e0e0e;
+  --bg-label-span: #363b44;
+  --bg-hover-active: #3a3d45;
+  --bg-cardBackground: #262a30;
+  --bg-modalBackground: #2c2f36;
+  --bg-taskDetail-container: #1a1d21;
+  --bg-containerBackground: #1a1d21;
+  --bg-containerBackground-inverted: #d9d9d9;
+  --bg-comment-description: #262a30;
+  --bg-back-button: #21242a;
+  --bg-tooltip: #2c2f36;
+  --bg-newComment-container: #21242a;
+  --bg-task-tag: rgb(160, 160, 160);
+  --bg-sidebar: #141518;
+  --bg-dropdown: #2c2f36;
+  --bg-self-comment: #17191d;
+  --bg-mention: #2c2f36;
+  --bg-reactions: #1a1d21;
+  --bg-horizontal-scrollbar: #1a1d21;
+  --bg-ai-chat-tiptap: #262a30;
+  --bg-ai-chat: #1a1d21;
+  --bg-mention-highlight: #3a331f;
+}
+
+/* Graphite Theme Hover Backgrounds */
+.graphite {
+  --hover-cardBackground: #2c3037;
+}
+
+/* Graphite Theme Active Backgrounds */
+.graphite {
+  --active-kanbanCardbg: #363b44;
+  --active-elementBg: #262930;
+  --active-modal-element: #3a3d45;
+  --active-mentionList: #3a3d45;
+  --active-list-element: #3a3d45;
+}
+
+/* Graphite Theme Colors */
+.graphite {
+  --color-page-background: var(--bg-pageBackground);
+  --color-white-black: #ffffff;
+  --color-white-black-inverted: #262a30;
+  --color-text-light-gray: #8e9093;
+  --color-border: 220 8% 22%;
+  --color-border-comment-description: #363b44;
+  --bg-newcomment-well: #17191d;
+  --color-my-comment: #ffffff;
+  --color-kanban-column-scrollbar: transparent;
+  --em-rgb-color: #ffffff;
+  --color-text-labelComponent: #d3d3d3;
+  --shadcn-primary: 225 10% 49%;
+  --primary-foreground: 0 0% 0%;
+  --secondary: 220 8% 16%;
+  --secondary-foreground: 0 0% 80%;
+  --muted: 220 5% 40%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 225 10% 49%;
+  --accent-foreground: 0 0% 0%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 85.7% 97.3%;
+  --border: 220 8% 22%;
+  --input: 220 8% 22%;
+  --ring: 225 10% 49%;
+  --button-arrow-disabled: gray;
+  --button-arrow: white;
+  --border-self-comment: 51, 55, 62;
+  --border-light-gray-thin: #33373e;
+  --color-mention-highlight: #d29f02;
+  --color-horizontal-scrollbar-track: #363b44;
+  --color-archived-state: #86efac;
+}
+
+/* Graphite Theme Focus Rings */
+.graphite {
+  --focus-ring: #707788;
+  --border-active: #707788;
+}
+
+@media (max-width: 767px) {
+  .graphite {
+    --bg-taskDetailPage: #1a1d21;
+    --bg-newComment-container: #21242a;
+  }
+}
+
+.graphite .modal-content,
+.graphite .linksModal .modal-content {
+  border: 1px solid #363b44;
+}
+
+.graphite .kanban-task-card .task-ticket-id {
+  color: #8e9093;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.graphite .kanban-column-count {
+  color: #8e9093;
+}
+
+.graphite .inbox-indicator-dot {
+  color: #707788;
+}
+
+/* Kanban column well: stable 1px border, same reasoning as AMOLED (see
+   amoled.css) — the section container's keyboard-focus border resolves to
+   --color-white-black, white here, which is too bright against this surface. */
+.graphite .section-container {
+  border: 1px solid #33373e;
+}
+
+.graphite .section-container:focus {
+  border-color: #4a4f58;
+}
+
+.graphite .table-view-header {
+  border-bottom: 1px solid #33373e;
+}
+
+.graphite .table-view-row:not(:last-child) {
+  border-bottom: 1px solid #24272c;
+}
+
+.graphite .kanban-task-card .label-pill {
+  font-size: 11px !important;
+}
+
+.graphite .app-shell-rail {
+  border-color: #3a3f47;
+}
+
+.graphite .right-sidebar-flyout {
+  border-left: 1px solid #3a3f47;
+}
+
+.graphite .bg-comment-description:not(.main-attachment-container):not(.ai-task-writer-panel):not(.description-container):not(.description-edit-container):not(.comment-edit-container):not(.comment-body):not(#comment),
+.graphite .bg-self-comment {
+  border: 1px solid #363b44;
+}
+
+.graphite .quick-tips-bar {
+  background: #262930;
+}
+
+.graphite em-emoji-picker {
+  --rgb-background: 44, 47, 54;
+  --rgb-input: 54, 59, 68;
+  --rgb-color: 255, 255, 255;
+  --color-border: #363b44;
+}
+
+/* html.graphite so this outranks the next/font Inter className on <html>
+   (equal-specificity source order is not guaranteed). */
+html.graphite {
+  font-family: var(--font-plex), ui-sans-serif, system-ui, sans-serif;
+}
+
+.graphite #comment #comment-input.bg-comment-description {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.graphite #comment .ai-task-writer-panel {
+  box-shadow: none;
+}
+
+.graphite .main-attachment-container {
+  background: transparent;
+}
+
+.graphite .attachment-tile {
+  background: #2c2f36 !important;
+  border: 1px solid #363b44;
+  color: #ffffff;
+}
+
+.graphite .attachment-tile:hover {
+  background: #33373e !important;
+}
+
+.graphite .attachment-tile-name {
+  color: #ffffff;
+}
+
+.graphite .ai-chat-sidebar {
+  border-left: 1px solid #3a3f47;
+}
+
+/* Core themes run thin 1.5 glyphs (HTPR-4931). CSS stroke-width beats the
+   SVG attribute so remaining Lucide call sites thin without edits. */
+.graphite svg.lucide:not(.keep-stroke) {
+  stroke-width: 1.5;
+}

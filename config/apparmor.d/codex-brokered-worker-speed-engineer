@@ -1,0 +1,79 @@
+# Constrain the trusted Speed Engineer worker and every helper it launches
+# before the provider transitions into the stricter provider profile.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile codex-brokered-worker-speed-engineer flags=(attach_disconnected,mediate_deleted) {
+  include <abstractions/base>
+
+  network,
+  # The worker may terminate only provider processes it launched. Filesystem
+  # Unix sockets are mediated by the exact state-path rules below.
+  signal (send) peer=codex-brokered-provider-speed-engineer,
+  deny ptrace,
+  deny dbus,
+
+  / r,
+  /** r,
+  /dev/{null,zero,full,random,urandom,tty} rw,
+
+  # Fail closed on execution. This is the complete trusted-worker executable
+  # set; an installed setuid/setgid binary is unusable unless named here.
+  /home/valentin/.local/bin/ht rix,
+  # AppArmor mediates the resolved target of the local ht symlink.
+  /usr/local/bin/ht rix,
+  /home/valentin/.local/bin/ht-agent rix,
+  /home/valentin/.npm-global/bin/hypertask rix,
+  /home/valentin/.npm-global/lib/node_modules/@hypertask/hypertask_cli/dist/hypertask_cli.js rix,
+  /usr/bin/aa-exec ix,
+  /usr/bin/bash ix,
+  /usr/bin/curl ix,
+  /usr/bin/cut ix,
+  /usr/bin/date ix,
+  /usr/bin/env ix,
+  /usr/bin/gh ix,
+  /usr/bin/git ix,
+  /usr/bin/grep ix,
+  /usr/bin/head ix,
+  /usr/bin/mv ix,
+  /usr/bin/node ix,
+  /usr/bin/python3 ix,
+  /usr/bin/python3.12 ix,
+  /usr/bin/rm ix,
+  /usr/bin/sed ix,
+  /usr/bin/sort ix,
+  /usr/bin/ssh ix,
+  /usr/bin/tr ix,
+  # Git re-execs its own binary through this exact git-core path for built-in
+  # helpers such as rev-list. This is the same executable already permitted at
+  # /usr/bin/git, not a wildcard over arbitrary git-core programs.
+  /usr/lib/git-core/git ix,
+  /usr/lib/git-core/git-rev-list ix,
+  /usr/lib/git-core/git-remote-http ix,
+  /usr/lib/git-core/git-remote-https ix,
+
+  # This instance may mutate only its own durable state, repository Git
+  # metadata used to create worktrees, and its isolated worktrees.
+  owner /home/valentin/.local/state/hypertask-speed-engineer/{,**} rwk,
+  owner /home/valentin/projects/hypertasks/.git/{,**} rwk,
+  owner /home/valentin/projects/hypertasks-worker-trees/speed-engineer-*/{,**} rwk,
+
+  # ht-agent's only mutable identity-side files are this deployment's
+  # notification cursors. Other agents' cursors and every credential remain
+  # non-writable.
+  owner /home/valentin/.config/hypertask-agents/speed-engineer.seen rwk,
+  owner /home/valentin/.config/hypertask-agents/speed-engineer.tickets rwk,
+  owner /home/valentin/.config/hypertask-agents/speed-engineer.watermark rwk,
+  owner /home/valentin/.config/hypertask-agents/speed-engineer.watermark.next rwk,
+  # A confined startup probe proves exact-path create, atomic replace, and
+  # unlink without granting write access to the containing directory.
+  owner /home/valentin/.config/hypertask-agents/speed-engineer.profile-probe rwk,
+  owner /home/valentin/.config/hypertask-agents/speed-engineer.profile-probe.next rwk,
+
+  change_profile -> codex-brokered-provider-speed-engineer,
+
+  deny /proc/*/environ r,
+
+  include if exists <local/codex-brokered-worker-speed-engineer>
+}

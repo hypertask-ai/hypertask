@@ -1,0 +1,312 @@
+<!-- @dsCard name="Colors" group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hypertask Colors</title>
+  <style>
+/* General Background Colors */
+:root {
+  --primary: 221.2 83.2% 53.3%;
+
+  --bg-pageBackground: rgb(255, 255, 255);
+  --bg-taskDetailPage: rgb(250, 250, 252);
+  --bg-containerBackground: white;
+  --bg-containerBackground-inverted: #212429;
+  --bg-taskDetail-container: white;
+  --bg-cardBackground: #f9f9f9;
+  --bg-modalBackground: white;
+  --bg-hover-active: #e9e9e9;
+  --bg-comment-description: #f9f9f9;
+  --bg-newComment-container:#f9f9f9;
+  --bg-ai-chat-tiptap: #f9f9f9;
+  --bg-ai-chat: white;
+  --bg-label-span: rgb(225, 225, 225);
+  --bg-back-button: white;
+  --bg-tooltip:#d1d1d1;
+  --bg-task-tag:rgb(160, 160, 160);
+  --bg-sidebar:#f3f3f3;
+  --bg-self-comment:white;
+  --bg-dropdown:#8d8e8f;
+  --bg-mention:white;
+  --bg-reactions:#e7e7e7;
+  --bg-horizontal-scrollbar:white;
+  --bg-mention-highlight:#f9efcb;
+  blockquote {
+    border-left: 3px solid var(--color-text-light-gray) !important;
+    padding-left: 1rem;
+  };
+  
+
+
+}
+
+/* Hover Backgrounds */
+:root {
+  --hover-cardBackground: #d0d0d0;
+}
+
+/* Active Backgrounds */
+:root {
+  --active-cardBackground: #ececec;
+  --active-elementBg:#ececec;
+  --active-modal-element:#ececec;
+  --active-kanbanCardbg: #eeeeee;
+  --active-mentionList:var(--active-modal-element);
+  --active-list-element:#ececec;
+
+}
+
+/* Colors */
+:root {
+  --color-page-background:var(--bg-pageBackground);
+  --color-white-black: #262525;
+  --color-white-black-inverted: white;
+  --color-text-light-gray: #858585;
+  --color-border: 240 5.9% 90%;
+  --color-border-comment-description: var(--bg-comment-description);
+  --color-my-comment:var(--color-white-black-inverted);
+  --em-rgb-color: white;
+  --color-text-labelComponent:#858585;
+  --shadcn-primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4.8% 95.9%;
+  --secondary-foreground: 240 5.9% 10%;
+  --muted: 0deg 0.48% 49.52%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --accent-foreground: 240 5.9% 10%;
+  --destructive: 0 72.22% 50.59%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 5.9% 90%;
+  --border-self-comment: 0,0,0,0.40;
+  --border-light-gray-thin:rgb(224, 224, 224);
+  --input: 240 5.9% 90%;
+  --ring: 240 5% 64.9%;
+  --button-arrow-disabled:rgb(220, 219, 219);
+  --button-arrow:rgb(134, 132, 132);
+  --color-kanban-column-scrollbar:transparent;
+  --color-horizontal-scrollbar-track:#4F5766;
+  --color-mention-highlight:#1365a3;
+}
+
+/* Focus Rings */
+:root {
+  --focus-ring: var(--color-white-black);
+  --border-active: #262525;
+}
+
+/* Media Query for Mobile Devices */
+@media (max-width: 767px) {
+  :root {
+    --bg-taskDetailPage: rgb(255, 255, 255);
+    --bg-containerBackground: #f7f7f7;
+    --bg-comment-description: #f9f9f9;
+    --bg-newComment-container:#f9f9f9;
+
+  }
+}
+
+/* Dark Theme Background Colors */
+.dark {
+  --primary: 221.2 83.2% 53.3%;
+
+  --bg-pageBackground: #0e0e0e;
+  --bg-taskDetailPage: #0e0e0e;
+  --bg-label-span: #4F5766;
+  --bg-hover-active: #4c5362;
+  --bg-cardBackground: #2a2d34;
+  --bg-modalBackground: #333B47;
+  --bg-taskDetail-container: #212429;
+  --bg-containerBackground: #212429;
+  --bg-containerBackground-inverted: #D9D9D9;
+  --bg-comment-description: #2F343C;
+  --bg-back-button: #27292D;
+  --bg-tooltip:#8E9093;
+  --bg-newComment-container:#27292D;
+  --bg-task-tag:rgb(160, 160, 160);
+  --bg-sidebar:#202124;
+  --bg-dropdown:#333b47;
+  --bg-self-comment:#18191A;
+  --bg-mention:#27292D;
+  --bg-reactions:var(--bg-taskDetail-container);
+  --bg-horizontal-scrollbar:#212429;
+  --bg-ai-chat-tiptap: #2f343c;
+  --bg-ai-chat: #212429;  
+  --bg-mention-highlight:#403a28;
+
+}
+
+/* Dark Theme Hover Backgrounds */
+.dark {
+  --hover-cardBackground: #2f343c;
+}
+
+/* Dark Theme Active Backgrounds */
+.dark {
+  --active-kanbanCardbg: #4F5766;
+  --active-elementBg:#2F343C;
+  --active-modal-element:#4f5766;
+  --active-mentionList:#363A40;
+  --active-list-element:#4f5766;
+}
+
+/* Dark Theme Colors */
+.dark {
+  --color-page-background:var(--bg-pageBackground);
+  --color-white-black: white;
+  --color-white-black-inverted: rgb(74, 74, 74);
+  --color-text-light-gray: #8e9093;
+  --color-border: 240 3.7% 15.9%;
+  --color-border-comment-description: var(--bg-comment-description);
+  --color-my-comment:var(--color-white-black);
+  --color-kanban-column-scrollbar:transparent;
+  --em-rgb-color: white;
+  --color-text-labelComponent:#d3d3d3;
+  --shadcn-primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0deg 0% 67.86%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 85.7% 97.3%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 240 4.9% 83.9%;
+  --button-arrow-disabled:gray;
+  --button-arrow:white;
+  --border-self-comment: 0, 0, 0;
+  --border-light-gray-thin:rgb(35, 37, 42);
+  --color-mention-highlight:#d29f02;
+  --color-horizontal-scrollbar-track:#4F5766;
+
+}
+
+/* Dark Theme Focus Rings */
+.dark {
+  --focus-ring: var(--color-white-black);
+  --border-active: white;
+}
+
+
+@media (max-width: 767px) {
+  .dark {
+    /* --bg-taskDetailPage: rgb(255, 255, 255);
+    --bg-containerBackground: #f7f7f7;
+    --bg-comment-description: #f9f9f9; */
+    --bg-taskDetailPage: #212429;
+    --bg-newComment-container:#27292D;
+
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg-pageBackground);
+  color: var(--color-white-black);
+  font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+}
+.wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 980px; }
+.theme-panel {
+  background: var(--bg-pageBackground);
+  color: var(--color-white-black);
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  padding: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+.panel-label { color: var(--color-text-light-gray); font-size: 11px; font-weight: 600; margin: 0 0 10px; }
+.stack { display: grid; gap: 8px; }
+.cluster { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.surface { background: var(--bg-containerBackground); border: 1px solid var(--border-light-gray-thin); border-radius: 4px; padding: 8px; }
+.muted { color: var(--color-text-light-gray); }
+.title { font-weight: 650; margin: 0; }
+.small { font-size: 11px; }
+.shadow-sm { box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--color-white-black) 10%, transparent); }
+.shadow-md { box-shadow: 0 4px 6px -1px color-mix(in srgb, var(--color-white-black) 12%, transparent), 0 2px 4px -2px color-mix(in srgb, var(--color-white-black) 12%, transparent); }
+.custom-shadow-1 { box-shadow: 2px 2px 20px 0 color-mix(in srgb, var(--color-white-black) 15%, transparent); }
+.custom-shadow-2 { box-shadow: 2px 2px 20px 0 color-mix(in srgb, var(--color-white-black) 35%, transparent); }
+.brand-purple { background: #4455BB; }
+.brand-green { background: #C2CFA5; }
+.brand-blue { background: rgb(35, 131, 226); }
+.icon-dark { color: #999a9d; }
+.icon-hover { color: #95999e; }
+@media.wrap > .dark { min-width: 0; }
+.wrap > .dark > .theme-panel { height: 100%; }
+ (max-width: 760px) { .wrap { grid-template-columns: 1fr; } }
+
+
+.swatches { display: grid; gap: 6px; }
+.swatch { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 32px; padding: 4px; background: var(--bg-containerBackground); border: 1px solid var(--border-light-gray-thin); border-radius: 4px; }
+.chip { width: 28px; height: 22px; border-radius: 3px; border: 1px solid hsl(var(--border)); }
+.name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.value { color: var(--color-text-light-gray); font-size: 11px; white-space: nowrap; }
+.section { margin: 10px 0 5px; color: var(--color-text-light-gray); font-weight: 700; font-size: 11px; text-transform: uppercase; }
+
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="theme-panel" style="background: var(--bg-pageBackground)">
+      <p class="panel-label">Light</p>
+      <div class="swatches">
+        <div class="section">Backgrounds & Surfaces</div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-pageBackground)"></span><span class="name">--bg-pageBackground</span><span class="value">#ffffff</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-sidebar)"></span><span class="name">--bg-sidebar</span><span class="value">#f3f3f3</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-cardBackground)"></span><span class="name">--bg-cardBackground</span><span class="value">#f9f9f9</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-modalBackground)"></span><span class="name">--bg-modalBackground</span><span class="value">#ffffff</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-containerBackground)"></span><span class="name">--bg-containerBackground</span><span class="value">#ffffff</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-hover-active)"></span><span class="name">--bg-hover-active</span><span class="value">#e9e9e9</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-comment-description)"></span><span class="name">--bg-comment-description</span><span class="value">#f9f9f9</span></div>
+        <div class="section">Text & Borders</div>
+        <div class="swatch"><span class="chip" style="background: var(--color-white-black)"></span><span class="name">--color-white-black</span><span class="value">#262525</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--color-text-light-gray)"></span><span class="name">--color-text-light-gray</span><span class="value">#858585</span></div>
+        <div class="swatch"><span class="chip" style="background: hsl(var(--color-border))"></span><span class="name">--color-border</span><span class="value">#e4e4e7</span></div>
+        <div class="swatch"><span class="chip" style="background: hsl(var(--border))"></span><span class="name">--border</span><span class="value">#e4e4e7</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--border-light-gray-thin)"></span><span class="name">--border-light-gray-thin</span><span class="value">#e0e0e0</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--color-border-comment-description)"></span><span class="name">--color-border-comment-description</span><span class="value">#f9f9f9</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--border-active)"></span><span class="name">--border-active</span><span class="value">#262525</span></div>
+        <div class="section">Brand Constants</div>
+        <div class="swatch"><span class="chip brand-purple"></span><span class="name">hypertasks-purple</span><span class="value">#4455BB</span></div>
+        <div class="swatch"><span class="chip brand-green"></span><span class="name">hypertasks-green</span><span class="value">#C2CFA5</span></div>
+        <div class="swatch"><span class="chip brand-blue"></span><span class="name">hypertasks-header-blue</span><span class="value">#2383e2</span></div>
+      </div>
+    </section>
+    <div class="dark" style="background: var(--bg-pageBackground)">
+      <section class="theme-panel" style="background: var(--bg-pageBackground)">
+        <p class="panel-label">Dark</p>
+      <div class="swatches">
+        <div class="section">Backgrounds & Surfaces</div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-pageBackground)"></span><span class="name">--bg-pageBackground</span><span class="value">#0e0e0e</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-sidebar)"></span><span class="name">--bg-sidebar</span><span class="value">#202124</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-cardBackground)"></span><span class="name">--bg-cardBackground</span><span class="value">#2a2d34</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-modalBackground)"></span><span class="name">--bg-modalBackground</span><span class="value">#333B47</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-containerBackground)"></span><span class="name">--bg-containerBackground</span><span class="value">#212429</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-hover-active)"></span><span class="name">--bg-hover-active</span><span class="value">#4c5362</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--bg-comment-description)"></span><span class="name">--bg-comment-description</span><span class="value">#2F343C</span></div>
+        <div class="section">Text & Borders</div>
+        <div class="swatch"><span class="chip" style="background: var(--color-white-black)"></span><span class="name">--color-white-black</span><span class="value">#ffffff</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--color-text-light-gray)"></span><span class="name">--color-text-light-gray</span><span class="value">#8e9093</span></div>
+        <div class="swatch"><span class="chip" style="background: hsl(var(--color-border))"></span><span class="name">--color-border</span><span class="value">#27272a</span></div>
+        <div class="swatch"><span class="chip" style="background: hsl(var(--border))"></span><span class="name">--border</span><span class="value">#27272a</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--border-light-gray-thin)"></span><span class="name">--border-light-gray-thin</span><span class="value">#23252a</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--color-border-comment-description)"></span><span class="name">--color-border-comment-description</span><span class="value">#2F343C</span></div>
+        <div class="swatch"><span class="chip" style="background: var(--border-active)"></span><span class="name">--border-active</span><span class="value">#ffffff</span></div>
+        <div class="section">Brand Constants</div>
+        <div class="swatch"><span class="chip brand-purple"></span><span class="name">hypertasks-purple</span><span class="value">#4455BB</span></div>
+        <div class="swatch"><span class="chip brand-green"></span><span class="name">hypertasks-green</span><span class="value">#C2CFA5</span></div>
+        <div class="swatch"><span class="chip brand-blue"></span><span class="name">hypertasks-header-blue</span><span class="value">#2383e2</span></div>
+      </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

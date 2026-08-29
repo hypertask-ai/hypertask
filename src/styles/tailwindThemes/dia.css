@@ -1,0 +1,345 @@
+/* Dia Theme Background Colors */
+.dia {
+  --primary: 142 27% 33%;
+
+  --bg-pageBackground: #f6f4ef;
+  --bg-taskDetailPage: #f6f4ef;
+  --bg-containerBackground: #f6f4ef;
+  --bg-containerBackground-inverted: #2a2823;
+  --bg-taskDetail-container: #f6f4ef;
+  --bg-cardBackground: #ffffff;
+  --bg-modalBackground: #ffffff;
+  --bg-hover-active: #deede2;
+  --bg-comment-description: #ffffff;
+  --bg-newComment-container: #ffffff;
+  --bg-ai-chat-tiptap: #ffffff;
+  --bg-ai-chat: #f6f4ef;
+  --bg-label-span: #f1eee7;
+  --bg-back-button: #ffffff;
+  --bg-tooltip: #2a2823;
+  --bg-task-tag: #deede2;
+  --bg-sidebar: #f1eee7;
+  --bg-self-comment: #ffffff;
+  --bg-dropdown: #ffffff;
+  --bg-mention: #ffffff;
+  --bg-reactions: #deede2;
+  --bg-horizontal-scrollbar: #f6f4ef;
+  --bg-mention-highlight: #fbf3d2;
+}
+
+/* Dia Theme Hover Backgrounds */
+.dia {
+  --hover-cardBackground: #deede2;
+}
+
+/* Dia Theme Active Backgrounds */
+.dia {
+  --active-cardBackground: #c9e3d2;
+  --active-elementBg: #c9e3d2;
+  --active-modal-element: #c9e3d2;
+  --active-kanbanCardbg: #c9e3d2;
+  --active-mentionList: #c9e3d2;
+  --active-list-element: #c9e3d2;
+}
+
+/* Dia Theme Colors */
+.dia {
+  --color-page-background: var(--bg-pageBackground);
+  --color-white-black: #1f1d1a;
+  --color-white-black-inverted: #f6f4ef;
+  --color-text-light-gray: #67635b;
+  --color-border: 40 25% 88%;
+  --color-border-comment-description: #e9e4da;
+  --bg-newcomment-well: #f1ede6;
+  --color-my-comment: #1f1d1a;
+  --em-rgb-color: #ffffff;
+  --color-text-labelComponent: #67635b;
+  --shadcn-primary: 142 27% 33%;
+  --primary-foreground: 43 28% 95%;
+  --secondary: 42 25% 93%;
+  --secondary-foreground: 40 9% 11%;
+  --muted: 40 25% 88%;
+  --muted-foreground: 40 6% 41%;
+  --accent: 136 30% 90%;
+  --accent-foreground: 40 9% 11%;
+  --destructive: 0 72.22% 50.59%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 40 25% 88%;
+  --border-self-comment: 233, 228, 218;
+  --border-light-gray-thin: #e9e4da;
+  --input: 40 25% 88%;
+  --ring: 142 27% 33%;
+  --button-arrow-disabled: #d8d2c6;
+  --button-arrow: #6f6b63;
+  --color-kanban-column-scrollbar: transparent;
+  --color-horizontal-scrollbar-track: #d8d2c6;
+  --color-mention-highlight: #3e6b4f;
+}
+
+/* Dia Theme Focus Rings */
+.dia {
+  --focus-ring: #3e6b4f;
+  --border-active: #3e6b4f;
+}
+
+@media (max-width: 767px) {
+  .dia {
+    --bg-taskDetailPage: #f6f4ef;
+    --bg-containerBackground: #f6f4ef;
+    --bg-comment-description: #ffffff;
+    --bg-newComment-container: #ffffff;
+  }
+}
+
+.dia .kanban-header-title,
+.dia .kanban-column-title,
+.dia .modal-title,
+.dia h1,
+.dia h2,
+.dia h3 {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.dia .kanban-header-title {
+  font-size: 22px;
+}
+
+.dia .kanban-column-title {
+  font-size: 14px !important;
+}
+
+.dia .kanban-task-card {
+  border: 1px solid #e9e4da;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(31, 29, 26, 0.05);
+  background-color: #ffffff;
+}
+
+/* The base card's white fill + hairline outrank the active-state utilities
+   (bg-kanban-active-cardbg / border-white-black), so restate the active card
+   here with Dia's own accents or a focused card looks identical to the rest. */
+.dia .kanban-task-card.bg-kanban-active-cardbg {
+  background-color: var(--active-kanbanCardbg);
+  border-color: var(--border-active);
+}
+
+.dia .kanban-task-card.bg-kanban-active-cardbg:hover {
+  background-color: var(--bg-hover-active);
+}
+
+.dia .modal-content {
+  border: 1px solid #e9e4da;
+  border-radius: 12px;
+}
+
+/* Inbox: the list panel below the split tabs is a card surface, so it takes
+   the card white instead of the page cream (--bg-containerBackground is the
+   page cream in Dia). */
+.dia .inbox-split-panel {
+  background-color: #ffffff;
+}
+
+.dia .task-ticket-id {
+  color: #3e6b4f;
+}
+
+.dia .label-pill {
+  border: 1px solid #e9e4da;
+}
+
+.dia .kanban-column-count {
+  color: #3e6b4f;
+}
+
+/* Card border for POSTED comments. The description field and the new-comment
+   composer (#comment) stay borderless; the AI writer keeps its own purple accent
+   border. On mobile the composer's input sits in a darker recessed well
+   (--bg-newcomment-well) instead of a border, so it reads as a clear tap target. */
+.dia .bg-comment-description:not(.main-attachment-container):not(.comment-edit-container):not(.description-edit-container):not(.ai-task-writer-panel):not(.description-container):not(.comment-body):not(#comment),
+.dia .bg-self-comment {
+  border: 1px solid #e9e4da;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(31, 29, 26, 0.04);
+}
+
+/* One card per comment. The outer .comment-container owns the hairline, so the
+   inner body (.comment-body) must stay borderless: it wraps only the text, so a
+   second box would fence the attachments out of the card, and its 10px corners
+   peel off the outer edge. Selected comments drop the card fill on the outer
+   container, so restate it here or a focused comment turns page-cream.
+   (.shadow-md is on the container exactly when it is a real comment card, i.e.
+   not stacked and not an activity row. Avoids :has(), which Firefox only
+   supports from 121 while the build baseline still includes 111.) */
+.dia .comment-container.shadow-md {
+  background-color: var(--bg-comment-description);
+  border-radius: 10px;
+}
+
+/* Keep task-detail accents inside the card silhouette. */
+.dia .comment-container {
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+
+/* The outer new-comment card owns the single Dia hairline. */
+.dia #comment #comment-input.bg-comment-description {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+/* The AI writer is an overlay panel, not the composer's inner editor: it needs
+   its own edge or it dissolves into the paper cream. Keep the purple accent
+   border (see the note above) and swap the dark-theme drop shadow for a
+   paper-weight one. */
+.dia #comment .ai-task-writer-panel {
+  box-shadow: 0 1px 3px rgba(31, 29, 26, 0.06);
+}
+
+.dia .quick-tips-bar {
+  background: #ece8df;
+}
+
+/* Task detail: an opaque canvas is enough to stop rows showing through the
+   sticky title. Do NOT raise its z-index -- it then paints over the task nav
+   column (back / prev / next) sitting to its left. */
+.dia [data-title-container="task-detail"] {
+  background: #f6f4ef;
+}
+
+.dia .ai-task-writer-attachment {
+  background: #ffffff;
+  border: 1px solid #e9e4da;
+  color: #1f1d1a;
+}
+
+.dia .ai-task-writer-attachment-remove {
+  background: #ffffff;
+  border-color: #e9e4da !important;
+  color: #6f6b63;
+}
+
+.dia .ai-task-writer-attachment-remove:hover {
+  background: #deede2;
+  color: #1f1d1a;
+}
+
+.dia .ai-task-writer-attachment-name,
+.dia .ai-task-writer-attachment-remove-icon {
+  color: currentColor;
+}
+
+/* Board header controls */
+.dia .board-header-icon {
+  color: #6f6b63;
+}
+
+.dia .board-header-icon:hover {
+  color: #1f1d1a;
+}
+
+/* Dia renders Lucide stroke icons here, so they must keep fill:none and take
+   their color from stroke. Non-Lucide svgs are still filled shapes. */
+.dia .board-header-icon > svg:not(.board-header-outline-icon):not(.lucide) {
+  fill: currentColor;
+}
+
+.dia .board-header-icon svg.lucide {
+  fill: none;
+  stroke: currentColor;
+}
+
+.dia .board-header-icon svg:not(.lucide) line {
+  stroke: currentColor;
+}
+
+.dia .board-header-icon.board-header-icon-active {
+  color: #3e6b4f;
+}
+
+.dia .board-header-icon.board-header-icon-active:hover {
+  color: #1f1d1a;
+}
+
+.dia .board-header-divider {
+  border-color: #e9e4da;
+}
+
+.dia .board-header-avatars .board-header-avatar {
+  border-color: #f6f4ef;
+}
+
+.dia .floating-action-button .floating-ai-icon {
+  color: #3e6b4f;
+}
+
+.dia .right-sidebar-toggle {
+  background: #ffffff;
+  border: 1px solid #e9e4da;
+  color: #6f6b63;
+}
+
+.dia .right-sidebar-toggle svg {
+  color: #6f6b63;
+}
+
+.dia .right-sidebar-toggle:hover,
+.dia .right-sidebar-toggle:hover svg {
+  color: #1f1d1a;
+}
+
+
+
+/* Task detail top-right controls */
+.dia .share-task-button {
+  font-weight: 500 !important;
+  color: #6f6b63;
+  letter-spacing: 0.01em;
+}
+
+.dia .share-task-button:hover {
+  color: #1f1d1a;
+  box-shadow: none !important;
+}
+
+.dia .task-option-icon {
+  color: #6f6b63;
+}
+
+.dia .task-option-icon:hover {
+  color: #1f1d1a;
+}
+
+.dia {
+  --color-archived-state: #3e6b4f;
+}
+
+.dia .task-archived-indicator,
+.dia .task-archived-indicator:hover {
+  color: var(--color-archived-state);
+}
+
+/* Attachments sit inside the comment card, so they get the card's surface,
+   not the hardcoded dark-theme tile. */
+.dia .main-attachment-container {
+  background: transparent;
+}
+
+.dia .comment-edit-container {
+  background: transparent;
+}
+
+.dia .attachment-tile {
+  background: #f1eee7 !important;
+  border: 1px solid #e9e4da;
+  color: #1f1d1a;
+}
+
+.dia .attachment-tile:hover {
+  background: #deede2 !important;
+}
+
+.dia .attachment-tile-name {
+  color: #1f1d1a;
+}

@@ -1,0 +1,15 @@
+.pricing_members_container{
+    display: grid;
+    grid-template-columns: auto 1.5fr 2fr 1fr auto;
+    margin-top: 2.5rem;
+}
+
+/* Apply padding to all rows */
+.pricing_members_container > * {
+    padding: 9px 0px; /* Adjust the padding value as needed */
+}
+
+.modal-content{
+    border-radius: 4px;
+    background-color: #27292D;
+}

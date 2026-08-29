@@ -1,0 +1,2 @@
+htreviewrunner ALL=(aireviewer) NOPASSWD: /usr/local/libexec/hypertask-codex-subscription-review
+htreviewrunner ALL=(aireviewer) NOPASSWD: /usr/local/libexec/hypertask-claude-subscription-review

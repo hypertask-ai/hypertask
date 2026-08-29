@@ -1,0 +1,25 @@
+{
+  "all": true,
+  "src": ["."],
+  "include": [
+    "src/**/*.{js,cjs,mjs,ts,tsx,jsx}",
+    ".github/scripts/**/*.{js,cjs,mjs,ts}",
+    "scripts/**/*.{js,cjs,mjs,ts}"
+  ],
+  "exclude": [
+    "coverage/**",
+    "node_modules/**",
+    "tests/**",
+    "**/__tests__/**",
+    "**/*.{test,spec}.{js,cjs,mjs,ts,tsx,jsx}",
+    "**/*.d.ts",
+    "src/prisma/**",
+    "src/generated/**",
+    "src/**/*.generated.*",
+    "scripts/**/fixtures/**"
+  ],
+  "exclude-after-remap": true,
+  "temp-directory": "coverage/raw",
+  "reports-dir": "coverage/report",
+  "reporter": ["text-summary", "json-summary"]
+}

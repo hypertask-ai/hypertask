@@ -1,0 +1,24 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/cleanup-guests",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/slack-thread-summaries",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/native-agent-heartbeat",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-seat-billing",
+      "schedule": "17 3 * * *"
+    },
+    {
+      "path": "/api/cron/demo-smoke",
+      "schedule": "*/30 * * * *"
+    }
+  ]
+}

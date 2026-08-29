@@ -1,0 +1,18 @@
+
+
+.links_modal{
+    // border-radius: 20px;
+    // background-color: red;
+
+    .list_container{
+        overflow-wrap:normal;
+        .links_list{
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+    }
+}
+

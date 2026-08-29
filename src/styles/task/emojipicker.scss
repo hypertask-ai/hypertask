@@ -1,0 +1,89 @@
+#root {
+    --sidebar-width:12px !important;
+
+}
+em-emoji-picker {
+    --border-radius: 6px;
+    --preview-placeholder-size: 15px;
+    --preview-title-size: 12px;
+    --preview-subtitle-size: 12px;
+    --font-size: 15px !important;
+    --rgb-background: var(--bg-dropdown);
+    --color-border-over: rgba(0, 0, 0, 0.1);
+    --sidebar-width:12px !important;
+
+    --color-border: #616b7d;
+    background-color: var(--bg-dropdown) !important;
+
+    .category {
+        button {
+            background-color: #4F5766 !important;
+        }
+    }
+
+    height: 39vh;
+    min-height: 200px;
+    max-height: 500px;
+
+    // min-width: 400px;
+    #preview .preview-placeholder {
+        font-style: 12px !important;
+    }
+
+    .preview-title {
+        font-style: 12px;
+    }
+
+    section{
+        --sidebar-width:12px !important;
+
+    }
+
+.search input[type="search"]{
+    padding:2px !important;
+
+}
+}
+
+@media (max-width:768px) {
+
+    em-emoji-picker {
+        --border-radius: 4px;
+        --font-size: 17px !important;
+
+        height: unset;
+        min-height: 200px;
+        max-height: 250px;
+
+        input {
+            padding: 7px 2em 8px 4.2em;
+        }
+    }
+
+}
+
+.search input[type="search"]{
+    padding:2px !important;
+
+}
+
+/* Mobile reaction sheet (HTPR-4589). Kept at TOP LEVEL — nesting these under
+   em-emoji-picker made SCSS prefix them (em-emoji-picker .reaction-emoji-sheet
+   …) so they never matched. The <em-emoji-picker> custom element defaults to
+   display:inline and shrink-wraps to its perLine width, which also starves
+   `dynamicWidth`; force block + 100% so it fills the sheet, and make it
+   transparent so it blends into the sheet instead of the grey `--bg-dropdown`. */
+.reaction-emoji-sheet em-emoji-picker {
+    display: block !important;
+    width: 100% !important;
+    max-height: 46vh !important;
+    background-color: transparent !important;
+}
+
+/* Light theme: fully white sheet (design ask); the search stays a faint
+   recessed well so it's visible without an outline (house style). */
+:root:not(.dark) .reaction-emoji-sheet em-emoji-picker {
+    --rgb-background: 255, 255, 255;
+    --rgb-input: 240, 241, 243;
+    --color-border: rgba(0, 0, 0, 0.06);
+}

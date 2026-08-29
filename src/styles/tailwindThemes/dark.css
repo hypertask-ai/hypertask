@@ -1,0 +1,97 @@
+/* Dark Theme Background Colors */
+.dark {
+  --primary: 221.2 83.2% 53.3%;
+
+  --bg-pageBackground: #0e0e0e;
+  --bg-taskDetailPage: #0e0e0e;
+  --bg-label-span: #4F5766;
+  --bg-hover-active: #4c5362;
+  --bg-cardBackground: #2a2d34;
+  --bg-modalBackground: #333B47;
+  --bg-taskDetail-container: #212429;
+  --bg-containerBackground: #212429;
+  --bg-containerBackground-inverted: #D9D9D9;
+  --bg-comment-description: #2F343C;
+  --bg-back-button: #27292D;
+  --bg-tooltip:#8E9093;
+  --bg-newComment-container:#27292D;
+  --bg-task-tag:rgb(160, 160, 160);
+  --bg-sidebar:#202124;
+  --bg-dropdown:#333b47;
+  --bg-self-comment:#18191A;
+  --bg-mention:#27292D;
+  --bg-reactions:var(--bg-taskDetail-container);
+  --bg-horizontal-scrollbar:#212429;
+  --bg-ai-chat-tiptap: #2f343c;
+  --bg-ai-chat: #212429;  
+  --bg-mention-highlight:#403a28;
+
+}
+
+/* Dark Theme Hover Backgrounds */
+.dark {
+  --hover-cardBackground: #2f343c;
+}
+
+/* Dark Theme Active Backgrounds */
+.dark {
+  --active-kanbanCardbg: #4F5766;
+  --active-elementBg:#2F343C;
+  --active-modal-element:#4f5766;
+  --active-mentionList:#363A40;
+  --active-list-element:#4f5766;
+}
+
+/* Dark Theme Colors */
+.dark {
+  --color-page-background:var(--bg-pageBackground);
+  --color-white-black: white;
+  --color-white-black-inverted: rgb(74, 74, 74);
+  --color-text-light-gray: #8e9093;
+  --color-border: 240 3.7% 15.9%;
+  --color-border-comment-description: var(--bg-comment-description);
+  --bg-newcomment-well: #1c1f25;
+  --color-my-comment:var(--color-white-black);
+  --color-kanban-column-scrollbar:transparent;
+  --em-rgb-color: white;
+  --color-text-labelComponent:#d3d3d3;
+  --shadcn-primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0deg 0% 67.86%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 85.7% 97.3%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 240 4.9% 83.9%;
+  --button-arrow-disabled:gray;
+  --button-arrow:white;
+  --border-self-comment: 0, 0, 0;
+  --border-light-gray-thin:rgb(35, 37, 42);
+  --color-mention-highlight:#d29f02;
+  --color-horizontal-scrollbar-track:#4F5766;
+  --color-archived-state: #86efac;
+
+}
+
+/* Dark Theme Focus Rings */
+.dark {
+  --focus-ring: var(--color-white-black);
+  --border-active: white;
+}
+
+
+@media (max-width: 767px) {
+  .dark {
+    /* --bg-taskDetailPage: rgb(255, 255, 255);
+    --bg-containerBackground: #f7f7f7;
+    --bg-comment-description: #f9f9f9; */
+    --bg-taskDetailPage: #212429;
+    --bg-newComment-container:#27292D;
+
+  }
+}
