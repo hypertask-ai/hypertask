@@ -319,6 +319,13 @@ jobs:
           [ "$AGE" -lt 900 ] && { echo "Staging tip is ${AGE}s old; a deploy is probably still in flight."; exit 0; }
 
           if git merge-base --is-ancestor "$LIVE" "$TIP" 2>/dev/null; then
+            # Commits the deploy ignore-step skips (docs, .github, openwiki) never
+            # build, so being "behind" by only those is the expected steady state.
+            APP_CHANGES=$(git diff --name-only "$LIVE..$TIP" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | head -1)
+            if [ -z "$APP_CHANGES" ]; then
+              echo "Live deploy is behind only by non-building commits (docs/CI); nothing to promote."
+              exit 0
+            fi
             BEHIND=$(git rev-list --count "$LIVE..$TIP" 2>/dev/null || echo "?")
             MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Shipped work is silently missing from the live app. Promote the newest deployment in Vercel."
           else
