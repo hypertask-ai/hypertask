@@ -1,0 +1,286 @@
+version: 3
+last_updated: 2026-08-22
+purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate."
+
+topology:
+  orchestrator: github-actions
+  compute: contabo-self-hosted-runners
+  additional_runner_hosts: false
+  vpn_for_runner_compute: false
+  runner_lanes:
+    review:
+      label: ai-review
+      repository: valentinyeo/hypertask-reviewer
+      dedicated_runners: [contabo-1, contabo-2]
+      os_user: htreviewrunner
+      dedicated_runners_exclusive: true
+      jobs: [ai-review]
+    fast:
+      label: ci-fast
+      dedicated_runners: [contabo-4]
+      dedicated_runners_exclusive: true
+      jobs: [secret-guard, revert-guard, automerge, auto-revert-staging]
+    heavy:
+      label: contabo
+      dedicated_runners: [contabo-3, contabo-5]
+      jobs: [ci-build, production-health]
+  review_first_gate:
+    # Owner decision 2026-08-26: ci-build runs on a PR only after claude-review
+    # is green (pr-feedback timer applies the full-ci label, which triggers the
+    # run). Agents run no production builds and no full suites locally; the
+    # only production build anywhere is Vercel's deploy build.
+    pr_ci_build_requires_label: full-ci
+    label_applied_by: pr-feedback-timer-on-review-success
+    local_agent_verification: [tsc-noEmit, targeted-tests]
+  action_archive_cache:
+    path: /opt/github-actions/action-archive-cache
+    runner_services: all-local-actions-runner-services
+    ownership: root
+    runner_access: read-only
+    manifest: .github/actions/action-archive-cache-manifest.txt
+    updater: .github/scripts/install-action-archive-cache.sh
+    workflow_refs: commit-sha-pinned
+    population_lock: .populate.lock
+    per_job_behavior: copy-archive-then-extract
+    shared_action_tree: false
+    automatic_eviction: false
+  production_branch: staging
+  repository_default_branch: staging
+  production_target: "Vercel project hypertasks-prod"
+
+policies:
+  previews:
+    verification: opt-in
+    required_for_every_pull_request: false
+  concurrency:
+    cancel_superseded_pull_request_runs: true
+    cancel_staging_push_runs: false
+    bound_heavy_jobs_per_host: true
+    prefer_queue_over_oom: true
+    reserve_fast_lane_for_merge_gates: true
+  review:
+    engine: valentinyeo/hypertask-reviewer (scripts/ai-review.mjs on its default branch)
+    provider_order: [codex-subscription, claude-subscription, vercel-ai-gateway]
+    providers:
+      codex-subscription:
+        authentication: chatgpt-subscription
+        model: gpt-5.6-luna
+        reasoning_effort: high
+      claude-subscription:
+        authentication: claude-code-subscription
+        model: sonnet
+        reasoning_effort: high
+      vercel-ai-gateway:
+        model: openai/gpt-5.6-luna
+        reasoning_effort: high
+        max_output_tokens: 24000
+    structured_output: strict-json-schema
+    failover_on:
+      [
+        quota,
+        authentication,
+        unavailable_binary,
+        timeout,
+        empty_response,
+        malformed_response,
+      ]
+    gateway_attempts: 3
+    timeout_terminates_process_group: true
+    timeout_graceful_termination_seconds: 5
+    stale_private_temp_cleanup_minutes: 60
+    runner_os_user: htreviewrunner
+    runner_repository: valentinyeo/hypertask-reviewer
+    application_repository_can_schedule_review_runners: false
+    dispatch_broker:
+      os_user: reviewdispatch
+      discovery: systemd-timer
+      discovery_interval_seconds: 30
+      validates: [open_pr, staging_base, same_repository_head, exact_head_sha]
+      maximum_automatic_dispatches_per_head: 2
+      dispatch_propagation_grace_minutes: 5
+      reconciliation:
+        [latest_claude_review_commit_status, private_workflow_run_state]
+      private_run_name_contract: "Review hypertasks PR #{pr} @ {head_sha}"
+    general_runner_os_user_can_invoke_subscription_wrappers: false
+    general_runner_os_user_can_invoke_dispatch_broker: false
+    valid_verdict_stops_failover: true
+    required_check_compatibility_name: claude-review
+    private_repository_publication: commit-status
+    external_repository_publication_default: commit-status
+    completion_trigger: application-automerge-workflow-dispatch
+    completion_fallback_sweep_minutes: 5
+    trusted_base_workflow: true
+    execute_pull_request_code: false
+    exact_head_commit_required: true
+    source_repository_variable: AI_REVIEW_REPOSITORY
+    newest_compatibility_check_wins: true
+    approve_passes: true
+    concerns_fail_closed: true
+    malformed_or_provider_error_fails_closed: true
+    producer_hold_requires_independent_release_session: true
+  deploys:
+    merge_to_staging_deploys_production: true
+    production_health_check_after_deploy: true
+    failed_build_keeps_previous_deployment_live: true
+  staging_ruleset:
+    required_status_checks:
+      [
+        claude-review,
+        next-public-secrets,
+        ci-tests,
+        vercel-build,
+      ]
+    # Speed checks retired 2026-08-23; the ruleset is updated via API in the
+    # same operation that merges the ci-tests rename (HTPR-5731) so the names
+    # never drift from what the workflows report.
+    gate_rollout_bootstrap:
+      pull_request: 2920
+      one_time: true
+      reason: "The required speed workflow does not exist on staging until this pull request merges."
+      required_before_merge: [claude-review, next-public-secrets, ci-tests, vercel-build]
+      merge_mode: repository-owner-authorized-manual-merge
+      allowed_paths:
+        - .github/workflows/automerge.yml
+        - .github/workflows/speed-evidence.yml
+        - config/app-project-performance-baseline.json
+        - docs/ci-policy.yml
+        - docs/ci.md
+        - package.json
+        - scripts/check-speed-pr-evidence.mjs
+        - tests/automerge-workflow.test.cjs
+        - tests/speed-pr-evidence.test.cjs
+      required_after_merge:
+        [reconcile_open_pull_requests, add_speed_checks_to_staging_ruleset]
+
+workflows:
+  - name: CI Build
+    file: .github/workflows/ci-build.yml
+    runs_on: [self-hosted, contabo]
+    required: true
+    checks: [dependencies, prisma, typescript, lint, tests]
+    test_lanes:
+      pull_request:
+        scope: scoped
+        selector: .github/scripts/select-tests.mjs
+        selector_source: base_branch_commit
+        selector_missing_on_base: full_suite
+        selection_inputs: [changed_files, test_file_contents]
+        always_run: [tests/test-inventory.test.cjs, tests/demo-smoke.test.cjs]
+        full_suite_fallback:
+          [
+            dependency_or_schema_change,
+            wide_shared_directory_fanout,
+            no_test_references_change,
+          ]
+        require_pg_tests_when: postgres_suite_selected
+        tests_changed_by_the_pull_request_count_as_coverage: false
+      push_staging:
+        scope: full
+        coverage: true
+        auto_revert_on_test_failure: true
+        auto_revert_scope: test_step_only
+        auto_revert_job: auto-revert-staging
+        auto_revert_method: compare_and_swap_push_then_labelled_pull_request
+        auto_revert_pull_request_automerge_when: branch_still_at_failing_sha
+        auto_revert_loop_guard: revert_commit_committer_identity
+        auto_revert_retry: idempotent
+        auto_revert_conflict_behavior: comment_on_pull_request_and_fail
+    dependency_install:
+      lockfile: package-lock.json
+      command: "npm ci --prefer-offline --no-audit --no-fund"
+      cache: runner-local-npm
+    lint:
+      scope: full-repository
+      cache: eslint-content
+      cache_key_inputs: [package-lock.json, eslint.config.mjs, tsconfig.json]
+      cache_miss_behavior: full-lint
+  - name: Speed Evidence
+    file: .github/workflows/speed-evidence.yml
+    trigger: pull_request_target
+    source: staging_base_commit
+    executes_pull_request_code: false
+    runs_on: [self-hosted, ci-fast]
+    required_for_title_tag: "[SPEED]"
+    required_title_shape: "HTPR-<n> [SPEED] <summary>"
+    title_history_keeps_speed_classification: true
+    speed_evidence:
+      record: "exactly one changed performance/evidence/*.json file"
+      measured_commit_must_equal_pull_request_head: true
+      minimum_mobile_runs: 5
+      unique_run_fields: [runId, capturedAt, artifactUrl, artifactSha256]
+      artifact_digest: sha256
+      artifact_source: repository-owner-authored-github-comment
+      artifact_content_verified: true
+      artifact_metrics_must_match_evidence: true
+      comparison_baseline_source: staging_base_commit
+      pull_request_baseline_runs_allowed: false
+      maximum_regression_percent: 5
+      total_blocking_time_budget_ms: 1050
+      longest_task_budget_ms: 1300
+      requires_two_session_realtime_qa: true
+      evidence_status_published_on_pull_request_head: true
+      trusted_exact_head_status: speed-qa
+      trusted_status_publisher: repository_owner
+      agent_may_publish_trusted_status: false
+      speed_pr_may_change_gate_or_limits: false
+      gate_or_limit_changes_require_manual_owner_review: true
+      open_pull_request_reconciliation:
+        trigger: push-to-staging
+        action: repository-dispatch-each-open-staging-pull-request
+  - name: Trusted reviewer execution
+    repository: valentinyeo/hypertask-reviewer
+    file: .github/workflows/review.yml
+    script: valentinyeo/hypertasks:.github/scripts/ai-review.mjs@staging
+    runs_on: [self-hosted, ai-review]
+    trigger: repository_dispatch
+    required: true
+    required_check: claude-review
+  - name: Secret Guard
+    file: .github/workflows/secret-guard.yml
+    runs_on: [self-hosted, ci-fast]
+    required: true
+  - name: Revert Guard
+    file: .github/workflows/revert-guard.yml
+    runs_on: [self-hosted, ci-fast]
+    required_by_automerge: true
+  - name: Auto-merge low-risk PRs
+    file: .github/workflows/automerge.yml
+    runs_on: [self-hosted, ci-fast]
+    required: false
+    scratch_space: runner_temp_unique_directory
+    incomplete_evaluation_fails_run: true
+    failed_merge_fails_run: true
+  - name: Production Health Check + Auto-Rollback
+    file: .github/workflows/prod-health.yml
+    runs_on: [self-hosted, contabo]
+    required: false
+  - name: Preview Smoke Test
+    file: .github/workflows/preview-smoke.yml
+    runs_on: [ubuntu-latest]
+    required: false
+
+agent_rules:
+  - "Read docs/ci.md before changing workflows, runner labels, rulesets, or deployment checks."
+  - "Never expose AI_REVIEW_GATEWAY_KEY to pull request code."
+  - "Never store subscription credentials in the repository or expose them to jobs that execute pull request code."
+  - "Require a current-commit APPROVE verdict; a comment existing is not enough."
+  - "Keep DeepSeek-produced PRs on hold until an independent trusted release session accepts them."
+  - "Keep substantive CI on the Contabo host; do not add a VPN runner or extra host implicitly."
+  - "Keep contabo-1 and contabo-2 registered only to valentinyeo/hypertask-reviewer under htreviewrunner; application PR workflows must not be able to schedule them."
+  - "Keep contabo-4 exclusive to ci-fast and contabo-3/contabo-5 exclusive to heavy work."
+  - "Use per-job temporary directories on shared runner hosts; never use fixed /tmp filenames for workflow state."
+  - "Keep remote workflow actions pinned to the exact SHAs in .github/actions/action-archive-cache-manifest.txt. Populate the shared archive cache only from the root-owned updater; runner accounts remain read-only."
+  - "The live CI page must alert when fewer than two ai-review runners are online or the review-only OS boundary is missing."
+
+vercel_build_gate:
+  # Owner decision 2026-08-27: builds fail often enough that a failed staging
+  # deploy must be caught BEFORE merge, not after. One Vercel preview build per
+  # ready PR, triggered last.
+  order: [ci-tests, claude-review, other-required-checks, vercel-build, merge]
+  trigger: pr-feedback timer, only when full-ci label present and every other
+    required check is green; once per head sha
+  reported_as: commit status "vercel-build" (required by automerge)
+  on_failure: red status routes to the owning agent via the standing red-check
+    ticket mention; agent fixes and pushes (new sha = new build)
+  post_merge_backstop: prod-health + the vercel-error ticket mention remain for
+    env-drift failures that only reproduce on the production build
