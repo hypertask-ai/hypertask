@@ -4,7 +4,7 @@ Open-source project and task management, built for teams that work with AI agent
 
 Hypertask is a kanban-style task manager with real-time collaboration, rich-text tickets, an AI chat that can act on your board, and an MCP server so coding agents can read and update tasks the same way humans do.
 
-The hosted version runs at [app.hypertask.ai](https://app.hypertask.ai). This repository contains the full core application, and you can self-host it.
+The hosted version runs at [hypertask.ai](https://hypertask.ai). This repository contains the full core application, and you can self-host it.
 
 ## Features
 
