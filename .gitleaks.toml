@@ -1,0 +1,15 @@
+# Gitleaks allowlist for known false positives.
+# Firebase web API keys (AIza...) are public by design; the rest are UI strings
+# and model names the generic rules mistake for credentials.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known false positives"
+regexes = [
+  '''AIzaSy[0-9A-Za-z_-]{33}''',
+  '''CMD/CTRL\+SHIFT\+O''',
+  '''claude-haiku-4\.5''',
+  '''qwen3\.7-plus''',
+  '''sk_test_placeholder''',
+]
