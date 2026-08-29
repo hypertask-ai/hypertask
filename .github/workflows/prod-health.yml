@@ -1,14 +1,14 @@
 name: Prod Health Check + Auto-Rollback
 
-# After every push to staging (= production deploy), wait for the Vercel
+# After every push to production (= production deploy), wait for the Vercel
 # deployment to finish, health-check the live app, and if the app is broken
 # promote the previous READY deployment (instant rollback) + notify Telegram.
 on:
   push:
-    branches: [staging]
+    branches: [production]
   schedule:
     # Every 30 min, catch production silently serving an older commit than the
-    # staging tip (HTPR-4781). Concurrent sessions each deploy from their own
+    # production tip (HTPR-4781). Concurrent sessions each deploy from their own
     # worktree, so an older build can take the production alias minutes after a
     # newer merge went READY and nothing warns you.
     - cron: "*/30 * * * *"
@@ -275,7 +275,7 @@ jobs:
           fi
           exit 1
 
-  # ── Deploy drift: is production actually serving the staging tip? ──────────
+  # ── Deploy drift: is production actually serving the production tip? ──────────
   # A newer merge can go READY and then an older build from another session's
   # worktree takes the production alias, silently reverting shipped work
   # (HTPR-4781: two features disappeared for ~20 minutes and only a manual API
@@ -287,10 +287,10 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: staging
+          ref: production
           fetch-depth: 50
 
-      - name: Compare the live production deployment against the staging tip
+      - name: Compare the live production deployment against the production tip
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -308,9 +308,9 @@ jobs:
             exit 0
           fi
 
-          echo "staging tip: $TIP"
+          echo "production tip: $TIP"
           echo "live deploy: $LIVE"
-          [ "$TIP" = "$LIVE" ] && { echo "Production is on the staging tip."; exit 0; }
+          [ "$TIP" = "$LIVE" ] && { echo "Production is on the production tip."; exit 0; }
 
           # A deploy in flight is normal: the tip is only a problem once its own
           # build has had time to finish, so ignore a tip pushed in the last 15
@@ -320,9 +320,9 @@ jobs:
 
           if git merge-base --is-ancestor "$LIVE" "$TIP" 2>/dev/null; then
             BEHIND=$(git rev-list --count "$LIVE..$TIP" 2>/dev/null || echo "?")
-            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the staging tip ${TIP:0:9}. Shipped work is silently missing from the live app. Promote the newest deployment in Vercel."
+            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Shipped work is silently missing from the live app. Promote the newest deployment in Vercel."
           else
-            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the staging tip ${TIP:0:9}. The live app is on a commit that is not on staging at all."
+            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the production tip ${TIP:0:9}. The live app is on a commit that is not on production at all."
           fi
 
           curl -s -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \

@@ -1,6 +1,6 @@
 name: Auto-merge low-risk PRs
 
-# Merges green, low-risk PRs to staging automatically, from ANY session (local
+# Merges green, low-risk PRs to production automatically, from ANY session (local
 # or the claude.ai app), so waved-through changes don't pile up. High-risk
 # changes (auth, billing, schema, security, workflows, deps) are parked with a
 # `valentin-review` label for a human. Opt out of any PR with a `hold` label.
@@ -100,22 +100,22 @@ jobs:
             if [ "$EVENT" = "workflow_dispatch" ] && [ -n "${DISP_PR:-}" ]; then
               PRS="$DISP_PR"
             else
-              list_all_prs() { gh pr list --repo "$REPO" --base staging --state open --json number -q '.[].number'; }
+              list_all_prs() { gh pr list --repo "$REPO" --base production --state open --json number -q '.[].number'; }
               if ! PRS=$(retry list_all_prs); then
-                echo "::error::Cannot discover open staging PRs after retries; merge evaluation did not run."
+                echo "::error::Cannot discover open production PRs after retries; merge evaluation did not run."
                 exit 1
               fi
             fi
           else
             [ "${RUN_REPO:-}" = "$REPO" ] || { echo "workflow_run from a fork ($RUN_REPO); ignoring."; exit 0; }
-            list_branch_prs() { gh pr list --repo "$REPO" --base staging --state open --head "$RUN_BRANCH" --json number -q '.[].number'; }
+            list_branch_prs() { gh pr list --repo "$REPO" --base production --state open --head "$RUN_BRANCH" --json number -q '.[].number'; }
             if ! PRS=$(retry list_branch_prs); then
-              echo "::error::Cannot discover the staging PR for branch $RUN_BRANCH after retries; merge evaluation did not run."
+              echo "::error::Cannot discover the production PR for branch $RUN_BRANCH after retries; merge evaluation did not run."
               exit 1
             fi
-            [ -z "${PRS:-}" ] && { echo "No open staging PR for branch $RUN_BRANCH."; exit 0; }
+            [ -z "${PRS:-}" ] && { echo "No open production PR for branch $RUN_BRANCH."; exit 0; }
           fi
-          [ -z "${PRS:-}" ] && { echo "No open PRs to staging."; exit 0; }
+          [ -z "${PRS:-}" ] && { echo "No open PRs to production."; exit 0; }
 
           has_hold() {  # $1 = newline list of lowercased labels ; returns 0 if a hold label present
             local labels="$1" L
@@ -204,7 +204,7 @@ jobs:
               continue
             fi
 
-            [ "$base" = "staging" ]     || { echo "skip: base=$base"; echo "::endgroup::"; continue; }
+            [ "$base" = "production" ]     || { echo "skip: base=$base"; echo "::endgroup::"; continue; }
             [ "$draft" = "false" ]      || { echo "skip: draft"; echo "::endgroup::"; continue; }
             # Same-repo branches only. Only someone with push access can create one,
             # so this is also the author-trust gate; fork PRs are never auto-merged.
@@ -221,7 +221,7 @@ jobs:
             # exactly once, then the has_hold gate above skips it on later sweeps.
             if [ "$mergeable" = "CONFLICTING" ]; then
               echo "PARK: has conflicts"
-              park "$PR" "it has merge conflicts with \`staging\` and needs a rebase before it can auto-merge"
+              park "$PR" "it has merge conflicts with \`production\` and needs a rebase before it can auto-merge"
               echo "::endgroup::"; continue
             fi
 

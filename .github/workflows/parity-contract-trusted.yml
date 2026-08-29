@@ -2,7 +2,7 @@ name: Trusted parity contract
 
 on:
   pull_request_target:
-    branches: [staging]
+    branches: [production]
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:

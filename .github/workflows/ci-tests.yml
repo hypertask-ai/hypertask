@@ -4,8 +4,8 @@ name: CI Tests
 # build slot. Purpose: let PRs be verified for merge without competing for the
 # Vercel build slot. This is the intended required check; the preview is not.
 #
-# It also runs on every push to `staging`. A PR can be green against the base it
-# branched from and still break once squash-merged onto a staging that has moved
+# It also runs on every push to `production`. A PR can be green against the base it
+# branched from and still break once squash-merged onto a production that has moved
 # (HTPR-4632: PR #1959 merged with ci-build SUCCESS, then failed the production
 # build). Nothing typechecked the merge result, so the first signal was a failed
 # Vercel prod deploy blocking every later release. This makes the merge commit
@@ -14,11 +14,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
   push:
-    branches: [staging]
+    branches: [production]
 
 concurrency:
   group: ci-tests-${{ github.event.pull_request.number || github.ref }}
-  # Superseded PR runs are waste, but a cancelled staging run never arms the
+  # Superseded PR runs are waste, but a cancelled production run never arms the
   # rollback below and would strand a failing commit on production's branch.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # This job checks out and executes pull request code, so it never holds a
-    # write token. The staging auto-revert is a separate push-only job.
+    # write token. The production auto-revert is a separate push-only job.
     permissions:
       contents: read
       # The fail-fast step reads the PR's labels live (see revert-guard.yml).
@@ -68,7 +68,7 @@ jobs:
       # report success (paths-ignore at the trigger level would leave it
       # pending forever). Instead: diff against the PR base here and skip the
       # Next.js build/test steps when every changed file is doc/worker-only.
-      # Pushes to staging always run the full build.
+      # Pushes to production always run the full build.
       - name: Determine change scope
         id: scope
         if: github.event_name == 'pull_request'
@@ -157,7 +157,7 @@ jobs:
         run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Save node_modules cache
-        # PRs restore the trusted staging cache, but only staging pushes save.
+        # PRs restore the trusted production cache, but only production pushes save.
         if: github.event_name == 'push' && steps.restore-node-modules.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -187,7 +187,7 @@ jobs:
         run: npx next typegen && npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
 
       - name: Save TypeScript cache
-        # PRs may restore the trusted staging cache, but only staging pushes save.
+        # PRs may restore the trusted production cache, but only production pushes save.
         if: github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -199,12 +199,12 @@ jobs:
         run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
 
       - name: Save ESLint cache
-        # PRs may restore the trusted base-branch cache, but only staging pushes
+        # PRs may restore the trusted base-branch cache, but only production pushes
         # may refresh it. This prevents untrusted PR cache data from becoming a
         # production input while still accelerating every subsequent PR.
         # cache-hit is true only for an exact primary-key match. Restoring the
-        # previous staging SHA through restore-keys returns false, so every new
-        # staging commit saves a refreshed cache; only same-SHA reruns skip it.
+        # previous production SHA through restore-keys returns false, so every new
+        # production commit saves a refreshed cache; only same-SHA reruns skip it.
         if: github.event_name == 'push' && steps.restore-eslint-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -212,13 +212,13 @@ jobs:
           key: ${{ steps.restore-eslint-cache.outputs.cache-primary-key }}
 
       # Every PR body claims "npm test N passed" and nothing checked it, so a
-      # broken suite sat green on staging for days (HTPR-5161).
+      # broken suite sat green on production for days (HTPR-5161).
       # HT_REQUIRE_PG_TESTS turns the real-PostgreSQL suites' "docker missing"
       # skip into a hard failure. Locally a developer without docker still gets a
       # clean skip; here a skip would be the same false green that let PR #2789's
       # task-write outage through (HTPR-5467).
       # PR lane: run only the tests that reference something this PR touched.
-      # The full suite is the staging lane's job (below), where a red run
+      # The full suite is the production lane's job (below), where a red run
       # auto-reverts and Vercel keeps the previous deployment live. Selection
       # falls back to the whole suite whenever it cannot be confident
       # (dependency/schema change, wide fan-out, nothing matched).
@@ -293,9 +293,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  auto-revert-staging:
-    name: auto-revert-staging
-    # The PR lane only ran a scoped subset, so staging is where the full suite
+  auto-revert-production:
+    name: auto-revert-production
+    # The PR lane only ran a scoped subset, so production is where the full suite
     # first sees the merged result. A red suite on production's branch gets
     # undone automatically instead of waiting for someone to notice. Only the
     # test step arms this: an npm ci or runner hiccup must not revert a good
@@ -365,9 +365,9 @@ jobs:
             echo "::notice::Emergency rollback: $RESULT"
 
             if [ "$ROLLBACK_STATUS" = "failed" ]; then
-              MSG="🔴🔴 hypertasks: staging red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
+              MSG="🔴🔴 hypertasks: production red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
             else
-              MSG="🔴 hypertasks: staging red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
+              MSG="🔴 hypertasks: production red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
             fi
             TG_CODE=$(curl -s --connect-timeout 10 --max-time 60 -o /tmp/tg.json -w '%{http_code}' -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
               -d chat_id="$TG_CHAT" --data-urlencode text="$MSG" 2>/dev/null) || true
@@ -399,13 +399,13 @@ jobs:
             git revert --abort || true
             emergency_rollback "does not revert cleanly"
             if [ -n "$PR_NUMBER" ]; then
-              gh pr comment "$PR_NUMBER" --body "The full test suite failed on staging for \`$GITHUB_SHA\` and the commit does not revert cleanly. $ROLLBACK_TEXT $RUN_URL"
+              gh pr comment "$PR_NUMBER" --body "The full test suite failed on production for \`$GITHUB_SHA\` and the commit does not revert cleanly. $ROLLBACK_TEXT $RUN_URL"
             fi
             echo "::error::$GITHUB_SHA does not revert cleanly; $ROLLBACK_TEXT"
             exit 1
           fi
           git commit --quiet -m "Revert \"$SUBJECT\"" -m "Auto-revert-of: $GITHUB_SHA"
-          BODY="The full test suite failed on staging for \`$GITHUB_SHA\` after merge, so it was reverted to stop production shipping a red build. Run: $RUN_URL"
+          BODY="The full test suite failed on production for \`$GITHUB_SHA\` after merge, so it was reverted to stop production shipping a red build. Run: $RUN_URL"
           # --force-with-lease is the compare-and-swap: the push is refused
           # unless the branch is still exactly the commit that failed, so a
           # revert can never land on top of newer work. The credential helper
@@ -426,7 +426,7 @@ jobs:
           # Refused: either the branch ruleset requires a pull request, or it
           # moved. Both need a human, so leave the revert ready for review
           # rather than pretending production is fixed. revert-guard blocks PRs
-          # deleting recent staging work, hence the label.
+          # deleting recent production work, hence the label.
           # Roll back immediately, before any of the branch/PR fallback work
           # below, so a gh/git failure in that fallback can never skip it.
           emergency_rollback "push refused, newer work landed on $GITHUB_REF_NAME"

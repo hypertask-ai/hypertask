@@ -1,13 +1,13 @@
 name: PR size check
 
 on:
-  # pull_request_target always runs the workflow file from the base branch (staging),
+  # pull_request_target always runs the workflow file from the base branch (production),
   # never from the PR head, so a PR can't edit this script to abuse the write token.
   # This job never checks out PR code and only reads PR metadata from the API, so
   # there is no code-injection surface even though it holds pull-requests: write.
   pull_request_target:
     types: [opened, synchronize, edited]
-    branches: [staging]
+    branches: [production]
 
 concurrency:
   group: pr-size-${{ github.event.pull_request.number }}

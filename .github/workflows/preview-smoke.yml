@@ -2,7 +2,7 @@ name: Preview Smoke Test
 
 # Runs when the Vercel preview deployment for hypertasks-prod succeeds.
 # Catches "builds fine but the app is broken" before merge. The authenticated
-# API check runs after merge in prod-health, against trusted staging code.
+# API check runs after merge in prod-health, against trusted production code.
 on:
   deployment_status:
 
