@@ -455,11 +455,11 @@ jobs:
     # Disabled after the public-repo cutover: the parity catalog
     # (openwiki/five-surface-parity.md) stays in the private repo. Re-enable
     # once the catalog gets a public in-repo home.
-    if: false
     # Candidate PRs are verified by parity-contract-trusted using the protected
-    # base verifier. Install and execute this repository's locked runner only
-    # after it has merged to staging, so the code executed here is already trusted.
-    if: github.event_name == 'push'
+    # base verifier. Runs only on push -- and is disabled entirely after the
+    # public-repo cutover: the parity catalog (openwiki/five-surface-parity.md)
+    # stays in the private repo. Re-enable once the catalog has a public home.
+    if: false && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
