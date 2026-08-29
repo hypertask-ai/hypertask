@@ -254,8 +254,8 @@ jobs:
             fi
           fi
 
-      - name: Drop tests needing files the public repo does not carry (openwiki/)
-        run: rm -f tests/parity-contract.test.cjs tests/agent-team-routing.test.cjs
+      - name: Drop tests needing files the public repo does not carry (openwiki/, self-hosted action archive)
+        run: rm -f tests/parity-contract.test.cjs tests/agent-team-routing.test.cjs tests/action-archive-cache.test.cjs
 
       - name: Test
         if: github.event_name != 'push' && steps.scope.outputs.build_needed == 'true'
@@ -452,6 +452,10 @@ jobs:
 
   production-cli-parity:
     name: production-cli-parity
+    # Disabled after the public-repo cutover: the parity catalog
+    # (openwiki/five-surface-parity.md) stays in the private repo. Re-enable
+    # once the catalog gets a public in-repo home.
+    if: false
     # Candidate PRs are verified by parity-contract-trusted using the protected
     # base verifier. Install and execute this repository's locked runner only
     # after it has merged to staging, so the code executed here is already trusted.

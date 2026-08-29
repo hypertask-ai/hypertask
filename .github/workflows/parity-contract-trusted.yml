@@ -14,6 +14,8 @@ jobs:
     # with contents: read, unsets GITHUB_TOKEN/GH_TOKEN before every command,
     # and only reads JSON and markdown out of the candidate checkout. It never
     # executes pull request code, and ci-fast already builds that code anyway.
+    # Disabled after the public-repo cutover: catalog lives in the private openwiki.
+    if: false
     runs-on: ubuntu-latest
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
