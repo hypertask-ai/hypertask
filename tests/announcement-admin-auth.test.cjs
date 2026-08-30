@@ -247,7 +247,10 @@ test("announcement listing returns admin data and sanitizes database failures", 
   });
 });
 
-function loadPostRoute(authorizeAdmin) {
+function loadPostRoute(
+  authorizeAdmin,
+  createdAnnouncement = { id: 9, isWelcome: false },
+) {
   const writes = [];
   const corsOptions = [];
   const handler = loadTypeScript("src/pages/api/admin/postAnnouncement.ts", {
@@ -264,7 +267,7 @@ function loadPostRoute(authorizeAdmin) {
         announcments: {
           create: async (write) => {
             writes.push(["create", write]);
-            return { id: 9, isWelcome: false };
+            return createdAnnouncement;
           },
         },
         user: {
@@ -282,14 +285,18 @@ function loadPostRoute(authorizeAdmin) {
   return { handler, writes, corsOptions };
 }
 
-async function callPost(handler, method = "POST") {
+async function callPost(
+  handler,
+  method = "POST",
+  jsonBody = { title: "Security test" },
+) {
   const { response, result } = responseRecorder();
   await handler(
     {
       method,
       headers: {},
       query: {},
-      body: { jsonBody: { title: "Security test" } },
+      body: { jsonBody },
     },
     response,
   );
@@ -317,6 +324,28 @@ test("announcement creation checks admin authorization before database writes", 
           body: { title: "Security test" },
           isWelcome: false,
         },
+      },
+    ],
+  ]);
+});
+
+test("welcome announcement creation writes only its intended recipients after authorization", async () => {
+  const welcome = loadPostRoute(async () => true, {
+    id: 10,
+    isWelcome: true,
+  });
+  const jsonBody = { title: "Welcome", newUserMark: true };
+
+  assert.equal((await callPost(welcome.handler, "POST", jsonBody)).status, 200);
+  assert.deepEqual(welcome.writes, [
+    ["create", { data: { body: jsonBody, isWelcome: true } }],
+    [
+      "recipients",
+      {
+        data: [1, 4, 6, 46, 193].map((userId) => ({
+          userId,
+          announcementId: 10,
+        })),
       },
     ],
   ]);
