@@ -241,7 +241,7 @@ const handler: NextApiHandler = async (
     }
     let priorityCreated: any = undefined;
     let estimateCreated: any = undefined;
-    let relatedTasks: any = undefined;
+    let relatedTasks: any = { status: 200, json: [] };
     const normalizedAssignees: NormalizedTaskAssignee[] = [];
 
     if (assignees && assignees.length > 0) {
@@ -456,7 +456,7 @@ const handler: NextApiHandler = async (
       );
     }
 
-    if (relationsToAdd) {
+    if (Array.isArray(relationsToAdd) && relationsToAdd.length > 0) {
       const { addRelatedTasks } = await import(
         "@/utils/controllers/tasks/addRelatedTasks"
       );
@@ -469,7 +469,7 @@ const handler: NextApiHandler = async (
       );
     }
 
-    if (urlsToAdd) {
+    if (Array.isArray(urlsToAdd) && urlsToAdd.length > 0) {
       const { default: addIntoTaskDesc } = await import(
         "@/utils/controllers/urls/addIntoTaskDesc"
       );
