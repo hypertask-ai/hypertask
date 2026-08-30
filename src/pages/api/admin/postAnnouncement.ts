@@ -1,13 +1,18 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import NextCors from "nextjs-cors";
-import { requireAnnouncementSecret } from "@/lib/admin/requireAnnouncementSecret";
+import { requireAnnouncementAdmin } from "@/lib/admin/requireAnnouncementAdmin";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
   console.log(req.method);
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
   try {
     await NextCors(req, res, {
       // Options
@@ -16,7 +21,7 @@ const handler: NextApiHandler = async (
       optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
     });
 
-    if (!requireAnnouncementSecret(req, res)) return;
+    if (!(await requireAnnouncementAdmin(req, res))) return;
 
     const { jsonBody } = req.body;
     console.log("🤔 ~ handler ~ jsonBody:", jsonBody);
