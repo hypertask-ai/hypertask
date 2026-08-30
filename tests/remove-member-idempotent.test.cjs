@@ -30,9 +30,9 @@ const membersRemove = removeMemberModule.default ?? removeMemberModule;
 // Minimal stand-ins: the point is the control flow, not the database.
 // project.findFirst is what isProjectAdmin uses, so returning a row there makes
 // the caller an admin without stubbing the module itself.
-function stubPrisma({ member }) {
+function stubPrisma({ member, admin = true }) {
   const deleted = [];
-  prisma.project.findFirst = async () => ({ id: 3 });
+  prisma.project.findFirst = async () => (admin ? { id: 3 } : null);
   prisma.user.findUnique = async () => ({ id: 2 });
   prisma.project.findUnique = async () => ({ id: 3, ownerId: 99, teamId: null });
   prisma.member.findFirst = async () => member;
@@ -47,6 +47,14 @@ function stubPrisma({ member }) {
   };
   return deleted;
 }
+
+test("a non-admin cannot remove a project member", async () => {
+  const deleted = stubPrisma({ member: { id: 42, userId: 2 }, admin: false });
+  const res = await membersRemove(2, 3, 1);
+
+  assert.equal(res.status, 401);
+  assert.deepEqual(deleted, []);
+});
 
 test("removing a member that is present succeeds and deletes the row", async () => {
   const deleted = stubPrisma({ member: { id: 42, userId: 2 } });

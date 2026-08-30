@@ -1,12 +1,19 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import membersRemove from "@/utils/controllers/projects/removeMember";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
+        const session = verifySession(req.cookies[SESSION_COOKIE]);
+        if (!session) {
+            return res
+                .status(401)
+                .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
+        }
+
         try {
             const { userId, projectId } = req.body;
-            const user = JSON.parse(req.cookies.nookies_user!)
             console.log("🚀 ~ file: removeMember.ts:9 ~ consthandler:NextApiHandler= ~ req.body:", req.body)
             if (!userId || !projectId) {
                 return res.status(400).json({ message: "Missing required information" });
@@ -49,7 +56,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             //         projectId: projectId
             //     }
             // })
-            const response = await membersRemove(userId, projectId, parseInt(user.id))
+            const response = await membersRemove(userId, projectId, session.id)
             return res.status(response.status).json(response.json);
         } catch (error) {
             console.log(error);
