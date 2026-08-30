@@ -51,7 +51,9 @@ function responseRecorder() {
   };
 }
 
-function loadRoute() {
+function loadRoute(
+  controllerResponse = { status: 200, json: { message: "Success" } },
+) {
   const calls = [];
   resetModules([
     "src/pages/api/members/removeTeamMember.ts",
@@ -60,7 +62,7 @@ function loadRoute() {
   stubModule("src/utils/controllers/teams/leave.ts", {
     leaveTeam: async (...args) => {
       calls.push(args);
-      return { status: 200, json: { message: "Success" } };
+      return controllerResponse;
     },
   });
   return {
@@ -69,7 +71,11 @@ function loadRoute() {
   };
 }
 
-function loadController({ ownerId = 6, removedCount = 1 } = {}) {
+function loadController({
+  ownerId = 6,
+  removedCount = 1,
+  teamUpdateCount = 1,
+} = {}) {
   const calls = {
     transaction: 0,
     memberTeamDeletes: [],
@@ -86,7 +92,7 @@ function loadController({ ownerId = 6, removedCount = 1 } = {}) {
         ownerId === null ? null : { googleAccount: { userId: ownerId } },
       updateMany: async (args) => {
         calls.teamUpdates.push(args);
-        return { count: 1 };
+        return { count: teamUpdateCount };
       },
     },
     member_Team: {
@@ -180,6 +186,27 @@ test("the route passes the verified caller identity into the controller", async 
   assert.deepEqual(calls, [["team-1", 8, 6]]);
 });
 
+test("the route forwards controller authorization failures", async () => {
+  const { signSession, SESSION_COOKIE } = loadTs("src/lib/auth/session.ts");
+  const { handler } = loadRoute({
+    status: 403,
+    json: { message: "Only the team owner can remove members" },
+  });
+  const response = responseRecorder();
+
+  await handler(
+    {
+      method: "POST",
+      cookies: { [SESSION_COOKIE]: signSession({ id: 6 }) },
+      body: { teamId: "team-1", userId: 8 },
+    },
+    response,
+  );
+
+  assert.equal(response.statusCode, 403);
+  assert.match(response.body.message, /team owner/i);
+});
+
 test("a non-owner cannot mutate another member inside the team transaction", async () => {
   const { leaveTeam, calls } = loadController({ ownerId: 99 });
 
@@ -196,15 +223,18 @@ test("a non-owner cannot mutate another member inside the team transaction", asy
   assert.equal(calls.firstProject.length, 0);
 });
 
-test("a non-owner cannot use this owner endpoint to remove themselves", async () => {
+test("an authenticated member can remove only themselves", async () => {
   const { leaveTeam, calls } = loadController({ ownerId: 99 });
 
   const result = await leaveTeam("team-1", 6, 6);
 
-  assert.equal(result.status, 403);
-  assert.equal(calls.memberTeamDeletes.length, 0);
-  assert.equal(calls.teamUpdates.length, 0);
-  assert.equal(calls.sync[0].mutation.sync, false);
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls.memberTeamDeletes[0].where, {
+    userId: 6,
+    teamId: "team-1",
+  });
+  assert.deepEqual(calls.teamUpdates[0].where, { id: "team-1" });
+  assert.equal(calls.sync[0].mutation.sync, true);
 });
 
 test("an owner atomically removes one membership and decrements one seat", async () => {
@@ -233,15 +263,38 @@ test("an owner atomically removes one membership and decrements one seat", async
   assert.deepEqual(calls.firstProject, [8]);
 });
 
-test("an already-absent membership changes no relations, seats, or billing", async () => {
+test("an already-absent membership cleans stale relations without changing billing", async () => {
   const { leaveTeam, calls } = loadController({ removedCount: 0 });
 
   const result = await leaveTeam("team-1", 8, 6);
 
   assert.equal(result.status, 200);
-  assert.equal(calls.assigneeDeletes.length, 0);
-  assert.equal(calls.followerDeletes.length, 0);
-  assert.equal(calls.memberDeletes.length, 0);
+  assert.equal(calls.assigneeDeletes.length, 1);
+  assert.equal(calls.followerDeletes.length, 1);
+  assert.equal(calls.memberDeletes.length, 1);
   assert.equal(calls.teamUpdates.length, 0);
   assert.equal(calls.sync[0].mutation.sync, false);
+});
+
+test("a missing team returns 404 without destructive queries", async () => {
+  const { leaveTeam, calls } = loadController({ ownerId: null });
+
+  const result = await leaveTeam("team-1", 8, 6);
+
+  assert.equal(result.status, 404);
+  assert.equal(calls.memberTeamDeletes.length, 0);
+  assert.equal(calls.assigneeDeletes.length, 0);
+  assert.equal(calls.teamUpdates.length, 0);
+  assert.equal(calls.sync[0].mutation.sync, false);
+});
+
+test("a failed conditional seat update fails the transaction", async () => {
+  const { leaveTeam, calls } = loadController({ teamUpdateCount: 0 });
+
+  const result = await leaveTeam("team-1", 8, 6);
+
+  assert.equal(result.status, 400);
+  assert.equal(calls.transaction, 1);
+  assert.equal(calls.teamUpdates.length, 1);
+  assert.equal(calls.sync.length, 0);
 });

@@ -31,7 +31,8 @@ export async function leaveTeam(
           }
 
           const isOwner = team.googleAccount.userId === requestingUserId;
-          if (!isOwner) {
+          const isLeavingSelf = userId === requestingUserId;
+          if (!isOwner && !isLeavingSelf) {
             return {
               value: "forbidden" as LeaveTeamMutationStatus,
               sync: false,
@@ -42,17 +43,12 @@ export async function leaveTeam(
             where: {
               userId,
               teamId,
-              team: { googleAccount: { userId: requestingUserId } },
+              ...(isLeavingSelf
+                ? {}
+                : { team: { googleAccount: { userId: requestingUserId } } }),
             },
           });
-          if (removed.count !== 1) {
-            return {
-              value: "success" as LeaveTeamMutationStatus,
-              sync: false,
-            };
-          }
 
-          console.log("🤔 ~ Team exit status: REMOVED FROM TEAM.");
           await tx.assignees.deleteMany({
             where: {
               task: { project: { teamId } },
@@ -77,14 +73,25 @@ export async function leaveTeam(
           });
           console.log("🤔 ~ Team exit status: REMOVED FROM PROJECTS.");
 
+          if (removed.count !== 1) {
+            return {
+              value: "success" as LeaveTeamMutationStatus,
+              sync: false,
+            };
+          }
+          console.log("🤔 ~ Team exit status: REMOVED FROM TEAM.");
+
           const updatedTeam = await tx.team.updateMany({
             where: {
               id: teamId,
-              googleAccount: { userId: requestingUserId },
+              ...(isLeavingSelf
+                ? {}
+                : { googleAccount: { userId: requestingUserId } }),
             },
             data: { totalSeats: { decrement: 1 } },
           });
           if (updatedTeam.count !== 1) {
+            // Throwing from the interactive transaction rolls every deletion back.
             throw new Error("Team ownership changed during member removal");
           }
 
