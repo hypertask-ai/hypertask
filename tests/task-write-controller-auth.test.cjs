@@ -338,7 +338,7 @@ function loadMoveController({ targetProjectId, sectionProjectId, agentId }) {
   };
 }
 
-test("cross-board moves use the dedicated project-change path", async () => {
+test("cross-board moves preserve the ticket key while allocating a destination index", async () => {
   const { move, calls } = loadMoveController({
     targetProjectId: OWNER_PROJECT,
     sectionProjectId: OWNER_PROJECT,
@@ -349,7 +349,8 @@ test("cross-board moves use the dedicated project-change path", async () => {
   assert.equal(result.success, true);
   assert.equal(result.task.projectId, OWNER_PROJECT);
   assert.equal(result.task.uniqueIndex, 1);
-  assert.equal(result.task.ticketNumber, "T-1");
+  assert.equal(result.task.ticketNumber, "HTPR-5731");
+  assert.equal(calls.updatedTask.ticketNumber, undefined);
   assert.equal(calls.allowProjectChange, true);
 });
 
