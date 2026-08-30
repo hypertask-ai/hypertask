@@ -16,7 +16,7 @@ import {
     parsePriorityIndex,
 } from "@/lib/mcp/tasks/validators";
 import { persistUrlsForDescription } from "@/utils/controllers/urls/extractUrlsFromContent";
-import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
+import { broadcastTaskUpdates } from "@/lib/mcp/tasks/broadcastTaskUpdates";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
 import { signSession, SESSION_COOKIE } from "@/lib/auth/session";
@@ -1070,17 +1070,9 @@ export async function executeTaskUpdate({
 
     console.log('[MCP Update Task] Tasks updated successfully:', updatedTaskIds)
 
-    // Real-time: refresh every affected board for everyone watching.
-    Array.from(new Set(updatedTasks.map((t) => t.projectId))).forEach((pid) =>
-        broadcastBoardChange(pid, { originUserId: user.id })
-    )
-
-    // HTPR-4484: also refresh any OPEN task-detail view of each changed task
-    // (section/status/fields), not just the board. The detail view subscribes to
-    // the task channel, which board-change events don't reach.
-    updatedTasks.forEach((t) =>
-        broadcastTaskChange(t.id, { originUserId: user.id })
-    )
+    // Wait for every delivery attempt before returning success. Otherwise the
+    // serverless request can finish before external CLI/MCP changes are emitted.
+    await broadcastTaskUpdates(updatedTasks, user.id)
 
     const mappedTasks = updatedTasks.map(mapTaskToDetail)
     
