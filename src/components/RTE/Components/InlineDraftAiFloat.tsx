@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { LoaderCircle } from "lucide-react";
@@ -8,7 +8,6 @@ import toast from "react-hot-toast";
 
 import { SendArrow } from "@/components/Common/AttachmentsUpload";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
-import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import {
@@ -28,12 +27,6 @@ const CHIP_DONE_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-medium text-white-black hover:bg-hover-active focus-visible:outline-none disabled:opacity-50";
 const CHIP_PRIMARY_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold bg-hypertasks-ai-purple text-white hover:opacity-90 focus-visible:outline-none disabled:opacity-50";
-const CHIP_SHEET_ROW_CLASS =
-  "flex min-h-[52px] w-full items-center px-3 text-left text-content text-white-black hover:bg-hover-active focus-visible:bg-hover-active disabled:opacity-50";
-const CHIP_SHEET_PRIMARY_CLASS =
-  "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hypertasks-ai-purple px-3 text-content font-semibold text-black disabled:opacity-50";
-const CHIP_SHEET_DONE_CLASS =
-  "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hover-active px-3 text-content font-semibold text-white-black";
 
 const EDIT_ACTIONS = [
   ["Improve readability", "ImproveReadability"],
@@ -73,8 +66,6 @@ const InlineDraftAiFloat = ({
   allowSuggestReply = false,
   toggleRecording,
   isRecording = false,
-  presentation = "inline",
-  suppressEditorSelectionHighlight = false,
 }: {
   editor: Editor;
   onClose: () => void;
@@ -83,8 +74,6 @@ const InlineDraftAiFloat = ({
   allowSuggestReply?: boolean;
   toggleRecording?: (val: boolean) => void;
   isRecording?: boolean;
-  presentation?: "inline" | "sheet";
-  suppressEditorSelectionHighlight?: boolean;
 }) => {
   const [prompt, setPrompt] = useState("");
   const [scope, setScope] = useState<InlineDraftAiRange | null>(null);
@@ -123,8 +112,6 @@ const InlineDraftAiFloat = ({
     loadingRef.current = isLoading;
   }, [isLoading]);
 
-  const isSheet = presentation === "sheet";
-
   useEffect(() => {
     if (!editor) return;
 
@@ -136,10 +123,7 @@ const InlineDraftAiFloat = ({
       isEmpty: editor.isEmpty,
     });
 
-    if (
-      !suppressEditorSelectionHighlight &&
-      (initial.from !== current.from || initial.to !== current.to)
-    ) {
+    if (initial.from !== current.from || initial.to !== current.to) {
       editor.commands.setTextSelection(initial);
     }
     setScope(initial);
@@ -165,7 +149,7 @@ const InlineDraftAiFloat = ({
         editor.setEditable(true);
       }
     };
-  }, [editor, suppressEditorSelectionHighlight]);
+  }, [editor]);
 
   const close = () => {
     requestIdRef.current += 1;
@@ -175,15 +159,8 @@ const InlineDraftAiFloat = ({
     if (!editor.isEditable && wasEditableRef.current) {
       editor.setEditable(true);
     }
-    if (suppressEditorSelectionHighlight) {
-      editor.commands.unsetHighlight();
-      const { from } = editor.state.selection;
-      editor.commands.setTextSelection(from);
-    }
     onClose();
-    if (!isSheet) {
-      editor.commands.focus();
-    }
+    editor.commands.focus();
   };
   closeRef.current = close;
 
@@ -248,8 +225,6 @@ const InlineDraftAiFloat = ({
   // Dismiss when clicking outside the float. Keep open for draft clicks so
   // users can adjust the selection without the bar disappearing.
   useEffect(() => {
-    if (isSheet) return;
-
     const onPointerDown = (event: PointerEvent) => {
       if (loadingRef.current || recordingRef.current || audioProcessingRef.current) {
         return;
@@ -264,7 +239,7 @@ const InlineDraftAiFloat = ({
 
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [editor, isSheet]);
+  }, [editor]);
 
   if (!editor || !scope) return null;
 
@@ -299,32 +274,23 @@ const InlineDraftAiFloat = ({
 
     if (wholeDocument || editor.isEmpty) {
       editor.commands.setContent(html);
-      if (suppressEditorSelectionHighlight) {
-        const newSize = editor.state.doc.content.size;
-        setScope({ from: 0, to: newSize });
-      } else {
-        editor.commands.selectAll();
-        const next = editor.state.selection;
-        setScope({ from: next.from, to: next.to });
-      }
+      editor.commands.selectAll();
+      const next = editor.state.selection;
+      setScope({ from: next.from, to: next.to });
       return;
     }
 
     editor
       .chain()
       .focus()
-      .insertContentAt(range, html, {
-        updateSelection: !suppressEditorSelectionHighlight,
-      })
+      .insertContentAt(range, html, { updateSelection: true })
       .run();
     const nextRange = rewrittenInlineDraftAiRange({
       oldDocSize,
       newDocSize: editor.state.doc.content.size,
       range,
     });
-    if (!suppressEditorSelectionHighlight) {
-      editor.commands.setTextSelection(nextRange);
-    }
+    editor.commands.setTextSelection(nextRange);
     setScope(nextRange);
   };
 
@@ -428,156 +394,6 @@ const InlineDraftAiFloat = ({
     );
   };
 
-  const handlePanelKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Enter") return;
-    if ((event.target as HTMLElement | null)?.tagName === "BUTTON") return;
-    event.preventDefault();
-    event.stopPropagation();
-    submitPrompt();
-  };
-
-  const promptRow = (
-    <div className="flex w-full min-w-0 items-center gap-2">
-      <div className={dictationActive ? "hidden" : "min-w-[150px] flex-1"}>
-        <input
-          autoFocus
-          maxLength={2_000}
-          value={prompt}
-          disabled={isLoading || audioProcessing}
-          onChange={(event) => setPrompt(event.target.value)}
-          placeholder={inlineDraftAiWritePlaceholder(
-            hasSelection,
-            allowSuggestReply,
-            editor.isEmpty,
-          )}
-          className="w-full border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
-        />
-      </div>
-
-      {dictationButton && (
-        <div
-          className={
-            dictationActive ? "min-w-0 flex-1" : isLoading ? "hidden" : "shrink-0"
-          }
-        >
-          {dictationButton}
-        </div>
-      )}
-
-      <button
-        type="button"
-        aria-label="Send AI instruction"
-        disabled={!prompt.trim() || isLoading || audioProcessing}
-        onClick={submitPrompt}
-        className={`${dictationActive ? "hidden" : "flex"} h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:bg-icon-dark-gray disabled:text-comment-description`}
-      >
-        {isLoading ? (
-          <LoaderCircle size={15} className="animate-spin" aria-hidden />
-        ) : (
-          <SendArrow size={16} />
-        )}
-      </button>
-    </div>
-  );
-
-  const inlineEditChips = showEditChips ? (
-    <div className="scrollbar-none flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto">
-      {hasResult && (
-        <>
-          <button type="button" className={CHIP_DONE_CLASS} onClick={close}>
-            Done
-          </button>
-          <button
-            type="button"
-            className={CHIP_PRIMARY_CLASS}
-            onClick={retry}
-            disabled={isLoading}
-          >
-            Retry
-          </button>
-        </>
-      )}
-      {EDIT_ACTIONS.map(([label, command]) => (
-        <button
-          key={command}
-          type="button"
-          disabled={isLoading}
-          className={CHIP_LINK_CLASS}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => void runAction({ command })}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  ) : null;
-
-  const sheetEditChips = showEditChips ? (
-    <div className="px-2 pt-1">
-      {EDIT_ACTIONS.map(([label, command]) => (
-        <button
-          key={command}
-          type="button"
-          disabled={isLoading}
-          className={CHIP_SHEET_ROW_CLASS}
-          onClick={() => void runAction({ command })}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  ) : null;
-
-  if (isSheet) {
-    return (
-      <MobileBottomSheet
-        isOpen
-        onClose={close}
-        keyboardAware
-        labelledBy="inline-draft-ai-sheet-title"
-        contentClassName="pb-2"
-        bottomSlot={
-          hasResult ? (
-            <div className="flex flex-col gap-0 px-2 pb-3">
-              <button type="button" className={CHIP_SHEET_DONE_CLASS} onClick={close}>
-                Done
-              </button>
-              <button
-                type="button"
-                className={CHIP_SHEET_PRIMARY_CLASS}
-                onClick={retry}
-                disabled={isLoading}
-              >
-                Retry
-              </button>
-            </div>
-          ) : null
-        }
-      >
-        <div className="px-4 pb-2 pt-1">
-          <h2
-            id="inline-draft-ai-sheet-title"
-            className="text-subheading font-medium text-white-black"
-          >
-            Write with AI
-          </h2>
-        </div>
-
-        <div
-          ref={rootRef}
-          role="dialog"
-          aria-label="Write with AI"
-          className="mx-4 flex flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
-          onKeyDown={handlePanelKeyDown}
-        >
-          {promptRow}
-        </div>
-
-        {sheetEditChips}
-      </MobileBottomSheet>
-    );
-  }
-
   return (
     <div
       ref={rootRef}
@@ -585,10 +401,93 @@ const InlineDraftAiFloat = ({
       aria-label="Write with AI"
       aria-modal="false"
       className="my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
-      onKeyDown={handlePanelKeyDown}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return;
+        // Let focused chip / Done / Retry / Send activate normally.
+        if ((event.target as HTMLElement | null)?.tagName === "BUTTON") return;
+        // Stop Ctrl/Cmd+Enter from also firing the parent comment Send.
+        event.preventDefault();
+        event.stopPropagation();
+        submitPrompt();
+      }}
     >
-      {promptRow}
-      {inlineEditChips}
+      <div className="flex w-full min-w-0 items-center gap-2">
+        <div
+          className={
+            dictationActive ? "hidden" : "min-w-[150px] flex-1"
+          }
+        >
+          <input
+            autoFocus
+            maxLength={2_000}
+            value={prompt}
+            disabled={isLoading || audioProcessing}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder={inlineDraftAiWritePlaceholder(
+              hasSelection,
+              allowSuggestReply,
+              editor.isEmpty,
+            )}
+            className="w-full border-0 bg-transparent px-1 py-1.5 text-white-black outline-none placeholder:text-text-light-gray"
+          />
+        </div>
+
+        {dictationButton && (
+          <div
+            className={
+              dictationActive ? "min-w-0 flex-1" : isLoading ? "hidden" : "shrink-0"
+            }
+          >
+            {dictationButton}
+          </div>
+        )}
+
+        <button
+          type="button"
+          aria-label="Send AI instruction"
+          disabled={!prompt.trim() || isLoading || audioProcessing}
+          onClick={submitPrompt}
+          className={`${dictationActive ? "hidden" : "flex"} h-7 w-7 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:bg-icon-dark-gray disabled:text-comment-description`}
+        >
+          {isLoading ? (
+            <LoaderCircle size={15} className="animate-spin" aria-hidden />
+          ) : (
+            <SendArrow size={16} />
+          )}
+        </button>
+      </div>
+
+      {showEditChips && (
+        <div className="scrollbar-none flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto">
+          {hasResult && (
+            <>
+              <button type="button" className={CHIP_DONE_CLASS} onClick={close}>
+                Done
+              </button>
+              <button
+                type="button"
+                className={CHIP_PRIMARY_CLASS}
+                onClick={retry}
+                disabled={isLoading}
+              >
+                Retry
+              </button>
+            </>
+          )}
+          {EDIT_ACTIONS.map(([label, command]) => (
+              <button
+                key={command}
+                type="button"
+                disabled={isLoading}
+                className={CHIP_LINK_CLASS}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => void runAction({ command })}
+              >
+                {label}
+              </button>
+            ))}
+        </div>
+      )}
     </div>
   );
 };
