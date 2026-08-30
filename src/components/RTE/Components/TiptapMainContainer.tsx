@@ -86,6 +86,17 @@ const TiptapMainContainer = () => {
         >
           <CreatedInfoTiptap />
           <TiptapEditor />
+          {shouldShowInlineDraftAi && editor && closeInlineDraftAi && (
+            <InlineDraftAiFloat
+              editor={editor}
+              onClose={closeInlineDraftAi}
+              projectId={aiProjectId}
+              taskId={aiTaskId}
+              allowSuggestReply
+              toggleRecording={toggleRecording}
+              isRecording={isRecording}
+            />
+          )}
           {/* ================== attachment button ============= */}
           <AttachmentsUpload
             filesFromParent={[]}
@@ -101,6 +112,8 @@ const TiptapMainContainer = () => {
             toggleRecording={toggleRecording}
             isRecording={isRecording}
             showDeleteComment={showDeleteComment}
+            toggleAiTaskWriter={toggleAiTaskWriter}
+            hideComposerDictation={shouldShowInlineDraftAi}
           />
         </div>
       );
