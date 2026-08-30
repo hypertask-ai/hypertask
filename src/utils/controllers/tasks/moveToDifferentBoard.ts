@@ -54,7 +54,6 @@ async function moveAllSubtasksRecursively(
   subtasks: any[],
   projectId: number,
   sectionId: number,
-  newProject: any,
   parentTaskId: number,
   currentUser: IUser,
   agentId?: string | null
@@ -71,7 +70,6 @@ async function moveAllSubtasksRecursively(
       section: section?.section_title ?? "",
       uniqueIndex: taskCount + 1,
       updatedAt: new Date(),
-      ticketNumber: `${newProject?.uniqueIdentifier}-${taskCount + 1}`,
       parentTaskId,
     };
     await updateTaskSingle(newTask, currentUser, agentId, {
@@ -87,7 +85,6 @@ async function moveAllSubtasksRecursively(
         subtask.subTasks,
         projectId,
         sectionId,
-        newProject,
         subtask.id,
         currentUser,
         agentId
@@ -279,7 +276,7 @@ export interface MoveTaskToDifferentBoardResult {
  * 3. **Load project & section** – Fetch target project, current project (for team check), and target section in parallel.
  * 4. **Validate targets** – Return 404 if target project or section is missing.
  * 5. **Same-board move** – Update only the main task's section and ranking, preserving its identity.
- * 6. **Cross-board placement** – Get a new task count and ranking, then update the task's project and ticket identity.
+ * 6. **Cross-board placement** – Get a destination task index and ranking, then update the task's project while preserving its ticket key.
  * 7. **Move subtasks** – Recursively move all nested subtasks (kept sequential to preserve unique indices).
  * 8. **Team switch** – If the target board is in a different team, reassign tasks whose assignees are not members.
  * 9. **Update & cleanup (parallel):**
@@ -387,7 +384,6 @@ export async function moveTaskToDifferentBoard(
     section: section?.section_title ?? "",
     uniqueIndex: taskCount + 1,
     updatedAt: new Date(),
-    ticketNumber: `${newProject?.uniqueIdentifier}-${taskCount + 1}`,
     parentTaskId: parentAlreadyInTarget ? taskToMove.parentTaskId : null,
   };
 
@@ -417,7 +413,6 @@ export async function moveTaskToDifferentBoard(
       taskToMove.subTasks,
       targetProjectId,
       targetSectionId,
-      newProject,
       updatedTask.id,
       currentUser,
       agentId
