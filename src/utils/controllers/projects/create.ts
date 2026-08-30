@@ -207,12 +207,18 @@ export async function updateUniqueIdentifier(teamId: string, title: string, proj
 
   // Ensure uniqueness within the team; on collision append a counter (kept <= 5 chars).
   let candidate = base;
-  for (let i = 1; i <= 50; i++) {
-    const clash = await prisma.project.findFirst({
+  let clash = await prisma.project.findFirst({
+    where: { teamId, uniqueIdentifier: candidate, status: { not: "Deleted" } },
+  });
+  for (let i = 1; clash; i++) {
+    const suffix = String(i);
+    if (suffix.length > 5) {
+      throw new Error("Could not assign unique project identifier");
+    }
+    candidate = `${base.slice(0, 5 - suffix.length)}${suffix}`;
+    clash = await prisma.project.findFirst({
       where: { teamId, uniqueIdentifier: candidate, status: { not: "Deleted" } },
     });
-    if (!clash) break;
-    candidate = (base.slice(0, 4) + i).slice(0, 5);
   }
 
   await prisma.project.update({
