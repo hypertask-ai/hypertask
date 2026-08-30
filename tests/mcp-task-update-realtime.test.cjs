@@ -52,3 +52,44 @@ test("MCP task updates wait for board and task realtime delivery attempts", asyn
   await pending;
   assert.equal(settled, true);
 });
+
+test("realtime delivery failures do not fail a persisted MCP task update", async () => {
+  const deliveryFailure = new Error("board delivery failed");
+  const warnings = [];
+  const originalWarn = console.warn;
+  let releaseTaskDelivery;
+  const taskDelivery = new Promise((resolve) => {
+    releaseTaskDelivery = resolve;
+  });
+  let settled = false;
+
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const pending = broadcastTaskUpdates(
+      [{ id: 101, projectId: 15 }],
+      6,
+      {
+        board: async () => {
+          throw deliveryFailure;
+        },
+        task: async () => {
+          await taskDelivery;
+        },
+      },
+    ).then(() => {
+      settled = true;
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(settled, false);
+    releaseTaskDelivery();
+    await pending;
+
+    assert.equal(settled, true);
+    assert.deepEqual(warnings, [
+      ["[MCP Update Task] Realtime delivery failed:", deliveryFailure],
+    ]);
+  } finally {
+    console.warn = originalWarn;
+  }
+});

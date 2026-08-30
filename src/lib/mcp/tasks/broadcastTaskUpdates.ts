@@ -24,8 +24,14 @@ export async function broadcastTaskUpdates(
   const payload = { originUserId };
   const projectIds = [...new Set(tasks.map((task) => task.projectId))];
 
-  await Promise.all([
+  const results = await Promise.allSettled([
     ...projectIds.map((projectId) => broadcasters.board(projectId, payload)),
     ...tasks.map((task) => broadcasters.task(task.id, payload)),
   ]);
+
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.warn("[MCP Update Task] Realtime delivery failed:", result.reason);
+    }
+  }
 }
