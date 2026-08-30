@@ -569,7 +569,15 @@ export function useSearch(
     }
 
     // ========== [g] main handler: initiate sequence only if no other g-then sequence is active
-    if (event.keyCode === KeyCodes.G) {
+    if (
+      event.keyCode === KeyCodes.G &&
+      !isInputFocused &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !event.repeat
+    ) {
       // If another g-sequence was not just triggered, start the timer for g-then combos.
       if (!lastgClick.current) {
         const now = new Date().getTime();
@@ -580,6 +588,25 @@ export function useSearch(
         return;
       }
       // Don't let a plain [g] immediately fall through to any other logic
+    }
+
+    // ========== [g] then [x] - Toggle archived search results
+    if (
+      lastgClick.current &&
+      event.keyCode === KeyCodes.X &&
+      !isInputFocused &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      const now = new Date().getTime();
+      if (now - lastgClick.current < globalConstants.gThenKeyDelay) {
+        event.preventDefault();
+        lastgClick.current = null;
+        setIncludeArchivedResults(!includeArchived);
+        return;
+      }
     }
 
     // ========== [g] then [g] - Jump to top/bottom row
@@ -702,6 +729,7 @@ export function useSearch(
     searchCache,
     selectedHistory,
     suggestedValue,
+    includeArchived,
   ]);
 
   // -------------------- recieving data from React-Query

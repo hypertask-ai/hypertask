@@ -82,7 +82,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Open Hypertask Command", pressKey: [cmdControl, "K"] },
         { shortTitle: "Undo latest action", pressKey: [cmdControl, "Z"] },
         { shortTitle: "Use snippet", pressKey: [";"] },
-        { shortTitle: "Show or hide archived tasks on board", pressKey: ["G", null, "X"] },
+        { shortTitle: "Show or hide archived tasks", pressKey: ["G", null, "X"] },
         { shortTitle: "Exit (go back)", pressKey: ["ESC"] },
         { shortTitle: "Archive task or comment", pressKey: [cmdControl, "E"] },
         { shortTitle: "Delete task", pressKey: ["#"] },

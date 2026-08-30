@@ -1066,6 +1066,9 @@ export interface IAllCommands {
   };
   appShellRailOn?: boolean;
   showArchivedOnBoard?: boolean;
+  searchOptions?: {
+    includeArchived: boolean;
+  };
   projectOptions?: {
     stalenessEnabled: boolean;
     stalenessViewEnabled?: boolean;

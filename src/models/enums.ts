@@ -202,6 +202,7 @@ export enum CommandMode {
   GoToAgents,
   TaskDescriptionVersions,
   SuggestReply,
+  ToggleArchivedSearchResults,
 }
 
 export enum ELogType {

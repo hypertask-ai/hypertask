@@ -72,6 +72,12 @@ const SearchComp = ({
     openAIChatInterface();
   }
 
+  function handleCommand(payload: unknown, mode: string) {
+    if (mode === "ToggleArchivedSearchResults" && typeof payload === "boolean") {
+      setIncludeArchivedResults(payload);
+    }
+  }
+
   const content = (
     <>
       <div
@@ -114,18 +120,6 @@ const SearchComp = ({
                 }}
               />
             </div>
-
-            <label className="mt-3 inline-flex cursor-pointer items-center gap-2 px-4 text-[13px] text-text-light-gray @md:px-9">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-hypertasks-purple focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white-black"
-                checked={includeArchived}
-                onChange={(event) =>
-                  setIncludeArchivedResults(event.target.checked)
-                }
-              />
-              Include archived
-            </label>
 
           <>
               {responseMessage !== "None" &&
@@ -243,7 +237,15 @@ const SearchComp = ({
             </>
         </div>
       </div>
-      {showCommands.show && <HypertasksCommands />}
+      {showCommands.show && (
+        <HypertasksCommands
+          callbackHandler={handleCommand}
+          contextOptions={{
+            context: "Others",
+            searchOptions: { includeArchived },
+          }}
+        />
+      )}
     </>
   );
 
