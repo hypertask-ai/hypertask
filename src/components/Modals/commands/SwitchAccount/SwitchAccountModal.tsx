@@ -156,10 +156,12 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
                 onClick={() => void handleSwitch(acc)}
                 className="flex items-center gap-3 w-full py-2 rounded-md hover:bg-active-elementBg text-left"
               >
-                {idx < 9 && (
+                {idx < 9 ? (
                   <kbd className="text-meta opacity-60 w-4 text-center shrink-0">
                     {idx + 1}
                   </kbd>
+                ) : (
+                  <span aria-hidden="true" className="w-4 shrink-0" />
                 )}
                 <UserAvatar
                   alt=""

@@ -21,14 +21,19 @@ test("account switcher uses compact modal typography and one content gutter", ()
     /<ModalBody className="[^"]*!px-5[^"]*pt-0[^"]*text-dense/,
   );
   assert.doesNotMatch(source, /<span className="text-lg">Switch account<\/span>/);
-  assert.doesNotMatch(source, /className="[^"]*\bp-2\b[^"]*"/);
+  assert.doesNotMatch(source, /className="[^"]*\b(?:p|px)-2\b[^"]*"/);
 });
 
-test("add-account row reserves the same shortcut column as account rows", () => {
+test("rows without a number reserve the same shortcut column as numbered accounts", () => {
+  assert.match(
+    source,
+    /idx < 9 \?[\s\S]*?<kbd[\s\S]*?: \(\s*<span aria-hidden="true" className="w-4 shrink-0" \/>/,
+  );
+
   const addAccountRow = source.slice(
     source.indexOf('<button\n            onClick={() => addAccount()}'),
   );
-
+  assert.notEqual(addAccountRow, source.slice(-1));
   assert.match(
     addAccountRow,
     /<span aria-hidden="true" className="w-4 shrink-0" \/>[\s\S]*?<MdAdd/,
