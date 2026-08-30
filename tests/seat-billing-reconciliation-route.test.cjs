@@ -163,7 +163,7 @@ test("every live team-join path uses conflict-safe membership and serialized bil
   assert.match(leave, /mutateAndSyncSeatBilling/);
   assert.ok(
     leave.indexOf("mutateAndSyncSeatBilling") <
-      leave.indexOf("prisma.member.deleteMany"),
+      leave.indexOf("tx.member.deleteMany"),
   );
 });
 
