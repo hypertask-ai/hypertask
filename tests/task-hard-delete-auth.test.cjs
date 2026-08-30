@@ -28,7 +28,16 @@ function loadRoute({ session = null, task = null, deleteOutcome = "success" } = 
         task: {
           findFirst: async (query) => {
             calls.taskLookups.push(query);
-            return task;
+            if (
+              task?.id !== query.where.id ||
+              task.status !== query.where.status ||
+              !task.writableByUserIds.includes(
+                query.where.project?.writableByUserId,
+              )
+            ) {
+              return null;
+            }
+            return { projectId: task.projectId };
           },
         },
       },
@@ -93,7 +102,15 @@ test("hard deletion rejects an unauthenticated request before reading or deletin
 });
 
 test("hard deletion rejects a task outside the caller's writable projects", async () => {
-  const { handler, calls } = loadRoute({ session: { userId: 23 } });
+  const { handler, calls } = loadRoute({
+    session: { userId: 23 },
+    task: {
+      id: 101,
+      status: "Deleted",
+      projectId: 99,
+      writableByUserIds: [99],
+    },
+  });
   const { response, result } = responseRecorder();
 
   await handler(deleteRequest(), response);
@@ -117,7 +134,12 @@ test("hard deletion rejects a task outside the caller's writable projects", asyn
 test("hard deletion passes the authenticated identity after task authorization", async () => {
   const { handler, calls } = loadRoute({
     session: { userId: 23 },
-    task: { projectId: 15 },
+    task: {
+      id: 101,
+      status: "Deleted",
+      projectId: 15,
+      writableByUserIds: [23],
+    },
   });
   const { response, result } = responseRecorder();
 
