@@ -21,7 +21,7 @@ export const getMobileCommandGroups = (
 ): CommandGroup[] =>
   isMobile ? [mobileAppCommands, ...commandGroups] : commandGroups;
 
-const getNavigateCommands = (): CommandGroup => ({
+const getNavigateCommands = (commandOptions: IAllCommands): CommandGroup => ({
   group: "Navigate",
   commandLists: [
     {
@@ -160,6 +160,17 @@ const getNavigateCommands = (): CommandGroup => ({
       commandMode: CommandMode.GotoTrash,
       keywords: "trash deleted recycle bin remove",
     },
+    ...(commandOptions.searchOptions
+      ? [
+          {
+            key: "toggleArchivedSearchResults",
+            name: `${commandOptions.searchOptions.includeArchived ? "Hide" : "Show"} archived search results`,
+            keyboard: ["G", null, "X"],
+            commandMode: CommandMode.ToggleArchivedSearchResults,
+            keywords: "show hide toggle archive archived search results tasks",
+          },
+        ]
+      : []),
     {
       key: "searchTask",
       name: "Search",
@@ -644,13 +655,18 @@ const getBoardCommands = (commandOptions: IAllCommands): CommandGroup => ({
       keywords:
         "empty columns sections hide show toggle blank empty column visibility collapse",
     },
-    {
-      key: "toggleArchivedOnBoard",
-      name: `${commandOptions.showArchivedOnBoard ? "Hide" : "Show"} archived tasks on board`,
-      keyboard: ["G", null, "X"],
-      commandMode: CommandMode.ToggleArchivedOnBoard,
-      keywords: "show hide toggle archive archived completed tasks board visibility",
-    },
+    ...(commandOptions.searchOptions
+      ? []
+      : [
+          {
+            key: "toggleArchivedOnBoard",
+            name: `${commandOptions.showArchivedOnBoard ? "Hide" : "Show"} archived tasks on board`,
+            keyboard: ["G", null, "X"],
+            commandMode: CommandMode.ToggleArchivedOnBoard,
+            keywords:
+              "show hide toggle archive archived completed tasks board visibility",
+          },
+        ]),
     {
       key: "renameBoard",
       name: "Rename board",
@@ -1739,7 +1755,7 @@ const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => {
 export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" }
 ): CommandGroup[] => {
-  const navigate = getNavigateCommands();
+  const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands(commandOptions);
   const comment = getCommentCommands(commandOptions);

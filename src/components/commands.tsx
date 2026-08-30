@@ -875,6 +875,13 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         toggleShowArchivedOnBoard();
         boardCloseHandler();
         break;
+      case CommandMode.ToggleArchivedSearchResults:
+        callbackHandler?.(
+          !paletteContextOptions?.searchOptions?.includeArchived,
+          "ToggleArchivedSearchResults"
+        );
+        boardCloseHandler();
+        break;
       case CommandMode.ArchiveShowActiveBoardsOnly:
         setArchiveBoardScope("active");
         boardCloseHandler();

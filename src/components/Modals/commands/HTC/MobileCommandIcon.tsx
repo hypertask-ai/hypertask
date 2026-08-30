@@ -89,6 +89,7 @@ const iconForCommand = (command: ICommandList): LucideIcon => {
     case CommandMode.ArchiveBoard:
     case CommandMode.GotoTaskArchives:
     case CommandMode.ToggleArchivedOnBoard:
+    case CommandMode.ToggleArchivedSearchResults:
       return Archive;
     case CommandMode.EditBoard:
     case CommandMode.EditComment:
