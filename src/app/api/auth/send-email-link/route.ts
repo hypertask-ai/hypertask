@@ -211,9 +211,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Sign-in email sent with both link and code!',
-      // HTPR-4176: never leak the code to the caller in production — anyone could
-      // read it here and log in as any user. Dev-only for local testing.
-      ...(process.env.NODE_ENV !== 'production' && { verificationCode, devLink: signInLink }),
     })
   } catch (error) {
     console.error('❌ Error generating email link:', error)

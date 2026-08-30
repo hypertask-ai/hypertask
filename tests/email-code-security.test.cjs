@@ -75,6 +75,58 @@ test('verification codes are generated through crypto.randomInt', () => {
   assert.deepEqual(calls, [[100000, 1000000]])
 })
 
+test('send-email-link never returns authentication secrets', async () => {
+  const previousNodeEnv = process.env.NODE_ENV
+  const previousJwtSecret = process.env.JWT_SECRET
+  const previousResendKey = process.env.RESEND_API_KEY
+  const storedCodes = []
+
+  process.env.NODE_ENV = 'development'
+  process.env.JWT_SECRET = 'test-only-email-link-secret'
+  delete process.env.RESEND_API_KEY
+
+  try {
+    const { POST } = loadTypescriptModule(
+      'src/app/api/auth/send-email-link/route.ts',
+      {
+        '@/lib/services/verificationCodeService': {
+          VerificationCodeService: {
+            generateCode: () => '123456',
+            isRateLimited: () => ({ limited: false, waitTime: 0 }),
+            storeCode: async (...args) => storedCodes.push(args),
+          },
+        },
+        '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
+        '@/lib/auth/requestBaseUrl': {
+          getRequestBaseUrl: () => 'https://app.hypertask.ai',
+        },
+        '@/lib/email/sendEmail': { sendEmail: async () => {} },
+      },
+    )
+    const response = await POST(
+      new NextRequest('https://app.hypertask.ai/api/auth/send-email-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: ' Owner@Example.Test ' }),
+      }),
+    )
+    const body = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(body.success, true)
+    assert.equal(Object.hasOwn(body, 'verificationCode'), false)
+    assert.equal(Object.hasOwn(body, 'devLink'), false)
+    assert.deepEqual(storedCodes, [['123456', 'owner@example.test', 30]])
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = previousNodeEnv
+    if (previousJwtSecret === undefined) delete process.env.JWT_SECRET
+    else process.env.JWT_SECRET = previousJwtSecret
+    if (previousResendKey === undefined) delete process.env.RESEND_API_KEY
+    else process.env.RESEND_API_KEY = previousResendKey
+  }
+})
+
 test('verification atomically binds a code to its normalized email', async () => {
   const store = makeVerificationCodeStore()
   const { VerificationCodeService } = loadTypescriptModule(
