@@ -5,6 +5,36 @@ const test = require("node:test");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const jiti = require("jiti")(
+  path.join(root, "tests/task-hard-delete-auth-jiti-entry.cjs"),
+  {
+    interopDefault: true,
+    alias: { "@": path.join(root, "src") },
+  },
+);
+const { taskWriteAccessWhere } = jiti(
+  path.join(root, "src/utils/controllers/projects/getAllIncludes.ts"),
+);
+
+function memberMatches(member, where) {
+  return Object.entries(where).every(([key, value]) => member[key] === value);
+}
+
+function projectMatches(project, where) {
+  if (where.ownerId !== undefined && project.ownerId !== where.ownerId) {
+    return false;
+  }
+  if (
+    where.members?.some &&
+    !project.members.some((member) => memberMatches(member, where.members.some))
+  ) {
+    return false;
+  }
+  if (where.OR && !where.OR.some((branch) => projectMatches(project, branch))) {
+    return false;
+  }
+  return true;
+}
 
 function loadRoute({ session = null, task = null, deleteOutcome = "success" } = {}) {
   const filename = path.join(root, "src/pages/api/tasks/deleteTask.ts");
@@ -31,9 +61,7 @@ function loadRoute({ session = null, task = null, deleteOutcome = "success" } = 
             if (
               task?.id !== query.where.id ||
               task.status !== query.where.status ||
-              !task.writableByUserIds.includes(
-                query.where.project?.writableByUserId,
-              )
+              !projectMatches(task.project, query.where.project)
             ) {
               return null;
             }
@@ -47,9 +75,7 @@ function loadRoute({ session = null, task = null, deleteOutcome = "success" } = 
         calls.broadcasts.push(projectId);
       },
     },
-    "@/utils/controllers/projects/getAllIncludes": {
-      taskWriteAccessWhere: (userId) => ({ writableByUserId: userId }),
-    },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
     "@/utils/controllers/tasks/invokeTaskDelete": {
       permanentlyDeleteTask: async (...args) => {
         calls.deletes.push(args);
@@ -108,7 +134,7 @@ test("hard deletion rejects a task outside the caller's writable projects", asyn
       id: 101,
       status: "Deleted",
       projectId: 99,
-      writableByUserIds: [99],
+      project: { ownerId: 99, members: [] },
     },
   });
   const { response, result } = responseRecorder();
@@ -122,7 +148,7 @@ test("hard deletion rejects a task outside the caller's writable projects", asyn
       where: {
         id: 101,
         status: "Deleted",
-        project: { writableByUserId: 23 },
+        project: taskWriteAccessWhere(23),
       },
       select: { projectId: true },
     },
@@ -138,7 +164,7 @@ test("hard deletion passes the authenticated identity after task authorization",
       id: 101,
       status: "Deleted",
       projectId: 15,
-      writableByUserIds: [23],
+      project: { ownerId: 23, members: [] },
     },
   });
   const { response, result } = responseRecorder();
