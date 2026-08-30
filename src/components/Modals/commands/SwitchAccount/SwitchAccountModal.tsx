@@ -116,11 +116,11 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
       shouldCloseOnClickOutside={true}
       contentClassName="h-full"
       fullScreen={isMbl}
-      className="font-bold sm:max-h-[750px] border-none sm:w-full md:max-w-[380px] sm:min-w-[380px] flex flex-col"
+      className="text-dense font-normal sm:max-h-[750px] border-none sm:w-full md:max-w-[380px] sm:min-w-[380px] flex flex-col"
     >
-      <ModalHeader className="rounded-none border-b-0 h-[60px] pl-[24px] text-xl font-extrabold [&>*:first-child]:w-full">
+      <ModalHeader className="rounded-none border-b-0 h-[48px] px-5 text-emphasis font-medium [&>*:first-child]:w-full">
         <div className="flex justify-between items-center w-full">
-          <span className="text-lg">Switch account</span>
+          <span>Switch account</span>
           <IoIosClose
             onClick={closeHandler}
             className="cursor-pointer"
@@ -128,21 +128,21 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
           />
         </div>
       </ModalHeader>
-      <ModalBody className="w-full border-b-0 border-transparent pt-0">
+      <ModalBody className="w-full border-b-0 border-transparent !px-5 pt-0 pb-5 text-dense">
         <div className="flex flex-col gap-1">
           {loading ? (
-            <p className="font-light text-sm px-2 py-3 opacity-60">Loading…</p>
+            <p className="py-3 font-normal opacity-60">Loading…</p>
           ) : items.length <= 1 ? (
-            <p className="font-light text-sm px-2 py-3 opacity-80">
+            <p className="py-3 font-normal opacity-80">
               Only this account is signed in. Add another to switch between them.
             </p>
           ) : (
-            <p className="font-light text-xs px-2 pt-1 pb-2 opacity-60">
+            <p className="pt-1 pb-2 text-meta font-normal opacity-60">
               Press 1-9 to switch.
             </p>
           )}
           {error && (
-            <p className="px-2 pb-2 text-sm font-medium text-red-400" role="alert">
+            <p className="pb-2 font-medium text-red-400" role="alert">
               {error}
             </p>
           )}
@@ -154,10 +154,10 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
                 key={acc.sessionToken || `current-${acc.id}`}
                 disabled={Boolean(switchingToken)}
                 onClick={() => void handleSwitch(acc)}
-                className="flex items-center gap-3 w-full p-2 rounded-md hover:bg-active-elementBg text-left"
+                className="flex items-center gap-3 w-full py-2 rounded-md hover:bg-active-elementBg text-left"
               >
                 {idx < 9 && (
-                  <kbd className="text-xs opacity-60 w-4 text-center shrink-0">
+                  <kbd className="text-meta opacity-60 w-4 text-center shrink-0">
                     {idx + 1}
                   </kbd>
                 )}
@@ -172,7 +172,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
                   <span className="font-medium truncate">
                     {switchingToken === acc.sessionToken ? "Switching…" : label}
                   </span>
-                  <span className="font-light text-xs truncate opacity-70">
+                  <span className="text-meta font-normal truncate opacity-70">
                     {acc.email}
                   </span>
                 </div>
@@ -187,8 +187,9 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
           })}
           <button
             onClick={() => addAccount()}
-            className="flex items-center gap-3 w-full p-2 mt-1 rounded-md hover:bg-active-elementBg text-left"
+            className="flex items-center gap-3 w-full py-2 mt-1 rounded-md hover:bg-active-elementBg text-left"
           >
+            <span aria-hidden="true" className="w-4 shrink-0" />
             <div className="w-9 h-9 rounded-full flex items-center justify-center bg-active-modal-element shrink-0">
               <MdAdd size={20} />
             </div>
