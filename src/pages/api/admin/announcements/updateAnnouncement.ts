@@ -1,7 +1,7 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import NextCors from "nextjs-cors";
-import { requireAnnouncementSecret } from "@/lib/admin/requireAnnouncementSecret";
+import { requireAnnouncementAdmin } from "@/lib/admin/requireAnnouncementAdmin";
 
 // /api/admin/postAnnouncements
 const handler: NextApiHandler = async (
@@ -12,11 +12,17 @@ const handler: NextApiHandler = async (
   try {
     await NextCors(req, res, {
       // Options
-      methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
+      methods: ["POST", "DELETE"],
       origin: ["*"], // replace this with your actual origin
       optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+      preflightContinue: true,
     });
-    if (!requireAnnouncementSecret(req, res)) return;
+    if (req.method === "OPTIONS") return res.status(200).end();
+    if (req.method !== "POST" && req.method !== "DELETE") {
+      res.setHeader("Allow", "POST, DELETE");
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+    if (!(await requireAnnouncementAdmin(req, res))) return;
     if (req.method === "POST") {
       const { jsonBody, announcementId } = req.body;
       console.log("🚀 ~ announcementId:", announcementId)
