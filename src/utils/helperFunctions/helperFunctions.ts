@@ -1292,8 +1292,8 @@ export function getSequentialLetters(title:string) {
   }
   const words = title.match(/[a-zA-Z]+/g) ?? [];
   if (words.length > 1) {
-    const first = words[0].slice(0, 2);
-    const last = words[words.length - 1].slice(0, 4 - first.length);
+    const first = words[0]!.slice(0, 2);
+    const last = words[words.length - 1]!.slice(0, 4 - first.length);
     if (first.length + last.length === 4) return `${first}${last}`.toUpperCase();
   }
   return cleanedTitle.substring(0, 4).toUpperCase();
