@@ -130,12 +130,29 @@ async function demo() {
     assert.deepEqual(ownershipQuery?.where, {
       id: 'someone-elses-agent',
       userId: user.id,
-      revokedAt: null,
     })
+
+    const alreadyRevokedAt = new Date('2026-08-17T12:00:00.000Z')
+    prismaMock.agent.findFirst = async (args: Record<string, any>) => {
+      ownershipQuery = args
+      return args.where.revokedAt === undefined
+        ? { id: 'revoked-agent', revokedAt: alreadyRevokedAt }
+        : null
+    }
+    prismaMock.agent.update = async () => {
+      throw new Error('already-revoked agents must not be updated')
+    }
+    const alreadyRevokedResponse = await POST(
+      request({ agent_id: 'revoked-agent' }, 'htmk_management-test')
+    )
+    const alreadyRevokedBody = await json(alreadyRevokedResponse)
+    assert.equal(alreadyRevokedResponse.status, 409)
+    assert.equal(alreadyRevokedBody.error, 'Agent already revoked')
+    assert.deepEqual(ownershipQuery?.select, { id: true, revokedAt: true })
 
     prismaMock.agent.findFirst = async (args: Record<string, any>) => {
       ownershipQuery = args
-      return { id: 'owned-agent' }
+      return { id: 'owned-agent', revokedAt: null }
     }
     let revokeUpdate: Record<string, any> | undefined
     prismaMock.agent.update = async (args: Record<string, any>) => {
@@ -168,7 +185,6 @@ async function demo() {
     assert.deepEqual(ownershipQuery?.where, {
       id: 'owned-agent',
       userId: user.id,
-      revokedAt: null,
     })
 
     let authAgentQuery: Record<string, any> | undefined

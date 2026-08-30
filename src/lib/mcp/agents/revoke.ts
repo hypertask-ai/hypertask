@@ -106,14 +106,19 @@ export async function revokeAgentForUser(
     where: {
       id: agentId,
       userId: user.id,
-      revokedAt: null,
     },
-    select: { id: true },
+    select: { id: true, revokedAt: true },
   })
   if (!agent) {
     return NextResponse.json(
       { success: false, error: 'Agent not found' },
       { status: 404 }
+    )
+  }
+  if (agent.revokedAt) {
+    return NextResponse.json(
+      { success: false, error: 'Agent already revoked' },
+      { status: 409 }
     )
   }
 
