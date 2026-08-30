@@ -16,6 +16,7 @@ const jiti = require("jiti")(
 const {
   nextThemeForDarkModeToggle,
   normalizeThemePreference,
+  resolvedThemeDomMetadata,
   resolveThemePreference,
   themeCookieSeedValue,
   themeOptions,
@@ -133,6 +134,49 @@ test("theme boot normalizes invalid cookies before first paint", () => {
   assert.equal(attributes["data-theme"], "amoled");
 });
 
+test("resolved themes expose matching Android status bar colors", () => {
+  assert.equal(resolvedThemeDomMetadata.porcelain.themeColor, "#ffffff");
+  assert.equal(resolvedThemeDomMetadata.dia.themeColor, "#f6f4ef");
+  assert.equal(resolvedThemeDomMetadata.graphite.themeColor, "#232326");
+  assert.equal(resolvedThemeDomMetadata.amoled.themeColor, "#000000");
+});
+
+test("theme boot synchronizes the Android status bar before first paint", () => {
+  const cases = [
+    { cookie: "theme=porcelain", systemDark: true, expected: "#ffffff" },
+    { cookie: "theme=dia", systemDark: true, expected: "#f6f4ef" },
+    { cookie: "theme=graphite", systemDark: false, expected: "#232326" },
+    { cookie: "theme=amoled", systemDark: false, expected: "#000000" },
+    { cookie: "theme=system", systemDark: false, expected: "#ffffff" },
+    { cookie: "theme=system", systemDark: true, expected: "#000000" },
+  ];
+
+  for (const { cookie, systemDark, expected } of cases) {
+    let themeColor;
+    const themeColorMeta = {
+      setAttribute: (name, value) => {
+        if (name === "content") themeColor = value;
+      },
+    };
+    const documentElement = {
+      classList: { add: () => {}, remove: () => {} },
+      setAttribute: () => {},
+    };
+
+    vm.runInNewContext(buildThemeBootScript("theme", "porcelain", "amoled"), {
+      document: {
+        cookie,
+        documentElement,
+        querySelector: (selector) =>
+          selector === 'meta[name="theme-color"]' ? themeColorMeta : null,
+      },
+      window: { matchMedia: () => ({ matches: systemDark }) },
+    });
+
+    assert.equal(themeColor, expected, cookie);
+  }
+});
+
 test("Ctrl+K exposes five direct theme choices without duplicate routes", () => {
   const groups = getAllCommands({ context: "Others" });
   const appearance = groups.find((group) => group.group === "Appearance");
@@ -169,7 +213,12 @@ test("pre-paint and live listeners resolve system mode through the shared model"
   );
   assert.match(layout, /resolveThemePreference\("system", "dark"\)/);
   assert.match(layout, /buildThemeBootScript\(/);
+  assert.ok(
+    layout.indexOf('name="theme-color"') <
+      layout.indexOf("buildThemeBootScript("),
+  );
   assert.match(listener, /resolveThemePreference\(/);
+  assert.match(listener, /resolvedThemeDomMetadata\[resolved\]\.themeColor/);
   assert.doesNotMatch(listener, /match\.matches \? "amoled"/);
 });
 
