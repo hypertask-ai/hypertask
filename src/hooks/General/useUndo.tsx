@@ -37,11 +37,20 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
   const isMobile = useContext(MobileViewContext);
   const [data, setData] = useState<any>(null);
   // console.log("🚀 ~ data:", data)
-  const [undoData, setUndoData] = useState<any[]>([]);
+  const [undoData, setRenderedUndoData] = useState<any[]>([]);
+  // Keyboard events can arrive before React commits the state update that
+  // follows an archive. The ref is authoritative; state is its render snapshot.
+  const undoDataRef = useRef<any[]>([]);
   const consumedUndoIds = useRef(new Set<string>());
   const inFlightUndoIds = useRef(new Set<string>());
   const expiryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   // console.log("🚀 ~ undoData:", undoData)
+
+  const commitUndoData = useCallback((update: (items: any[]) => any[]) => {
+    const nextItems = update(undoDataRef.current);
+    undoDataRef.current = nextItems;
+    setRenderedUndoData(nextItems);
+  }, []);
 
   const performActionAndStoreUndoData = useCallback(
     (actionData: any, undoText: string, undoHandler: any) => {
@@ -55,7 +64,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           // The request owns this entry until it settles. Its failure path
           // reissues a fresh shortcut window instead of losing retryability.
           if (inFlightUndoIds.current.has(undoId)) return;
-          setUndoData((items) =>
+          commitUndoData((items) =>
             items.filter((item) => String(item.toastId) !== undoId),
           );
         }, Math.max(0, expiresAt - Date.now()));
@@ -79,7 +88,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           const expiryTimer = expiryTimers.current.get(undoId);
           if (expiryTimer) clearTimeout(expiryTimer);
           expiryTimers.current.delete(undoId);
-          setUndoData((items) =>
+          commitUndoData((items) =>
             items.filter((item) => String(item.toastId) !== undoId),
           );
           toast.dismiss(toastId);
@@ -101,7 +110,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           consumedUndoIds.current.add(undoId);
           const expiryTimer = expiryTimers.current.get(undoId);
           if (expiryTimer) clearTimeout(expiryTimer);
-          setUndoData((items) =>
+          commitUndoData((items) =>
             items.filter((item) => String(item.toastId) !== undoId),
           );
           const consumedCleanupTimer = setTimeout(() => {
@@ -117,7 +126,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
               ...pendingUndoData,
               expiresAt: Date.now() + UNDO_ACTION_WINDOW_MS,
             };
-            setUndoData((items) =>
+            commitUndoData((items) =>
               items.map((item) =>
                 String(item.toastId) === undoId ? pendingUndoData : item,
               ),
@@ -143,16 +152,20 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
       };
       // console.log("🚀 ~ performActionAndStoreUndoData ~ toasterId:", toasterId)
       setData(pendingUndoData);
-      setUndoData((prevUndoData) => [...prevUndoData, pendingUndoData]);
+      commitUndoData((prevUndoData) => [...prevUndoData, pendingUndoData]);
       scheduleExpiry(undoId, pendingUndoData.expiresAt);
     },
-    [isMobile],
+    [commitUndoData, isMobile],
   );
 
   const undoAction = useCallback(async (mode: Mode, actionData: any) => {
     setData(actionData);
-    setUndoData((prevUndoData) =>
-      prevUndoData.filter((item) => item !== actionData),
+    commitUndoData((prevUndoData) =>
+      prevUndoData.filter((item) =>
+        actionData?.toastId === undefined
+          ? item !== actionData
+          : String(item.toastId) !== String(actionData.toastId),
+      ),
     );
 
     // Call the appropriate undo action based on the mode
@@ -171,10 +184,10 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
     } else if (mode === "other") {
       actions.undoTaskCreate(actionData);
     }
-  }, []);
+  }, [commitUndoData]);
 
   const undoLatest = useCallback(async () => {
-    const pendingUndo = undoData[undoData.length - 1];
+    const pendingUndo = undoDataRef.current[undoDataRef.current.length - 1];
     if (
       !pendingUndo?.undoHandler ||
       isUndoWindowExpired(pendingUndo, Date.now()) ||
@@ -186,7 +199,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
 
     await pendingUndo.undoHandler(pendingUndo, pendingUndo.toastId, "shortcut");
     return true;
-  }, [undoData]);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -221,12 +234,15 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
 
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [undoData.length, undoLatest]);
+  }, [undoLatest]);
 
   useEffect(
     () => () => {
       expiryTimers.current.forEach((timer) => clearTimeout(timer));
       expiryTimers.current.clear();
+      undoDataRef.current = [];
+      consumedUndoIds.current.clear();
+      inFlightUndoIds.current.clear();
     },
     [],
   );
