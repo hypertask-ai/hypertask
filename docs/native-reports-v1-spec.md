@@ -1,6 +1,6 @@
 # Native Reports v1 specification
 
-Status: proposed for product and mockup approval in HTPR-4251.
+Status: locked for implementation after product and mockup approval in HTPR-4251 on 31 August 2026.
 
 ## Outcome
 
