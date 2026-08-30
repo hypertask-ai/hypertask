@@ -2,7 +2,7 @@ import { IUser } from "@/models/model";
 import { cookies } from "next/headers";
 import LandingPage from "./LandingPage";
 import { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import getFirst from "@/utils/controllers/projects/getFirst";
 import NoBoardsEmptyState from "./NoBoardsEmptyState";
 import Unauthorized from "../unauthorized/page";
@@ -14,6 +14,10 @@ import {
   resolveBoardRouteTitleRequest,
 } from "@/lib/boardRouteTitle";
 import { getProjectForValidation } from "@/lib/boardRouteMetadata";
+import {
+  buildCanonicalBoardUrl,
+  resolveBoardRoutePath,
+} from "@/lib/boardRoutePath";
 
 export async function generateMetadata(props: {
   searchParams: Promise<BoardRouteSearchParams>;
@@ -47,11 +51,23 @@ export async function generateMetadata(props: {
 
 export default async function Page(
   props: {
-    params: Promise<any>;
+    params: Promise<{ boardURL?: string[] }>;
     searchParams: Promise<any>;
   }
 ) {
-  const searchParams = await props.searchParams;
+  const [params, searchParams] = await Promise.all([
+    props.params,
+    props.searchParams,
+  ]);
+  const pathResolution = resolveBoardRoutePath(params.boardURL);
+
+  if (pathResolution.kind === "not-found") {
+    notFound();
+  }
+  if (pathResolution.kind === "redirect") {
+    redirect(buildCanonicalBoardUrl(pathResolution.projectId, searchParams));
+  }
+
   const cookieStore = await cookies();
 
   let userObjString: any = cookieStore.get("nookies_user");
