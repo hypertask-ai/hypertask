@@ -85,6 +85,16 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   assert.doesNotMatch(button[1], /(?:^|\s)text-white(?:\s|$)/);
 });
 
+test("mobile create-comment composer wires inline AI and the purple ai trigger", () => {
+  const mobileBranch = mainContainer.slice(
+    mainContainer.indexOf("// FOR: New comment on mobile"),
+    mainContainer.indexOf("// FOR: Description and old comment."),
+  );
+  assert.match(mobileBranch, /<InlineDraftAiFloat/);
+  assert.match(mobileBranch, /toggleAiTaskWriter=\{toggleAiTaskWriter\}/);
+  assert.match(mobileBranch, /hideComposerDictation=\{shouldShowInlineDraftAi\}/);
+});
+
 test("empty-state mobile comment microphone is rectangular, still purple", () => {
   // Class order inside the string is incidental; presence of both is not.
   const branch = audioButton.match(
