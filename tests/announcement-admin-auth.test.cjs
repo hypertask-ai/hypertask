@@ -178,11 +178,15 @@ test("announcement admin auth preserves the configured owner CLI credential", as
 
 function loadPostRoute(authorizeAdmin) {
   const writes = [];
+  const corsOptions = [];
   const handler = loadTypeScript("src/pages/api/admin/postAnnouncement.ts", {
     "@/lib/admin/requireAnnouncementAdmin": {
       requireAnnouncementAdmin: authorizeAdmin,
     },
-    "nextjs-cors": { __esModule: true, default: async () => undefined },
+    "nextjs-cors": {
+      __esModule: true,
+      default: async (_req, _res, options) => corsOptions.push(options),
+    },
     "@/lib/prisma": {
       __esModule: true,
       default: {
@@ -204,7 +208,7 @@ function loadPostRoute(authorizeAdmin) {
       },
     },
   }).default;
-  return { handler, writes };
+  return { handler, writes, corsOptions };
 }
 
 async function callPost(handler, method = "POST") {
@@ -262,15 +266,38 @@ test("announcement creation rejects unsupported methods before authorization or 
   assert.deepEqual(writes, []);
 });
 
+test("announcement creation permits CORS preflight without authorization or writes", async () => {
+  let authCalls = 0;
+  const { handler, writes, corsOptions } = loadPostRoute(async () => {
+    authCalls += 1;
+    return true;
+  });
+
+  const result = await callPost(handler, "OPTIONS");
+
+  assert.equal(result.status, 200);
+  assert.equal(result.ended, true);
+  assert.deepEqual(corsOptions.map(({ methods, preflightContinue }) => ({
+    methods,
+    preflightContinue,
+  })), [{ methods: ["POST"], preflightContinue: true }]);
+  assert.equal(authCalls, 0);
+  assert.deepEqual(writes, []);
+});
+
 function loadUpdateRoute(authorizeAdmin) {
   const writes = [];
+  const corsOptions = [];
   const handler = loadTypeScript(
     "src/pages/api/admin/announcements/updateAnnouncement.ts",
     {
       "@/lib/admin/requireAnnouncementAdmin": {
         requireAnnouncementAdmin: authorizeAdmin,
       },
-      "nextjs-cors": { __esModule: true, default: async () => undefined },
+      "nextjs-cors": {
+        __esModule: true,
+        default: async (_req, _res, options) => corsOptions.push(options),
+      },
       "@/lib/prisma": {
         __esModule: true,
         default: {
@@ -298,7 +325,7 @@ function loadUpdateRoute(authorizeAdmin) {
       },
     },
   ).default;
-  return { handler, writes };
+  return { handler, writes, corsOptions };
 }
 
 async function callUpdate(handler, method) {
@@ -359,6 +386,25 @@ test("announcement update rejects unsupported methods before authorization or wr
 
   assert.equal(result.status, 405);
   assert.deepEqual(result.headers, { Allow: "POST, DELETE" });
+  assert.equal(authCalls, 0);
+  assert.deepEqual(writes, []);
+});
+
+test("announcement update permits CORS preflight without authorization or writes", async () => {
+  let authCalls = 0;
+  const { handler, writes, corsOptions } = loadUpdateRoute(async () => {
+    authCalls += 1;
+    return true;
+  });
+
+  const result = await callUpdate(handler, "OPTIONS");
+
+  assert.equal(result.status, 200);
+  assert.equal(result.ended, true);
+  assert.deepEqual(corsOptions.map(({ methods, preflightContinue }) => ({
+    methods,
+    preflightContinue,
+  })), [{ methods: ["POST", "DELETE"], preflightContinue: true }]);
   assert.equal(authCalls, 0);
   assert.deepEqual(writes, []);
 });

@@ -8,18 +8,20 @@ const handler: NextApiHandler = async (
   res: NextApiResponse
 ) => {
   console.log(req.method);
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
   try {
     await NextCors(req, res, {
       // Options
-      methods: ["GET", "HEAD", "PUT", "PATCH", "POST", "DELETE"],
+      methods: ["POST"],
       origin: ["*"], // replace this with your actual origin
       optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+      preflightContinue: true,
     });
+
+    if (req.method === "OPTIONS") return res.status(200).end();
+    if (req.method !== "POST") {
+      res.setHeader("Allow", "POST");
+      return res.status(405).json({ error: "Method not allowed" });
+    }
 
     if (!(await requireAnnouncementAdmin(req, res))) return;
 
