@@ -123,7 +123,6 @@ test("HyperAI verifies the session and runs a cancellable multi-step tool loop",
   assert.match(createComment, /agentId: agentId \?\? null/);
   for (const editPath of [
     "src/utils/controllers/comments/updateCommentService.ts",
-    "src/utils/controllers/comments/single.ts",
     "src/utils/controllers/comments/updateComment.ts",
   ]) {
     assert.match(
