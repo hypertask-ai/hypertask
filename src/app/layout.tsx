@@ -14,6 +14,7 @@ import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
+  resolvedThemeDomMetadata,
   resolveThemePreference,
 } from "@/lib/themePreferences";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
@@ -66,6 +67,9 @@ export default async function RootLayout(
   const themeValue = normalizeThemePreference(theme.value) ?? "system";
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
+  const initialThemeColor =
+    resolvedThemeDomMetadata[resolveThemePreference(themeValue, "light")]
+      .themeColor;
   const themeClassName =
     themeValue === "amoled"
       ? "dark amoled"
@@ -89,6 +93,11 @@ export default async function RootLayout(
       data-theme={themeValue}
     >
       <head>
+        <meta
+          name="theme-color"
+          content={initialThemeColor}
+          suppressHydrationWarning
+        />
         {/*
           Theme boot: the server applies explicit light/dark from the cookie,
           but cannot resolve "system" (prefers-color-scheme is client-only), so
@@ -126,7 +135,6 @@ export default async function RootLayout(
           }}
         />
         {/* <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=no,viewport-fit=cover"/> */}
-        <meta name="theme-color" content="#232326" />
         <meta
           name="description"
           content="Hypertask - AI-powered Project Boards"

@@ -12,12 +12,12 @@ export type SystemColorScheme = "light" | "dark";
 
 export const resolvedThemeDomMetadata: Record<
   ResolvedTheme,
-  { classes: readonly string[] }
+  { classes: readonly string[]; themeColor: string }
 > = {
-  porcelain: { classes: ["light", "porcelain"] },
-  graphite: { classes: ["dark", "graphite"] },
-  amoled: { classes: ["dark", "amoled"] },
-  dia: { classes: ["light", "dia"] },
+  porcelain: { classes: ["light", "porcelain"], themeColor: "#ffffff" },
+  graphite: { classes: ["dark", "graphite"], themeColor: "#232326" },
+  amoled: { classes: ["dark", "amoled"], themeColor: "#000000" },
+  dia: { classes: ["light", "dia"], themeColor: "#f6f4ef" },
 };
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import {
   normalizeThemePreference,
+  resolvedThemeDomMetadata,
   resolveThemePreference,
 } from "@/lib/themePreferences";
 
@@ -46,6 +47,13 @@ const ThemeListener = () => {
         document.documentElement.classList.add(resolved);
         document.documentElement.setAttribute("data-theme", resolved);
       }
+
+      document
+        .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+        ?.setAttribute(
+          "content",
+          resolvedThemeDomMetadata[resolved].themeColor,
+        );
     };
 
     applyTheme(); // On mount
