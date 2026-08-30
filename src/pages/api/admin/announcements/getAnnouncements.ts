@@ -19,7 +19,7 @@ const handler: NextApiHandler = async (
     return res.status(200).json(announcements);
   } catch (error) {
     console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
-    return res.status(500).json({ error });
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 

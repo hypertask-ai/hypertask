@@ -176,6 +176,77 @@ test("announcement admin auth preserves the configured owner CLI credential", as
   }
 });
 
+function loadGetRoute(authorizeAdmin, findMany) {
+  let reads = 0;
+  const handler = loadTypeScript(
+    "src/pages/api/admin/announcements/getAnnouncements.ts",
+    {
+      "@/lib/admin/requireAnnouncementAdmin": {
+        requireAnnouncementAdmin: authorizeAdmin,
+      },
+      "@/lib/prisma": {
+        __esModule: true,
+        default: {
+          announcments: {
+            findMany: async (...args) => {
+              reads += 1;
+              return findMany(...args);
+            },
+          },
+        },
+      },
+    },
+  ).default;
+  return { handler, getReads: () => reads };
+}
+
+async function callGet(handler, method = "GET") {
+  const { response, result } = responseRecorder();
+  await handler({ method, headers: {}, query: {}, body: {} }, response);
+  return result;
+}
+
+test("announcement listing authorizes before reads and limits its method", async () => {
+  const denied = loadGetRoute(async () => false, async () => []);
+  await callGet(denied.handler);
+  assert.equal(denied.getReads(), 0);
+
+  let authCalls = 0;
+  const method = loadGetRoute(
+    async () => {
+      authCalls += 1;
+      return true;
+    },
+    async () => [],
+  );
+  const result = await callGet(method.handler, "POST");
+  assert.equal(result.status, 405);
+  assert.deepEqual(result.headers, { Allow: "GET" });
+  assert.equal(authCalls, 0);
+  assert.equal(method.getReads(), 0);
+});
+
+test("announcement listing returns admin data and sanitizes database failures", async () => {
+  const announcements = [{ id: 1, body: { title: "Update" } }];
+  const allowed = loadGetRoute(async () => true, async () => announcements);
+  assert.deepEqual(await callGet(allowed.handler), {
+    status: 200,
+    body: announcements,
+    ended: false,
+    headers: {},
+  });
+
+  const failed = loadGetRoute(async () => true, async () => {
+    throw new Error("private database details");
+  });
+  assert.deepEqual(await callGet(failed.handler), {
+    status: 500,
+    body: { error: "Internal server error" },
+    ended: false,
+    headers: {},
+  });
+});
+
 function loadPostRoute(authorizeAdmin) {
   const writes = [];
   const corsOptions = [];
