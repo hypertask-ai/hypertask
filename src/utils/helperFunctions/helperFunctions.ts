@@ -1283,19 +1283,20 @@ export function getRandomElement(array:any[]) {
 export function cleanTitle(title:string) {
   return title.replace(/[^a-zA-Z]/g, '').toLowerCase();
  }
-// Function to generate a random index within the range of the title's length
-
-// Function to generate a substring of 4 sequential letters from the title
+// Function to generate a deterministic 4-letter identifier from the title
 export function getSequentialLetters(title:string) {
   const cleanedTitle = cleanTitle(title);
   // Ensure there are at least 4 characters
   if (cleanedTitle.length < 4) {
     return "Not enough characters";
   }
-  // Generate a random starting index within the range of the title's length
-  const startIndex = Math.floor(Math.random() * (cleanedTitle.length - 3));
-  // Extract a substring of 4 sequential letters
-  return cleanedTitle.substring(startIndex, startIndex + 4).toUpperCase();
+  const words = title.match(/[a-zA-Z]+/g) ?? [];
+  if (words.length > 1) {
+    const first = words[0].slice(0, 2);
+    const last = words[words.length - 1].slice(0, 4 - first.length);
+    if (first.length + last.length === 4) return `${first}${last}`.toUpperCase();
+  }
+  return cleanedTitle.substring(0, 4).toUpperCase();
  }
  
 
