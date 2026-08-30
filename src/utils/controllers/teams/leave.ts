@@ -18,7 +18,7 @@ export async function leaveTeam(
       teamId,
       async (assertHeld) => {
         assertHeld();
-        return prisma.$transaction(async (tx) => {
+        const mutation = await prisma.$transaction(async (tx) => {
           const team = await tx.team.findUnique({
             where: { id: teamId },
             select: { googleAccount: { select: { userId: true } } },
@@ -105,6 +105,8 @@ export async function leaveTeam(
             sync: true,
           };
         });
+        assertHeld();
+        return mutation;
       },
       { exact: true },
     );
