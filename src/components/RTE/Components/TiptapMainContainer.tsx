@@ -60,8 +60,9 @@ const TiptapMainContainer = () => {
         editor?.isFocused || newCommentAttachments.length > 0 || isRecording;
 
       return (
-        <div
-          className={`
+        <>
+          <div
+            className={`
               ${isComposerExpanded ? "flex-col" : "flex-row items-center"}
               flex w-full gap-[8px]
               scrollbar-none
@@ -86,17 +87,6 @@ const TiptapMainContainer = () => {
         >
           <CreatedInfoTiptap />
           <TiptapEditor />
-          {shouldShowInlineDraftAi && editor && closeInlineDraftAi && (
-            <InlineDraftAiFloat
-              editor={editor}
-              onClose={closeInlineDraftAi}
-              projectId={aiProjectId}
-              taskId={aiTaskId}
-              allowSuggestReply
-              toggleRecording={toggleRecording}
-              isRecording={isRecording}
-            />
-          )}
           {/* ================== attachment button ============= */}
           <AttachmentsUpload
             filesFromParent={[]}
@@ -116,6 +106,20 @@ const TiptapMainContainer = () => {
             hideComposerDictation={shouldShowInlineDraftAi}
           />
         </div>
+        {shouldShowInlineDraftAi && editor && closeInlineDraftAi && (
+          <InlineDraftAiFloat
+            editor={editor}
+            onClose={closeInlineDraftAi}
+            projectId={aiProjectId}
+            taskId={aiTaskId}
+            allowSuggestReply
+            toggleRecording={toggleRecording}
+            isRecording={isRecording}
+            presentation="sheet"
+            suppressEditorSelectionHighlight
+          />
+        )}
+        </>
       );
     }
 
