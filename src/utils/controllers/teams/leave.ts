@@ -48,6 +48,12 @@ export async function leaveTeam(
                 : { team: { googleAccount: { userId: requestingUserId } } }),
             },
           });
+          if (removed.count !== 1) {
+            return {
+              value: "success" as LeaveTeamMutationStatus,
+              sync: false,
+            };
+          }
 
           await tx.assignees.deleteMany({
             where: {
@@ -73,12 +79,6 @@ export async function leaveTeam(
           });
           console.log("🤔 ~ Team exit status: REMOVED FROM PROJECTS.");
 
-          if (removed.count !== 1) {
-            return {
-              value: "success" as LeaveTeamMutationStatus,
-              sync: false,
-            };
-          }
           console.log("🤔 ~ Team exit status: REMOVED FROM TEAM.");
 
           const updatedTeam = await tx.team.updateMany({

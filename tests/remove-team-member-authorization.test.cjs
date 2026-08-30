@@ -263,15 +263,15 @@ test("an owner atomically removes one membership and decrements one seat", async
   assert.deepEqual(calls.firstProject, [8]);
 });
 
-test("an already-absent membership cleans stale relations without changing billing", async () => {
+test("an already-absent membership changes no relations, seats, or billing", async () => {
   const { leaveTeam, calls } = loadController({ removedCount: 0 });
 
   const result = await leaveTeam("team-1", 8, 6);
 
   assert.equal(result.status, 200);
-  assert.equal(calls.assigneeDeletes.length, 1);
-  assert.equal(calls.followerDeletes.length, 1);
-  assert.equal(calls.memberDeletes.length, 1);
+  assert.equal(calls.assigneeDeletes.length, 0);
+  assert.equal(calls.followerDeletes.length, 0);
+  assert.equal(calls.memberDeletes.length, 0);
   assert.equal(calls.teamUpdates.length, 0);
   assert.equal(calls.sync[0].mutation.sync, false);
 });
