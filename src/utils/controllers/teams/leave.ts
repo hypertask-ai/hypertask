@@ -39,6 +39,7 @@ export async function leaveTeam(
             };
           }
 
+          assertHeld();
           const removed = await tx.member_Team.deleteMany({
             where: {
               userId,
@@ -55,6 +56,7 @@ export async function leaveTeam(
             };
           }
 
+          assertHeld();
           await tx.assignees.deleteMany({
             where: {
               task: { project: { teamId } },
@@ -63,6 +65,7 @@ export async function leaveTeam(
           });
           console.log("🤔 ~ Team exit status: REMOVED FROM ASSIGNEES.");
 
+          assertHeld();
           await tx.follower.deleteMany({
             where: {
               userId,
@@ -71,6 +74,7 @@ export async function leaveTeam(
           });
           console.log("🤔 ~ Team exit status: REMOVED AS FOLLOWERS.");
 
+          assertHeld();
           await tx.member.deleteMany({
             where: {
               userId,
@@ -81,6 +85,7 @@ export async function leaveTeam(
 
           console.log("🤔 ~ Team exit status: REMOVED FROM TEAM.");
 
+          assertHeld();
           const updatedTeam = await tx.team.updateMany({
             where: {
               id: teamId,

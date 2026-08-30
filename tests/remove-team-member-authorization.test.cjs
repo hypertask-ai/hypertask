@@ -85,6 +85,7 @@ function loadController({
     teamUpdates: [],
     sync: [],
     firstProject: [],
+    leaseChecks: 0,
   };
   const tx = {
     team: {
@@ -137,7 +138,9 @@ function loadController({
   });
   stubModule("src/lib/syncSeatBilling.ts", {
     mutateAndSyncSeatBilling: async (teamId, mutate, options) => {
-      const mutation = await mutate(() => {});
+      const mutation = await mutate(() => {
+        calls.leaseChecks += 1;
+      });
       calls.sync.push({ teamId, mutation, options });
       return { value: mutation.value, billing: "OK" };
     },
@@ -259,6 +262,7 @@ test("an owner atomically removes one membership and decrements one seat", async
     data: { totalSeats: { decrement: 1 } },
   });
   assert.equal(calls.sync[0].mutation.sync, true);
+  assert.equal(calls.leaseChecks, 6);
   assert.deepEqual(calls.sync[0].options, { exact: true });
   assert.deepEqual(calls.firstProject, [8]);
 });
