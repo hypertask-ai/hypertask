@@ -1,15 +1,13 @@
 import { IUser } from "@/models/model";
 import createActivity from "./createActivity";
 import { ITaskMoveActivity } from "@/models/ActivityModels.ts";
-import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import {
   classifyTaskMoveCollapse,
   mergeStatusFlipActivity,
 } from "./taskMoveCollapse";
-import { sendTaskMoveNotificationIfNeeded } from "./sendTaskMoveNotification";
 
-interface IProps {
+export interface TaskMovedActivityProps {
   userObj: IUser;
   toSectionId: number;
   toSection_title: string;
@@ -25,7 +23,12 @@ interface IProps {
   sendNotification?: () => Promise<unknown>;
 }
 
-const createTaskMovedActivity = async ({
+type StoredMoveActivity = Parameters<
+  typeof classifyTaskMoveCollapse
+>[0]["previousActivity"];
+
+export async function createTaskMovedActivityInTransaction({
+  transaction,
   userObj,
   toSectionId,
   toSection_title,
@@ -33,19 +36,14 @@ const createTaskMovedActivity = async ({
   fromSection_title,
   taskId,
   fromAgent,
-  sendNotification,
-}: IProps) => {
-  const finish = async <T extends { shouldNotify: boolean }>(result: T) => {
-    if (sendNotification) {
-      await sendTaskMoveNotificationIfNeeded(result, sendNotification);
-    }
-    return result;
-  };
-  const activityBody: ITaskMoveActivity | any = {
+}: Omit<TaskMovedActivityProps, "sendNotification"> & {
+  transaction: Prisma.TransactionClient;
+}) {
+  const activityBody = {
     type: "TaskMove",
     data: {
       fromUserId: userObj.id,
-      fromUserDisplayName: userObj.displayName,
+      fromUserDisplayName: userObj.displayName ?? "",
       fromUser: userObj,
       fromAgent,
       toSection: {
@@ -57,21 +55,21 @@ const createTaskMovedActivity = async ({
         sectionTitle: fromSection_title,
       },
     },
-  };
+  } as unknown as ITaskMoveActivity;
   if (fromSectionId === toSectionId) {
-    return await finish({ newComment: null, shouldNotify: false });
+    return { newComment: null, shouldNotify: false };
   }
 
   // Only the task's latest activity can be extended. This preserves anything
   // another actor did between moves and keeps the collapsed row at the end of
   // the activity feed.
-  const previous = await prisma.comment.findFirst({
+  const previous = await transaction.comment.findFirst({
     where: { taskId, activity: { not: Prisma.JsonNull } },
     orderBy: { createdAt: "desc" },
     select: { id: true, createdAt: true, activity: true },
   });
 
-  const previousActivity = previous?.activity as ITaskMoveActivity | any;
+  const previousActivity = previous?.activity as unknown as StoredMoveActivity;
   const sameActor = fromAgent
     ? previousActivity?.data?.fromAgent?.id === fromAgent.id
     : !previousActivity?.data?.fromAgent &&
@@ -87,33 +85,36 @@ const createTaskMovedActivity = async ({
       })
     : null;
 
-  if (previous && collapseKind === "status-flip") {
-    const newComment = await prisma.comment.update({
+  if (previous && previousActivity && collapseKind === "status-flip") {
+    const newComment = await transaction.comment.update({
       where: { id: previous.id },
       data: {
         // Prisma requires an index signature for JSON input, while the typed
         // activity model lists its serializable fields explicitly.
-        activity: mergeStatusFlipActivity(previousActivity, {
-          sectionId: toSectionId,
-          sectionTitle: toSection_title,
-        }) as unknown as Prisma.InputJsonValue,
+        activity: mergeStatusFlipActivity(
+          previousActivity as unknown as ITaskMoveActivity,
+          {
+            sectionId: toSectionId,
+            sectionTitle: toSection_title,
+          },
+        ) as unknown as Prisma.InputJsonValue,
         createdAt: new Date(),
       },
     });
-    return await finish({ newComment, shouldNotify: false });
+    return { newComment, shouldNotify: false };
   }
 
-  if (previous && collapseKind === "quick-journey") {
-    const originSectionId = previousActivity.data.fromSection?.sectionId;
+  if (previous && previousActivity && collapseKind === "quick-journey") {
+    const originSectionId = previousActivity.data?.fromSection?.sectionId;
 
     // HTPR-3793: a rapid keyboard journey that returns to its starting point
     // leaves no misleading move behind.
     if (originSectionId === toSectionId) {
-      await prisma.comment.delete({ where: { id: previous.id } });
-      return await finish({ newComment: null, shouldNotify: true });
+      await transaction.comment.delete({ where: { id: previous.id } });
+      return { newComment: null, shouldNotify: true };
     }
 
-    const newComment = await prisma.comment.update({
+    const newComment = await transaction.comment.update({
       where: { id: previous.id },
       data: {
         activity: {
@@ -129,15 +130,14 @@ const createTaskMovedActivity = async ({
         },
       },
     });
-    return await finish({ newComment, shouldNotify: true });
+    return { newComment, shouldNotify: true };
   }
 
   const newComment = await createActivity({
     activityBody,
     taskId,
     runTaskSummary: false,
+    transaction,
   });
-  return await finish({ newComment, shouldNotify: true });
-};
-
-export default createTaskMovedActivity;
+  return { newComment, shouldNotify: true };
+}

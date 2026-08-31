@@ -3,6 +3,11 @@ import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
 import { Prisma, Status } from "@prisma/client";
 import createActivity from "../activities/createActivity";
+import {
+  createTaskMovedActivityInTransaction,
+  type TaskMovedActivityProps,
+} from "../activities/createTaskMovedActivity";
+import { sendTaskMoveNotificationIfNeeded } from "../activities/sendTaskMoveNotification";
 import sendNotificationForTask from "../notifications/creation-service/createAndSendNotificationTaskMove";
 import upsertTaskDescription from "../description/common-description-create";
 import scheduleTaskSummaryGeneration from "@/pages/api/queues/FAST/generateSummary";
@@ -53,6 +58,10 @@ type UpdateTaskSingleOptions = {
   trustedCaller?: boolean;
   // Compare under the mutation fence so a restore cannot replace a newer edit.
   expectedDescription?: string;
+  taskMovedActivity?: Pick<
+    TaskMovedActivityProps,
+    "fromAgent" | "sendNotification"
+  >;
 };
 
 class TaskDescriptionChangedError extends Error {}
@@ -62,6 +71,9 @@ type UpdateTaskSingleResult = {
   json: any;
   oldTask?: any;
   commentActivity?: any;
+  moveActivity?: Awaited<
+    ReturnType<typeof createTaskMovedActivityInTransaction>
+  > | null;
 };
 
 export async function updateTaskSingle(
@@ -162,6 +174,7 @@ export async function updateTaskSingle(
     const {
       task,
       newComment,
+      moveActivity,
       boardWebhookDeliveryIds,
       agentWebhookDeliveryIds = [],
     } = await prisma.$transaction(
@@ -309,6 +322,35 @@ export async function updateTaskSingle(
               userId: currentUser.id,
             },
           });
+        }
+        let moveActivity = null;
+        if (sectionIdChanged && options.taskMovedActivity) {
+          if (currentState.sectionId === null || updatedTask.sectionId === null) {
+            moveActivity = { newComment: null, shouldNotify: true };
+          } else {
+            let taskMoveAgent = options.taskMovedActivity.fromAgent;
+            if (taskMoveAgent === undefined && agentId) {
+              taskMoveAgent = await tx.agent.findUnique({
+                where: { id: agentId },
+                select: {
+                  id: true,
+                  userId: true,
+                  displayName: true,
+                  photoURL: true,
+                },
+              });
+            }
+            moveActivity = await createTaskMovedActivityInTransaction({
+              transaction: tx,
+              taskId: updatedTask.id,
+              userObj: currentUser,
+              toSectionId: updatedTask.sectionId,
+              toSection_title: updatedTask.section ?? "",
+              fromSectionId: currentState.sectionId,
+              fromSection_title: currentState.section ?? "",
+              fromAgent: taskMoveAgent,
+            });
+          }
         }
         let descriptionActivity;
         if (requestedMutation.description !== undefined) {
@@ -459,12 +501,26 @@ export async function updateTaskSingle(
         return {
           task: updatedTask,
           newComment: descriptionActivity,
+          moveActivity,
           boardWebhookDeliveryIds,
           agentWebhookDeliveryIds,
         };
       },
       { timeout: 60_000 },
     );
+    const moveNotification =
+      moveActivity && options.taskMovedActivity?.sendNotification
+        ? sendTaskMoveNotificationIfNeeded(
+            moveActivity,
+            options.taskMovedActivity.sendNotification,
+          ).catch((error) => {
+            console.warn(
+              "[task-move] Notification failed after the task update committed.",
+              error,
+            );
+            return false;
+          })
+        : Promise.resolve(false);
     await Promise.all([
       agentWebhookDeliveryIds.length > 0
         ? publishAgentWebhookDeliveries(agentWebhookDeliveryIds)
@@ -472,6 +528,7 @@ export async function updateTaskSingle(
       boardWebhookDeliveryIds.length > 0
         ? publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
         : Promise.resolve(),
+      moveNotification,
     ]);
 
     if (requestedMutation.description !== undefined) {
@@ -555,6 +612,7 @@ export async function updateTaskSingle(
       json: task,
       oldTask: taskBeforeWrite,
       commentActivity: newComment,
+      moveActivity,
     };
   } catch (error) {
     if (error instanceof TaskDescriptionChangedError) {

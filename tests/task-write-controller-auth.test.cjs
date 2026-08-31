@@ -73,12 +73,16 @@ function execute(javascript, stubs) {
   }
 }
 
-function loadUpdateController(projectId, destinationSectionProjectId) {
+function loadUpdateController(
+  projectId,
+  destinationSectionProjectId,
+  { moveShouldNotify = false, serializeTaskWrites = false } = {},
+) {
   const calls = { transaction: 0, sideEffects: 0 };
   const noop = () => {
     calls.sideEffects += 1;
   };
-  const currentTask = {
+  let currentTask = {
     id: TASK_ID,
     projectId,
     title: "Task",
@@ -100,15 +104,20 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
   };
   const tx = {
     task: {
-      findUnique: async () => currentTask,
-      update: async ({ data }) => ({ ...currentTask, ...data }),
+      findUnique: async () => ({ ...currentTask }),
+      update: async ({ data }) => {
+        (calls.order ??= []).push("task-update");
+        currentTask = { ...currentTask, ...data };
+        return { ...currentTask };
+      },
     },
     section: {
       findFirst: async ({ where }) => {
         calls.validatedSectionProjectId = where.projectId;
-        return where.projectId === destinationSectionProjectId
-          ? { section_title: "Todo" }
-          : null;
+        if (where.projectId !== destinationSectionProjectId) return null;
+        return {
+          section_title: where.id === SECTION_ID ? "Todo" : "Backlog",
+        };
       },
       findMany: async () => [
         { id: SECTION_ID - 1, section_title: "Backlog" },
@@ -117,9 +126,29 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
     },
     taskSectionEvent: { create: async () => undefined },
   };
+  let fenceTail = Promise.resolve();
+  const fenceReleases = new WeakMap();
+  const activeTransactions = new Set();
+  const acquireTaskFence = async (transaction, taskId) => {
+    if (!serializeTaskWrites) return;
+    assert.equal(taskId, TASK_ID);
+    if (fenceReleases.has(transaction)) return;
+    const previous = fenceTail;
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => held);
+    fenceTail = tail;
+    await previous;
+    fenceReleases.set(transaction, () => {
+      release();
+      if (fenceTail === tail) fenceTail = Promise.resolve();
+    });
+  };
   const prisma = {
     task: {
-      findUnique: async () => currentTask,
+      findUnique: async () => ({ ...currentTask }),
     },
     project: {
       findFirst: async ({ where }) => findWritableProject(where),
@@ -129,8 +158,25 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
       if (destinationSectionProjectId === undefined) {
         throw new Error("a denied write reached the transaction");
       }
-      return callback(tx);
+      const transaction = { ...tx };
+      activeTransactions.add(transaction);
+      calls.transactionActive = true;
+      calls.transactionClient = transaction;
+      try {
+        return await callback(transaction);
+      } finally {
+        fenceReleases.get(transaction)?.();
+        activeTransactions.delete(transaction);
+        calls.transactionActive = activeTransactions.size > 0;
+      }
     },
+  };
+  const createTaskMovedActivityInTransaction = async (args) => {
+    assert.equal(activeTransactions.has(args.transaction), true);
+    calls.moveActivityArgs = args;
+    (calls.moveActivityArgsList ??= []).push(args);
+    (calls.order ??= []).push("move-activity");
+    return { newComment: { id: 1 }, shouldNotify: moveShouldNotify };
   };
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -139,6 +185,20 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
     "@/models/model": {},
     "@prisma/client": { Status: { Archive: "Archive" } },
     "../activities/createActivity": noop,
+    "../activities/createTaskMovedActivity": {
+      createTaskMovedActivityInTransaction,
+    },
+    "../activities/sendTaskMoveNotification": {
+      sendTaskMoveNotificationIfNeeded: async (result, sendNotification) => {
+        if (!result.shouldNotify) return false;
+        try {
+          await sendNotification();
+          return true;
+        } catch {
+          return false;
+        }
+      },
+    },
     "../notifications/creation-service/createAndSendNotificationTaskMove": noop,
     "../description/common-description-create": noop,
     "@/pages/api/queues/FAST/generateSummary": noop,
@@ -152,7 +212,7 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
     "@/lib/mcp/tasks/agentMutationFence": {
       AgentMutationLeaseConflictError: class extends Error {},
-      assertAgentAssignmentChangeAllowed: noop,
+      assertAgentAssignmentChangeAllowed: acquireTaskFence,
       cancelAgentMutationLeaseForHumanOverride: noop,
     },
     "./invokeTaskDelete": {},
@@ -235,6 +295,126 @@ test("the shared update controller validates a moved section against the destina
   assert.equal(calls.validatedSectionProjectId, MEMBER_PROJECT);
   assert.equal(result.json.projectId, MEMBER_PROJECT);
   assert.equal(result.json.sectionId, SECTION_ID);
+});
+
+test("a task move and its activity persist inside the same fenced transaction", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+  );
+  let deliveries = 0;
+  const result = await updateTaskSingle(
+    {
+      id: TASK_ID,
+      sectionId: SECTION_ID,
+      section: "Todo",
+    },
+    { id: USER_ID, displayName: "Valentin" },
+    null,
+    {
+      skipAutoAssign: true,
+      skipRecurrence: true,
+      taskMovedActivity: {
+        sendNotification: async () => {
+          deliveries += 1;
+        },
+      },
+    },
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls.order, ["task-update", "move-activity"]);
+  assert.equal(calls.moveActivityArgs.fromSectionId, SECTION_ID - 1);
+  assert.equal(calls.moveActivityArgs.toSectionId, SECTION_ID);
+  assert.equal(calls.moveActivityArgs.transaction, calls.transactionClient);
+  assert.equal(result.moveActivity.shouldNotify, false);
+  assert.equal(deliveries, 0);
+});
+
+test("overlapping task moves serialize their state and activity updates", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+    { serializeTaskWrites: true },
+  );
+  const user = { id: USER_ID, displayName: "Valentin" };
+  const moveOptions = {
+    skipAutoAssign: true,
+    skipRecurrence: true,
+    taskMovedActivity: {},
+  };
+
+  const results = await Promise.all([
+    updateTaskSingle(
+      { id: TASK_ID, sectionId: SECTION_ID, section: "Todo" },
+      user,
+      null,
+      moveOptions,
+    ),
+    updateTaskSingle(
+      { id: TASK_ID, sectionId: SECTION_ID - 1, section: "Backlog" },
+      user,
+      null,
+      moveOptions,
+    ),
+  ]);
+
+  assert.deepEqual(
+    results.map(({ status }) => status),
+    [200, 200],
+  );
+  assert.deepEqual(calls.order, [
+    "task-update",
+    "move-activity",
+    "task-update",
+    "move-activity",
+  ]);
+  assert.deepEqual(
+    calls.moveActivityArgsList.map(({ fromSectionId, toSectionId }) => [
+      fromSectionId,
+      toSectionId,
+    ]),
+    [
+      [SECTION_ID - 1, SECTION_ID],
+      [SECTION_ID, SECTION_ID - 1],
+    ],
+  );
+  assert.equal(calls.transaction, 2);
+  assert.equal(calls.transactionActive, false);
+});
+
+test("a post-commit move notification failure preserves the successful update", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+    { moveShouldNotify: true },
+  );
+  let deliveryAttempts = 0;
+  const result = await updateTaskSingle(
+    {
+      id: TASK_ID,
+      sectionId: SECTION_ID,
+      section: "Todo",
+    },
+    { id: USER_ID, displayName: "Valentin" },
+    null,
+    {
+      skipAutoAssign: true,
+      skipRecurrence: true,
+      taskMovedActivity: {
+        sendNotification: async () => {
+          assert.equal(calls.transactionActive, false);
+          deliveryAttempts += 1;
+          throw new Error("delivery unavailable");
+        },
+      },
+    },
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls.order, ["task-update", "move-activity"]);
+  assert.equal(result.moveActivity.shouldNotify, true);
+  assert.equal(deliveryAttempts, 1);
 });
 
 function loadMoveController({ targetProjectId, sectionProjectId, agentId }) {

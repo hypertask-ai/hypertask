@@ -97,6 +97,12 @@ function loadDeleteController(deleteOutcome) {
     "@/models/model": {},
     "@prisma/client": { Status: { Archive: "Archive" } },
     "../activities/createActivity": () => undefined,
+    "../activities/createTaskMovedActivity": {
+      createTaskMovedActivityInTransaction: () => undefined,
+    },
+    "../activities/sendTaskMoveNotification": {
+      sendTaskMoveNotificationIfNeeded: () => undefined,
+    },
     "../notifications/creation-service/createAndSendNotificationTaskMove": () =>
       undefined,
     "../description/common-description-create": () => undefined,

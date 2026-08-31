@@ -29,7 +29,6 @@ import scheduleTaskSummaryGeneration from "@/pages/api/queues/FAST/generateSumma
 import createArchiveActivity from "@/utils/controllers/activities/createArchiveActivity";
 import createPriorityActivity from "@/utils/controllers/activities/CreatePriorityActivity";
 import createTaskDueDateActivity from "@/utils/controllers/activities/createTaskDueDateActivity";
-import createTaskMovedActivity from "@/utils/controllers/activities/createTaskMovedActivity";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { createFollowerService } from "@/utils/controllers/followers/createFollowerService";
@@ -313,18 +312,20 @@ async function moveTask(
       ranking: generateRank(lastTask?.ranking, undefined),
     },
     activityUser,
+    null,
+    {
+      taskMovedActivity: {
+        sendNotification: () =>
+          sendNotificationForTask(
+            actor.user.id,
+            "TaskMoved",
+            task.id,
+            task.projectId,
+          ),
+      },
+    },
   );
   if (result.status !== 200) throw new Error("Task move failed");
-  await createTaskMovedActivity({
-    taskId: task.id,
-    userObj: activityUser,
-    toSectionId: section.id,
-    toSection_title: section.section_title,
-    fromSectionId: task.sectionId ?? -1,
-    fromSection_title: task.section ?? "",
-    sendNotification: () =>
-      sendNotificationForTask(actor.user.id, "TaskMoved", task.id, task.projectId),
-  });
   void broadcastBoardChange(task.projectId, { originUserId: actor.user.id });
   void broadcastTaskChange(task.id, { originUserId: actor.user.id });
   return confirmBlock(`Moved ${task.ticketNumber} to ${section.section_title}.`);

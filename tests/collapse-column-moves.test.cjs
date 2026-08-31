@@ -29,13 +29,10 @@ const controllerJiti = createJiti(__filename, {
   },
   interopDefault: true,
 });
-const createTaskMovedActivityModule = controllerJiti(
+const { createTaskMovedActivityInTransaction } = controllerJiti(
   path.join(root, "src/utils/controllers/activities/createTaskMovedActivity.ts"),
 );
-const createTaskMovedActivity =
-  typeof createTaskMovedActivityModule === "function"
-    ? createTaskMovedActivityModule
-    : createTaskMovedActivityModule.default;
+const taskMovePrisma = require("./stubs/task-move-prisma.cjs");
 
 const NOW = 2_000_000_000;
 const move = (
@@ -89,17 +86,35 @@ function controllerState(previousActivity) {
   return state;
 }
 
+async function moveThroughController({
+  fromSectionId,
+  toSectionId,
+  fromAgent = null,
+  sendNotification,
+}) {
+  const result = await createTaskMovedActivityInTransaction({
+    transaction: taskMovePrisma,
+    userObj: human,
+    fromAgent,
+    fromSectionId,
+    fromSection_title: `Section ${fromSectionId}`,
+    toSectionId,
+    toSection_title: `Section ${toSectionId}`,
+    taskId: 42,
+  });
+  if (sendNotification) {
+    await sendTaskMoveNotificationIfNeeded(result, sendNotification);
+  }
+  return result;
+}
+
 async function reverseThroughController({ previousActivity, fromAgent = null }) {
   const state = controllerState(previousActivity);
   let deliveries = 0;
-  const result = await createTaskMovedActivity({
-    userObj: human,
+  const result = await moveThroughController({
     fromAgent,
     fromSectionId: 2,
-    fromSection_title: "Section 2",
     toSectionId: 1,
-    toSection_title: "Section 1",
-    taskId: 42,
     sendNotification: async () => {
       deliveries += 1;
     },
@@ -199,6 +214,39 @@ test("the controller collapses a human A-B reversal without notifying again", as
   assert.equal(persisted.data.toSection.sectionId, 2);
   assert.equal(persisted.data.currentSection.sectionId, 1);
   assert.equal(persisted.data.statusFlipCount, 1);
+});
+
+test("the second persisted flip increments the stored count again", async () => {
+  const state = controllerState(move(1, 2));
+  let deliveries = 0;
+  const sendNotification = async () => {
+    deliveries += 1;
+  };
+
+  const results = [];
+  results.push(
+    await moveThroughController({
+      fromSectionId: 2,
+      toSectionId: 1,
+      sendNotification,
+    }),
+  );
+  results.push(
+    await moveThroughController({
+      fromSectionId: 1,
+      toSectionId: 2,
+      sendNotification,
+    }),
+  );
+
+  assert.equal(state.updates.length, 2);
+  assert.equal(state.previous.activity.data.statusFlipCount, 2);
+  assert.equal(state.previous.activity.data.currentSection.sectionId, 2);
+  assert.deepEqual(
+    results.map(({ shouldNotify }) => shouldNotify),
+    [false, false],
+  );
+  assert.equal(deliveries, 0);
 });
 
 test("different human users never share a collapse run", async () => {
