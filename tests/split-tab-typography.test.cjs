@@ -2,48 +2,127 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
+const parse = (relativePath, kind) =>
+  ts.createSourceFile(
+    relativePath,
+    read(relativePath),
+    ts.ScriptTarget.Latest,
+    true,
+    kind,
+  );
+const propertyName = (property) =>
+  ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
+    ? property.name.text
+    : null;
+const objectProperty = (object, name) => {
+  const property = object.properties.find(
+    (candidate) =>
+      ts.isPropertyAssignment(candidate) && propertyName(candidate) === name,
+  );
+  assert.ok(property, `${name} configuration not found`);
+  assert.ok(
+    ts.isObjectLiteralExpression(property.initializer),
+    `${name} must be an object`,
+  );
+  return property.initializer;
+};
+const jsxAttribute = (element, name) =>
+  element.attributes.properties.find(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) && attribute.name.getText() === name,
+  );
+const classTokens = (className, target) => {
+  assert.equal(typeof className, "string", `${target} class list not found`);
+  return new Set(className.split(/\s+/).filter(Boolean));
+};
 
-const tailwindConfig = read("tailwind.config.ts");
-const viewTabs = read(
-  "src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx",
-);
-const inboxSplitTitle = read(
-  "src/components/notifications/inboxSplit/SplitTitle.tsx",
-);
+const contentFontSize = () => {
+  const configFile = parse("tailwind.config.ts", ts.ScriptKind.TS);
+  const configDeclaration = configFile.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => statement.declarationList.declarations)
+    .find((declaration) => declaration.name.getText() === "config");
+  assert.ok(
+    configDeclaration &&
+      configDeclaration.initializer &&
+      ts.isObjectLiteralExpression(configDeclaration.initializer),
+    "Tailwind config object not found",
+  );
+  const theme = objectProperty(configDeclaration.initializer, "theme");
+  const extend = objectProperty(theme, "extend");
+  const fontSize = objectProperty(extend, "fontSize");
+  const content = fontSize.properties.find(
+    (property) =>
+      ts.isPropertyAssignment(property) && propertyName(property) === "content",
+  );
+  assert.ok(content, "content font size not found");
+  assert.ok(ts.isStringLiteral(content.initializer), "content font size must be static");
+  return content.initializer.text;
+};
 
-const classTokens = (match, target) => {
-  assert.ok(match, `${target} class list not found`);
-  return new Set(match[1].split(/\s+/).filter(Boolean));
+const sidebarBoardTabClasses = () => {
+  const sourceFile = parse(
+    "src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx",
+    ts.ScriptKind.TSX,
+  );
+  let classes;
+  const visit = (node) => {
+    if (
+      ts.isConditionalExpression(node) &&
+      ts.isIdentifier(node.condition) &&
+      node.condition.text === "appShellRail" &&
+      ts.isCallExpression(node.whenTrue) &&
+      ts.isIdentifier(node.whenTrue.expression) &&
+      node.whenTrue.expression.text === "cn"
+    ) {
+      const className = node.whenTrue.arguments[0];
+      if (className && ts.isStringLiteral(className)) classes = className.text;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return classes;
+};
+
+const inboxSplitTabClasses = () => {
+  const sourceFile = parse(
+    "src/components/notifications/inboxSplit/SplitTitle.tsx",
+    ts.ScriptKind.TSX,
+  );
+  let classes;
+  const visit = (node) => {
+    if (ts.isJsxOpeningElement(node)) {
+      const onClick = jsxAttribute(node, "onClick");
+      const className = jsxAttribute(node, "className");
+      if (
+        onClick?.initializer &&
+        ts.isJsxExpression(onClick.initializer) &&
+        ts.isIdentifier(onClick.initializer.expression) &&
+        onClick.initializer.expression.text === "onClick" &&
+        className?.initializer &&
+        ts.isJsxExpression(className.initializer) &&
+        ts.isNoSubstitutionTemplateLiteral(className.initializer.expression)
+      ) {
+        classes = className.initializer.expression.text;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return classes;
 };
 
 test("sidebar board names and inbox split tabs use the 14px content token", () => {
-  const fontSizeConfig = tailwindConfig.match(
-    /fontSize\s*:\s*\{([\s\S]*?)\n\s*\},\n\s*boxShadow/,
-  );
-  assert.ok(fontSizeConfig, "Tailwind fontSize configuration not found");
-  assert.match(fontSizeConfig[1], /["']content["']\s*:\s*["']14px["']/);
+  assert.equal(contentFontSize(), "14px");
 
   const targets = [
-    [
-      "sidebar board tab",
-      classTokens(
-        viewTabs.match(/appShellRail\s*\?\s*cn\(\s*'([^']+)'/),
-        "sidebar board tab",
-      ),
-    ],
-    [
-      "inbox split tab",
-      classTokens(
-        inboxSplitTitle.match(
-          /className=\{`([^`]+)`\}\s*onClick=\{onClick\}/,
-        ),
-        "inbox split tab",
-      ),
-    ],
+    ["sidebar board tab", classTokens(sidebarBoardTabClasses(), "sidebar board tab")],
+    ["inbox split tab", classTokens(inboxSplitTabClasses(), "inbox split tab")],
   ];
 
   for (const [target, tokens] of targets) {
