@@ -74,7 +74,7 @@ const CliInstallModal: React.FC<IProps> = ({ closeHandler, onOpenMcp }) => {
             1. Install
           </label>
           <p className="text-meta text-text-light-gray mb-2">
-            Requires Node.js. Run this in your terminal.
+            Run this in your terminal on macOS or Linux.
           </p>
           <CommandRow command={INSTALL_COMMAND} />
         </div>
