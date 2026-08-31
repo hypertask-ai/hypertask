@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
-import { isValidUser } from '@/utils/edgeHelpers'
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
 import prisma from '@/lib/prisma'
 import { generateAuthCode } from '@/lib/oauth/pkce'
@@ -77,20 +76,12 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check if user is authenticated.
-    // nookies_user is client-writable JSON, so it proves nothing on its own. The
-    // HTPR-4182 edge gate enforces "nookies_user must match a signed ht_session"
-    // for /api and page routes, but proxy.ts lets /oauth through untouched, so
-    // this endpoint has to enforce the same invariant itself — otherwise anyone
-    // can forge {id: victimId} and mint an authorization code bound to that user.
+    // Resolve identity only from the signed, HttpOnly session. nookies_user is a
+    // client-writable presentation cache and must never select the OAuth subject.
     const cookieStore = await cookies()
-    const userCookie = cookieStore.get('nookies_user')
-    const { isValid, user } = isValidUser(userCookie?.value)
     const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value)
-    const sessionMatchesCookie =
-      !!session && !!user && Number(session.id) === Number(user.id)
 
-    if (!isValid || !user || !user.id || !sessionMatchesCookie) {
+    if (!session) {
       // User not authenticated - redirect to main login page with OAuth params preserved
       const loginUrl = new URL('/login', request.url)
       // Preserve all OAuth query parameters
@@ -103,7 +94,7 @@ export async function GET(request: NextRequest) {
 
     // User is authenticated - get Firebase UID from database
     const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
+      where: { id: session.id },
       select: { uid: true, email: true }
     })
 
@@ -120,7 +111,7 @@ export async function GET(request: NextRequest) {
       const agent = await prisma.agent.findFirst({
         where: {
           id: agentIdParam,
-          userId: user.id,
+          userId: session.id,
           revokedAt: null,
         },
         select: { id: true },
@@ -150,7 +141,7 @@ export async function GET(request: NextRequest) {
           redirect_uri: redirectUri,
           code_challenge: codeChallenge,
           firebase_uid: dbUser.uid,
-          user_id: user.id,
+          user_id: session.id,
           agent_id: agentIdToStore,
           expires_at: expiresAt,
           used: false,

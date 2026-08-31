@@ -63,6 +63,7 @@ const isolatedCjsTests = new Set([
   "tests/management-key-route-wiring.test.cjs",
   "tests/mcp-usage-auth.test.cjs",
   "tests/mcp-usage-route.test.cjs",
+  "tests/oauth-authorize-session-identity.test.cjs",
 ]);
 
 console.log(
