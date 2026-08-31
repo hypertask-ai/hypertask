@@ -19,21 +19,37 @@ const tableHeader = tableView.slice(
   tableView.indexOf('className={`${TABLE_GRID_CLASS} table-view-header'),
   tableView.indexOf("{rows.length === 0"),
 );
+const ticketCell = taskCells.slice(
+  taskCells.indexOf('case "ticket"'),
+  taskCells.indexOf('case "title"'),
+);
+const titleCell = taskCells.slice(
+  taskCells.indexOf('case "title"'),
+  taskCells.indexOf('case "status"'),
+);
+const horizontalHeaderCell = tableHeader.slice(
+  tableHeader.indexOf("style={"),
+  tableHeader.indexOf("{dragOverColumn?.column"),
+);
+
+const assertDesktopOnlySticky = (source) => {
+  assert.match(source, /md:sticky/);
+  assert.doesNotMatch(source.replaceAll("md:sticky", ""), /(?:^|[\s"`])sticky(?=[\s"`])/);
+};
 
 test("mobile table rows scroll every column while desktop keeps ticket and title frozen", () => {
   assert.doesNotMatch(taskCells, /style=\{\{ position: "sticky"/);
-  assert.equal(
-    taskCells.match(/md:sticky/g)?.length,
-    2,
-    "only the ticket and title cells should become sticky at the desktop breakpoint",
-  );
+  assertDesktopOnlySticky(ticketCell);
+  assertDesktopOnlySticky(titleCell);
   assert.match(taskCells, /selected\s*\? "md:bg-active-elementBg"/);
   assert.match(taskCells, /\? "md:bg-hover-active"\s*:\s*"md:bg-containerBackground"/);
+  assert.match(tableView, /overflow-x-auto overflow-y-auto table-hscroll/);
+  assert.match(tableView, /style=\{\{ minWidth: tableMinWidth \}\}/);
 });
 
 test("the table header stays vertically sticky on mobile without frozen columns", () => {
   assert.match(tableHeader, /table-view-header[^`]+sticky top-0/);
-  assert.doesNotMatch(tableHeader, /position: "sticky"/);
-  assert.match(tableHeader, /md:sticky md:z-20/);
-  assert.match(tableHeader, /md:bg-taskDetailPage/);
+  assert.doesNotMatch(horizontalHeaderCell, /position: "sticky"/);
+  assertDesktopOnlySticky(horizontalHeaderCell);
+  assert.match(horizontalHeaderCell, /md:z-20 md:bg-taskDetailPage/);
 });
