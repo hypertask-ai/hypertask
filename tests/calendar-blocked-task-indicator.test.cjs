@@ -43,6 +43,87 @@ const task = (waitingOnUserId) => ({
   _count: { comments: 0, savedContent: 0 },
 });
 
+test("mobile agenda cards show the blocked indicator", () => {
+  const previousReact = global.React;
+
+  try {
+    global.React = React;
+    stubModule("src/lib/state.tsx", {
+      useRecoilValue: () => null,
+      useSetRecoilState: () => () => {},
+    });
+    stubModule("src/store/index.ts", {
+      calendarSettingsAtom: {},
+      currentUserAtom: {},
+      mobileTopBarTitleAtom: {},
+    });
+    stubModule("src/components/Common/Calendar/index.tsx", {
+      Calendar: () => null,
+    });
+    stubModule("src/lib/contexts/Calendar/calendar.context.tsx", {
+      useCalendarContext: () => ({}),
+    });
+    stubModule("src/lib/configs/ calendar.config.ts", {
+      calendarConfig: { constants: { day_names: [], month_names: [] } },
+    });
+    stubModule("src/hooks/General/useGetUserDrafts.ts", {
+      useGetUserDrafts: () => ({ draftTaskIds: new Set() }),
+    });
+    stubModule("src/components/PageComponents/Calendar/CalendarSplitsRow.tsx", {
+      default: () => null,
+    });
+    stubModule(
+      "src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx",
+      {
+        default: ({ blockingUser }) =>
+          React.createElement(
+            "div",
+            { "data-blocking-user": blockingUser?.id ?? "" },
+            blockingUser?.displayName,
+          ),
+      },
+    );
+
+    const jiti = jitiModule.createJiti
+      ? jitiModule.createJiti(__filename, {
+          interopDefault: true,
+          jsx: true,
+          alias: { "@": path.join(root, "src") },
+        })
+      : jitiModule(__filename, {
+          interopDefault: true,
+          jsx: true,
+          alias: { "@": path.join(root, "src") },
+        });
+    const { AgendaRow } = jiti(
+      modulePath("src/components/PageComponents/Calendar/MobileCalendar.tsx"),
+    );
+    const renderAgendaRow = (calendarTask) =>
+      new JSDOM(
+        renderToStaticMarkup(
+          React.createElement(AgendaRow, {
+            task: calendarTask,
+            project: undefined,
+            hasDraft: false,
+            onOpen: () => {},
+          }),
+        ),
+      ).window.document;
+
+    const blockedRow = renderAgendaRow(task(6));
+    assert.match(blockedRow.body.textContent, /Valentin Yeo/);
+    assert.equal(
+      blockedRow.querySelector("[data-blocking-user]").dataset.blockingUser,
+      "6",
+    );
+    assert.doesNotMatch(renderAgendaRow(task(null)).body.textContent, /Valentin Yeo/);
+  } finally {
+    restoreStubs();
+    if (previousReact === undefined) delete global.React;
+    else global.React = previousReact;
+  }
+});
+
 test("calendar cards show the board blocked indicator in month, week, and day views", () => {
   const dndPath = require.resolve("@hello-pangea/dnd");
   const previousDnd = require.cache[dndPath];
