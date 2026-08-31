@@ -26,8 +26,8 @@ export const shouldShowMobileCreateTaskButton = (pathname: string | null) =>
   shouldShowMobileDock(pathname) &&
   Boolean(
     pathname &&
-      ["/project", "/calendar", "/inbox"].some((path) =>
-        pathname.startsWith(path),
+      ["/project", "/calendar", "/inbox"].some(
+        (path) => pathname === path || pathname.startsWith(`${path}/`),
       ),
   );
 

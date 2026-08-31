@@ -41,6 +41,9 @@ test("the mobile create-task action is limited to Board, Calendar, and Inbox", (
     "/search",
     "/all-tasks",
     "/chat",
+    "/projectile",
+    "/calendar-settings",
+    "/inbox-old",
   ]) {
     assert.equal(shouldShowMobileCreateTaskButton(pathname), false, pathname);
   }
@@ -61,7 +64,10 @@ test("the mobile create-task wrapper opens the shared modal", () => {
   assert.match(button, /<MobileFloatingActionButton/);
   assert.match(button, /ariaLabel="Create task"/);
   assert.match(button, /label="New task"/);
-  assert.match(button, /setCreateTaskModal\(\{ show: true \}\)/);
+  assert.match(
+    button,
+    /onClick=\{\(\) => setCreateTaskModal\(\{ show: true \}\)\}/,
+  );
 });
 
 test("the shared floating action owns the mobile dock clearance and styling", () => {
