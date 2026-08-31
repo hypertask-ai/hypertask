@@ -328,8 +328,8 @@ export async function updateTaskSingle(
           await tx.taskSectionEvent.create({
             data: {
               taskId: updatedTask.id,
-              from: currentState.section,
-              to: updatedTask.section,
+              from: currentState.section ?? "",
+              to: updatedTask.section ?? "",
               userId: currentUser.id,
             },
           });

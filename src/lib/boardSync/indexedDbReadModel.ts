@@ -7,6 +7,7 @@ import {
   isBoardReadModelSnapshotV1,
   materializeBoardReadModelSnapshot,
 } from "./contract";
+import { boardRetentionEvictionKeys } from "./retention";
 
 const DATABASE_NAME = "hypertask-board-read-model";
 const DATABASE_VERSION = 1;
@@ -14,6 +15,16 @@ const STORE_NAME = "boards";
 const ACCOUNT_INDEX = "accountId";
 const CLEAR_MESSAGE = "clear-board-read-models";
 const DELETE_TIMEOUT_MS = 2_000;
+
+// Snapshots and revocation stubs share one key per board and record their own
+// recency field (savedAt / revokedAt respectively) — this reads whichever is
+// present so both compete on equal footing for the retained slots.
+const recordRecency = (record: unknown): string | null => {
+  const savedAt = (record as { savedAt?: unknown })?.savedAt;
+  if (typeof savedAt === "string") return savedAt;
+  const revokedAt = (record as { revokedAt?: unknown })?.revokedAt;
+  return typeof revokedAt === "string" ? revokedAt : null;
+};
 
 let operationGeneration = 0;
 let operationsDisabled = false;
@@ -151,13 +162,28 @@ export const writeBoardReadModel = async ({
       store.put(snapshot);
     };
 
-    // The pilot intentionally keeps one active board per account. This bounds
-    // storage and makes eviction semantics explicit before broader rollout.
+    // HTPR-5753: the pilot keeps the RETENTION_LIMIT most-recently-written
+    // boards per account (was 1, uncovering that cross-session board
+    // rotation, not live in-session switching, was driving most network-path
+    // loads). Whole-record eviction only: a stub occupies the same key as the
+    // snapshot it masks, so deleting a key always drops both together, never
+    // leaving one behind.
+    const otherRecords: { key: string; recency: string }[] = [];
     const cursorRequest = store.index(ACCOUNT_INDEX).openCursor(IDBKeyRange.only(accountId));
     cursorRequest.onsuccess = () => {
       const cursor = cursorRequest.result;
-      if (!cursor) return;
-      if (cursor.primaryKey !== snapshot.key) cursor.delete();
+      if (!cursor) {
+        boardRetentionEvictionKeys(otherRecords, snapshot.key).forEach((key) =>
+          store.delete(key),
+        );
+        return;
+      }
+      if (cursor.primaryKey !== snapshot.key) {
+        otherRecords.push({
+          key: cursor.primaryKey as string,
+          recency: recordRecency(cursor.value) ?? "",
+        });
+      }
       cursor.continue();
     };
 
