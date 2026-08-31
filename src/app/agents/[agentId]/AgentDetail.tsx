@@ -344,7 +344,7 @@ const AgentDetail = (props: IProp) => {
   const [deleting, setDeleting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const agentRefreshSeq = useRef(0);
-  const appliedAgentRefreshSeq = useRef(0);
+  const appliedAgentRefreshSeq = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -424,19 +424,24 @@ const AgentDetail = (props: IProp) => {
           throw new Error(data.error ?? "Failed to load agent");
         }
         if (cancelled) return;
-        if (initialSeq >= appliedAgentRefreshSeq.current) {
-          appliedAgentRefreshSeq.current = initialSeq;
-          setAgent(data.agent);
-        }
+        const refreshedAgent = data.agent;
+        setAgent((prev) => {
+          if (prev && prev.id !== refreshedAgent.id) return prev;
+          const appliedSeq =
+            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+          if (initialSeq < appliedSeq) return prev;
+          appliedAgentRefreshSeq.current[refreshedAgent.id] = initialSeq;
+          return refreshedAgent;
+        });
         // A link built on an id still works; the address bar shows the
         // readable form instead of a uuid.
-        if (data.agent.slug && data.agent.slug !== agentId) {
-          router.replace(`/agents/${data.agent.slug}`, { scroll: false });
+        if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
+          router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
         }
-        loadActivity(data.agent.id);
+        loadActivity(refreshedAgent.id);
       })
       .catch((e) => {
-        if (!cancelled && initialSeq > appliedAgentRefreshSeq.current) {
+        if (!cancelled && initialSeq === agentRefreshSeq.current) {
           setError(e instanceof Error ? e.message : "Failed to load agent");
         }
       });
@@ -452,9 +457,7 @@ const AgentDetail = (props: IProp) => {
             success?: boolean;
             agent?: TDetailAgent;
           };
-          if (!res.ok || !data.success || !data.agent) return;
-          if (cancelled || seq < appliedAgentRefreshSeq.current) return;
-          appliedAgentRefreshSeq.current = seq;
+          if (!res.ok || !data.success || !data.agent || cancelled) return;
           const refreshedAgent = data.agent;
           const {
             working,
@@ -465,8 +468,12 @@ const AgentDetail = (props: IProp) => {
             boardAccess,
           } = refreshedAgent;
           setAgent((prev) => {
+            if (prev && prev.id !== refreshedAgent.id) return prev;
+            const appliedSeq =
+              appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+            if (seq < appliedSeq) return prev;
+            appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
             if (!prev) return refreshedAgent;
-            if (prev.id !== refreshedAgent.id) return prev;
             return {
               ...prev,
               working: working ?? null,
@@ -522,11 +529,7 @@ const AgentDetail = (props: IProp) => {
                 success?: boolean;
                 agent?: TDetailAgent;
               };
-              if (!res.ok || !data.success || !data.agent) return;
-              // Only the newest successful response may merge, or a slow
-              // earlier response would overwrite a newer count.
-              if (seq < appliedAgentRefreshSeq.current || cancelled) return;
-              appliedAgentRefreshSeq.current = seq;
+              if (!res.ok || !data.success || !data.agent || cancelled) return;
               const refreshedAgent = data.agent;
               const {
                 working,
@@ -537,8 +540,12 @@ const AgentDetail = (props: IProp) => {
                 boardAccess,
               } = refreshedAgent;
               setAgent((prev) => {
+                if (prev && prev.id !== refreshedAgent.id) return prev;
+                const appliedSeq =
+                  appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+                if (seq < appliedSeq) return prev;
+                appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
                 if (!prev) return refreshedAgent;
-                if (prev.id !== refreshedAgent.id) return prev;
                 return {
                   ...prev,
                   working: working ?? null,
@@ -900,13 +907,15 @@ const AgentDetail = (props: IProp) => {
         agent?: TDetailAgent;
       } | null;
       if (refresh.ok && refreshed?.success && refreshed.agent) {
-        if (seq >= appliedAgentRefreshSeq.current) {
-          appliedAgentRefreshSeq.current = seq;
-          const refreshedAgent = refreshed.agent;
-          setAgent((prev) =>
-            prev?.id === refreshedAgent.id ? refreshedAgent : prev,
-          );
-        }
+        const refreshedAgent = refreshed.agent;
+        setAgent((prev) => {
+          if (prev?.id !== refreshedAgent.id) return prev;
+          const appliedSeq =
+            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+          if (seq < appliedSeq) return prev;
+          appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+          return refreshedAgent;
+        });
       } else {
         setBoardErrors((errors) => ({
           ...errors,
