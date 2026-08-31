@@ -457,10 +457,14 @@ const Inbox = ({
         index: data.notificationIndex,
       },
     });
-    await queryClient.refetchQueries({
-      queryKey: inboxDataQueryKey(currentUser.id),
-      exact: true,
-    });
+    await queryClient
+      .refetchQueries({
+        queryKey: inboxDataQueryKey(currentUser.id),
+        exact: true,
+      })
+      // The undo is already persisted and visible, so reconciliation failure
+      // must not turn a successful undo into a false failure message.
+      .catch(() => undefined);
     toast.dismiss(toastId);
     toast("Undo notification archive");
   };

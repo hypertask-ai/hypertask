@@ -232,10 +232,10 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     console.time("StartingProcess");
     const _notifications: INotificationsFromTQ | undefined =
       queryClient.getQueryData(resolvedQueryKey);
-    const prevTabLength = _notifications?.structuredData.tabs.length;
+    if (!_notifications?.notifications) return;
+    const prevTabLength = _notifications.structuredData.tabs.length;
     const currentSplitName =
-      _notifications?.structuredData.tabs[globalFocus.currSplit].project;
-    if (!_notifications || !_notifications.notifications) return;
+      _notifications.structuredData.tabs[globalFocus.currSplit].project;
     const cachePayload = updateInboxOptimistically({
       queryClient,
       queryKey: resolvedQueryKey,
