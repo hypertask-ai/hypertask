@@ -5,6 +5,7 @@ import { isAiChatSidebarModeAtom, showAIChatInterfaceAtom, tasksPlayListAtom } f
 import { useMemo } from "react";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { useRecoilState } from "@/lib/state";
+import { getTaskPlaylistBounds } from "@/lib/taskDetailSwipe";
 
 const TaskMovement =(
     {
@@ -25,9 +26,10 @@ const TaskMovement =(
     const [showAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
     const [isSidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
     
-    const indexOf = useMemo(()=>tasksPlayList?.findIndex(obj =>obj.projectId === currentItemInTasksPlaylist.projectId && obj.uniqueIndex === currentItemInTasksPlaylist.uniqueIndex),[currentItemInTasksPlaylist, tasksPlayList])
-    const previousDisabled = !tasksPlayList?.length || indexOf === 0;
-    const nextDisabled = !tasksPlayList?.length || indexOf === tasksPlayList.length - 1;
+    const { currentIndex: indexOf, previousDisabled, nextDisabled } = useMemo(
+        () => getTaskPlaylistBounds(tasksPlayList, currentItemInTasksPlaylist),
+        [currentItemInTasksPlaylist, tasksPlayList]
+    );
   
     return (
         <>

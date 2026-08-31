@@ -90,6 +90,7 @@ import useArchiveAndNavigate from "@/hooks/Task Detail/useArchiveAndNavigate";
 import { useTaskTime } from "@/hooks/Task Detail/useTimeTracking";
 import useSetStickyHeight from "@/hooks/Task Detail/useSetStickyHeight";
 import TaskDetailMainContainer from "@/components/PageComponents/TaskDetail/TaskDetailMainContainer";
+import MobileTaskDetailSwipe from "@/components/PageComponents/TaskDetail/MobileTaskDetailSwipe";
 import TaskDetailTitleContainer from "@/components/PageComponents/TaskDetail/TopRow/TaskDetailTitleContainer";
 import CommentAndDescriptionContainer from "@/components/PageComponents/TaskDetail/CommentAndDescription";
 import { useFollowersContext } from "@/lib/contexts/TaskDetail/FollowersProvider";
@@ -2214,8 +2215,28 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
                 : "contents"
             }
           >
-            <TaskDetailMainContainer>
-              <TaskDetailTitleContainer containerRef={dynamicElementRef} />
+            <MobileTaskDetailSwipe
+              enabled={_mbl && !embedded}
+              currentItem={currentItemInTasksPlaylist}
+              onNext={() =>
+                navigateToNextTask(
+                  false,
+                  true,
+                  undefined,
+                  undefined,
+                  searchParams?.get(taskDetailConfig.searchParams.inboxFlow),
+                )
+              }
+              onPrevious={() =>
+                navigateToPreviousTask(
+                  false,
+                  false,
+                  searchParams?.get(taskDetailConfig.searchParams.inboxFlow),
+                )
+              }
+            >
+              <TaskDetailMainContainer>
+                <TaskDetailTitleContainer containerRef={dynamicElementRef} />
 
               {/* --------------------------- COMMENTS + DESCRIPTION CONTAINER ------------------------------ */}
               <div
@@ -2272,8 +2293,9 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
                   />
                 )}
               </div>
-              {_mbl && !embedded && <NewCommentComponent />}
-            </TaskDetailMainContainer>
+                {_mbl && !embedded && <NewCommentComponent />}
+              </TaskDetailMainContainer>
+            </MobileTaskDetailSwipe>
           </div>
           {_mbl && embedded && <NewCommentComponent />}
 
