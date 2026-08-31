@@ -61,7 +61,7 @@ export const createInboxReadinessLatch = (): { claim: () => boolean } => {
   };
 };
 
-export const requiresPersistentInboxFence = (
+export const requiresLateInboxPersistenceCheck = (
   enabled: boolean,
   revisionStorageAvailable: boolean,
 ): boolean => enabled && !revisionStorageAvailable;
@@ -204,6 +204,13 @@ const fetchInboxPayload = async (
         return readInboxReadModel(userId);
       })().catch(() => null)
     : Promise.resolve(null);
+  const sharedRevisionFenceReadPromise = enabled
+    ? (async () => {
+        const { readInboxReadModelRevisionFence } =
+          await import("@/lib/inboxSync/indexedDbReadModel");
+        return readInboxReadModelRevisionFence(userId);
+      })().catch(() => null)
+    : Promise.resolve(null);
   let response: InboxQueryPayload;
   try {
     response = await getAllNotifications(userId);
@@ -232,11 +239,11 @@ const fetchInboxPayload = async (
   let fallbackPersistedPayload:
     import("@/lib/inboxSync/contract").InboxReadModelPayloadV1 | null = null;
   let persistedRevisionFence: InboxReadModelRevision | null = null;
-  const persistentFenceRequired = requiresPersistentInboxFence(
+  const latePersistenceCheckRequired = requiresLateInboxPersistenceCheck(
     enabled,
     inboxRevisionStorageAvailable(userId),
   );
-  if (persistentFenceRequired) {
+  if (latePersistenceCheckRequired) {
     fallbackPersistedPayload = await sharedHydrationReadPromise;
     const { readInboxReadModel, readInboxReadModelRevisionFence } =
       await import("@/lib/inboxSync/indexedDbReadModel");
@@ -244,13 +251,16 @@ const fetchInboxPayload = async (
     if (fallbackPersistedPayload) {
       observeInboxReadModelRevision(userId, fallbackPersistedPayload.revision);
     }
-    // Browsers without synchronous revision storage need the durable fence as
-    // their final stale-response check. Other browsers can publish the network
-    // response without waiting for IndexedDB.
+    // Browsers without synchronous revision storage need a late durable read
+    // as their final stale-response check.
     persistedRevisionFence = await readInboxReadModelRevisionFence(userId);
-    if (persistedRevisionFence) {
-      observeInboxReadModelRevision(userId, persistedRevisionFence);
-    }
+  } else if (enabled) {
+    // Catch an older durable revision that predates synchronous storage. This
+    // small read runs with the network and does not block on the full snapshot.
+    persistedRevisionFence = await sharedRevisionFenceReadPromise;
+  }
+  if (persistedRevisionFence) {
+    observeInboxReadModelRevision(userId, persistedRevisionFence);
   }
   const current = queryClient.getQueryData<InboxQueryPayload>(
     inboxDataQueryKey(userId),
