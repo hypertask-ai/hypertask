@@ -33,13 +33,17 @@ test("tab labels inherit the UI font instead of Dia heading typography", () => {
         node.expression?.getText(sourceFile) === labelExpression
       ) {
         labelsFound += 1;
-        if (ts.isJsxElement(node.parent)) {
-          const tagName = node.parent.openingElement.tagName.getText(sourceFile);
-          assert.equal(
-            headingTags.has(tagName),
-            false,
-            `${relativePath} must not render ${labelExpression} as a heading`,
-          );
+        let ancestor = node.parent;
+        while (ancestor) {
+          if (ts.isJsxElement(ancestor)) {
+            const tagName = ancestor.openingElement.tagName.getText(sourceFile);
+            assert.equal(
+              headingTags.has(tagName),
+              false,
+              `${relativePath} must not render ${labelExpression} inside a heading`,
+            );
+          }
+          ancestor = ancestor.parent;
         }
       }
       ts.forEachChild(node, visit);
