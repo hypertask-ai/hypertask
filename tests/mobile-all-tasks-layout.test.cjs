@@ -40,11 +40,10 @@ test("mobile task rows shrink and truncate inside their content box", () => {
 });
 
 test("task rows follow the global view container breakpoints", () => {
-  const classNames = [...taskListRow.matchAll(/className(?:=|=\{cn\()[\s\S]*?(?:"|`)([^"`]*)/g)]
-    .map((match) => match[1])
-    .join(" ");
-
-  assert.doesNotMatch(classNames, /(?:^|\s)(?:xs|sm|md|lg):/);
+  assert.doesNotMatch(
+    taskListRow,
+    /(^|[^@\w-])(?:x-sm|xs|sm|md|lg|xl|2xl):/m,
+  );
   assert.match(taskListRow, /@md:flex-row/);
   assert.match(taskListRow, /@md:hidden/);
 });
