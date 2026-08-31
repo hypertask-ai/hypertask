@@ -128,7 +128,14 @@ function loadUpdateController(
         { id: SECTION_ID, section_title: "Todo" },
       ],
     },
-    taskSectionEvent: { create: async () => undefined },
+    taskSectionEvent: {
+      create: async ({ data }) => {
+        if (data.from == null || data.to == null) {
+          throw new Error("TaskSectionEvent requires section names");
+        }
+        (calls.sectionEvents ??= []).push(data);
+      },
+    },
   };
   let fenceTail = Promise.resolve();
   const fenceReleases = new WeakMap();
@@ -355,6 +362,14 @@ test("a move from an unassigned section still records an activity", async () => 
   assert.equal(result.status, 200);
   assert.equal(calls.moveActivityArgs.fromSectionId, null);
   assert.equal(calls.moveActivityArgs.toSectionId, SECTION_ID);
+  assert.deepEqual(calls.sectionEvents, [
+    {
+      taskId: TASK_ID,
+      from: "",
+      to: "Todo",
+      userId: USER_ID,
+    },
+  ]);
   assert.ok(result.moveActivity.newComment);
 });
 
@@ -379,6 +394,14 @@ test("a move into an unassigned section still records an activity", async () => 
   assert.equal(result.json.section, null);
   assert.equal(calls.moveActivityArgs.fromSectionId, SECTION_ID - 1);
   assert.equal(calls.moveActivityArgs.toSectionId, null);
+  assert.deepEqual(calls.sectionEvents, [
+    {
+      taskId: TASK_ID,
+      from: "Backlog",
+      to: "",
+      userId: USER_ID,
+    },
+  ]);
   assert.ok(result.moveActivity.newComment);
 });
 
