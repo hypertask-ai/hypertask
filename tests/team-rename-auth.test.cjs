@@ -78,13 +78,13 @@ function responseRecorder() {
   return { response, result };
 }
 
-async function request(handler, { authenticated = true, method = "POST", body } = {}) {
+async function request(handler, { sessionToken = "valid-session", method = "POST", body } = {}) {
   const { response, result } = responseRecorder();
   await handler(
     {
       method,
       body: body ?? { teamId: "team-1", updatedTitle: " Renamed team " },
-      cookies: authenticated ? { ht_session: "valid-session" } : {},
+      cookies: sessionToken ? { ht_session: sessionToken } : {},
     },
     response,
   );
@@ -94,7 +94,16 @@ async function request(handler, { authenticated = true, method = "POST", body } 
 test("team rename rejects anonymous requests before reading or writing a team", async () => {
   const { handler, calls } = loadRoute();
 
-  const result = await request(handler, { authenticated: false });
+  const result = await request(handler, { sessionToken: null });
+
+  assert.equal(result.status, 401);
+  assert.deepEqual(calls, { reads: [], writes: [] });
+});
+
+test("team rename rejects invalid sessions before reading or writing a team", async () => {
+  const { handler, calls } = loadRoute();
+
+  const result = await request(handler, { sessionToken: "forged-session" });
 
   assert.equal(result.status, 401);
   assert.deepEqual(calls, { reads: [], writes: [] });
