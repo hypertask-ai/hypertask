@@ -27,6 +27,8 @@ import type {
   AgentRuntimeQueueItem,
   AgentRuntimeSnapshot,
 } from "@/lib/agents/runtimeState";
+import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
+import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
 
 type TActivityKind = "comment" | "evidence" | "question" | "session" | "model";
 
@@ -62,7 +64,10 @@ type TAgentOperations = {
   };
 };
 
-type TDetailAgent = TAgent & { operations: TAgentOperations };
+type TDetailAgent = TAgent & {
+  operations: TAgentOperations;
+  boardAccess: TAgentBoardAccess[];
+};
 
 const PROMPT_MAX = 8000;
 const PROMPT_WARN = 7000;
@@ -327,6 +332,12 @@ const AgentDetail = (props: IProp) => {
   const [providerKeyDraft, setProviderKeyDraft] = useState("");
   const [savingProviderKey, setSavingProviderKey] = useState(false);
   const [openingChat, setOpeningChat] = useState(false);
+  const [boardAccessOpen, setBoardAccessOpen] = useState(false);
+  const [pendingBoardId, setPendingBoardId] = useState<number | null>(null);
+  const [boardErrors, setBoardErrors] = useState<Record<number, string>>({});
+  const [boardToRemove, setBoardToRemove] = useState<TAgentBoardAccess | null>(
+    null,
+  );
   const [manageOpen, setManageOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [savingImportant, setSavingImportant] = useState(false);
@@ -823,6 +834,61 @@ const AgentDetail = (props: IProp) => {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
       setSavingImportant(false);
+    }
+  };
+
+  const changeBoardMembership = async (
+    board: TAgentBoardAccess,
+    member: boolean,
+  ) => {
+    if (!agent || pendingBoardId !== null) return;
+    setPendingBoardId(board.id);
+    let failureMessage = "Could not change board access";
+    setBoardErrors((errors) => {
+      const next = { ...errors };
+      delete next[board.id];
+      return next;
+    });
+    try {
+      const res = await fetch(
+        member ? "/api/members/addAgent" : "/api/members/removeAgent",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: board.id, agentId: agent.id }),
+        },
+      );
+      const data = (await res.json()) as { message?: string };
+      if (!res.ok) {
+        failureMessage = data.message ?? failureMessage;
+        throw new Error(failureMessage);
+      }
+      const refresh = await fetch(`/api/agents/${agent.id}`);
+      const refreshed = (await refresh.json().catch(() => null)) as {
+        success?: boolean;
+        agent?: TDetailAgent;
+      } | null;
+      if (refresh.ok && refreshed?.success && refreshed.agent) {
+        setAgent(refreshed.agent);
+      } else {
+        setBoardErrors((errors) => ({
+          ...errors,
+          [board.id]: "Access changed. Reload this page to refresh the list.",
+        }));
+      }
+      toast.success(
+        member
+          ? `${agent.displayName} added to ${board.name}`
+          : `${agent.displayName} removed from ${board.name}`,
+      );
+    } catch {
+      setBoardErrors((errors) => ({
+        ...errors,
+        [board.id]: failureMessage,
+      }));
+    } finally {
+      setBoardToRemove(null);
+      setPendingBoardId(null);
     }
   };
 
@@ -1500,18 +1566,119 @@ const AgentDetail = (props: IProp) => {
                     )}
                   </InfoRow>
                 )}
-                <InfoRow label="Boards">
-                  {agent.boards && agent.boards.length > 0 ? (
-                    agent.boards.map((b) => b.name).join(", ")
-                  ) : (
-                    <span className="text-text-light-gray">None</span>
-                  )}
-                </InfoRow>
                 </section>
               </div>
             </div>
 
             <RecentActionsCard activity={activity} error={activityError} />
+
+            <div className="mt-6 bg-cardBackground rounded-[4px] shadow-md">
+              <button
+                type="button"
+                aria-expanded={boardAccessOpen}
+                onClick={() => setBoardAccessOpen((open) => !open)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-left"
+              >
+                <span className="text-text-light-gray">
+                  {boardAccessOpen ? "▾" : "▸"}
+                </span>
+                <span>
+                  <strong className="block">Board access</strong>
+                  <span className="text-[12px] text-text-light-gray">
+                    This agent is a member of {agent.boards?.length ?? 0}{" "}
+                    {(agent.boards?.length ?? 0) === 1 ? "board" : "boards"}
+                  </span>
+                </span>
+              </button>
+
+              {boardAccessOpen && (
+                <div className="border-t border-comment-description-border px-4 pb-2">
+                  <p className="py-3 text-[13px] text-text-light-gray">
+                    Tick a board to give this agent access. Changes save
+                    immediately.
+                  </p>
+                  {agent.boardAccess.length === 0 ? (
+                    <p className="pb-3 text-[13px] text-text-light-gray">
+                      No accessible boards.
+                    </p>
+                  ) : (
+                    agent.boardAccess.map((board) => {
+                      const pending = pendingBoardId === board.id;
+                      const additionBlocked =
+                        !board.member && Boolean(agent.revokedAt);
+                      return (
+                        <div
+                          key={board.id}
+                          className="flex items-start gap-3 border-t border-comment-description-border py-3 first:border-t-0"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={board.member}
+                            disabled={
+                              pendingBoardId !== null ||
+                              !board.canChange ||
+                              additionBlocked
+                            }
+                            aria-label={`${board.member ? "Remove" : "Add"} ${agent.displayName} ${board.member ? "from" : "to"} ${board.name}`}
+                            onChange={() => {
+                              if (board.member) setBoardToRemove(board);
+                              else void changeBoardMembership(board, true);
+                            }}
+                            className="mt-0.5 h-4 w-4 shrink-0 accent-hypertasks-purple disabled:opacity-40"
+                          />
+                          <div className="min-w-0">
+                            <Link
+                              href={`/project?id=${board.id}`}
+                              className="text-hypertasks-purple"
+                            >
+                              {board.name}
+                            </Link>
+                            <p
+                              className={cn(
+                                "mt-0.5 text-[12px]",
+                                boardErrors[board.id]
+                                  ? "text-red-500"
+                                  : "text-text-light-gray",
+                              )}
+                            >
+                              {pending
+                                ? "Saving..."
+                                : boardErrors[board.id] ??
+                                  (additionBlocked
+                                    ? "Turn the agent on before adding it"
+                                    : board.unavailableReason ??
+                                      (board.member
+                                        ? `Member${board.teamName ? ` · ${board.teamName}` : ""}`
+                                        : `Not a member${board.teamName ? ` · ${board.teamName}` : ""}`))}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {boardToRemove && (
+              <ConfirmDialog
+                id="remove-agent-board-access"
+                message={`Remove ${agent.displayName} from ${boardToRemove.name}?`}
+                confirmLabel="Remove from board"
+                loadingLabel="Removing..."
+                loading={pendingBoardId === boardToRemove.id}
+                onConfirm={() =>
+                  void changeBoardMembership(boardToRemove, false)
+                }
+                onCancel={() => setBoardToRemove(null)}
+                footerVerb="remove"
+              >
+                <p className="px-4 py-3 text-[13px] text-text-light-gray">
+                  The agent will lose access to this board and its content. You
+                  can add it again later.
+                </p>
+              </ConfirmDialog>
+            )}
 
             {/* Collapsed by default: archiving and deleting are the two things
                 on this page you cannot undo with the switch next to the name,

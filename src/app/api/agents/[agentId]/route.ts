@@ -27,6 +27,7 @@ import {
   deleteOwnedAgent,
   type AgentManagementDatabase,
 } from "@/lib/mcp/agents/ownedAgents";
+import { buildAgentBoardAccess } from "@/lib/agents/boardAccess";
 
 /**
  * The URL carries a readable slug now (/agents/board-maintainer), so every
@@ -113,15 +114,31 @@ export async function GET(
   // The register card decides Running/Quiet from the newest of heartbeat and
   // posted comment, so this page has to read the same pair or the two surfaces
   // disagree about the same agent.
-  const lastPosted = await prisma.comment.aggregate({
-    where: {
-      agentId: agent.id,
-      task: { project: getProjectWhere(user.id) },
-    },
-    _max: { createdAt: true },
-  });
-
-  const working = (await workingOnByAgent([agent.id], user.id)).get(agent.id);
+  const [lastPosted, workingByAgent, accessibleBoards, allMemberships] =
+    await Promise.all([
+      prisma.comment.aggregate({
+        where: {
+          agentId: agent.id,
+          task: { project: getProjectWhere(user.id) },
+        },
+        _max: { createdAt: true },
+      }),
+      workingOnByAgent([agent.id], user.id),
+      prisma.project.findMany({
+        where: { status: "Normal", ...getProjectWhere(user.id) },
+        select: {
+          id: true,
+          name: true,
+          title: true,
+          team: { select: { id: true, title: true } },
+        },
+      }),
+      prisma.member.findMany({
+        where: { agentId: agent.id },
+        select: { project: { select: { teamId: true } } },
+      }),
+    ]);
+  const working = workingByAgent.get(agent.id);
 
   const {
     permissions,
@@ -302,6 +319,16 @@ export async function GET(
         teamId: project.team?.id ?? null,
         teamName: project.team?.title ?? null,
       })),
+      boardAccess: buildAgentBoardAccess(
+        accessibleBoards.map((project) => ({
+          id: project.id,
+          name: project.title ?? project.name,
+          teamId: project.team?.id ?? null,
+          teamName: project.team?.title ?? null,
+        })),
+        boardIds,
+        allMemberships.map(({ project }) => project.teamId),
+      ),
       postsToImportant:
         (permissions as AgentScopes | null)?.postsToImportant !== false,
       createdAt: agent.createdAt.toISOString(),
