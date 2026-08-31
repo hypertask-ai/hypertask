@@ -632,6 +632,22 @@ test("undo restores an archived notification to its post-removal cache position"
     duplicate.notifications.map(({ id }) => id),
     ["12", "9", "10", "11"],
   );
+
+  const fallbackCases = [
+    { notifications: [before], expected: ["9", "10"] },
+    { notifications: [after], expected: ["10", "11"] },
+    { notifications: [], expected: ["10"] },
+  ];
+  for (const fallback of fallbackCases) {
+    const result = applyInboxReadModelMutation(
+      { ...payload, notifications: fallback.notifications },
+      { type: "restore", notification: archived, ...restoreAnchors },
+    );
+    assert.deepEqual(
+      result.notifications.map(({ id }) => id),
+      fallback.expected,
+    );
+  }
 });
 
 test("legacy Inbox caches keep immediate mutations without read-model metadata", () => {

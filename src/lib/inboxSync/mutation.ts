@@ -157,12 +157,12 @@ export const applyInboxReadModelMutation = <
             ({ id }) => String(id) === mutation.afterNotificationId,
           )
         : -1;
-      const insertionIndex =
-        beforeIndex >= 0
-          ? beforeIndex
-          : afterIndex >= 0
-            ? afterIndex + 1
-            : notifications.length;
+      let insertionIndex = notifications.length;
+      if (beforeIndex >= 0) {
+        insertionIndex = beforeIndex;
+      } else if (afterIndex >= 0) {
+        insertionIndex = afterIndex + 1;
+      }
       notifications.splice(insertionIndex, 0, mutation.notification);
       return { ...payload, notifications } as Payload;
     }
