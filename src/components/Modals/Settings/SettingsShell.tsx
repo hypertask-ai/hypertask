@@ -23,6 +23,9 @@ import { SidebarContextProvider } from "@/lib/contexts/Sidebars/SidebarProvider"
 import { currentUserAtom } from "@/store";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRecoilValue } from "@/lib/state";
+import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
+import { useGetAnnouncements } from "@/hooks/MultiPages/Sidebar/useGetAnnouncements";
+import type { IAnnouncement } from "@/models/Announcements/model";
 import SettingsBoardPicker from "./SettingsBoardPicker";
 import SettingsTeamPicker from "./SettingsTeamPicker";
 import { useSettingsTeam } from "./useSettingsTeam";
@@ -261,6 +264,7 @@ interface SettingsNavGroupsProps {
   activeSection?: SettingsSectionId;
   compact?: boolean;
   groups: SettingsNavGroup[];
+  hasUnreadAnnouncements?: boolean;
   mobile?: boolean;
   onSelect: (section: SettingsSectionId) => void;
 }
@@ -269,6 +273,7 @@ const SettingsNavGroups: React.FC<SettingsNavGroupsProps> = ({
   activeSection,
   compact = false,
   groups,
+  hasUnreadAnnouncements = false,
   mobile = false,
   onSelect,
 }) => (
@@ -302,12 +307,20 @@ const SettingsNavGroups: React.FC<SettingsNavGroupsProps> = ({
               type="button"
               className={cn(
                 NAV_ENTRY_CLASS,
-                mobile && "py-3",
+                mobile && "flex items-center justify-between gap-2 py-3",
                 activeSection === item.id && "bg-active-modal-element",
               )}
               onClick={() => onSelect(item.id)}
             >
-              {item.label}
+              <span>{item.label}</span>
+              {mobile &&
+                item.id === "announcements" &&
+                hasUnreadAnnouncements && (
+                  <span
+                    aria-hidden="true"
+                    className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#51A4F1]"
+                  />
+                )}
             </button>
           ),
         )}
@@ -321,6 +334,17 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useContext(MobileViewContext);
   const currentUser = useRecoilValue(currentUserAtom);
+  const { data: announcementsData } = useGetAnnouncements(currentUser?.id);
+  const { data: userPreferences } = useGetUserPreferences();
+  const hasUnreadAnnouncements = useMemo(
+    () =>
+      !userPreferences?.muteAnnouncements &&
+      Array.isArray(announcementsData) &&
+      (announcementsData as IAnnouncement[]).some(
+        (announcement) => !announcement.readAt,
+      ),
+    [announcementsData, userPreferences?.muteAnnouncements],
+  );
   const { billing } = useSettingsTeam();
   const { clearSettingsSection, closeSettings, setSettingsSection } =
     useSettingsNavigation();
@@ -503,6 +527,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                   <SettingsNavGroups
                     activeSection={mbl ? undefined : activeSection}
                     groups={primaryGroups}
+                    hasUnreadAnnouncements={hasUnreadAnnouncements}
                     mobile={mbl}
                     onSelect={setSettingsSection}
                   />
@@ -512,6 +537,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                         activeSection={mbl ? undefined : activeSection}
                         compact
                         groups={bottomGroups}
+                        hasUnreadAnnouncements={hasUnreadAnnouncements}
                         mobile={mbl}
                         onSelect={setSettingsSection}
                       />
