@@ -5,12 +5,14 @@ export const shouldReleaseSecondaryStartupOnBoardRequest = ({
 }) => !isMobile;
 
 export const shouldEnableSecondaryStartup = ({
+  hasAuthenticatedUser,
   projectRoute,
   releasedForAccount,
 }: {
+  hasAuthenticatedUser: boolean;
   projectRoute: boolean;
   releasedForAccount: boolean;
-}) => !projectRoute || releasedForAccount;
+}) => hasAuthenticatedUser && (!projectRoute || releasedForAccount);
 
 export const shouldReleaseSecondaryStartupForTerminalBoard = ({
   isMobile,

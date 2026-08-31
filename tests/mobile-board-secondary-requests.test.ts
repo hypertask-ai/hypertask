@@ -14,6 +14,7 @@ test("mobile secondary traffic waits for usable Board release", () => {
   );
   assert.equal(
     shouldEnableSecondaryStartup({
+      hasAuthenticatedUser: true,
       projectRoute: true,
       releasedForAccount: false,
     }),
@@ -21,6 +22,7 @@ test("mobile secondary traffic waits for usable Board release", () => {
   );
   assert.equal(
     shouldEnableSecondaryStartup({
+      hasAuthenticatedUser: true,
       projectRoute: true,
       releasedForAccount: true,
     }),
@@ -35,13 +37,25 @@ test("desktop retains request-settled release timing", () => {
   );
 });
 
-test("non-project routes do not wait for Board readiness", () => {
+test("authenticated non-project routes do not wait for Board readiness", () => {
   assert.equal(
     shouldEnableSecondaryStartup({
+      hasAuthenticatedUser: true,
       projectRoute: false,
       releasedForAccount: false,
     }),
     true,
+  );
+});
+
+test("logged-out routes do not start authenticated secondary requests", () => {
+  assert.equal(
+    shouldEnableSecondaryStartup({
+      hasAuthenticatedUser: false,
+      projectRoute: false,
+      releasedForAccount: false,
+    }),
+    false,
   );
 });
 

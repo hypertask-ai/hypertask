@@ -267,6 +267,7 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
     number | "anonymous" | null
   >(null);
   const secondaryStartupEnabled = shouldEnableSecondaryStartup({
+    hasAuthenticatedUser: Boolean(startupUser?.id),
     projectRoute,
     releasedForAccount: releasedStartupAccountKey === startupAccountKey,
   });
