@@ -27,7 +27,10 @@ import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { useGetAnnouncements } from "@/hooks/MultiPages/Sidebar/useGetAnnouncements";
 import SettingsBoardPicker from "./SettingsBoardPicker";
 import SettingsTeamPicker from "./SettingsTeamPicker";
-import { shouldShowMobileAnnouncementIndicator } from "./announcementIndicator";
+import {
+  MobileAnnouncementIndicator,
+  shouldShowMobileAnnouncementIndicator,
+} from "./announcementIndicator";
 import { useSettingsTeam } from "./useSettingsTeam";
 import {
   SETTINGS_CROSS_TAB_GROUPS,
@@ -313,14 +316,11 @@ const SettingsNavGroups: React.FC<SettingsNavGroupsProps> = ({
               onClick={() => onSelect(item.id)}
             >
               <span>{item.label}</span>
-              {mobile &&
-                item.id === "announcements" &&
-                hasUnreadAnnouncements && (
-                  <span
-                    aria-hidden="true"
-                    className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#51A4F1]"
-                  />
-                )}
+              {item.id === "announcements" && (
+                <MobileAnnouncementIndicator
+                  visible={mobile && hasUnreadAnnouncements}
+                />
+              )}
             </button>
           ),
         )}

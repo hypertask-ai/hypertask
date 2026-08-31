@@ -17,6 +17,18 @@ export const shouldShowMobileAnnouncementIndicator = ({
   preferencesFetched &&
   muted === false &&
   Array.isArray(announcements) &&
-  (announcements as IAnnouncement[]).some(
-    (announcement) => !announcement.readAt,
+  announcements.some(
+    (announcement) =>
+      typeof announcement === "object" &&
+      announcement !== null &&
+      "readAt" in announcement &&
+      !(announcement as Pick<IAnnouncement, "readAt">).readAt,
   );
+
+export const MobileAnnouncementIndicator = ({ visible }: { visible: boolean }) =>
+  visible ? (
+    <span
+      aria-hidden="true"
+      className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#51A4F1]"
+    />
+  ) : null;
