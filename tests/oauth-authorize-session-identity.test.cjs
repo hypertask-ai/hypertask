@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
@@ -67,13 +68,17 @@ const { GET } = jiti(path.join(root, "src/app/oauth/authorize/route.ts"));
 
 const VICTIM_ID = 42;
 const ATTACKER_ID = 99;
+const PKCE_CHALLENGE = crypto
+  .createHash("sha256")
+  .update("oauth-authorize-session-identity-test-verifier")
+  .digest("base64url");
 
 function authorizeRequest() {
   const url = new URL("https://app.hypertask.ai/oauth/authorize");
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", "test-client");
   url.searchParams.set("redirect_uri", "https://client.example.test/callback");
-  url.searchParams.set("code_challenge", "attacker-controlled-challenge");
+  url.searchParams.set("code_challenge", PKCE_CHALLENGE);
   url.searchParams.set("code_challenge_method", "S256");
   url.searchParams.set("state", "test-state");
   return new NextRequest(url);
