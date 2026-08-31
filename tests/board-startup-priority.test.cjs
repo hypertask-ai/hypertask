@@ -102,7 +102,8 @@ test("secondary global startup follows the Board release policy", () => {
   );
   assert.match(
     globalProviderSource,
-    /const secondaryStartupEnabled = shouldEnableSecondaryStartup\(/,
+    /const secondaryStartupEnabled = shouldEnableSecondaryStartup\(\{[\s\S]*?hasAuthenticatedUser: Boolean\(startupUser\?\.id\)/,
+    "logged-out routes must not issue authenticated secondary requests",
   );
   assert.doesNotMatch(
     globalProviderSource,
