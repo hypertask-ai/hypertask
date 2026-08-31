@@ -30,6 +30,7 @@ import { mobileCommentMicWrapperClass } from "./mobileCommentComposer";
 import { useFileUpload } from "./FileUploadHandler";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { SendArrow } from "@/components/Common/SendArrow";
 
 interface IProps {
   /** create-task-modal only: the modal's title field has text. Save must
@@ -737,21 +738,6 @@ const SaveButtonMobile: React.FC<IPropsSaveButtonMobile> = ({
     </span>
   );
 };
-
-// The one send glyph in the product. Exported so the AI Task Writer stops
-// shipping its own circled arrow: one shape, one direction, everywhere.
-export const SendArrow = ({ size = 20 }: { size?: number }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 105 105"
-    fill="currentColor"
-    aria-hidden
-  >
-    <path d="M26.7598 78.28V58.72L52.8398 52.2L26.7598 45.68V26.12L88.6998 52.2L26.7598 78.28Z" />
-  </svg>
-);
 
 const DesktopAttachment = ({
   mode,

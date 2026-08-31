@@ -15,6 +15,12 @@ const jiti = require("jiti")(
     alias: { "@": path.join(root, "src") },
   },
 );
+const { mobileMicPresentation } = jiti(
+  path.join(
+    root,
+    "src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
+);
 const originalCache = new Map(Object.entries(require.cache));
 const TestChatContext = React.createContext(undefined);
 
@@ -44,6 +50,7 @@ stubSourceModule("src/components/Common/Tooltip.tsx", {
 });
 stubSourceModule("src/lib/configs/aiTaskWriter.config.ts", {
   aiTaskWriterConfig: {
+    fontSizes: { moderateIcon: 18 },
     shortcutsAndTooltips: {
       ai_chat: {
         attachment_button: () => ({}),
@@ -59,15 +66,6 @@ stubSourceModule(
     useAiChatContext: () => React.useContext(TestChatContext),
   },
 );
-stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
-  default: ({ wrapperClassName, visualizerClassName }) =>
-    React.createElement("div", {
-      className: ["audio-recorder", wrapperClassName, visualizerClassName]
-        .filter(Boolean)
-        .join(" "),
-      "data-control": "recorder",
-    }),
-});
 stubSourceModule(
   "src/components/Common/AttachmentsUpload/ImageGalleryView.tsx",
   { default: () => null },
@@ -100,6 +98,27 @@ stubSourceModule("src/styles/tiptap.module.scss", {
 const { MobileViewContext } = jiti(
   path.join(root, "src/lib/contexts/mobileContext.tsx"),
 );
+const { AudioButton: RealAudioButton } = jiti(
+  path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
+);
+stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
+  default: ({
+    wrapperClassName,
+    visualizerClassName,
+    globalRecording,
+    hasText,
+    onProcessingChange,
+  }) =>
+    React.createElement("button", {
+      className: ["audio-recorder", wrapperClassName, visualizerClassName]
+        .filter(Boolean)
+        .join(" "),
+      "data-control": "recorder",
+      "data-global-recording": String(globalRecording),
+      "data-has-text": String(hasText),
+      onClick: () => onProcessingChange?.(true),
+    }),
+});
 const { AI_Tiptap_Container } = jiti(
   path.join(root, "src/components/AI_CHAT/AI_Tiptap_Container.tsx"),
 );
@@ -111,9 +130,9 @@ for (const [filename, cachedModule] of originalCache) {
   require.cache[filename] = cachedModule;
 }
 
-const chatContextValue = (isRecording) => ({
+const chatContextValue = (isRecording, isEmpty = true) => ({
   tiptapKeydown: () => {},
-  editor: null,
+  editor: { isEmpty },
   isTyping: false,
   isRecording,
   queuedMessages: [],
@@ -138,16 +157,137 @@ const chatContextValue = (isRecording) => ({
   removeFile: () => {},
 });
 
-const renderComposer = (isRecording) =>
+const renderComposer = (isRecording, isEmpty = true) =>
   React.createElement(
     MobileViewContext.Provider,
     { value: true },
     React.createElement(
       TestChatContext.Provider,
-      { value: chatContextValue(isRecording) },
+      { value: chatContextValue(isRecording, isEmpty) },
       React.createElement(AI_Tiptap_Container),
     ),
   );
+
+test("mobile AI chat uses the filled 44px mic and demotes it once text exists", () => {
+  const base = {
+    isMobileCreateComment: false,
+    isMobileTaskWriter: false,
+    isMobileNewTask: false,
+    isMobileAiChat: true,
+    isProcessing: false,
+  };
+  const empty = mobileMicPresentation(base);
+  assert.equal(empty.prominent, true);
+  assert.match(empty.className, /h-11 w-11/);
+  assert.match(empty.className, /rounded-full/);
+  assert.match(empty.className, /bg-shadcn-primary/);
+
+  const typed = mobileMicPresentation({ ...base, hasText: true });
+  assert.equal(typed.prominent, true);
+  assert.match(typed.className, /h-11 w-11/);
+  assert.match(typed.className, /text-icon-dark-gray/);
+  assert.doesNotMatch(typed.className, /bg-shadcn-primary/);
+
+  const recording = mobileMicPresentation({
+    ...base,
+    globalRecording: true,
+  });
+  assert.equal(recording.prominent, false);
+
+  const processing = mobileMicPresentation({
+    ...base,
+    isProcessing: true,
+  });
+  assert.equal(processing.className, "h-[34px] gap-2");
+});
+
+test("real mobile microphones apply each composer presentation state", async () => {
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
+    url: "https://app.hypertask.ai/chat",
+  });
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const previousLocalStorage = global.localStorage;
+  const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.localStorage = dom.window.localStorage;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+
+  const container = document.getElementById("root");
+  const reactRoot = createRoot(container);
+  const renderMic = (id, hasText, globalRecording = false) =>
+    React.createElement(
+      MobileViewContext.Provider,
+      { value: true },
+      React.createElement(RealAudioButton, {
+        callbackHandler: () => {},
+        editor: null,
+        globalRecording,
+        hasText,
+        id,
+        toggleRecording: () => {},
+      }),
+    );
+  const modes = [
+    {
+      id: "create-comment-audio-button",
+      shape: /rounded-sm/,
+      fill: /bg-hypertasks-ai-purple/,
+    },
+    {
+      id: "ai-writer-audio-button",
+      shape: /rounded-sm/,
+      fill: /bg-shadcn-primary/,
+    },
+    {
+      id: "create-task-modal-audio-button",
+      shape: /rounded-sm/,
+      fill: /bg-shadcn-primary/,
+    },
+    {
+      id: "ai-chat-audio-button",
+      shape: /rounded-full/,
+      fill: /bg-shadcn-primary/,
+    },
+  ];
+
+  try {
+    for (const { id, shape, fill } of modes) {
+      await act(async () => reactRoot.render(renderMic(id, false)));
+      const mic = container.querySelector(`#${id}`);
+      assert.ok(mic);
+      assert.match(mic.className, /h-11 w-11/);
+      assert.match(mic.className, shape);
+      assert.match(mic.className, fill);
+
+      await act(async () => reactRoot.render(renderMic(id, true)));
+      assert.match(mic.className, /text-icon-dark-gray/);
+      assert.doesNotMatch(mic.className, fill);
+    }
+
+    await act(async () =>
+      reactRoot.render(renderMic("ai-chat-audio-button", true, true)),
+    );
+    const recordingMic = container.querySelector("#ai-chat-audio-button");
+    assert.match(recordingMic.className, /h-\[32px\]/);
+    assert.doesNotMatch(recordingMic.className, /h-11 w-11/);
+  } finally {
+    await act(async () => reactRoot.unmount());
+    dom.window.close();
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+    if (previousLocalStorage === undefined) delete global.localStorage;
+    else global.localStorage = previousLocalStorage;
+    if (previousActEnvironment === undefined) {
+      delete global.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  }
+});
 
 test("mobile composer follows live recording state without remounting recorder", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>");
@@ -164,47 +304,81 @@ test("mobile composer follows live recording state without remounting recorder",
   const reactRoot = createRoot(container);
 
   try {
-    await act(async () => reactRoot.render(renderComposer(false)));
+    await act(async () => reactRoot.render(renderComposer(false, true)));
     const recorderBefore = container.querySelector('[data-control="recorder"]');
+    const overflow = container.querySelector("[data-ai-chat-mobile-overflow]");
     assert.ok(recorderBefore);
+    assert.ok(overflow);
+    assert.equal(recorderBefore.dataset.hasText, "false");
+    assert.equal(recorderBefore.dataset.globalRecording, "false");
+    assert.match(recorderBefore.className, /order-4 ml-auto/);
     assert.equal(
       container.querySelector("[data-ai-chat-leading-controls]").hidden,
       false,
     );
+    assert.equal(overflow.hidden, false);
     assert.equal(
-      container.querySelector("[data-ai-chat-before-recorder]").hidden,
-      false,
+      overflow.querySelector('[role="group"]').querySelectorAll("button").length,
+      2,
+      "attachment and context controls belong inside the + overflow",
     );
-    assert.equal(
-      container.querySelector("[data-ai-chat-after-recorder]").hidden,
-      false,
-    );
+    assert.equal(container.querySelector("[data-ai-chat-primary-send]"), null);
 
-    await act(async () => reactRoot.render(renderComposer(true)));
+    await act(async () => reactRoot.render(renderComposer(false, false)));
+    const recorderWithText = container.querySelector('[data-control="recorder"]');
+    assert.strictEqual(
+      recorderWithText,
+      recorderBefore,
+      "typing must move, not remount, the recorder",
+    );
+    assert.equal(recorderWithText.dataset.hasText, "true");
+    assert.equal(recorderWithText.dataset.globalRecording, "false");
+    assert.match(recorderWithText.className, /order-2/);
+    assert.doesNotMatch(recorderWithText.className, /ml-auto/);
+    const primarySend = container.querySelector(
+      "[data-ai-chat-primary-send] button",
+    );
+    assert.ok(primarySend);
+    assert.match(primarySend.className, /h-11 w-11/);
+    assert.match(primarySend.className, /rounded-full/);
+    assert.match(primarySend.className, /bg-shadcn-primary/);
+    assert.equal(primarySend.querySelector("svg")?.getAttribute("viewBox"), "0 0 105 105");
+
+    await act(async () => reactRoot.render(renderComposer(true, false)));
     const recorderAfter = container.querySelector('[data-control="recorder"]');
     assert.strictEqual(
       recorderAfter,
       recorderBefore,
       "recording state must not remount the recorder",
     );
+    assert.equal(recorderAfter.dataset.globalRecording, "true");
     assert.equal(
       container.querySelector("[data-ai-chat-leading-controls]").hidden,
       true,
     );
     assert.equal(
-      container.querySelector("[data-ai-chat-before-recorder]").hidden,
+      container.querySelector("[data-ai-chat-mobile-overflow]").hidden,
       true,
     );
-    assert.equal(
-      container.querySelector("[data-ai-chat-after-recorder]").hidden,
-      true,
-    );
+    assert.equal(container.querySelector("[data-ai-chat-primary-send]"), null);
     assert.match(
       container.querySelector("[data-ai-chat-recorder-row]").className,
       /min-w-0 flex-1/,
     );
     assert.match(recorderAfter.className, /min-w-0 flex-1/);
     assert.match(recorderAfter.className, /!mb-0 min-w-0 w-full/);
+
+    await act(async () => reactRoot.render(renderComposer(false, false)));
+    await act(async () => recorderAfter.click());
+    assert.strictEqual(
+      container.querySelector('[data-control="recorder"]'),
+      recorderBefore,
+      "transcription state must not remount the recorder",
+    );
+    assert.equal(
+      container.querySelector("[data-ai-chat-leading-controls]").hidden,
+      true,
+    );
   } finally {
     await act(async () => reactRoot.unmount());
     dom.window.close();

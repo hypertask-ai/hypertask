@@ -20,11 +20,19 @@ import {
 } from "lucide-react";
 import { ITeam, MentionItem } from "@/models/model";
 import AudioButton from "../RTE/Components/AudioButton";
+import { SendArrow } from "../Common/SendArrow";
 import ImageGallery from "../Common/AttachmentsUpload/ImageGalleryView";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { usePathname } from "next/navigation";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import {
   currentProjectAtom,
@@ -66,7 +74,8 @@ export function AI_Tiptap_Container() {
     fileItems,
     removeFile,
   } = useAiChatContext();
-  const mobileRecording = isMbl && isRecording;
+  const [audioProcessing, setAudioProcessing] = useState(false);
+  const mobileDictating = Boolean(isMbl && (isRecording || audioProcessing));
 
   // Focus the composer as soon as it is on screen. The focus call in
   // useAiChat fires when the open-toggle flips, before the dynamically
@@ -147,6 +156,14 @@ export function AI_Tiptap_Container() {
       editor,
       selector: ({ editor }) => editor?.isEmpty ?? true,
     }) ?? true;
+  let recorderWrapperClassName: string | undefined;
+  if (mobileDictating) {
+    recorderWrapperClassName = "order-2 min-w-0 flex-1";
+  } else if (isMbl) {
+    recorderWrapperClassName = isEditorEmpty
+      ? "order-4 ml-auto"
+      : "order-2";
+  }
 
   return (
     <div className={`p-2 relative`} ref={focusRootRef}>
@@ -204,7 +221,9 @@ export function AI_Tiptap_Container() {
           )}
         </div>
         <AiChatComposerActionRow
-          mobileRecording={mobileRecording}
+          mobile={Boolean(isMbl)}
+          mobileDictating={mobileDictating}
+          hasText={!isEditorEmpty}
           leadingControls={
             <>
               <AIModelDropDownButton
@@ -224,39 +243,44 @@ export function AI_Tiptap_Container() {
               {!pathname?.startsWith("/chat") && <ChatScopeDropdown />}
             </>
           }
-          beforeRecorder={
+          attachmentControl={
             <AttachmentButton
               disabled={false}
               onClick={handleAttachmentClick}
             />
           }
+          contextControl={<AddContextButton onClick={handleAddContext} />}
           recorder={
             <AudioButton
               callbackHandler={audioTiptapCallback}
               editor={editor}
               id={"ai-chat-audio-button"}
               toggleRecording={toggleRecording!}
-              wrapperClassName={mobileRecording ? "min-w-0 flex-1" : undefined}
+              globalRecording={isRecording}
+              hasText={!isEditorEmpty}
+              onProcessingChange={setAudioProcessing}
+              ariaLabel="Start dictation"
+              wrapperClassName={recorderWrapperClassName}
               visualizerClassName={
-                mobileRecording ? "!mb-0 min-w-0 w-full" : undefined
+                mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
               }
             />
           }
-          afterRecorder={
-            <>
-              <AddContextButton onClick={handleAddContext} />
-              {isTyping && (
-                <CancelStreamButton onClick={handleCancelStream} />
-              )}
-              {(!isTyping || !isEditorEmpty) && (
-                <SendMessageButton
-                  disabled={isEditorEmpty || isByokBlocked}
-                  isByokBlocked={isByokBlocked}
-                  queueMode={isTyping}
-                  onClick={() => handleSendMessage()}
-                />
-              )}
-            </>
+          streamControl={
+            isTyping ? (
+              <CancelStreamButton onClick={handleCancelStream} />
+            ) : null
+          }
+          sendControl={
+            !isTyping || !isEditorEmpty ? (
+              <SendMessageButton
+                disabled={isEditorEmpty || isByokBlocked}
+                isByokBlocked={isByokBlocked}
+                queueMode={isTyping}
+                mobile={Boolean(isMbl)}
+                onClick={() => handleSendMessage()}
+              />
+            ) : null
           }
         />
         <input
@@ -498,6 +522,7 @@ function AttachmentButton({
       className="relative group rounded-full text-icon-dark-gray hover:text-white-black"
       onClick={(e) => onClick(e)}
       disabled={disabled}
+      aria-label="Attach files"
     >
       <Tooltip
         {...aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.attachment_button(
@@ -557,44 +582,61 @@ function SendMessageButton({
   disabled,
   isByokBlocked,
   queueMode = false,
+  mobile,
   onClick,
 }: {
   disabled: boolean;
   isByokBlocked: boolean;
   queueMode?: boolean;
+  mobile: boolean;
   onClick: () => void;
 }) {
-  const tooltipProps = isByokBlocked
-    ? {
-        text: "Enable API keys first",
-        keyCombination: [] as string[],
-        left: -175,
-        bottom: 25,
-      }
-    : queueMode
-      ? {
-          text: "Queue message",
-          keyCombination: ["enter"] as string[],
-          left: -120,
-          bottom: 25,
-        }
-      : (aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.send_button as any);
+  const sendTooltip =
+    aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.send_button;
+  let tooltipProps: ComponentProps<typeof Tooltip> = {
+    ...sendTooltip,
+    keyCombination: [...(sendTooltip.keyCombination ?? [])],
+  };
+  if (isByokBlocked) {
+    tooltipProps = {
+      text: "Enable API keys first",
+      keyCombination: [] as string[],
+      left: -175,
+      bottom: 25,
+    };
+  } else if (queueMode) {
+    tooltipProps = {
+      text: "Queue message",
+      keyCombination: ["enter"] as string[],
+      left: -120,
+      bottom: 25,
+    };
+  }
+
+  let buttonClassName =
+    "relative group disabled:text-gray-400 disabled:cursor-not-allowed rounded-full";
+  if (mobile) {
+    buttonClassName =
+      "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+  } else if (!disabled && queueMode) {
+    buttonClassName += " text-text-light-gray hover:text-white-black";
+  } else if (!disabled) {
+    buttonClassName += " text-button-arrow hover:opacity-80";
+  }
 
   return (
     <button
-      className={`relative group disabled:text-gray-400 disabled:cursor-not-allowed rounded-full ${
-        !disabled
-          ? queueMode
-            ? " text-text-light-gray hover:text-white-black"
-            : " text-button-arrow hover:opacity-80"
-          : " "
-      }`}
+      className={buttonClassName}
       onClick={onClick}
       disabled={disabled}
       aria-label={queueMode ? "Queue message" : "Send message"}
     >
       <Tooltip {...tooltipProps} />
-      <Send size={16} strokeWidth={1.75} />
+      {mobile ? (
+        <SendArrow size={22} />
+      ) : (
+        <Send size={16} strokeWidth={1.75} />
+      )}
     </button>
   );
 }
@@ -616,7 +658,11 @@ function CancelStreamButton({ onClick }: { onClick: () => void }) {
 
 function AddContextButton({ onClick }: { onClick: () => void }) {
   return (
-    <button className={`relative group text-white`} onClick={onClick}>
+    <button
+      className="relative group text-white"
+      onClick={onClick}
+      aria-label="Add context"
+    >
       <Tooltip
         {...(aiTaskWriterConfig.shortcutsAndTooltips.ai_chat
           .add_context_button as any)}

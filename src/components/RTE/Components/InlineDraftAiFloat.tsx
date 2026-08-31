@@ -7,7 +7,7 @@ import { EditorContent, useEditorState } from "@tiptap/react";
 import { LoaderCircle, X } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { SendArrow } from "@/components/Common/AttachmentsUpload";
+import { SendArrow } from "@/components/Common/SendArrow";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
 import {

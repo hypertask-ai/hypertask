@@ -22,10 +22,6 @@ const composerPath = path.join(
   "src/components/Common/AttachmentsUpload/index.tsx",
 );
 const composer = fs.readFileSync(composerPath, "utf8");
-const audioButton = fs.readFileSync(
-  path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
-  "utf8",
-);
 
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
@@ -36,6 +32,19 @@ const {
 } = jiti(
   path.join(root, "src/components/Common/AttachmentsUpload/mobileCommentComposer.ts"),
 );
+const { mobileMicPresentation } = jiti(
+  path.join(
+    root,
+    "src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
+);
+const commentMicState = {
+  isMobileCreateComment: true,
+  isMobileTaskWriter: false,
+  isMobileNewTask: false,
+  isMobileAiChat: false,
+  isProcessing: false,
+};
 
 test("empty composer: the mic is the primary, pinned to the right", () => {
   const cls = mobileCommentMicWrapperClass({ hasText: false });
@@ -74,16 +83,13 @@ test("Send occupies the primary slot once there is text, same colour as the demo
 });
 
 test("the mic loses its fill as soon as there is text", () => {
-  // hasText is checked BEFORE the create-comment carve-out, otherwise the
-  // comment composer keeps a filled mic and the old bug returns.
-  const branch = audioButton.match(
-    /const prominentClassName = isProcessing[\s\S]*?;\n/,
-  );
-  assert.ok(branch, "prominent styling branch must exist");
-  assert.ok(
-    branch[0].indexOf("hasText") < branch[0].indexOf("isMobileCreateComment"),
-    "hasText must outrank the create-comment carve-out",
-  );
+  const presentation = mobileMicPresentation({
+    ...commentMicState,
+    hasText: true,
+  });
+  assert.equal(presentation.prominent, true);
+  assert.match(presentation.className, /text-icon-dark-gray/);
+  assert.doesNotMatch(presentation.className, /bg-hypertasks-ai-purple/);
 });
 
 test("the mic is never re-parented between states", () => {

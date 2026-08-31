@@ -7,7 +7,20 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
 
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
-const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
+const jiti = require("jiti")(__filename, { interopDefault: true });
+const { mobileMicPresentation } = jiti(
+  path.join(
+    __dirname,
+    "../src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
+);
+const commentMicState = {
+  isMobileCreateComment: true,
+  isMobileTaskWriter: false,
+  isMobileNewTask: false,
+  isMobileAiChat: false,
+  isProcessing: false,
+};
 
 // HTPR-5684 reverses what this test used to assert. It required the mic to
 // stay the filled purple primary after typing, with Send as a neutral arrow
@@ -16,22 +29,28 @@ const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
 // the same neutral colour as the demoted mic. The empty-composer half of the
 // old rule survives unchanged and is still checked here.
 test("empty mobile comment composer keeps the microphone as the filled primary", () => {
-  assert.match(
-    audioButton,
-    /isMobileCreateComment[\s\S]*?h-11 w-11[\s\S]*?bg-hypertasks-ai-purple/,
-  );
+  const presentation = mobileMicPresentation(commentMicState);
+  assert.equal(presentation.prominent, true);
+  assert.match(presentation.className, /h-11 w-11/);
+  assert.match(presentation.className, /bg-hypertasks-ai-purple/);
 });
 
 test("typed mobile comments hand the primary slot to Send without a colour change", () => {
-  // hasText has to be tested BEFORE the create-comment carve-out, or the
-  // comment composer keeps a filled mic and the two primaries compete again.
-  const branch = audioButton.match(
-    /const prominentClassName = isProcessing[\s\S]*?;\n/,
+  const presentation = mobileMicPresentation({
+    ...commentMicState,
+    hasText: true,
+  });
+  assert.equal(presentation.prominent, true);
+  assert.match(presentation.className, /text-icon-dark-gray/);
+  assert.doesNotMatch(presentation.className, /bg-hypertasks-ai-purple/);
+
+  const commentBranch = attachments.slice(
+    attachments.indexOf('{mode === "create-comment" ? ('),
+    attachments.indexOf("// ========================================================== DESKTOP"),
   );
-  assert.ok(branch, "prominent styling branch must exist");
-  assert.ok(
-    branch[0].indexOf("hasText") < branch[0].indexOf("isMobileCreateComment"),
-    "hasText must outrank the create-comment carve-out",
+  assert.match(
+    commentBranch,
+    /<AudioButton[\s\S]*?id=\{mode \+ "-audio-button"\}[\s\S]*?globalRecording=\{isRecording\}[\s\S]*?hasText=\{hasText\}/,
   );
 
   // HTPR-5659: Send takes the right-hand slot but keeps the demoted-mic colour.

@@ -29,10 +29,17 @@ const read = (relativePath) =>
 
 const editor = read("src/components/RTE/Components/TiptapEditor.tsx");
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
-const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
+const sendArrow = read("src/components/Common/SendArrow.tsx");
 const tiptapStyles = read("src/styles/tiptap.module.scss");
 const mainContainer = read("src/components/RTE/Components/TiptapMainContainer.tsx");
 const tailwindConfig = read("tailwind.config.ts");
+const jiti = require("jiti")(__filename, { interopDefault: true });
+const { mobileMicPresentation } = jiti(
+  path.join(
+    __dirname,
+    "../src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
+);
 
 // The `d` of the send chevron. Identifies the arrow path wherever it moves to
 // inside IOSend, so the fill assertion cannot drift onto a different element.
@@ -69,13 +76,10 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   // HTPR-5684 retired IOSend for the shared SendArrow. HTPR-5659 keeps Send
   // the same neutral colour as the demoted mic, so the arrow must track
   // currentColor (not a hardcoded white that vanishes on light themes).
-  const arrowStart = attachments.indexOf("export const SendArrow");
-  assert.ok(arrowStart > -1, "SendArrow not found");
-  const arrow = attachments.slice(arrowStart);
-  const arrowAt = arrow.indexOf(SEND_ARROW_GEOMETRY);
+  const arrowAt = sendArrow.indexOf(SEND_ARROW_GEOMETRY);
   assert.ok(arrowAt > -1, "send arrow path geometry not found in SendArrow");
-  assert.match(arrow.slice(0, arrowAt), /fill="currentColor"/);
-  assert.doesNotMatch(arrow.slice(0, arrowAt), /fill="white"/);
+  assert.match(sendArrow.slice(0, arrowAt), /fill="currentColor"/);
+  assert.doesNotMatch(sendArrow.slice(0, arrowAt), /fill="white"/);
   const button = attachments.match(
     /aria-label="Send comment"[\s\S]{0,500}?className="([^"]+)"/,
   );
@@ -112,12 +116,15 @@ test("mobile create-comment uses AppSheet for both refine and compose", () => {
 });
 
 test("empty-state mobile comment microphone is rectangular, still purple", () => {
-  // Class order inside the string is incidental; presence of both is not.
-  const branch = audioButton.match(
-    /isMobileCreateComment\s*\?\s*"([^"]*)"/,
-  );
-  assert.ok(branch, "isMobileCreateComment class branch not found");
-  assert.match(branch[1], /\brounded-sm\b/);
-  assert.doesNotMatch(branch[1], /\brounded-full\b/);
-  assert.match(branch[1], /\bbg-hypertasks-ai-purple\b/);
+  const presentation = mobileMicPresentation({
+    isMobileCreateComment: true,
+    isMobileTaskWriter: false,
+    isMobileNewTask: false,
+    isMobileAiChat: false,
+    isProcessing: false,
+  });
+  assert.equal(presentation.prominent, true);
+  assert.match(presentation.className, /\brounded-sm\b/);
+  assert.doesNotMatch(presentation.className, /\brounded-full\b/);
+  assert.match(presentation.className, /\bbg-hypertasks-ai-purple\b/);
 });

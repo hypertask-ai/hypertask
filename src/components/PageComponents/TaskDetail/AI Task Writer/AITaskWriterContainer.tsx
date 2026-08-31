@@ -18,7 +18,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 // Components
 import AILogo from "@/assets/AILogo.png";
 import { Paperclip, RotateCw } from "lucide-react";
-import { SendArrow } from "@/components/Common/AttachmentsUpload";
+import { SendArrow } from "@/components/Common/SendArrow";
 import ConfirmModal from "@/components/Modals/Common Modals/ConfirmActionModal";
 import AudioButton from "@/components/RTE/Components/AudioButton";
 import AITaskWriterHeadline from "./AITaskWriterHeadline";
