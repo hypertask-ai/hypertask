@@ -7,6 +7,7 @@ import {
   classifyTaskMoveCollapse,
   mergeStatusFlipActivity,
 } from "./taskMoveCollapse";
+import { sendTaskMoveNotificationIfNeeded } from "./sendTaskMoveNotification";
 
 interface IProps {
   userObj: IUser;
@@ -21,6 +22,7 @@ interface IProps {
     displayName: string;
     photoURL?: string | null;
   } | null;
+  sendNotification?: () => Promise<unknown>;
 }
 
 const createTaskMovedActivity = async ({
@@ -31,7 +33,14 @@ const createTaskMovedActivity = async ({
   fromSection_title,
   taskId,
   fromAgent,
+  sendNotification,
 }: IProps) => {
+  const finish = async <T extends { shouldNotify: boolean }>(result: T) => {
+    if (sendNotification) {
+      await sendTaskMoveNotificationIfNeeded(result, sendNotification);
+    }
+    return result;
+  };
   const activityBody: ITaskMoveActivity | any = {
     type: "TaskMove",
     data: {
@@ -50,7 +59,7 @@ const createTaskMovedActivity = async ({
     },
   };
   if (fromSectionId === toSectionId) {
-    return { newComment: null, shouldNotify: false };
+    return await finish({ newComment: null, shouldNotify: false });
   }
 
   // Only the task's latest activity can be extended. This preserves anything
@@ -91,7 +100,7 @@ const createTaskMovedActivity = async ({
         createdAt: new Date(),
       },
     });
-    return { newComment, shouldNotify: false };
+    return await finish({ newComment, shouldNotify: false });
   }
 
   if (previous && collapseKind === "quick-journey") {
@@ -101,7 +110,7 @@ const createTaskMovedActivity = async ({
     // leaves no misleading move behind.
     if (originSectionId === toSectionId) {
       await prisma.comment.delete({ where: { id: previous.id } });
-      return { newComment: null, shouldNotify: true };
+      return await finish({ newComment: null, shouldNotify: true });
     }
 
     const newComment = await prisma.comment.update({
@@ -120,7 +129,7 @@ const createTaskMovedActivity = async ({
         },
       },
     });
-    return { newComment, shouldNotify: true };
+    return await finish({ newComment, shouldNotify: true });
   }
 
   const newComment = await createActivity({
@@ -128,7 +137,7 @@ const createTaskMovedActivity = async ({
     taskId,
     runTaskSummary: false,
   });
-  return { newComment, shouldNotify: true };
+  return await finish({ newComment, shouldNotify: true });
 };
 
 export default createTaskMovedActivity;

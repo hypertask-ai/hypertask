@@ -18,6 +18,24 @@ const {
 const { sendTaskMoveNotificationIfNeeded } = jiti(
   path.join(root, "src/utils/controllers/activities/sendTaskMoveNotification.ts"),
 );
+const controllerJiti = createJiti(__filename, {
+  alias: {
+    "@/lib/prisma": path.join(__dirname, "stubs/task-move-prisma.cjs"),
+    "@/pages/api/queues/FAST/generateSummary": path.join(
+      __dirname,
+      "stubs/schedule-summary-noop.cjs",
+    ),
+    "@": path.join(root, "src"),
+  },
+  interopDefault: true,
+});
+const createTaskMovedActivityModule = controllerJiti(
+  path.join(root, "src/utils/controllers/activities/createTaskMovedActivity.ts"),
+);
+const createTaskMovedActivity =
+  typeof createTaskMovedActivityModule === "function"
+    ? createTaskMovedActivityModule
+    : createTaskMovedActivityModule.default;
 
 const NOW = 2_000_000_000;
 const move = (
@@ -43,6 +61,51 @@ const move = (
     ...(quickMoveCollapsed ? { quickMoveCollapsed } : {}),
   },
 });
+
+const human = {
+  id: 6,
+  displayName: "Valentin",
+  email: "valentin@example.com",
+};
+const agent = {
+  id: "agent-a",
+  userId: 6,
+  displayName: "Dev Agent",
+  photoURL: null,
+};
+
+function controllerState(previousActivity) {
+  const state = {
+    previous: {
+      id: 1,
+      createdAt: new Date(Date.now() - 5 * 60_000),
+      activity: previousActivity,
+    },
+    updates: [],
+    deletes: [],
+    creates: [],
+  };
+  globalThis.__taskMovePrismaState = state;
+  return state;
+}
+
+async function reverseThroughController({ previousActivity, fromAgent = null }) {
+  const state = controllerState(previousActivity);
+  let deliveries = 0;
+  const result = await createTaskMovedActivity({
+    userObj: human,
+    fromAgent,
+    fromSectionId: 2,
+    fromSection_title: "Section 2",
+    toSectionId: 1,
+    toSection_title: "Section 1",
+    taskId: 42,
+    sendNotification: async () => {
+      deliveries += 1;
+    },
+  });
+  return { state, deliveries, result };
+}
 
 const classify = ({
   previousActivity = move(1, 2),
@@ -124,6 +187,46 @@ test("merging a flip preserves the section pair and records the latest destinati
   assert.equal(secondFlip.data.toSection.sectionId, 2);
   assert.equal(secondFlip.data.currentSection.sectionId, 2);
   assert.equal(secondFlip.data.statusFlipCount, 2);
+});
+
+test("the controller collapses a human A-B reversal without notifying again", async () => {
+  const { state, deliveries, result } = await reverseThroughController({
+    previousActivity: move(1, 2),
+  });
+
+  assert.equal(state.updates.length, 1);
+  assert.equal(state.creates.length, 0);
+  assert.equal(result.shouldNotify, false);
+  assert.equal(deliveries, 0);
+});
+
+test("an agent and its owner never share a collapse run", async () => {
+  const humanAfterAgent = await reverseThroughController({
+    previousActivity: move(1, 2, { agent }),
+  });
+  assert.equal(humanAfterAgent.state.updates.length, 0);
+  assert.equal(humanAfterAgent.state.creates.length, 1);
+  assert.equal(humanAfterAgent.deliveries, 1);
+
+  const agentAfterHuman = await reverseThroughController({
+    previousActivity: move(1, 2),
+    fromAgent: agent,
+  });
+  assert.equal(agentAfterHuman.state.updates.length, 0);
+  assert.equal(agentAfterHuman.state.creates.length, 1);
+  assert.equal(agentAfterHuman.deliveries, 1);
+});
+
+test("the same agent continues its own collapse run", async () => {
+  const { state, deliveries, result } = await reverseThroughController({
+    previousActivity: move(1, 2, { agent }),
+    fromAgent: agent,
+  });
+
+  assert.equal(state.updates.length, 1);
+  assert.equal(state.creates.length, 0);
+  assert.equal(result.shouldNotify, false);
+  assert.equal(deliveries, 0);
 });
 
 test("a collapsed run does not invoke notification delivery", async () => {

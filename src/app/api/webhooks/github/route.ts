@@ -241,32 +241,34 @@ export async function POST(request: NextRequest) {
 
         try {
           const previousSectionId = moveResult.oldTask?.sectionId;
-          const moveActivity =
-            previousSectionId !== null && previousSectionId !== undefined
-              ? await createTaskMovedActivity({
-                  taskId: task.id,
-                  toSection_title: section.section_title,
-                  toSectionId: section.id,
-                  userObj: currentUser,
-                  fromSection_title: moveResult.oldTask.section ?? "",
-                  fromSectionId: previousSectionId,
-                  fromAgent: null,
-                })
-              : { newComment: null, shouldNotify: true };
-          await Promise.all([
-            broadcastBoardChange(task.projectId, {
-              originUserId: generalConfig.hyperAiId,
-            }),
-            sendTaskMoveNotificationIfNeeded(moveActivity, () =>
-              sendNotificationForTask(
-                generalConfig.hyperAiId,
-                "TaskMoved",
-                task.id,
-                task.projectId,
-                null,
-              ),
-            ),
-          ]);
+          const sendMoveNotification = () =>
+            sendNotificationForTask(
+              generalConfig.hyperAiId,
+              "TaskMoved",
+              task.id,
+              task.projectId,
+              null,
+            );
+          if (previousSectionId !== null && previousSectionId !== undefined) {
+            await createTaskMovedActivity({
+              taskId: task.id,
+              toSection_title: section.section_title,
+              toSectionId: section.id,
+              userObj: currentUser,
+              fromSection_title: moveResult.oldTask.section ?? "",
+              fromSectionId: previousSectionId,
+              fromAgent: null,
+              sendNotification: sendMoveNotification,
+            });
+          } else {
+            await sendTaskMoveNotificationIfNeeded(
+              { shouldNotify: true },
+              sendMoveNotification,
+            );
+          }
+          await broadcastBoardChange(task.projectId, {
+            originUserId: generalConfig.hyperAiId,
+          });
         } catch (error) {
           console.warn(
             `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
