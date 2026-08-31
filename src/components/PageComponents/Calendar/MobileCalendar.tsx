@@ -157,7 +157,7 @@ const WeekStrip = () => {
   );
 };
 
-const AgendaRow = ({
+export const AgendaRow = ({
   task,
   project,
   hasDraft,
@@ -178,6 +178,7 @@ const AgendaRow = ({
       currentSetting="None"
       assignedUsers={humanAssignees}
       agentAssignees={agentAssignees}
+      blockingUser={task.waitingOnUser ?? undefined}
       active={false}
       hover={false}
       hasDraft={hasDraft}
