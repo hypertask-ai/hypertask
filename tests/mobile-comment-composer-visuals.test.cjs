@@ -85,18 +85,18 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   assert.doesNotMatch(button[1], /(?:^|\s)text-white(?:\s|$)/);
 });
 
-test("mobile create-comment composer docks AI panel inside the composer", () => {
+test("mobile create-comment uses fullscreen refine when draft has text", () => {
   const mobileBranch = mainContainer.slice(
     mainContainer.indexOf("// FOR: New comment on mobile"),
     mainContainer.indexOf("// FOR: Description and old comment."),
   );
-  assert.match(mobileBranch, /<InlineDraftAiFloat/);
+  assert.match(mobileBranch, /aiRefineOpen/);
+  assert.match(mobileBranch, /presentation="refine-fullscreen"/);
+  assert.match(mobileBranch, /!editor\.isEmpty/);
+  assert.match(mobileBranch, /aiComposeOpen/);
   assert.match(mobileBranch, /presentation="composer"/);
-  assert.match(mobileBranch, /suppressEditorSelectionHighlight/);
+  assert.match(mobileBranch, /editor\.isEmpty/);
   assert.match(mobileBranch, /toggleAiTaskWriter=\{toggleAiTaskWriter\}/);
-  assert.match(mobileBranch, /hideComposerDictation=\{shouldShowInlineDraftAi\}/);
-  assert.match(mobileBranch, /aiComposerOpen/);
-  assert.match(mobileBranch, /max-h-\[min\(38svh/);
   assert.doesNotMatch(mobileBranch, /MobileBottomSheet/);
 });
 

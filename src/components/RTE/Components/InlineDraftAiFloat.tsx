@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { LoaderCircle } from "lucide-react";
@@ -33,6 +34,8 @@ const CHIP_SHEET_PRIMARY_CLASS =
   "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hypertasks-ai-purple px-3 text-content font-semibold text-black disabled:opacity-50";
 const CHIP_SHEET_DONE_CLASS =
   "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hover-active px-3 text-content font-semibold text-white-black";
+const CHIP_REFINE_CLASS =
+  "rounded-sm border border-thin border-label-span bg-cardBackground px-3 py-2.5 text-meta font-medium text-white-black hover:bg-hover-active focus-visible:bg-hover-active disabled:opacity-50";
 
 const EDIT_ACTIONS = [
   ["Improve readability", "ImproveReadability"],
@@ -54,6 +57,11 @@ function selectedHtml(editor: Editor, range: InlineDraftAiRange) {
     DOMSerializer.fromSchema(editor.schema).serializeFragment(fragment),
   );
   return wrapper.innerHTML;
+}
+
+function draftHtml(editor: Editor, range: InlineDraftAiRange) {
+  if (range.to > range.from) return selectedHtml(editor, range);
+  return editor.getHTML();
 }
 
 function focusablesIn(root: HTMLElement) {
@@ -82,7 +90,7 @@ const InlineDraftAiFloat = ({
   allowSuggestReply?: boolean;
   toggleRecording?: (val: boolean) => void;
   isRecording?: boolean;
-  presentation?: "inline" | "composer";
+  presentation?: "inline" | "composer" | "refine-fullscreen";
   suppressEditorSelectionHighlight?: boolean;
 }) => {
   const [prompt, setPrompt] = useState("");
@@ -123,6 +131,13 @@ const InlineDraftAiFloat = ({
   }, [isLoading]);
 
   const isComposer = presentation === "composer";
+  const isRefineFullscreen = presentation === "refine-fullscreen";
+
+  useEffect(() => {
+    if (!isRefineFullscreen || !editor) return;
+    (document.activeElement as HTMLElement | null)?.blur();
+    editor.commands.blur();
+  }, [editor, isRefineFullscreen]);
 
   useEffect(() => {
     if (!editor) return;
@@ -180,8 +195,8 @@ const InlineDraftAiFloat = ({
       editor.commands.setTextSelection(from);
     }
     onClose();
-    if (!isComposer) {
-      editor.commands.focus();
+    if (!isComposer || isRefineFullscreen) {
+      editor.commands.focus("end");
     }
   };
   closeRef.current = close;
@@ -247,7 +262,7 @@ const InlineDraftAiFloat = ({
   // Dismiss when clicking outside the float. Keep open for draft clicks so
   // users can adjust the selection without the bar disappearing.
   useEffect(() => {
-    if (isComposer) return;
+    if (isComposer || isRefineFullscreen) return;
 
     const onPointerDown = (event: PointerEvent) => {
       if (loadingRef.current || recordingRef.current || audioProcessingRef.current) {
@@ -263,12 +278,13 @@ const InlineDraftAiFloat = ({
 
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [editor, isComposer]);
+  }, [editor, isComposer, isRefineFullscreen]);
 
   if (!editor || !scope) return null;
 
   const hasSelection = scope.to > scope.from;
-  const showEditChips = shouldShowInlineDraftAiChips(hasSelection, prompt);
+  const showEditChips =
+    isRefineFullscreen || shouldShowInlineDraftAiChips(hasSelection, prompt);
   const showDictation = Boolean(toggleRecording);
   const dictationActive = isRecording || audioProcessing;
 
@@ -394,6 +410,10 @@ const InlineDraftAiFloat = ({
       if (requestId !== requestIdRef.current) return;
       replaceScope(html, range);
       setPrompt("");
+      if (isRefineFullscreen) {
+        closeRef.current();
+        return;
+      }
       setHasResult(true);
     } catch {
       // toast.promise already reports the request error.
@@ -526,6 +546,76 @@ const InlineDraftAiFloat = ({
       ))}
     </div>
   ) : null;
+
+  const refineEditChips = showEditChips ? (
+    <div className="flex flex-wrap gap-2">
+      {EDIT_ACTIONS.map(([label, command]) => (
+        <button
+          key={command}
+          type="button"
+          disabled={isLoading}
+          className={CHIP_REFINE_CLASS}
+          onClick={() => void runAction({ command })}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  if (isRefineFullscreen && typeof document !== "undefined") {
+    return createPortal(
+      <div
+        ref={rootRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Write with AI"
+        className="fixed inset-0 z-[10000] flex flex-col bg-pageBackground p-3 pb-[max(12px,env(safe-area-inset-bottom))]"
+      >
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[5px] border-thin border-hypertasks-ai-purple/70 bg-modalBackground shadow-customshadow-2">
+          <div className="flex shrink-0 items-center justify-between border-b border-thin border-border px-4 py-3">
+            <h2 className="text-subheading font-medium text-white-black">
+              Write with AI
+            </h2>
+            <button
+              type="button"
+              className="rounded-sm px-2 py-1 text-meta text-text-light-gray hover:bg-hover-active"
+              onClick={close}
+              disabled={isLoading}
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            <div
+              className="text-content leading-relaxed text-white-black [&_p]:mb-2 [&_p:last-child]:mb-0"
+              dangerouslySetInnerHTML={{ __html: draftHtml(editor, scope) }}
+            />
+          </div>
+
+          <div className="shrink-0 border-t border-thin border-border px-4 py-3">
+            {isLoading ? (
+              <div
+                className="flex items-center gap-2 text-meta text-text-light-gray"
+                role="status"
+              >
+                <LoaderCircle
+                  size={16}
+                  className="animate-spin text-hypertasks-ai-purple"
+                  aria-hidden
+                />
+                Rewriting draft…
+              </div>
+            ) : (
+              refineEditChips
+            )}
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
 
   const composerResultActions = hasResult ? (
     <div className="flex flex-col">
