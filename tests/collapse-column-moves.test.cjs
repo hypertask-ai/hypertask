@@ -216,7 +216,7 @@ test("the controller collapses a human A-B reversal without notifying again", as
   assert.equal(persisted.data.statusFlipCount, 1);
 });
 
-test("two fenced flips preserve both activity-count increments", async () => {
+test("the second persisted flip increments the stored count again", async () => {
   const state = controllerState(move(1, 2));
   let deliveries = 0;
   const sendNotification = async () => {

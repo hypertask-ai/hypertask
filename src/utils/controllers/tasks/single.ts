@@ -508,6 +508,19 @@ export async function updateTaskSingle(
       },
       { timeout: 60_000 },
     );
+    const moveNotification =
+      moveActivity && options.taskMovedActivity?.sendNotification
+        ? sendTaskMoveNotificationIfNeeded(
+            moveActivity,
+            options.taskMovedActivity.sendNotification,
+          ).catch((error) => {
+            console.warn(
+              "[task-move] Notification failed after the task update committed.",
+              error,
+            );
+            return false;
+          })
+        : Promise.resolve(false);
     await Promise.all([
       agentWebhookDeliveryIds.length > 0
         ? publishAgentWebhookDeliveries(agentWebhookDeliveryIds)
@@ -515,12 +528,7 @@ export async function updateTaskSingle(
       boardWebhookDeliveryIds.length > 0
         ? publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
         : Promise.resolve(),
-      moveActivity && options.taskMovedActivity?.sendNotification
-        ? sendTaskMoveNotificationIfNeeded(
-            moveActivity,
-            options.taskMovedActivity.sendNotification,
-          )
-        : Promise.resolve(),
+      moveNotification,
     ]);
 
     if (requestedMutation.description !== undefined) {
