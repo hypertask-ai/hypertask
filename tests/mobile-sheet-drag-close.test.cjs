@@ -36,18 +36,51 @@ function getDragEndBody(sheetBundle) {
 
 test("closing a mobile sheet during drag release does not measure an unmounted panel", () => {
   const sheetBundle = fs.readFileSync(require.resolve("react-modal-sheet"), "utf8");
-  const getSheetHeight = loadSheetHeightHelper(sheetBundle);
+  const safeSheetHeight = loadSheetHeightHelper(sheetBundle);
+  let measurements = 0;
+  let animations = 0;
+  let closes = 0;
+  const dragEnd = vm.runInNewContext(
+    `((_, { velocity }) => ${getDragEndBody(sheetBundle)})`,
+    {
+      animationOptions: {},
+      detent: "content-height",
+      dragCloseThreshold: 0.6,
+      dragVelocityThreshold: 500,
+      getClosestSnapPoint() {
+        assert.fail("an unsnapped sheet must not resolve a snap point");
+      },
+      getSheetHeight(sheetRef) {
+        measurements += 1;
+        return safeSheetHeight(sheetRef);
+      },
+      getSnapPoints() {
+        assert.fail("an unsnapped sheet must not calculate snap points");
+      },
+      indicatorRotation: { set() {} },
+      onClose() {
+        closes += 1;
+      },
+      onSnap: undefined,
+      react: {
+        animate() {
+          animations += 1;
+        },
+      },
+      sheetRef: { current: null },
+      snapPointsProp: undefined,
+      y: { get: () => 0 },
+    },
+  );
 
-  assert.equal(getSheetHeight({ current: null }), 0);
+  assert.doesNotThrow(() => dragEnd(null, { velocity: { y: 0 } }));
+  assert.equal(measurements, 1);
+  assert.equal(animations, 1);
+  assert.equal(closes, 1);
   assert.equal(
-    getSheetHeight({
+    safeSheetHeight({
       current: { getBoundingClientRect: () => ({ height: 216.7 }) },
     }),
     217,
-  );
-  assert.match(
-    getDragEndBody(sheetBundle),
-    /const sheetHeight = getSheetHeight\(sheetRef\)/,
-    "drag release must use the null-safe sheet measurement",
   );
 });
