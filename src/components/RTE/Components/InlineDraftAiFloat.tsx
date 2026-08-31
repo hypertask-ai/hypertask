@@ -324,7 +324,8 @@ const InlineDraftAiFloat = ({
 
   const hasSelection = scope.to > scope.from;
   const showEditChips =
-    isRefineFullscreen || shouldShowInlineDraftAiChips(hasSelection, prompt);
+    (isMobileAiSheet && editorHasText) ||
+    shouldShowInlineDraftAiChips(hasSelection, prompt);
   const showDictation = Boolean(toggleRecording);
   const dictationActive = isRecording || audioProcessing;
 
