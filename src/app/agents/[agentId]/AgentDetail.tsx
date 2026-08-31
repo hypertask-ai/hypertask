@@ -384,6 +384,9 @@ const AgentDetail = (props: IProp) => {
 
   useEffect(() => {
     let cancelled = false;
+    setAgent((prev) =>
+      prev && prev.id !== agentId && prev.slug !== agentId ? null : prev,
+    );
 
     // Nested routes take the uuid, not the slug, so activity runs on the id
     // the agent load resolved.
@@ -447,6 +450,7 @@ const AgentDetail = (props: IProp) => {
           };
           if (!res.ok || !data.success || !data.agent) return;
           if (cancelled || seq !== agentRefreshSeq.current) return;
+          const refreshedAgent = data.agent;
           const {
             working,
             heartbeatAt,
@@ -454,20 +458,20 @@ const AgentDetail = (props: IProp) => {
             operations,
             boards,
             boardAccess,
-          } = data.agent;
-          setAgent((prev) =>
-            prev?.id === data.agent?.id
-              ? {
-                  ...prev,
-                  working: working ?? null,
-                  heartbeatAt,
-                  lastPostedAt,
-                  operations,
-                  boards,
-                  boardAccess,
-                }
-              : data.agent ?? prev,
-          );
+          } = refreshedAgent;
+          setAgent((prev) => {
+            if (!prev) return refreshedAgent;
+            if (prev.id !== refreshedAgent.id) return prev;
+            return {
+              ...prev,
+              working: working ?? null,
+              heartbeatAt,
+              lastPostedAt,
+              operations,
+              boards,
+              boardAccess,
+            };
+          });
         })
         .catch(() => {});
     }, POLL_MS);
@@ -517,6 +521,7 @@ const AgentDetail = (props: IProp) => {
               // Only the newest request may merge, or a slow earlier
               // response would overwrite a newer count.
               if (seq !== agentRefreshSeq.current || cancelled) return;
+              const refreshedAgent = data.agent;
               const {
                 working,
                 heartbeatAt,
@@ -524,20 +529,20 @@ const AgentDetail = (props: IProp) => {
                 operations,
                 boards,
                 boardAccess,
-              } = data.agent;
-              setAgent((prev) =>
-                prev?.id === data.agent?.id
-                  ? {
-                      ...prev,
-                      working: working ?? null,
-                      heartbeatAt,
-                      lastPostedAt,
-                      operations,
-                      boards,
-                      boardAccess,
-                    }
-                  : data.agent ?? prev,
-              );
+              } = refreshedAgent;
+              setAgent((prev) => {
+                if (!prev) return refreshedAgent;
+                if (prev.id !== refreshedAgent.id) return prev;
+                return {
+                  ...prev,
+                  working: working ?? null,
+                  heartbeatAt,
+                  lastPostedAt,
+                  operations,
+                  boards,
+                  boardAccess,
+                };
+              });
             })
             .catch(() => {});
         }, 500);
