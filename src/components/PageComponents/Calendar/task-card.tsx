@@ -26,7 +26,8 @@ import { useCalendarContext } from "@/lib/contexts/Calendar/calendar.context";
 // (TableView.tsx) — same grid, header, and cell styling.
 const DAY_TABLE_COLUMNS = "90px minmax(200px,1fr) 140px 64px 100px 80px";
 const DAY_TABLE_LABEL_CLASS = "border-border-labelComponent text-label-component";
-
+const isTaskBlocked = (task: ITask) =>
+  task.waitingOnUserId !== null && task.waitingOnUserId !== undefined;
 
 export function TaskCard({
   task,
@@ -94,7 +95,7 @@ export function TaskCard({
             _currentProject={currentProject!}
             openDetail={() => {}}
             active={active}
-            blocked={task.waitingOnUserId != null}
+            blocked={isTaskBlocked(task)}
             linkClassName={view === "month" ? "gap-0" : ""}
           >
             <div className={`flex gap-1 flex-wrap basis-full items-center`}>
@@ -368,7 +369,10 @@ export function DaySection({
                 projects.find((item) => item.id === task.projectId) ??
                 task.project;
               const selected = currentTask === task.id;
-              const blocked = task.waitingOnUserId != null;
+              const blocked = isTaskBlocked(task);
+              let borderClass = "border-l-transparent";
+              if (blocked) borderClass = "border-[hsl(0_62.8%_30.6%)]";
+              else if (selected) borderClass = "border-l-selected-item-border";
               const openTask = () => handleTaskClick(day, task);
               return (
                 // The row carries the task-<id> focus target the calendar's
@@ -382,13 +386,7 @@ export function DaySection({
                   style={{ gridTemplateColumns: DAY_TABLE_COLUMNS }}
                   className={`outline-none grid cursor-pointer items-center gap-2 py-[6px] px-5 rounded-md border-l-4 text-dense ${
                     selected ? "bg-active-elementBg" : "bg-transparent"
-                  } ${
-                    blocked
-                      ? "border-[hsl(0_62.8%_30.6%)]"
-                      : selected
-                        ? "border-l-selected-item-border"
-                        : "border-l-transparent"
-                  }`}
+                  } ${borderClass}`}
                 >
                   <span className="font-bold text-icon-dark-gray whitespace-nowrap">
                     {/* Calendar payloads don't select the project prefix;

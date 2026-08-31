@@ -99,11 +99,10 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
     const blockedTask = task(6);
     const unblockedTask = task(null);
     const day = new Date("2026-08-31T00:00:00.000Z");
-
-    for (const view of ["month", "week"]) {
+    const cardClassName = (calendarTask, view) => {
       const html = renderToStaticMarkup(
         React.createElement(TaskCard, {
-          task: blockedTask,
+          task: calendarTask,
           taskDay: day,
           index: 0,
           active: false,
@@ -111,11 +110,16 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
           view,
         }),
       );
-      const document = new JSDOM(html).window.document;
+      return new JSDOM(html).window.document.querySelector(".kanban-task-card")
+        .className;
+    };
+
+    for (const view of ["month", "week"]) {
       assert.match(
-        document.querySelector(".kanban-task-card").className,
+        cardClassName(blockedTask, view),
         /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
       );
+      assert.match(cardClassName(unblockedTask, view), /border-transparent/);
     }
 
     const dayHtml = renderToStaticMarkup(
