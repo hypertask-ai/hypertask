@@ -81,6 +81,18 @@ const defaultFontSizeNames = new Set([
   "8xl",
   "9xl",
 ]);
+const isArbitraryFontSize = (value) => {
+  const arbitrary = value.match(/^\[(.+)\]$/)?.[1];
+  if (!arbitrary) return false;
+  return (
+    arbitrary.startsWith("length:") ||
+    /^-?\d*\.?\d+(?:px|r?em|ch|ex|lh|vw|vh|vmin|vmax|%|pt|pc|in|cm|mm|q)$/.test(
+      arbitrary,
+    ) ||
+    /^(?:calc|clamp|min|max)\(/.test(arbitrary) ||
+    /^var\(--[^)]*(?:font|text)[^)]*size[^)]*\)$/.test(arbitrary)
+  );
+};
 const fontSizeUtilities = (tokens, configuredNames) =>
   [...tokens].filter((token) => {
     const utility = token.split(":").at(-1).replace(/^!/, "");
@@ -89,7 +101,7 @@ const fontSizeUtilities = (tokens, configuredNames) =>
     return (
       configuredNames.has(value) ||
       defaultFontSizeNames.has(value) ||
-      (value.startsWith("[") && !value.startsWith("[color:"))
+      isArbitraryFontSize(value)
     );
   });
 
