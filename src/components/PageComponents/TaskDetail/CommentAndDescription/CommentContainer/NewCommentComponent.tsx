@@ -40,6 +40,25 @@ import { usePathname } from "next/navigation";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
 
+const AskAiButton = ({ bottomOffset }: { bottomOffset: number }) => {
+  const { openAIChatInterface } = useGlobalUIState();
+  return (
+    <MobileFloatingActionButton
+      ariaLabel="Ask AI about this task"
+      bottomOffset={bottomOffset}
+      icon={
+        <Sparkles
+          size={20}
+          strokeWidth={1.75}
+          className="text-hypertasks-ai-purple"
+          aria-hidden="true"
+        />
+      }
+      onClick={openAIChatInterface}
+    />
+  );
+};
+
 // import BackButton from "@/components/Buttons/BackButton";
 
 const NewCommentComponent = (
@@ -424,7 +443,13 @@ const NewCommentComponent = (
                   />
               )}
 
-              {_mbl && <AskAiButton/>}
+              {_mbl && composerHeight > 0 && (
+                <AskAiButton
+                  bottomOffset={
+                    composerHeight + (viewportGeometry?.bottomInset ?? 0)
+                  }
+                />
+              )}
   
               {/* ------------------------- New Comment ------------------------- */}
               {/* ====================== DESKTOP ===================== */}
@@ -655,25 +680,5 @@ const NewCommentComponent = (
       </>
     )
   }
-
-  const AskAiButton = ()=>{
-    const { openAIChatInterface } = useGlobalUIState()
-    return (
-      <MobileFloatingActionButton
-        ariaLabel="Ask AI about this task"
-        icon={
-          <Sparkles
-            size={20}
-            strokeWidth={1.75}
-            className="text-hypertasks-ai-purple"
-            aria-hidden="true"
-          />
-        }
-        label="Ask AI"
-        onClick={openAIChatInterface}
-      />
-    )
-  }
-
 
   export default NewCommentComponent

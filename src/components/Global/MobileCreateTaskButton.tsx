@@ -12,7 +12,6 @@ const MobileCreateTaskButton = () => {
     <MobileFloatingActionButton
       ariaLabel="Create task"
       icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}
-      label="New task"
       onClick={() => setCreateTaskModal({ show: true })}
     />
   );

@@ -63,26 +63,34 @@ test("the mobile create-task action follows dock and chat visibility", () => {
 test("the mobile create-task wrapper opens the shared modal", () => {
   assert.match(button, /<MobileFloatingActionButton/);
   assert.match(button, /ariaLabel="Create task"/);
-  assert.match(button, /label="New task"/);
+  assert.doesNotMatch(button, /label=/);
   assert.match(
     button,
     /onClick=\{\(\) => setCreateTaskModal\(\{ show: true \}\)\}/,
   );
 });
 
-test("the shared floating action owns the mobile dock clearance and styling", () => {
+test("the shared floating action is an accessible icon-only circle", () => {
   assert.match(floatingButton, /type="button"/);
   assert.match(floatingButton, /aria-label=\{ariaLabel\}/);
   assert.match(floatingButton, /\{icon\}/);
-  assert.match(floatingButton, /<span>\{label\}<\/span>/);
+  assert.doesNotMatch(floatingButton, /<span>/);
+  assert.doesNotMatch(floatingButton, /label: string/);
   assert.match(floatingButton, /onClick=\{onClick\}/);
-  assert.match(floatingButton, /min-h-11/);
+  assert.match(floatingButton, /h-12 w-12/);
+  assert.match(floatingButton, /justify-center/);
+  assert.match(floatingButton, /rounded-full/);
   assert.match(floatingButton, /right-4/);
   assert.match(floatingButton, /z-\[200\]/);
   assert.match(floatingButton, /bg-modalBackground/);
   assert.match(floatingButton, /shadow-customshadow-2/);
+});
+
+test("the shared floating action accepts a measured bottom offset and otherwise clears the dock", () => {
+  assert.match(floatingButton, /bottomOffset\?: number/);
   assert.match(
     floatingButton,
     /calc\(var\(--mobile-dock-h, 0px\) \+ 16px \+ env\(safe-area-inset-bottom\)\)/,
   );
+  assert.match(floatingButton, /`calc\(\$\{bottomOffset\}px \+ 16px\)`/);
 });
