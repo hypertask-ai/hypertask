@@ -26,16 +26,22 @@ export function stripChunkRecoveryParam(href: string) {
   return url.toString();
 }
 
-// Reloading an installed Android WebView is a one-way door: if the network is
+// Reloading the native Android WebView is a one-way door: if the network is
 // sleeping, Chromium can replace the app with an error interstitial that has no
-// useful navigation controls. Prove the cache-busted document is reachable
-// before leaving the still-rendered error boundary.
+// useful navigation controls. Web browsers retain their own retry controls, so
+// do not let a second network timeout prevent their cache-busted recovery.
 export async function canReachPage(
   url: string,
   timeoutMs = RELOAD_PREFLIGHT_TIMEOUT_MS
 ) {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return false;
+  }
+  if (
+    typeof navigator === "undefined" ||
+    !/\bHypertaskApp\b/.test(navigator.userAgent)
+  ) {
+    return true;
   }
 
   const controller = new AbortController();

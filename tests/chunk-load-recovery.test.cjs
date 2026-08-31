@@ -24,9 +24,31 @@ new Function("module", "exports", "require", javascript)(
 
 const {
   buildChunkRecoveryUrl,
+  canReachPage,
   nextChunkRecoveryAttempt,
   stripChunkRecoveryParam,
 } = loaded.exports;
+
+function mockBrowser(t, { userAgent, online = true, fetchPage }) {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  const originalFetch = globalThis.fetch;
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { onLine: online, userAgent },
+  });
+  globalThis.fetch = fetchPage;
+  t.after(() => {
+    if (navigatorDescriptor) {
+      Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    } else {
+      delete globalThis.navigator;
+    }
+    globalThis.fetch = originalFetch;
+  });
+}
 
 test("chunk recovery is capped and tolerates a corrupt session value", () => {
   assert.equal(nextChunkRecoveryAttempt(null), 1);
@@ -34,6 +56,34 @@ test("chunk recovery is capped and tolerates a corrupt session value", () => {
   assert.equal(nextChunkRecoveryAttempt("2"), null);
   assert.equal(nextChunkRecoveryAttempt("not-a-number"), 1);
   assert.equal(nextChunkRecoveryAttempt("-1"), 1);
+});
+
+test("desktop chunk recovery does not depend on a second network probe", async (t) => {
+  let requests = 0;
+  mockBrowser(t, {
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/148.0.0.0",
+    fetchPage: async () => {
+      requests += 1;
+      throw new Error("timed out");
+    },
+  });
+
+  assert.equal(await canReachPage("https://app.hypertask.ai/login", 1), true);
+  assert.equal(requests, 0);
+});
+
+test("native chunk recovery still requires a reachable document", async (t) => {
+  let requests = 0;
+  mockBrowser(t, {
+    userAgent: "Mozilla/5.0 Android 16 wv HypertaskApp",
+    fetchPage: async () => {
+      requests += 1;
+      throw new Error("timed out");
+    },
+  });
+
+  assert.equal(await canReachPage("https://app.hypertask.ai/login", 1), false);
+  assert.equal(requests, 1);
 });
 
 test("chunk recovery cache-busts the current document without losing route state", () => {
