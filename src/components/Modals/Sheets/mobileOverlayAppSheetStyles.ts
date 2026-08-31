@@ -23,9 +23,8 @@ export const mobileOverlayAppSheetHandleRowClass =
 export const mobileOverlayAppSheetHandleBarClass =
   "h-1 w-10 rounded-full bg-white-black/25";
 
-/** Darker typing well — sits above the keyboard at the bottom of the sheet. */
+/** Darker typing well — fills the sheet body above the action row. */
 export const mobileOverlayAppSheetEditorWellClass = cn(
-  "mx-2 flex-shrink-0 overflow-y-auto rounded-lg border border-thin border-border-light-gray-thin",
+  "mx-2 mb-2 min-h-[120px] min-w-0 flex-1 overflow-y-auto rounded-lg border border-thin border-border-light-gray-thin",
   "bg-newcomment-well px-3 py-2 text-content",
-  "min-h-[120px]",
 );

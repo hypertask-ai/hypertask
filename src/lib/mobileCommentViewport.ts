@@ -1,6 +1,7 @@
 export const MOBILE_COMMENT_MIN_EDITOR_HEIGHT = 39;
 export const MOBILE_COMMENT_AUTO_VIEWPORT_RATIO = 0.55;
 export const MOBILE_COMMENT_MANUAL_VIEWPORT_RATIO = 0.8;
+export const MOBILE_OVERLAY_SHEET_MAX_HEIGHT_RATIO = 0.85;
 
 interface MobileCommentViewportInput {
   layoutViewportHeight: number;
@@ -104,5 +105,40 @@ export const getMobileCommentViewportGeometry = ({
             manualEditorMaxHeight,
             Math.max(MOBILE_COMMENT_MIN_EDITOR_HEIGHT, requestedEditorHeight)
           ),
+  };
+};
+
+export interface MobileOverlaySheetViewportInput {
+  layoutHeight: number;
+  visibleHeight: number;
+  bottomInset: number;
+}
+
+export interface MobileOverlaySheetContainerStyle {
+  bottom: number;
+  height: string;
+  maxHeight: string;
+}
+
+/** Size mobile AI overlay sheets to the visible viewport (keyboard-aware). */
+export const getMobileOverlaySheetContainerStyle = (
+  viewport: MobileOverlaySheetViewportInput | null | undefined,
+): MobileOverlaySheetContainerStyle | undefined => {
+  if (!viewport) return undefined;
+
+  const layoutHeight = finiteNonNegative(viewport.layoutHeight);
+  const visibleHeight = finiteNonNegative(viewport.visibleHeight);
+  const bottomInset = finiteNonNegative(viewport.bottomInset);
+  const keyboardOpen = bottomInset > 0;
+  const restingHeight = Math.min(
+    visibleHeight,
+    layoutHeight * MOBILE_OVERLAY_SHEET_MAX_HEIGHT_RATIO,
+  );
+  const sheetHeight = keyboardOpen ? visibleHeight : restingHeight;
+
+  return {
+    bottom: keyboardOpen ? bottomInset : 0,
+    height: `${sheetHeight}px`,
+    maxHeight: `${sheetHeight}px`,
   };
 };
