@@ -84,22 +84,37 @@ function controllerState(previousActivity) {
     updates: [],
     deletes: [],
     creates: [],
+    locks: [],
   };
   globalThis.__taskMovePrismaState = state;
   return state;
 }
 
+function moveThroughController({
+  fromSectionId,
+  toSectionId,
+  fromAgent = null,
+  sendNotification,
+}) {
+  return createTaskMovedActivity({
+    userObj: human,
+    fromAgent,
+    fromSectionId,
+    fromSection_title: `Section ${fromSectionId}`,
+    toSectionId,
+    toSection_title: `Section ${toSectionId}`,
+    taskId: 42,
+    sendNotification,
+  });
+}
+
 async function reverseThroughController({ previousActivity, fromAgent = null }) {
   const state = controllerState(previousActivity);
   let deliveries = 0;
-  const result = await createTaskMovedActivity({
-    userObj: human,
+  const result = await moveThroughController({
     fromAgent,
     fromSectionId: 2,
-    fromSection_title: "Section 2",
     toSectionId: 1,
-    toSection_title: "Section 1",
-    taskId: 42,
     sendNotification: async () => {
       deliveries += 1;
     },
@@ -190,6 +205,7 @@ test("the controller collapses a human A-B reversal without notifying again", as
     previousActivity: move(1, 2),
   });
 
+  assert.equal(state.locks.length, 1);
   assert.equal(state.updates.length, 1);
   assert.equal(state.creates.length, 0);
   assert.equal(result.shouldNotify, false);
@@ -199,6 +215,37 @@ test("the controller collapses a human A-B reversal without notifying again", as
   assert.equal(persisted.data.toSection.sectionId, 2);
   assert.equal(persisted.data.currentSection.sectionId, 1);
   assert.equal(persisted.data.statusFlipCount, 1);
+});
+
+test("overlapping flips serialize without losing the activity count", async () => {
+  const state = controllerState(move(1, 2));
+  let deliveries = 0;
+  const sendNotification = async () => {
+    deliveries += 1;
+  };
+
+  const results = await Promise.all([
+    moveThroughController({
+      fromSectionId: 2,
+      toSectionId: 1,
+      sendNotification,
+    }),
+    moveThroughController({
+      fromSectionId: 1,
+      toSectionId: 2,
+      sendNotification,
+    }),
+  ]);
+
+  assert.equal(state.locks.length, 2);
+  assert.equal(state.updates.length, 2);
+  assert.equal(state.previous.activity.data.statusFlipCount, 2);
+  assert.equal(state.previous.activity.data.currentSection.sectionId, 2);
+  assert.deepEqual(
+    results.map(({ shouldNotify }) => shouldNotify),
+    [false, false],
+  );
+  assert.equal(deliveries, 0);
 });
 
 test("different human users never share a collapse run", async () => {

@@ -62,82 +62,91 @@ const createTaskMovedActivity = async ({
     return await finish({ newComment: null, shouldNotify: false });
   }
 
-  // Only the task's latest activity can be extended. This preserves anything
-  // another actor did between moves and keeps the collapsed row at the end of
-  // the activity feed.
-  const previous = await prisma.comment.findFirst({
-    where: { taskId, activity: { not: Prisma.JsonNull } },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, createdAt: true, activity: true },
-  });
+  const result = await prisma.$transaction(async (tx) => {
+    // The task write and its activity are separate legacy operations. Serialize
+    // this read-merge-write sequence so overlapping flips cannot lose counts.
+    await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(${taskId})`);
 
-  const previousActivity = previous?.activity as ITaskMoveActivity | any;
-  const sameActor = fromAgent
-    ? previousActivity?.data?.fromAgent?.id === fromAgent.id
-    : !previousActivity?.data?.fromAgent &&
-      previousActivity?.data?.fromUserId === userObj.id;
-
-  const collapseKind = previous
-    ? classifyTaskMoveCollapse({
-        previousActivity,
-        previousCreatedAt: previous.createdAt,
-        sameActor,
-        fromSectionId,
-        toSectionId,
-      })
-    : null;
-
-  if (previous && collapseKind === "status-flip") {
-    const newComment = await prisma.comment.update({
-      where: { id: previous.id },
-      data: {
-        // Prisma requires an index signature for JSON input, while the typed
-        // activity model lists its serializable fields explicitly.
-        activity: mergeStatusFlipActivity(previousActivity, {
-          sectionId: toSectionId,
-          sectionTitle: toSection_title,
-        }) as unknown as Prisma.InputJsonValue,
-        createdAt: new Date(),
-      },
+    // Only the task's latest activity can be extended. This preserves anything
+    // another actor did between moves and keeps the collapsed row at the end of
+    // the activity feed.
+    const previous = await tx.comment.findFirst({
+      where: { taskId, activity: { not: Prisma.JsonNull } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, createdAt: true, activity: true },
     });
-    return await finish({ newComment, shouldNotify: false });
-  }
 
-  if (previous && collapseKind === "quick-journey") {
-    const originSectionId = previousActivity.data.fromSection?.sectionId;
+    const previousActivity = previous?.activity as ITaskMoveActivity | any;
+    const sameActor = fromAgent
+      ? previousActivity?.data?.fromAgent?.id === fromAgent.id
+      : !previousActivity?.data?.fromAgent &&
+        previousActivity?.data?.fromUserId === userObj.id;
 
-    // HTPR-3793: a rapid keyboard journey that returns to its starting point
-    // leaves no misleading move behind.
-    if (originSectionId === toSectionId) {
-      await prisma.comment.delete({ where: { id: previous.id } });
-      return await finish({ newComment: null, shouldNotify: true });
+    const collapseKind = previous
+      ? classifyTaskMoveCollapse({
+          previousActivity,
+          previousCreatedAt: previous.createdAt,
+          sameActor,
+          fromSectionId,
+          toSectionId,
+        })
+      : null;
+
+    if (previous && collapseKind === "status-flip") {
+      const newComment = await tx.comment.update({
+        where: { id: previous.id },
+        data: {
+          // Prisma requires an index signature for JSON input, while the typed
+          // activity model lists its serializable fields explicitly.
+          activity: mergeStatusFlipActivity(previousActivity, {
+            sectionId: toSectionId,
+            sectionTitle: toSection_title,
+          }) as unknown as Prisma.InputJsonValue,
+          createdAt: new Date(),
+        },
+      });
+      return { newComment, shouldNotify: false };
     }
 
-    const newComment = await prisma.comment.update({
-      where: { id: previous.id },
-      data: {
-        activity: {
-          ...previousActivity,
-          data: {
-            ...previousActivity.data,
-            quickMoveCollapsed: true,
-            toSection: {
-              sectionId: toSectionId,
-              sectionTitle: toSection_title,
+    if (previous && collapseKind === "quick-journey") {
+      const originSectionId = previousActivity.data.fromSection?.sectionId;
+
+      // HTPR-3793: a rapid keyboard journey that returns to its starting point
+      // leaves no misleading move behind.
+      if (originSectionId === toSectionId) {
+        await tx.comment.delete({ where: { id: previous.id } });
+        return { newComment: null, shouldNotify: true };
+      }
+
+      const newComment = await tx.comment.update({
+        where: { id: previous.id },
+        data: {
+          activity: {
+            ...previousActivity,
+            data: {
+              ...previousActivity.data,
+              quickMoveCollapsed: true,
+              toSection: {
+                sectionId: toSectionId,
+                sectionTitle: toSection_title,
+              },
             },
           },
         },
-      },
-    });
-    return await finish({ newComment, shouldNotify: true });
-  }
+      });
+      return { newComment, shouldNotify: true };
+    }
 
-  const newComment = await createActivity({
-    activityBody,
-    taskId,
-    runTaskSummary: false,
+    const newComment = await createActivity({
+      activityBody,
+      taskId,
+      runTaskSummary: false,
+      transaction: tx,
+    });
+    return { newComment, shouldNotify: true };
   });
-  return await finish({ newComment, shouldNotify: true });
+
+  return await finish(result);
 };
 
 export default createTaskMovedActivity;

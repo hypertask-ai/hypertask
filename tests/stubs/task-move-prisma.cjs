@@ -5,12 +5,28 @@ function state() {
   return globalThis.__taskMovePrismaState;
 }
 
+let transactionTail = Promise.resolve();
+
 module.exports = {
+  $transaction: (callback) => {
+    const run = transactionTail.then(() => callback(module.exports));
+    transactionTail = run.catch(() => undefined);
+    return run;
+  },
+  $queryRaw: async (query) => {
+    state().locks.push(query);
+    return [{ pg_advisory_xact_lock: null }];
+  },
   comment: {
     findFirst: async () => state().previous,
     update: async (args) => {
       state().updates.push(args);
-      return { id: args.where.id, ...args.data };
+      state().previous = {
+        ...state().previous,
+        ...args.data,
+        id: args.where.id,
+      };
+      return state().previous;
     },
     delete: async (args) => {
       state().deletes.push(args);
