@@ -1,7 +1,14 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
@@ -31,7 +38,7 @@ import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
 import {
   applySequencedResponse,
-  markSequencedResponse,
+  invalidateSequencedResponse,
 } from "@/lib/agents/responseSequence";
 
 type TActivityKind = "comment" | "evidence" | "question" | "session" | "model";
@@ -354,7 +361,10 @@ const AgentDetail = (props: IProp) => {
     null,
   );
   const agentRouteRef = useRef(agentId);
-  agentRouteRef.current = agentId;
+
+  useLayoutEffect(() => {
+    agentRouteRef.current = agentId;
+  }, [agentId]);
 
   useEffect(() => {
     renderedAgentIdentity.current = agent
@@ -387,17 +397,6 @@ const AgentDetail = (props: IProp) => {
       const seq = ++responseSeq.current;
       const responseKeys = [`agent:${requestRef}`];
       if (expectedAgentId) responseKeys.push(`agent:${expectedAgentId}`);
-      const identity = renderedAgentIdentity.current;
-      if (
-        identity &&
-        (identity.id === requestRef ||
-          identity.slug === requestRef ||
-          identity.id === expectedAgentId)
-      ) {
-        responseKeys.push(`agent:${identity.id}`);
-        if (identity.slug) responseKeys.push(`agent:${identity.slug}`);
-      }
-      markSequencedResponse(latestResponseSeq.current, seq, responseKeys);
       try {
         const res = await fetch(`/api/agents/${requestRef}`);
         const data = (await res.json()) as {
@@ -479,7 +478,6 @@ const AgentDetail = (props: IProp) => {
     async (refreshedAgent: TDetailAgent) => {
       const seq = ++responseSeq.current;
       const responseKey = `activity:${refreshedAgent.id}`;
-      markSequencedResponse(latestResponseSeq.current, seq, [responseKey]);
       try {
         const res = await fetch(
           `/api/agents/${refreshedAgent.id}/activity?limit=40`,
@@ -584,7 +582,7 @@ const AgentDetail = (props: IProp) => {
     if (changesAgent) {
       bootstrappedAgentId.current = null;
       if (renderedAgent) {
-        markSequencedResponse(
+        invalidateSequencedResponse(
           latestResponseSeq.current,
           ++responseSeq.current,
           [`activity:${renderedAgent.id}`],

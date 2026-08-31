@@ -1,4 +1,4 @@
-export function markSequencedResponse(
+function recordSequence(
   latestSequences: Map<string, number>,
   sequence: number,
   keys: readonly string[],
@@ -8,6 +8,14 @@ export function markSequencedResponse(
       latestSequences.set(key, sequence);
     }
   });
+}
+
+export function invalidateSequencedResponse(
+  latestSequences: Map<string, number>,
+  sequence: number,
+  keys: readonly string[],
+): void {
+  recordSequence(latestSequences, sequence, keys);
 }
 
 export function applySequencedResponse(
@@ -21,7 +29,7 @@ export function applySequencedResponse(
     ...keys.map((key) => latestSequences.get(key) ?? 0),
   );
   if (sequence < latestSequence) return false;
-  markSequencedResponse(latestSequences, sequence, keys);
+  recordSequence(latestSequences, sequence, keys);
   apply();
   return true;
 }

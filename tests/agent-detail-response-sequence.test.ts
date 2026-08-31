@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   applySequencedResponse,
-  markSequencedResponse,
+  invalidateSequencedResponse,
 } from '../src/lib/agents/responseSequence'
 
 describe('agent detail response sequencing', () => {
@@ -10,16 +10,6 @@ describe('agent detail response sequencing', () => {
     const latestSequences = new Map<string, number>()
     const applied: string[] = []
 
-    markSequencedResponse(latestSequences, 2, [
-      'agent:agent-1',
-      'agent:planner',
-    ])
-    assert.equal(
-      applySequencedResponse(latestSequences, 1, ['agent:planner'], () =>
-        applied.push('old'),
-      ),
-      false,
-    )
     assert.equal(
       applySequencedResponse(
         latestSequences,
@@ -29,16 +19,20 @@ describe('agent detail response sequencing', () => {
       ),
       true,
     )
+    assert.equal(
+      applySequencedResponse(latestSequences, 1, ['agent:planner'], () =>
+        applied.push('old'),
+      ),
+      false,
+    )
     assert.deepEqual(applied, ['new'])
   })
 
-  it('invalidates an old activity request across an agent round trip', () => {
-    const latestSequences = new Map<string, number>([['agent:agent-1', 4]])
+  it('invalidates old activity when the route leaves and returns', () => {
+    const latestSequences = new Map<string, number>()
     const applied: string[] = []
 
-    markSequencedResponse(latestSequences, 1, ['activity:agent-1'])
-    markSequencedResponse(latestSequences, 2, ['activity:agent-2'])
-    markSequencedResponse(latestSequences, 3, ['activity:agent-1'])
+    invalidateSequencedResponse(latestSequences, 2, ['activity:agent-1'])
 
     assert.equal(
       applySequencedResponse(
