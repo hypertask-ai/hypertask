@@ -6638,8 +6638,15 @@ function buildTools(
             fromSectionId: oldTask.sectionId ?? -1,
             fromSection_title: oldTask.section ?? "",
             taskId: task.id,
+            sendNotification: () =>
+              sendNotificationForTask(
+                user.id,
+                "TaskMoved",
+                task.id,
+                task.projectId,
+                undefined,
+              ),
           });
-          await sendNotificationForTask(user.id, "TaskMoved", task.id, task.projectId, undefined);
         }
 
         if (input.status !== undefined && oldTask.status !== input.status) {

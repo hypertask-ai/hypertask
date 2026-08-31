@@ -3,11 +3,11 @@ import createActivity from "./createActivity";
 import { ITaskMoveActivity } from "@/models/ActivityModels.ts";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
-
-// "Quick succession" per HTPR-3793. Long enough to cover walking a card across
-// a board with the keyboard, short enough that two deliberate moves minutes
-// apart stay two separate history entries.
-const COLLAPSE_WINDOW_MS = 60_000;
+import {
+  classifyTaskMoveCollapse,
+  mergeStatusFlipActivity,
+} from "./taskMoveCollapse";
+import { sendTaskMoveNotificationIfNeeded } from "./sendTaskMoveNotification";
 
 interface IProps {
   userObj: IUser;
@@ -22,6 +22,7 @@ interface IProps {
     displayName: string;
     photoURL?: string | null;
   } | null;
+  sendNotification?: () => Promise<unknown>;
 }
 
 const createTaskMovedActivity = async ({
@@ -32,7 +33,14 @@ const createTaskMovedActivity = async ({
   fromSection_title,
   taskId,
   fromAgent,
+  sendNotification,
 }: IProps) => {
+  const finish = async <T extends { shouldNotify: boolean }>(result: T) => {
+    if (sendNotification) {
+      await sendTaskMoveNotificationIfNeeded(result, sendNotification);
+    }
+    return result;
+  };
   const activityBody: ITaskMoveActivity | any = {
     type: "TaskMove",
     data: {
@@ -50,17 +58,13 @@ const createTaskMovedActivity = async ({
       },
     },
   };
-  if (fromSectionId === toSectionId) return;
+  if (fromSectionId === toSectionId) {
+    return await finish({ newComment: null, shouldNotify: false });
+  }
 
-  // HTPR-3793: walking a card through several columns with the keyboard wrote
-  // one history row per stop, so the feed read as noise and the move that
-  // actually mattered was buried. Collapse a rapid follow-up move into the
-  // previous one so the history shows the real journey: where it started, and
-  // where it ended up.
-  //
-  // Only the task's LATEST activity is collapsed, so nothing that happened in
-  // between ever gets reordered or absorbed, and only when the same person or
-  // agent made both moves.
+  // Only the task's latest activity can be extended. This preserves anything
+  // another actor did between moves and keeps the collapsed row at the end of
+  // the activity feed.
   const previous = await prisma.comment.findFirst({
     where: { taskId, activity: { not: Prisma.JsonNull } },
     orderBy: { createdAt: "desc" },
@@ -73,32 +77,50 @@ const createTaskMovedActivity = async ({
     : !previousActivity?.data?.fromAgent &&
       previousActivity?.data?.fromUserId === userObj.id;
 
-  const isCollapsible =
-    previous &&
-    previousActivity?.type === "TaskMove" &&
-    sameActor &&
-    // The previous move must have ended where this one begins, otherwise these
-    // are two separate journeys that happen to be adjacent.
-    previousActivity?.data?.toSection?.sectionId === fromSectionId &&
-    Date.now() - new Date(previous.createdAt).getTime() <= COLLAPSE_WINDOW_MS;
+  const collapseKind = previous
+    ? classifyTaskMoveCollapse({
+        previousActivity,
+        previousCreatedAt: previous.createdAt,
+        sameActor,
+        fromSectionId,
+        toSectionId,
+      })
+    : null;
 
-  if (isCollapsible) {
+  if (previous && collapseKind === "status-flip") {
+    const newComment = await prisma.comment.update({
+      where: { id: previous.id },
+      data: {
+        // Prisma requires an index signature for JSON input, while the typed
+        // activity model lists its serializable fields explicitly.
+        activity: mergeStatusFlipActivity(previousActivity, {
+          sectionId: toSectionId,
+          sectionTitle: toSection_title,
+        }) as unknown as Prisma.InputJsonValue,
+        createdAt: new Date(),
+      },
+    });
+    return await finish({ newComment, shouldNotify: false });
+  }
+
+  if (previous && collapseKind === "quick-journey") {
     const originSectionId = previousActivity.data.fromSection?.sectionId;
 
-    // Moved back where it started: the round trip changed nothing, so leave no
-    // trace of it rather than recording a move to the column it never left.
+    // HTPR-3793: a rapid keyboard journey that returns to its starting point
+    // leaves no misleading move behind.
     if (originSectionId === toSectionId) {
       await prisma.comment.delete({ where: { id: previous.id } });
-      return;
+      return await finish({ newComment: null, shouldNotify: true });
     }
 
-    return await prisma.comment.update({
+    const newComment = await prisma.comment.update({
       where: { id: previous.id },
       data: {
         activity: {
           ...previousActivity,
           data: {
             ...previousActivity.data,
+            quickMoveCollapsed: true,
             toSection: {
               sectionId: toSectionId,
               sectionTitle: toSection_title,
@@ -107,13 +129,15 @@ const createTaskMovedActivity = async ({
         },
       },
     });
+    return await finish({ newComment, shouldNotify: true });
   }
 
-  return await createActivity({
+  const newComment = await createActivity({
     activityBody,
     taskId,
     runTaskSummary: false,
   });
+  return await finish({ newComment, shouldNotify: true });
 };
 
 export default createTaskMovedActivity;

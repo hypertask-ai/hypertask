@@ -153,14 +153,29 @@ const TaskMovedActivity = ({ activity }: { activity: ITaskMoveActivity }) => {
     photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
   };
 
+  if (activity.data.statusFlipCount) {
+    return (
+      <>
+        <BoldElement>
+          <CreatedByLocal name={fromObj.displayName} pfp={fromObj.photoURL} />
+        </BoldElement>{" "}
+        changed the status between{" "}
+        <BoldElement>{activity.data.fromSection?.sectionTitle}</BoldElement> and{" "}
+        <BoldElement>{activity.data.toSection?.sectionTitle}</BoldElement>{" "}
+        {activity.data.statusFlipCount + 1} times, ending in{" "}
+        <BoldElement>{activity.data.currentSection?.sectionTitle}</BoldElement>
+      </>
+    );
+  }
+
   return (
     <>
       <BoldElement>
         <CreatedByLocal name={fromObj.displayName} pfp={fromObj.photoURL} />
       </BoldElement>{" "}
       changed the status from{" "}
-      <BoldElement>{activity?.data.fromSection?.sectionTitle}</BoldElement> to{" "}
-      <BoldElement>{activity?.data.toSection?.sectionTitle}</BoldElement>
+      <BoldElement>{activity.data.fromSection?.sectionTitle}</BoldElement> to{" "}
+      <BoldElement>{activity.data.toSection?.sectionTitle}</BoldElement>
     </>
   );
 };

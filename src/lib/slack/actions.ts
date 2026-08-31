@@ -322,8 +322,9 @@ async function moveTask(
     toSection_title: section.section_title,
     fromSectionId: task.sectionId ?? -1,
     fromSection_title: task.section ?? "",
+    sendNotification: () =>
+      sendNotificationForTask(actor.user.id, "TaskMoved", task.id, task.projectId),
   });
-  void sendNotificationForTask(actor.user.id, "TaskMoved", task.id, task.projectId);
   void broadcastBoardChange(task.projectId, { originUserId: actor.user.id });
   void broadcastTaskChange(task.id, { originUserId: actor.user.id });
   return confirmBlock(`Moved ${task.ticketNumber} to ${section.section_title}.`);
