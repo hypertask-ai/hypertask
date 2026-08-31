@@ -323,11 +323,14 @@ export async function updateTaskSingle(
             },
           });
         }
-        const taskMoveAgent =
-          sectionIdChanged &&
-          options.taskMovedActivity?.fromAgent === undefined &&
-          agentId
-            ? await tx.agent.findUnique({
+        let moveActivity = null;
+        if (sectionIdChanged && options.taskMovedActivity) {
+          if (currentState.sectionId === null || updatedTask.sectionId === null) {
+            moveActivity = { newComment: null, shouldNotify: true };
+          } else {
+            let taskMoveAgent = options.taskMovedActivity.fromAgent;
+            if (taskMoveAgent === undefined && agentId) {
+              taskMoveAgent = await tx.agent.findUnique({
                 where: { id: agentId },
                 select: {
                   id: true,
@@ -335,23 +338,20 @@ export async function updateTaskSingle(
                   displayName: true,
                   photoURL: true,
                 },
-              })
-            : options.taskMovedActivity?.fromAgent;
-        const moveActivity =
-          sectionIdChanged && options.taskMovedActivity
-            ? currentState.sectionId !== null && updatedTask.sectionId !== null
-              ? await createTaskMovedActivityInTransaction({
-                  transaction: tx,
-                  taskId: updatedTask.id,
-                  userObj: currentUser,
-                  toSectionId: updatedTask.sectionId,
-                  toSection_title: updatedTask.section ?? "",
-                  fromSectionId: currentState.sectionId,
-                  fromSection_title: currentState.section ?? "",
-                  fromAgent: taskMoveAgent,
-                })
-              : { newComment: null, shouldNotify: true }
-            : null;
+              });
+            }
+            moveActivity = await createTaskMovedActivityInTransaction({
+              transaction: tx,
+              taskId: updatedTask.id,
+              userObj: currentUser,
+              toSectionId: updatedTask.sectionId,
+              toSection_title: updatedTask.section ?? "",
+              fromSectionId: currentState.sectionId,
+              fromSection_title: currentState.section ?? "",
+              fromAgent: taskMoveAgent,
+            });
+          }
+        }
         let descriptionActivity;
         if (requestedMutation.description !== undefined) {
           // Core task fields, the normalized body, draft cleanup, and activity
