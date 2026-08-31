@@ -85,7 +85,7 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   assert.doesNotMatch(button[1], /(?:^|\s)text-white(?:\s|$)/);
 });
 
-test("mobile create-comment uses AppSheet refine when draft has text", () => {
+test("mobile create-comment uses AppSheet for both refine and compose", () => {
   const mobileBranch = mainContainer.slice(
     mainContainer.indexOf("// FOR: New comment on mobile"),
     mainContainer.indexOf("// FOR: Description and old comment."),
@@ -93,7 +93,7 @@ test("mobile create-comment uses AppSheet refine when draft has text", () => {
   const inlineDraftAi = read("src/components/RTE/Components/InlineDraftAiFloat.tsx");
   assert.match(mobileBranch, /aiRefineOpen/);
   assert.match(mobileBranch, /presentation="refine-fullscreen"/);
-  assert.match(mobileBranch, /!aiRefineOpen && <TiptapEditor/);
+  assert.match(mobileBranch, /!aiRefineOpen && !aiComposeOpen && <TiptapEditor/);
   assert.match(mobileBranch, /!editor\.isEmpty/);
   assert.match(mobileBranch, /aiComposeOpen/);
   assert.match(mobileBranch, /presentation="composer"/);
@@ -103,6 +103,7 @@ test("mobile create-comment uses AppSheet refine when draft has text", () => {
   assert.match(inlineDraftAi, /AppSheet/);
   assert.match(inlineDraftAi, /mobileOverlayAppSheetPanelClass/);
   assert.match(inlineDraftAi, /EditorContent editor=\{editor\}/);
+  assert.match(inlineDraftAi, /isRefineFullscreen \|\| isComposer/);
   assert.doesNotMatch(inlineDraftAi, /createPortal/);
 });
 
