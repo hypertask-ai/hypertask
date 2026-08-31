@@ -447,7 +447,20 @@ const Inbox = ({
   // undoHandler function
   const undoHandler = async (data: any, toastId: string) => {
     await undoAction("UNDO_INBOX_ARCHIVE", data);
-    queryClient.refetchQueries({ queryKey: inboxConfig.undo.queryKey });
+    updateInboxOptimistically({
+      queryClient,
+      queryKey: inboxDataQueryKey(currentUser.id),
+      accountId: currentUser.id,
+      mutation: {
+        type: "restore",
+        notification: data.notification,
+        index: data.notificationIndex,
+      },
+    });
+    await queryClient.refetchQueries({
+      queryKey: inboxDataQueryKey(currentUser.id),
+      exact: true,
+    });
     toast.dismiss(toastId);
     toast("Undo notification archive");
   };

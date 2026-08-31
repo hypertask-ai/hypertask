@@ -12,6 +12,11 @@ export type InboxReadModelMutation =
       taskIds: readonly number[];
     }
   | {
+      type: "restore";
+      notification: INotification;
+      index: number;
+    }
+  | {
       type: "set_seen";
       notificationId: string;
       seen: boolean;
@@ -96,6 +101,27 @@ export const applyInboxReadModelMutation = <
             !notificationMatchesRemoval(notification, notificationIds, taskIds),
         ),
       } as Payload;
+    }
+    case "restore": {
+      const notificationId = persistentInboxNotificationId(
+        mutation.notification,
+      );
+      if (
+        notificationId &&
+        payload.notifications.some(
+          (notification) =>
+            persistentInboxNotificationId(notification) === notificationId,
+        )
+      ) {
+        return payload;
+      }
+      const notifications = [...payload.notifications];
+      notifications.splice(
+        Math.max(0, Math.min(mutation.index, notifications.length)),
+        0,
+        mutation.notification,
+      );
+      return { ...payload, notifications } as Payload;
     }
     case "set_seen":
       return {
