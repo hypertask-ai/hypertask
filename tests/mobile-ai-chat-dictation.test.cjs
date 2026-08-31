@@ -50,6 +50,7 @@ stubSourceModule("src/components/Common/Tooltip.tsx", {
 });
 stubSourceModule("src/lib/configs/aiTaskWriter.config.ts", {
   aiTaskWriterConfig: {
+    fontSizes: { moderateIcon: 18 },
     shortcutsAndTooltips: {
       ai_chat: {
         attachment_button: () => ({}),
@@ -65,17 +66,6 @@ stubSourceModule(
     useAiChatContext: () => React.useContext(TestChatContext),
   },
 );
-stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
-  default: ({ wrapperClassName, visualizerClassName, hasText, onProcessingChange }) =>
-    React.createElement("button", {
-      className: ["audio-recorder", wrapperClassName, visualizerClassName]
-        .filter(Boolean)
-        .join(" "),
-      "data-control": "recorder",
-      "data-has-text": String(hasText),
-      onClick: () => onProcessingChange?.(true),
-    }),
-});
 stubSourceModule(
   "src/components/Common/AttachmentsUpload/ImageGalleryView.tsx",
   { default: () => null },
@@ -108,6 +98,27 @@ stubSourceModule("src/styles/tiptap.module.scss", {
 const { MobileViewContext } = jiti(
   path.join(root, "src/lib/contexts/mobileContext.tsx"),
 );
+const { AudioButton: RealAudioButton } = jiti(
+  path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
+);
+stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
+  default: ({
+    wrapperClassName,
+    visualizerClassName,
+    globalRecording,
+    hasText,
+    onProcessingChange,
+  }) =>
+    React.createElement("button", {
+      className: ["audio-recorder", wrapperClassName, visualizerClassName]
+        .filter(Boolean)
+        .join(" "),
+      "data-control": "recorder",
+      "data-global-recording": String(globalRecording),
+      "data-has-text": String(hasText),
+      onClick: () => onProcessingChange?.(true),
+    }),
+});
 const { AI_Tiptap_Container } = jiti(
   path.join(root, "src/components/AI_CHAT/AI_Tiptap_Container.tsx"),
 );
@@ -190,6 +201,67 @@ test("mobile AI chat uses the filled 44px mic and demotes it once text exists", 
   assert.equal(processing.className, "h-[34px] gap-2");
 });
 
+test("real AI chat microphone applies text and recording presentation states", async () => {
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
+    url: "https://app.hypertask.ai/chat",
+  });
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const previousLocalStorage = global.localStorage;
+  const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.localStorage = dom.window.localStorage;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+
+  const container = document.getElementById("root");
+  const reactRoot = createRoot(container);
+  const renderMic = (hasText, globalRecording = false) =>
+    React.createElement(
+      MobileViewContext.Provider,
+      { value: true },
+      React.createElement(RealAudioButton, {
+        callbackHandler: () => {},
+        editor: null,
+        globalRecording,
+        hasText,
+        id: "ai-chat-audio-button",
+        toggleRecording: () => {},
+      }),
+    );
+
+  try {
+    await act(async () => reactRoot.render(renderMic(false)));
+    const mic = container.querySelector("#ai-chat-audio-button");
+    assert.ok(mic);
+    assert.match(mic.className, /h-11 w-11/);
+    assert.match(mic.className, /rounded-full/);
+    assert.match(mic.className, /bg-shadcn-primary/);
+
+    await act(async () => reactRoot.render(renderMic(true)));
+    assert.match(mic.className, /text-icon-dark-gray/);
+    assert.doesNotMatch(mic.className, /bg-shadcn-primary/);
+
+    await act(async () => reactRoot.render(renderMic(true, true)));
+    assert.match(mic.className, /h-\[32px\]/);
+    assert.doesNotMatch(mic.className, /h-11 w-11/);
+  } finally {
+    await act(async () => reactRoot.unmount());
+    dom.window.close();
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+    if (previousLocalStorage === undefined) delete global.localStorage;
+    else global.localStorage = previousLocalStorage;
+    if (previousActEnvironment === undefined) {
+      delete global.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  }
+});
+
 test("mobile composer follows live recording state without remounting recorder", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>");
   const previousWindow = global.window;
@@ -211,6 +283,7 @@ test("mobile composer follows live recording state without remounting recorder",
     assert.ok(recorderBefore);
     assert.ok(overflow);
     assert.equal(recorderBefore.dataset.hasText, "false");
+    assert.equal(recorderBefore.dataset.globalRecording, "false");
     assert.match(recorderBefore.className, /order-4 ml-auto/);
     assert.equal(
       container.querySelector("[data-ai-chat-leading-controls]").hidden,
@@ -232,6 +305,7 @@ test("mobile composer follows live recording state without remounting recorder",
       "typing must move, not remount, the recorder",
     );
     assert.equal(recorderWithText.dataset.hasText, "true");
+    assert.equal(recorderWithText.dataset.globalRecording, "false");
     assert.match(recorderWithText.className, /order-2/);
     assert.doesNotMatch(recorderWithText.className, /ml-auto/);
     const primarySend = container.querySelector(
@@ -250,6 +324,7 @@ test("mobile composer follows live recording state without remounting recorder",
       recorderBefore,
       "recording state must not remount the recorder",
     );
+    assert.equal(recorderAfter.dataset.globalRecording, "true");
     assert.equal(
       container.querySelector("[data-ai-chat-leading-controls]").hidden,
       true,
