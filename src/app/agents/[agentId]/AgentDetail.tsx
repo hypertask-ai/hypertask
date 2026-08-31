@@ -425,14 +425,20 @@ const AgentDetail = (props: IProp) => {
         }
         if (cancelled) return;
         const refreshedAgent = data.agent;
-        setAgent((prev) => {
-          if (prev && prev.id !== refreshedAgent.id) return prev;
-          const appliedSeq =
-            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
-          if (initialSeq < appliedSeq) return prev;
+        if (
+          refreshedAgent.id !== agentId &&
+          refreshedAgent.slug !== agentId
+        ) {
+          return;
+        }
+        const appliedSeq =
+          appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+        if (initialSeq >= appliedSeq) {
           appliedAgentRefreshSeq.current[refreshedAgent.id] = initialSeq;
-          return refreshedAgent;
-        });
+          setAgent((prev) =>
+            prev && prev.id !== refreshedAgent.id ? prev : refreshedAgent,
+          );
+        }
         // A link built on an id still works; the address bar shows the
         // readable form instead of a uuid.
         if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
@@ -459,6 +465,16 @@ const AgentDetail = (props: IProp) => {
           };
           if (!res.ok || !data.success || !data.agent || cancelled) return;
           const refreshedAgent = data.agent;
+          if (
+            refreshedAgent.id !== agentId &&
+            refreshedAgent.slug !== agentId
+          ) {
+            return;
+          }
+          const appliedSeq =
+            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+          if (seq < appliedSeq) return;
+          appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
           const {
             working,
             heartbeatAt,
@@ -469,10 +485,6 @@ const AgentDetail = (props: IProp) => {
           } = refreshedAgent;
           setAgent((prev) => {
             if (prev && prev.id !== refreshedAgent.id) return prev;
-            const appliedSeq =
-              appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
-            if (seq < appliedSeq) return prev;
-            appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
             if (!prev) return refreshedAgent;
             return {
               ...prev,
@@ -531,6 +543,16 @@ const AgentDetail = (props: IProp) => {
               };
               if (!res.ok || !data.success || !data.agent || cancelled) return;
               const refreshedAgent = data.agent;
+              if (
+                refreshedAgent.id !== agentId &&
+                refreshedAgent.slug !== agentId
+              ) {
+                return;
+              }
+              const appliedSeq =
+                appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+              if (seq < appliedSeq) return;
+              appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
               const {
                 working,
                 heartbeatAt,
@@ -541,10 +563,6 @@ const AgentDetail = (props: IProp) => {
               } = refreshedAgent;
               setAgent((prev) => {
                 if (prev && prev.id !== refreshedAgent.id) return prev;
-                const appliedSeq =
-                  appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
-                if (seq < appliedSeq) return prev;
-                appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
                 if (!prev) return refreshedAgent;
                 return {
                   ...prev,
@@ -908,14 +926,16 @@ const AgentDetail = (props: IProp) => {
       } | null;
       if (refresh.ok && refreshed?.success && refreshed.agent) {
         const refreshedAgent = refreshed.agent;
-        setAgent((prev) => {
-          if (prev?.id !== refreshedAgent.id) return prev;
+        if (refreshedAgent.id === agent.id) {
           const appliedSeq =
             appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
-          if (seq < appliedSeq) return prev;
-          appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
-          return refreshedAgent;
-        });
+          if (seq >= appliedSeq) {
+            appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+            setAgent((prev) =>
+              prev?.id === refreshedAgent.id ? refreshedAgent : prev,
+            );
+          }
+        }
       } else {
         setBoardErrors((errors) => ({
           ...errors,
