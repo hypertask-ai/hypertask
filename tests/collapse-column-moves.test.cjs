@@ -205,7 +205,7 @@ test("the controller collapses a human A-B reversal without notifying again", as
     previousActivity: move(1, 2),
   });
 
-  assert.equal(state.locks.length, 1);
+  assert.deepEqual(state.locks.map(({ key }) => key), ["[42]"]);
   assert.equal(state.updates.length, 1);
   assert.equal(state.creates.length, 0);
   assert.equal(result.shouldNotify, false);
@@ -237,7 +237,7 @@ test("overlapping flips serialize without losing the activity count", async () =
     }),
   ]);
 
-  assert.equal(state.locks.length, 2);
+  assert.deepEqual(state.locks.map(({ key }) => key), ["[42]", "[42]"]);
   assert.equal(state.updates.length, 2);
   assert.equal(state.previous.activity.data.statusFlipCount, 2);
   assert.equal(state.previous.activity.data.currentSection.sectionId, 2);

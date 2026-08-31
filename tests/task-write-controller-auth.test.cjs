@@ -101,7 +101,10 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
   const tx = {
     task: {
       findUnique: async () => currentTask,
-      update: async ({ data }) => ({ ...currentTask, ...data }),
+      update: async ({ data }) => {
+        (calls.order ??= []).push("task-update");
+        return { ...currentTask, ...data };
+      },
     },
     section: {
       findFirst: async ({ where }) => {
@@ -129,8 +132,20 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
       if (destinationSectionProjectId === undefined) {
         throw new Error("a denied write reached the transaction");
       }
-      return callback(tx);
+      calls.transactionActive = true;
+      try {
+        return await callback(tx);
+      } finally {
+        calls.transactionActive = false;
+      }
     },
+  };
+  const createTaskMovedActivityInTransaction = async (args) => {
+    assert.equal(calls.transactionActive, true);
+    calls.moveActivityTransaction = args.transaction;
+    calls.moveActivityArgs = args;
+    (calls.order ??= []).push("move-activity");
+    return { newComment: { id: 1 }, shouldNotify: false };
   };
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -139,6 +154,16 @@ function loadUpdateController(projectId, destinationSectionProjectId) {
     "@/models/model": {},
     "@prisma/client": { Status: { Archive: "Archive" } },
     "../activities/createActivity": noop,
+    "../activities/createTaskMovedActivity": {
+      createTaskMovedActivityInTransaction,
+    },
+    "../activities/sendTaskMoveNotification": {
+      sendTaskMoveNotificationIfNeeded: async (result, sendNotification) => {
+        if (!result.shouldNotify) return false;
+        await sendNotification();
+        return true;
+      },
+    },
     "../notifications/creation-service/createAndSendNotificationTaskMove": noop,
     "../description/common-description-create": noop,
     "@/pages/api/queues/FAST/generateSummary": noop,
@@ -235,6 +260,40 @@ test("the shared update controller validates a moved section against the destina
   assert.equal(calls.validatedSectionProjectId, MEMBER_PROJECT);
   assert.equal(result.json.projectId, MEMBER_PROJECT);
   assert.equal(result.json.sectionId, SECTION_ID);
+});
+
+test("a task move and its activity persist inside the same fenced transaction", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+  );
+  let deliveries = 0;
+  const result = await updateTaskSingle(
+    {
+      id: TASK_ID,
+      sectionId: SECTION_ID,
+      section: "Todo",
+    },
+    { id: USER_ID, displayName: "Valentin" },
+    null,
+    {
+      skipAutoAssign: true,
+      skipRecurrence: true,
+      taskMovedActivity: {
+        sendNotification: async () => {
+          deliveries += 1;
+        },
+      },
+    },
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls.order, ["task-update", "move-activity"]);
+  assert.equal(calls.moveActivityArgs.fromSectionId, SECTION_ID - 1);
+  assert.equal(calls.moveActivityArgs.toSectionId, SECTION_ID);
+  assert.equal(calls.moveActivityArgs.transaction, calls.moveActivityTransaction);
+  assert.equal(result.moveActivity.shouldNotify, false);
+  assert.equal(deliveries, 0);
 });
 
 function loadMoveController({ targetProjectId, sectionProjectId, agentId }) {

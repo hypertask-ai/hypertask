@@ -2,7 +2,6 @@ import { NextApiHandler } from "next";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
-import createTaskMovedActivity from "@/utils/controllers/activities/createTaskMovedActivity";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { toErrorMessage } from "@/lib/api/errorMessage";
@@ -58,7 +57,20 @@ const handler: NextApiHandler = async (req, res) => {
     const response: any = await updateTaskSingle(
       updatedTaskData,
       userObj,
-      agentId ?? null
+      agentId ?? null,
+      {
+        taskMovedActivity: {
+          fromAgent: agent,
+          sendNotification: () =>
+            sendNotificationForTask(
+              userObj.id,
+              "TaskMoved",
+              taskId,
+              projectId,
+              agentId ?? null,
+            ),
+        },
+      },
     );
 
     if (response.status !== 200) {
@@ -75,28 +87,12 @@ const handler: NextApiHandler = async (req, res) => {
     // HTPR-4484: sync the moved task into any open task-detail view (section change).
     void broadcastTaskChange(taskId, { originUserId: userObj.id });
 
-    const moveActivity = await createTaskMovedActivity({
-      taskId,
-      toSection_title: section_title,
-      toSectionId: sectionId,
-      userObj,
-      fromSection_title: response.oldTask?.section ?? "",
-      fromSectionId: response.oldTask?.sectionId,
-      fromAgent: agent,
-      sendNotification: () =>
-        sendNotificationForTask(
-          userObj.id,
-          "TaskMoved",
-          taskId,
-          projectId,
-          agentId ?? null,
-        ),
-    });
-
     // Send back updated task, optionally with new activity
     return res.status(response.status).json({
       ...response.json,
-      ...(moveActivity.newComment && { newComment: moveActivity.newComment }),
+      ...(response.moveActivity?.newComment && {
+        newComment: response.moveActivity.newComment,
+      }),
     });
   } catch (error) {
     console.error(error);

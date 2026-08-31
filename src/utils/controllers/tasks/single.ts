@@ -3,6 +3,11 @@ import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
 import { Prisma, Status } from "@prisma/client";
 import createActivity from "../activities/createActivity";
+import {
+  createTaskMovedActivityInTransaction,
+  type TaskMovedActivityProps,
+} from "../activities/createTaskMovedActivity";
+import { sendTaskMoveNotificationIfNeeded } from "../activities/sendTaskMoveNotification";
 import sendNotificationForTask from "../notifications/creation-service/createAndSendNotificationTaskMove";
 import upsertTaskDescription from "../description/common-description-create";
 import scheduleTaskSummaryGeneration from "@/pages/api/queues/FAST/generateSummary";
@@ -53,6 +58,10 @@ type UpdateTaskSingleOptions = {
   trustedCaller?: boolean;
   // Compare under the mutation fence so a restore cannot replace a newer edit.
   expectedDescription?: string;
+  taskMovedActivity?: Pick<
+    TaskMovedActivityProps,
+    "fromAgent" | "sendNotification"
+  >;
 };
 
 class TaskDescriptionChangedError extends Error {}
@@ -62,6 +71,9 @@ type UpdateTaskSingleResult = {
   json: any;
   oldTask?: any;
   commentActivity?: any;
+  moveActivity?: Awaited<
+    ReturnType<typeof createTaskMovedActivityInTransaction>
+  > | null;
 };
 
 export async function updateTaskSingle(
@@ -162,6 +174,7 @@ export async function updateTaskSingle(
     const {
       task,
       newComment,
+      moveActivity,
       boardWebhookDeliveryIds,
       agentWebhookDeliveryIds = [],
     } = await prisma.$transaction(
@@ -310,6 +323,35 @@ export async function updateTaskSingle(
             },
           });
         }
+        const taskMoveAgent =
+          sectionIdChanged &&
+          options.taskMovedActivity?.fromAgent === undefined &&
+          agentId
+            ? await tx.agent.findUnique({
+                where: { id: agentId },
+                select: {
+                  id: true,
+                  userId: true,
+                  displayName: true,
+                  photoURL: true,
+                },
+              })
+            : options.taskMovedActivity?.fromAgent;
+        const moveActivity =
+          sectionIdChanged && options.taskMovedActivity
+            ? currentState.sectionId !== null && updatedTask.sectionId !== null
+              ? await createTaskMovedActivityInTransaction({
+                  transaction: tx,
+                  taskId: updatedTask.id,
+                  userObj: currentUser,
+                  toSectionId: updatedTask.sectionId,
+                  toSection_title: updatedTask.section ?? "",
+                  fromSectionId: currentState.sectionId,
+                  fromSection_title: currentState.section ?? "",
+                  fromAgent: taskMoveAgent,
+                })
+              : { newComment: null, shouldNotify: true }
+            : null;
         let descriptionActivity;
         if (requestedMutation.description !== undefined) {
           // Core task fields, the normalized body, draft cleanup, and activity
@@ -459,6 +501,7 @@ export async function updateTaskSingle(
         return {
           task: updatedTask,
           newComment: descriptionActivity,
+          moveActivity,
           boardWebhookDeliveryIds,
           agentWebhookDeliveryIds,
         };
@@ -473,6 +516,13 @@ export async function updateTaskSingle(
         ? publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
         : Promise.resolve(),
     ]);
+
+    if (moveActivity && options.taskMovedActivity?.sendNotification) {
+      await sendTaskMoveNotificationIfNeeded(
+        moveActivity,
+        options.taskMovedActivity.sendNotification,
+      );
+    }
 
     if (requestedMutation.description !== undefined) {
       try {
@@ -555,6 +605,7 @@ export async function updateTaskSingle(
       json: task,
       oldTask: taskBeforeWrite,
       commentActivity: newComment,
+      moveActivity,
     };
   } catch (error) {
     if (error instanceof TaskDescriptionChangedError) {

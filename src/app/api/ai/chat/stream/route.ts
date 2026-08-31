@@ -158,7 +158,6 @@ import { columnRole, columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { loadDoneTitlesByProject } from "@/utils/controllers/notifications/inboxZero";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
-import createTaskMovedActivity from "@/utils/controllers/activities/createTaskMovedActivity";
 import createArchiveActivity from "@/utils/controllers/activities/createArchiveActivity";
 import {
   broadcastInboxChange,
@@ -6619,7 +6618,25 @@ function buildTools(
         }
 
         if (Object.keys(patch).length > 1) {
-          const result = await updateTaskSingle(patch, activityUser, actingAgentId);
+          const result = await updateTaskSingle(
+            patch,
+            activityUser,
+            actingAgentId,
+            sectionTarget
+              ? {
+                  taskMovedActivity: {
+                    sendNotification: () =>
+                      sendNotificationForTask(
+                        user.id,
+                        "TaskMoved",
+                        task.id,
+                        task.projectId,
+                        actingAgentId ?? undefined,
+                      ),
+                  },
+                }
+              : {},
+          );
           if (result.status !== 200) {
             return {
               success: false,
@@ -6628,25 +6645,6 @@ function buildTools(
                 "Failed to update task",
             };
           }
-        }
-
-        if (sectionTarget && oldTask.sectionId !== sectionTarget.id) {
-          await createTaskMovedActivity({
-            userObj: activityUser,
-            toSectionId: sectionTarget.id,
-            toSection_title: sectionTarget.section_title,
-            fromSectionId: oldTask.sectionId ?? -1,
-            fromSection_title: oldTask.section ?? "",
-            taskId: task.id,
-            sendNotification: () =>
-              sendNotificationForTask(
-                user.id,
-                "TaskMoved",
-                task.id,
-                task.projectId,
-                undefined,
-              ),
-          });
         }
 
         if (input.status !== undefined && oldTask.status !== input.status) {
