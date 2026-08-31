@@ -283,24 +283,35 @@ export async function updateTaskSingle(
           requestedSectionName !== currentState.section;
         sectionChanged = sectionIdChanged || sectionNameChanged;
         if (sectionIdChanged) {
-          if (typeof requestedSectionId !== "number") {
-            throw new Error("Section not found");
+          if (requestedSectionId === null) {
+            if (
+              requestedSectionName !== undefined &&
+              requestedSectionName !== null
+            ) {
+              throw new Error("Section does not match sectionId");
+            }
+            updateData.section = null;
+          } else {
+            if (typeof requestedSectionId !== "number") {
+              throw new Error("Section not found");
+            }
+            const targetSection = await tx.section.findFirst({
+              where: {
+                id: requestedSectionId,
+                projectId:
+                  requestedMutation.projectId ?? currentState.projectId,
+              },
+              select: { section_title: true },
+            });
+            if (!targetSection) throw new Error("Section not found");
+            if (
+              requestedSectionName !== undefined &&
+              requestedSectionName !== targetSection.section_title
+            ) {
+              throw new Error("Section does not match sectionId");
+            }
+            updateData.section = targetSection.section_title;
           }
-          const targetSection = await tx.section.findFirst({
-            where: {
-              id: requestedSectionId,
-              projectId: requestedMutation.projectId ?? currentState.projectId,
-            },
-            select: { section_title: true },
-          });
-          if (!targetSection) throw new Error("Section not found");
-          if (
-            requestedSectionName !== undefined &&
-            requestedSectionName !== targetSection.section_title
-          ) {
-            throw new Error("Section does not match sectionId");
-          }
-          updateData.section = targetSection.section_title;
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();

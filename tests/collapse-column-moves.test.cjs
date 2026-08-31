@@ -46,7 +46,7 @@ const move = (
     fromAgent: agent,
     fromSection: { sectionId: fromId, sectionTitle: `Section ${fromId}` },
     toSection: { sectionId: toId, sectionTitle: `Section ${toId}` },
-    ...(currentSectionId
+    ...(currentSectionId !== undefined
       ? {
           currentSection: {
             sectionId: currentSectionId,
@@ -152,6 +152,17 @@ test("a repeated A-B run follows its stored current section", () => {
   });
   assert.equal(
     classify({ previousActivity, fromSectionId: 1, toSectionId: 2 }),
+    "status-flip",
+  );
+});
+
+test("a repeated A-unassigned run keeps null as its current section", () => {
+  const previousActivity = move(null, 2, {
+    currentSectionId: null,
+    statusFlipCount: 1,
+  });
+  assert.equal(
+    classify({ previousActivity, fromSectionId: null, toSectionId: 2 }),
     "status-flip",
   );
 });

@@ -358,6 +358,30 @@ test("a move from an unassigned section still records an activity", async () => 
   assert.ok(result.moveActivity.newComment);
 });
 
+test("a move into an unassigned section still records an activity", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+  );
+  const result = await updateTaskSingle(
+    { id: TASK_ID, sectionId: null, section: null },
+    { id: USER_ID, displayName: "Valentin" },
+    null,
+    {
+      skipAutoAssign: true,
+      skipRecurrence: true,
+      taskMovedActivity: {},
+    },
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.json.sectionId, null);
+  assert.equal(result.json.section, null);
+  assert.equal(calls.moveActivityArgs.fromSectionId, SECTION_ID - 1);
+  assert.equal(calls.moveActivityArgs.toSectionId, null);
+  assert.ok(result.moveActivity.newComment);
+});
+
 test("overlapping task moves serialize their state and activity updates", async () => {
   const { updateTaskSingle, calls } = loadUpdateController(
     OWNER_PROJECT,
