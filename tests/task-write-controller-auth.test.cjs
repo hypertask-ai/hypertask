@@ -353,7 +353,7 @@ test("a move from an unassigned section still records an activity", async () => 
   );
 
   assert.equal(result.status, 200);
-  assert.equal(calls.moveActivityArgs.fromSectionId, -1);
+  assert.equal(calls.moveActivityArgs.fromSectionId, null);
   assert.equal(calls.moveActivityArgs.toSectionId, SECTION_ID);
   assert.ok(result.moveActivity.newComment);
 });

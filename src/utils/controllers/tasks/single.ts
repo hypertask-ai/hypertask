@@ -341,9 +341,9 @@ export async function updateTaskSingle(
             transaction: tx,
             taskId: updatedTask.id,
             userObj: currentUser,
-            toSectionId: updatedTask.sectionId ?? -1,
+            toSectionId: updatedTask.sectionId,
             toSection_title: updatedTask.section ?? "",
-            fromSectionId: currentState.sectionId ?? -1,
+            fromSectionId: currentState.sectionId,
             fromSection_title: currentState.section ?? "",
             fromAgent: taskMoveAgent,
           });
