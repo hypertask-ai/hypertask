@@ -14,8 +14,7 @@ const CliSection = () => {
     <SettingsSectionShell title="CLI">
       <SettingsCard title="Install">
         <p className="px-2 text-dense font-medium text-text-light-gray">
-          Install the Hypertask command-line interface globally. Node.js is
-          required.
+          Install the Hypertask command-line interface on macOS or Linux.
         </p>
         <SettingsCodeRow value={INSTALL_COMMAND} />
       </SettingsCard>
