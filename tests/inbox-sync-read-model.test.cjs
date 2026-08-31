@@ -39,9 +39,10 @@ const {
 const { restoreInboxAfterUndo, updateInboxOptimistically } = jiti(
   path.join(root, "src/lib/inboxSync/optimistic.ts"),
 );
-const { createInboxReadinessLatch } = jiti(
-  path.join(root, "src/hooks/Inbox/useGetNotifications.ts"),
-);
+const {
+  createInboxReadinessLatch,
+  requiresPersistentInboxFence,
+} = jiti(path.join(root, "src/hooks/Inbox/useGetNotifications.ts"));
 
 const revision = (operationTime, tabId = "a".repeat(32), previousRevision) =>
   createInboxReadModelRevision({ operationTime, tabId, previousRevision });
@@ -748,6 +749,12 @@ test("Inbox readiness is claimed only once per page-load latch", () => {
   assert.equal(latch.claim(), false);
 });
 
+test("Inbox network publication waits for IndexedDB only without a synchronous revision fence", () => {
+  assert.equal(requiresPersistentInboxFence(false, false), false);
+  assert.equal(requiresPersistentInboxFence(true, true), false);
+  assert.equal(requiresPersistentInboxFence(true, false), true);
+});
+
 test("the Inbox integration hydrates, reconciles, persists confirmed data, measures, and clears", () => {
   const hook = read("src/hooks/Inbox/useGetNotifications.ts");
   const indexedDb = read("src/lib/inboxSync/indexedDbReadModel.ts");
@@ -814,17 +821,24 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   );
   assert.match(hook, /current\?\.readModelRevision/);
   assert.match(hook, /responseIsStale/);
-  assert.match(hook, /const persistedPayloadPromise = enabled/);
-  assert.match(hook, /persistedPayload = await persistedPayloadPromise/);
+  assert.match(hook, /const sharedHydrationReadPromise = enabled/);
+  assert.match(
+    hook,
+    /fallbackPersistedPayload = await sharedHydrationReadPromise/,
+  );
   assert.match(hook, /readInboxReadModelRevisionFence\(userId\)/);
-  assert.match(hook, /!inboxRevisionStorageAvailable\(userId\)/);
+  assert.match(
+    hook,
+    /requiresPersistentInboxFence\(\s*enabled,\s*inboxRevisionStorageAvailable\(userId\)/,
+  );
+  assert.match(hook, /if \(persistentFenceRequired\)/);
   assert.match(hook, /const finalRevision = currentInboxReadModelRevision/);
   assert.match(hook, /Ignored Inbox response after final revision check/);
   assert.ok(
-    hook.indexOf("const persistedPayloadPromise = enabled") <
+    hook.indexOf("const sharedHydrationReadPromise = enabled") <
       hook.indexOf("response = await getAllNotifications(userId)"),
   );
-  assert.match(hook, /persistedPayload\.revision/);
+  assert.match(hook, /fallbackPersistedPayload\.revision/);
   assert.match(
     hook,
     /throw new Error\("Ignored stale cross-tab Inbox response"\)/,

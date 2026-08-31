@@ -61,6 +61,11 @@ export const createInboxReadinessLatch = (): { claim: () => boolean } => {
   };
 };
 
+export const requiresPersistentInboxFence = (
+  enabled: boolean,
+  revisionStorageAvailable: boolean,
+): boolean => enabled && !revisionStorageAvailable;
+
 type LocalReadinessOutcome = "miss" | "error" | "none";
 type LocalReadinessOutcomeRef = { current: LocalReadinessOutcome };
 
@@ -189,10 +194,10 @@ const fetchInboxPayload = async (
   const revision = reserveInboxReadModelRevision(userId);
   latestNetworkRequestRevisionByAccount.set(userId, revision);
   const enabled = localReadModelEnabled();
-  // Start the revision snapshot read with the request. Hydration shares the
-  // same in-flight IndexedDB read, so reconciliation does not deserialize the
-  // full Inbox a second time after the response arrives.
-  const persistedPayloadPromise = enabled
+  // Start the revision snapshot read with the request. The mount hydration
+  // effect shares and publishes this in-flight read independently; network
+  // reconciliation awaits it only when IndexedDB is the durable revision fence.
+  const sharedHydrationReadPromise = enabled
     ? (async () => {
         const { readInboxReadModel } =
           await import("@/lib/inboxSync/indexedDbReadModel");
@@ -224,22 +229,24 @@ const fetchInboxPayload = async (
     // to render local rows again.
     latestAuthorizationFailureRevisionByAccount.delete(userId);
   }
-  let persistedPayload:
+  let fallbackPersistedPayload:
     import("@/lib/inboxSync/contract").InboxReadModelPayloadV1 | null = null;
   let persistedRevisionFence: InboxReadModelRevision | null = null;
-  if (enabled) {
-    persistedPayload = await persistedPayloadPromise;
+  const persistentFenceRequired = requiresPersistentInboxFence(
+    enabled,
+    inboxRevisionStorageAvailable(userId),
+  );
+  if (persistentFenceRequired) {
+    fallbackPersistedPayload = await sharedHydrationReadPromise;
     const { readInboxReadModel, readInboxReadModelRevisionFence } =
       await import("@/lib/inboxSync/indexedDbReadModel");
-    if (!inboxRevisionStorageAvailable(userId)) {
-      persistedPayload = await readInboxReadModel(userId);
+    fallbackPersistedPayload = await readInboxReadModel(userId);
+    if (fallbackPersistedPayload) {
+      observeInboxReadModelRevision(userId, fallbackPersistedPayload.revision);
     }
-    if (persistedPayload) {
-      observeInboxReadModelRevision(userId, persistedPayload.revision);
-    }
-    // Make the small IndexedDB fence the final asynchronous read before the
-    // response check. The synchronous localStorage read below then provides
-    // the acceptance point for browsers with cross-tab storage.
+    // Browsers without synchronous revision storage need the durable fence as
+    // their final stale-response check. Other browsers can publish the network
+    // response without waiting for IndexedDB.
     persistedRevisionFence = await readInboxReadModelRevisionFence(userId);
     if (persistedRevisionFence) {
       observeInboxReadModelRevision(userId, persistedRevisionFence);
@@ -258,19 +265,22 @@ const fetchInboxPayload = async (
         candidate != null &&
         compareInboxReadModelRevisions(revision, candidate) < 0,
     ) ||
-    (persistedPayload != null &&
-      compareInboxReadModelRevisions(revision, persistedPayload.revision) < 0);
+    (fallbackPersistedPayload != null &&
+      compareInboxReadModelRevisions(
+        revision,
+        fallbackPersistedPayload.revision,
+      ) < 0);
   if (authorizationFailureBlocksRevision(userId, revision)) {
     throw new Error("Ignored Inbox response after authorization failure");
   }
   if (responseIsStale) {
     if (
-      persistedPayload &&
-      compareInboxReadModelRevisions(revision, persistedPayload.revision) < 0 &&
+      fallbackPersistedPayload &&
+      compareInboxReadModelRevisions(revision, fallbackPersistedPayload.revision) < 0 &&
       (!cachedRevision ||
         compareInboxReadModelRevisions(
           cachedRevision,
-          persistedPayload.revision,
+          fallbackPersistedPayload.revision,
         ) < 0)
     ) {
       const access = await getInboxAccessibleProjectIds();
@@ -278,7 +288,7 @@ const fetchInboxPayload = async (
         throw new Error("Inbox access account does not match local account");
       }
       const persisted = filterInboxReadModelByProjectAccess(
-        persistedPayload,
+        fallbackPersistedPayload,
         access.projectIds,
       );
       if (authorizationFailureBlocksRevision(userId, revision)) {
