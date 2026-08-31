@@ -204,6 +204,17 @@ const fetchInboxPayload = async (
         return readInboxReadModel(userId);
       })().catch(() => null)
     : Promise.resolve(null);
+  // HTPR-5847: open the fence's own connection in parallel too (alongside,
+  // not instead of, the payload read above) so readInboxReadModelRevisionFence
+  // below skips its own indexedDB.open() round trip. The fence read keeps its
+  // exact position as the last read before the response-staleness check.
+  const fenceConnectionPromise = enabled
+    ? (async () => {
+        const { openInboxReadModelConnection } =
+          await import("@/lib/inboxSync/indexedDbReadModel");
+        return openInboxReadModelConnection();
+      })().catch(() => null)
+    : Promise.resolve(null);
   let response: InboxQueryPayload;
   try {
     response = await getAllNotifications(userId);
@@ -217,6 +228,16 @@ const fetchInboxPayload = async (
         emptyInboxPayload(userId),
       );
     }
+    // HTPR-5847: the fence connection opened above is only consumed by the
+    // reads below, which never run on this path. Close it here so it isn't
+    // leaked while awaiting a request that already failed.
+    void fenceConnectionPromise.then(async (database) => {
+      if (!database) return;
+      const { closeInboxReadModelConnection } = await import(
+        "@/lib/inboxSync/indexedDbReadModel"
+      );
+      closeInboxReadModelConnection(database);
+    });
     throw error;
   }
   const latestAuthorizationFailure =
@@ -247,7 +268,10 @@ const fetchInboxPayload = async (
     // Browsers without synchronous revision storage need the durable fence as
     // their final stale-response check. Other browsers can publish the network
     // response without waiting for IndexedDB.
-    persistedRevisionFence = await readInboxReadModelRevisionFence(userId);
+    persistedRevisionFence = await readInboxReadModelRevisionFence(
+      userId,
+      await fenceConnectionPromise,
+    );
     if (persistedRevisionFence) {
       observeInboxReadModelRevision(userId, persistedRevisionFence);
     }
@@ -258,7 +282,10 @@ const fetchInboxPayload = async (
     try {
       const { readInboxReadModelRevisionFence } =
         await import("@/lib/inboxSync/indexedDbReadModel");
-      persistedRevisionFence = await readInboxReadModelRevisionFence(userId);
+      persistedRevisionFence = await readInboxReadModelRevisionFence(
+        userId,
+        await fenceConnectionPromise,
+      );
     } catch {
       persistedRevisionFence = null;
     }
