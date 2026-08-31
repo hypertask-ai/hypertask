@@ -25,9 +25,9 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRecoilValue } from "@/lib/state";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { useGetAnnouncements } from "@/hooks/MultiPages/Sidebar/useGetAnnouncements";
-import type { IAnnouncement } from "@/models/Announcements/model";
 import SettingsBoardPicker from "./SettingsBoardPicker";
 import SettingsTeamPicker from "./SettingsTeamPicker";
+import { shouldShowMobileAnnouncementIndicator } from "./announcementIndicator";
 import { useSettingsTeam } from "./useSettingsTeam";
 import {
   SETTINGS_CROSS_TAB_GROUPS,
@@ -339,14 +339,15 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
     useGetUserPreferences();
   const hasUnreadAnnouncements = useMemo(
     () =>
-      userPreferencesFetched &&
-      !userPreferences?.muteAnnouncements &&
-      Array.isArray(announcementsData) &&
-      (announcementsData as IAnnouncement[]).some(
-        (announcement) => !announcement.readAt,
-      ),
+      shouldShowMobileAnnouncementIndicator({
+        announcements: announcementsData,
+        mobile: mbl,
+        muted: userPreferences?.muteAnnouncements,
+        preferencesFetched: userPreferencesFetched,
+      }),
     [
       announcementsData,
+      mbl,
       userPreferences?.muteAnnouncements,
       userPreferencesFetched,
     ],

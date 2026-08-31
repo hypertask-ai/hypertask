@@ -27,11 +27,7 @@ test("mobile announcements live in Settings instead of the top bar", () => {
     false,
   );
   assert.match(settings, /useGetAnnouncements\(currentUser\?\.id\)/);
-  assert.match(settings, /isFetched: userPreferencesFetched/);
-  assert.match(
-    settings,
-    /userPreferencesFetched &&[\s\S]*!userPreferences\?\.muteAnnouncements/,
-  );
+  assert.match(settings, /shouldShowMobileAnnouncementIndicator\(\{/);
   assert.match(
     settings,
     /mobile &&[\s\S]*item\.id === "announcements" &&[\s\S]*hasUnreadAnnouncements/,
