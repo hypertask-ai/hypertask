@@ -22,8 +22,6 @@ import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import styles from "@/styles/tiptap.module.scss";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
-import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import {
   inlineDraftAiCommandForInstruction,
   inlineDraftAiWritePlaceholder,
