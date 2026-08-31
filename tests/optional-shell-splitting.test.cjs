@@ -20,6 +20,7 @@ test("closed optional shell features stay behind dynamic imports", () => {
     "Modals/MobileBlockingOverlay/MobileBlockingOverlay",
     "Modals/EmailVerificationModal",
     "Global/MobileTabBar",
+    "Global/MobileCreateTaskButton",
     "Global/MobilePullDownCommand",
     "Global/MobileTopBar",
     "Global/BottomSettings_QuickTips",

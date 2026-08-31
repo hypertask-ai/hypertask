@@ -22,6 +22,15 @@ export const shouldShowMobileDock = (pathname: string | null) =>
   shouldShowMobileTabBar(pathname) &&
   !(pathname?.startsWith("/detail") ?? false);
 
+export const shouldShowMobileCreateTaskButton = (pathname: string | null) =>
+  shouldShowMobileDock(pathname) &&
+  Boolean(
+    pathname &&
+      ["/project", "/calendar", "/inbox"].some(
+        (path) => pathname === path || pathname.startsWith(`${path}/`),
+      ),
+  );
+
 export const isMobileInboxPath = (pathname: string | null) =>
   pathname === "/inbox" || (pathname?.startsWith("/inbox/") ?? false);
 

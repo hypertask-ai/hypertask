@@ -82,6 +82,10 @@ const EmailVerificationModal = dynamic(
 const MobileTabBar = dynamic(() => import("../Global/MobileTabBar"), {
   ssr: false,
 });
+const MobileCreateTaskButton = dynamic(
+  () => import("../Global/MobileCreateTaskButton"),
+  { ssr: false },
+);
 const MobilePullDownCommand = dynamic(
   () => import("../Global/MobilePullDownCommand"),
   { ssr: false },
@@ -202,6 +206,7 @@ import {
   shouldShowMobileTabBar,
   shouldShowMobileDock,
   shouldShowMobilePrimaryDock,
+  shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
 } from "../Global/mobileShellVisibility";
 import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
@@ -517,6 +522,10 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
     shouldEnableMobilePullDownCommand(pathname);
   const mobileBottomInsetVisible =
     showMobileBottomInset && mobileBoardControlsReady;
+  const mobileCreateTaskButtonVisible =
+    mobileBottomInsetVisible &&
+    !showAiChatInterface &&
+    shouldShowMobileCreateTaskButton(pathname);
   const mobilePullCommandVisible =
     enableMobilePullDownCommand && mobileBoardControlsReady;
 
@@ -1247,6 +1256,7 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
           {showMobileBottomNav && mobileBoardControlsReady && (
             <MobileTabBar currentUserId={currentUser.id} />
           )}
+          {mobileCreateTaskButtonVisible && <MobileCreateTaskButton />}
           {mobilePullCommandVisible && (
             <MobilePullDownCommand />
           )}
