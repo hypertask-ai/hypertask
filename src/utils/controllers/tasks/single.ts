@@ -325,32 +325,28 @@ export async function updateTaskSingle(
         }
         let moveActivity = null;
         if (sectionIdChanged && options.taskMovedActivity) {
-          if (currentState.sectionId === null || updatedTask.sectionId === null) {
-            moveActivity = { newComment: null, shouldNotify: true };
-          } else {
-            let taskMoveAgent = options.taskMovedActivity.fromAgent;
-            if (taskMoveAgent === undefined && agentId) {
-              taskMoveAgent = await tx.agent.findUnique({
-                where: { id: agentId },
-                select: {
-                  id: true,
-                  userId: true,
-                  displayName: true,
-                  photoURL: true,
-                },
-              });
-            }
-            moveActivity = await createTaskMovedActivityInTransaction({
-              transaction: tx,
-              taskId: updatedTask.id,
-              userObj: currentUser,
-              toSectionId: updatedTask.sectionId,
-              toSection_title: updatedTask.section ?? "",
-              fromSectionId: currentState.sectionId,
-              fromSection_title: currentState.section ?? "",
-              fromAgent: taskMoveAgent,
+          let taskMoveAgent = options.taskMovedActivity.fromAgent;
+          if (taskMoveAgent === undefined && agentId) {
+            taskMoveAgent = await tx.agent.findUnique({
+              where: { id: agentId },
+              select: {
+                id: true,
+                userId: true,
+                displayName: true,
+                photoURL: true,
+              },
             });
           }
+          moveActivity = await createTaskMovedActivityInTransaction({
+            transaction: tx,
+            taskId: updatedTask.id,
+            userObj: currentUser,
+            toSectionId: updatedTask.sectionId ?? -1,
+            toSection_title: updatedTask.section ?? "",
+            fromSectionId: currentState.sectionId ?? -1,
+            fromSection_title: currentState.section ?? "",
+            fromAgent: taskMoveAgent,
+          });
         }
         let descriptionActivity;
         if (requestedMutation.description !== undefined) {

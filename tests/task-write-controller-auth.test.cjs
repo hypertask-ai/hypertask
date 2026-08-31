@@ -76,7 +76,11 @@ function execute(javascript, stubs) {
 function loadUpdateController(
   projectId,
   destinationSectionProjectId,
-  { moveShouldNotify = false, serializeTaskWrites = false } = {},
+  {
+    moveShouldNotify = false,
+    serializeTaskWrites = false,
+    initialSectionId = SECTION_ID - 1,
+  } = {},
 ) {
   const calls = { transaction: 0, sideEffects: 0 };
   const noop = () => {
@@ -88,8 +92,8 @@ function loadUpdateController(
     title: "Task",
     description: "",
     description_: { content: "" },
-    section: "Backlog",
-    sectionId: SECTION_ID - 1,
+    section: initialSectionId === null ? null : "Backlog",
+    sectionId: initialSectionId,
     userId: USER_ID,
     status: "Normal",
     ranking: "rank",
@@ -329,6 +333,29 @@ test("a task move and its activity persist inside the same fenced transaction", 
   assert.equal(calls.moveActivityArgs.transaction, calls.transactionClient);
   assert.equal(result.moveActivity.shouldNotify, false);
   assert.equal(deliveries, 0);
+});
+
+test("a move from an unassigned section still records an activity", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+    { initialSectionId: null },
+  );
+  const result = await updateTaskSingle(
+    { id: TASK_ID, sectionId: SECTION_ID, section: "Todo" },
+    { id: USER_ID, displayName: "Valentin" },
+    null,
+    {
+      skipAutoAssign: true,
+      skipRecurrence: true,
+      taskMovedActivity: {},
+    },
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(calls.moveActivityArgs.fromSectionId, -1);
+  assert.equal(calls.moveActivityArgs.toSectionId, SECTION_ID);
+  assert.ok(result.moveActivity.newComment);
 });
 
 test("overlapping task moves serialize their state and activity updates", async () => {
