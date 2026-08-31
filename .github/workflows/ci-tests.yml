@@ -254,9 +254,6 @@ jobs:
             fi
           fi
 
-      - name: Drop tests needing files the public repo does not carry (openwiki/, self-hosted action archive)
-        run: rm -f tests/parity-contract.test.cjs tests/agent-team-routing.test.cjs tests/action-archive-cache.test.cjs
-
       - name: Test
         if: github.event_name != 'push' && steps.scope.outputs.build_needed == 'true'
         env:
@@ -452,21 +449,16 @@ jobs:
 
   production-cli-parity:
     name: production-cli-parity
-    # Disabled after the public-repo cutover: the parity catalog
-    # (openwiki/five-surface-parity.md) stays in the private repo. Re-enable
-    # once the catalog gets a public in-repo home.
     # Candidate PRs are verified by parity-contract-trusted using the protected
-    # base verifier. Runs only on push -- and is disabled entirely after the
-    # public-repo cutover: the parity catalog (openwiki/five-surface-parity.md)
-    # stays in the private repo. Re-enable once the catalog has a public home.
-    if: false && github.event_name == 'push'
+    # base verifier. This job verifies the merged inventory against production.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
-      TRUSTED_CLI_VERSION: "1.13.24"
+      TRUSTED_CLI_VERSION: "1.13.29"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

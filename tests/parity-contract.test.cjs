@@ -354,7 +354,7 @@ test("trusted validation recomputes candidate artifacts without executing candid
     staleInventory,
   );
   fs.copyFileSync(
-    path.join(root, "openwiki/five-surface-parity.md"),
+    path.join(root, "docs/parity.md"),
     staleReport,
   );
   fs.appendFileSync(staleInventory, " ");
