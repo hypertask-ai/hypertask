@@ -148,7 +148,7 @@ const sidebarBoardTabClasses = () => {
     "src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx",
     ts.ScriptKind.TSX,
   );
-  let classes;
+  const matches = [];
   const visit = (node) => {
     if (
       ts.isConditionalExpression(node) &&
@@ -158,12 +158,13 @@ const sidebarBoardTabClasses = () => {
       ts.isIdentifier(node.whenTrue.expression) &&
       node.whenTrue.expression.text === "cn"
     ) {
-      classes = staticClassNames(node.whenTrue, "sidebar board tab").join(" ");
+      matches.push(staticClassNames(node.whenTrue, "sidebar board tab").join(" "));
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return classes;
+  assert.equal(matches.length, 1, "expected one sidebar board tab class expression");
+  return matches[0];
 };
 
 const inboxSplitTabClasses = () => {
@@ -171,7 +172,7 @@ const inboxSplitTabClasses = () => {
     "src/components/notifications/inboxSplit/SplitTitle.tsx",
     ts.ScriptKind.TSX,
   );
-  let classes;
+  const matches = [];
   const visit = (node) => {
     if (ts.isJsxOpeningElement(node)) {
       const onClick = jsxAttribute(node, "onClick");
@@ -185,13 +186,14 @@ const inboxSplitTabClasses = () => {
         ts.isJsxExpression(className.initializer) &&
         ts.isNoSubstitutionTemplateLiteral(className.initializer.expression)
       ) {
-        classes = className.initializer.expression.text;
+        matches.push(className.initializer.expression.text);
       }
     }
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return classes;
+  assert.equal(matches.length, 1, "expected one inbox split tab class expression");
+  return matches[0];
 };
 
 test("font-size class detection preserves typed arbitrary values", () => {
