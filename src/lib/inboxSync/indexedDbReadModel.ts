@@ -170,46 +170,14 @@ export const readInboxReadModel = (
   return trackedRead;
 };
 
-/**
- * HTPR-5847: opens (or reuses) the connection with no read, so it can be
- * started in parallel with the persisted-payload read -- by the time
- * readInboxReadModelRevisionFence needs it below, the expensive part
- * (indexedDB.open()) is already done. The fence itself still reads last,
- * right before the response-staleness check; only its connection cost moves
- * off the critical path, not its timing.
- */
-export const openInboxReadModelConnection = async (): Promise<IDBDatabase | null> => {
-  if (operationsDisabled) return null;
-  try {
-    return await openDatabase();
-  } catch {
-    return null;
-  }
-};
-
-/**
- * HTPR-5847: closes a connection opened by openInboxReadModelConnection when
- * nothing ends up consuming it (e.g. the network request it was opened
- * alongside threw before the fence read ran) -- otherwise it leaks: stays in
- * activeDatabases, and a retry opens yet another one on top of it.
- */
-export const closeInboxReadModelConnection = (
-  database: IDBDatabase | null,
-): void => {
-  closeDatabase(database);
-};
-
 export const readInboxReadModelRevisionFence = async (
   accountId: number,
-  preOpenedConnection?: IDBDatabase | null,
 ): Promise<InboxReadModelRevision | null> => {
+  if (operationsDisabled) return null;
   const startedGeneration = operationGeneration;
-  // Assigned before the operationsDisabled check so a handed-in connection is
-  // always closed in finally, even on the earliest return.
-  let database: IDBDatabase | null = preOpenedConnection ?? null;
+  let database: IDBDatabase | null = null;
   try {
-    if (operationsDisabled) return null;
-    if (!database) database = await openDatabase();
+    database = await openDatabase();
     if (!database || startedGeneration !== operationGeneration) return null;
     const transaction = database.transaction(STORE_NAME, "readonly");
     const transactionComplete = waitForTransaction(transaction);
