@@ -1011,6 +1011,10 @@ test("Calendar integrates cache-first hydration, authoritative reconciliation, r
   assert.match(userPicker, /typeof entry\.id === "string"/);
   assert.match(taskTopRow, /task\._count\?\.savedContent/);
   assert.match(hook, /createCalendarHydrationArbiter/);
+  assert.match(
+    hook,
+    /currentWaitingOnUser\?\.id === task\.waitingOnUserId/,
+  );
   assert.match(hook, /observeAuthoritativeAccess/);
   assert.match(hook, /settleCalendarAuthorizationFailure/);
   assert.match(hook, /updateProjection\(\(current\)[\s\S]*?\? null\s*:\s*current/);

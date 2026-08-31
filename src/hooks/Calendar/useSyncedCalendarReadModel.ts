@@ -617,14 +617,17 @@ export const useSyncedCalendarReadModel = ({
           (candidate) => candidate.id === task.id,
         );
         const tasks = [...current.payload.tasks];
+        let waitingOnUser = task.waitingOnUser;
+        if (waitingOnUser === undefined) {
+          const currentWaitingOnUser = tasks[existingIndex]?.waitingOnUser;
+          waitingOnUser =
+            currentWaitingOnUser?.id === task.waitingOnUserId
+              ? currentWaitingOnUser
+              : null;
+        }
         const projectedTask: CalendarTaskV1 = {
           ...task,
-          waitingOnUser:
-            task.waitingOnUser !== undefined
-              ? task.waitingOnUser
-              : task.waitingOnUserId == null
-                ? null
-                : (tasks[existingIndex]?.waitingOnUser ?? null),
+          waitingOnUser,
         };
         if (belongsInRange && existingIndex >= 0) {
           tasks[existingIndex] = projectedTask;
