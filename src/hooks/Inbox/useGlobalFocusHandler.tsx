@@ -232,26 +232,27 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     console.time("StartingProcess");
     const _notifications: INotificationsFromTQ | undefined =
       queryClient.getQueryData(resolvedQueryKey);
-    if (!_notifications?.notifications) return;
-    const prevTabLength = _notifications.structuredData.tabs.length;
-    const currentSplitName =
-      _notifications.structuredData.tabs[globalFocus.currSplit].project;
-    const cachePayload = updateInboxOptimistically({
-      queryClient,
-      queryKey: resolvedQueryKey,
-      accountId: currentUser.id,
-      mutation: createInboxRemovalMutation([elementToRemove]),
-    });
-    if (!cachePayload) return;
+    const cachePayload = _notifications?.notifications
+      ? updateInboxOptimistically({
+          queryClient,
+          queryKey: resolvedQueryKey,
+          accountId: currentUser.id,
+          mutation: createInboxRemovalMutation([elementToRemove]),
+        })
+      : null;
+    const restoreAnchors =
+      _notifications && cachePayload
+        ? findInboxRestoreAnchors(
+            _notifications.notifications,
+            cachePayload.notifications,
+            String(elementToRemove.id),
+          )
+        : { beforeNotificationId: null, afterNotificationId: null };
     const body = {
       notification: elementToRemove,
       currentUser,
       queryKey: resolvedQueryKey,
-      ...findInboxRestoreAnchors(
-        _notifications.notifications,
-        cachePayload.notifications,
-        String(elementToRemove.id),
-      ),
+      ...restoreAnchors,
     };
     undoHandler &&
       performActionAndStoreUndoData(
@@ -259,6 +260,10 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
         "Undo remove notification",
         undoHandler,
       );
+    if (!_notifications || !cachePayload) return;
+    const prevTabLength = _notifications.structuredData.tabs.length;
+    const currentSplitName =
+      _notifications.structuredData.tabs[globalFocus.currSplit].project;
     const newState = cachePayload.notifications;
     console.timeEnd("StartingProcess");
 
