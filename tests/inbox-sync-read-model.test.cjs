@@ -36,7 +36,7 @@ const {
   createInboxRemovalMutation,
   findInboxRestoreAnchors,
 } = jiti(path.join(root, "src/lib/inboxSync/mutation.ts"));
-const { updateInboxOptimistically } = jiti(
+const { restoreInboxAfterUndo, updateInboxOptimistically } = jiti(
   path.join(root, "src/lib/inboxSync/optimistic.ts"),
 );
 const { createInboxReadinessLatch } = jiti(
@@ -650,6 +650,42 @@ test("undo restores an archived notification to its post-removal cache position"
   }
 });
 
+test("undo reconciliation restores the cache and refetches its exact query", async () => {
+  const queryKey = ["inbox", "data", accountId];
+  const archived = notification(10);
+  let cached = {
+    revision: revision(7_200),
+    notifications: [notification(12), notification(9), notification(11)],
+    splitsNoImportant: [],
+    showImportantSplit: false,
+  };
+  const refetches = [];
+  const queryClient = {
+    getQueryData: () => cached,
+    setQueryData: (_queryKey, payload) => {
+      cached = payload;
+    },
+    refetchQueries: async (options) => {
+      refetches.push(options);
+    },
+  };
+
+  await restoreInboxAfterUndo({
+    queryClient,
+    queryKey,
+    accountId,
+    notification: archived,
+    beforeNotificationId: "11",
+    afterNotificationId: "9",
+  });
+
+  assert.deepEqual(
+    cached.notifications.map(({ id }) => id),
+    ["12", "9", "10", "11"],
+  );
+  assert.deepEqual(refetches, [{ queryKey, exact: true }]);
+});
+
 test("legacy Inbox caches keep immediate mutations without read-model metadata", () => {
   const queryKey = ["agent-inbox", "agent-1"];
   const row = notification(10);
@@ -812,10 +848,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     /queryClient\.resetQueries\(\{ queryKey, exact: true \}\)/,
   );
   assert.match(inbox, /updateInboxOptimistically/);
-  assert.match(
-    inbox,
-    /const undoHandler[\s\S]*?queryKey: undoQueryKey[\s\S]*?beforeNotificationId: data\.beforeNotificationId[\s\S]*?afterNotificationId: data\.afterNotificationId[\s\S]*?queryKey: undoQueryKey[\s\S]*?exact: true/,
-  );
+  assert.match(inbox, /restoreInboxAfterUndo/);
   assert.match(focusHandler, /updateInboxOptimistically/);
   assert.match(splitRows, /updateInboxOptimistically/);
   assert.doesNotMatch(inbox, /reserveInboxReadModelRevision/);

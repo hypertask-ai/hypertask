@@ -79,7 +79,10 @@ import {
   LEARN_TUTORIAL_STATE_UPDATED_EVENT,
   parseLearnTutorialState,
 } from "@/lib/tutorial/learnTutorialState";
-import { updateInboxOptimistically } from "@/lib/inboxSync/optimistic";
+import {
+  restoreInboxAfterUndo,
+  updateInboxOptimistically,
+} from "@/lib/inboxSync/optimistic";
 import { canWarmPreviousBoardFromInbox } from "@/lib/inboxSync/warmPreviousBoard";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
 import { shouldPreserveNativeInboxTab } from "@/lib/inboxKeyboardNavigation";
@@ -448,25 +451,14 @@ const Inbox = ({
   const undoHandler = async (data: any, toastId: string) => {
     await undoAction("UNDO_INBOX_ARCHIVE", data);
     const undoQueryKey = data.queryKey ?? inboxDataQueryKey(currentUser.id);
-    updateInboxOptimistically({
+    await restoreInboxAfterUndo({
       queryClient,
       queryKey: undoQueryKey,
       accountId: currentUser.id,
-      mutation: {
-        type: "restore",
-        notification: data.notification,
-        beforeNotificationId: data.beforeNotificationId,
-        afterNotificationId: data.afterNotificationId,
-      },
+      notification: data.notification,
+      beforeNotificationId: data.beforeNotificationId,
+      afterNotificationId: data.afterNotificationId,
     });
-    await queryClient
-      .refetchQueries({
-        queryKey: undoQueryKey,
-        exact: true,
-      })
-      // The undo is already persisted and visible, so reconciliation failure
-      // must not turn a successful undo into a false failure message.
-      .catch(() => undefined);
     toast.dismiss(toastId);
     toast("Undo notification archive");
   };
