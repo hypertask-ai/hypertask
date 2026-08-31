@@ -573,6 +573,38 @@ test("removal targets both the exact notification row and its same-task siblings
   assert.deepEqual(fallbackMutation.taskIds, [500]);
 });
 
+test("undo restores an archived notification to its previous cache position", () => {
+  const before = notification(9);
+  const archived = notification(10);
+  const after = notification(11);
+  const payload = {
+    revision: revision(7_100),
+    notifications: [before, after],
+    splitsNoImportant: [],
+    showImportantSplit: false,
+  };
+
+  const restored = applyInboxReadModelMutation(payload, {
+    type: "restore",
+    notification: archived,
+    index: 1,
+  });
+  assert.deepEqual(
+    restored.notifications.map(({ id }) => id),
+    ["9", "10", "11"],
+  );
+
+  const duplicate = applyInboxReadModelMutation(restored, {
+    type: "restore",
+    notification: archived,
+    index: 1,
+  });
+  assert.deepEqual(
+    duplicate.notifications.map(({ id }) => id),
+    ["9", "10", "11"],
+  );
+});
+
 test("legacy Inbox caches keep immediate mutations without read-model metadata", () => {
   const queryKey = ["agent-inbox", "agent-1"];
   const row = notification(10);
@@ -735,6 +767,10 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     /queryClient\.resetQueries\(\{ queryKey, exact: true \}\)/,
   );
   assert.match(inbox, /updateInboxOptimistically/);
+  assert.match(
+    inbox,
+    /const undoHandler[\s\S]*?type: "restore"[\s\S]*?notificationIndex[\s\S]*?exact: true/,
+  );
   assert.match(focusHandler, /updateInboxOptimistically/);
   assert.match(splitRows, /updateInboxOptimistically/);
   assert.doesNotMatch(inbox, /reserveInboxReadModelRevision/);

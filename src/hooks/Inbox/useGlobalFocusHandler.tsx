@@ -227,7 +227,16 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     cmdControl: TRemoveFromInboxMode,
   ) => {
     console.time("StartingProcess");
-    const body = { notification: elementToRemove, currentUser: currentUser };
+    const _notifications: INotificationsFromTQ | undefined =
+      queryClient.getQueryData(resolvedQueryKey);
+    const body = {
+      notification: elementToRemove,
+      currentUser,
+      notificationIndex:
+        _notifications?.notifications.findIndex(
+          ({ id }) => String(id) === String(elementToRemove.id),
+        ) ?? 0,
+    };
     undoHandler &&
       performActionAndStoreUndoData(
         body,
@@ -235,8 +244,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
         undoHandler,
       );
 
-    const _notifications: INotificationsFromTQ | undefined =
-      queryClient.getQueryData(resolvedQueryKey);
     const prevTabLength = _notifications?.structuredData.tabs.length;
     const currentSplitName =
       _notifications?.structuredData.tabs[globalFocus.currSplit].project;
