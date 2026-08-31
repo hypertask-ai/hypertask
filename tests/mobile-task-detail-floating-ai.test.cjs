@@ -28,30 +28,32 @@ test("mobile task detail keeps Ask AI outside the composer in the shared floatin
     true,
     ts.ScriptKind.TSX,
   );
-  let askAiButton;
-  const findAskAiButton = (node) => {
+  const askAiButtons = [];
+  const findAskAiButtons = (node) => {
     if (
       ts.isJsxSelfClosingElement(node) &&
       node.tagName.getText(sourceFile) === "AskAiButton"
     ) {
-      askAiButton = node;
+      askAiButtons.push(node);
     }
-    ts.forEachChild(node, findAskAiButton);
+    ts.forEachChild(node, findAskAiButtons);
   };
-  findAskAiButton(sourceFile);
-  assert.ok(askAiButton, "AskAiButton render not found");
+  findAskAiButtons(sourceFile);
+  assert.equal(askAiButtons.length, 1, "expected one AskAiButton render");
 
-  for (let ancestor = askAiButton.parent; ancestor; ancestor = ancestor.parent) {
-    if (!ts.isJsxElement(ancestor)) continue;
-    const isCommentComposer = ancestor.openingElement.attributes.properties.some(
-      (attribute) =>
-        ts.isJsxAttribute(attribute) &&
-        attribute.name.getText(sourceFile) === "id" &&
-        attribute.initializer &&
-        ts.isStringLiteral(attribute.initializer) &&
-        attribute.initializer.text === "comment",
-    );
-    assert.equal(isCommentComposer, false, "AskAiButton is nested inside #comment");
+  for (const askAiButton of askAiButtons) {
+    for (let ancestor = askAiButton.parent; ancestor; ancestor = ancestor.parent) {
+      if (!ts.isJsxElement(ancestor)) continue;
+      const isCommentComposer = ancestor.openingElement.attributes.properties.some(
+        (attribute) =>
+          ts.isJsxAttribute(attribute) &&
+          attribute.name.getText(sourceFile) === "id" &&
+          attribute.initializer &&
+          ts.isStringLiteral(attribute.initializer) &&
+          attribute.initializer.text === "comment",
+      );
+      assert.equal(isCommentComposer, false, "AskAiButton is nested inside #comment");
+    }
   }
 
   assert.match(commentComposer, /\{_mbl && <AskAiButton\/>\}/);
