@@ -94,28 +94,9 @@ const TiptapMainContainer = () => {
           }}
         >
           <CreatedInfoTiptap />
-          <div
-            className={
-              aiComposeOpen
-                ? "max-h-[min(38svh,var(--mobile-comment-auto-editor-max-height,55vh))] min-h-[80px] w-full min-w-0 shrink-0 overflow-y-auto"
-                : "w-full min-w-0"
-            }
-          >
-            {!aiRefineOpen && <TiptapEditor />}
+          <div className="w-full min-w-0">
+            {!aiRefineOpen && !aiComposeOpen && <TiptapEditor />}
           </div>
-          {aiComposeOpen && closeInlineDraftAi && (
-            <InlineDraftAiFloat
-              editor={editor}
-              onClose={closeInlineDraftAi}
-              projectId={aiProjectId}
-              taskId={aiTaskId}
-              allowSuggestReply
-              toggleRecording={toggleRecording}
-              isRecording={isRecording}
-              presentation="composer"
-              suppressEditorSelectionHighlight
-            />
-          )}
           {/* ================== attachment button ============= */}
           <div className="w-full shrink-0">
             <AttachmentsUpload
@@ -147,6 +128,19 @@ const TiptapMainContainer = () => {
             toggleRecording={toggleRecording}
             isRecording={isRecording}
             presentation="refine-fullscreen"
+            suppressEditorSelectionHighlight
+          />
+        )}
+        {aiComposeOpen && closeInlineDraftAi && (
+          <InlineDraftAiFloat
+            editor={editor}
+            onClose={closeInlineDraftAi}
+            projectId={aiProjectId}
+            taskId={aiTaskId}
+            allowSuggestReply
+            toggleRecording={toggleRecording}
+            isRecording={isRecording}
+            presentation="composer"
             suppressEditorSelectionHighlight
           />
         )}

@@ -58,6 +58,8 @@ type UpdateTaskSingleOptions = {
   trustedCaller?: boolean;
   // Compare under the mutation fence so a restore cannot replace a newer edit.
   expectedDescription?: string;
+  // Every section-ID change creates activity. This only supplies actor detail
+  // and the post-commit notification used by move-specific callers.
   taskMovedActivity?: Pick<
     TaskMovedActivityProps,
     "fromAgent" | "sendNotification"
@@ -290,7 +292,9 @@ export async function updateTaskSingle(
             ) {
               throw new Error("Section does not match sectionId");
             }
-            updateData.section = null;
+            // sectionId is the nullable identity; Task.section is required
+            // legacy display text, so unassigned tasks store an empty name.
+            updateData.section = "";
           } else {
             if (typeof requestedSectionId !== "number") {
               throw new Error("Section not found");
@@ -335,8 +339,8 @@ export async function updateTaskSingle(
           });
         }
         let moveActivity = null;
-        if (sectionIdChanged && options.taskMovedActivity) {
-          let taskMoveAgent = options.taskMovedActivity.fromAgent;
+        if (sectionIdChanged) {
+          let taskMoveAgent = options.taskMovedActivity?.fromAgent;
           if (taskMoveAgent === undefined && agentId) {
             taskMoveAgent = await tx.agent.findUnique({
               where: { id: agentId },

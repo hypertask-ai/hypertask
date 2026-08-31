@@ -568,11 +568,11 @@ export async function executeTaskUpdate({
         }
         return NextResponse.json(
             {
-                success: true,
+                success: false,
                 tasks: [],
-                message: 'No tasks found or access denied'
+                error: 'Task not found or access denied'
             },
-            { status: 200 }
+            { status: 404 }
         )
     }
 

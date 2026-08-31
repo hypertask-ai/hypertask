@@ -136,6 +136,7 @@ const InlineDraftAiFloat = ({
 
   const isComposer = presentation === "composer";
   const isRefineFullscreen = presentation === "refine-fullscreen";
+  const isMobileAiSheet = isRefineFullscreen || isComposer;
 
   useEffect(() => {
     if (!isRefineFullscreen || !editor) return;
@@ -149,7 +150,7 @@ const InlineDraftAiFloat = ({
   }, [editor, isRefineFullscreen]);
 
   useEffect(() => {
-    if (!isRefineFullscreen) return;
+    if (!isMobileAiSheet) return;
     const previous = window.__htHandleBack;
     window.__htHandleBack = () => {
       closeRef.current();
@@ -158,7 +159,7 @@ const InlineDraftAiFloat = ({
     return () => {
       window.__htHandleBack = previous;
     };
-  }, [isRefineFullscreen]);
+  }, [isMobileAiSheet]);
 
   useEffect(() => {
     if (!editor) return;
@@ -216,7 +217,7 @@ const InlineDraftAiFloat = ({
       editor.commands.setTextSelection(from);
     }
     onClose();
-    if (!isComposer || isRefineFullscreen) {
+    if (isMobileAiSheet) {
       editor.commands.focus("end");
     }
   };
@@ -283,7 +284,7 @@ const InlineDraftAiFloat = ({
   // Dismiss when clicking outside the float. Keep open for draft clicks so
   // users can adjust the selection without the bar disappearing.
   useEffect(() => {
-    if (isComposer || isRefineFullscreen) return;
+    if (isMobileAiSheet) return;
 
     const onPointerDown = (event: PointerEvent) => {
       if (loadingRef.current || recordingRef.current || audioProcessingRef.current) {
@@ -299,7 +300,7 @@ const InlineDraftAiFloat = ({
 
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [editor, isComposer, isRefineFullscreen]);
+  }, [editor, isMobileAiSheet]);
 
   if (!editor || !scope) return null;
 
@@ -431,7 +432,7 @@ const InlineDraftAiFloat = ({
       if (requestId !== requestIdRef.current) return;
       replaceScope(html, range);
       setPrompt("");
-      if (isRefineFullscreen) {
+      if (isMobileAiSheet) {
         closeRef.current();
         return;
       }
@@ -568,7 +569,65 @@ const InlineDraftAiFloat = ({
     </div>
   ) : null;
 
-  if (isRefineFullscreen) {
+  const composerResultActions = hasResult ? (
+    <div className="flex flex-col">
+      <button type="button" className={CHIP_SHEET_DONE_CLASS} onClick={close}>
+        Done
+      </button>
+      <button
+        type="button"
+        className={CHIP_SHEET_PRIMARY_CLASS}
+        onClick={retry}
+        disabled={isLoading}
+      >
+        Retry
+      </button>
+    </div>
+  ) : null;
+
+  if (isRefineFullscreen || isComposer) {
+    const sheetFooter = isRefineFullscreen ? (
+      isLoading ? (
+        <div
+          className="flex items-center gap-2 px-4 py-3 text-meta text-text-light-gray"
+          role="status"
+        >
+          <LoaderCircle
+            size={16}
+            className="animate-spin text-hypertasks-ai-purple"
+            aria-hidden
+          />
+          Rewriting draft…
+        </div>
+      ) : (
+        sheetEditChips
+      )
+    ) : (
+      <>
+        <div
+          className="rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5"
+          onKeyDown={handlePanelKeyDown}
+        >
+          {isLoading ? (
+            <div
+              className="flex items-center gap-2 py-1.5 text-meta text-text-light-gray"
+              role="status"
+            >
+              <LoaderCircle
+                size={16}
+                className="animate-spin text-hypertasks-ai-purple"
+                aria-hidden
+              />
+              Writing draft…
+            </div>
+          ) : (
+            promptRow
+          )}
+        </div>
+        {composerResultActions}
+      </>
+    );
+
     return (
       <AppSheet
         isOpen
@@ -605,64 +664,18 @@ const InlineDraftAiFloat = ({
             <div
               className={cn(
                 styles.editorContainer,
-                "text-content break-normal px-1 py-2",
+                "min-h-[120px] break-normal px-1 py-2 text-content",
               )}
             >
               <EditorContent editor={editor} />
             </div>
           </div>
 
-          <div className="shrink-0 border-t border-thin border-border-light-gray-thin">
-            {isLoading ? (
-              <div
-                className="flex items-center gap-2 px-4 py-3 text-meta text-text-light-gray"
-                role="status"
-              >
-                <LoaderCircle
-                  size={16}
-                  className="animate-spin text-hypertasks-ai-purple"
-                  aria-hidden
-                />
-                Rewriting draft…
-              </div>
-            ) : (
-              sheetEditChips
-            )}
+          <div className="shrink-0 space-y-2 border-t border-thin border-border-light-gray-thin p-2">
+            {sheetFooter}
           </div>
         </div>
       </AppSheet>
-    );
-  }
-
-  const composerResultActions = hasResult ? (
-    <div className="flex flex-col">
-      <button type="button" className={CHIP_SHEET_DONE_CLASS} onClick={close}>
-        Done
-      </button>
-      <button
-        type="button"
-        className={CHIP_SHEET_PRIMARY_CLASS}
-        onClick={retry}
-        disabled={isLoading}
-      >
-        Retry
-      </button>
-    </div>
-  ) : null;
-
-  if (isComposer) {
-    return (
-      <div
-        ref={rootRef}
-        role="region"
-        aria-label="Write with AI"
-        className="flex w-full min-w-0 shrink-0 flex-col overflow-hidden rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description text-content shadow-md"
-        onKeyDown={handlePanelKeyDown}
-      >
-        <div className="px-2 py-1.5">{promptRow}</div>
-        {sheetEditChips}
-        {composerResultActions}
-      </div>
     );
   }
 
