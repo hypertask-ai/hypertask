@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
@@ -29,6 +29,7 @@ import type {
 } from "@/lib/agents/runtimeState";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
+import { applySequencedResponse } from "@/lib/agents/responseSequence";
 
 type TActivityKind = "comment" | "evidence" | "question" | "session" | "model";
 
@@ -343,19 +344,183 @@ const AgentDetail = (props: IProp) => {
   const [savingImportant, setSavingImportant] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const agentRefreshSeq = useRef(0);
-  const appliedAgentRefreshSeq = useRef(new Map<string, number>());
-  const activityRequestSeq = useRef(0);
+  const responseSeq = useRef(0);
+  const appliedResponseSeq = useRef(new Map<string, number>());
   const bootstrappedAgentId = useRef<string | null>(null);
   const renderedAgentIdentity = useRef<{ id: string; slug: string | null } | null>(
     null,
   );
+  const agentRouteRef = useRef(agentId);
+  agentRouteRef.current = agentId;
 
   useEffect(() => {
     renderedAgentIdentity.current = agent
       ? { id: agent.id, slug: agent.slug ?? null }
       : null;
   }, [agent?.id, agent?.slug]);
+
+  const applyResponse = useCallback(
+    (seq: number, keys: string[], apply: () => void) =>
+      applySequencedResponse(appliedResponseSeq.current, seq, keys, apply),
+    [],
+  );
+
+  const fetchAgentRefresh = useCallback(
+    async ({
+      requestRef,
+      mergeRuntime,
+      expectedAgentId,
+      cancelled = () => false,
+      reportError = false,
+      onApplied,
+    }: {
+      requestRef: string;
+      mergeRuntime: boolean;
+      expectedAgentId?: string;
+      cancelled?: () => boolean;
+      reportError?: boolean;
+      onApplied?: (refreshedAgent: TDetailAgent) => void;
+    }) => {
+      const seq = ++responseSeq.current;
+      const responseKeys = [`agent:${requestRef}`];
+      if (expectedAgentId) responseKeys.push(`agent:${expectedAgentId}`);
+      try {
+        const res = await fetch(`/api/agents/${requestRef}`);
+        const data = (await res.json()) as {
+          success?: boolean;
+          agent?: TDetailAgent;
+          error?: string;
+        };
+        if (!res.ok || !data.success || !data.agent) {
+          throw new Error(data.error ?? "Failed to load agent");
+        }
+        if (cancelled()) return true;
+        const refreshedAgent = data.agent;
+        if (
+          refreshedAgent.id !== requestRef &&
+          refreshedAgent.slug !== requestRef
+        ) {
+          return false;
+        }
+        if (expectedAgentId && refreshedAgent.id !== expectedAgentId)
+          return true;
+        const currentRoute = agentRouteRef.current;
+        if (
+          refreshedAgent.id !== currentRoute &&
+          refreshedAgent.slug !== currentRoute
+        ) {
+          return true;
+        }
+        responseKeys.push(`agent:${refreshedAgent.id}`);
+        if (refreshedAgent.slug) {
+          responseKeys.push(`agent:${refreshedAgent.slug}`);
+        }
+        applyResponse(seq, responseKeys, () => {
+          setError(null);
+          setAgent((prev) => {
+            if (prev && prev.id !== refreshedAgent.id) return prev;
+            if (!mergeRuntime || !prev) return refreshedAgent;
+            const {
+              working,
+              heartbeatAt,
+              lastPostedAt,
+              operations,
+              boards,
+              boardAccess,
+            } = refreshedAgent;
+            return {
+              ...prev,
+              working: working ?? null,
+              heartbeatAt,
+              lastPostedAt,
+              operations,
+              boards,
+              boardAccess,
+            };
+          });
+          onApplied?.(refreshedAgent);
+        });
+        return true;
+      } catch (e) {
+        if (cancelled()) return false;
+        const identity = renderedAgentIdentity.current;
+        const currentRoute = agentRouteRef.current;
+        const requestIsCurrent =
+          currentRoute === requestRef ||
+          (identity != null &&
+            (identity.id === currentRoute || identity.slug === currentRoute) &&
+            (identity.id === requestRef || identity.slug === requestRef));
+        if (reportError && requestIsCurrent) {
+          applyResponse(seq, responseKeys, () => {
+            setError(e instanceof Error ? e.message : "Failed to load agent");
+          });
+        }
+        return false;
+      }
+    },
+    [applyResponse],
+  );
+
+  const loadActivity = useCallback(
+    async (refreshedAgent: TDetailAgent) => {
+      const seq = ++responseSeq.current;
+      const responseKey = `activity:${refreshedAgent.id}`;
+      try {
+        const res = await fetch(
+          `/api/agents/${refreshedAgent.id}/activity?limit=40`,
+        );
+        const data = (await res.json()) as {
+          success?: boolean;
+          items?: TActivityItem[];
+          error?: string;
+        };
+        if (!res.ok || !data.success || !Array.isArray(data.items)) {
+          throw new Error(data.error ?? "Failed to load activity");
+        }
+        const currentRoute = agentRouteRef.current;
+        if (
+          refreshedAgent.id !== currentRoute &&
+          refreshedAgent.slug !== currentRoute
+        ) {
+          return false;
+        }
+        return applyResponse(seq, [responseKey], () => {
+          setActivity(data.items ?? []);
+          setActivityError(null);
+        });
+      } catch (e) {
+        const currentRoute = agentRouteRef.current;
+        if (
+          refreshedAgent.id !== currentRoute &&
+          refreshedAgent.slug !== currentRoute
+        ) {
+          return false;
+        }
+        return applyResponse(seq, [responseKey], () => {
+          setActivityError(
+            e instanceof Error ? e.message : "Failed to load activity",
+          );
+        });
+      }
+    },
+    [applyResponse],
+  );
+
+  const bootstrapAgent = useCallback(
+    (refreshedAgent: TDetailAgent) => {
+      if (
+        refreshedAgent.slug &&
+        refreshedAgent.slug !== agentRouteRef.current
+      ) {
+        router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
+      }
+      if (bootstrappedAgentId.current === refreshedAgent.id) return;
+      void loadActivity(refreshedAgent).then((loaded) => {
+        if (loaded) bootstrappedAgentId.current = refreshedAgent.id;
+      });
+    },
+    [loadActivity, router],
+  );
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -402,7 +567,6 @@ const AgentDetail = (props: IProp) => {
       (renderedAgent.id !== agentId && renderedAgent.slug !== agentId);
     if (changesAgent) {
       bootstrappedAgentId.current = null;
-      activityRequestSeq.current += 1;
       setActivity(null);
       setActivityError(null);
     }
@@ -411,139 +575,31 @@ const AgentDetail = (props: IProp) => {
       prev && prev.id !== agentId && prev.slug !== agentId ? null : prev,
     );
 
-    // Nested routes take the uuid, not the slug, so activity runs on the id
-    // the agent load resolved.
-    const loadActivity = (id: string) => {
-      const seq = ++activityRequestSeq.current;
-      return fetch(`/api/agents/${id}/activity?limit=40`)
-        .then(async (res) => {
-          const data = (await res.json()) as {
-            success?: boolean;
-            items?: TActivityItem[];
-            error?: string;
-          };
-          if (!res.ok || !data.success || !Array.isArray(data.items)) {
-            throw new Error(data.error ?? "Failed to load activity");
-          }
-          if (cancelled || seq !== activityRequestSeq.current) return false;
-          setActivity(data.items);
-          setActivityError(null);
-          return true;
-        })
-        .catch((e) => {
-          if (!cancelled && seq === activityRequestSeq.current) {
-            setActivityError(
-              e instanceof Error ? e.message : "Failed to load activity",
-            );
-          }
-          return false;
-        });
-    };
-
-    const bootstrapAgent = (refreshedAgent: TDetailAgent) => {
-      if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
-        router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
-      }
-      if (bootstrappedAgentId.current === refreshedAgent.id) return;
-      void loadActivity(refreshedAgent.id).then((loaded) => {
-        if (loaded) bootstrappedAgentId.current = refreshedAgent.id;
-      });
-    };
-
-    const initialSeq = ++agentRefreshSeq.current;
-    fetch(`/api/agents/${agentId}`)
-      .then(async (res) => {
-        const data = (await res.json()) as {
-          success?: boolean;
-          agent?: TDetailAgent;
-          error?: string;
-        };
-        if (!res.ok || !data.success || !data.agent) {
-          throw new Error(data.error ?? "Failed to load agent");
-        }
-        if (cancelled) return;
-        const refreshedAgent = data.agent;
-        if (
-          refreshedAgent.id !== agentId &&
-          refreshedAgent.slug !== agentId
-        ) {
-          return;
-        }
-        const appliedSeq =
-          appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
-        if (initialSeq >= appliedSeq) {
-          appliedAgentRefreshSeq.current.set(refreshedAgent.id, initialSeq);
-          appliedAgentRefreshSeq.current.set(agentId, initialSeq);
-          setError(null);
-          setAgent((prev) =>
-            prev && prev.id !== refreshedAgent.id ? prev : refreshedAgent,
-          );
-          bootstrapAgent(refreshedAgent);
-        }
-      })
-      .catch((e) => {
-        const appliedSeq = appliedAgentRefreshSeq.current.get(agentId) ?? 0;
-        if (!cancelled && initialSeq > appliedSeq) {
-          setError(e instanceof Error ? e.message : "Failed to load agent");
-        }
-      });
+    void fetchAgentRefresh({
+      requestRef: agentId,
+      mergeRuntime: false,
+      cancelled: () => cancelled,
+      reportError: true,
+      onApplied: bootstrapAgent,
+    });
 
     // Canonical runtime and membership fields are merged rather than replacing
     // the agent: a poll landing between an edit and its save would otherwise
     // throw the edit away.
     const poll = setInterval(() => {
-      const seq = ++agentRefreshSeq.current;
-      fetch(`/api/agents/${agentId}`)
-        .then(async (res) => {
-          const data = (await res.json()) as {
-            success?: boolean;
-            agent?: TDetailAgent;
-          };
-          if (!res.ok || !data.success || !data.agent || cancelled) return;
-          const refreshedAgent = data.agent;
-          if (
-            refreshedAgent.id !== agentId &&
-            refreshedAgent.slug !== agentId
-          ) {
-            return;
-          }
-          const appliedSeq =
-            appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
-          if (seq < appliedSeq) return;
-          appliedAgentRefreshSeq.current.set(refreshedAgent.id, seq);
-          appliedAgentRefreshSeq.current.set(agentId, seq);
-          setError(null);
-          const {
-            working,
-            heartbeatAt,
-            lastPostedAt,
-            operations,
-            boards,
-            boardAccess,
-          } = refreshedAgent;
-          setAgent((prev) => {
-            if (prev && prev.id !== refreshedAgent.id) return prev;
-            if (!prev) return refreshedAgent;
-            return {
-              ...prev,
-              working: working ?? null,
-              heartbeatAt,
-              lastPostedAt,
-              operations,
-              boards,
-              boardAccess,
-            };
-          });
-          bootstrapAgent(refreshedAgent);
-        })
-        .catch(() => {});
+      void fetchAgentRefresh({
+        requestRef: agentId,
+        mergeRuntime: true,
+        cancelled: () => cancelled,
+        onApplied: bootstrapAgent,
+      });
     }, POLL_MS);
 
     return () => {
       cancelled = true;
       clearInterval(poll);
     };
-  }, [agentId, router]);
+  }, [agentId, bootstrapAgent, fetchAgentRefresh]);
 
   // The poll above bounds staleness at 30s, but an assignment broadcasts a
   // board change event, so the assigned-ticket count can move the moment it
@@ -574,51 +630,12 @@ const AgentDetail = (props: IProp) => {
         if (boardRefreshTimer.current) clearTimeout(boardRefreshTimer.current);
         boardRefreshTimer.current = setTimeout(() => {
           boardRefreshTimer.current = null;
-          const seq = ++agentRefreshSeq.current;
-          fetch(`/api/agents/${agentId}`)
-            .then(async (res) => {
-              const data = (await res.json()) as {
-                success?: boolean;
-                agent?: TDetailAgent;
-              };
-              if (!res.ok || !data.success || !data.agent || cancelled) return;
-              const refreshedAgent = data.agent;
-              if (
-                refreshedAgent.id !== agentId &&
-                refreshedAgent.slug !== agentId
-              ) {
-                return;
-              }
-              if (refreshedAgent.id !== subscribedAgentId) return;
-              const appliedSeq =
-                appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
-              if (seq < appliedSeq) return;
-              appliedAgentRefreshSeq.current.set(refreshedAgent.id, seq);
-              appliedAgentRefreshSeq.current.set(agentId, seq);
-              setError(null);
-              const {
-                working,
-                heartbeatAt,
-                lastPostedAt,
-                operations,
-                boards,
-                boardAccess,
-              } = refreshedAgent;
-              setAgent((prev) => {
-                if (prev && prev.id !== refreshedAgent.id) return prev;
-                if (!prev) return refreshedAgent;
-                return {
-                  ...prev,
-                  working: working ?? null,
-                  heartbeatAt,
-                  lastPostedAt,
-                  operations,
-                  boards,
-                  boardAccess,
-                };
-              });
-            })
-            .catch(() => {});
+          void fetchAgentRefresh({
+            requestRef: agentId,
+            mergeRuntime: true,
+            expectedAgentId: subscribedAgentId,
+            cancelled: () => cancelled,
+          });
         }, 500);
       };
 
@@ -643,7 +660,7 @@ const AgentDetail = (props: IProp) => {
       }
       unsubs.forEach((fn) => fn());
     };
-  }, [boardIdsKey, agentId, subscribedAgentId]);
+  }, [boardIdsKey, agentId, subscribedAgentId, fetchAgentRefresh]);
 
   const handleSaveProviderKey = async () => {
     const next = providerKeyDraft.trim();
@@ -961,26 +978,12 @@ const AgentDetail = (props: IProp) => {
         failureMessage = data.message ?? failureMessage;
         throw new Error(failureMessage);
       }
-      const seq = ++agentRefreshSeq.current;
-      const refresh = await fetch(`/api/agents/${agent.id}`);
-      const refreshed = (await refresh.json().catch(() => null)) as {
-        success?: boolean;
-        agent?: TDetailAgent;
-      } | null;
-      if (refresh.ok && refreshed?.success && refreshed.agent) {
-        const refreshedAgent = refreshed.agent;
-        if (refreshedAgent.id === agent.id) {
-          const appliedSeq =
-            appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
-          if (seq >= appliedSeq) {
-            appliedAgentRefreshSeq.current.set(refreshedAgent.id, seq);
-            appliedAgentRefreshSeq.current.set(agentId, seq);
-            setAgent((prev) =>
-              prev?.id === refreshedAgent.id ? refreshedAgent : prev,
-            );
-          }
-        }
-      } else {
+      const refreshed = await fetchAgentRefresh({
+        requestRef: agent.id,
+        mergeRuntime: false,
+        expectedAgentId: agent.id,
+      });
+      if (!refreshed) {
         setBoardErrors((errors) => ({
           ...errors,
           [board.id]: "Access changed. Reload this page to refresh the list.",
