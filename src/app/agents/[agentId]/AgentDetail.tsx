@@ -29,7 +29,10 @@ import type {
 } from "@/lib/agents/runtimeState";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
-import { applySequencedResponse } from "@/lib/agents/responseSequence";
+import {
+  applySequencedResponse,
+  markSequencedResponse,
+} from "@/lib/agents/responseSequence";
 
 type TActivityKind = "comment" | "evidence" | "question" | "session" | "model";
 
@@ -345,7 +348,7 @@ const AgentDetail = (props: IProp) => {
   const [deleting, setDeleting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const responseSeq = useRef(0);
-  const appliedResponseSeq = useRef(new Map<string, number>());
+  const latestResponseSeq = useRef(new Map<string, number>());
   const bootstrappedAgentId = useRef<string | null>(null);
   const renderedAgentIdentity = useRef<{ id: string; slug: string | null } | null>(
     null,
@@ -361,7 +364,7 @@ const AgentDetail = (props: IProp) => {
 
   const applyResponse = useCallback(
     (seq: number, keys: string[], apply: () => void) =>
-      applySequencedResponse(appliedResponseSeq.current, seq, keys, apply),
+      applySequencedResponse(latestResponseSeq.current, seq, keys, apply),
     [],
   );
 
@@ -384,6 +387,17 @@ const AgentDetail = (props: IProp) => {
       const seq = ++responseSeq.current;
       const responseKeys = [`agent:${requestRef}`];
       if (expectedAgentId) responseKeys.push(`agent:${expectedAgentId}`);
+      const identity = renderedAgentIdentity.current;
+      if (
+        identity &&
+        (identity.id === requestRef ||
+          identity.slug === requestRef ||
+          identity.id === expectedAgentId)
+      ) {
+        responseKeys.push(`agent:${identity.id}`);
+        if (identity.slug) responseKeys.push(`agent:${identity.slug}`);
+      }
+      markSequencedResponse(latestResponseSeq.current, seq, responseKeys);
       try {
         const res = await fetch(`/api/agents/${requestRef}`);
         const data = (await res.json()) as {
@@ -465,6 +479,7 @@ const AgentDetail = (props: IProp) => {
     async (refreshedAgent: TDetailAgent) => {
       const seq = ++responseSeq.current;
       const responseKey = `activity:${refreshedAgent.id}`;
+      markSequencedResponse(latestResponseSeq.current, seq, [responseKey]);
       try {
         const res = await fetch(
           `/api/agents/${refreshedAgent.id}/activity?limit=40`,
@@ -568,6 +583,13 @@ const AgentDetail = (props: IProp) => {
       (renderedAgent.id !== agentId && renderedAgent.slug !== agentId);
     if (changesAgent) {
       bootstrappedAgentId.current = null;
+      if (renderedAgent) {
+        markSequencedResponse(
+          latestResponseSeq.current,
+          ++responseSeq.current,
+          [`activity:${renderedAgent.id}`],
+        );
+      }
       setActivity(null);
       setActivityError(null);
     }
