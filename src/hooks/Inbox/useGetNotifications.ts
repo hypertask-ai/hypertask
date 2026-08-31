@@ -255,9 +255,13 @@ const fetchInboxPayload = async (
   if (!persistentFenceRequired && enabled) {
     // Read after the request so an IndexedDB-only revision committed while it
     // was in flight cannot be overwritten by the network response.
-    const { readInboxReadModelRevisionFence } =
-      await import("@/lib/inboxSync/indexedDbReadModel");
-    persistedRevisionFence = await readInboxReadModelRevisionFence(userId);
+    try {
+      const { readInboxReadModelRevisionFence } =
+        await import("@/lib/inboxSync/indexedDbReadModel");
+      persistedRevisionFence = await readInboxReadModelRevisionFence(userId);
+    } catch {
+      persistedRevisionFence = null;
+    }
     if (persistedRevisionFence) {
       observeInboxReadModelRevision(userId, persistedRevisionFence);
     }
