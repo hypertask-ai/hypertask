@@ -432,9 +432,9 @@ const AgentDetail = (props: IProp) => {
         }
       });
 
-    // Only the live fields are re-read, and they are merged rather than
-    // replacing the agent: a poll landing between an edit and its save would
-    // otherwise throw the edit away.
+    // Canonical runtime and membership fields are merged rather than replacing
+    // the agent: a poll landing between an edit and its save would otherwise
+    // throw the edit away.
     const poll = setInterval(() => {
       fetch(`/api/agents/${agentId}`)
         .then(async (res) => {
@@ -444,7 +444,14 @@ const AgentDetail = (props: IProp) => {
           };
           if (!res.ok || !data.success || !data.agent) return;
           if (cancelled) return;
-          const { working, heartbeatAt, lastPostedAt, operations } = data.agent;
+          const {
+            working,
+            heartbeatAt,
+            lastPostedAt,
+            operations,
+            boards,
+            boardAccess,
+          } = data.agent;
           setAgent((prev) =>
             prev
               ? {
@@ -453,6 +460,8 @@ const AgentDetail = (props: IProp) => {
                   heartbeatAt,
                   lastPostedAt,
                   operations,
+                  boards,
+                  boardAccess,
                 }
               : prev,
           );
@@ -506,8 +515,14 @@ const AgentDetail = (props: IProp) => {
               // Only the newest request may merge, or a slow earlier
               // response would overwrite a newer count.
               if (seq !== latestRefreshSeq.current || cancelled) return;
-              const { working, heartbeatAt, lastPostedAt, operations } =
-                data.agent;
+              const {
+                working,
+                heartbeatAt,
+                lastPostedAt,
+                operations,
+                boards,
+                boardAccess,
+              } = data.agent;
               setAgent((prev) =>
                 prev
                   ? {
@@ -516,6 +531,8 @@ const AgentDetail = (props: IProp) => {
                       heartbeatAt,
                       lastPostedAt,
                       operations,
+                      boards,
+                      boardAccess,
                     }
                   : prev,
               );
