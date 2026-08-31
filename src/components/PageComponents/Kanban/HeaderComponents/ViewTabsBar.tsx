@@ -177,7 +177,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                           dropTargetId === view.id && 'bg-hover-active rounded-sm',
                           appShellRail
                           ? cn(
-                              '!cursor-default relative group flex h-8 max-w-full min-w-0 items-center justify-start gap-1 whitespace-nowrap pr-[15px] text-[14.5px] transition-opacity',
+                              '!cursor-default relative group flex h-8 max-w-full min-w-0 items-center justify-start gap-1 whitespace-nowrap pr-[15px] text-content transition-opacity',
                               // Dim non-active views so the active one pops; the
                               // home board is marked by its house icon, not a backdrop.
                               isActive
