@@ -84,6 +84,15 @@ test("mobile controls sit in a left-aligned row with the primary pushed right", 
   assert.match(audio, /isMobileTaskWriter[\s\S]*?ai-writer-audio-button/);
   // New-task and AI-chat mics share the prominent system so each can hold the
   // filled primary slot on an empty mobile composer.
+  assert.match(
+    audio,
+    /import \{ mobileMicPresentation \} from "\.\/mobileAudioButtonPresentation"/,
+  );
+  assert.match(
+    audio,
+    /mobileMicPresentation\(\{[\s\S]*?isMobileCreateComment,[\s\S]*?isMobileTaskWriter,[\s\S]*?isMobileNewTask,[\s\S]*?isMobileAiChat,[\s\S]*?globalRecording,[\s\S]*?hasText,[\s\S]*?isProcessing,[\s\S]*?\}\)/,
+  );
+  assert.match(audio, /prominent \? prominentClassName : "h-\[32px\]"/);
   for (const mode of ["isMobileTaskWriter", "isMobileNewTask", "isMobileAiChat"]) {
     const presentation = mobileMicPresentation({
       isMobileCreateComment: false,
