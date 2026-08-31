@@ -1,7 +1,8 @@
 // HTPR-5564: the approved wireframe moves the mobile undo pill to the LEFT so
 // it stops covering the task actions on the right, and gives mobile the same
-// Dismiss X the desktop toast already has. The undo window itself stays at
-// 15s — dismissing the prompt must not shorten what can still be undone.
+// Dismiss X the desktop toast already has. Dismissing the prompt still must
+// not shorten what can still be undone. HTPR-5872 then halves the mobile
+// window: toast and action window drop to 7.5s together, desktop stays 15s.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -49,10 +50,15 @@ test("the mobile pill anchors left of the task actions", () => {
     ".toastContainerMobile must not force every mobile toast to the left");
 });
 
-test("the undo window stays in lockstep at 15 seconds", () => {
+test("toast and undo window stay in lockstep on every viewport", () => {
   assert.equal(undoToastSource.includes("UNDO_TOAST_DURATION_MS = UNDO_ACTION_WINDOW_MS"), true);
+  assert.equal(undoToastSource.includes("MOBILE_UNDO_TOAST_DURATION_MS = MOBILE_UNDO_ACTION_WINDOW_MS"), true);
   assert.equal(undoToastSource.includes("UNDO_ACTION_WINDOW_MS = 15_000"), true);
-  assert.equal(undoToastSource.includes("duration: UNDO_TOAST_DURATION_MS"), true);
+  assert.equal(undoToastSource.includes("MOBILE_UNDO_ACTION_WINDOW_MS = 7_500"), true);
+  assert.match(
+    undoToastSource,
+    /duration: isMobile\s*\?\s*MOBILE_UNDO_TOAST_DURATION_MS\s*:\s*UNDO_TOAST_DURATION_MS/,
+  );
 });
 
 // The viewport flag is part of the signature now; every caller passes it.
