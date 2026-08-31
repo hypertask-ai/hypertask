@@ -127,12 +127,11 @@ const config: Config = {
         'gradient-dark': 'linear-gradient(to bottom, #000000, #0a0012, #11001b)',
       },
       fontFamily:{
-        // Inter is the single app-wide sans font (loaded in src/app/layout.tsx via
-        // next/font). Wire it here so `font-sans` and Tailwind's Preflight base both
-        // resolve to Inter instead of silently falling back to the system stack —
-        // that gap let Roboto/-apple-system leak into `font-sans` <kbd>/label chips.
-        // The Dia ("paper") theme keeps its serif headings via more-specific `.dia`
-        // selectors, so it is unaffected. `mono`/`serif` keep their Tailwind defaults.
+        // Inter is the fallback `font-sans` value for surfaces without a theme
+        // override. Core themes replace it with IBM Plex Sans, while Dia headings
+        // use Newsreader. Keep this explicit so `font-sans` labels do not fall back
+        // to a platform-dependent system stack. `mono` and `serif` keep Tailwind's
+        // defaults.
         sans:[
           "var(--font-inter)",
           "ui-sans-serif",
