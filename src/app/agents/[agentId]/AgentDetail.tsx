@@ -345,6 +345,7 @@ const AgentDetail = (props: IProp) => {
   const [now, setNow] = useState(() => Date.now());
   const agentRefreshSeq = useRef(0);
   const appliedAgentRefreshSeq = useRef<Record<string, number>>({});
+  const bootstrappedAgentId = useRef<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -385,6 +386,7 @@ const AgentDetail = (props: IProp) => {
 
   useEffect(() => {
     let cancelled = false;
+    bootstrappedAgentId.current = null;
     setAgent((prev) =>
       prev && prev.id !== agentId && prev.slug !== agentId ? null : prev,
     );
@@ -411,6 +413,15 @@ const AgentDetail = (props: IProp) => {
             );
           }
         });
+
+    const bootstrapAgent = (refreshedAgent: TDetailAgent) => {
+      if (bootstrappedAgentId.current === refreshedAgent.id) return;
+      bootstrappedAgentId.current = refreshedAgent.id;
+      if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
+        router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
+      }
+      loadActivity(refreshedAgent.id);
+    };
 
     const initialSeq = ++agentRefreshSeq.current;
     fetch(`/api/agents/${agentId}`)
@@ -439,13 +450,8 @@ const AgentDetail = (props: IProp) => {
           setAgent((prev) =>
             prev && prev.id !== refreshedAgent.id ? prev : refreshedAgent,
           );
+          bootstrapAgent(refreshedAgent);
         }
-        // A link built on an id still works; the address bar shows the
-        // readable form instead of a uuid.
-        if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
-          router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
-        }
-        loadActivity(refreshedAgent.id);
       })
       .catch((e) => {
         const appliedSeq = appliedAgentRefreshSeq.current[agentId] ?? 0;
@@ -499,6 +505,7 @@ const AgentDetail = (props: IProp) => {
               boardAccess,
             };
           });
+          bootstrapAgent(refreshedAgent);
         })
         .catch(() => {});
     }, POLL_MS);
@@ -512,6 +519,7 @@ const AgentDetail = (props: IProp) => {
   // The poll above bounds staleness at 30s, but an assignment broadcasts a
   // board change event, so the assigned-ticket count can move the moment it
   // happens instead of on the next tick.
+  const subscribedAgentId = agent?.id;
   const boardIdsKey = (agent?.boards ?? []).map((b) => b.id).join(",");
   const boardRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -552,6 +560,7 @@ const AgentDetail = (props: IProp) => {
               ) {
                 return;
               }
+              if (refreshedAgent.id !== subscribedAgentId) return;
               const appliedSeq =
                 appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
               if (seq < appliedSeq) return;
@@ -604,7 +613,7 @@ const AgentDetail = (props: IProp) => {
       }
       unsubs.forEach((fn) => fn());
     };
-  }, [boardIdsKey, agentId]);
+  }, [boardIdsKey, agentId, subscribedAgentId]);
 
   const handleSaveProviderKey = async () => {
     const next = providerKeyDraft.trim();
