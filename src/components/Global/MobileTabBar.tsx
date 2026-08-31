@@ -11,6 +11,12 @@ import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShor
 import { useGetNotificationCount } from "@/hooks/Inbox/useGetNotifications";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { shouldShowMobilePrimaryDock } from "./mobileShellVisibility";
+import {
+  publishMobileDockHeight,
+  releaseMobileDockHeight,
+} from "./mobileDockHeight";
+
+const mobileTabBarDockOwner = {};
 
 interface MobileTabBarProps {
   currentUserId: number;
@@ -64,19 +70,23 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
   useEffect(() => {
     const root = document.documentElement;
     if (hidden) {
-      root.style.setProperty("--mobile-dock-h", "0px");
-      return () => root.style.removeProperty("--mobile-dock-h");
+      publishMobileDockHeight(root, mobileTabBarDockOwner, "0px");
+      return () => releaseMobileDockHeight(root, mobileTabBarDockOwner);
     }
     const dock = dockRef.current;
     if (!dock) return;
     const publish = () =>
-      root.style.setProperty("--mobile-dock-h", `${dock.offsetHeight}px`);
+      publishMobileDockHeight(
+        root,
+        mobileTabBarDockOwner,
+        `${dock.offsetHeight}px`,
+      );
     publish();
     const observer = new ResizeObserver(publish);
     observer.observe(dock);
     return () => {
       observer.disconnect();
-      root.style.removeProperty("--mobile-dock-h");
+      releaseMobileDockHeight(root, mobileTabBarDockOwner);
     };
   }, [hidden, pathname]);
 

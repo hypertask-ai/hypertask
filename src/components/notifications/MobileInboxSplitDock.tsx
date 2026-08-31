@@ -7,6 +7,12 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import { useRecoilValue } from "@/lib/state";
 import { mobileCommentComposerOpenAtom } from "@/store";
+import {
+  publishMobileDockHeight,
+  releaseMobileDockHeight,
+} from "@/components/Global/mobileDockHeight";
+
+const mobileInboxSplitDockOwner = {};
 
 type MobileInboxSplitDockTab = Pick<
   InboxTabMeta,
@@ -38,22 +44,26 @@ const MobileInboxSplitDock = ({
   useLayoutEffect(() => {
     const root = document.documentElement;
     if (hidden) {
-      root.style.setProperty("--mobile-dock-h", "0px");
-      return () => root.style.removeProperty("--mobile-dock-h");
+      publishMobileDockHeight(root, mobileInboxSplitDockOwner, "0px");
+      return () => releaseMobileDockHeight(root, mobileInboxSplitDockOwner);
     }
 
     const dock = dockRef.current;
     if (!dock) return;
 
     const publishHeight = () =>
-      root.style.setProperty("--mobile-dock-h", `${dock.offsetHeight}px`);
+      publishMobileDockHeight(
+        root,
+        mobileInboxSplitDockOwner,
+        `${dock.offsetHeight}px`,
+      );
     publishHeight();
 
     const observer = new ResizeObserver(publishHeight);
     observer.observe(dock);
     return () => {
       observer.disconnect();
-      root.style.removeProperty("--mobile-dock-h");
+      releaseMobileDockHeight(root, mobileInboxSplitDockOwner);
     };
   }, [hidden]);
 

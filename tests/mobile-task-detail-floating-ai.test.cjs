@@ -61,12 +61,19 @@ test("mobile task detail keeps Ask AI outside the composer in the shared floatin
   assert.equal(askAiButtons.length, 1, "expected one AskAiButton render");
   const askAiButton = askAiButtons[0];
 
-  assert.ok(ts.isBinaryExpression(askAiButton.parent));
-  assert.equal(
-    askAiButton.parent.operatorToken.kind,
-    ts.SyntaxKind.AmpersandAmpersandToken,
+  assert.match(
+    commentComposer,
+    /_mbl && composerHeight > 0 && \(\s*<AskAiButton/,
   );
-  assert.equal(askAiButton.parent.left.getText(sourceFile), "_mbl");
+  const askAiBottomOffset = attributeNamed(askAiButton, "bottomOffset");
+  assert.ok(
+    askAiBottomOffset?.initializer &&
+      ts.isJsxExpression(askAiBottomOffset.initializer),
+  );
+  assert.equal(
+    askAiBottomOffset.initializer.expression?.getText(sourceFile),
+    "composerHeight + (viewportGeometry?.bottomInset ?? 0)",
+  );
 
   for (let ancestor = askAiButton.parent; ancestor; ancestor = ancestor.parent) {
     if (!ts.isJsxElement(ancestor)) continue;
@@ -91,7 +98,16 @@ test("mobile task detail keeps Ask AI outside the composer in the shared floatin
     stringAttributeValue(floatingButton, "ariaLabel"),
     "Ask AI about this task",
   );
-  assert.equal(stringAttributeValue(floatingButton, "label"), "Ask AI");
+  assert.equal(attributeNamed(floatingButton, "label"), undefined);
+  const floatingBottomOffset = attributeNamed(floatingButton, "bottomOffset");
+  assert.ok(
+    floatingBottomOffset?.initializer &&
+      ts.isJsxExpression(floatingBottomOffset.initializer),
+  );
+  assert.equal(
+    floatingBottomOffset.initializer.expression?.getText(sourceFile),
+    "bottomOffset",
+  );
   assert.ok(attributeNamed(floatingButton, "icon"), "icon attribute not found");
   const onClick = attributeNamed(floatingButton, "onClick");
   assert.ok(onClick?.initializer && ts.isJsxExpression(onClick.initializer));

@@ -424,7 +424,13 @@ const NewCommentComponent = (
                   />
               )}
 
-              {_mbl && <AskAiButton/>}
+              {_mbl && composerHeight > 0 && (
+                <AskAiButton
+                  bottomOffset={
+                    composerHeight + (viewportGeometry?.bottomInset ?? 0)
+                  }
+                />
+              )}
   
               {/* ------------------------- New Comment ------------------------- */}
               {/* ====================== DESKTOP ===================== */}
@@ -656,11 +662,12 @@ const NewCommentComponent = (
     )
   }
 
-  const AskAiButton = ()=>{
+  const AskAiButton = ({ bottomOffset }: { bottomOffset: number })=>{
     const { openAIChatInterface } = useGlobalUIState()
     return (
       <MobileFloatingActionButton
         ariaLabel="Ask AI about this task"
+        bottomOffset={bottomOffset}
         icon={
           <Sparkles
             size={20}
@@ -669,7 +676,6 @@ const NewCommentComponent = (
             aria-hidden="true"
           />
         }
-        label="Ask AI"
         onClick={openAIChatInterface}
       />
     )
