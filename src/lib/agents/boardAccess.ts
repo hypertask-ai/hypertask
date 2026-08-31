@@ -19,13 +19,22 @@ export function buildAgentBoardAccess(
   return boards
     .map((board) => {
       const member = memberships.has(board.id);
-      const sameTeam = canAdd && (!lockedTeam || board.teamId === lockedTeam);
+      const sameTeam =
+        board.teamId !== null &&
+        canAdd &&
+        (!lockedTeam || board.teamId === lockedTeam);
+      let unavailableReason: string | null = null;
+      if (!member && !sameTeam) {
+        unavailableReason = "Agent belongs to another team";
+        if (board.teamId === null) {
+          unavailableReason = "Board does not belong to a team";
+        }
+      }
       return {
         ...board,
         member,
         canChange: member || sameTeam,
-        unavailableReason:
-          member || sameTeam ? null : "Agent belongs to another team",
+        unavailableReason,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));

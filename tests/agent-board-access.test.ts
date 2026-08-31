@@ -23,9 +23,24 @@ describe("agent detail board access", () => {
     assert.equal(access[1].unavailableReason, "Agent belongs to another team");
   });
 
-  it("lets a boardless agent join any accessible team", () => {
-    const access = buildAgentBoardAccess(boards, [], []);
-    assert.ok(access.every((board) => board.canChange));
+  it("lets a boardless agent join any accessible team but not a teamless board", () => {
+    const access = buildAgentBoardAccess(
+      [
+        ...boards,
+        { id: 4, name: "Legacy", teamId: null, teamName: null },
+      ],
+      [],
+      [],
+    );
+
+    assert.ok(
+      access.filter((board) => board.id !== 4).every((board) => board.canChange),
+    );
+    assert.equal(access.find((board) => board.id === 4)?.canChange, false);
+    assert.equal(
+      access.find((board) => board.id === 4)?.unavailableReason,
+      "Board does not belong to a team",
+    );
   });
 
   it("keeps an existing cross-team membership removable", () => {
