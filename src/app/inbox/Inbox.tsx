@@ -79,7 +79,10 @@ import {
   LEARN_TUTORIAL_STATE_UPDATED_EVENT,
   parseLearnTutorialState,
 } from "@/lib/tutorial/learnTutorialState";
-import { updateInboxOptimistically } from "@/lib/inboxSync/optimistic";
+import {
+  restoreInboxAfterUndo,
+  updateInboxOptimistically,
+} from "@/lib/inboxSync/optimistic";
 import { canWarmPreviousBoardFromInbox } from "@/lib/inboxSync/warmPreviousBoard";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
 import { shouldPreserveNativeInboxTab } from "@/lib/inboxKeyboardNavigation";
@@ -447,19 +450,14 @@ const Inbox = ({
   // undoHandler function
   const undoHandler = async (data: any, toastId: string) => {
     await undoAction("UNDO_INBOX_ARCHIVE", data);
-    updateInboxOptimistically({
+    const undoQueryKey = data.queryKey ?? inboxDataQueryKey(currentUser.id);
+    await restoreInboxAfterUndo({
       queryClient,
-      queryKey: inboxDataQueryKey(currentUser.id),
+      queryKey: undoQueryKey,
       accountId: currentUser.id,
-      mutation: {
-        type: "restore",
-        notification: data.notification,
-        index: data.notificationIndex,
-      },
-    });
-    await queryClient.refetchQueries({
-      queryKey: inboxDataQueryKey(currentUser.id),
-      exact: true,
+      notification: data.notification,
+      beforeNotificationId: data.beforeNotificationId,
+      afterNotificationId: data.afterNotificationId,
     });
     toast.dismiss(toastId);
     toast("Undo notification archive");

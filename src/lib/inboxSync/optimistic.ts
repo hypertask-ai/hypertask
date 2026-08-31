@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import type { INotification } from "@/models/model";
 import {
   BOARD_SYNC_PILOT_PARAM,
   getBoardSyncPilotEnabled,
@@ -127,4 +128,37 @@ export const updateInboxOptimistically = ({
   );
   queryClient.setQueryData(queryKey, immediateQueryPayload);
   return immediateQueryPayload;
+};
+
+export const restoreInboxAfterUndo = async ({
+  queryClient,
+  queryKey,
+  accountId,
+  notification,
+  beforeNotificationId,
+  afterNotificationId,
+}: {
+  queryClient: QueryClient;
+  queryKey: readonly unknown[];
+  accountId: number;
+  notification: INotification;
+  beforeNotificationId: string | null;
+  afterNotificationId: string | null;
+}): Promise<void> => {
+  updateInboxOptimistically({
+    queryClient,
+    queryKey,
+    accountId,
+    mutation: {
+      type: "restore",
+      notification,
+      beforeNotificationId,
+      afterNotificationId,
+    },
+  });
+  await queryClient
+    .refetchQueries({ queryKey, exact: true })
+    // The undo is already persisted and visible, so reconciliation failure
+    // must not turn a successful undo into a false failure message.
+    .catch(() => undefined);
 };

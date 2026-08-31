@@ -31,10 +31,12 @@ const {
   observeInboxReadModelRevision,
   reserveInboxReadModelRevision,
 } = jiti(path.join(root, "src/lib/inboxSync/revision.ts"));
-const { applyInboxReadModelMutation, createInboxRemovalMutation } = jiti(
-  path.join(root, "src/lib/inboxSync/mutation.ts"),
-);
-const { updateInboxOptimistically } = jiti(
+const {
+  applyInboxReadModelMutation,
+  createInboxRemovalMutation,
+  findInboxRestoreAnchors,
+} = jiti(path.join(root, "src/lib/inboxSync/mutation.ts"));
+const { restoreInboxAfterUndo, updateInboxOptimistically } = jiti(
   path.join(root, "src/lib/inboxSync/optimistic.ts"),
 );
 const { createInboxReadinessLatch } = jiti(
@@ -573,36 +575,123 @@ test("removal targets both the exact notification row and its same-task siblings
   assert.deepEqual(fallbackMutation.taskIds, [500]);
 });
 
-test("undo restores an archived notification to its previous cache position", () => {
+test("undo restores an archived notification to its post-removal cache position", () => {
   const before = notification(9);
-  const archived = notification(10);
+  const sibling = notification(8, { taskId: 500 });
+  const archived = notification(10, { taskId: 500 });
   const after = notification(11);
+  const previousNotifications = [before, sibling, archived, after];
   const payload = {
     revision: revision(7_100),
-    notifications: [before, after],
+    notifications: applyInboxReadModelMutation(
+      {
+        revision: revision(7_000),
+        notifications: previousNotifications,
+        splitsNoImportant: [],
+        showImportantSplit: false,
+      },
+      createInboxRemovalMutation([archived]),
+    ).notifications,
     splitsNoImportant: [],
     showImportantSplit: false,
   };
+  assert.deepEqual(
+    payload.notifications.map(({ id }) => id),
+    ["9", "11"],
+  );
+  const restoreAnchors = findInboxRestoreAnchors(
+    previousNotifications,
+    payload.notifications,
+    archived.id,
+  );
+  assert.deepEqual(restoreAnchors, {
+    beforeNotificationId: "11",
+    afterNotificationId: "9",
+  });
 
-  const restored = applyInboxReadModelMutation(payload, {
+  const changedPayload = {
+    ...payload,
+    notifications: [notification(12), ...payload.notifications],
+  };
+  const restored = applyInboxReadModelMutation(changedPayload, {
     type: "restore",
     notification: archived,
-    index: 1,
+    ...restoreAnchors,
   });
   assert.deepEqual(
     restored.notifications.map(({ id }) => id),
-    ["9", "10", "11"],
+    ["12", "9", "10", "11"],
   );
 
   const duplicate = applyInboxReadModelMutation(restored, {
     type: "restore",
     notification: archived,
-    index: 1,
+    ...restoreAnchors,
   });
   assert.deepEqual(
     duplicate.notifications.map(({ id }) => id),
-    ["9", "10", "11"],
+    ["12", "9", "10", "11"],
   );
+
+  const fallbackCases = [
+    { notifications: [before], expected: ["9", "10"] },
+    { notifications: [after], expected: ["10", "11"] },
+    { notifications: [], expected: ["10"] },
+  ];
+  for (const fallback of fallbackCases) {
+    const result = applyInboxReadModelMutation(
+      { ...payload, notifications: fallback.notifications },
+      { type: "restore", notification: archived, ...restoreAnchors },
+    );
+    assert.deepEqual(
+      result.notifications.map(({ id }) => id),
+      fallback.expected,
+    );
+  }
+});
+
+test("undo reconciliation restores the cache and refetches its exact query", async () => {
+  const queryKey = ["inbox", "data", accountId];
+  const archived = notification(10);
+  let cached = {
+    revision: revision(7_200),
+    notifications: [notification(12), notification(9), notification(11)],
+    splitsNoImportant: [],
+    showImportantSplit: false,
+  };
+  const reads = [];
+  const writes = [];
+  const refetches = [];
+  const queryClient = {
+    getQueryData: (readQueryKey) => {
+      reads.push(readQueryKey);
+      return readQueryKey === queryKey ? cached : undefined;
+    },
+    setQueryData: (writeQueryKey, payload) => {
+      writes.push(writeQueryKey);
+      if (writeQueryKey === queryKey) cached = payload;
+    },
+    refetchQueries: async (options) => {
+      refetches.push(options);
+    },
+  };
+
+  await restoreInboxAfterUndo({
+    queryClient,
+    queryKey,
+    accountId,
+    notification: archived,
+    beforeNotificationId: "11",
+    afterNotificationId: "9",
+  });
+
+  assert.deepEqual(
+    cached.notifications.map(({ id }) => id),
+    ["12", "9", "10", "11"],
+  );
+  assert.deepEqual(reads, [queryKey]);
+  assert.deepEqual(writes, [queryKey]);
+  assert.deepEqual(refetches, [{ queryKey, exact: true }]);
 });
 
 test("legacy Inbox caches keep immediate mutations without read-model metadata", () => {
@@ -767,10 +856,11 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     /queryClient\.resetQueries\(\{ queryKey, exact: true \}\)/,
   );
   assert.match(inbox, /updateInboxOptimistically/);
-  assert.match(
-    inbox,
-    /const undoHandler[\s\S]*?type: "restore"[\s\S]*?notificationIndex[\s\S]*?exact: true/,
-  );
+  assert.match(inbox, /restoreInboxAfterUndo\(/);
+  assert.match(inbox, /queryKey: undoQueryKey/);
+  assert.match(inbox, /notification: data\.notification/);
+  assert.match(inbox, /beforeNotificationId: data\.beforeNotificationId/);
+  assert.match(inbox, /afterNotificationId: data\.afterNotificationId/);
   assert.match(focusHandler, /updateInboxOptimistically/);
   assert.match(splitRows, /updateInboxOptimistically/);
   assert.doesNotMatch(inbox, /reserveInboxReadModelRevision/);

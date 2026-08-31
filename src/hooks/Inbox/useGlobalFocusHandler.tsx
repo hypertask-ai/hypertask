@@ -24,7 +24,10 @@ import {
   type LearnTutorialInboxArchivedDetail,
 } from "@/lib/tutorial/learnTutorialState";
 import { updateInboxOptimistically } from "@/lib/inboxSync/optimistic";
-import { createInboxRemovalMutation } from "@/lib/inboxSync/mutation";
+import {
+  createInboxRemovalMutation,
+  findInboxRestoreAnchors,
+} from "@/lib/inboxSync/mutation";
 export interface INotificationsFromTQ {
   structuredData: {
     data: INotification[][];
@@ -229,13 +232,27 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     console.time("StartingProcess");
     const _notifications: INotificationsFromTQ | undefined =
       queryClient.getQueryData(resolvedQueryKey);
+    const cachePayload = _notifications?.notifications
+      ? updateInboxOptimistically({
+          queryClient,
+          queryKey: resolvedQueryKey,
+          accountId: currentUser.id,
+          mutation: createInboxRemovalMutation([elementToRemove]),
+        })
+      : null;
+    const restoreAnchors =
+      _notifications && cachePayload
+        ? findInboxRestoreAnchors(
+            _notifications.notifications,
+            cachePayload.notifications,
+            String(elementToRemove.id),
+          )
+        : { beforeNotificationId: null, afterNotificationId: null };
     const body = {
       notification: elementToRemove,
       currentUser,
-      notificationIndex:
-        _notifications?.notifications.findIndex(
-          ({ id }) => String(id) === String(elementToRemove.id),
-        ) ?? 0,
+      queryKey: resolvedQueryKey,
+      ...restoreAnchors,
     };
     undoHandler &&
       performActionAndStoreUndoData(
@@ -243,18 +260,10 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
         "Undo remove notification",
         undoHandler,
       );
-
-    const prevTabLength = _notifications?.structuredData.tabs.length;
+    if (!_notifications || !cachePayload) return;
+    const prevTabLength = _notifications.structuredData.tabs.length;
     const currentSplitName =
-      _notifications?.structuredData.tabs[globalFocus.currSplit].project;
-    if (!_notifications || !_notifications.notifications) return;
-    const cachePayload = updateInboxOptimistically({
-      queryClient,
-      queryKey: resolvedQueryKey,
-      accountId: currentUser.id,
-      mutation: createInboxRemovalMutation([elementToRemove]),
-    });
-    if (!cachePayload) return;
+      _notifications.structuredData.tabs[globalFocus.currSplit].project;
     const newState = cachePayload.notifications;
     console.timeEnd("StartingProcess");
 

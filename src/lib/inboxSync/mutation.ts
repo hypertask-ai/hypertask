@@ -14,7 +14,8 @@ export type InboxReadModelMutation =
   | {
       type: "restore";
       notification: INotification;
-      index: number;
+      beforeNotificationId: string | null;
+      afterNotificationId: string | null;
     }
   | {
       type: "set_seen";
@@ -35,6 +36,36 @@ type InboxMutationPayload = Pick<
   InboxReadModelPayloadV1,
   "notifications" | "splitsNoImportant" | "showImportantSplit"
 >;
+
+export const findInboxRestoreAnchors = (
+  previousNotifications: readonly INotification[],
+  remainingNotifications: readonly INotification[],
+  notificationId: string,
+): { beforeNotificationId: string | null; afterNotificationId: string | null } => {
+  const previousIndex = previousNotifications.findIndex(
+    ({ id }) => String(id) === notificationId,
+  );
+  if (previousIndex < 0) {
+    return { beforeNotificationId: null, afterNotificationId: null };
+  }
+
+  const remainingIds = new Set(
+    remainingNotifications.map(({ id }) => String(id)),
+  );
+  const beforeNotification = previousNotifications
+    .slice(previousIndex + 1)
+    .find(({ id }) => remainingIds.has(String(id)));
+  const afterNotification = previousNotifications
+    .slice(0, previousIndex)
+    .reverse()
+    .find(({ id }) => remainingIds.has(String(id)));
+  return {
+    beforeNotificationId: beforeNotification
+      ? String(beforeNotification.id)
+      : null,
+    afterNotificationId: afterNotification ? String(afterNotification.id) : null,
+  };
+};
 
 export const createInboxRemovalMutation = (
   notifications: readonly INotification[],
@@ -116,11 +147,23 @@ export const applyInboxReadModelMutation = <
         return payload;
       }
       const notifications = [...payload.notifications];
-      notifications.splice(
-        Math.max(0, Math.min(mutation.index, notifications.length)),
-        0,
-        mutation.notification,
-      );
+      const beforeIndex = mutation.beforeNotificationId
+        ? notifications.findIndex(
+            ({ id }) => String(id) === mutation.beforeNotificationId,
+          )
+        : -1;
+      const afterIndex = mutation.afterNotificationId
+        ? notifications.findIndex(
+            ({ id }) => String(id) === mutation.afterNotificationId,
+          )
+        : -1;
+      let insertionIndex = notifications.length;
+      if (beforeIndex >= 0) {
+        insertionIndex = beforeIndex;
+      } else if (afterIndex >= 0) {
+        insertionIndex = afterIndex + 1;
+      }
+      notifications.splice(insertionIndex, 0, mutation.notification);
       return { ...payload, notifications } as Payload;
     }
     case "set_seen":
