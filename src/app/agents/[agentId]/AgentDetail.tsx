@@ -344,7 +344,7 @@ const AgentDetail = (props: IProp) => {
   const [deleting, setDeleting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const agentRefreshSeq = useRef(0);
-  const appliedAgentRefreshSeq = useRef<Record<string, number>>({});
+  const appliedAgentRefreshSeq = useRef(new Map<string, number>());
   const activityRequestSeq = useRef(0);
   const bootstrappedAgentId = useRef<string | null>(null);
   const renderedAgentIdentity = useRef<{ id: string; slug: string | null } | null>(
@@ -470,10 +470,10 @@ const AgentDetail = (props: IProp) => {
           return;
         }
         const appliedSeq =
-          appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+          appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
         if (initialSeq >= appliedSeq) {
-          appliedAgentRefreshSeq.current[refreshedAgent.id] = initialSeq;
-          appliedAgentRefreshSeq.current[agentId] = initialSeq;
+          appliedAgentRefreshSeq.current.set(refreshedAgent.id, initialSeq);
+          appliedAgentRefreshSeq.current.set(agentId, initialSeq);
           setError(null);
           setAgent((prev) =>
             prev && prev.id !== refreshedAgent.id ? prev : refreshedAgent,
@@ -482,7 +482,7 @@ const AgentDetail = (props: IProp) => {
         }
       })
       .catch((e) => {
-        const appliedSeq = appliedAgentRefreshSeq.current[agentId] ?? 0;
+        const appliedSeq = appliedAgentRefreshSeq.current.get(agentId) ?? 0;
         if (!cancelled && initialSeq > appliedSeq) {
           setError(e instanceof Error ? e.message : "Failed to load agent");
         }
@@ -508,10 +508,10 @@ const AgentDetail = (props: IProp) => {
             return;
           }
           const appliedSeq =
-            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+            appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
           if (seq < appliedSeq) return;
-          appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
-          appliedAgentRefreshSeq.current[agentId] = seq;
+          appliedAgentRefreshSeq.current.set(refreshedAgent.id, seq);
+          appliedAgentRefreshSeq.current.set(agentId, seq);
           setError(null);
           const {
             working,
@@ -591,10 +591,10 @@ const AgentDetail = (props: IProp) => {
               }
               if (refreshedAgent.id !== subscribedAgentId) return;
               const appliedSeq =
-                appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+                appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
               if (seq < appliedSeq) return;
-              appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
-              appliedAgentRefreshSeq.current[agentId] = seq;
+              appliedAgentRefreshSeq.current.set(refreshedAgent.id, seq);
+              appliedAgentRefreshSeq.current.set(agentId, seq);
               setError(null);
               const {
                 working,
@@ -971,10 +971,10 @@ const AgentDetail = (props: IProp) => {
         const refreshedAgent = refreshed.agent;
         if (refreshedAgent.id === agent.id) {
           const appliedSeq =
-            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+            appliedAgentRefreshSeq.current.get(refreshedAgent.id) ?? 0;
           if (seq >= appliedSeq) {
-            appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
-            appliedAgentRefreshSeq.current[agentId] = seq;
+            appliedAgentRefreshSeq.current.set(refreshedAgent.id, seq);
+            appliedAgentRefreshSeq.current.set(agentId, seq);
             setAgent((prev) =>
               prev?.id === refreshedAgent.id ? refreshedAgent : prev,
             );
