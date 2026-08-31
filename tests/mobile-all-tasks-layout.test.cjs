@@ -21,7 +21,9 @@ test("All Tasks owns one mobile horizontal inset around its header and rows", ()
     allTasks,
     /className="rounded-b-\[4px\] mt-3 px-0 @md:!px-16/,
   );
-  assert.match(allTasks, /<TaskListRow[\s\S]*?flushMobilePadding/);
+  const taskRowTag = allTasks.match(/<TaskListRow\b([\s\S]*?)\/>/);
+  assert.ok(taskRowTag, "All Tasks should render a TaskListRow");
+  assert.match(taskRowTag[1], /\bflushMobilePadding\b/);
 });
 
 test("mobile task rows shrink and truncate inside their content box", () => {
