@@ -99,6 +99,8 @@ test("the split dock is reachable, scrollable, and owns shell spacing safely", (
   assert.match(splitDock, /focus-visible:ring-2/);
   assert.match(splitDock, /aria-selected=\{active\}/);
   assert.match(splitDock, /safe-area-inset-bottom/);
+  assert.match(splitDock, /const dockOwner = useRef\(\{\}\)/);
+  assert.match(primaryDock, /const dockOwner = useRef\(\{\}\)/);
   assert.match(splitDock, /publishMobileDockHeight/);
   assert.match(splitDock, /releaseMobileDockHeight/);
   assert.match(primaryDock, /publishMobileDockHeight/);
@@ -115,11 +117,11 @@ test("the split dock is reachable, scrollable, and owns shell spacing safely", (
   assert.match(splitDock, /if \(hidden\) return null/);
   assert.match(
     splitDock,
-    /if \(hidden\) \{\s*clearMobileDockHeight\(root, mobileInboxSplitDockOwner\);/,
+    /if \(hidden\) \{\s*clearMobileDockHeight\(root, dockOwner\.current\);/,
   );
   assert.match(
     primaryDock,
-    /if \(hidden\) \{\s*clearMobileDockHeight\(root, mobileTabBarDockOwner\);/,
+    /if \(hidden\) \{\s*clearMobileDockHeight\(root, dockOwner\.current\);/,
   );
   assert.match(splitDock, /}, \[hidden\]\);/);
   assert.match(splitDock, /const observer = new ResizeObserver\(publishHeight\)/);

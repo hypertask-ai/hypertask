@@ -17,8 +17,6 @@ import {
   releaseMobileDockHeight,
 } from "./mobileDockHeight";
 
-const mobileTabBarDockOwner = {};
-
 interface MobileTabBarProps {
   currentUserId: number;
 }
@@ -26,6 +24,7 @@ interface MobileTabBarProps {
 const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
   const pathname = usePathname();
   const dockRef = useRef<HTMLElement>(null);
+  const dockOwner = useRef({});
   const [currentDay, setCurrentDay] = useState(() => new Date().getDate());
   const { data: notificationCount } = useGetNotificationCount(currentUserId);
   const { navigateToBoard } = useAppShellSurfaceShortcuts({ listen: false });
@@ -71,7 +70,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
   useEffect(() => {
     const root = document.documentElement;
     if (hidden) {
-      clearMobileDockHeight(root, mobileTabBarDockOwner);
+      clearMobileDockHeight(root, dockOwner.current);
       return;
     }
     const dock = dockRef.current;
@@ -79,7 +78,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
     const publish = () =>
       publishMobileDockHeight(
         root,
-        mobileTabBarDockOwner,
+        dockOwner.current,
         `${dock.offsetHeight}px`,
       );
     publish();
@@ -87,7 +86,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
     observer.observe(dock);
     return () => {
       observer.disconnect();
-      releaseMobileDockHeight(root, mobileTabBarDockOwner);
+      releaseMobileDockHeight(root, dockOwner.current);
     };
   }, [hidden, pathname]);
 

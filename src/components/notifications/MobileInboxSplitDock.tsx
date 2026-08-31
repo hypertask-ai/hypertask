@@ -13,8 +13,6 @@ import {
   releaseMobileDockHeight,
 } from "@/components/Global/mobileDockHeight";
 
-const mobileInboxSplitDockOwner = {};
-
 type MobileInboxSplitDockTab = Pick<
   InboxTabMeta,
   "project" | "projectId" | "length" | "hasUnseen"
@@ -32,6 +30,7 @@ const MobileInboxSplitDock = ({
   onSelect,
 }: MobileInboxSplitDockProps) => {
   const dockRef = useRef<HTMLElement>(null);
+  const dockOwner = useRef({});
   const scrollerRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const resolvedActiveIndex = tabs[activeIndex] ? activeIndex : 0;
@@ -45,7 +44,7 @@ const MobileInboxSplitDock = ({
   useLayoutEffect(() => {
     const root = document.documentElement;
     if (hidden) {
-      clearMobileDockHeight(root, mobileInboxSplitDockOwner);
+      clearMobileDockHeight(root, dockOwner.current);
       return;
     }
 
@@ -55,7 +54,7 @@ const MobileInboxSplitDock = ({
     const publishHeight = () =>
       publishMobileDockHeight(
         root,
-        mobileInboxSplitDockOwner,
+        dockOwner.current,
         `${dock.offsetHeight}px`,
       );
     publishHeight();
@@ -64,7 +63,7 @@ const MobileInboxSplitDock = ({
     observer.observe(dock);
     return () => {
       observer.disconnect();
-      releaseMobileDockHeight(root, mobileInboxSplitDockOwner);
+      releaseMobileDockHeight(root, dockOwner.current);
     };
   }, [hidden]);
 
