@@ -148,10 +148,6 @@ test("a flip outside the window remains a separate activity", () => {
   );
 });
 
-test("another actor's reversal remains a separate activity", () => {
-  assert.equal(classify({ sameActor: false }), null);
-});
-
 test("a move involving a third section is not treated as A-B ping-pong", () => {
   assert.equal(
     classify({ age: 5 * 60_000, fromSectionId: 2, toSectionId: 3 }),
@@ -198,6 +194,22 @@ test("the controller collapses a human A-B reversal without notifying again", as
   assert.equal(state.creates.length, 0);
   assert.equal(result.shouldNotify, false);
   assert.equal(deliveries, 0);
+  const persisted = state.updates[0].data.activity;
+  assert.equal(persisted.data.fromSection.sectionId, 1);
+  assert.equal(persisted.data.toSection.sectionId, 2);
+  assert.equal(persisted.data.currentSection.sectionId, 1);
+  assert.equal(persisted.data.statusFlipCount, 1);
+});
+
+test("different human users never share a collapse run", async () => {
+  const { state, deliveries, result } = await reverseThroughController({
+    previousActivity: move(1, 2, { userId: 7 }),
+  });
+
+  assert.equal(state.updates.length, 0);
+  assert.equal(state.creates.length, 1);
+  assert.equal(result.shouldNotify, true);
+  assert.equal(deliveries, 1);
 });
 
 test("an agent and its owner never share a collapse run", async () => {

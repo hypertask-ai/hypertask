@@ -315,7 +315,7 @@ async function moveTask(
     activityUser,
   );
   if (result.status !== 200) throw new Error("Task move failed");
-  const moveActivity = await createTaskMovedActivity({
+  await createTaskMovedActivity({
     taskId: task.id,
     userObj: activityUser,
     toSectionId: section.id,

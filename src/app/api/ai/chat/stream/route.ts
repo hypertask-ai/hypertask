@@ -6631,7 +6631,7 @@ function buildTools(
         }
 
         if (sectionTarget && oldTask.sectionId !== sectionTarget.id) {
-          const moveActivity = await createTaskMovedActivity({
+          await createTaskMovedActivity({
             userObj: activityUser,
             toSectionId: sectionTarget.id,
             toSection_title: sectionTarget.section_title,
