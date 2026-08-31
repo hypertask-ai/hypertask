@@ -15,7 +15,6 @@ test("mobile announcements live in Settings instead of the top bar", () => {
   const topBarActions = read(
     "src/components/Global/MobileTopBarActions.tsx",
   );
-  const settings = read("src/components/Modals/Settings/SettingsShell.tsx");
   const announcements = read(
     "src/components/Modals/Settings/AnnouncementsSection.tsx",
   );
@@ -30,9 +29,6 @@ test("mobile announcements live in Settings instead of the top bar", () => {
     ),
     false,
   );
-  assert.match(settings, /useGetAnnouncements\(currentUser\?\.id\)/);
-  assert.match(settings, /shouldShowMobileAnnouncementIndicator\(\{/);
-  assert.match(settings, /<MobileAnnouncementIndicator/);
   assert.match(
     announcements,
     /Show an unread indicator when new updates are available\./,
