@@ -17,6 +17,7 @@ const {
   nextThemeForDarkModeToggle,
   normalizeThemePreference,
   resolvedThemeDomMetadata,
+  resolveInitialThemeColor,
   resolveThemePreference,
   themeCookieSeedValue,
   themeOptions,
@@ -139,6 +140,12 @@ test("resolved themes expose matching Android status bar colors", () => {
   assert.equal(resolvedThemeDomMetadata.dia.themeColor, "#f6f4ef");
   assert.equal(resolvedThemeDomMetadata.graphite.themeColor, "#232326");
   assert.equal(resolvedThemeDomMetadata.amoled.themeColor, "#000000");
+});
+
+test("initial documents use a dark fallback for unresolved system themes", () => {
+  assert.equal(resolveInitialThemeColor("system"), "#000000");
+  assert.equal(resolveInitialThemeColor("porcelain"), "#ffffff");
+  assert.equal(resolveInitialThemeColor("dia"), "#f6f4ef");
 });
 
 test("theme boot synchronizes the Android status bar before first paint", () => {

@@ -14,7 +14,7 @@ import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
-  resolvedThemeDomMetadata,
+  resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
@@ -67,9 +67,7 @@ export default async function RootLayout(
   const themeValue = normalizeThemePreference(theme.value) ?? "system";
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
-  const initialThemeColor =
-    resolvedThemeDomMetadata[resolveThemePreference(themeValue, "light")]
-      .themeColor;
+  const initialThemeColor = resolveInitialThemeColor(themeValue);
   const themeClassName =
     themeValue === "amoled"
       ? "dark amoled"
@@ -139,7 +137,6 @@ export default async function RootLayout(
           name="description"
           content="Hypertask - AI-powered Project Boards"
         />
-        <link rel="manifest" href="/manifest.json" />
       </head>
       <body style={{fontFamily:"inherit !important"}} id={DIV_ID_CONSTANTS.bodyLayout}>
         <div id="portal-root"></div>
