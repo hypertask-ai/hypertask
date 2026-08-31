@@ -978,10 +978,10 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   const renderTaskRow = (task: ITask, flatIndex: number) => {
     const selected = selectedIndex === flatIndex;
     const stickyBackground = selected
-      ? "bg-containerBackground md:bg-active-elementBg"
+      ? "md:bg-active-elementBg"
       : dragOverSectionId === task.sectionId
-        ? "bg-hover-active"
-        : "bg-containerBackground";
+        ? "md:bg-hover-active"
+        : "md:bg-containerBackground";
     const dragData = getTableRowDragData(
       task.id,
       task.sectionId,
@@ -1006,11 +1006,9 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
           return (
             <span
               key="ticket"
-              // HTPR-4643: frozen. The background must be opaque or the data
-              // columns show through as they scroll under it, and it has to
-              // match the row's own state, hence the selected branch.
-              style={{ position: "sticky", left: frozenColumnOffset("ticket"), zIndex: 1 }}
-              className={`font-bold text-icon-dark-gray whitespace-nowrap ${stickyBackground}`}
+              // Frozen on desktop only. Mobile scrolls every column as one row.
+              style={{ left: frozenColumnOffset("ticket") }}
+              className={`md:sticky md:z-[1] font-bold text-icon-dark-gray whitespace-nowrap ${stickyBackground}`}
             >
               {getTicketText(task)}
             </span>
@@ -1019,9 +1017,8 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
           return (
             <span
               key="title"
-              // HTPR-4643: frozen, same treatment as ticket.
-              style={{ position: "sticky", left: frozenColumnOffset("title"), zIndex: 1 }}
-              className={`font-medium text-white-black truncate whitespace-nowrap min-w-0 ${stickyBackground}`}
+              style={{ left: frozenColumnOffset("title") }}
+              className={`md:sticky md:z-[1] font-medium text-white-black truncate whitespace-nowrap min-w-0 ${stickyBackground}`}
             >
               {task.title ?? ""}
             </span>
@@ -1224,17 +1221,15 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
                 <div
                   key={column.key}
                   ref={column.key === "title" ? titleHeaderRef : undefined}
-                  // HTPR-4643: the header is already sticky vertically; ticket
-                  // and title are sticky horizontally too, so the frozen pair
-                  // stays square with its own column headings. z-20 keeps them
-                  // above the scrolling headers they sit in front of.
+                  // The header row stays vertically sticky everywhere. Only desktop
+                  // freezes the ticket and title headings horizontally.
                   style={
                     frozenColumnOffset(column.key) === undefined
                       ? undefined
-                      : { position: "sticky", left: frozenColumnOffset(column.key), zIndex: 20 }
+                      : { left: frozenColumnOffset(column.key) }
                   }
                   className={`relative min-w-0 ${
-                    frozenColumnOffset(column.key) === undefined ? "" : "bg-taskDetailPage"
+                    frozenColumnOffset(column.key) === undefined ? "" : "md:sticky md:z-20 md:bg-taskDetailPage"
                   }`}
                 >
                   {dragOverColumn?.column === column.key && (
