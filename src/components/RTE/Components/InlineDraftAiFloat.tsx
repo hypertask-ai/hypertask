@@ -8,7 +8,6 @@ import toast from "react-hot-toast";
 
 import { SendArrow } from "@/components/Common/AttachmentsUpload";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
-import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import {
@@ -83,7 +82,7 @@ const InlineDraftAiFloat = ({
   allowSuggestReply?: boolean;
   toggleRecording?: (val: boolean) => void;
   isRecording?: boolean;
-  presentation?: "inline" | "sheet";
+  presentation?: "inline" | "composer";
   suppressEditorSelectionHighlight?: boolean;
 }) => {
   const [prompt, setPrompt] = useState("");
@@ -123,7 +122,7 @@ const InlineDraftAiFloat = ({
     loadingRef.current = isLoading;
   }, [isLoading]);
 
-  const isSheet = presentation === "sheet";
+  const isComposer = presentation === "composer";
 
   useEffect(() => {
     if (!editor) return;
@@ -181,7 +180,7 @@ const InlineDraftAiFloat = ({
       editor.commands.setTextSelection(from);
     }
     onClose();
-    if (!isSheet) {
+    if (!isComposer) {
       editor.commands.focus();
     }
   };
@@ -248,7 +247,7 @@ const InlineDraftAiFloat = ({
   // Dismiss when clicking outside the float. Keep open for draft clicks so
   // users can adjust the selection without the bar disappearing.
   useEffect(() => {
-    if (isSheet) return;
+    if (isComposer) return;
 
     const onPointerDown = (event: PointerEvent) => {
       if (loadingRef.current || recordingRef.current || audioProcessingRef.current) {
@@ -264,7 +263,7 @@ const InlineDraftAiFloat = ({
 
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, [editor, isSheet]);
+  }, [editor, isComposer]);
 
   if (!editor || !scope) return null;
 
@@ -528,53 +527,35 @@ const InlineDraftAiFloat = ({
     </div>
   ) : null;
 
-  if (isSheet) {
-    return (
-      <MobileBottomSheet
-        isOpen
-        onClose={close}
-        keyboardAware
-        labelledBy="inline-draft-ai-sheet-title"
-        contentClassName="pb-2"
-        bottomSlot={
-          hasResult ? (
-            <div className="flex flex-col gap-0 px-2 pb-3">
-              <button type="button" className={CHIP_SHEET_DONE_CLASS} onClick={close}>
-                Done
-              </button>
-              <button
-                type="button"
-                className={CHIP_SHEET_PRIMARY_CLASS}
-                onClick={retry}
-                disabled={isLoading}
-              >
-                Retry
-              </button>
-            </div>
-          ) : null
-        }
+  const composerResultActions = hasResult ? (
+    <div className="flex flex-col">
+      <button type="button" className={CHIP_SHEET_DONE_CLASS} onClick={close}>
+        Done
+      </button>
+      <button
+        type="button"
+        className={CHIP_SHEET_PRIMARY_CLASS}
+        onClick={retry}
+        disabled={isLoading}
       >
-        <div className="px-4 pb-2 pt-1">
-          <h2
-            id="inline-draft-ai-sheet-title"
-            className="text-subheading font-medium text-white-black"
-          >
-            Write with AI
-          </h2>
-        </div>
+        Retry
+      </button>
+    </div>
+  ) : null;
 
-        <div
-          ref={rootRef}
-          role="dialog"
-          aria-label="Write with AI"
-          className="mx-4 flex flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
-          onKeyDown={handlePanelKeyDown}
-        >
-          {promptRow}
-        </div>
-
+  if (isComposer) {
+    return (
+      <div
+        ref={rootRef}
+        role="region"
+        aria-label="Write with AI"
+        className="flex w-full min-w-0 shrink-0 flex-col overflow-hidden rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description text-content shadow-md"
+        onKeyDown={handlePanelKeyDown}
+      >
+        <div className="px-2 py-1.5">{promptRow}</div>
         {sheetEditChips}
-      </MobileBottomSheet>
+        {composerResultActions}
+      </div>
     );
   }
 
