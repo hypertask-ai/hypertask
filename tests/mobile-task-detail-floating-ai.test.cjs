@@ -13,6 +13,42 @@ const commentComposer = fs.readFileSync(
   "utf8",
 );
 
+const sourceFile = ts.createSourceFile(
+  "NewCommentComponent.tsx",
+  commentComposer,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TSX,
+);
+const selfClosingElements = [];
+const collectSelfClosingElements = (node) => {
+  if (ts.isJsxSelfClosingElement(node)) selfClosingElements.push(node);
+  ts.forEachChild(node, collectSelfClosingElements);
+};
+collectSelfClosingElements(sourceFile);
+
+const elementsNamed = (name) =>
+  selfClosingElements.filter(
+    (element) => element.tagName.getText(sourceFile) === name,
+  );
+
+const attributeNamed = (element, name) =>
+  element.attributes.properties.find(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) &&
+      attribute.name.getText(sourceFile) === name,
+  );
+
+const stringAttributeValue = (element, name) => {
+  const attribute = attributeNamed(element, name);
+  assert.ok(attribute, `${name} attribute not found`);
+  assert.ok(
+    attribute.initializer && ts.isStringLiteral(attribute.initializer),
+    `${name} must be a string`,
+  );
+  return attribute.initializer.text;
+};
+
 test("mobile task detail removes the composer-anchored button rail", () => {
   assert.doesNotMatch(commentComposer, /const ScrollToTop\s*=/);
   assert.doesNotMatch(commentComposer, /const PlaylistArrow\s*=/);
@@ -21,44 +57,43 @@ test("mobile task detail removes the composer-anchored button rail", () => {
 });
 
 test("mobile task detail keeps Ask AI outside the composer in the shared floating action", () => {
-  const sourceFile = ts.createSourceFile(
-    "NewCommentComponent.tsx",
-    commentComposer,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TSX,
-  );
-  const askAiButtons = [];
-  const findAskAiButtons = (node) => {
-    if (
-      ts.isJsxSelfClosingElement(node) &&
-      node.tagName.getText(sourceFile) === "AskAiButton"
-    ) {
-      askAiButtons.push(node);
-    }
-    ts.forEachChild(node, findAskAiButtons);
-  };
-  findAskAiButtons(sourceFile);
+  const askAiButtons = elementsNamed("AskAiButton");
   assert.equal(askAiButtons.length, 1, "expected one AskAiButton render");
+  const askAiButton = askAiButtons[0];
 
-  for (const askAiButton of askAiButtons) {
-    for (let ancestor = askAiButton.parent; ancestor; ancestor = ancestor.parent) {
-      if (!ts.isJsxElement(ancestor)) continue;
-      const isCommentComposer = ancestor.openingElement.attributes.properties.some(
-        (attribute) =>
-          ts.isJsxAttribute(attribute) &&
-          attribute.name.getText(sourceFile) === "id" &&
-          attribute.initializer &&
-          ts.isStringLiteral(attribute.initializer) &&
-          attribute.initializer.text === "comment",
-      );
-      assert.equal(isCommentComposer, false, "AskAiButton is nested inside #comment");
-    }
+  assert.ok(ts.isBinaryExpression(askAiButton.parent));
+  assert.equal(
+    askAiButton.parent.operatorToken.kind,
+    ts.SyntaxKind.AmpersandAmpersandToken,
+  );
+  assert.equal(askAiButton.parent.left.getText(sourceFile), "_mbl");
+
+  for (let ancestor = askAiButton.parent; ancestor; ancestor = ancestor.parent) {
+    if (!ts.isJsxElement(ancestor)) continue;
+    const id = attributeNamed(ancestor.openingElement, "id");
+    const isCommentComposer = Boolean(
+      id?.initializer &&
+        ts.isStringLiteral(id.initializer) &&
+        id.initializer.text === "comment",
+    );
+    assert.equal(isCommentComposer, false, "AskAiButton is nested inside #comment");
   }
 
-  assert.match(commentComposer, /\{_mbl && <AskAiButton\/>\}/);
-  assert.match(commentComposer, /MobileFloatingActionButton/);
-  assert.match(commentComposer, /ariaLabel="Ask AI about this task"/);
-  assert.match(commentComposer, /label="Ask AI"/);
-  assert.match(commentComposer, /onClick=\{openAIChatInterface\}/);
+  const floatingButtons = elementsNamed("MobileFloatingActionButton");
+  assert.equal(floatingButtons.length, 1, "expected one floating action definition");
+  const floatingButton = floatingButtons[0];
+  let owner = floatingButton.parent;
+  while (owner && !ts.isVariableDeclaration(owner)) owner = owner.parent;
+  assert.ok(owner && ts.isIdentifier(owner.name));
+  assert.equal(owner.name.text, "AskAiButton");
+
+  assert.equal(
+    stringAttributeValue(floatingButton, "ariaLabel"),
+    "Ask AI about this task",
+  );
+  assert.equal(stringAttributeValue(floatingButton, "label"), "Ask AI");
+  assert.ok(attributeNamed(floatingButton, "icon"), "icon attribute not found");
+  const onClick = attributeNamed(floatingButton, "onClick");
+  assert.ok(onClick?.initializer && ts.isJsxExpression(onClick.initializer));
+  assert.equal(onClick.initializer.expression?.getText(sourceFile), "openAIChatInterface");
 });
