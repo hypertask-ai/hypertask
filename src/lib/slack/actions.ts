@@ -30,6 +30,7 @@ import createArchiveActivity from "@/utils/controllers/activities/createArchiveA
 import createPriorityActivity from "@/utils/controllers/activities/CreatePriorityActivity";
 import createTaskDueDateActivity from "@/utils/controllers/activities/createTaskDueDateActivity";
 import createTaskMovedActivity from "@/utils/controllers/activities/createTaskMovedActivity";
+import { sendTaskMoveNotificationIfNeeded } from "@/utils/controllers/activities/sendTaskMoveNotification";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { createFollowerService } from "@/utils/controllers/followers/createFollowerService";
@@ -323,9 +324,9 @@ async function moveTask(
     fromSectionId: task.sectionId ?? -1,
     fromSection_title: task.section ?? "",
   });
-  if (moveActivity.shouldNotify) {
-    void sendNotificationForTask(actor.user.id, "TaskMoved", task.id, task.projectId);
-  }
+  await sendTaskMoveNotificationIfNeeded(moveActivity, () =>
+    sendNotificationForTask(actor.user.id, "TaskMoved", task.id, task.projectId),
+  );
   void broadcastBoardChange(task.projectId, { originUserId: actor.user.id });
   void broadcastTaskChange(task.id, { originUserId: actor.user.id });
   return confirmBlock(`Moved ${task.ticketNumber} to ${section.section_title}.`);

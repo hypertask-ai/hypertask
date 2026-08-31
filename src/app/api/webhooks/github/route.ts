@@ -4,6 +4,7 @@ import { generalConfig } from "@/lib/configs/general.config";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import generateRank from "@/utils/generateRank";
 import createTaskMovedActivity from "@/utils/controllers/activities/createTaskMovedActivity";
+import { sendTaskMoveNotificationIfNeeded } from "@/utils/controllers/activities/sendTaskMoveNotification";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
@@ -239,30 +240,32 @@ export async function POST(request: NextRequest) {
         moved = true;
 
         try {
-          const moveActivity = moveResult.oldTask?.sectionId != null
-            ? await createTaskMovedActivity({
-                taskId: task.id,
-                toSection_title: section.section_title,
-                toSectionId: section.id,
-                userObj: currentUser,
-                fromSection_title: moveResult.oldTask.section ?? "",
-                fromSectionId: moveResult.oldTask.sectionId,
-                fromAgent: null,
-              })
-            : null;
+          const previousSectionId = moveResult.oldTask?.sectionId;
+          const moveActivity =
+            previousSectionId !== null && previousSectionId !== undefined
+              ? await createTaskMovedActivity({
+                  taskId: task.id,
+                  toSection_title: section.section_title,
+                  toSectionId: section.id,
+                  userObj: currentUser,
+                  fromSection_title: moveResult.oldTask.section ?? "",
+                  fromSectionId: previousSectionId,
+                  fromAgent: null,
+                })
+              : { newComment: null, shouldNotify: true };
           await Promise.all([
             broadcastBoardChange(task.projectId, {
               originUserId: generalConfig.hyperAiId,
             }),
-            moveActivity?.shouldNotify
-              ? sendNotificationForTask(
-                  generalConfig.hyperAiId,
-                  "TaskMoved",
-                  task.id,
-                  task.projectId,
-                  null,
-                )
-              : Promise.resolve(),
+            sendTaskMoveNotificationIfNeeded(moveActivity, () =>
+              sendNotificationForTask(
+                generalConfig.hyperAiId,
+                "TaskMoved",
+                task.id,
+                task.projectId,
+                null,
+              ),
+            ),
           ]);
         } catch (error) {
           console.warn(

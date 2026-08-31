@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
@@ -15,6 +14,9 @@ const {
   mergeStatusFlipActivity,
 } = jiti(
   path.join(root, "src/utils/controllers/activities/taskMoveCollapse.ts"),
+);
+const { sendTaskMoveNotificationIfNeeded } = jiti(
+  path.join(root, "src/utils/controllers/activities/sendTaskMoveNotification.ts"),
 );
 
 const NOW = 2_000_000_000;
@@ -124,14 +126,46 @@ test("merging a flip preserves the section pair and records the latest destinati
   assert.equal(secondFlip.data.statusFlipCount, 2);
 });
 
-test("all task-move entry points gate notifications on the activity result", () => {
-  for (const relativePath of [
-    "src/pages/api/tasks/moveTask.ts",
-    "src/lib/slack/actions.ts",
-    "src/app/api/webhooks/github/route.ts",
-    "src/app/api/ai/chat/stream/route.ts",
-  ]) {
-    const source = fs.readFileSync(path.join(root, relativePath), "utf8");
-    assert.match(source, /moveActivity(?:\?\.|\.)shouldNotify/);
-  }
+test("a collapsed run does not invoke notification delivery", async () => {
+  let deliveries = 0;
+  const sent = await sendTaskMoveNotificationIfNeeded(
+    { shouldNotify: false },
+    async () => {
+      deliveries += 1;
+    },
+  );
+
+  assert.equal(sent, false);
+  assert.equal(deliveries, 0);
+});
+
+test("the first move awaits one notification delivery", async () => {
+  let delivered = false;
+  const sent = await sendTaskMoveNotificationIfNeeded(
+    { shouldNotify: true },
+    async () => {
+      await Promise.resolve();
+      delivered = true;
+    },
+  );
+
+  assert.equal(sent, true);
+  assert.equal(delivered, true);
+});
+
+test("notification failures do not turn a successful move into a failed request", async () => {
+  const failure = new Error("notification unavailable");
+  let reported;
+  const sent = await sendTaskMoveNotificationIfNeeded(
+    { shouldNotify: true },
+    async () => {
+      throw failure;
+    },
+    (error) => {
+      reported = error;
+    },
+  );
+
+  assert.equal(sent, false);
+  assert.equal(reported, failure);
 });

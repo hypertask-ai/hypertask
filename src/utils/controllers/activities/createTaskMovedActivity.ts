@@ -82,10 +82,12 @@ const createTaskMovedActivity = async ({
     const newComment = await prisma.comment.update({
       where: { id: previous.id },
       data: {
+        // Prisma requires an index signature for JSON input, while the typed
+        // activity model lists its serializable fields explicitly.
         activity: mergeStatusFlipActivity(previousActivity, {
           sectionId: toSectionId,
           sectionTitle: toSection_title,
-        }) as any,
+        }) as unknown as Prisma.InputJsonValue,
         createdAt: new Date(),
       },
     });

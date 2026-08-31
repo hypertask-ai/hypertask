@@ -159,6 +159,7 @@ import { loadDoneTitlesByProject } from "@/utils/controllers/notifications/inbox
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
 import createTaskMovedActivity from "@/utils/controllers/activities/createTaskMovedActivity";
+import { sendTaskMoveNotificationIfNeeded } from "@/utils/controllers/activities/sendTaskMoveNotification";
 import createArchiveActivity from "@/utils/controllers/activities/createArchiveActivity";
 import {
   broadcastInboxChange,
@@ -6639,15 +6640,15 @@ function buildTools(
             fromSection_title: oldTask.section ?? "",
             taskId: task.id,
           });
-          if (moveActivity.shouldNotify) {
-            await sendNotificationForTask(
+          await sendTaskMoveNotificationIfNeeded(moveActivity, () =>
+            sendNotificationForTask(
               user.id,
               "TaskMoved",
               task.id,
               task.projectId,
               undefined,
-            );
-          }
+            ),
+          );
         }
 
         if (input.status !== undefined && oldTask.status !== input.status) {

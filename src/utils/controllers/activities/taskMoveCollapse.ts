@@ -1,3 +1,5 @@
+import type { ITaskMoveActivity } from "@/models/ActivityModels.ts";
+
 export const STATUS_FLIP_COLLAPSE_WINDOW_MS = 30 * 60 * 1000;
 export const QUICK_MOVE_COLLAPSE_WINDOW_MS = 60_000;
 
@@ -67,9 +69,9 @@ export function classifyTaskMoveCollapse({
 }
 
 export function mergeStatusFlipActivity(
-  previousActivity: MoveActivity,
+  previousActivity: ITaskMoveActivity,
   currentSection: { sectionId: number; sectionTitle: string },
-): MoveActivity {
+): ITaskMoveActivity {
   const previousCount = Number(previousActivity.data?.statusFlipCount) || 0;
   return {
     ...previousActivity,

@@ -3,6 +3,7 @@ import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
 import createTaskMovedActivity from "@/utils/controllers/activities/createTaskMovedActivity";
+import { sendTaskMoveNotificationIfNeeded } from "@/utils/controllers/activities/sendTaskMoveNotification";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { toErrorMessage } from "@/lib/api/errorMessage";
@@ -84,15 +85,15 @@ const handler: NextApiHandler = async (req, res) => {
       fromSectionId: response.oldTask?.sectionId,
       fromAgent: agent,
     });
-    if (moveActivity.shouldNotify) {
-      void sendNotificationForTask(
+    await sendTaskMoveNotificationIfNeeded(moveActivity, () =>
+      sendNotificationForTask(
         userObj.id,
         "TaskMoved",
         taskId,
         projectId,
         agentId ?? null,
-      );
-    }
+      ),
+    );
 
     // Send back updated task, optionally with new activity
     return res.status(response.status).json({
