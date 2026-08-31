@@ -228,9 +228,9 @@ const fetchInboxPayload = async (
         emptyInboxPayload(userId),
       );
     }
-    // HTPR-5847: the fence connection opened above is only consumed by the
-    // reads below, which never run on this path. Close it here so it isn't
-    // leaked while awaiting a request that already failed.
+    // HTPR-5847: the fence read below never runs on this path, so nothing
+    // else will close the connection opened alongside this request -- close
+    // it here or it leaks (and a retry opens one more on top of it).
     void fenceConnectionPromise.then(async (database) => {
       if (!database) return;
       const { closeInboxReadModelConnection } = await import(

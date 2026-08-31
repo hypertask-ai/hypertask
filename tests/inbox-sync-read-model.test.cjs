@@ -669,6 +669,65 @@ test("readInboxReadModelRevisionFence falls back to its own connection when the 
   }
 });
 
+// HTPR-5847 follow-up: fenceConnectionPromise opens alongside the network
+// request in useGetNotifications. When that request throws (auth failure or
+// network error, both rethrow before the fence read ever runs), nothing else
+// closes it -- closeInboxReadModelConnection is what the hook's catch block
+// calls on that path. Proven here by opening, closing early (simulating the
+// throw path), then triggering clearInboxReadModels: if the closed
+// connection were still tracked, the clear would close() it a second time.
+test("closeInboxReadModelConnection removes the connection from tracking (no double close on a later clear)", async () => {
+  const originalIndexedDb = global.indexedDB;
+  const originalBroadcastChannel = global.BroadcastChannel;
+  global.BroadcastChannel = undefined;
+
+  let closeCount = 0;
+  global.indexedDB = {
+    open: () => {
+      const openRequest = {};
+      setImmediate(() => {
+        openRequest.result = {
+          objectStoreNames: { contains: () => true },
+          transaction: () => ({ objectStore: () => ({ get: () => ({}) }) }),
+          close: () => {
+            closeCount += 1;
+          },
+        };
+        openRequest.onsuccess();
+      });
+      return openRequest;
+    },
+    deleteDatabase: () => {
+      const deleteRequest = {};
+      setImmediate(() => deleteRequest.onsuccess());
+      return deleteRequest;
+    },
+  };
+
+  try {
+    const {
+      openInboxReadModelConnection,
+      closeInboxReadModelConnection,
+      clearInboxReadModels,
+    } = jiti(path.join(root, "src/lib/inboxSync/indexedDbReadModel.ts"));
+
+    const connection = await openInboxReadModelConnection();
+    assert.ok(connection);
+    closeInboxReadModelConnection(connection);
+    assert.equal(closeCount, 1);
+
+    await clearInboxReadModels();
+    assert.equal(
+      closeCount,
+      1,
+      "a connection already closed and untracked must not be closed again by a later clear",
+    );
+  } finally {
+    global.indexedDB = originalIndexedDb;
+    global.BroadcastChannel = originalBroadcastChannel;
+  }
+});
+
 test("a failed IndexedDB read does not block the next account read", async () => {
   const originalIndexedDb = global.indexedDB;
   const originalBroadcastChannel = global.BroadcastChannel;
@@ -1035,6 +1094,12 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     hook,
     /if \(!persistentFenceRequired && enabled\) \{[\s\S]*?persistedRevisionFence = await readInboxReadModelRevisionFence\(\s*userId,\s*await fenceConnectionPromise,?\s*\)/,
   );
+  assert.match(
+    hook,
+    /catch \(error\) \{\s*if \(isInboxAuthorizationError\(error\)\)[\s\S]*?fenceConnectionPromise\.then\(async \(database\) => \{\s*if \(!database\) return;[\s\S]*?closeInboxReadModelConnection\(database\)/,
+    "the fetch-throw path must close the pre-opened fence connection so it does not leak",
+  );
+  assert.match(hook, /!inboxRevisionStorageAvailable\(userId\)/);
   assert.match(hook, /const finalRevision = currentInboxReadModelRevision/);
   assert.match(hook, /Ignored Inbox response after final revision check/);
   assert.ok(
