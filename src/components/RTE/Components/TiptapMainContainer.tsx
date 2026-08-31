@@ -56,13 +56,16 @@ const TiptapMainContainer = () => {
   if (isMbl) {
     // FOR: New comment on mobile
     if (mode === "create-comment") {
+      const aiComposerOpen = shouldShowInlineDraftAi;
       const isComposerExpanded =
-        editor?.isFocused || newCommentAttachments.length > 0 || isRecording;
+        editor?.isFocused ||
+        newCommentAttachments.length > 0 ||
+        isRecording ||
+        aiComposerOpen;
 
       return (
-        <>
-          <div
-            className={`
+        <div
+          className={`
               ${isComposerExpanded ? "flex-col" : "flex-row items-center"}
               flex w-full gap-[8px]
               scrollbar-none
@@ -86,40 +89,49 @@ const TiptapMainContainer = () => {
           }}
         >
           <CreatedInfoTiptap />
-          <TiptapEditor />
+          <div
+            className={
+              aiComposerOpen
+                ? "max-h-[min(38svh,var(--mobile-comment-auto-editor-max-height,55vh))] min-h-[80px] w-full min-w-0 shrink-0 overflow-y-auto"
+                : "w-full min-w-0"
+            }
+          >
+            <TiptapEditor />
+          </div>
+          {aiComposerOpen && editor && closeInlineDraftAi && (
+            <InlineDraftAiFloat
+              editor={editor}
+              onClose={closeInlineDraftAi}
+              projectId={aiProjectId}
+              taskId={aiTaskId}
+              allowSuggestReply
+              toggleRecording={toggleRecording}
+              isRecording={isRecording}
+              presentation="composer"
+              suppressEditorSelectionHighlight
+            />
+          )}
           {/* ================== attachment button ============= */}
-          <AttachmentsUpload
-            filesFromParent={[]}
-            trigger={trigger}
-            droppedFiles={[]}
-            callback={getAttachments}
-            mode={mode}
-            sendOnClick={sendComment}
-            editor={editor}
-            discardDraft={discardDraft}
-            audioTiptapCallback={audioTiptapCallback}
-            audioDefaultContent={editor?.getHTML()}
-            toggleRecording={toggleRecording}
-            isRecording={isRecording}
-            showDeleteComment={showDeleteComment}
-            toggleAiTaskWriter={toggleAiTaskWriter}
-            hideComposerDictation={shouldShowInlineDraftAi}
-          />
+          <div className="w-full shrink-0">
+            <AttachmentsUpload
+              filesFromParent={[]}
+              trigger={trigger}
+              droppedFiles={[]}
+              callback={getAttachments}
+              mode={mode}
+              sendOnClick={sendComment}
+              editor={editor}
+              discardDraft={discardDraft}
+              audioTiptapCallback={audioTiptapCallback}
+              audioDefaultContent={editor?.getHTML()}
+              toggleRecording={toggleRecording}
+              isRecording={isRecording}
+              showDeleteComment={showDeleteComment}
+              toggleAiTaskWriter={toggleAiTaskWriter}
+              hideComposerDictation={shouldShowInlineDraftAi}
+            />
+          </div>
         </div>
-        {shouldShowInlineDraftAi && editor && closeInlineDraftAi && (
-          <InlineDraftAiFloat
-            editor={editor}
-            onClose={closeInlineDraftAi}
-            projectId={aiProjectId}
-            taskId={aiTaskId}
-            allowSuggestReply
-            toggleRecording={toggleRecording}
-            isRecording={isRecording}
-            presentation="sheet"
-            suppressEditorSelectionHighlight
-          />
-        )}
-        </>
       );
     }
 
