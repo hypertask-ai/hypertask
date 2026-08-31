@@ -104,6 +104,9 @@ test("mobile create-comment uses AppSheet for both refine and compose", () => {
   assert.match(inlineDraftAi, /mobileOverlayAppSheetPanelClass/);
   assert.match(inlineDraftAi, /EditorContent editor=\{editor\}/);
   assert.match(inlineDraftAi, /isRefineFullscreen \|\| isComposer/);
+  assert.match(inlineDraftAi, /mobileOverlayAppSheetEditorWellClass/);
+  assert.match(inlineDraftAi, /editorHasText/);
+  assert.match(inlineDraftAi, /useMobileVisualViewport/);
   assert.doesNotMatch(inlineDraftAi, /createPortal/);
 });
 
