@@ -343,6 +343,7 @@ const AgentDetail = (props: IProp) => {
   const [savingImportant, setSavingImportant] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const agentRefreshSeq = useRef(0);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -432,10 +433,11 @@ const AgentDetail = (props: IProp) => {
         }
       });
 
-    // Only the live fields are re-read, and they are merged rather than
-    // replacing the agent: a poll landing between an edit and its save would
-    // otherwise throw the edit away.
+    // Canonical runtime and membership fields are merged rather than replacing
+    // the agent: a poll landing between an edit and its save would otherwise
+    // throw the edit away.
     const poll = setInterval(() => {
+      const seq = ++agentRefreshSeq.current;
       fetch(`/api/agents/${agentId}`)
         .then(async (res) => {
           const data = (await res.json()) as {
@@ -443,8 +445,15 @@ const AgentDetail = (props: IProp) => {
             agent?: TDetailAgent;
           };
           if (!res.ok || !data.success || !data.agent) return;
-          if (cancelled) return;
-          const { working, heartbeatAt, lastPostedAt, operations } = data.agent;
+          if (cancelled || seq !== agentRefreshSeq.current) return;
+          const {
+            working,
+            heartbeatAt,
+            lastPostedAt,
+            operations,
+            boards,
+            boardAccess,
+          } = data.agent;
           setAgent((prev) =>
             prev
               ? {
@@ -453,6 +462,8 @@ const AgentDetail = (props: IProp) => {
                   heartbeatAt,
                   lastPostedAt,
                   operations,
+                  boards,
+                  boardAccess,
                 }
               : prev,
           );
@@ -471,7 +482,6 @@ const AgentDetail = (props: IProp) => {
   // happens instead of on the next tick.
   const boardIdsKey = (agent?.boards ?? []).map((b) => b.id).join(",");
   const boardRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestRefreshSeq = useRef(0);
   useEffect(() => {
     const boardIds = boardIdsKey
       ? boardIdsKey.split(",").map(Number).filter(Boolean)
@@ -495,7 +505,7 @@ const AgentDetail = (props: IProp) => {
         if (boardRefreshTimer.current) clearTimeout(boardRefreshTimer.current);
         boardRefreshTimer.current = setTimeout(() => {
           boardRefreshTimer.current = null;
-          const seq = ++latestRefreshSeq.current;
+          const seq = ++agentRefreshSeq.current;
           fetch(`/api/agents/${agentId}`)
             .then(async (res) => {
               const data = (await res.json()) as {
@@ -505,9 +515,15 @@ const AgentDetail = (props: IProp) => {
               if (!res.ok || !data.success || !data.agent) return;
               // Only the newest request may merge, or a slow earlier
               // response would overwrite a newer count.
-              if (seq !== latestRefreshSeq.current || cancelled) return;
-              const { working, heartbeatAt, lastPostedAt, operations } =
-                data.agent;
+              if (seq !== agentRefreshSeq.current || cancelled) return;
+              const {
+                working,
+                heartbeatAt,
+                lastPostedAt,
+                operations,
+                boards,
+                boardAccess,
+              } = data.agent;
               setAgent((prev) =>
                 prev
                   ? {
@@ -516,6 +532,8 @@ const AgentDetail = (props: IProp) => {
                       heartbeatAt,
                       lastPostedAt,
                       operations,
+                      boards,
+                      boardAccess,
                     }
                   : prev,
               );
@@ -863,13 +881,16 @@ const AgentDetail = (props: IProp) => {
         failureMessage = data.message ?? failureMessage;
         throw new Error(failureMessage);
       }
+      const seq = ++agentRefreshSeq.current;
       const refresh = await fetch(`/api/agents/${agent.id}`);
       const refreshed = (await refresh.json().catch(() => null)) as {
         success?: boolean;
         agent?: TDetailAgent;
       } | null;
       if (refresh.ok && refreshed?.success && refreshed.agent) {
-        setAgent(refreshed.agent);
+        if (seq === agentRefreshSeq.current) {
+          setAgent(refreshed.agent);
+        }
       } else {
         setBoardErrors((errors) => ({
           ...errors,
