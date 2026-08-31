@@ -94,6 +94,7 @@ export function TaskCard({
             _currentProject={currentProject!}
             openDetail={() => {}}
             active={active}
+            blocked={task.waitingOnUserId != null}
             linkClassName={view === "month" ? "gap-0" : ""}
           >
             <div className={`flex gap-1 flex-wrap basis-full items-center`}>
@@ -367,6 +368,7 @@ export function DaySection({
                 projects.find((item) => item.id === task.projectId) ??
                 task.project;
               const selected = currentTask === task.id;
+              const blocked = task.waitingOnUserId != null;
               const openTask = () => handleTaskClick(day, task);
               return (
                 // The row carries the task-<id> focus target the calendar's
@@ -379,9 +381,13 @@ export function DaySection({
                   onMouseEnter={() => setCurrentTask(task.id)}
                   style={{ gridTemplateColumns: DAY_TABLE_COLUMNS }}
                   className={`outline-none grid cursor-pointer items-center gap-2 py-[6px] px-5 rounded-md border-l-4 text-dense ${
-                    selected
-                      ? "bg-active-elementBg border-l-selected-item-border"
-                      : "border-l-transparent bg-transparent"
+                    selected ? "bg-active-elementBg" : "bg-transparent"
+                  } ${
+                    blocked
+                      ? "border-[hsl(0_62.8%_30.6%)]"
+                      : selected
+                        ? "border-l-selected-item-border"
+                        : "border-l-transparent"
                   }`}
                 >
                   <span className="font-bold text-icon-dark-gray whitespace-nowrap">
