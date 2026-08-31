@@ -9,6 +9,8 @@
 /* General Background Colors */
 :root {
   --primary: 221.2 83.2% 53.3%;
+  --font-ui: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-editorial: "Newsreader", Georgia, serif;
 
   --bg-pageBackground: rgb(255, 255, 255);
   --bg-taskDetailPage: rgb(250, 250, 252);
@@ -210,7 +212,7 @@ body {
   padding: 16px;
   background: var(--bg-pageBackground);
   color: var(--color-white-black);
-  font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-ui);
   font-size: 12px;
 }
 .wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 980px; }
@@ -229,6 +231,7 @@ body {
 .surface { background: var(--bg-containerBackground); border: 1px solid var(--border-light-gray-thin); border-radius: 4px; padding: 8px; }
 .muted { color: var(--color-text-light-gray); }
 .title { font-weight: 650; margin: 0; }
+.editorial-heading { font-family: var(--font-editorial); font-style: italic; }
 .small { font-size: 11px; }
 .shadow-sm { box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--color-white-black) 10%, transparent); }
 .shadow-md { box-shadow: 0 4px 6px -1px color-mix(in srgb, var(--color-white-black) 12%, transparent), 0 2px 4px -2px color-mix(in srgb, var(--color-white-black) 12%, transparent); }
@@ -262,6 +265,7 @@ body {
     <section class="theme-panel" style="background: var(--bg-pageBackground)">
       <p class="panel-label">Light</p>
       <div class="stack">
+        <div class="surface"><p class="title fs-14">IBM Plex Sans</p><p class="editorial-heading fs-16">Newsreader italic for Dia headings</p></div>
         <div class="type-row"><span class="type-meta">11px</span><span class="fs-11">Keyboard hint ESC</span></div>
         <div class="type-row"><span class="type-meta">12px / xs</span><span class="fs-12">HTPR-3814 uppercase ticket metadata</span></div>
         <div class="type-row"><span class="type-meta">13px</span><span class="fs-13">Kanban task title wraps across lines</span></div>
@@ -277,6 +281,7 @@ body {
       <section class="theme-panel" style="background: var(--bg-pageBackground)">
         <p class="panel-label">Dark</p>
       <div class="stack">
+        <div class="surface"><p class="title fs-14">IBM Plex Sans</p><p class="editorial-heading fs-16">Newsreader italic for Dia headings</p></div>
         <div class="type-row"><span class="type-meta">11px</span><span class="fs-11">Keyboard hint ESC</span></div>
         <div class="type-row"><span class="type-meta">12px / xs</span><span class="fs-12">HTPR-3814 uppercase ticket metadata</span></div>
         <div class="type-row"><span class="type-meta">13px</span><span class="fs-13">Kanban task title wraps across lines</span></div>

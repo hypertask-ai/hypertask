@@ -56,7 +56,7 @@
 }
 
 .task-summary {
-    // Inherit the app font (Inter) — this used to hard-code Arial, which rendered
+    // Inherit the active theme font; this used to hard-code Arial, which rendered
     // task summaries in a different typeface from every other view.
     font-family: inherit;
     // margin: 10px 0;

@@ -1,6 +1,6 @@
 import { IBM_Plex_Sans } from "next/font/google";
 
-/** AMOLED theme font — see src/styles/tailwindThemes/amoled.css `.amoled { font-family }`. */
+/** Core theme font; applied by the AMOLED, Graphite, and Porcelain stylesheets. */
 export const ibmPlexSans = IBM_Plex_Sans({
   weight: "variable",
   subsets: ["latin"],
