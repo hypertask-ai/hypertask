@@ -92,7 +92,7 @@ function loadUpdateController(
     title: "Task",
     description: "",
     description_: { content: "" },
-    section: initialSectionId === null ? null : "Backlog",
+    section: initialSectionId === null ? "" : "Backlog",
     sectionId: initialSectionId,
     userId: USER_ID,
     status: "Normal",
@@ -110,6 +110,9 @@ function loadUpdateController(
     task: {
       findUnique: async () => ({ ...currentTask }),
       update: async ({ data }) => {
+        if (data.section == null) {
+          throw new Error("Task requires a section name");
+        }
         (calls.order ??= []).push("task-update");
         currentTask = { ...currentTask, ...data };
         return { ...currentTask };
@@ -342,7 +345,7 @@ test("a task move and its activity persist inside the same fenced transaction", 
   assert.equal(deliveries, 0);
 });
 
-test("a move from an unassigned section still records an activity", async () => {
+test("a move from an unassigned section records activity without caller opt-in", async () => {
   const { updateTaskSingle, calls } = loadUpdateController(
     OWNER_PROJECT,
     OWNER_PROJECT,
@@ -355,11 +358,11 @@ test("a move from an unassigned section still records an activity", async () => 
     {
       skipAutoAssign: true,
       skipRecurrence: true,
-      taskMovedActivity: {},
     },
   );
 
   assert.equal(result.status, 200);
+  assert.equal(result.json.section, "Todo");
   assert.equal(calls.moveActivityArgs.fromSectionId, null);
   assert.equal(calls.moveActivityArgs.toSectionId, SECTION_ID);
   assert.deepEqual(calls.sectionEvents, [
@@ -373,7 +376,7 @@ test("a move from an unassigned section still records an activity", async () => 
   assert.ok(result.moveActivity.newComment);
 });
 
-test("a move into an unassigned section still records an activity", async () => {
+test("a move into an unassigned section records activity without caller opt-in", async () => {
   const { updateTaskSingle, calls } = loadUpdateController(
     OWNER_PROJECT,
     OWNER_PROJECT,
@@ -385,13 +388,12 @@ test("a move into an unassigned section still records an activity", async () => 
     {
       skipAutoAssign: true,
       skipRecurrence: true,
-      taskMovedActivity: {},
     },
   );
 
   assert.equal(result.status, 200);
   assert.equal(result.json.sectionId, null);
-  assert.equal(result.json.section, null);
+  assert.equal(result.json.section, "");
   assert.equal(calls.moveActivityArgs.fromSectionId, SECTION_ID - 1);
   assert.equal(calls.moveActivityArgs.toSectionId, null);
   assert.deepEqual(calls.sectionEvents, [
@@ -405,7 +407,7 @@ test("a move into an unassigned section still records an activity", async () => 
   assert.ok(result.moveActivity.newComment);
 });
 
-test("overlapping task moves serialize their state and activity updates", async () => {
+test("overlapping task moves serialize state and activity without caller opt-in", async () => {
   const { updateTaskSingle, calls } = loadUpdateController(
     OWNER_PROJECT,
     OWNER_PROJECT,
@@ -415,7 +417,6 @@ test("overlapping task moves serialize their state and activity updates", async 
   const moveOptions = {
     skipAutoAssign: true,
     skipRecurrence: true,
-    taskMovedActivity: {},
   };
 
   const results = await Promise.all([
