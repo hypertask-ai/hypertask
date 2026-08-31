@@ -23,6 +23,12 @@ const restoreStubs = () => {
   }
 };
 
+const blockingUser = {
+  id: 6,
+  displayName: "Valentin Yeo",
+  photoURL: "https://example.com/valentin.jpg",
+};
+
 const task = (waitingOnUserId) => ({
   id: waitingOnUserId == null ? 1 : 2,
   uniqueIndex: waitingOnUserId == null ? 1 : 2,
@@ -63,6 +69,10 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
     stubModule("src/store/index.ts", { currentProjectAtom: {} });
     stubModule("src/components/Common/Tooltip.tsx", { default: () => null });
     stubModule("src/components/Common/UserAvatar.tsx", { default: () => null });
+    require.cache[modulePath("src/components/Common/UserAvatar.tsx")].exports = {
+      default: ({ name }) =>
+        React.createElement("span", { "data-user-avatar": name }),
+    };
     stubModule(
       "src/components/Modals/TaskPriority/PriorityLabelComponent.tsx",
       { default: () => null },
@@ -81,6 +91,23 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
     stubModule("src/lib/contexts/Calendar/calendar.context.tsx", {
       useCalendarContext: () => ({ projects: [], setCurrentTask: () => {} }),
     });
+    require.cache[
+      modulePath("src/lib/contexts/Calendar/calendar.context.tsx")
+    ].exports = {
+      useCalendarContext: () => ({
+        projects: [
+          {
+            id: 15,
+            name: "hypertask-product",
+            title: "Hypertask Product",
+            members: [{ user: blockingUser }],
+            labels: [],
+            _count: { tasks: 2 },
+          },
+        ],
+        setCurrentTask: () => {},
+      }),
+    };
 
     const jiti = jitiModule.createJiti
       ? jitiModule.createJiti(__filename, {
@@ -113,6 +140,19 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
       return new JSDOM(html).window.document.querySelector(".kanban-task-card")
         .className;
     };
+    const cardDocument = (calendarTask, view) => {
+      const html = renderToStaticMarkup(
+        React.createElement(TaskCard, {
+          task: calendarTask,
+          taskDay: day,
+          index: 0,
+          active: false,
+          handleTaskClick: () => {},
+          view,
+        }),
+      );
+      return new JSDOM(html).window.document;
+    };
 
     for (const view of ["month", "week"]) {
       assert.match(
@@ -120,6 +160,18 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
         /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
       );
       assert.match(cardClassName(unblockedTask, view), /border-transparent/);
+
+      const blockedCard = cardDocument(blockedTask, view).querySelector(
+        ".kanban-task-card",
+      );
+      assert.match(blockedCard.textContent, /Valentin Yeo/);
+      assert.ok(
+        blockedCard.querySelector('[data-user-avatar="Valentin Yeo"]'),
+      );
+      assert.doesNotMatch(
+        cardDocument(unblockedTask, view).body.textContent,
+        /Valentin Yeo/,
+      );
     }
 
     const dayHtml = renderToStaticMarkup(
@@ -143,6 +195,16 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
     assert.match(
       dayDocument.getElementById("task-1").className,
       /border-l-transparent/,
+    );
+
+    const blockedDayRow = dayDocument.getElementById("task-2");
+    assert.match(blockedDayRow.textContent, /Valentin Yeo/);
+    assert.ok(
+      blockedDayRow.querySelector('[data-user-avatar="Valentin Yeo"]'),
+    );
+    assert.doesNotMatch(
+      dayDocument.getElementById("task-1").textContent,
+      /Valentin Yeo/,
     );
   } finally {
     restoreStubs();

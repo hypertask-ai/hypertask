@@ -21,6 +21,8 @@ import EstimateLabelComponent from "@/components/Modals/TaskEstimate/EstimateLab
 import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelComponent";
 import { renderAssigneeAvatars } from "@/components/PageComponents/Kanban/TableView/TableView";
 import { useCalendarContext } from "@/lib/contexts/Calendar/calendar.context";
+import BlockerChip from "@/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip";
+import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
 
 // Day view renders tasks as table rows matching the board table view
 // (TableView.tsx) — same grid, header, and cell styling.
@@ -45,6 +47,14 @@ export function TaskCard({
   view: "month" | "week";
 }) {
   const currentProject = useRecoilValue(currentProjectAtom);
+  const { projects } = useCalendarContext();
+  const blockingUser = useMemo(
+    () =>
+      projects
+        .find((project) => project.id === task.projectId)
+        ?.members.find((member) => member.user.id === task.waitingOnUserId)?.user,
+    [projects, task.projectId, task.waitingOnUserId],
+  );
   const isOverdue = task.dueDate && task.dueDate < new Date() ? true : false;
   const taskSaved = (task._count?.savedContent ?? 0) > 0;
   const assignees = useMemo<(IUser | IAgent)[]>(() => {
@@ -159,6 +169,7 @@ export function TaskCard({
               </p>
             </div>
             <TaskTagsRow
+              blockingUser={blockingUser}
               estimate={task.estimate ?? undefined}
               priority={task.priority ?? undefined}
               taskLabels={task.taskLabels ?? []}
@@ -172,19 +183,24 @@ export function TaskCard({
 }
 
 const TaskTagsRow = ({
+  blockingUser,
   priority,
   estimate,
   taskLabels = [],
   view,
 }: {
+  blockingUser: CalendarUserSummary | undefined;
   priority: IPriority | undefined;
   estimate: IEstimate | undefined;
   taskLabels: ITaskLabel[];
   view: "month" | "week";
 }) => {
-  if (!priority && !estimate && taskLabels.length === 0) return <></>;
+  if (!blockingUser && !priority && !estimate && taskLabels.length === 0) {
+    return <></>;
+  }
   return (
     <div className={`basis-full flex gap-1 flex-wrap`}>
+      {blockingUser && <BlockerChip user={blockingUser} />}
       {/* {dueDate && (
         <DueDateLabel
           stopPropogation={true}
@@ -365,9 +381,13 @@ export function DaySection({
               // Prefer the context project: the task loader's project only
               // carries {id, title} and title is nullable; context has the
               // name slug to fall back on.
-              const project =
-                projects.find((item) => item.id === task.projectId) ??
-                task.project;
+              const calendarProject = projects.find(
+                (item) => item.id === task.projectId,
+              );
+              const project = calendarProject ?? task.project;
+              const blockingUser = calendarProject?.members.find(
+                (member) => member.user.id === task.waitingOnUserId,
+              )?.user;
               const selected = currentTask === task.id;
               const blocked = isTaskBlocked(task);
               let borderClass = "border-l-transparent";
@@ -393,8 +413,15 @@ export function DaySection({
                         ticketNumber is server-formatted on real tasks. */}
                     {task.ticketNumber || `#${task.uniqueIndex}`}
                   </span>
-                  <span className="font-medium text-white-black truncate whitespace-nowrap min-w-0">
-                    {task.title ?? ""}
+                  <span className="min-w-0 flex items-center gap-1">
+                    <span className="font-medium text-white-black truncate whitespace-nowrap min-w-0">
+                      {task.title ?? ""}
+                    </span>
+                    {blockingUser && (
+                      <span className="min-w-0">
+                        <BlockerChip user={blockingUser} />
+                      </span>
+                    )}
                   </span>
                   <span className="min-w-0 flex items-center text-[11px] text-text-light-gray truncate">
                     {project ? project.title ?? project.name : ""}
