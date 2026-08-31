@@ -935,6 +935,7 @@ const AgentDetail = (props: IProp) => {
             appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
           if (seq >= appliedSeq) {
             appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+            appliedAgentRefreshSeq.current[agentId] = seq;
             setAgent((prev) =>
               prev?.id === refreshedAgent.id ? refreshedAgent : prev,
             );
