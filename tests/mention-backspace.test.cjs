@@ -91,9 +91,11 @@ function backwardDelete(window, options = {}) {
   return event;
 }
 
-test("the shared editor registers mobile and hardware mention deletion", () => {
-  assert.match(tiptapSource, /DeleteMentionOnBackspace/);
-  assert.match(tiptapSource, /deleteTriggerWithBackspace: true/);
+test("the shared editor registers the exported mention deletion builder", () => {
+  assert.match(
+    tiptapSource,
+    /\.\.\.withMentionBackspaceDeletion\(\s*CustomMention\.configure\(/,
+  );
 });
 
 test("Android-style backward input deletes only the mention before the caret", async () => {
@@ -102,7 +104,7 @@ test("Android-style backward input deletes only the mention before the caret", a
   const { Editor } = require("@tiptap/core");
   const StarterKit = require("@tiptap/starter-kit").default;
   const Mention = require("@tiptap/extension-mention").default;
-  const { DeleteMentionOnBackspace } = loadTypescriptModule(
+  const { withMentionBackspaceDeletion } = loadTypescriptModule(
     path.join(
       root,
       "src/components/RTE/Extensions/DeleteMentionOnBackspace.ts",
@@ -111,11 +113,7 @@ test("Android-style backward input deletes only the mention before the caret", a
 
   const editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
-    extensions: [
-      StarterKit,
-      Mention.configure({ deleteTriggerWithBackspace: true }),
-      DeleteMentionOnBackspace,
-    ],
+    extensions: [StarterKit, ...withMentionBackspaceDeletion(Mention)],
     content:
       '<p>before <span data-type="mention" data-id="Ada" data-label="name-7">Ada</span> after</p>',
   });
@@ -164,7 +162,7 @@ test("mention deletion ignores text, selections, read-only editors, and other in
   const { Editor } = require("@tiptap/core");
   const StarterKit = require("@tiptap/starter-kit").default;
   const Mention = require("@tiptap/extension-mention").default;
-  const { DeleteMentionOnBackspace } = loadTypescriptModule(
+  const { withMentionBackspaceDeletion } = loadTypescriptModule(
     path.join(
       root,
       "src/components/RTE/Extensions/DeleteMentionOnBackspace.ts",
@@ -172,7 +170,7 @@ test("mention deletion ignores text, selections, read-only editors, and other in
   );
   const editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
-    extensions: [StarterKit, Mention, DeleteMentionOnBackspace],
+    extensions: [StarterKit, ...withMentionBackspaceDeletion(Mention)],
     content:
       '<p>text <span data-type="mention" data-id="Ada" data-label="name-7">Ada</span></p>',
   });

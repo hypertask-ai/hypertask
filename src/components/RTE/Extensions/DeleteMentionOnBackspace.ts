@@ -1,4 +1,4 @@
-import { Extension } from "@tiptap/core";
+import { Extension, type AnyExtension } from "@tiptap/core";
 import { Plugin, TextSelection } from "@tiptap/pm/state";
 
 export const DeleteMentionOnBackspace = Extension.create({
@@ -42,3 +42,8 @@ export const DeleteMentionOnBackspace = Extension.create({
     ];
   },
 });
+
+export const withMentionBackspaceDeletion = (mention: AnyExtension) => [
+  mention.configure({ deleteTriggerWithBackspace: true }),
+  DeleteMentionOnBackspace,
+];

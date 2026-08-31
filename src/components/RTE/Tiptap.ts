@@ -43,7 +43,7 @@ import {
   unregisterTiptapEditor,
 } from "@/lib/snippets";
 import { ReplyBlockquote } from "./Extensions/ReplyBlockquote";
-import { DeleteMentionOnBackspace } from "./Extensions/DeleteMentionOnBackspace";
+import { withMentionBackspaceDeletion } from "./Extensions/DeleteMentionOnBackspace";
 
 const defaultScrollMargin = 5;
 const descriptionCaretTopGutter = 8;
@@ -229,19 +229,19 @@ const useTiptap = ({
         enableEmoticons: true,
         suggestion: suggestion,
       }),
-      CustomMention.configure({
-        HTMLAttributes: {
-          class: "mention",
-        },
-        suggestion: MentionData,
-        deleteTriggerWithBackspace: true,
-        renderLabel({ options, node }) {
-          // const href = options.linkPrefix + node.attrs.id; // Assuming linkPrefix is a prefix for the URL
+      ...withMentionBackspaceDeletion(
+        CustomMention.configure({
+          HTMLAttributes: {
+            class: "mention",
+          },
+          suggestion: MentionData,
+          renderLabel({ options, node }) {
+            // const href = options.linkPrefix + node.attrs.id; // Assuming linkPrefix is a prefix for the URL
 
-          return `${node.attrs.id ?? node.attrs.id}`;
-        },
-      }),
-      DeleteMentionOnBackspace,
+            return `${node.attrs.id ?? node.attrs.id}`;
+          },
+        })
+      ),
       ResizableMedia.configure({
         uploadFn: async (file) => {
           // You could implement your own progress tracking here
