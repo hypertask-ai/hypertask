@@ -43,10 +43,11 @@ export function classifyTaskMoveCollapse({
   const data = previousActivity.data;
   const previousFromId = data?.fromSection?.sectionId;
   const previousToId = data?.toSection?.sectionId;
+  const storedCurrentSectionId = data?.currentSection?.sectionId;
   const previousCurrentId =
-    data?.currentSection === undefined
+    storedCurrentSectionId === undefined
       ? previousToId
-      : data.currentSection.sectionId;
+      : storedCurrentSectionId;
   if (previousCurrentId !== fromSectionId) return null;
 
   const samePair =

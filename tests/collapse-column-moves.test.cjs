@@ -167,6 +167,13 @@ test("a repeated A-unassigned run keeps null as its current section", () => {
   );
 });
 
+test("a current section missing its ID falls back to the stored destination", () => {
+  const previousActivity = move(1, 2);
+  previousActivity.data.currentSection = { sectionTitle: "Section 2" };
+
+  assert.equal(classify({ previousActivity }), "status-flip");
+});
+
 test("a flip outside the window remains a separate activity", () => {
   assert.equal(
     classify({ age: STATUS_FLIP_COLLAPSE_WINDOW_MS + 1 }),
