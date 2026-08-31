@@ -44,6 +44,15 @@ test("typed mobile comments hand the primary slot to Send without a colour chang
   assert.match(presentation.className, /text-icon-dark-gray/);
   assert.doesNotMatch(presentation.className, /bg-hypertasks-ai-purple/);
 
+  const commentBranch = attachments.slice(
+    attachments.indexOf('{mode === "create-comment" ? ('),
+    attachments.indexOf("// ========================================================== DESKTOP"),
+  );
+  assert.match(
+    commentBranch,
+    /<AudioButton[\s\S]*?id=\{mode \+ "-audio-button"\}[\s\S]*?globalRecording=\{isRecording\}[\s\S]*?hasText=\{hasText\}/,
+  );
+
   // HTPR-5659: Send takes the right-hand slot but keeps the demoted-mic colour.
   const send = attachments.match(
     /aria-label="Send comment"[\s\S]{0,400}?className="([^"]+)"/,

@@ -201,7 +201,7 @@ test("mobile AI chat uses the filled 44px mic and demotes it once text exists", 
   assert.equal(processing.className, "h-[34px] gap-2");
 });
 
-test("real AI chat microphone applies text and recording presentation states", async () => {
+test("real mobile microphones apply each composer presentation state", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", {
     url: "https://app.hypertask.ai/chat",
   });
@@ -216,7 +216,7 @@ test("real AI chat microphone applies text and recording presentation states", a
 
   const container = document.getElementById("root");
   const reactRoot = createRoot(container);
-  const renderMic = (hasText, globalRecording = false) =>
+  const renderMic = (id, hasText, globalRecording = false) =>
     React.createElement(
       MobileViewContext.Provider,
       { value: true },
@@ -225,26 +225,53 @@ test("real AI chat microphone applies text and recording presentation states", a
         editor: null,
         globalRecording,
         hasText,
-        id: "ai-chat-audio-button",
+        id,
         toggleRecording: () => {},
       }),
     );
+  const modes = [
+    {
+      id: "create-comment-audio-button",
+      shape: /rounded-sm/,
+      fill: /bg-hypertasks-ai-purple/,
+    },
+    {
+      id: "ai-writer-audio-button",
+      shape: /rounded-sm/,
+      fill: /bg-shadcn-primary/,
+    },
+    {
+      id: "create-task-modal-audio-button",
+      shape: /rounded-sm/,
+      fill: /bg-shadcn-primary/,
+    },
+    {
+      id: "ai-chat-audio-button",
+      shape: /rounded-full/,
+      fill: /bg-shadcn-primary/,
+    },
+  ];
 
   try {
-    await act(async () => reactRoot.render(renderMic(false)));
-    const mic = container.querySelector("#ai-chat-audio-button");
-    assert.ok(mic);
-    assert.match(mic.className, /h-11 w-11/);
-    assert.match(mic.className, /rounded-full/);
-    assert.match(mic.className, /bg-shadcn-primary/);
+    for (const { id, shape, fill } of modes) {
+      await act(async () => reactRoot.render(renderMic(id, false)));
+      const mic = container.querySelector(`#${id}`);
+      assert.ok(mic);
+      assert.match(mic.className, /h-11 w-11/);
+      assert.match(mic.className, shape);
+      assert.match(mic.className, fill);
 
-    await act(async () => reactRoot.render(renderMic(true)));
-    assert.match(mic.className, /text-icon-dark-gray/);
-    assert.doesNotMatch(mic.className, /bg-shadcn-primary/);
+      await act(async () => reactRoot.render(renderMic(id, true)));
+      assert.match(mic.className, /text-icon-dark-gray/);
+      assert.doesNotMatch(mic.className, fill);
+    }
 
-    await act(async () => reactRoot.render(renderMic(true, true)));
-    assert.match(mic.className, /h-\[32px\]/);
-    assert.doesNotMatch(mic.className, /h-11 w-11/);
+    await act(async () =>
+      reactRoot.render(renderMic("ai-chat-audio-button", true, true)),
+    );
+    const recordingMic = container.querySelector("#ai-chat-audio-button");
+    assert.match(recordingMic.className, /h-\[32px\]/);
+    assert.doesNotMatch(recordingMic.className, /h-11 w-11/);
   } finally {
     await act(async () => reactRoot.unmount());
     dom.window.close();
