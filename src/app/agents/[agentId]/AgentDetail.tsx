@@ -37,6 +37,7 @@ import type {
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
 import {
+  applySequencedError,
   applySequencedResponse,
   invalidateSequencedResponse,
 } from "@/lib/agents/responseSequence";
@@ -377,6 +378,11 @@ const AgentDetail = (props: IProp) => {
       applySequencedResponse(latestResponseSeq.current, seq, keys, apply),
     [],
   );
+  const applyError = useCallback(
+    (seq: number, keys: string[], apply: () => void) =>
+      applySequencedError(latestResponseSeq.current, seq, keys, apply),
+    [],
+  );
 
   const fetchAgentRefresh = useCallback(
     async ({
@@ -464,14 +470,14 @@ const AgentDetail = (props: IProp) => {
             (identity.id === currentRoute || identity.slug === currentRoute) &&
             (identity.id === requestRef || identity.slug === requestRef));
         if (reportError && requestIsCurrent) {
-          applyResponse(seq, responseKeys, () => {
+          applyError(seq, responseKeys, () => {
             setError(e instanceof Error ? e.message : "Failed to load agent");
           });
         }
         return false;
       }
     },
-    [applyResponse],
+    [applyError, applyResponse],
   );
 
   const loadActivity = useCallback(
@@ -509,7 +515,7 @@ const AgentDetail = (props: IProp) => {
         ) {
           return false;
         }
-        applyResponse(seq, [responseKey], () => {
+        applyError(seq, [responseKey], () => {
           setActivityError(
             e instanceof Error ? e.message : "Failed to load activity",
           );
@@ -517,7 +523,7 @@ const AgentDetail = (props: IProp) => {
         return false;
       }
     },
-    [applyResponse],
+    [applyError, applyResponse],
   );
 
   const bootstrapAgent = useCallback(
