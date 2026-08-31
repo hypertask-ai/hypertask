@@ -122,11 +122,20 @@ const baseUtility = (token) => {
   }
   return token.slice(lastVariantColon + 1).replace(/^!/, "");
 };
+const withoutLineHeightModifier = (value) => {
+  let bracketDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "[") bracketDepth += 1;
+    else if (value[index] === "]") bracketDepth -= 1;
+    else if (value[index] === "/" && bracketDepth === 0) return value.slice(0, index);
+  }
+  return value;
+};
 const fontSizeUtilities = (tokens, configuredNames) =>
   [...tokens].filter((token) => {
     const utility = baseUtility(token);
     if (!utility.startsWith("text-")) return false;
-    const value = utility.slice("text-".length);
+    const value = withoutLineHeightModifier(utility.slice("text-".length));
     return (
       configuredNames.has(value) ||
       defaultFontSizeNames.has(value) ||
@@ -189,12 +198,16 @@ test("font-size class detection preserves typed arbitrary values", () => {
   const tokens = new Set([
     "text-content",
     "hover:text-[length:16px]",
+    "md:text-sm/6",
+    "text-content/[20px]",
     "text-[#fff]",
     "focus:text-[rgb(1,2,3)]",
   ]);
   assert.deepEqual(fontSizeUtilities(tokens, new Set(["content"])), [
     "text-content",
     "hover:text-[length:16px]",
+    "md:text-sm/6",
+    "text-content/[20px]",
   ]);
 });
 
