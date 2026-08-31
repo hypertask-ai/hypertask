@@ -80,7 +80,10 @@ test("the shared mobile stack exposes icon-only create and AI actions", () => {
 test("the shared stack keeps the AI circle smaller and 12px above the primary", () => {
   assert.match(button, /size="secondary"/);
   assert.match(button, /stackOffset=\{60\}/);
-  assert.match(button, /bottomOffset=\{bottomOffset\}/g);
+  assert.equal(
+    (button.match(/bottomOffset=\{bottomOffset\}/g) ?? []).length,
+    2,
+  );
   assert.match(floatingButton, /size\?: "primary" \| "secondary"/);
   assert.match(floatingButton, /size === "secondary" \? "h-10 w-10" : "h-12 w-12"/);
   assert.match(floatingButton, /stackOffset\?: number/);
