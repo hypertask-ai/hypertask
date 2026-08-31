@@ -26,7 +26,7 @@ test("typed mobile comments hand the primary slot to Send without a colour chang
   // hasText has to be tested BEFORE the create-comment carve-out, or the
   // comment composer keeps a filled mic and the two primaries compete again.
   const branch = audioButton.match(
-    /const prominentClassName = isProcessing[\s\S]*?;\n/,
+    /let prominentClassName =[\s\S]*?return \(/,
   );
   assert.ok(branch, "prominent styling branch must exist");
   assert.ok(

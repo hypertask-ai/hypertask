@@ -149,6 +149,14 @@ export function AI_Tiptap_Container() {
       editor,
       selector: ({ editor }) => editor?.isEmpty ?? true,
     }) ?? true;
+  let recorderWrapperClassName: string | undefined;
+  if (mobileDictating) {
+    recorderWrapperClassName = "order-2 min-w-0 flex-1";
+  } else if (isMbl) {
+    recorderWrapperClassName = isEditorEmpty
+      ? "order-4 ml-auto"
+      : "order-2";
+  }
 
   return (
     <div className={`p-2 relative`} ref={focusRootRef}>
@@ -245,15 +253,7 @@ export function AI_Tiptap_Container() {
               hasText={!isEditorEmpty}
               onProcessingChange={setAudioProcessing}
               ariaLabel="Start dictation"
-              wrapperClassName={
-                mobileDictating
-                  ? "order-2 min-w-0 flex-1"
-                  : isMbl
-                    ? isEditorEmpty
-                      ? "order-4 ml-auto"
-                      : "order-2"
-                    : undefined
-              }
+              wrapperClassName={recorderWrapperClassName}
               visualizerClassName={
                 mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
               }
@@ -584,35 +584,38 @@ function SendMessageButton({
   mobile: boolean;
   onClick: () => void;
 }) {
-  const tooltipProps = isByokBlocked
-    ? {
-        text: "Enable API keys first",
-        keyCombination: [] as string[],
-        left: -175,
-        bottom: 25,
-      }
-    : queueMode
-      ? {
-          text: "Queue message",
-          keyCombination: ["enter"] as string[],
-          left: -120,
-          bottom: 25,
-        }
-      : (aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.send_button as any);
+  let tooltipProps =
+    aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.send_button as any;
+  if (isByokBlocked) {
+    tooltipProps = {
+      text: "Enable API keys first",
+      keyCombination: [] as string[],
+      left: -175,
+      bottom: 25,
+    };
+  } else if (queueMode) {
+    tooltipProps = {
+      text: "Queue message",
+      keyCombination: ["enter"] as string[],
+      left: -120,
+      bottom: 25,
+    };
+  }
+
+  let buttonClassName =
+    "relative group disabled:text-gray-400 disabled:cursor-not-allowed rounded-full";
+  if (mobile) {
+    buttonClassName =
+      "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+  } else if (!disabled && queueMode) {
+    buttonClassName += " text-text-light-gray hover:text-white-black";
+  } else if (!disabled) {
+    buttonClassName += " text-button-arrow hover:opacity-80";
+  }
 
   return (
     <button
-      className={
-        mobile
-          ? "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-          : `relative group disabled:text-gray-400 disabled:cursor-not-allowed rounded-full ${
-              !disabled
-                ? queueMode
-                  ? " text-text-light-gray hover:text-white-black"
-                  : " text-button-arrow hover:opacity-80"
-                : " "
-            }`
-      }
+      className={buttonClassName}
       onClick={onClick}
       disabled={disabled}
       aria-label={queueMode ? "Queue message" : "Send message"}

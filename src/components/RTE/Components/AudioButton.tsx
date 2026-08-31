@@ -624,13 +624,22 @@ export const AudioButton = ({
                 isMobileNewTask ||
                 isMobileAiChat) &&
               !globalRecording;
-            const prominentClassName = isProcessing
-              ? "h-[34px] gap-2"
-              : hasText
-                ? `h-11 w-11 justify-center ${isMobileAiChat ? "rounded-full" : "rounded-sm"} text-icon-dark-gray`
-                : isMobileCreateComment
-                  ? "h-11 w-11 justify-center rounded-sm bg-hypertasks-ai-purple text-white shadow-[0_3px_12px_rgba(198,104,255,0.38)]"
-                  : `h-11 w-11 justify-center ${isMobileAiChat ? "rounded-full" : "rounded-sm"} bg-shadcn-primary text-primary-foreground`;
+            let prominentShapeClassName = "rounded-sm";
+            if (isMobileAiChat) prominentShapeClassName = "rounded-full";
+
+            let prominentClassName =
+              "h-11 w-11 justify-center " + prominentShapeClassName;
+            if (isProcessing) {
+              prominentClassName = "h-[34px] gap-2";
+            } else if (hasText) {
+              prominentClassName += " text-icon-dark-gray";
+            } else if (isMobileCreateComment) {
+              prominentClassName =
+                "h-11 w-11 justify-center rounded-sm bg-hypertasks-ai-purple text-white shadow-[0_3px_12px_rgba(198,104,255,0.38)]";
+            } else {
+              prominentClassName +=
+                " bg-shadcn-primary text-primary-foreground";
+            }
             return (
               <div
                 id={id}

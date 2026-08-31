@@ -77,7 +77,7 @@ test("the mic loses its fill as soon as there is text", () => {
   // hasText is checked BEFORE the create-comment carve-out, otherwise the
   // comment composer keeps a filled mic and the old bug returns.
   const branch = audioButton.match(
-    /const prominentClassName = isProcessing[\s\S]*?;\n/,
+    /let prominentClassName =[\s\S]*?return \(/,
   );
   assert.ok(branch, "prominent styling branch must exist");
   assert.ok(

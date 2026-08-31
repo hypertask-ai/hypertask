@@ -167,11 +167,15 @@ test("mobile AI chat uses the filled 44px mic and demotes it once text exists", 
   );
   assert.match(
     audioButtonSource,
-    /hasText[\s\S]*?isMobileAiChat \? "rounded-full"[\s\S]*?text-icon-dark-gray/,
+    /if \(isMobileAiChat\) prominentShapeClassName = "rounded-full"/,
   );
   assert.match(
     audioButtonSource,
-    /isMobileAiChat \? "rounded-full"[\s\S]*?bg-shadcn-primary text-primary-foreground/,
+    /let prominentClassName =\s*"h-11 w-11 justify-center "/,
+  );
+  assert.match(
+    audioButtonSource,
+    /else if \(hasText\)[\s\S]*?text-icon-dark-gray[\s\S]*?else[\s\S]*?bg-shadcn-primary text-primary-foreground/,
   );
 });
 
