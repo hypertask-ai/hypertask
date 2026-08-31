@@ -8,9 +8,9 @@ export type TaskMoveCollapseKind = "status-flip" | "quick-journey" | null;
 type MoveActivity = {
   type?: string;
   data?: {
-    fromSection?: { sectionId?: number; sectionTitle?: string };
-    toSection?: { sectionId?: number; sectionTitle?: string };
-    currentSection?: { sectionId?: number; sectionTitle?: string };
+    fromSection?: { sectionId?: number | null; sectionTitle?: string };
+    toSection?: { sectionId?: number | null; sectionTitle?: string };
+    currentSection?: { sectionId?: number | null; sectionTitle?: string };
     fromAgent?: { id?: string } | null;
     fromUserId?: number;
     quickMoveCollapsed?: boolean;
@@ -31,8 +31,8 @@ export function classifyTaskMoveCollapse({
   previousActivity: MoveActivity | null | undefined;
   previousCreatedAt: Date | string | number;
   sameActor: boolean;
-  fromSectionId: number;
-  toSectionId: number;
+  fromSectionId: number | null;
+  toSectionId: number | null;
   now?: number;
 }): TaskMoveCollapseKind {
   if (previousActivity?.type !== "TaskMove" || !sameActor) return null;
@@ -43,7 +43,11 @@ export function classifyTaskMoveCollapse({
   const data = previousActivity.data;
   const previousFromId = data?.fromSection?.sectionId;
   const previousToId = data?.toSection?.sectionId;
-  const previousCurrentId = data?.currentSection?.sectionId ?? previousToId;
+  const storedCurrentSectionId = data?.currentSection?.sectionId;
+  const previousCurrentId =
+    storedCurrentSectionId === undefined
+      ? previousToId
+      : storedCurrentSectionId;
   if (previousCurrentId !== fromSectionId) return null;
 
   const samePair =
@@ -70,7 +74,7 @@ export function classifyTaskMoveCollapse({
 
 export function mergeStatusFlipActivity(
   previousActivity: ITaskMoveActivity,
-  currentSection: { sectionId: number; sectionTitle: string },
+  currentSection: { sectionId: number | null; sectionTitle: string },
 ): ITaskMoveActivity {
   const previousCount = Number(previousActivity.data?.statusFlipCount) || 0;
   return {

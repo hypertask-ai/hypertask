@@ -9,9 +9,9 @@ import {
 
 export interface TaskMovedActivityProps {
   userObj: IUser;
-  toSectionId: number;
+  toSectionId: number | null;
   toSection_title: string;
-  fromSectionId: number;
+  fromSectionId: number | null;
   fromSection_title: string;
   taskId: number;
   fromAgent?: {

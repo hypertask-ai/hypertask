@@ -9,15 +9,15 @@ export interface ITaskMoveActivity {
     fromUser?: IUser;
     fromAgent?: IAgent | null;
     toSection?: {
-      sectionId: number;
+      sectionId: number | null;
       sectionTitle: string;
     };
     fromSection?: {
-      sectionId: number;
+      sectionId: number | null;
       sectionTitle: string;
     };
     currentSection?: {
-      sectionId: number;
+      sectionId: number | null;
       sectionTitle: string;
     };
     statusFlipCount?: number;

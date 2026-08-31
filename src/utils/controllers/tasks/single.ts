@@ -283,24 +283,35 @@ export async function updateTaskSingle(
           requestedSectionName !== currentState.section;
         sectionChanged = sectionIdChanged || sectionNameChanged;
         if (sectionIdChanged) {
-          if (typeof requestedSectionId !== "number") {
-            throw new Error("Section not found");
+          if (requestedSectionId === null) {
+            if (
+              requestedSectionName !== undefined &&
+              requestedSectionName !== null
+            ) {
+              throw new Error("Section does not match sectionId");
+            }
+            updateData.section = null;
+          } else {
+            if (typeof requestedSectionId !== "number") {
+              throw new Error("Section not found");
+            }
+            const targetSection = await tx.section.findFirst({
+              where: {
+                id: requestedSectionId,
+                projectId:
+                  requestedMutation.projectId ?? currentState.projectId,
+              },
+              select: { section_title: true },
+            });
+            if (!targetSection) throw new Error("Section not found");
+            if (
+              requestedSectionName !== undefined &&
+              requestedSectionName !== targetSection.section_title
+            ) {
+              throw new Error("Section does not match sectionId");
+            }
+            updateData.section = targetSection.section_title;
           }
-          const targetSection = await tx.section.findFirst({
-            where: {
-              id: requestedSectionId,
-              projectId: requestedMutation.projectId ?? currentState.projectId,
-            },
-            select: { section_title: true },
-          });
-          if (!targetSection) throw new Error("Section not found");
-          if (
-            requestedSectionName !== undefined &&
-            requestedSectionName !== targetSection.section_title
-          ) {
-            throw new Error("Section does not match sectionId");
-          }
-          updateData.section = targetSection.section_title;
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();
@@ -325,32 +336,28 @@ export async function updateTaskSingle(
         }
         let moveActivity = null;
         if (sectionIdChanged && options.taskMovedActivity) {
-          if (currentState.sectionId === null || updatedTask.sectionId === null) {
-            moveActivity = { newComment: null, shouldNotify: true };
-          } else {
-            let taskMoveAgent = options.taskMovedActivity.fromAgent;
-            if (taskMoveAgent === undefined && agentId) {
-              taskMoveAgent = await tx.agent.findUnique({
-                where: { id: agentId },
-                select: {
-                  id: true,
-                  userId: true,
-                  displayName: true,
-                  photoURL: true,
-                },
-              });
-            }
-            moveActivity = await createTaskMovedActivityInTransaction({
-              transaction: tx,
-              taskId: updatedTask.id,
-              userObj: currentUser,
-              toSectionId: updatedTask.sectionId,
-              toSection_title: updatedTask.section ?? "",
-              fromSectionId: currentState.sectionId,
-              fromSection_title: currentState.section ?? "",
-              fromAgent: taskMoveAgent,
+          let taskMoveAgent = options.taskMovedActivity.fromAgent;
+          if (taskMoveAgent === undefined && agentId) {
+            taskMoveAgent = await tx.agent.findUnique({
+              where: { id: agentId },
+              select: {
+                id: true,
+                userId: true,
+                displayName: true,
+                photoURL: true,
+              },
             });
           }
+          moveActivity = await createTaskMovedActivityInTransaction({
+            transaction: tx,
+            taskId: updatedTask.id,
+            userObj: currentUser,
+            toSectionId: updatedTask.sectionId,
+            toSection_title: updatedTask.section ?? "",
+            fromSectionId: currentState.sectionId,
+            fromSection_title: currentState.section ?? "",
+            fromAgent: taskMoveAgent,
+          });
         }
         let descriptionActivity;
         if (requestedMutation.description !== undefined) {
