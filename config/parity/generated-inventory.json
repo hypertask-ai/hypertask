@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "cliPackage": {
     "name": "@hypertask/hypertask_cli",
-    "version": "1.13.24"
+    "version": "1.13.29"
   },
   "surfaces": {
     "api": [
@@ -243,6 +243,7 @@
       "admin tokens revoke",
       "agents create",
       "agents list",
+      "agents rename",
       "agents revoke",
       "agents rotate-token",
       "ai improve",
@@ -310,6 +311,7 @@
       "section list",
       "section rename",
       "section reorder",
+      "section update",
       "skills create",
       "skills delete",
       "skills get",
@@ -759,6 +761,7 @@
       "admin tokens revoke": "agents.manage",
       "agents create": "agents.manage",
       "agents list": "agents.observe",
+      "agents rename": "agents.manage",
       "agents revoke": "agents.manage",
       "agents rotate-token": "agents.manage",
       "ai improve": "ai.write",
@@ -826,6 +829,7 @@
       "section list": "boards.structure",
       "section rename": "boards.structure",
       "section reorder": "boards.structure",
+      "section update": "boards.structure",
       "skills create": "skills.manage",
       "skills delete": "skills.manage",
       "skills get": "skills.manage",

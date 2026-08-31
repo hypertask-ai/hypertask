@@ -3,7 +3,7 @@
   "title": "Hypertask five-surface catalog parity contract",
   "cliPackage": {
     "name": "@hypertask/hypertask_cli",
-    "version": "1.13.24"
+    "version": "1.13.29"
   },
   "jobs": [
     {
@@ -64,7 +64,7 @@
           "^hypertask_list_connections$"
         ],
         "cli": [
-          "^(admin keys (create|list|revoke)|agents (create|revoke|rotate-token)|token set-management-key)$",
+          "^(admin keys (create|list|revoke)|agents (create|rename|revoke|rotate-token)|token set-management-key)$",
           "^admin agents list$",
           "^admin agents create$",
           "^admin agents revoke$",
@@ -207,7 +207,7 @@
       "matches": {
         "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/(projects/\\[projectId\\]/labels|projects/\\[projectId\\]/sections($|/\\[sectionId\\]$)|custom-fields($|/\\[fieldId\\]$|/value$))"],
         "mcp": ["^hypertask_(create_label|list_labels|section|list_custom_fields|set_custom_field_value)$", "^hypertask_update_label$"],
-        "cli": ["^(labels (list|create)|project label create|section (list|create|rename|reorder|done|delete)|fields (list|create|get|set|delete))$", "^labels update$", "^project label update$"],
+        "cli": ["^(labels (list|create)|project label create|section (list|create|update|rename|reorder|done|delete)|fields (list|create|get|set|delete))$", "^labels update$", "^project label update$"],
         "ai_chat": ["^hypertask_(create_label|list_labels|section|list_custom_fields|set_custom_field_value)$", "^hypertask_update_label$"],
         "hyperai": ["^hypertask_(create_label|list_labels|section|list_custom_fields|set_custom_field_value)$", "^hypertask_update_label$"]
       },

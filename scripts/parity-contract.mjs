@@ -18,7 +18,7 @@ const contractPath = options.contract
   ? path.resolve(options.contract)
   : path.join(root, "config/parity/contract.json");
 const inventoryPath = path.join(root, "config/parity/generated-inventory.json");
-const reportPath = path.join(root, "openwiki/five-surface-parity.md");
+const reportPath = path.join(root, "docs/parity.md");
 
 function parseArgs(argv) {
   const result = {

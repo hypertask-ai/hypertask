@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "dependencies": {
-    "@hypertask/hypertask_cli": "1.13.24",
+    "@hypertask/hypertask_cli": "1.13.29",
     "typescript": "6.0.3"
   }
 }
