@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildAgentBoardAccess,
-  setAgentBoardMembership,
-} from "../src/lib/agents/boardAccess";
+import { buildAgentBoardAccess } from "../src/lib/agents/boardAccess";
 
 const boards = [
   { id: 1, name: "Product", teamId: "team-a", teamName: "Hypertask" },
@@ -35,13 +32,5 @@ describe("agent detail board access", () => {
     const access = buildAgentBoardAccess(boards, [1, 3], ["team-a", "team-b"]);
     assert.equal(access.find((board) => board.id === 3)?.canChange, true);
     assert.equal(access.find((board) => board.id === 2)?.canChange, false);
-  });
-
-  it("recalculates available boards after a membership changes", () => {
-    const access = buildAgentBoardAccess(boards, [1], ["team-a"]);
-    const withoutProduct = setAgentBoardMembership(access, 1, false);
-
-    assert.ok(withoutProduct.every((board) => board.canChange));
-    assert.equal(withoutProduct.find((board) => board.id === 1)?.member, false);
   });
 });

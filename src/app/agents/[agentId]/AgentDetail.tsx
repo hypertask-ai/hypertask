@@ -28,10 +28,7 @@ import type {
   AgentRuntimeSnapshot,
 } from "@/lib/agents/runtimeState";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
-import {
-  setAgentBoardMembership,
-  type TAgentBoardAccess,
-} from "@/lib/agents/boardAccess";
+import type { TAgentBoardAccess } from "@/lib/agents/boardAccess";
 
 type TActivityKind = "comment" | "evidence" | "question" | "session" | "model";
 
@@ -846,6 +843,7 @@ const AgentDetail = (props: IProp) => {
   ) => {
     if (!agent || pendingBoardId !== null) return;
     setPendingBoardId(board.id);
+    let failureMessage = "Could not change board access";
     setBoardErrors((errors) => {
       const next = { ...errors };
       delete next[board.id];
@@ -862,37 +860,32 @@ const AgentDetail = (props: IProp) => {
       );
       const data = (await res.json()) as { message?: string };
       if (!res.ok) {
-        throw new Error(data.message ?? "Could not change board access");
+        failureMessage = data.message ?? failureMessage;
+        throw new Error(failureMessage);
       }
-      setAgent((previous) => {
-        if (!previous) return previous;
-        const boardAccess = setAgentBoardMembership(
-          previous.boardAccess,
-          board.id,
-          member,
-        );
-        return {
-          ...previous,
-          boardAccess,
-          boards: boardAccess
-            .filter((item) => item.member)
-            .map(({ id, name, teamId, teamName }) => ({
-              id,
-              name,
-              teamId,
-              teamName,
-            })),
-        };
-      });
+      const refresh = await fetch(`/api/agents/${agent.id}`);
+      const refreshed = (await refresh.json().catch(() => null)) as {
+        success?: boolean;
+        agent?: TDetailAgent;
+      } | null;
+      if (refresh.ok && refreshed?.success && refreshed.agent) {
+        setAgent(refreshed.agent);
+      } else {
+        setBoardErrors((errors) => ({
+          ...errors,
+          [board.id]: "Access changed. Reload this page to refresh the list.",
+        }));
+      }
       toast.success(
         member
           ? `${agent.displayName} added to ${board.name}`
           : `${agent.displayName} removed from ${board.name}`,
       );
-    } catch (e) {
-      const message =
-        e instanceof Error ? e.message : "Could not change board access";
-      setBoardErrors((errors) => ({ ...errors, [board.id]: message }));
+    } catch {
+      setBoardErrors((errors) => ({
+        ...errors,
+        [board.id]: failureMessage,
+      }));
     } finally {
       setBoardToRemove(null);
       setPendingBoardId(null);

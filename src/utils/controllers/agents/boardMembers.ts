@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import type { Member, User } from "@prisma/client";
+import type { Member, Prisma, User } from "@prisma/client";
 import { canAttachAgentToTeam } from "./teamScope";
 import {
   publicAgentSelect,
@@ -218,12 +218,18 @@ export type RemoveAgentFromBoardResult =
   | { ok: true }
   | { ok: false; status: number; message: string };
 
-export async function removeAgentFromBoard(
+type RemoveAgentDatabase = Pick<
+  Prisma.TransactionClient,
+  "project" | "member" | "taskLease"
+>;
+
+async function removeAgentFromBoardTransaction(
+  database: RemoveAgentDatabase,
   projectId: number,
   agentId: string,
-  requestingUserId: number
+  requestingUserId: number,
 ): Promise<RemoveAgentFromBoardResult> {
-  const project = await prisma.project.findFirst({
+  const project = await database.project.findFirst({
     where: { id: projectId, status: "Normal" },
     select: { id: true, ownerId: true },
   });
@@ -233,14 +239,9 @@ export async function removeAgentFromBoard(
 
   const hasHumanAccess =
     project.ownerId === requestingUserId ||
-    (await prisma.member.findFirst({
-      where: {
-        projectId,
-        userId: requestingUserId,
-        agentId: null,
-      },
+    (await database.member.findFirst({
+      where: { projectId, userId: requestingUserId, agentId: null },
     })) != null;
-
   if (!hasHumanAccess) {
     return {
       ok: false,
@@ -249,15 +250,21 @@ export async function removeAgentFromBoard(
     };
   }
 
-  const member = await prisma.member.findFirst({
+  const member = await database.member.findFirst({
     where: { projectId, agentId },
     include: { agent: { select: publicAgentSelect } },
   });
   if (!member) {
-    return { ok: false, status: 404, message: "Agent is not a member of this board" };
+    return {
+      ok: false,
+      status: 404,
+      message: "Agent is not a member of this board",
+    };
   }
-
-  if (member.agent?.userId !== requestingUserId && project.ownerId !== requestingUserId) {
+  if (
+    member.agent?.userId !== requestingUserId &&
+    project.ownerId !== requestingUserId
+  ) {
     return {
       ok: false,
       status: 403,
@@ -265,12 +272,8 @@ export async function removeAgentFromBoard(
     };
   }
 
-  const activeLease = await prisma.taskLease.findFirst({
-    where: {
-      agentId,
-      expiresAt: { gt: new Date() },
-      task: { projectId },
-    },
+  const activeLease = await database.taskLease.findFirst({
+    where: { agentId, expiresAt: { gt: new Date() }, task: { projectId } },
     select: {
       task: { select: { ticketNumber: true, uniqueIndex: true } },
     },
@@ -285,8 +288,36 @@ export async function removeAgentFromBoard(
     };
   }
 
-  await prisma.member.delete({ where: { id: member.id } });
+  await database.member.delete({ where: { id: member.id } });
   return { ok: true };
+}
+
+export async function removeAgentFromBoard(
+  projectId: number,
+  agentId: string,
+  requestingUserId: number,
+): Promise<RemoveAgentFromBoardResult> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await prisma.$transaction(
+        (tx) =>
+          removeAgentFromBoardTransaction(
+            tx,
+            projectId,
+            agentId,
+            requestingUserId,
+          ),
+        { isolationLevel: "Serializable" },
+      );
+    } catch (error) {
+      const serializationConflict =
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P2034";
+      if (attempt >= 2 || !serializationConflict) throw error;
+    }
+  }
 }
 
 export async function getBoardAgentIds(projectId: number): Promise<string[]> {

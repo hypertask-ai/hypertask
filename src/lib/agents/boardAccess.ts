@@ -30,18 +30,3 @@ export function buildAgentBoardAccess(
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 }
-
-export function setAgentBoardMembership(
-  boards: TAgentBoardAccess[],
-  projectId: number,
-  member: boolean,
-): TAgentBoardAccess[] {
-  const memberProjectIds = boards
-    .filter((board) => (board.id === projectId ? member : board.member))
-    .map((board) => board.id);
-  const memberTeamIds = boards
-    .filter((board) => memberProjectIds.includes(board.id))
-    .map((board) => board.teamId);
-
-  return buildAgentBoardAccess(boards, memberProjectIds, memberTeamIds);
-}
