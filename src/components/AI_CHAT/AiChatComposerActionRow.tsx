@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import React, { type ReactNode } from "react";
+import React, { type ReactNode, useEffect, useRef } from "react";
 
 const mobileActionClass =
   "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:text-white-black";
@@ -27,6 +27,37 @@ export function AiChatComposerActionRow({
   streamControl,
   sendControl,
 }: AiChatComposerActionRowProps) {
+  const overflowRef = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    if (!mobile) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const overflow = overflowRef.current;
+      if (overflow?.open && !overflow.contains(event.target as Node)) {
+        overflow.open = false;
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && overflowRef.current) {
+        overflowRef.current.open = false;
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobile]);
+
+  useEffect(() => {
+    if (mobileDictating && overflowRef.current) {
+      overflowRef.current.open = false;
+    }
+  }, [mobileDictating]);
+
   return (
     <div
       data-ai-chat-action-row
@@ -52,6 +83,7 @@ export function AiChatComposerActionRow({
         {mobile ? (
           <>
             <details
+              ref={overflowRef}
               data-ai-chat-mobile-overflow
               hidden={mobileDictating}
               className="order-1 relative shrink-0"
@@ -65,6 +97,9 @@ export function AiChatComposerActionRow({
               <div
                 role="group"
                 aria-label="More chat actions"
+                onClick={() => {
+                  if (overflowRef.current) overflowRef.current.open = false;
+                }}
                 className="absolute bottom-[calc(100%_+_0.5rem)] right-0 z-[1100] flex items-center gap-3 rounded-[4px] bg-modalBackground p-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
               >
                 {attachmentControl}
