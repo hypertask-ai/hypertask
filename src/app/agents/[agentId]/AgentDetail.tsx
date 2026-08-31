@@ -408,6 +408,7 @@ const AgentDetail = (props: IProp) => {
           }
         });
 
+    const initialSeq = ++agentRefreshSeq.current;
     fetch(`/api/agents/${agentId}`)
       .then(async (res) => {
         const data = (await res.json()) as {
@@ -418,7 +419,7 @@ const AgentDetail = (props: IProp) => {
         if (!res.ok || !data.success || !data.agent) {
           throw new Error(data.error ?? "Failed to load agent");
         }
-        if (cancelled) return;
+        if (cancelled || initialSeq !== agentRefreshSeq.current) return;
         setAgent(data.agent);
         // A link built on an id still works; the address bar shows the
         // readable form instead of a uuid.
@@ -428,7 +429,7 @@ const AgentDetail = (props: IProp) => {
         loadActivity(data.agent.id);
       })
       .catch((e) => {
-        if (!cancelled) {
+        if (!cancelled && initialSeq === agentRefreshSeq.current) {
           setError(e instanceof Error ? e.message : "Failed to load agent");
         }
       });
@@ -455,7 +456,7 @@ const AgentDetail = (props: IProp) => {
             boardAccess,
           } = data.agent;
           setAgent((prev) =>
-            prev
+            prev?.id === data.agent?.id
               ? {
                   ...prev,
                   working: working ?? null,
@@ -465,7 +466,7 @@ const AgentDetail = (props: IProp) => {
                   boards,
                   boardAccess,
                 }
-              : prev,
+              : data.agent ?? prev,
           );
         })
         .catch(() => {});
@@ -525,7 +526,7 @@ const AgentDetail = (props: IProp) => {
                 boardAccess,
               } = data.agent;
               setAgent((prev) =>
-                prev
+                prev?.id === data.agent?.id
                   ? {
                       ...prev,
                       working: working ?? null,
@@ -535,7 +536,7 @@ const AgentDetail = (props: IProp) => {
                       boards,
                       boardAccess,
                     }
-                  : prev,
+                  : data.agent ?? prev,
               );
             })
             .catch(() => {});
