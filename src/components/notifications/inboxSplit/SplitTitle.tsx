@@ -34,7 +34,7 @@ const SplitTitle = ({
                         justify-start
                         whitespace-nowrap footer_tags_main items-center
                         @md:pr-[10px] @lg:pr-[15px]
-                        text-[14.5px]  flex  gap-1 `}
+                        text-content flex gap-1 `}
       onClick={onClick}
     >
       <div

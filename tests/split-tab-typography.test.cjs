@@ -1,0 +1,232 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+const ts = require("typescript");
+
+const root = path.resolve(__dirname, "..");
+const read = (relativePath) =>
+  fs.readFileSync(path.join(root, relativePath), "utf8");
+const parse = (relativePath, kind) =>
+  ts.createSourceFile(
+    relativePath,
+    read(relativePath),
+    ts.ScriptTarget.Latest,
+    true,
+    kind,
+  );
+const propertyName = (property) =>
+  ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)
+    ? property.name.text
+    : null;
+const objectProperty = (object, name) => {
+  const property = object.properties.find(
+    (candidate) =>
+      ts.isPropertyAssignment(candidate) && propertyName(candidate) === name,
+  );
+  assert.ok(property, `${name} configuration not found`);
+  assert.ok(
+    ts.isObjectLiteralExpression(property.initializer),
+    `${name} must be an object`,
+  );
+  return property.initializer;
+};
+const jsxAttribute = (element, name) =>
+  element.attributes.properties.find(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) && attribute.name.getText() === name,
+  );
+const classTokens = (className, target) => {
+  assert.equal(typeof className, "string", `${target} class list not found`);
+  return new Set(className.split(/\s+/).filter(Boolean));
+};
+const staticClassNames = (node, target) => {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return [node.text];
+  }
+  if (ts.isConditionalExpression(node)) {
+    return [
+      ...staticClassNames(node.whenTrue, target),
+      ...staticClassNames(node.whenFalse, target),
+    ];
+  }
+  if (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "cn"
+  ) {
+    return node.arguments.flatMap((argument) => staticClassNames(argument, target));
+  }
+  assert.fail(`${target} has an unsupported computed class: ${node.getText()}`);
+};
+
+const fontSizeConfig = () => {
+  const configFile = parse("tailwind.config.ts", ts.ScriptKind.TS);
+  const configDeclaration = configFile.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => statement.declarationList.declarations)
+    .find((declaration) => declaration.name.getText() === "config");
+  assert.ok(
+    configDeclaration &&
+      configDeclaration.initializer &&
+      ts.isObjectLiteralExpression(configDeclaration.initializer),
+    "Tailwind config object not found",
+  );
+  const theme = objectProperty(configDeclaration.initializer, "theme");
+  const extend = objectProperty(theme, "extend");
+  const fontSize = objectProperty(extend, "fontSize");
+  const entries = fontSize.properties.filter(ts.isPropertyAssignment);
+  const content = entries.find((property) => propertyName(property) === "content");
+  assert.ok(content, "content font size not found");
+  assert.ok(ts.isStringLiteral(content.initializer), "content font size must be static");
+  return {
+    content: content.initializer.text,
+    names: new Set(entries.map(propertyName).filter(Boolean)),
+  };
+};
+
+const defaultFontSizeNames = new Set([
+  "xs",
+  "sm",
+  "base",
+  "lg",
+  "xl",
+  "2xl",
+  "3xl",
+  "4xl",
+  "5xl",
+  "6xl",
+  "7xl",
+  "8xl",
+  "9xl",
+]);
+const isArbitraryFontSize = (value) => {
+  const arbitrary = value.match(/^\[(.+)\]$/)?.[1];
+  if (!arbitrary) return false;
+  return (
+    arbitrary.startsWith("length:") ||
+    /^-?\d*\.?\d+(?:px|r?em|ch|ex|lh|vw|vh|vmin|vmax|%|pt|pc|in|cm|mm|q)$/.test(
+      arbitrary,
+    ) ||
+    /^(?:calc|clamp|min|max)\(/.test(arbitrary) ||
+    /^var\(--[^)]*(?:font|text)[^)]*size[^)]*\)$/.test(arbitrary)
+  );
+};
+const baseUtility = (token) => {
+  let bracketDepth = 0;
+  let lastVariantColon = -1;
+  for (let index = 0; index < token.length; index += 1) {
+    if (token[index] === "[") bracketDepth += 1;
+    else if (token[index] === "]") bracketDepth -= 1;
+    else if (token[index] === ":" && bracketDepth === 0) lastVariantColon = index;
+  }
+  return token.slice(lastVariantColon + 1).replace(/^!/, "");
+};
+const withoutLineHeightModifier = (value) => {
+  let bracketDepth = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === "[") bracketDepth += 1;
+    else if (value[index] === "]") bracketDepth -= 1;
+    else if (value[index] === "/" && bracketDepth === 0) return value.slice(0, index);
+  }
+  return value;
+};
+const fontSizeUtilities = (tokens, configuredNames) =>
+  [...tokens].filter((token) => {
+    const utility = baseUtility(token);
+    if (!utility.startsWith("text-")) return false;
+    const value = withoutLineHeightModifier(utility.slice("text-".length));
+    return (
+      configuredNames.has(value) ||
+      defaultFontSizeNames.has(value) ||
+      isArbitraryFontSize(value)
+    );
+  });
+
+const sidebarBoardTabClasses = () => {
+  const sourceFile = parse(
+    "src/components/PageComponents/Kanban/HeaderComponents/ViewTabsBar.tsx",
+    ts.ScriptKind.TSX,
+  );
+  const matches = [];
+  const visit = (node) => {
+    if (
+      ts.isConditionalExpression(node) &&
+      ts.isIdentifier(node.condition) &&
+      node.condition.text === "appShellRail" &&
+      ts.isCallExpression(node.whenTrue) &&
+      ts.isIdentifier(node.whenTrue.expression) &&
+      node.whenTrue.expression.text === "cn"
+    ) {
+      matches.push(staticClassNames(node.whenTrue, "sidebar board tab").join(" "));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  assert.equal(matches.length, 1, "expected one sidebar board tab class expression");
+  return matches[0];
+};
+
+const inboxSplitTabClasses = () => {
+  const sourceFile = parse(
+    "src/components/notifications/inboxSplit/SplitTitle.tsx",
+    ts.ScriptKind.TSX,
+  );
+  const matches = [];
+  const visit = (node) => {
+    if (ts.isJsxOpeningElement(node)) {
+      const onClick = jsxAttribute(node, "onClick");
+      const className = jsxAttribute(node, "className");
+      if (
+        onClick?.initializer &&
+        ts.isJsxExpression(onClick.initializer) &&
+        ts.isIdentifier(onClick.initializer.expression) &&
+        onClick.initializer.expression.text === "onClick" &&
+        className?.initializer &&
+        ts.isJsxExpression(className.initializer) &&
+        ts.isNoSubstitutionTemplateLiteral(className.initializer.expression)
+      ) {
+        matches.push(className.initializer.expression.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  assert.equal(matches.length, 1, "expected one inbox split tab class expression");
+  return matches[0];
+};
+
+test("font-size class detection preserves typed arbitrary values", () => {
+  const tokens = new Set([
+    "text-content",
+    "hover:text-[length:16px]",
+    "md:text-sm/6",
+    "text-content/[20px]",
+    "text-[#fff]",
+    "focus:text-[rgb(1,2,3)]",
+  ]);
+  assert.deepEqual(fontSizeUtilities(tokens, new Set(["content"])), [
+    "text-content",
+    "hover:text-[length:16px]",
+    "md:text-sm/6",
+    "text-content/[20px]",
+  ]);
+});
+
+test("sidebar board names and inbox split tabs use the 14px content token", () => {
+  const fontSizes = fontSizeConfig();
+  assert.equal(fontSizes.content, "14px");
+
+  const targets = [
+    ["sidebar board tab", classTokens(sidebarBoardTabClasses(), "sidebar board tab")],
+    ["inbox split tab", classTokens(inboxSplitTabClasses(), "inbox split tab")],
+  ];
+
+  for (const [target, tokens] of targets) {
+    assert.deepEqual(
+      fontSizeUtilities(tokens, fontSizes.names),
+      ["text-content"],
+      `${target} must use only the content font size`,
+    );
+  }
+});
