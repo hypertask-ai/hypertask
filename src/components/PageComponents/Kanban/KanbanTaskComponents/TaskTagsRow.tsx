@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { CustomFieldType } from '@prisma/client';
 import axios from 'axios';
 import React from 'react'
-import UserAvatar from '@/components/Common/UserAvatar';
+import BlockerChip from './BlockerChip';
 
 interface ITaskTopRow {
     task:ITask;
@@ -195,23 +195,6 @@ const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) =
     <span className="truncate">{agent.displayName}</span>
   </LabelWrapper>
 );
-
-const BlockerChip = ({ user }: { user: IUser }) => {
-  const name = user.displayName?.trim() || user.email?.trim() || "Unknown person";
-  return (
-    <span className="inline-flex h-labelComponent max-w-full items-center gap-1 rounded-[4px] bg-[hsl(0_62.8%_30.6%)] px-1.5 text-micro font-semibold leading-none text-white">
-      <UserAvatar
-        alt=""
-        fallbackClassName="bg-white/20 text-white"
-        name={name}
-        photoURL={user.photoURL}
-        size={16}
-        title={name}
-      />
-      <span className="truncate">{name}</span>
-    </span>
-  );
-};
 
 // ponytail: reuses the same ["customFields", projectId] query key as TableView —
 // react-query dedupes the fetch across every card, no per-card network call.

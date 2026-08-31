@@ -23,6 +23,12 @@ const restoreStubs = () => {
   }
 };
 
+const blockingUser = {
+  id: 6,
+  displayName: "Valentin Yeo",
+  photoURL: "https://example.com/valentin.jpg",
+};
+
 const task = (waitingOnUserId) => ({
   id: waitingOnUserId == null ? 1 : 2,
   uniqueIndex: waitingOnUserId == null ? 1 : 2,
@@ -62,7 +68,10 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
     stubModule("src/lib/state.tsx", { useRecoilValue: () => ({ id: 15 }) });
     stubModule("src/store/index.ts", { currentProjectAtom: {} });
     stubModule("src/components/Common/Tooltip.tsx", { default: () => null });
-    stubModule("src/components/Common/UserAvatar.tsx", { default: () => null });
+    stubModule("src/components/Common/UserAvatar.tsx", {
+      default: ({ name }) =>
+        React.createElement("span", { "data-user-avatar": name }),
+    });
     stubModule(
       "src/components/Modals/TaskPriority/PriorityLabelComponent.tsx",
       { default: () => null },
@@ -79,7 +88,19 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
       renderAssigneeAvatars: () => null,
     });
     stubModule("src/lib/contexts/Calendar/calendar.context.tsx", {
-      useCalendarContext: () => ({ projects: [], setCurrentTask: () => {} }),
+      useCalendarContext: () => ({
+        projects: [
+          {
+            id: 15,
+            name: "hypertask-product",
+            title: "Hypertask Product",
+            members: [{ user: blockingUser }],
+            labels: [],
+            _count: { tasks: 2 },
+          },
+        ],
+        setCurrentTask: () => {},
+      }),
     });
 
     const jiti = jitiModule.createJiti
@@ -99,7 +120,7 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
     const blockedTask = task(6);
     const unblockedTask = task(null);
     const day = new Date("2026-08-31T00:00:00.000Z");
-    const cardClassName = (calendarTask, view) => {
+    const cardDocument = (calendarTask, view) => {
       const html = renderToStaticMarkup(
         React.createElement(TaskCard, {
           task: calendarTask,
@@ -110,16 +131,26 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
           view,
         }),
       );
-      return new JSDOM(html).window.document.querySelector(".kanban-task-card")
-        .className;
+      return new JSDOM(html).window.document;
     };
 
     for (const view of ["month", "week"]) {
+      const blockedDocument = cardDocument(blockedTask, view);
+      const blockedCard = blockedDocument.querySelector(".kanban-task-card");
       assert.match(
-        cardClassName(blockedTask, view),
+        blockedCard.className,
         /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
       );
-      assert.match(cardClassName(unblockedTask, view), /border-transparent/);
+      assert.match(blockedCard.textContent, /Valentin Yeo/);
+      assert.ok(
+        blockedCard.querySelector('[data-user-avatar="Valentin Yeo"]'),
+      );
+
+      const unblockedCard = cardDocument(unblockedTask, view).querySelector(
+        ".kanban-task-card",
+      );
+      assert.match(unblockedCard.className, /border-transparent/);
+      assert.doesNotMatch(unblockedCard.textContent, /Valentin Yeo/);
     }
 
     const dayHtml = renderToStaticMarkup(
@@ -136,14 +167,19 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
       }),
     );
     const dayDocument = new JSDOM(dayHtml).window.document;
+    const blockedDayRow = dayDocument.getElementById("task-2");
     assert.match(
-      dayDocument.getElementById("task-2").className,
+      blockedDayRow.className,
       /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
     );
-    assert.match(
-      dayDocument.getElementById("task-1").className,
-      /border-l-transparent/,
+    assert.match(blockedDayRow.textContent, /Valentin Yeo/);
+    assert.ok(
+      blockedDayRow.querySelector('[data-user-avatar="Valentin Yeo"]'),
     );
+
+    const unblockedDayRow = dayDocument.getElementById("task-1");
+    assert.match(unblockedDayRow.className, /border-l-transparent/);
+    assert.doesNotMatch(unblockedDayRow.textContent, /Valentin Yeo/);
   } finally {
     restoreStubs();
     if (previousDnd === undefined) delete require.cache[dndPath];
