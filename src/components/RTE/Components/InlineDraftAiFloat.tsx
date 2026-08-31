@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 import { EditorContent, useEditorState } from "@tiptap/react";
@@ -19,6 +19,7 @@ import {
   mobileOverlayAppSheetHandleRowClass,
   mobileOverlayAppSheetPanelClass,
 } from "@/components/Modals/Sheets/mobileOverlayAppSheetStyles";
+import { getMobileOverlaySheetContainerStyle } from "@/lib/mobileCommentViewport";
 import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import styles from "@/styles/tiptap.module.scss";
@@ -136,20 +137,23 @@ const InlineDraftAiFloat = ({
   const isRefineFullscreen = presentation === "refine-fullscreen";
   const isMobileAiSheet = isRefineFullscreen || isComposer;
   const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
+  const sheetContainerStyle = getMobileOverlaySheetContainerStyle(sheetViewport);
   const editorHasText =
     useEditorState({
       editor,
       selector: ({ editor: activeEditor }) => !(activeEditor?.isEmpty ?? true),
     }) ?? false;
 
-  useEffect(() => {
+  const focusEditorInSheet = useCallback(() => {
     if (!isMobileAiSheet || !editor) return;
     requestAnimationFrame(() => {
-      try {
-        editor.commands.focus(isRefineFullscreen ? "end" : "start");
-      } catch {
-        // Editor view may not be mounted yet.
-      }
+      requestAnimationFrame(() => {
+        try {
+          editor.commands.focus(isRefineFullscreen ? "end" : "start");
+        } catch {
+          // Editor view may not be mounted yet.
+        }
+      });
     });
   }, [editor, isMobileAiSheet, isRefineFullscreen]);
 
@@ -619,30 +623,25 @@ const InlineDraftAiFloat = ({
         zIndex={MOBILE_OVERLAY_SHEET_Z}
         detent="full-height"
         disableScrollLocking
+        onOpenStart={focusEditorInSheet}
+        onOpenEnd={focusEditorInSheet}
         panelClassName={cn(
           mobileOverlayAppSheetPanelClass,
-          sheetViewport && "!h-auto",
+          sheetContainerStyle && "!h-full !max-h-full",
         )}
         bodyClassName={cn(
           mobileOverlayAppSheetBodyClass,
-          sheetViewport ? "max-h-full" : "!max-h-[85svh]",
+          sheetContainerStyle ? "h-full max-h-full" : "!max-h-[85svh]",
         )}
         headerClassName={mobileOverlayAppSheetHandleHeaderClass}
         handleRowClassName={mobileOverlayAppSheetHandleRowClass}
         handleBarClassName={mobileOverlayAppSheetHandleBarClass}
-        containerStyle={
-          sheetViewport
-            ? {
-                bottom: sheetViewport.bottomInset,
-                maxHeight: `${sheetViewport.visibleHeight}px`,
-              }
-            : undefined
-        }
+        containerStyle={sheetContainerStyle}
       >
         <div
           ref={rootRef}
           className={cn(
-            "bg-ai-chat text-meta flex min-h-0 w-full flex-1 flex-col overflow-hidden",
+            "bg-ai-chat text-meta flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden",
           )}
         >
           <div className="z-10 flex shrink-0 items-center justify-between gap-4 px-2 py-2 text-content font-bold text-white-black">
@@ -657,8 +656,6 @@ const InlineDraftAiFloat = ({
               <X size={18} strokeWidth={1.75} />
             </button>
           </div>
-
-          <div className="min-h-0 flex-1" aria-hidden />
 
           <div
             className={cn(
