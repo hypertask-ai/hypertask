@@ -345,6 +345,7 @@ const AgentDetail = (props: IProp) => {
   const [now, setNow] = useState(() => Date.now());
   const agentRefreshSeq = useRef(0);
   const appliedAgentRefreshSeq = useRef<Record<string, number>>({});
+  const activityRequestSeq = useRef(0);
   const bootstrappedAgentId = useRef<string | null>(null);
   const renderedAgentIdentity = useRef<{ id: string; slug: string | null } | null>(
     null,
@@ -396,20 +397,25 @@ const AgentDetail = (props: IProp) => {
   useEffect(() => {
     let cancelled = false;
     const renderedAgent = renderedAgentIdentity.current;
-    if (
+    const changesAgent =
       !renderedAgent ||
-      (renderedAgent.id !== agentId && renderedAgent.slug !== agentId)
-    ) {
+      (renderedAgent.id !== agentId && renderedAgent.slug !== agentId);
+    if (changesAgent) {
       bootstrappedAgentId.current = null;
+      activityRequestSeq.current += 1;
+      setActivity(null);
+      setActivityError(null);
     }
+    setError(null);
     setAgent((prev) =>
       prev && prev.id !== agentId && prev.slug !== agentId ? null : prev,
     );
 
     // Nested routes take the uuid, not the slug, so activity runs on the id
     // the agent load resolved.
-    const loadActivity = (id: string) =>
-      fetch(`/api/agents/${id}/activity?limit=40`)
+    const loadActivity = (id: string) => {
+      const seq = ++activityRequestSeq.current;
+      return fetch(`/api/agents/${id}/activity?limit=40`)
         .then(async (res) => {
           const data = (await res.json()) as {
             success?: boolean;
@@ -419,18 +425,20 @@ const AgentDetail = (props: IProp) => {
           if (!res.ok || !data.success || !Array.isArray(data.items)) {
             throw new Error(data.error ?? "Failed to load activity");
           }
-          if (cancelled) return false;
+          if (cancelled || seq !== activityRequestSeq.current) return false;
           setActivity(data.items);
+          setActivityError(null);
           return true;
         })
         .catch((e) => {
-          if (!cancelled) {
+          if (!cancelled && seq === activityRequestSeq.current) {
             setActivityError(
               e instanceof Error ? e.message : "Failed to load activity",
             );
           }
           return false;
         });
+    };
 
     const bootstrapAgent = (refreshedAgent: TDetailAgent) => {
       if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
@@ -466,6 +474,7 @@ const AgentDetail = (props: IProp) => {
         if (initialSeq >= appliedSeq) {
           appliedAgentRefreshSeq.current[refreshedAgent.id] = initialSeq;
           appliedAgentRefreshSeq.current[agentId] = initialSeq;
+          setError(null);
           setAgent((prev) =>
             prev && prev.id !== refreshedAgent.id ? prev : refreshedAgent,
           );
@@ -503,6 +512,7 @@ const AgentDetail = (props: IProp) => {
           if (seq < appliedSeq) return;
           appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
           appliedAgentRefreshSeq.current[agentId] = seq;
+          setError(null);
           const {
             working,
             heartbeatAt,
@@ -585,6 +595,7 @@ const AgentDetail = (props: IProp) => {
               if (seq < appliedSeq) return;
               appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
               appliedAgentRefreshSeq.current[agentId] = seq;
+              setError(null);
               const {
                 working,
                 heartbeatAt,
