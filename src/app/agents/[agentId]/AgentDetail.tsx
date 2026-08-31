@@ -344,6 +344,17 @@ const AgentDetail = (props: IProp) => {
   const [deleting, setDeleting] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const agentRefreshSeq = useRef(0);
+  const appliedAgentRefreshSeq = useRef<Record<string, number>>({});
+  const bootstrappedAgentId = useRef<string | null>(null);
+  const renderedAgentIdentity = useRef<{ id: string; slug: string | null } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    renderedAgentIdentity.current = agent
+      ? { id: agent.id, slug: agent.slug ?? null }
+      : null;
+  }, [agent?.id, agent?.slug]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -384,6 +395,16 @@ const AgentDetail = (props: IProp) => {
 
   useEffect(() => {
     let cancelled = false;
+    const renderedAgent = renderedAgentIdentity.current;
+    if (
+      !renderedAgent ||
+      (renderedAgent.id !== agentId && renderedAgent.slug !== agentId)
+    ) {
+      bootstrappedAgentId.current = null;
+    }
+    setAgent((prev) =>
+      prev && prev.id !== agentId && prev.slug !== agentId ? null : prev,
+    );
 
     // Nested routes take the uuid, not the slug, so activity runs on the id
     // the agent load resolved.
@@ -398,7 +419,9 @@ const AgentDetail = (props: IProp) => {
           if (!res.ok || !data.success || !Array.isArray(data.items)) {
             throw new Error(data.error ?? "Failed to load activity");
           }
-          if (!cancelled) setActivity(data.items);
+          if (cancelled) return false;
+          setActivity(data.items);
+          return true;
         })
         .catch((e) => {
           if (!cancelled) {
@@ -406,8 +429,20 @@ const AgentDetail = (props: IProp) => {
               e instanceof Error ? e.message : "Failed to load activity",
             );
           }
+          return false;
         });
 
+    const bootstrapAgent = (refreshedAgent: TDetailAgent) => {
+      if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
+        router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
+      }
+      if (bootstrappedAgentId.current === refreshedAgent.id) return;
+      void loadActivity(refreshedAgent.id).then((loaded) => {
+        if (loaded) bootstrappedAgentId.current = refreshedAgent.id;
+      });
+    };
+
+    const initialSeq = ++agentRefreshSeq.current;
     fetch(`/api/agents/${agentId}`)
       .then(async (res) => {
         const data = (await res.json()) as {
@@ -419,16 +454,27 @@ const AgentDetail = (props: IProp) => {
           throw new Error(data.error ?? "Failed to load agent");
         }
         if (cancelled) return;
-        setAgent(data.agent);
-        // A link built on an id still works; the address bar shows the
-        // readable form instead of a uuid.
-        if (data.agent.slug && data.agent.slug !== agentId) {
-          router.replace(`/agents/${data.agent.slug}`, { scroll: false });
+        const refreshedAgent = data.agent;
+        if (
+          refreshedAgent.id !== agentId &&
+          refreshedAgent.slug !== agentId
+        ) {
+          return;
         }
-        loadActivity(data.agent.id);
+        const appliedSeq =
+          appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+        if (initialSeq >= appliedSeq) {
+          appliedAgentRefreshSeq.current[refreshedAgent.id] = initialSeq;
+          appliedAgentRefreshSeq.current[agentId] = initialSeq;
+          setAgent((prev) =>
+            prev && prev.id !== refreshedAgent.id ? prev : refreshedAgent,
+          );
+          bootstrapAgent(refreshedAgent);
+        }
       })
       .catch((e) => {
-        if (!cancelled) {
+        const appliedSeq = appliedAgentRefreshSeq.current[agentId] ?? 0;
+        if (!cancelled && initialSeq > appliedSeq) {
           setError(e instanceof Error ? e.message : "Failed to load agent");
         }
       });
@@ -444,8 +490,19 @@ const AgentDetail = (props: IProp) => {
             success?: boolean;
             agent?: TDetailAgent;
           };
-          if (!res.ok || !data.success || !data.agent) return;
-          if (cancelled || seq !== agentRefreshSeq.current) return;
+          if (!res.ok || !data.success || !data.agent || cancelled) return;
+          const refreshedAgent = data.agent;
+          if (
+            refreshedAgent.id !== agentId &&
+            refreshedAgent.slug !== agentId
+          ) {
+            return;
+          }
+          const appliedSeq =
+            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+          if (seq < appliedSeq) return;
+          appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+          appliedAgentRefreshSeq.current[agentId] = seq;
           const {
             working,
             heartbeatAt,
@@ -453,20 +510,21 @@ const AgentDetail = (props: IProp) => {
             operations,
             boards,
             boardAccess,
-          } = data.agent;
-          setAgent((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  working: working ?? null,
-                  heartbeatAt,
-                  lastPostedAt,
-                  operations,
-                  boards,
-                  boardAccess,
-                }
-              : prev,
-          );
+          } = refreshedAgent;
+          setAgent((prev) => {
+            if (prev && prev.id !== refreshedAgent.id) return prev;
+            if (!prev) return refreshedAgent;
+            return {
+              ...prev,
+              working: working ?? null,
+              heartbeatAt,
+              lastPostedAt,
+              operations,
+              boards,
+              boardAccess,
+            };
+          });
+          bootstrapAgent(refreshedAgent);
         })
         .catch(() => {});
     }, POLL_MS);
@@ -480,6 +538,7 @@ const AgentDetail = (props: IProp) => {
   // The poll above bounds staleness at 30s, but an assignment broadcasts a
   // board change event, so the assigned-ticket count can move the moment it
   // happens instead of on the next tick.
+  const subscribedAgentId = agent?.id;
   const boardIdsKey = (agent?.boards ?? []).map((b) => b.id).join(",");
   const boardRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -512,10 +571,20 @@ const AgentDetail = (props: IProp) => {
                 success?: boolean;
                 agent?: TDetailAgent;
               };
-              if (!res.ok || !data.success || !data.agent) return;
-              // Only the newest request may merge, or a slow earlier
-              // response would overwrite a newer count.
-              if (seq !== agentRefreshSeq.current || cancelled) return;
+              if (!res.ok || !data.success || !data.agent || cancelled) return;
+              const refreshedAgent = data.agent;
+              if (
+                refreshedAgent.id !== agentId &&
+                refreshedAgent.slug !== agentId
+              ) {
+                return;
+              }
+              if (refreshedAgent.id !== subscribedAgentId) return;
+              const appliedSeq =
+                appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+              if (seq < appliedSeq) return;
+              appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+              appliedAgentRefreshSeq.current[agentId] = seq;
               const {
                 working,
                 heartbeatAt,
@@ -523,20 +592,20 @@ const AgentDetail = (props: IProp) => {
                 operations,
                 boards,
                 boardAccess,
-              } = data.agent;
-              setAgent((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      working: working ?? null,
-                      heartbeatAt,
-                      lastPostedAt,
-                      operations,
-                      boards,
-                      boardAccess,
-                    }
-                  : prev,
-              );
+              } = refreshedAgent;
+              setAgent((prev) => {
+                if (prev && prev.id !== refreshedAgent.id) return prev;
+                if (!prev) return refreshedAgent;
+                return {
+                  ...prev,
+                  working: working ?? null,
+                  heartbeatAt,
+                  lastPostedAt,
+                  operations,
+                  boards,
+                  boardAccess,
+                };
+              });
             })
             .catch(() => {});
         }, 500);
@@ -563,7 +632,7 @@ const AgentDetail = (props: IProp) => {
       }
       unsubs.forEach((fn) => fn());
     };
-  }, [boardIdsKey, agentId]);
+  }, [boardIdsKey, agentId, subscribedAgentId]);
 
   const handleSaveProviderKey = async () => {
     const next = providerKeyDraft.trim();
@@ -888,8 +957,17 @@ const AgentDetail = (props: IProp) => {
         agent?: TDetailAgent;
       } | null;
       if (refresh.ok && refreshed?.success && refreshed.agent) {
-        if (seq === agentRefreshSeq.current) {
-          setAgent(refreshed.agent);
+        const refreshedAgent = refreshed.agent;
+        if (refreshedAgent.id === agent.id) {
+          const appliedSeq =
+            appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
+          if (seq >= appliedSeq) {
+            appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+            appliedAgentRefreshSeq.current[agentId] = seq;
+            setAgent((prev) =>
+              prev?.id === refreshedAgent.id ? refreshedAgent : prev,
+            );
+          }
         }
       } else {
         setBoardErrors((errors) => ({
