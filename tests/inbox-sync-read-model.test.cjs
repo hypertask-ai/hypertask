@@ -41,7 +41,7 @@ const { restoreInboxAfterUndo, updateInboxOptimistically } = jiti(
 );
 const {
   createInboxReadinessLatch,
-  requiresLateInboxPersistenceCheck,
+  requiresPersistentInboxFence,
 } = jiti(path.join(root, "src/hooks/Inbox/useGetNotifications.ts"));
 
 const revision = (operationTime, tabId = "a".repeat(32), previousRevision) =>
@@ -749,10 +749,10 @@ test("Inbox readiness is claimed only once per page-load latch", () => {
   assert.equal(latch.claim(), false);
 });
 
-test("Inbox network publication waits for the full snapshot only without a synchronous revision fence", () => {
-  assert.equal(requiresLateInboxPersistenceCheck(false, false), false);
-  assert.equal(requiresLateInboxPersistenceCheck(true, true), false);
-  assert.equal(requiresLateInboxPersistenceCheck(true, false), true);
+test("Inbox network publication waits for IndexedDB only without a synchronous revision fence", () => {
+  assert.equal(requiresPersistentInboxFence(false, false), false);
+  assert.equal(requiresPersistentInboxFence(true, true), false);
+  assert.equal(requiresPersistentInboxFence(true, false), true);
 });
 
 test("the Inbox integration hydrates, reconciles, persists confirmed data, measures, and clears", () => {
@@ -830,9 +830,10 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.match(hook, /const sharedRevisionFenceReadPromise = enabled/);
   assert.match(
     hook,
-    /requiresLateInboxPersistenceCheck\(\s*enabled,\s*inboxRevisionStorageAvailable\(userId\)/,
+    /requiresPersistentInboxFence\(\s*enabled,\s*inboxRevisionStorageAvailable\(userId\)/,
   );
-  assert.match(hook, /if \(latePersistenceCheckRequired\)/);
+  assert.match(hook, /if \(persistentFenceRequired\)/);
+  assert.match(hook, /if \(!persistentFenceRequired && enabled\)/);
   assert.match(
     hook,
     /persistedRevisionFence = await sharedRevisionFenceReadPromise/,
