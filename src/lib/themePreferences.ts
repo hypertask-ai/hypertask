@@ -58,3 +58,8 @@ export const resolveThemePreference = (
 
   return theme;
 };
+
+export const resolveInitialThemeColor = (
+  theme: ThemePreference | undefined,
+): string =>
+  resolvedThemeDomMetadata[resolveThemePreference(theme, "dark")].themeColor;
