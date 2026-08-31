@@ -93,6 +93,11 @@ test("mobile task detail keeps Ask AI outside the composer in the shared floatin
   while (owner && !ts.isVariableDeclaration(owner)) owner = owner.parent;
   assert.ok(owner && ts.isIdentifier(owner.name));
   assert.equal(owner.name.text, "AskAiButton");
+  assert.equal(
+    owner.parent.parent.parent,
+    sourceFile,
+    "AskAiButton must keep a stable module-level component identity",
+  );
 
   assert.equal(
     stringAttributeValue(floatingButton, "ariaLabel"),

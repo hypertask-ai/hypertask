@@ -12,6 +12,7 @@ import { useGetNotificationCount } from "@/hooks/Inbox/useGetNotifications";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { shouldShowMobilePrimaryDock } from "./mobileShellVisibility";
 import {
+  clearMobileDockHeight,
   publishMobileDockHeight,
   releaseMobileDockHeight,
 } from "./mobileDockHeight";
@@ -70,8 +71,8 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
   useEffect(() => {
     const root = document.documentElement;
     if (hidden) {
-      publishMobileDockHeight(root, mobileTabBarDockOwner, "0px");
-      return () => releaseMobileDockHeight(root, mobileTabBarDockOwner);
+      clearMobileDockHeight(root, mobileTabBarDockOwner);
+      return;
     }
     const dock = dockRef.current;
     if (!dock) return;

@@ -17,3 +17,13 @@ export const releaseMobileDockHeight = (
   dockHeightOwners.delete(root);
   root.style.removeProperty("--mobile-dock-h");
 };
+
+export const clearMobileDockHeight = (
+  root: HTMLElement,
+  owner: object,
+) => {
+  const currentOwner = dockHeightOwners.get(root);
+  if (currentOwner && currentOwner !== owner) return;
+  if (currentOwner === owner) dockHeightOwners.delete(root);
+  root.style.setProperty("--mobile-dock-h", "0px");
+};

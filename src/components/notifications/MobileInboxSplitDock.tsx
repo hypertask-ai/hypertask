@@ -8,6 +8,7 @@ import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import { useRecoilValue } from "@/lib/state";
 import { mobileCommentComposerOpenAtom } from "@/store";
 import {
+  clearMobileDockHeight,
   publishMobileDockHeight,
   releaseMobileDockHeight,
 } from "@/components/Global/mobileDockHeight";
@@ -44,8 +45,8 @@ const MobileInboxSplitDock = ({
   useLayoutEffect(() => {
     const root = document.documentElement;
     if (hidden) {
-      publishMobileDockHeight(root, mobileInboxSplitDockOwner, "0px");
-      return () => releaseMobileDockHeight(root, mobileInboxSplitDockOwner);
+      clearMobileDockHeight(root, mobileInboxSplitDockOwner);
+      return;
     }
 
     const dock = dockRef.current;

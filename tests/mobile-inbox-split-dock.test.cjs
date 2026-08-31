@@ -26,7 +26,11 @@ const dockHeightPath = path.join(
   "src/components/Global/mobileDockHeight.ts",
 );
 const dockHeight = read("src/components/Global/mobileDockHeight.ts");
-const { publishMobileDockHeight, releaseMobileDockHeight } = jiti(dockHeightPath);
+const {
+  clearMobileDockHeight,
+  publishMobileDockHeight,
+  releaseMobileDockHeight,
+} = jiti(dockHeightPath);
 
 test("Inbox routes replace the regular mobile navigation", () => {
   assert.match(visibility, /isMobileInboxPath/);
@@ -73,6 +77,14 @@ test("a stale dock cleanup cannot clear the replacement dock height", () => {
 
   releaseMobileDockHeight(rootElement, inboxOwner);
   assert.equal(values.has("--mobile-dock-h"), false);
+
+  publishMobileDockHeight(rootElement, primaryOwner, "64px");
+  clearMobileDockHeight(rootElement, primaryOwner);
+  assert.equal(values.get("--mobile-dock-h"), "0px");
+
+  publishMobileDockHeight(rootElement, inboxOwner, "72px");
+  clearMobileDockHeight(rootElement, primaryOwner);
+  assert.equal(values.get("--mobile-dock-h"), "72px");
   assert.match(dockHeight, /WeakMap/);
 });
 
@@ -101,6 +113,14 @@ test("the split dock is reachable, scrollable, and owns shell spacing safely", (
     /hidden = showAiChatInterface \|\| commentComposerOpen/,
   );
   assert.match(splitDock, /if \(hidden\) return null/);
+  assert.match(
+    splitDock,
+    /if \(hidden\) \{\s*clearMobileDockHeight\(root, mobileInboxSplitDockOwner\);/,
+  );
+  assert.match(
+    primaryDock,
+    /if \(hidden\) \{\s*clearMobileDockHeight\(root, mobileTabBarDockOwner\);/,
+  );
   assert.match(splitDock, /}, \[hidden\]\);/);
   assert.match(splitDock, /const observer = new ResizeObserver\(publishHeight\)/);
   assert.match(inbox, /if \(isMbl && e\.keyCode === KeyCodes\.TAB\) return/);
