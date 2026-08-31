@@ -11,6 +11,37 @@ const tiptapSource = fs.readFileSync(
   "utf8",
 );
 
+function sharedEditorRegistersMentionDeletion(source) {
+  const sourceFile = ts.createSourceFile(
+    "Tiptap.ts",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  let registered = false;
+
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "withMentionBackspaceDeletion" &&
+      ts.isSpreadElement(node.parent) &&
+      ts.isArrayLiteralExpression(node.parent.parent) &&
+      ts.isArrowFunction(node.parent.parent.parent) &&
+      ts.isCallExpression(node.parent.parent.parent.parent) &&
+      ts.isIdentifier(node.parent.parent.parent.parent.expression) &&
+      node.parent.parent.parent.parent.expression.text === "useMemo"
+    ) {
+      registered = true;
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
+  return registered;
+}
+
 function loadTypescriptModule(filePath) {
   const source = fs.readFileSync(filePath, "utf8");
   const javascript = ts.transpileModule(source, {
@@ -91,11 +122,8 @@ function backwardDelete(window, options = {}) {
   return event;
 }
 
-test("the shared editor registers the exported mention deletion builder", () => {
-  assert.match(
-    tiptapSource,
-    /\.\.\.withMentionBackspaceDeletion\(\s*CustomMention\.configure\(/,
-  );
+test("the shared editor extension array registers mention deletion", () => {
+  assert.equal(sharedEditorRegistersMentionDeletion(tiptapSource), true);
 });
 
 test("Android-style backward input deletes only the mention before the caret", async () => {
