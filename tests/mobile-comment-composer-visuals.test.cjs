@@ -112,7 +112,7 @@ test("mobile create-comment uses AppSheet for both refine and compose", () => {
 test("empty-state mobile comment microphone is rectangular, still purple", () => {
   // Class order inside the string is incidental; presence of both is not.
   const branch = audioButton.match(
-    /isMobileCreateComment\s*\?\s*"([^"]*)"/,
+    /else if \(isMobileCreateComment\) \{\s*prominentClassName =\s*"([^"]*)"/,
   );
   assert.ok(branch, "isMobileCreateComment class branch not found");
   assert.match(branch[1], /\brounded-sm\b/);
