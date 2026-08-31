@@ -416,7 +416,9 @@ const AgentDetail = (props: IProp) => {
           if (!res.ok || !data.success || !Array.isArray(data.items)) {
             throw new Error(data.error ?? "Failed to load activity");
           }
-          if (!cancelled) setActivity(data.items);
+          if (cancelled) return false;
+          setActivity(data.items);
+          return true;
         })
         .catch((e) => {
           if (!cancelled) {
@@ -424,15 +426,17 @@ const AgentDetail = (props: IProp) => {
               e instanceof Error ? e.message : "Failed to load activity",
             );
           }
+          return false;
         });
 
     const bootstrapAgent = (refreshedAgent: TDetailAgent) => {
       if (bootstrappedAgentId.current === refreshedAgent.id) return;
-      bootstrappedAgentId.current = refreshedAgent.id;
       if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
         router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
       }
-      loadActivity(refreshedAgent.id);
+      void loadActivity(refreshedAgent.id).then((loaded) => {
+        if (loaded) bootstrappedAgentId.current = refreshedAgent.id;
+      });
     };
 
     const initialSeq = ++agentRefreshSeq.current;
