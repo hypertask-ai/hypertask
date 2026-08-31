@@ -19,27 +19,54 @@ function sharedEditorRegistersMentionDeletion(source) {
     true,
     ts.ScriptKind.TS,
   );
-  let registered = false;
+  let extensionsIncludeDeletion = false;
+  let editorUsesExtensions = false;
 
   const visit = (node) => {
     if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.name.text === "extensions" &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      ts.isIdentifier(node.initializer.expression) &&
+      node.initializer.expression.text === "useMemo"
+    ) {
+      const factory = node.initializer.arguments[0];
+      const extensionArray =
+        factory && ts.isArrowFunction(factory) && ts.isArrayLiteralExpression(factory.body)
+          ? factory.body
+          : undefined;
+      extensionsIncludeDeletion = Boolean(
+        extensionArray?.elements.some(
+          (element) =>
+            ts.isSpreadElement(element) &&
+            ts.isCallExpression(element.expression) &&
+            ts.isIdentifier(element.expression.expression) &&
+            element.expression.expression.text === "withMentionBackspaceDeletion",
+        ),
+      );
+    }
+
+    if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      node.expression.text === "withMentionBackspaceDeletion" &&
-      ts.isSpreadElement(node.parent) &&
-      ts.isArrayLiteralExpression(node.parent.parent) &&
-      ts.isArrowFunction(node.parent.parent.parent) &&
-      ts.isCallExpression(node.parent.parent.parent.parent) &&
-      ts.isIdentifier(node.parent.parent.parent.parent.expression) &&
-      node.parent.parent.parent.parent.expression.text === "useMemo"
+      node.expression.text === "useEditor" &&
+      node.arguments[0] &&
+      ts.isObjectLiteralExpression(node.arguments[0])
     ) {
-      registered = true;
+      editorUsesExtensions = node.arguments[0].properties.some(
+        (property) =>
+          ts.isShorthandPropertyAssignment(property) &&
+          property.name.text === "extensions",
+      );
     }
+
     ts.forEachChild(node, visit);
   };
 
   visit(sourceFile);
-  return registered;
+  return extensionsIncludeDeletion && editorUsesExtensions;
 }
 
 function loadTypescriptModule(filePath) {
