@@ -1,14 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { createPortal } from "react-dom";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { SendArrow } from "@/components/Common/AttachmentsUpload";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
+import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
+import {
+  MOBILE_OVERLAY_SHEET_Z,
+  mobileOverlayAppSheetBodyClass,
+  mobileOverlayAppSheetHandleBarClass,
+  mobileOverlayAppSheetHandleHeaderClass,
+  mobileOverlayAppSheetHandleRowClass,
+  mobileOverlayAppSheetPanelClass,
+} from "@/components/Modals/Sheets/mobileOverlayAppSheetStyles";
 import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import {
@@ -138,6 +146,18 @@ const InlineDraftAiFloat = ({
     (document.activeElement as HTMLElement | null)?.blur();
     editor.commands.blur();
   }, [editor, isRefineFullscreen]);
+
+  useEffect(() => {
+    if (!isRefineFullscreen) return;
+    const previous = window.__htHandleBack;
+    window.__htHandleBack = () => {
+      closeRef.current();
+      return true;
+    };
+    return () => {
+      window.__htHandleBack = previous;
+    };
+  }, [isRefineFullscreen]);
 
   useEffect(() => {
     if (!editor) return;
@@ -563,38 +583,42 @@ const InlineDraftAiFloat = ({
     </div>
   ) : null;
 
-  if (isRefineFullscreen && typeof document !== "undefined") {
-    return createPortal(
-      <div
-        ref={rootRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Write with AI"
-        className="fixed inset-0 z-[10000] flex flex-col bg-pageBackground p-3 pb-[max(12px,env(safe-area-inset-bottom))]"
+  if (isRefineFullscreen) {
+    return (
+      <AppSheet
+        isOpen
+        onClose={close}
+        ariaLabel="Write with AI"
+        defaultLibraryHeader={false}
+        zIndex={MOBILE_OVERLAY_SHEET_Z}
+        panelClassName={mobileOverlayAppSheetPanelClass}
+        bodyClassName={mobileOverlayAppSheetBodyClass}
+        headerClassName={mobileOverlayAppSheetHandleHeaderClass}
+        handleRowClassName={mobileOverlayAppSheetHandleRowClass}
+        handleBarClassName={mobileOverlayAppSheetHandleBarClass}
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[5px] border-thin border-hypertasks-ai-purple/70 bg-modalBackground shadow-customshadow-2">
-          <div className="flex shrink-0 items-center justify-between border-b border-thin border-border px-4 py-3">
-            <h2 className="text-subheading font-medium text-white-black">
-              Write with AI
-            </h2>
+        <div ref={rootRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="z-10 flex shrink-0 items-center justify-between gap-4 px-2 py-2 text-content font-bold text-white-black">
+            <h2 className="min-w-0 truncate px-1 font-medium">Write with AI</h2>
             <button
               type="button"
-              className="rounded-sm px-2 py-1 text-meta text-text-light-gray hover:bg-hover-active"
               onClick={close}
               disabled={isLoading}
+              aria-label="Close Write with AI"
+              className="text-icon-dark-gray hover:text-white-black"
             >
-              Close
+              <X size={18} strokeWidth={1.75} />
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
             <div
               className="text-content leading-relaxed text-white-black [&_p]:mb-2 [&_p:last-child]:mb-0"
               dangerouslySetInnerHTML={{ __html: draftHtml(editor, scope) }}
             />
           </div>
 
-          <div className="shrink-0 border-t border-thin border-border px-4 py-3">
+          <div className="shrink-0 border-t border-thin border-border-light-gray-thin px-4 py-3">
             {isLoading ? (
               <div
                 className="flex items-center gap-2 text-meta text-text-light-gray"
@@ -612,8 +636,7 @@ const InlineDraftAiFloat = ({
             )}
           </div>
         </div>
-      </div>,
-      document.body,
+      </AppSheet>
     );
   }
 

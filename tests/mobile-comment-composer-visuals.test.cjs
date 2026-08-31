@@ -85,11 +85,12 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   assert.doesNotMatch(button[1], /(?:^|\s)text-white(?:\s|$)/);
 });
 
-test("mobile create-comment uses fullscreen refine when draft has text", () => {
+test("mobile create-comment uses AppSheet refine when draft has text", () => {
   const mobileBranch = mainContainer.slice(
     mainContainer.indexOf("// FOR: New comment on mobile"),
     mainContainer.indexOf("// FOR: Description and old comment."),
   );
+  const inlineDraftAi = read("src/components/RTE/Components/InlineDraftAiFloat.tsx");
   assert.match(mobileBranch, /aiRefineOpen/);
   assert.match(mobileBranch, /presentation="refine-fullscreen"/);
   assert.match(mobileBranch, /!editor\.isEmpty/);
@@ -98,6 +99,9 @@ test("mobile create-comment uses fullscreen refine when draft has text", () => {
   assert.match(mobileBranch, /editor\.isEmpty/);
   assert.match(mobileBranch, /toggleAiTaskWriter=\{toggleAiTaskWriter\}/);
   assert.doesNotMatch(mobileBranch, /MobileBottomSheet/);
+  assert.match(inlineDraftAi, /AppSheet/);
+  assert.match(inlineDraftAi, /mobileOverlayAppSheetPanelClass/);
+  assert.doesNotMatch(inlineDraftAi, /createPortal/);
 });
 
 test("empty-state mobile comment microphone is rectangular, still purple", () => {
