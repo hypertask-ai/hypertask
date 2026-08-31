@@ -346,6 +346,12 @@ const AgentDetail = (props: IProp) => {
   const agentRefreshSeq = useRef(0);
   const appliedAgentRefreshSeq = useRef<Record<string, number>>({});
   const bootstrappedAgentId = useRef<string | null>(null);
+  const renderedAgentIdentity = useRef<{ id: string; slug: string | null } | null>(
+    null,
+  );
+  renderedAgentIdentity.current = agent
+    ? { id: agent.id, slug: agent.slug ?? null }
+    : null;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -386,7 +392,13 @@ const AgentDetail = (props: IProp) => {
 
   useEffect(() => {
     let cancelled = false;
-    bootstrappedAgentId.current = null;
+    const renderedAgent = renderedAgentIdentity.current;
+    if (
+      !renderedAgent ||
+      (renderedAgent.id !== agentId && renderedAgent.slug !== agentId)
+    ) {
+      bootstrappedAgentId.current = null;
+    }
     setAgent((prev) =>
       prev && prev.id !== agentId && prev.slug !== agentId ? null : prev,
     );
