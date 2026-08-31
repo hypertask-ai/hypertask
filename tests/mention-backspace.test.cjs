@@ -153,9 +153,15 @@ test("the shared editor extension array registers mention deletion", () => {
   assert.equal(sharedEditorRegistersMentionDeletion(tiptapSource), true);
 });
 
-test("Android-style backward input deletes only the mention before the caret", async () => {
+test("Android-style backward input deletes only the mention before the caret", async (t) => {
   const dom = new JSDOM('<div id="editor"></div>');
   const restoreGlobals = installBrowserGlobals(dom.window);
+  let editor;
+  t.after(() => {
+    editor?.destroy();
+    restoreGlobals();
+    dom.window.close();
+  });
   const { Editor } = require("@tiptap/core");
   const StarterKit = require("@tiptap/starter-kit").default;
   const Mention = require("@tiptap/extension-mention").default;
@@ -166,14 +172,13 @@ test("Android-style backward input deletes only the mention before the caret", a
     ),
   );
 
-  const editor = new Editor({
+  editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
     extensions: [StarterKit, ...withMentionBackspaceDeletion(Mention)],
     content:
       '<p>before <span data-type="mention" data-id="Ada" data-label="name-7">Ada</span> after</p>',
   });
 
-  try {
     const position = mentionPosition(editor);
     editor.commands.setTextSelection(position + 1);
     let transactionCount = 0;
@@ -204,16 +209,17 @@ test("Android-style backward input deletes only the mention before the caret", a
     assert.equal(handled, true);
     assert.equal(editor.getText(), "before  after");
     assert.doesNotMatch(editor.getHTML(), /data-type="mention"/);
-  } finally {
-    editor.destroy();
-    restoreGlobals();
-    dom.window.close();
-  }
 });
 
-test("mention deletion ignores text, selections, read-only editors, and other input", () => {
+test("mention deletion ignores text, selections, read-only editors, and other input", (t) => {
   const dom = new JSDOM('<div id="editor"></div>');
   const restoreGlobals = installBrowserGlobals(dom.window);
+  let editor;
+  t.after(() => {
+    editor?.destroy();
+    restoreGlobals();
+    dom.window.close();
+  });
   const { Editor } = require("@tiptap/core");
   const StarterKit = require("@tiptap/starter-kit").default;
   const Mention = require("@tiptap/extension-mention").default;
@@ -223,14 +229,13 @@ test("mention deletion ignores text, selections, read-only editors, and other in
       "src/components/RTE/Extensions/DeleteMentionOnBackspace.ts",
     ),
   );
-  const editor = new Editor({
+  editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
     extensions: [StarterKit, ...withMentionBackspaceDeletion(Mention)],
     content:
       '<p>text <span data-type="mention" data-id="Ada" data-label="name-7">Ada</span></p>',
   });
 
-  try {
     const initialHtml = editor.getHTML();
     const position = mentionPosition(editor);
 
@@ -259,9 +264,4 @@ test("mention deletion ignores text, selections, read-only editors, and other in
     assert.equal(readOnlyEvent.defaultPrevented, false);
 
     assert.equal(editor.getHTML(), initialHtml);
-  } finally {
-    editor.destroy();
-    restoreGlobals();
-    dom.window.close();
-  }
 });
