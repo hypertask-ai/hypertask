@@ -10,7 +10,7 @@ import {
 
 import { IAttachment, IComment, IDraft, RedirectAPIParams, StackedType } from "@/models/model";
 import { useRecoilState } from "@/lib/state";
-import { currentUserAtom, mobileCommentComposerOpenAtom, tasksPlayListAtom } from "@/store";
+import { currentUserAtom, mobileCommentComposerOpenAtom } from "@/store";
 
 // import Tiptap from "@/components/RTE/TipTap";
 import dynamic from "next/dynamic"
@@ -20,10 +20,9 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useDescriptionAndCommentsContext } from "@/lib/contexts/TaskDetail/DescriptionProvider";
-import { Check, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
-import { FaArrowLeft } from "react-icons/fa";
-import { IoIosArrowUp } from "react-icons/io";
+import MobileFloatingActionButton from "@/components/Global/MobileFloatingActionButton";
 import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import useArchiveAndNavigate from "@/hooks/Task Detail/useArchiveAndNavigate";
 import RemindMeTaskDetail from "../../TaskOptions/RemindMeTaskDetail";
@@ -38,7 +37,6 @@ import {
 } from "@/lib/mobileCommentViewport";
 import { shouldShowMobileDock } from "@/components/Global/mobileShellVisibility";
 import { usePathname } from "next/navigation";
-import { TOUCH_HALO_X } from "@/lib/configs/general.config";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
 
@@ -48,7 +46,7 @@ const NewCommentComponent = (
 
     ) => {
   
-      const {parsedTask:parsed_task, currentTask, setCurrentId, currentId, allowPerks,  forceOpenEdit,setLoading , editMode, showScrollToTop, draftsFromTQ, embedded} = useTaskContext();
+      const {parsedTask:parsed_task, currentTask, setCurrentId, currentId, allowPerks,  forceOpenEdit,setLoading , editMode, draftsFromTQ} = useTaskContext();
       // console.log("🚀 ~ editMode:", editMode)
       const _parsedTask = useMemo(()=>JSON.parse(parsed_task),[parsed_task])
       const { replyQuote} = useDescriptionAndCommentsContext()
@@ -425,6 +423,8 @@ const NewCommentComponent = (
                       }}
                   />
               )}
+
+              {_mbl && <AskAiButton/>}
   
               {/* ------------------------- New Comment ------------------------- */}
               {/* ====================== DESKTOP ===================== */}
@@ -509,15 +509,6 @@ const NewCommentComponent = (
                       <span className="h-1 w-9 rounded-full bg-[#4F5766]" />
                     </div>
                     <div className="relative w-full px-[12px] pb-[6px]">
-                      {showScrollToTop && <ScrollToTop/>}
-                      <AskAiButton/>
-                      {!embedded && <GoBackButton/>}
-                      {!embedded && (
-                        <>
-                          <PlaylistArrow direction="previous" top="-320px" />
-                          <PlaylistArrow direction="next" top="-280px" />
-                        </>
-                      )}
                       <TaskOptions show={showTaskOptions}/>
                       {/* Darker recessed well so the comment field reads clearly as a tap-to-type input (no outline). */}
                       <div className="rounded-lg bg-newcomment-well px-[12px] py-[4px]">
@@ -665,113 +656,22 @@ const NewCommentComponent = (
     )
   }
 
-  // Sits directly above Go back, so the always-present buttons stay adjacent and
-  // the conditional Scroll-to-top stacks on top without leaving a gap. The whole
-  // stack is lifted well clear of the composer (160/200/240px) to sit in the
-  // thumb zone rather than at the very bottom edge of the screen.
-  //
-  // All three live inside the composer container, whose onClick opens the
-  // comment editor, so every one of them has to stop the click from bubbling
-  // or tapping them also pops the keyboard.
   const AskAiButton = ()=>{
     const { openAIChatInterface } = useGlobalUIState()
     return (
-        <button
-          type="button"
-          aria-label="Ask AI about this task"
-          onClick={(event)=>{
-            event.stopPropagation()
-            openAIChatInterface()
-          }}
-          className={`absolute -top-[200px] right-0 z-[1000] flex h-8 w-8 cursor-pointer items-center justify-center rounded-[5px] bg-modalBackground text-hypertasks-ai-purple shadow-customshadow-2 ${TOUCH_HALO_X}`}
-        >
-          <Sparkles size={15} strokeWidth={1.75}/>
-        </button>
-    )
-  }
-
-  const ScrollToTop = ()=>{
-    const {scrollVirtualize} = useTaskContext()
-    return (
-        <button
-          type="button"
-          aria-label="Scroll to top"
-          onClick={(event)=>{
-            event.stopPropagation()
-            scrollVirtualize("description")
-          }}
-          className={`absolute -top-[240px] right-0 z-[1000] flex h-8 w-8 cursor-pointer items-center justify-center rounded-[5px] bg-modalBackground text-[#8e9093] shadow-customshadow-2 ${TOUCH_HALO_X}`}
-        >
-          <IoIosArrowUp size={16}/>
-        </button>
-    )
-  }
-
-  // Desktop moves through the playlist with J and K. A phone has no keyboard, so
-  // the same two handlers get two more circles on the rail that already holds
-  // back / ask-AI / scroll-to-top (HTPR-3617). They dim at the ends of the list
-  // rather than disappearing, so the rail never changes height.
-  const PlaylistArrow = ({
-    direction,
-    top,
-  }: {
-    direction: "previous" | "next";
-    top: string;
-  }) => {
-    const { navigateToNextTask, navigateToPreviousTask } =
-      useArchiveAndNavigate();
-    const { currentItemInTasksPlaylist } = useTaskContext();
-    const [tasksPlayList] = useRecoilState(tasksPlayListAtom);
-    const indexOf = tasksPlayList?.findIndex(
-      (obj: { projectId: number; uniqueIndex: any }) =>
-        obj.projectId === currentItemInTasksPlaylist.projectId &&
-        obj.uniqueIndex === currentItemInTasksPlaylist.uniqueIndex
-    );
-    const disabled =
-      !tasksPlayList?.length ||
-      (direction === "previous"
-        ? indexOf === 0
-        : indexOf === tasksPlayList.length - 1);
-    const Icon = direction === "previous" ? ChevronUp : ChevronDown;
-    return (
-      <button
-        type="button"
-        aria-label={
-          direction === "previous"
-            ? "Previous task"
-            : "Next task"
+      <MobileFloatingActionButton
+        ariaLabel="Ask AI about this task"
+        icon={
+          <Sparkles
+            size={20}
+            strokeWidth={1.75}
+            className="text-hypertasks-ai-purple"
+            aria-hidden="true"
+          />
         }
-        aria-disabled={disabled}
-        onClick={(event) => {
-          event.stopPropagation();
-          if (disabled) return;
-          if (direction === "previous") navigateToPreviousTask(false, false);
-          else navigateToNextTask(false, true);
-        }}
-        className={`absolute right-0 z-[1000] flex h-8 w-8 cursor-pointer items-center justify-center rounded-[5px] bg-modalBackground text-[#8e9093] shadow-customshadow-2 ${TOUCH_HALO_X} ${
-          disabled ? "opacity-40" : ""
-        }`}
-        style={{ top }}
-      >
-        <Icon size={16} strokeWidth={1.75} />
-      </button>
-    );
-  };
-
-  const GoBackButton = ()=>{
-    const {onGoback} = useTaskContext()
-    return (
-        <button
-          type="button"
-          aria-label="Go back"
-          onClick={(event)=>{
-            event.stopPropagation()
-            onGoback()
-          }}
-          className={`absolute -top-[160px] right-0 z-[1000] flex h-8 w-8 cursor-pointer items-center justify-center rounded-[5px] bg-modalBackground text-[#8e9093] shadow-customshadow-2 ${TOUCH_HALO_X}`}
-        >
-          <FaArrowLeft size={14}/>
-        </button>
+        label="Ask AI"
+        onClick={openAIChatInterface}
+      />
     )
   }
 
