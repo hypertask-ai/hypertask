@@ -10,9 +10,11 @@ module.exports = {
     findFirst: async () => state().previous,
     update: async (args) => {
       state().updates.push(args);
+      const previous = state().previous;
       state().previous = {
-        ...state().previous,
+        ...previous,
         ...args.data,
+        activity: args.data.activity ?? previous.activity,
         id: args.where.id,
       };
       return state().previous;
