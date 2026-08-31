@@ -265,6 +265,26 @@ export async function removeAgentFromBoard(
     };
   }
 
+  const activeLease = await prisma.taskLease.findFirst({
+    where: {
+      agentId,
+      expiresAt: { gt: new Date() },
+      task: { projectId },
+    },
+    select: {
+      task: { select: { ticketNumber: true, uniqueIndex: true } },
+    },
+  });
+  if (activeLease) {
+    const ticket =
+      activeLease.task.ticketNumber ?? `task ${activeLease.task.uniqueIndex}`;
+    return {
+      ok: false,
+      status: 409,
+      message: `Agent is working ${ticket} on this board. Hand off or wait for it to finish, then remove.`,
+    };
+  }
+
   await prisma.member.delete({ where: { id: member.id } });
   return { ok: true };
 }
