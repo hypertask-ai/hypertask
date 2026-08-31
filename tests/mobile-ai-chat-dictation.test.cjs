@@ -317,11 +317,29 @@ test("mobile composer follows live recording state without remounting recorder",
       false,
     );
     assert.equal(overflow.hidden, false);
+    const overflowActions = overflow
+      .querySelector('[role="group"]')
+      .querySelectorAll("button");
     assert.equal(
-      overflow.querySelector('[role="group"]').querySelectorAll("button").length,
+      overflowActions.length,
       2,
       "attachment and context controls belong inside the + overflow",
     );
+    overflow.open = true;
+    await act(async () => overflowActions[0].click());
+    assert.equal(overflow.open, false, "an action must close the overflow");
+
+    overflow.open = true;
+    document.body.dispatchEvent(
+      new dom.window.Event("pointerdown", { bubbles: true }),
+    );
+    assert.equal(overflow.open, false, "an outside tap must close the overflow");
+
+    overflow.open = true;
+    document.dispatchEvent(
+      new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    assert.equal(overflow.open, false, "Escape must close the overflow");
     assert.equal(container.querySelector("[data-ai-chat-primary-send]"), null);
 
     await act(async () => reactRoot.render(renderComposer(false, false)));
@@ -344,7 +362,9 @@ test("mobile composer follows live recording state without remounting recorder",
     assert.match(primarySend.className, /bg-shadcn-primary/);
     assert.equal(primarySend.querySelector("svg")?.getAttribute("viewBox"), "0 0 105 105");
 
+    overflow.open = true;
     await act(async () => reactRoot.render(renderComposer(true, false)));
+    assert.equal(overflow.open, false, "dictation must close the overflow");
     const recorderAfter = container.querySelector('[data-control="recorder"]');
     assert.strictEqual(
       recorderAfter,
