@@ -75,11 +75,11 @@ test("mobile controls sit in a left-aligned row with the primary pushed right", 
     /wrapperClassName=\{\s*isMobile && !userPrompt\.trim\(\) \? "ml-auto" : undefined\s*\}/,
   );
   assert.match(audio, /isMobileTaskWriter[\s\S]*?ai-writer-audio-button/);
-  // The new-task mic joined the prominent system so it can hold the filled
-  // primary slot on an empty composer (HTPR-5517 wireframe).
+  // New-task and AI-chat mics share the prominent system so each can hold the
+  // filled primary slot on an empty mobile composer.
   assert.match(
     audio,
-    /\(isMobileCreateComment \|\| isMobileTaskWriter \|\| isMobileNewTask\) &&\s*!globalRecording/,
+    /\(isMobileCreateComment \|\|[\s\S]*?isMobileTaskWriter \|\|[\s\S]*?isMobileNewTask \|\|[\s\S]*?isMobileAiChat\) &&\s*!globalRecording/,
   );
   // One glyph size (HTPR-5517): the writer and new-task mics are 20px like
   // every other icon in the row, no longer a 24px outlier.

@@ -29,6 +29,7 @@ const read = (relativePath) =>
 
 const editor = read("src/components/RTE/Components/TiptapEditor.tsx");
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
+const sendArrow = read("src/components/Common/SendArrow.tsx");
 const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
 const tiptapStyles = read("src/styles/tiptap.module.scss");
 const mainContainer = read("src/components/RTE/Components/TiptapMainContainer.tsx");
@@ -69,13 +70,10 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   // HTPR-5684 retired IOSend for the shared SendArrow. HTPR-5659 keeps Send
   // the same neutral colour as the demoted mic, so the arrow must track
   // currentColor (not a hardcoded white that vanishes on light themes).
-  const arrowStart = attachments.indexOf("export const SendArrow");
-  assert.ok(arrowStart > -1, "SendArrow not found");
-  const arrow = attachments.slice(arrowStart);
-  const arrowAt = arrow.indexOf(SEND_ARROW_GEOMETRY);
+  const arrowAt = sendArrow.indexOf(SEND_ARROW_GEOMETRY);
   assert.ok(arrowAt > -1, "send arrow path geometry not found in SendArrow");
-  assert.match(arrow.slice(0, arrowAt), /fill="currentColor"/);
-  assert.doesNotMatch(arrow.slice(0, arrowAt), /fill="white"/);
+  assert.match(sendArrow.slice(0, arrowAt), /fill="currentColor"/);
+  assert.doesNotMatch(sendArrow.slice(0, arrowAt), /fill="white"/);
   const button = attachments.match(
     /aria-label="Send comment"[\s\S]{0,500}?className="([^"]+)"/,
   );

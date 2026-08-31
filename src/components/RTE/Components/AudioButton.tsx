@@ -102,6 +102,7 @@ export const AudioButton = ({
     isMobileView && id === "ai-writer-audio-button";
   const isMobileNewTask =
     isMobileView && id === "create-task-modal-audio-button";
+  const isMobileAiChat = isMobileView && id === "ai-chat-audio-button";
   const isKeyboardAccessible =
     isMobileTaskWriter || Boolean(ariaLabel || idleLabel);
   const dictationAriaLabel = isKeyboardAccessible
@@ -618,15 +619,18 @@ export const AudioButton = ({
               filled and left two competing primaries side by side). */}
           {(() => {
             const prominent =
-              (isMobileCreateComment || isMobileTaskWriter || isMobileNewTask) &&
+              (isMobileCreateComment ||
+                isMobileTaskWriter ||
+                isMobileNewTask ||
+                isMobileAiChat) &&
               !globalRecording;
             const prominentClassName = isProcessing
               ? "h-[34px] gap-2"
               : hasText
-                ? "h-11 w-11 justify-center rounded-sm text-icon-dark-gray"
+                ? `h-11 w-11 justify-center ${isMobileAiChat ? "rounded-full" : "rounded-sm"} text-icon-dark-gray`
                 : isMobileCreateComment
                   ? "h-11 w-11 justify-center rounded-sm bg-hypertasks-ai-purple text-white shadow-[0_3px_12px_rgba(198,104,255,0.38)]"
-                  : "h-11 w-11 justify-center rounded-sm bg-shadcn-primary text-primary-foreground";
+                  : `h-11 w-11 justify-center ${isMobileAiChat ? "rounded-full" : "rounded-sm"} bg-shadcn-primary text-primary-foreground`;
             return (
               <div
                 id={id}

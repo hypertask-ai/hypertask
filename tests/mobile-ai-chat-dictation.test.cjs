@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
@@ -7,6 +8,10 @@ const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
+const audioButtonSource = fs.readFileSync(
+  path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
+  "utf8",
+);
 const jiti = require("jiti")(
   path.join(root, "tests/mobile-ai-chat-dictation.test.cjs"),
   {
@@ -60,12 +65,14 @@ stubSourceModule(
   },
 );
 stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
-  default: ({ wrapperClassName, visualizerClassName }) =>
-    React.createElement("div", {
+  default: ({ wrapperClassName, visualizerClassName, hasText, onProcessingChange }) =>
+    React.createElement("button", {
       className: ["audio-recorder", wrapperClassName, visualizerClassName]
         .filter(Boolean)
         .join(" "),
       "data-control": "recorder",
+      "data-has-text": String(hasText),
+      onClick: () => onProcessingChange?.(true),
     }),
 });
 stubSourceModule(
@@ -111,9 +118,9 @@ for (const [filename, cachedModule] of originalCache) {
   require.cache[filename] = cachedModule;
 }
 
-const chatContextValue = (isRecording) => ({
+const chatContextValue = (isRecording, isEmpty = true) => ({
   tiptapKeydown: () => {},
-  editor: null,
+  editor: { isEmpty },
   isTyping: false,
   isRecording,
   queuedMessages: [],
@@ -138,16 +145,35 @@ const chatContextValue = (isRecording) => ({
   removeFile: () => {},
 });
 
-const renderComposer = (isRecording) =>
+const renderComposer = (isRecording, isEmpty = true) =>
   React.createElement(
     MobileViewContext.Provider,
     { value: true },
     React.createElement(
       TestChatContext.Provider,
-      { value: chatContextValue(isRecording) },
+      { value: chatContextValue(isRecording, isEmpty) },
       React.createElement(AI_Tiptap_Container),
     ),
   );
+
+test("mobile AI chat uses the filled 44px mic and demotes it once text exists", () => {
+  assert.match(
+    audioButtonSource,
+    /isMobileAiChat = isMobileView && id === "ai-chat-audio-button"/,
+  );
+  assert.match(
+    audioButtonSource,
+    /isMobileNewTask \|\|[\s\S]*?isMobileAiChat\)[\s\S]*?!globalRecording/,
+  );
+  assert.match(
+    audioButtonSource,
+    /hasText[\s\S]*?isMobileAiChat \? "rounded-full"[\s\S]*?text-icon-dark-gray/,
+  );
+  assert.match(
+    audioButtonSource,
+    /isMobileAiChat \? "rounded-full"[\s\S]*?bg-shadcn-primary text-primary-foreground/,
+  );
+});
 
 test("mobile composer follows live recording state without remounting recorder", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>");
@@ -164,23 +190,45 @@ test("mobile composer follows live recording state without remounting recorder",
   const reactRoot = createRoot(container);
 
   try {
-    await act(async () => reactRoot.render(renderComposer(false)));
+    await act(async () => reactRoot.render(renderComposer(false, true)));
     const recorderBefore = container.querySelector('[data-control="recorder"]');
+    const overflow = container.querySelector("[data-ai-chat-mobile-overflow]");
     assert.ok(recorderBefore);
+    assert.ok(overflow);
+    assert.equal(recorderBefore.dataset.hasText, "false");
+    assert.match(recorderBefore.className, /order-4 ml-auto/);
     assert.equal(
       container.querySelector("[data-ai-chat-leading-controls]").hidden,
       false,
     );
+    assert.equal(overflow.hidden, false);
     assert.equal(
-      container.querySelector("[data-ai-chat-before-recorder]").hidden,
-      false,
+      overflow.querySelector('[role="group"]').querySelectorAll("button").length,
+      2,
+      "attachment and context controls belong inside the + overflow",
     );
-    assert.equal(
-      container.querySelector("[data-ai-chat-after-recorder]").hidden,
-      false,
-    );
+    assert.equal(container.querySelector("[data-ai-chat-primary-send]"), null);
 
-    await act(async () => reactRoot.render(renderComposer(true)));
+    await act(async () => reactRoot.render(renderComposer(false, false)));
+    const recorderWithText = container.querySelector('[data-control="recorder"]');
+    assert.strictEqual(
+      recorderWithText,
+      recorderBefore,
+      "typing must move, not remount, the recorder",
+    );
+    assert.equal(recorderWithText.dataset.hasText, "true");
+    assert.match(recorderWithText.className, /order-2/);
+    assert.doesNotMatch(recorderWithText.className, /ml-auto/);
+    const primarySend = container.querySelector(
+      "[data-ai-chat-primary-send] button",
+    );
+    assert.ok(primarySend);
+    assert.match(primarySend.className, /h-11 w-11/);
+    assert.match(primarySend.className, /rounded-full/);
+    assert.match(primarySend.className, /bg-shadcn-primary/);
+    assert.equal(primarySend.querySelector("svg")?.getAttribute("viewBox"), "0 0 105 105");
+
+    await act(async () => reactRoot.render(renderComposer(true, false)));
     const recorderAfter = container.querySelector('[data-control="recorder"]');
     assert.strictEqual(
       recorderAfter,
@@ -192,19 +240,28 @@ test("mobile composer follows live recording state without remounting recorder",
       true,
     );
     assert.equal(
-      container.querySelector("[data-ai-chat-before-recorder]").hidden,
+      container.querySelector("[data-ai-chat-mobile-overflow]").hidden,
       true,
     );
-    assert.equal(
-      container.querySelector("[data-ai-chat-after-recorder]").hidden,
-      true,
-    );
+    assert.equal(container.querySelector("[data-ai-chat-primary-send]"), null);
     assert.match(
       container.querySelector("[data-ai-chat-recorder-row]").className,
       /min-w-0 flex-1/,
     );
     assert.match(recorderAfter.className, /min-w-0 flex-1/);
     assert.match(recorderAfter.className, /!mb-0 min-w-0 w-full/);
+
+    await act(async () => reactRoot.render(renderComposer(false, false)));
+    await act(async () => recorderAfter.click());
+    assert.strictEqual(
+      container.querySelector('[data-control="recorder"]'),
+      recorderBefore,
+      "transcription state must not remount the recorder",
+    );
+    assert.equal(
+      container.querySelector("[data-ai-chat-leading-controls]").hidden,
+      true,
+    );
   } finally {
     await act(async () => reactRoot.unmount());
     dom.window.close();
