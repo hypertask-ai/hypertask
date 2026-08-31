@@ -462,7 +462,8 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
         autoFocus={false}
         className={`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex  linksModal  ${styles.links_modal}`}
       >
-        <div className="flex items-center justify-between gap-5 px-[40px]">
+        <div className="px-4 @md:px-0">
+          <div className="flex items-center justify-between gap-5 @md:px-[40px]">
           <span className={`flex gap-1 font-bold text-subheading text-white-black`}>
             <p>All Tasks</p>
           </span>
@@ -536,12 +537,14 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
                       handleMouseEnter={handleMouseEnter}
                       handleMouseLeave={handleMouseLeave}
                       selected={selectedIndex===index}
+                      flushMobilePadding
                       key={`list-row-all-tasks-${index}`}
                     />
                   );
                 })}
             </ul>
           </div>
+        </div>
         </div>
         <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title">
           {tabs.map((item, index) => (

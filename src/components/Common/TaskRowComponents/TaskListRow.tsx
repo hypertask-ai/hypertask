@@ -18,6 +18,7 @@ interface IProps {
   selected: boolean;
   showDueDate?: boolean;
   isOverdue?: boolean;
+  flushMobilePadding?: boolean;
 }
 
 export const TaskListRow = (props: IProps) => {
@@ -30,6 +31,7 @@ export const TaskListRow = (props: IProps) => {
     selected,
     showDueDate = false,
     isOverdue = false,
+    flushMobilePadding = false,
   } = props;
 
   const isBulkSelected = false; // Not using bulk selection in scheduled view
@@ -59,17 +61,18 @@ export const TaskListRow = (props: IProps) => {
       handleMouseLeave={handleMouseLeave}
       openTask={handleClick}
       className={cn(
-        "flex cursor-pointer md:space-x-8 py-[8px] px-[20px] md:px-5 rounded-md justify-between w-full flex-col md:flex-row md:border-l-4",
+        "flex cursor-pointer @md:space-x-8 py-[8px] px-[20px] @md:px-5 rounded-md justify-between w-full flex-col @md:flex-row @md:border-l-4",
+        flushMobilePadding && "px-0",
         selected
-          ? "md:bg-active-elementBg md:border-l-selected-item-border"
-          : "md:border-l-transparent bg-transparent"
+          ? "@md:bg-active-elementBg @md:border-l-selected-item-border"
+          : "@md:border-l-transparent bg-transparent"
       )}
     >
       {/* First column: StarredDot & Notification Dot | Assignee Name | Comment Count */}
-      <div className="flex md:space-x-6 md:min-w-[15%]">
+      <div className="flex @md:space-x-6 @md:min-w-[15%]">
         <div className="flex justify-between w-100">
-          <div className="gap-1 flex items-center">
-            <span className="flex md:gap-[10px] items-center">
+          <div className="gap-1 flex items-center min-w-0">
+            <span className="flex @md:gap-[10px] items-center min-w-0">
               <StarAndSeenDots
                 starred={!!(task.savedContent && task.savedContent.length > 0)}
                 seen={
@@ -109,7 +112,7 @@ export const TaskListRow = (props: IProps) => {
           <span
             className={cn(
               inboxConfig.bulkSelectionStyling.timestamp(isBulkSelected),
-              "flex md:hidden min-w-fit",
+              "flex @md:hidden min-w-fit",
               isOverdue && "text-[#F88F9C]"
             )}
             suppressHydrationWarning
@@ -125,14 +128,14 @@ export const TaskListRow = (props: IProps) => {
       </div>
 
       {/* Second column: Title Container (ticket number, title, labels) | Description */}
-      <div className="flex flex-grow xs:mt-2 sm:mt-0 gap-2 items-baseline md:items-center md:w-[40%] flex-col md:flex-row">
+      <div className="flex min-w-0 flex-grow mt-2 @sm:mt-0 gap-2 items-baseline @md:items-center @md:w-[40%] flex-col @md:flex-row">
         {/* ============ title =================  */}
         <div
           suppressHydrationWarning
-          className="truncate flex-1 flex-column sm:flex-initial"
+          className="min-w-0 flex-1 flex-column @sm:flex-initial"
         >
           <span
-            className="flex items-center truncate justify-start gap-1 xs:flex-wrap md:flex-nowrap"
+            className="flex min-w-0 items-center truncate justify-start gap-1"
             style={{
               fontSize: 13 }}
           >
@@ -141,7 +144,7 @@ export const TaskListRow = (props: IProps) => {
             <span className="font-bold text-icon-dark-gray text-nowrap">
               {task.ticketNumber}
             </span>
-            <span className="font-medium text-white-black truncate line-clamp-1">
+            <span className="min-w-0 flex-1 font-medium text-white-black truncate line-clamp-1">
               {task.title}
             </span>
           </span>
@@ -152,12 +155,12 @@ export const TaskListRow = (props: IProps) => {
           suppressHydrationWarning
           className={cn(
             inboxConfig.bulkSelectionStyling.content(isBulkSelected),
-            "flex-1 truncate flex-column md:min-w-[160px]"
+            "min-w-0 w-full flex-1 truncate flex-column @md:min-w-[160px]"
           )}
         >
           <span
             suppressHydrationWarning
-            className="truncate line-clamp-1 xs:max-w-[92vw] md:max-w-full xs:whitespace-pre-wrap md:whitespace-nowrap"
+            className="block w-full max-w-full truncate whitespace-nowrap line-clamp-1"
             style={{
               fontSize: 13 }}
           >
@@ -170,9 +173,9 @@ export const TaskListRow = (props: IProps) => {
       </div>
 
       {/* Third column: Archive status | Due date Label | Time */}
-      <div className="flex items-center justify-end gap-2 md:min-w-[120px]">
+      <div className="flex items-center justify-end gap-2 @md:min-w-[120px]">
         {/* Archive status */}
-        <div className="hidden md:flex items-center">
+        <div className="hidden @md:flex items-center">
           <Check
             size={15}
             color={task.status === "Archive" ? "green" : "#8E9093"}
@@ -184,7 +187,7 @@ export const TaskListRow = (props: IProps) => {
         <span
           className={cn(
             inboxConfig.bulkSelectionStyling.timestamp(isBulkSelected),
-            "hidden md:block md:min-w-[57px]",
+            "hidden @md:block @md:min-w-[57px]",
             isOverdue && "text-[#F88F9C]"
           )}
           suppressHydrationWarning
@@ -218,10 +221,10 @@ export const SplitTitle = ({
   return (
     <div
       key={tab.project?.toString()}
-      className={` cursor-pointer relative group md:h-8
+      className={` cursor-pointer relative group @md:h-8
                         justify-start
                         whitespace-nowrap footer_tags_main items-center
-                        md:px-[10px] lg:px-[15px]
+                        @md:px-[10px] @lg:px-[15px]
                         text-content  flex  gap-1 `}
       onClick={onClick}
     >
@@ -249,7 +252,7 @@ const StarAndSeenDots = ({
 }) => {
   return (
     <div
-      className="group md:w-[10px] xs:left-[-14px] md:left-0 flex items-center justify-center relative"
+      className="group @md:w-[10px] @md:left-0 flex items-center justify-center relative"
       style={{ position: "relative", marginRight: "-2%" }}
     >
       {seen === false ? (
