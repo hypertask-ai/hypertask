@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
-import { EditorContent } from "@tiptap/react";
+import { EditorContent, useEditorState } from "@tiptap/react";
 import { LoaderCircle, X } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -13,6 +13,7 @@ import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
 import {
   MOBILE_OVERLAY_SHEET_Z,
   mobileOverlayAppSheetBodyClass,
+  mobileOverlayAppSheetEditorWellClass,
   mobileOverlayAppSheetHandleBarClass,
   mobileOverlayAppSheetHandleHeaderClass,
   mobileOverlayAppSheetHandleRowClass,
@@ -22,6 +23,7 @@ import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import styles from "@/styles/tiptap.module.scss";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import {
   inlineDraftAiCommandForInstruction,
   inlineDraftAiWritePlaceholder,
@@ -41,10 +43,6 @@ const CHIP_PRIMARY_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold bg-hypertasks-ai-purple text-white hover:opacity-90 focus-visible:outline-none disabled:opacity-50";
 const CHIP_SHEET_ROW_CLASS =
   "flex min-h-[52px] w-full items-center px-3 text-left text-content text-white-black hover:bg-hover-active focus-visible:bg-hover-active disabled:opacity-50";
-const CHIP_SHEET_PRIMARY_CLASS =
-  "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hypertasks-ai-purple px-3 text-content font-semibold text-black disabled:opacity-50";
-const CHIP_SHEET_DONE_CLASS =
-  "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hover-active px-3 text-content font-semibold text-white-black";
 
 const EDIT_ACTIONS = [
   ["Improve readability", "ImproveReadability"],
@@ -137,17 +135,37 @@ const InlineDraftAiFloat = ({
   const isComposer = presentation === "composer";
   const isRefineFullscreen = presentation === "refine-fullscreen";
   const isMobileAiSheet = isRefineFullscreen || isComposer;
+  const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
+  const editorHasText =
+    useEditorState({
+      editor,
+      selector: ({ editor: activeEditor }) => !(activeEditor?.isEmpty ?? true),
+    }) ?? false;
 
   useEffect(() => {
-    if (!isRefineFullscreen || !editor) return;
+    if (!isMobileAiSheet || !editor) return;
     requestAnimationFrame(() => {
       try {
-        editor.commands.focus("end");
+        editor.commands.focus(isRefineFullscreen ? "end" : "start");
       } catch {
         // Editor view may not be mounted yet.
       }
     });
-  }, [editor, isRefineFullscreen]);
+  }, [editor, isMobileAiSheet, isRefineFullscreen]);
+
+  useEffect(() => {
+    if (!isMobileAiSheet || !editor) return;
+    const dom = editor.view.dom;
+    if (document.activeElement !== dom && !dom.contains(document.activeElement)) {
+      return;
+    }
+    dom.scrollIntoView({ block: "nearest" });
+  }, [
+    editor,
+    isMobileAiSheet,
+    sheetViewport?.bottomInset,
+    sheetViewport?.visibleHeight,
+  ]);
 
   useEffect(() => {
     if (!isMobileAiSheet) return;
@@ -569,48 +587,13 @@ const InlineDraftAiFloat = ({
     </div>
   ) : null;
 
-  const composerResultActions = hasResult ? (
-    <div className="flex flex-col">
-      <button type="button" className={CHIP_SHEET_DONE_CLASS} onClick={close}>
-        Done
-      </button>
-      <button
-        type="button"
-        className={CHIP_SHEET_PRIMARY_CLASS}
-        onClick={retry}
-        disabled={isLoading}
-      >
-        Retry
-      </button>
-    </div>
-  ) : null;
-
   if (isRefineFullscreen || isComposer) {
-    const sheetFooter = isRefineFullscreen ? (
-      isLoading ? (
-        <div
-          className="flex items-center gap-2 px-4 py-3 text-meta text-text-light-gray"
-          role="status"
-        >
-          <LoaderCircle
-            size={16}
-            className="animate-spin text-hypertasks-ai-purple"
-            aria-hidden
-          />
-          Rewriting draft…
-        </div>
-      ) : (
-        sheetEditChips
-      )
-    ) : (
-      <>
-        <div
-          className="rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5"
-          onKeyDown={handlePanelKeyDown}
-        >
-          {isLoading ? (
+    const showSheetActions = editorHasText;
+    const sheetFooter = showSheetActions
+      ? isLoading
+        ? (
             <div
-              className="flex items-center gap-2 py-1.5 text-meta text-text-light-gray"
+              className="flex items-center gap-2 px-2 py-2 text-meta text-text-light-gray"
               role="status"
             >
               <LoaderCircle
@@ -618,15 +601,13 @@ const InlineDraftAiFloat = ({
                 className="animate-spin text-hypertasks-ai-purple"
                 aria-hidden
               />
-              Writing draft…
+              {isRefineFullscreen ? "Rewriting draft…" : "Writing draft…"}
             </div>
-          ) : (
-            promptRow
-          )}
-        </div>
-        {composerResultActions}
-      </>
-    );
+          )
+        : (
+          sheetEditChips
+        )
+      : null;
 
     return (
       <AppSheet
@@ -635,11 +616,27 @@ const InlineDraftAiFloat = ({
         ariaLabel="Write with AI"
         defaultLibraryHeader={false}
         zIndex={MOBILE_OVERLAY_SHEET_Z}
-        panelClassName={mobileOverlayAppSheetPanelClass}
-        bodyClassName={mobileOverlayAppSheetBodyClass}
+        detent="full-height"
+        disableScrollLocking
+        panelClassName={cn(
+          mobileOverlayAppSheetPanelClass,
+          sheetViewport && "!h-auto",
+        )}
+        bodyClassName={cn(
+          mobileOverlayAppSheetBodyClass,
+          sheetViewport ? "max-h-full" : "!max-h-[85svh]",
+        )}
         headerClassName={mobileOverlayAppSheetHandleHeaderClass}
         handleRowClassName={mobileOverlayAppSheetHandleRowClass}
         handleBarClassName={mobileOverlayAppSheetHandleBarClass}
+        containerStyle={
+          sheetViewport
+            ? {
+                bottom: sheetViewport.bottomInset,
+                maxHeight: `${sheetViewport.visibleHeight}px`,
+              }
+            : undefined
+        }
       >
         <div
           ref={rootRef}
@@ -660,20 +657,23 @@ const InlineDraftAiFloat = ({
             </button>
           </div>
 
-          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2">
-            <div
-              className={cn(
-                styles.editorContainer,
-                "min-h-[120px] break-normal px-1 py-2 text-content",
-              )}
-            >
-              <EditorContent editor={editor} />
-            </div>
+          <div className="min-h-0 flex-1" aria-hidden />
+
+          <div
+            className={cn(
+              mobileOverlayAppSheetEditorWellClass,
+              styles.editorContainer,
+              "break-normal",
+            )}
+          >
+            <EditorContent editor={editor} />
           </div>
 
-          <div className="shrink-0 space-y-2 border-t border-thin border-border-light-gray-thin p-2">
-            {sheetFooter}
-          </div>
+          {sheetFooter ? (
+            <div className="shrink-0 border-t border-thin border-border-light-gray-thin p-2">
+              {sheetFooter}
+            </div>
+          ) : null}
         </div>
       </AppSheet>
     );
