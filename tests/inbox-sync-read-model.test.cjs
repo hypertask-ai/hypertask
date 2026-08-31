@@ -31,9 +31,11 @@ const {
   observeInboxReadModelRevision,
   reserveInboxReadModelRevision,
 } = jiti(path.join(root, "src/lib/inboxSync/revision.ts"));
-const { applyInboxReadModelMutation, createInboxRemovalMutation } = jiti(
-  path.join(root, "src/lib/inboxSync/mutation.ts"),
-);
+const {
+  applyInboxReadModelMutation,
+  createInboxRemovalMutation,
+  findInboxRestoreIndex,
+} = jiti(path.join(root, "src/lib/inboxSync/mutation.ts"));
 const { updateInboxOptimistically } = jiti(
   path.join(root, "src/lib/inboxSync/optimistic.ts"),
 );
@@ -573,21 +575,41 @@ test("removal targets both the exact notification row and its same-task siblings
   assert.deepEqual(fallbackMutation.taskIds, [500]);
 });
 
-test("undo restores an archived notification to its previous cache position", () => {
+test("undo restores an archived notification to its post-removal cache position", () => {
   const before = notification(9);
-  const archived = notification(10);
+  const sibling = notification(8, { taskId: 500 });
+  const archived = notification(10, { taskId: 500 });
   const after = notification(11);
+  const previousNotifications = [before, sibling, archived, after];
   const payload = {
     revision: revision(7_100),
-    notifications: [before, after],
+    notifications: applyInboxReadModelMutation(
+      {
+        revision: revision(7_000),
+        notifications: previousNotifications,
+        splitsNoImportant: [],
+        showImportantSplit: false,
+      },
+      createInboxRemovalMutation([archived]),
+    ).notifications,
     splitsNoImportant: [],
     showImportantSplit: false,
   };
+  assert.deepEqual(
+    payload.notifications.map(({ id }) => id),
+    ["9", "11"],
+  );
+  const restoreIndex = findInboxRestoreIndex(
+    previousNotifications,
+    payload.notifications,
+    archived.id,
+  );
+  assert.equal(restoreIndex, 1);
 
   const restored = applyInboxReadModelMutation(payload, {
     type: "restore",
     notification: archived,
-    index: 1,
+    index: restoreIndex,
   });
   assert.deepEqual(
     restored.notifications.map(({ id }) => id),

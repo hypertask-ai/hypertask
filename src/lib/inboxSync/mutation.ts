@@ -36,6 +36,24 @@ type InboxMutationPayload = Pick<
   "notifications" | "splitsNoImportant" | "showImportantSplit"
 >;
 
+export const findInboxRestoreIndex = (
+  previousNotifications: readonly INotification[],
+  remainingNotifications: readonly INotification[],
+  notificationId: string,
+): number => {
+  const previousIndex = previousNotifications.findIndex(
+    ({ id }) => String(id) === notificationId,
+  );
+  if (previousIndex <= 0) return 0;
+
+  const remainingIds = new Set(
+    remainingNotifications.map(({ id }) => String(id)),
+  );
+  return previousNotifications
+    .slice(0, previousIndex)
+    .filter(({ id }) => remainingIds.has(String(id))).length;
+};
+
 export const createInboxRemovalMutation = (
   notifications: readonly INotification[],
 ): Extract<InboxReadModelMutation, { type: "remove" }> => {

@@ -24,7 +24,10 @@ import {
   type LearnTutorialInboxArchivedDetail,
 } from "@/lib/tutorial/learnTutorialState";
 import { updateInboxOptimistically } from "@/lib/inboxSync/optimistic";
-import { createInboxRemovalMutation } from "@/lib/inboxSync/mutation";
+import {
+  createInboxRemovalMutation,
+  findInboxRestoreIndex,
+} from "@/lib/inboxSync/mutation";
 export interface INotificationsFromTQ {
   structuredData: {
     data: INotification[][];
@@ -229,21 +232,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     console.time("StartingProcess");
     const _notifications: INotificationsFromTQ | undefined =
       queryClient.getQueryData(resolvedQueryKey);
-    const body = {
-      notification: elementToRemove,
-      currentUser,
-      notificationIndex:
-        _notifications?.notifications.findIndex(
-          ({ id }) => String(id) === String(elementToRemove.id),
-        ) ?? 0,
-    };
-    undoHandler &&
-      performActionAndStoreUndoData(
-        body,
-        "Undo remove notification",
-        undoHandler,
-      );
-
     const prevTabLength = _notifications?.structuredData.tabs.length;
     const currentSplitName =
       _notifications?.structuredData.tabs[globalFocus.currSplit].project;
@@ -255,6 +243,21 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       mutation: createInboxRemovalMutation([elementToRemove]),
     });
     if (!cachePayload) return;
+    const body = {
+      notification: elementToRemove,
+      currentUser,
+      notificationIndex: findInboxRestoreIndex(
+        _notifications.notifications,
+        cachePayload.notifications,
+        String(elementToRemove.id),
+      ),
+    };
+    undoHandler &&
+      performActionAndStoreUndoData(
+        body,
+        "Undo remove notification",
+        undoHandler,
+      );
     const newState = cachePayload.notifications;
     console.timeEnd("StartingProcess");
 
