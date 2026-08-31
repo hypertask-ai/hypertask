@@ -6631,7 +6631,7 @@ function buildTools(
         }
 
         if (sectionTarget && oldTask.sectionId !== sectionTarget.id) {
-          await createTaskMovedActivity({
+          const moveActivity = await createTaskMovedActivity({
             userObj: activityUser,
             toSectionId: sectionTarget.id,
             toSection_title: sectionTarget.section_title,
@@ -6639,7 +6639,15 @@ function buildTools(
             fromSection_title: oldTask.section ?? "",
             taskId: task.id,
           });
-          await sendNotificationForTask(user.id, "TaskMoved", task.id, task.projectId, undefined);
+          if (moveActivity.shouldNotify) {
+            await sendNotificationForTask(
+              user.id,
+              "TaskMoved",
+              task.id,
+              task.projectId,
+              undefined,
+            );
+          }
         }
 
         if (input.status !== undefined && oldTask.status !== input.status) {

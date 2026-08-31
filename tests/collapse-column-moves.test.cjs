@@ -1,92 +1,137 @@
-// HTPR-3793. Walking a card through several columns with the keyboard wrote one
-// history row per stop, so the feed read as noise and the move that actually
-// mattered was buried.
-//
-// A rapid follow-up move now extends the previous entry instead of adding a new
-// one. This pins the four rules that decide whether that is safe to do.
 const test = require("node:test");
-const assert = require("node:assert");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const { createJiti } = require("jiti");
 
-const COLLAPSE_WINDOW_MS = 60_000;
+const root = path.join(__dirname, "..");
+const jiti = createJiti(__filename, {
+  alias: { "@": path.join(root, "src") },
+  interopDefault: true,
+});
+const {
+  STATUS_FLIP_COLLAPSE_WINDOW_MS,
+  classifyTaskMoveCollapse,
+  mergeStatusFlipActivity,
+} = jiti(
+  path.join(root, "src/utils/controllers/activities/taskMoveCollapse.ts"),
+);
 
-// Mirrors the decision in src/utils/controllers/activities/createTaskMovedActivity.ts.
-const isCollapsible = ({ previous, fromSectionId, actor, now }) => {
-  if (!previous || previous.type !== "TaskMove") return false;
-  const sameActor = actor.agentId
-    ? previous.data.fromAgent?.id === actor.agentId
-    : !previous.data.fromAgent && previous.data.fromUserId === actor.userId;
-  return (
-    sameActor &&
-    previous.data.toSection?.sectionId === fromSectionId &&
-    now - previous.createdAt <= COLLAPSE_WINDOW_MS
-  );
-};
-
-const move = (fromId, toId, { userId = 6, agent = null, createdAt = 0 } = {}) => ({
+const NOW = 2_000_000_000;
+const move = (
+  fromId,
+  toId,
+  { userId = 6, agent = null, currentSectionId, statusFlipCount, quickMoveCollapsed } = {},
+) => ({
   type: "TaskMove",
-  createdAt,
   data: {
     fromUserId: userId,
     fromAgent: agent,
-    fromSection: { sectionId: fromId },
-    toSection: { sectionId: toId },
+    fromSection: { sectionId: fromId, sectionTitle: `Section ${fromId}` },
+    toSection: { sectionId: toId, sectionTitle: `Section ${toId}` },
+    ...(currentSectionId
+      ? {
+          currentSection: {
+            sectionId: currentSectionId,
+            sectionTitle: `Section ${currentSectionId}`,
+          },
+        }
+      : {}),
+    ...(statusFlipCount ? { statusFlipCount } : {}),
+    ...(quickMoveCollapsed ? { quickMoveCollapsed } : {}),
   },
 });
 
-const NOW = 1_000_000;
+const classify = ({
+  previousActivity = move(1, 2),
+  age = 5_000,
+  sameActor = true,
+  fromSectionId = 2,
+  toSectionId = 1,
+} = {}) =>
+  classifyTaskMoveCollapse({
+    previousActivity,
+    previousCreatedAt: new Date(NOW - age),
+    sameActor,
+    fromSectionId,
+    toSectionId,
+    now: NOW,
+  });
 
-test("a rapid follow-up move collapses into the previous one", () => {
-  const previous = move(1, 2, { createdAt: NOW - 5_000 });
-  assert.strictEqual(
-    isCollapsible({ previous, fromSectionId: 2, actor: { userId: 6 }, now: NOW }),
-    true
+test("a same-actor A-B reversal within 30 minutes collapses", () => {
+  assert.equal(
+    classify({ age: STATUS_FLIP_COLLAPSE_WINDOW_MS }),
+    "status-flip",
   );
 });
 
-test("a move minutes later stays a separate history entry", () => {
-  const previous = move(1, 2, { createdAt: NOW - 5 * 60_000 });
-  assert.strictEqual(
-    isCollapsible({ previous, fromSectionId: 2, actor: { userId: 6 }, now: NOW }),
-    false
+test("a repeated A-B run follows its stored current section", () => {
+  const previousActivity = move(1, 2, {
+    currentSectionId: 1,
+    statusFlipCount: 1,
+  });
+  assert.equal(
+    classify({ previousActivity, fromSectionId: 1, toSectionId: 2 }),
+    "status-flip",
   );
 });
 
-test("someone else's move is never absorbed into yours", () => {
-  const previous = move(1, 2, { userId: 99, createdAt: NOW - 5_000 });
-  assert.strictEqual(
-    isCollapsible({ previous, fromSectionId: 2, actor: { userId: 6 }, now: NOW }),
-    false
+test("a flip outside the window remains a separate activity", () => {
+  assert.equal(
+    classify({ age: STATUS_FLIP_COLLAPSE_WINDOW_MS + 1 }),
+    null,
   );
 });
 
-test("a move that does not continue from where the last one ended is separate", () => {
-  // Previous journey ended in column 2; this one starts in column 5. Two
-  // unrelated moves that happen to be adjacent in the feed.
-  const previous = move(1, 2, { createdAt: NOW - 5_000 });
-  assert.strictEqual(
-    isCollapsible({ previous, fromSectionId: 5, actor: { userId: 6 }, now: NOW }),
-    false
+test("another actor's reversal remains a separate activity", () => {
+  assert.equal(classify({ sameActor: false }), null);
+});
+
+test("a move involving a third section is not treated as A-B ping-pong", () => {
+  assert.equal(
+    classify({ age: 5 * 60_000, fromSectionId: 2, toSectionId: 3 }),
+    null,
   );
 });
 
-test("an agent does not inherit its owner's move, and vice versa", () => {
-  const byAgent = move(1, 2, { agent: { id: "agent-a" }, createdAt: NOW - 5_000 });
-  // Same underlying user id, but the actor is the human, not the agent.
-  assert.strictEqual(
-    isCollapsible({ previous: byAgent, fromSectionId: 2, actor: { userId: 6 }, now: NOW }),
-    false
-  );
-  const byUser = move(1, 2, { createdAt: NOW - 5_000 });
-  assert.strictEqual(
-    isCollapsible({ previous: byUser, fromSectionId: 2, actor: { agentId: "agent-a" }, now: NOW }),
-    false
+test("the existing rapid multi-column journey collapse remains intact", () => {
+  assert.equal(
+    classify({ age: 5_000, fromSectionId: 2, toSectionId: 3 }),
+    "quick-journey",
   );
 });
 
-test("a non-move activity in between blocks collapsing", () => {
-  const previous = { type: "TaskAssigned", createdAt: NOW - 1_000, data: {} };
-  assert.strictEqual(
-    isCollapsible({ previous, fromSectionId: 2, actor: { userId: 6 }, now: NOW }),
-    false
+test("a non-move activity blocks collapsing", () => {
+  assert.equal(
+    classify({ previousActivity: { type: "TaskAssigned", data: {} } }),
+    null,
   );
+});
+
+test("merging a flip preserves the section pair and records the latest destination", () => {
+  const firstFlip = mergeStatusFlipActivity(move(1, 2), {
+    sectionId: 1,
+    sectionTitle: "Section 1",
+  });
+  const secondFlip = mergeStatusFlipActivity(firstFlip, {
+    sectionId: 2,
+    sectionTitle: "Section 2",
+  });
+
+  assert.equal(secondFlip.data.fromSection.sectionId, 1);
+  assert.equal(secondFlip.data.toSection.sectionId, 2);
+  assert.equal(secondFlip.data.currentSection.sectionId, 2);
+  assert.equal(secondFlip.data.statusFlipCount, 2);
+});
+
+test("all task-move entry points gate notifications on the activity result", () => {
+  for (const relativePath of [
+    "src/pages/api/tasks/moveTask.ts",
+    "src/lib/slack/actions.ts",
+    "src/app/api/webhooks/github/route.ts",
+    "src/app/api/ai/chat/stream/route.ts",
+  ]) {
+    const source = fs.readFileSync(path.join(root, relativePath), "utf8");
+    assert.match(source, /moveActivity(?:\?\.|\.)shouldNotify/);
+  }
 });

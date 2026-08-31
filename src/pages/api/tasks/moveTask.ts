@@ -75,10 +75,7 @@ const handler: NextApiHandler = async (req, res) => {
     // HTPR-4484: sync the moved task into any open task-detail view (section change).
     void broadcastTaskChange(taskId, { originUserId: userObj.id });
 
-    // Fire notification and activity
-    sendNotificationForTask(userObj.id, "TaskMoved", taskId, projectId, agentId ?? null);
-
-    const newComment = await createTaskMovedActivity({
+    const moveActivity = await createTaskMovedActivity({
       taskId,
       toSection_title: section_title,
       toSectionId: sectionId,
@@ -87,11 +84,20 @@ const handler: NextApiHandler = async (req, res) => {
       fromSectionId: response.oldTask?.sectionId,
       fromAgent: agent,
     });
+    if (moveActivity.shouldNotify) {
+      void sendNotificationForTask(
+        userObj.id,
+        "TaskMoved",
+        taskId,
+        projectId,
+        agentId ?? null,
+      );
+    }
 
     // Send back updated task, optionally with new activity
     return res.status(response.status).json({
       ...response.json,
-      ...(newComment && { newComment }),
+      ...(moveActivity.newComment && { newComment: moveActivity.newComment }),
     });
   } catch (error) {
     console.error(error);

@@ -315,7 +315,7 @@ async function moveTask(
     activityUser,
   );
   if (result.status !== 200) throw new Error("Task move failed");
-  await createTaskMovedActivity({
+  const moveActivity = await createTaskMovedActivity({
     taskId: task.id,
     userObj: activityUser,
     toSectionId: section.id,
@@ -323,7 +323,9 @@ async function moveTask(
     fromSectionId: task.sectionId ?? -1,
     fromSection_title: task.section ?? "",
   });
-  void sendNotificationForTask(actor.user.id, "TaskMoved", task.id, task.projectId);
+  if (moveActivity.shouldNotify) {
+    void sendNotificationForTask(actor.user.id, "TaskMoved", task.id, task.projectId);
+  }
   void broadcastBoardChange(task.projectId, { originUserId: actor.user.id });
   void broadcastTaskChange(task.id, { originUserId: actor.user.id });
   return confirmBlock(`Moved ${task.ticketNumber} to ${section.section_title}.`);

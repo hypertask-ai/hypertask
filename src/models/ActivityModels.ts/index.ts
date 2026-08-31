@@ -16,6 +16,12 @@ export interface ITaskMoveActivity {
       sectionId: number;
       sectionTitle: string;
     };
+    currentSection?: {
+      sectionId: number;
+      sectionTitle: string;
+    };
+    statusFlipCount?: number;
+    quickMoveCollapsed?: boolean;
   };
 }
 

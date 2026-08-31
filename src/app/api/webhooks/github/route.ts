@@ -239,27 +239,29 @@ export async function POST(request: NextRequest) {
         moved = true;
 
         try {
+          const moveActivity = moveResult.oldTask?.sectionId != null
+            ? await createTaskMovedActivity({
+                taskId: task.id,
+                toSection_title: section.section_title,
+                toSectionId: section.id,
+                userObj: currentUser,
+                fromSection_title: moveResult.oldTask.section ?? "",
+                fromSectionId: moveResult.oldTask.sectionId,
+                fromAgent: null,
+              })
+            : null;
           await Promise.all([
             broadcastBoardChange(task.projectId, {
               originUserId: generalConfig.hyperAiId,
             }),
-            sendNotificationForTask(
-              generalConfig.hyperAiId,
-              "TaskMoved",
-              task.id,
-              task.projectId,
-              null,
-            ),
-            moveResult.oldTask?.sectionId != null
-              ? createTaskMovedActivity({
-                  taskId: task.id,
-                  toSection_title: section.section_title,
-                  toSectionId: section.id,
-                  userObj: currentUser,
-                  fromSection_title: moveResult.oldTask.section ?? "",
-                  fromSectionId: moveResult.oldTask.sectionId,
-                  fromAgent: null,
-                })
+            moveActivity?.shouldNotify
+              ? sendNotificationForTask(
+                  generalConfig.hyperAiId,
+                  "TaskMoved",
+                  task.id,
+                  task.projectId,
+                  null,
+                )
               : Promise.resolve(),
           ]);
         } catch (error) {
