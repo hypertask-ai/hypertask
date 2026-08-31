@@ -455,7 +455,8 @@ const Inbox = ({
       mutation: {
         type: "restore",
         notification: data.notification,
-        index: data.notificationIndex,
+        beforeNotificationId: data.beforeNotificationId,
+        afterNotificationId: data.afterNotificationId,
       },
     });
     await queryClient

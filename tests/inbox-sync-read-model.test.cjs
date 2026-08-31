@@ -34,7 +34,7 @@ const {
 const {
   applyInboxReadModelMutation,
   createInboxRemovalMutation,
-  findInboxRestoreIndex,
+  findInboxRestoreAnchors,
 } = jiti(path.join(root, "src/lib/inboxSync/mutation.ts"));
 const { updateInboxOptimistically } = jiti(
   path.join(root, "src/lib/inboxSync/optimistic.ts"),
@@ -599,31 +599,38 @@ test("undo restores an archived notification to its post-removal cache position"
     payload.notifications.map(({ id }) => id),
     ["9", "11"],
   );
-  const restoreIndex = findInboxRestoreIndex(
+  const restoreAnchors = findInboxRestoreAnchors(
     previousNotifications,
     payload.notifications,
     archived.id,
   );
-  assert.equal(restoreIndex, 1);
+  assert.deepEqual(restoreAnchors, {
+    beforeNotificationId: "11",
+    afterNotificationId: "9",
+  });
 
-  const restored = applyInboxReadModelMutation(payload, {
+  const changedPayload = {
+    ...payload,
+    notifications: [notification(12), ...payload.notifications],
+  };
+  const restored = applyInboxReadModelMutation(changedPayload, {
     type: "restore",
     notification: archived,
-    index: restoreIndex,
+    ...restoreAnchors,
   });
   assert.deepEqual(
     restored.notifications.map(({ id }) => id),
-    ["9", "10", "11"],
+    ["12", "9", "10", "11"],
   );
 
   const duplicate = applyInboxReadModelMutation(restored, {
     type: "restore",
     notification: archived,
-    index: 1,
+    ...restoreAnchors,
   });
   assert.deepEqual(
     duplicate.notifications.map(({ id }) => id),
-    ["9", "10", "11"],
+    ["12", "9", "10", "11"],
   );
 });
 
@@ -791,7 +798,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.match(inbox, /updateInboxOptimistically/);
   assert.match(
     inbox,
-    /const undoHandler[\s\S]*?queryKey: undoQueryKey[\s\S]*?type: "restore"[\s\S]*?index: data\.notificationIndex[\s\S]*?queryKey: undoQueryKey[\s\S]*?exact: true/,
+    /const undoHandler[\s\S]*?queryKey: undoQueryKey[\s\S]*?beforeNotificationId: data\.beforeNotificationId[\s\S]*?afterNotificationId: data\.afterNotificationId[\s\S]*?queryKey: undoQueryKey[\s\S]*?exact: true/,
   );
   assert.match(focusHandler, /updateInboxOptimistically/);
   assert.match(splitRows, /updateInboxOptimistically/);

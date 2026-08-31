@@ -26,7 +26,7 @@ import {
 import { updateInboxOptimistically } from "@/lib/inboxSync/optimistic";
 import {
   createInboxRemovalMutation,
-  findInboxRestoreIndex,
+  findInboxRestoreAnchors,
 } from "@/lib/inboxSync/mutation";
 export interface INotificationsFromTQ {
   structuredData: {
@@ -247,7 +247,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       notification: elementToRemove,
       currentUser,
       queryKey: resolvedQueryKey,
-      notificationIndex: findInboxRestoreIndex(
+      ...findInboxRestoreAnchors(
         _notifications.notifications,
         cachePayload.notifications,
         String(elementToRemove.id),
