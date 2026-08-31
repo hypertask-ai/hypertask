@@ -335,15 +335,21 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const mbl = useContext(MobileViewContext);
   const currentUser = useRecoilValue(currentUserAtom);
   const { data: announcementsData } = useGetAnnouncements(currentUser?.id);
-  const { data: userPreferences } = useGetUserPreferences();
+  const { data: userPreferences, isFetched: userPreferencesFetched } =
+    useGetUserPreferences();
   const hasUnreadAnnouncements = useMemo(
     () =>
+      userPreferencesFetched &&
       !userPreferences?.muteAnnouncements &&
       Array.isArray(announcementsData) &&
       (announcementsData as IAnnouncement[]).some(
         (announcement) => !announcement.readAt,
       ),
-    [announcementsData, userPreferences?.muteAnnouncements],
+    [
+      announcementsData,
+      userPreferences?.muteAnnouncements,
+      userPreferencesFetched,
+    ],
   );
   const { billing } = useSettingsTeam();
   const { clearSettingsSection, closeSettings, setSettingsSection } =
