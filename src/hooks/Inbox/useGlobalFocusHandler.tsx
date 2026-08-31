@@ -246,6 +246,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     const body = {
       notification: elementToRemove,
       currentUser,
+      queryKey: resolvedQueryKey,
       notificationIndex: findInboxRestoreIndex(
         _notifications.notifications,
         cachePayload.notifications,

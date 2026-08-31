@@ -791,7 +791,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.match(inbox, /updateInboxOptimistically/);
   assert.match(
     inbox,
-    /const undoHandler[\s\S]*?type: "restore"[\s\S]*?notificationIndex[\s\S]*?exact: true/,
+    /const undoHandler[\s\S]*?queryKey: undoQueryKey[\s\S]*?type: "restore"[\s\S]*?index: data\.notificationIndex[\s\S]*?queryKey: undoQueryKey[\s\S]*?exact: true/,
   );
   assert.match(focusHandler, /updateInboxOptimistically/);
   assert.match(splitRows, /updateInboxOptimistically/);

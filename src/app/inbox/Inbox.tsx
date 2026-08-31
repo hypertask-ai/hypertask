@@ -447,9 +447,10 @@ const Inbox = ({
   // undoHandler function
   const undoHandler = async (data: any, toastId: string) => {
     await undoAction("UNDO_INBOX_ARCHIVE", data);
+    const undoQueryKey = data.queryKey ?? inboxDataQueryKey(currentUser.id);
     updateInboxOptimistically({
       queryClient,
-      queryKey: inboxDataQueryKey(currentUser.id),
+      queryKey: undoQueryKey,
       accountId: currentUser.id,
       mutation: {
         type: "restore",
@@ -459,7 +460,7 @@ const Inbox = ({
     });
     await queryClient
       .refetchQueries({
-        queryKey: inboxDataQueryKey(currentUser.id),
+        queryKey: undoQueryKey,
         exact: true,
       })
       // The undo is already persisted and visible, so reconciliation failure
