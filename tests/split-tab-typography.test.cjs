@@ -93,9 +93,19 @@ const isArbitraryFontSize = (value) => {
     /^var\(--[^)]*(?:font|text)[^)]*size[^)]*\)$/.test(arbitrary)
   );
 };
+const baseUtility = (token) => {
+  let bracketDepth = 0;
+  let lastVariantColon = -1;
+  for (let index = 0; index < token.length; index += 1) {
+    if (token[index] === "[") bracketDepth += 1;
+    else if (token[index] === "]") bracketDepth -= 1;
+    else if (token[index] === ":" && bracketDepth === 0) lastVariantColon = index;
+  }
+  return token.slice(lastVariantColon + 1).replace(/^!/, "");
+};
 const fontSizeUtilities = (tokens, configuredNames) =>
   [...tokens].filter((token) => {
-    const utility = token.split(":").at(-1).replace(/^!/, "");
+    const utility = baseUtility(token);
     if (!utility.startsWith("text-")) return false;
     const value = utility.slice("text-".length);
     return (
@@ -156,6 +166,19 @@ const inboxSplitTabClasses = () => {
   visit(sourceFile);
   return classes;
 };
+
+test("font-size class detection preserves typed arbitrary values", () => {
+  const tokens = new Set([
+    "text-content",
+    "hover:text-[length:16px]",
+    "text-[#fff]",
+    "focus:text-[rgb(1,2,3)]",
+  ]);
+  assert.deepEqual(fontSizeUtilities(tokens, new Set(["content"])), [
+    "text-content",
+    "hover:text-[length:16px]",
+  ]);
+});
 
 test("sidebar board names and inbox split tabs use the 14px content token", () => {
   const fontSizes = fontSizeConfig();
