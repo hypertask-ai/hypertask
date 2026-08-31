@@ -484,6 +484,9 @@ const AgentDetail = (props: IProp) => {
     async (refreshedAgent: TDetailAgent) => {
       const seq = ++responseSeq.current;
       const responseKey = `activity:${refreshedAgent.id}`;
+      invalidateSequencedResponse(latestResponseSeq.current, seq, [
+        responseKey,
+      ]);
       try {
         const res = await fetch(
           `/api/agents/${refreshedAgent.id}/activity?limit=40`,

@@ -64,6 +64,12 @@ describe('agent detail response sequencing', () => {
     invalidateSequencedResponse(latestSequences, 2, ['activity:agent-1'])
 
     assert.equal(
+      applySequencedError(latestSequences, 2, ['activity:agent-1'], () =>
+        applied.push('new error'),
+      ),
+      true,
+    )
+    assert.equal(
       applySequencedResponse(
         latestSequences,
         1,
@@ -81,6 +87,6 @@ describe('agent detail response sequencing', () => {
       ),
       true,
     )
-    assert.deepEqual(applied, ['new agent-1'])
+    assert.deepEqual(applied, ['new error', 'new agent-1'])
   })
 })
