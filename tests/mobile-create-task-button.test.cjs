@@ -60,13 +60,33 @@ test("the mobile create-task action follows dock and chat visibility", () => {
   );
 });
 
-test("the mobile create-task wrapper opens the shared modal", () => {
-  assert.match(button, /<MobileFloatingActionButton/);
+test("the shared mobile stack exposes icon-only create and AI actions", () => {
+  assert.equal(
+    (button.match(/<MobileFloatingActionButton/g) ?? []).length,
+    2,
+  );
   assert.match(button, /ariaLabel="Create task"/);
+  assert.match(button, /ariaLabel="Ask AI"/);
   assert.doesNotMatch(button, /label=/);
+  assert.match(button, /<Plus[^>]*aria-hidden="true"/);
+  assert.match(button, /<Sparkles[^>]*aria-hidden="true"/);
   assert.match(
     button,
     /onClick=\{\(\) => setCreateTaskModal\(\{ show: true \}\)\}/,
+  );
+  assert.match(button, /onClick=\{openAIChatInterface\}/);
+});
+
+test("the shared stack keeps the AI circle smaller and 12px above the primary", () => {
+  assert.match(button, /size="secondary"/);
+  assert.match(button, /stackOffset=\{60\}/);
+  assert.match(button, /bottomOffset=\{bottomOffset\}/g);
+  assert.match(floatingButton, /size\?: "primary" \| "secondary"/);
+  assert.match(floatingButton, /size === "secondary" \? "h-10 w-10" : "h-12 w-12"/);
+  assert.match(floatingButton, /stackOffset\?: number/);
+  assert.match(
+    floatingButton,
+    /transform: stackOffset > 0 \? `translateY\(-\$\{stackOffset\}px\)` : undefined/,
   );
 });
 

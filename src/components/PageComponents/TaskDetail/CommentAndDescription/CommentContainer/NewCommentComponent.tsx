@@ -20,9 +20,8 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useDescriptionAndCommentsContext } from "@/lib/contexts/TaskDetail/DescriptionProvider";
-import { Check, Sparkles } from "lucide-react";
-import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
-import MobileFloatingActionButton from "@/components/Global/MobileFloatingActionButton";
+import { Check } from "lucide-react";
+import MobileCreateTaskButton from "@/components/Global/MobileCreateTaskButton";
 import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import useArchiveAndNavigate from "@/hooks/Task Detail/useArchiveAndNavigate";
 import RemindMeTaskDetail from "../../TaskOptions/RemindMeTaskDetail";
@@ -39,25 +38,6 @@ import { shouldShowMobileDock } from "@/components/Global/mobileShellVisibility"
 import { usePathname } from "next/navigation";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
-
-const AskAiButton = ({ bottomOffset }: { bottomOffset: number }) => {
-  const { openAIChatInterface } = useGlobalUIState();
-  return (
-    <MobileFloatingActionButton
-      ariaLabel="Ask AI about this task"
-      bottomOffset={bottomOffset}
-      icon={
-        <Sparkles
-          size={20}
-          strokeWidth={1.75}
-          className="text-hypertasks-ai-purple"
-          aria-hidden="true"
-        />
-      }
-      onClick={openAIChatInterface}
-    />
-  );
-};
 
 // import BackButton from "@/components/Buttons/BackButton";
 
@@ -444,7 +424,7 @@ const NewCommentComponent = (
               )}
 
               {_mbl && composerHeight > 0 && (
-                <AskAiButton
+                <MobileCreateTaskButton
                   bottomOffset={
                     composerHeight + (viewportGeometry?.bottomInset ?? 0)
                   }
