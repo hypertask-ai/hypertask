@@ -1,6 +1,5 @@
 import { parseCookies } from 'better-auth/cookies'
 
-import { auth } from '@/lib/auth/betterAuth'
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
 
 export type SessionUser =
@@ -34,12 +33,17 @@ export async function getSessionUser(headers: Headers): Promise<SessionUser | nu
   }
 
   if (process.env.BETTER_AUTH_ENABLED === '1') {
-    let session: Awaited<ReturnType<typeof auth.api.getSession>>
+    // Lazy import: keeps Better Auth's module-scope construction (8 plugins)
+    // off the cold-start path for every request the fast path above already
+    // resolved. Same pattern PR #2785 used, never implicated in its revert
+    // (that was the cookie-name heuristic, not this).
+    let session: Awaited<ReturnType<typeof import('@/lib/auth/betterAuth').auth.api.getSession>> | null
     try {
+      const { auth } = await import('@/lib/auth/betterAuth')
       session = await auth.api.getSession({ headers })
     } catch {
-      // An adapter outage must fail closed rather than crash the request or
-      // let an unverified identity through.
+      // An adapter outage (or the import itself failing) must fail closed
+      // rather than crash the request or let an unverified identity through.
       session = null
     }
     if (session && session.user && typeof session.user === 'object') {

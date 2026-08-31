@@ -373,3 +373,17 @@ test("differential: fast path and full lookup return the same userId in every ce
     );
   }
 });
+
+test("getSessionUser.ts has no static top-level betterAuth import (cold-start: HTPR-5820)", () => {
+  assert.doesNotMatch(
+    source,
+    /^import\s.*from\s+['"]@\/lib\/auth\/betterAuth['"]/m,
+    "betterAuth must be dynamically imported so its module-scope construction " +
+      "doesn't run on every cold start, only when BETTER_AUTH_ENABLED actually needs it",
+  );
+  assert.match(
+    source,
+    /await import\(['"]@\/lib\/auth\/betterAuth['"]\)/,
+    "expected a dynamic import of betterAuth inside the BETTER_AUTH_ENABLED branch",
+  );
+});
