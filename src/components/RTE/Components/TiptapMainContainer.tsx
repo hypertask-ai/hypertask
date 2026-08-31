@@ -64,7 +64,8 @@ const TiptapMainContainer = () => {
         editor?.isFocused ||
         newCommentAttachments.length > 0 ||
         isRecording ||
-        aiComposeOpen;
+        aiComposeOpen ||
+        aiRefineOpen;
 
       return (
         <>
@@ -100,7 +101,7 @@ const TiptapMainContainer = () => {
                 : "w-full min-w-0"
             }
           >
-            <TiptapEditor />
+            {!aiRefineOpen && <TiptapEditor />}
           </div>
           {aiComposeOpen && closeInlineDraftAi && (
             <InlineDraftAiFloat

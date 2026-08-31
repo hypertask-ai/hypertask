@@ -93,6 +93,7 @@ test("mobile create-comment uses AppSheet refine when draft has text", () => {
   const inlineDraftAi = read("src/components/RTE/Components/InlineDraftAiFloat.tsx");
   assert.match(mobileBranch, /aiRefineOpen/);
   assert.match(mobileBranch, /presentation="refine-fullscreen"/);
+  assert.match(mobileBranch, /!aiRefineOpen && <TiptapEditor/);
   assert.match(mobileBranch, /!editor\.isEmpty/);
   assert.match(mobileBranch, /aiComposeOpen/);
   assert.match(mobileBranch, /presentation="composer"/);
@@ -101,6 +102,7 @@ test("mobile create-comment uses AppSheet refine when draft has text", () => {
   assert.doesNotMatch(mobileBranch, /MobileBottomSheet/);
   assert.match(inlineDraftAi, /AppSheet/);
   assert.match(inlineDraftAi, /mobileOverlayAppSheetPanelClass/);
+  assert.match(inlineDraftAi, /EditorContent editor=\{editor\}/);
   assert.doesNotMatch(inlineDraftAi, /createPortal/);
 });
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
+import { EditorContent } from "@tiptap/react";
 import { LoaderCircle, X } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -17,6 +18,10 @@ import {
   mobileOverlayAppSheetHandleRowClass,
   mobileOverlayAppSheetPanelClass,
 } from "@/components/Modals/Sheets/mobileOverlayAppSheetStyles";
+import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
+import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
+import styles from "@/styles/tiptap.module.scss";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import {
@@ -42,8 +47,6 @@ const CHIP_SHEET_PRIMARY_CLASS =
   "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hypertasks-ai-purple px-3 text-content font-semibold text-black disabled:opacity-50";
 const CHIP_SHEET_DONE_CLASS =
   "flex min-h-[52px] w-full items-center justify-center rounded-sm bg-hover-active px-3 text-content font-semibold text-white-black";
-const CHIP_REFINE_CLASS =
-  "rounded-sm border border-thin border-label-span bg-cardBackground px-3 py-2.5 text-meta font-medium text-white-black hover:bg-hover-active focus-visible:bg-hover-active disabled:opacity-50";
 
 const EDIT_ACTIONS = [
   ["Improve readability", "ImproveReadability"],
@@ -65,11 +68,6 @@ function selectedHtml(editor: Editor, range: InlineDraftAiRange) {
     DOMSerializer.fromSchema(editor.schema).serializeFragment(fragment),
   );
   return wrapper.innerHTML;
-}
-
-function draftHtml(editor: Editor, range: InlineDraftAiRange) {
-  if (range.to > range.from) return selectedHtml(editor, range);
-  return editor.getHTML();
 }
 
 function focusablesIn(root: HTMLElement) {
@@ -143,8 +141,13 @@ const InlineDraftAiFloat = ({
 
   useEffect(() => {
     if (!isRefineFullscreen || !editor) return;
-    (document.activeElement as HTMLElement | null)?.blur();
-    editor.commands.blur();
+    requestAnimationFrame(() => {
+      try {
+        editor.commands.focus("end");
+      } catch {
+        // Editor view may not be mounted yet.
+      }
+    });
   }, [editor, isRefineFullscreen]);
 
   useEffect(() => {
@@ -567,22 +570,6 @@ const InlineDraftAiFloat = ({
     </div>
   ) : null;
 
-  const refineEditChips = showEditChips ? (
-    <div className="flex flex-wrap gap-2">
-      {EDIT_ACTIONS.map(([label, command]) => (
-        <button
-          key={command}
-          type="button"
-          disabled={isLoading}
-          className={CHIP_REFINE_CLASS}
-          onClick={() => void runAction({ command })}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  ) : null;
-
   if (isRefineFullscreen) {
     return (
       <AppSheet
@@ -597,7 +584,12 @@ const InlineDraftAiFloat = ({
         handleRowClassName={mobileOverlayAppSheetHandleRowClass}
         handleBarClassName={mobileOverlayAppSheetHandleBarClass}
       >
-        <div ref={rootRef} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          ref={rootRef}
+          className={cn(
+            "bg-ai-chat text-meta flex min-h-0 w-full flex-1 flex-col overflow-hidden",
+          )}
+        >
           <div className="z-10 flex shrink-0 items-center justify-between gap-4 px-2 py-2 text-content font-bold text-white-black">
             <h2 className="min-w-0 truncate px-1 font-medium">Write with AI</h2>
             <button
@@ -611,17 +603,21 @@ const InlineDraftAiFloat = ({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2">
+          <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-2">
             <div
-              className="text-content leading-relaxed text-white-black [&_p]:mb-2 [&_p:last-child]:mb-0"
-              dangerouslySetInnerHTML={{ __html: draftHtml(editor, scope) }}
-            />
+              className={cn(
+                styles.editorContainer,
+                "text-content break-normal px-1 py-2",
+              )}
+            >
+              <EditorContent editor={editor} />
+            </div>
           </div>
 
-          <div className="shrink-0 border-t border-thin border-border-light-gray-thin px-4 py-3">
+          <div className="shrink-0 border-t border-thin border-border-light-gray-thin">
             {isLoading ? (
               <div
-                className="flex items-center gap-2 text-meta text-text-light-gray"
+                className="flex items-center gap-2 px-4 py-3 text-meta text-text-light-gray"
                 role="status"
               >
                 <LoaderCircle
@@ -632,7 +628,7 @@ const InlineDraftAiFloat = ({
                 Rewriting draft…
               </div>
             ) : (
-              refineEditChips
+              sheetEditChips
             )}
           </div>
         </div>
