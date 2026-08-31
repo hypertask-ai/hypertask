@@ -33,8 +33,9 @@ const horizontalHeaderCell = tableHeader.slice(
 );
 
 const assertDesktopOnlySticky = (source) => {
-  assert.match(source, /md:sticky/);
-  assert.doesNotMatch(source.replaceAll("md:sticky", ""), /(?:^|[\s"`])sticky(?=[\s"`])/);
+  const stickyTokens = [...source.matchAll(/(?:^|[\s"`])([^\s"`]*sticky)(?=[\s"`])/g)]
+    .map((match) => match[1]);
+  assert.deepEqual(stickyTokens, ["md:sticky"]);
 };
 
 test("mobile table rows scroll every column while desktop keeps ticket and title frozen", () => {
