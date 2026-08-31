@@ -496,11 +496,12 @@ const AgentDetail = (props: IProp) => {
         ) {
           return false;
         }
-        return applyResponse(seq, [responseKey], () => {
+        applyResponse(seq, [responseKey], () => {
           setActivityError(
             e instanceof Error ? e.message : "Failed to load activity",
           );
         });
+        return false;
       }
     },
     [applyResponse],
