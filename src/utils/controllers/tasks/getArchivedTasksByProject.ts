@@ -4,6 +4,7 @@ import {
   getProjectWhere,
   taskBoardOmit,
 } from "@/utils/controllers/projects/getAllIncludes";
+import { attachWaitingOnUsers } from "./attachWaitingOnUsers";
 
 // The board's show-archived toggle asks for every archived card on the project
 // at once, with the full task include (assignees, labels, subtasks, comments
@@ -79,7 +80,7 @@ const tasksGetArchivedTasksByProject = async (
 
     return {
       status: 200,
-      json: tasks,
+      json: await attachWaitingOnUsers(tasks),
     };
   } catch (error) {
     console.log(error);

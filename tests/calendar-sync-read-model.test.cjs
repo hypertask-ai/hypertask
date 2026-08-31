@@ -88,6 +88,7 @@ const calendarTask = ({ id, projectId, title, dueDate, ...overrides }) => ({
   recurrence: null,
   deletedAt: null,
   waitingOnUserId: null,
+  waitingOnUser: null,
   agentId: null,
   updatedByUserIds: [],
   project:
@@ -210,7 +211,7 @@ test("calendar snapshots are account, schema, timezone, range, and expiry scoped
   );
   assert.equal(
     isCalendarReadModelSnapshotV1(
-      { ...snapshot, schemaVersion: 2 },
+      { ...snapshot, schemaVersion: 1 },
       { accountId: 6, range, nowMs: Date.parse("2026-08-09T11:00:00.000Z") },
     ),
     false,
@@ -242,6 +243,39 @@ test("calendar snapshots are account, schema, timezone, range, and expiry scoped
   assert.ok(
     materializeCalendarReadModelSnapshot(snapshot).tasks[0].dueDate instanceof
       Date,
+  );
+
+  const blockedPayload = payloadFor(range);
+  blockedPayload.tasks[0] = {
+    ...blockedPayload.tasks[0],
+    waitingOnUserId: 42,
+    waitingOnUser: {
+      id: 42,
+      displayName: "Jacqueline Bolz",
+      photoURL: null,
+    },
+  };
+  const blockedSnapshot = createCalendarReadModelSnapshot({
+    payload: blockedPayload,
+  });
+  assert.ok(blockedSnapshot);
+  assert.equal(
+    materializeCalendarReadModelSnapshot(blockedSnapshot).tasks[0]
+      .waitingOnUser.displayName,
+    "Jacqueline Bolz",
+  );
+  assert.equal(
+    createCalendarReadModelSnapshot({
+      payload: {
+        ...blockedPayload,
+        tasks: blockedPayload.tasks.map((task, index) =>
+          index === 0
+            ? { ...task, waitingOnUser: { ...task.waitingOnUser, id: 43 } }
+            : task,
+        ),
+      },
+    }),
+    null,
   );
 
   const forgedProject = { id: 999, name: "revoked", title: "Revoked" };
@@ -478,6 +512,12 @@ test("persisted identity data is least-privilege and preserves human classificat
   assert.equal(
     containsUnsafeCalendarIdentity({
       user: { ...human, uid: "firebase-user-6" },
+    }),
+    true,
+  );
+  assert.equal(
+    containsUnsafeCalendarIdentity({
+      waitingOnUser: { ...human, email: "private@example.com" },
     }),
     true,
   );
@@ -937,6 +977,12 @@ test("Calendar integrates cache-first hydration, authoritative reconciliation, r
     /savedContent:\s*\{\s*where:\s*\{ userId, commentId: null \}/,
   );
   assert.match(taskCard, /task\._count\?\.savedContent/);
+  assert.match(taskCard, /task\.waitingOnUser \?\? undefined/);
+  assert.doesNotMatch(
+    taskCard,
+    /members\.find\([\s\S]*?waitingOnUserId/,
+  );
+  assert.match(controller, /attachWaitingOnUsers\(authorizedTasks\)/);
   assert.match(
     controller,
     /members:\s*\{\s*some:\s*\{\s*userId, status: "Accepted"/,
@@ -965,6 +1011,10 @@ test("Calendar integrates cache-first hydration, authoritative reconciliation, r
   assert.match(userPicker, /typeof entry\.id === "string"/);
   assert.match(taskTopRow, /task\._count\?\.savedContent/);
   assert.match(hook, /createCalendarHydrationArbiter/);
+  assert.match(
+    hook,
+    /currentWaitingOnUser\?\.id === task\.waitingOnUserId/,
+  );
   assert.match(hook, /observeAuthoritativeAccess/);
   assert.match(hook, /settleCalendarAuthorizationFailure/);
   assert.match(hook, /updateProjection\(\(current\)[\s\S]*?\? null\s*:\s*current/);

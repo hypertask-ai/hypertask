@@ -496,6 +496,11 @@ export interface ITask {
   lastCommentAt?: string | null;
   staleNudgedAt?: string | null;
   waitingOnUserId?: number | null;
+  waitingOnUser?: {
+    id: number;
+    displayName: string | null;
+    photoURL: string | null;
+  } | null;
   waitingOnSetById?: number | null;
   waitingOnSetAt?: string | null;
   dueDate?: Date;

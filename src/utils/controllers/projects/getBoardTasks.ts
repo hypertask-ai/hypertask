@@ -8,6 +8,7 @@ import {
   taskBoardOmit,
 } from "./getAllIncludes";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { attachWaitingOnUsers } from "@/utils/controllers/tasks/attachWaitingOnUsers";
 
 /**
  * Tasks/views for one board in the BoardTasksPayload client contract. The
@@ -52,6 +53,7 @@ const getBoardTasks = async (
         },
       },
     });
+    const tasksWithWaitingOnUsers = await attachWaitingOnUsers(tasks);
 
     const sanitizedProject = sanitizeProjectBoardFilters(project);
     const { allViews = [], ...projectView } =
@@ -64,7 +66,7 @@ const getBoardTasks = async (
       status: 200,
       json: {
         project: projectPayload,
-        tasks,
+        tasks: tasksWithWaitingOnUsers,
         allViews,
       },
     };
