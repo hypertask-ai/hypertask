@@ -41,7 +41,7 @@ const classTokens = (className, target) => {
   return new Set(className.split(/\s+/).filter(Boolean));
 };
 
-const contentFontSize = () => {
+const fontSizeConfig = () => {
   const configFile = parse("tailwind.config.ts", ts.ScriptKind.TS);
   const configDeclaration = configFile.statements
     .filter(ts.isVariableStatement)
@@ -56,14 +56,42 @@ const contentFontSize = () => {
   const theme = objectProperty(configDeclaration.initializer, "theme");
   const extend = objectProperty(theme, "extend");
   const fontSize = objectProperty(extend, "fontSize");
-  const content = fontSize.properties.find(
-    (property) =>
-      ts.isPropertyAssignment(property) && propertyName(property) === "content",
-  );
+  const entries = fontSize.properties.filter(ts.isPropertyAssignment);
+  const content = entries.find((property) => propertyName(property) === "content");
   assert.ok(content, "content font size not found");
   assert.ok(ts.isStringLiteral(content.initializer), "content font size must be static");
-  return content.initializer.text;
+  return {
+    content: content.initializer.text,
+    names: new Set(entries.map(propertyName).filter(Boolean)),
+  };
 };
+
+const defaultFontSizeNames = new Set([
+  "xs",
+  "sm",
+  "base",
+  "lg",
+  "xl",
+  "2xl",
+  "3xl",
+  "4xl",
+  "5xl",
+  "6xl",
+  "7xl",
+  "8xl",
+  "9xl",
+]);
+const fontSizeUtilities = (tokens, configuredNames) =>
+  [...tokens].filter((token) => {
+    const utility = token.split(":").at(-1).replace(/^!/, "");
+    if (!utility.startsWith("text-")) return false;
+    const value = utility.slice("text-".length);
+    return (
+      configuredNames.has(value) ||
+      defaultFontSizeNames.has(value) ||
+      (value.startsWith("[") && !value.startsWith("[color:"))
+    );
+  });
 
 const sidebarBoardTabClasses = () => {
   const sourceFile = parse(
@@ -118,7 +146,8 @@ const inboxSplitTabClasses = () => {
 };
 
 test("sidebar board names and inbox split tabs use the 14px content token", () => {
-  assert.equal(contentFontSize(), "14px");
+  const fontSizes = fontSizeConfig();
+  assert.equal(fontSizes.content, "14px");
 
   const targets = [
     ["sidebar board tab", classTokens(sidebarBoardTabClasses(), "sidebar board tab")],
@@ -126,7 +155,10 @@ test("sidebar board names and inbox split tabs use the 14px content token", () =
   ];
 
   for (const [target, tokens] of targets) {
-    assert.equal(tokens.has("text-content"), true, `${target} must use text-content`);
-    assert.equal(tokens.has("text-[14.5px]"), false, `${target} must not use 14.5px`);
+    assert.deepEqual(
+      fontSizeUtilities(tokens, fontSizes.names),
+      ["text-content"],
+      `${target} must use only the content font size`,
+    );
   }
 });
