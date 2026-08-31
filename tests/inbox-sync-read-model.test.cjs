@@ -659,11 +659,17 @@ test("undo reconciliation restores the cache and refetches its exact query", asy
     splitsNoImportant: [],
     showImportantSplit: false,
   };
+  const reads = [];
+  const writes = [];
   const refetches = [];
   const queryClient = {
-    getQueryData: () => cached,
-    setQueryData: (_queryKey, payload) => {
-      cached = payload;
+    getQueryData: (readQueryKey) => {
+      reads.push(readQueryKey);
+      return readQueryKey === queryKey ? cached : undefined;
+    },
+    setQueryData: (writeQueryKey, payload) => {
+      writes.push(writeQueryKey);
+      if (writeQueryKey === queryKey) cached = payload;
     },
     refetchQueries: async (options) => {
       refetches.push(options);
@@ -683,6 +689,8 @@ test("undo reconciliation restores the cache and refetches its exact query", asy
     cached.notifications.map(({ id }) => id),
     ["12", "9", "10", "11"],
   );
+  assert.deepEqual(reads, [queryKey]);
+  assert.deepEqual(writes, [queryKey]);
   assert.deepEqual(refetches, [{ queryKey, exact: true }]);
 });
 
