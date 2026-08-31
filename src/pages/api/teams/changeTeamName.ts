@@ -30,10 +30,13 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(403).json({ message: "Only the team owner can rename it" });
   }
 
-  await prisma.team.update({
-    where: { id: teamId },
+  const renamed = await prisma.team.updateMany({
+    where: { id: teamId, googleAccount: { userId: session.id } },
     data: { title: updatedTitle },
   });
+  if (renamed.count !== 1) {
+    return res.status(403).json({ message: "Only the team owner can rename it" });
+  }
 
   return res.status(200).json({ message: "success" });
 };
