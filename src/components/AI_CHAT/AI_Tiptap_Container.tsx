@@ -25,7 +25,14 @@ import ImageGallery from "../Common/AttachmentsUpload/ImageGalleryView";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { usePathname } from "next/navigation";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import {
   currentProjectAtom,
@@ -584,8 +591,12 @@ function SendMessageButton({
   mobile: boolean;
   onClick: () => void;
 }) {
-  let tooltipProps =
-    aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.send_button as any;
+  const sendTooltip =
+    aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.send_button;
+  let tooltipProps: ComponentProps<typeof Tooltip> = {
+    ...sendTooltip,
+    keyCombination: [...(sendTooltip.keyCombination ?? [])],
+  };
   if (isByokBlocked) {
     tooltipProps = {
       text: "Enable API keys first",

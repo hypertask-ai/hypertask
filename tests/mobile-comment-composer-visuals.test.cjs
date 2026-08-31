@@ -30,10 +30,16 @@ const read = (relativePath) =>
 const editor = read("src/components/RTE/Components/TiptapEditor.tsx");
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
 const sendArrow = read("src/components/Common/SendArrow.tsx");
-const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
 const tiptapStyles = read("src/styles/tiptap.module.scss");
 const mainContainer = read("src/components/RTE/Components/TiptapMainContainer.tsx");
 const tailwindConfig = read("tailwind.config.ts");
+const jiti = require("jiti")(__filename, { interopDefault: true });
+const { mobileMicPresentation } = jiti(
+  path.join(
+    __dirname,
+    "../src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
+);
 
 // The `d` of the send chevron. Identifies the arrow path wherever it moves to
 // inside IOSend, so the fill assertion cannot drift onto a different element.
@@ -110,12 +116,15 @@ test("mobile create-comment uses AppSheet for both refine and compose", () => {
 });
 
 test("empty-state mobile comment microphone is rectangular, still purple", () => {
-  // Class order inside the string is incidental; presence of both is not.
-  const branch = audioButton.match(
-    /else if \(isMobileCreateComment\) \{\s*prominentClassName =\s*"([^"]*)"/,
-  );
-  assert.ok(branch, "isMobileCreateComment class branch not found");
-  assert.match(branch[1], /\brounded-sm\b/);
-  assert.doesNotMatch(branch[1], /\brounded-full\b/);
-  assert.match(branch[1], /\bbg-hypertasks-ai-purple\b/);
+  const presentation = mobileMicPresentation({
+    isMobileCreateComment: true,
+    isMobileTaskWriter: false,
+    isMobileNewTask: false,
+    isMobileAiChat: false,
+    isProcessing: false,
+  });
+  assert.equal(presentation.prominent, true);
+  assert.match(presentation.className, /\brounded-sm\b/);
+  assert.doesNotMatch(presentation.className, /\brounded-full\b/);
+  assert.match(presentation.className, /\bbg-hypertasks-ai-purple\b/);
 });

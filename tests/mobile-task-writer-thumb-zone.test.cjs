@@ -14,6 +14,13 @@ const input = read(
 const audio = read("src/components/RTE/Components/AudioButton.tsx");
 const autosize = read("src/hooks/General/useAutosizeTextarea.ts");
 const appSheet = read("src/components/Modals/Sheets/AppSheet.tsx");
+const jiti = require("jiti")(__filename, { interopDefault: true });
+const { mobileMicPresentation } = jiti(
+  path.join(
+    root,
+    "src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
+);
 
 test("mobile prompt focuses with a visible caret as the writer opens", () => {
   assert.match(container, /useLayoutEffect\(\(\) => \{/);
@@ -77,10 +84,18 @@ test("mobile controls sit in a left-aligned row with the primary pushed right", 
   assert.match(audio, /isMobileTaskWriter[\s\S]*?ai-writer-audio-button/);
   // New-task and AI-chat mics share the prominent system so each can hold the
   // filled primary slot on an empty mobile composer.
-  assert.match(
-    audio,
-    /\(isMobileCreateComment \|\|[\s\S]*?isMobileTaskWriter \|\|[\s\S]*?isMobileNewTask \|\|[\s\S]*?isMobileAiChat\) &&\s*!globalRecording/,
-  );
+  for (const mode of ["isMobileTaskWriter", "isMobileNewTask", "isMobileAiChat"]) {
+    const presentation = mobileMicPresentation({
+      isMobileCreateComment: false,
+      isMobileTaskWriter: false,
+      isMobileNewTask: false,
+      isMobileAiChat: false,
+      isProcessing: false,
+      [mode]: true,
+    });
+    assert.equal(presentation.prominent, true);
+    assert.match(presentation.className, /bg-shadcn-primary/);
+  }
   // One glyph size (HTPR-5517): the writer and new-task mics are 20px like
   // every other icon in the row, no longer a 24px outlier.
   assert.match(audio, /size=\{isMobileTaskWriter \|\| isMobileNewTask \? 20 : 18\}/);

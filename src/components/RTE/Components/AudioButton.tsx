@@ -13,6 +13,7 @@ import toast from "react-hot-toast";
 import { createTapGuard } from "@/lib/utils/deliberateTap";
 import { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 import { collectDictationTranscriptFromSse } from "@/lib/dictationSse";
+import { mobileMicPresentation } from "./mobileAudioButtonPresentation";
 
 interface IProp {
   callbackHandler: (text: string, setContent?: boolean) => void;
@@ -618,28 +619,16 @@ export const AudioButton = ({
               included (HTPR-5684, reversing the earlier carve-out that kept it
               filled and left two competing primaries side by side). */}
           {(() => {
-            const prominent =
-              (isMobileCreateComment ||
-                isMobileTaskWriter ||
-                isMobileNewTask ||
-                isMobileAiChat) &&
-              !globalRecording;
-            let prominentShapeClassName = "rounded-sm";
-            if (isMobileAiChat) prominentShapeClassName = "rounded-full";
-
-            let prominentClassName =
-              "h-11 w-11 justify-center " + prominentShapeClassName;
-            if (isProcessing) {
-              prominentClassName = "h-[34px] gap-2";
-            } else if (hasText) {
-              prominentClassName += " text-icon-dark-gray";
-            } else if (isMobileCreateComment) {
-              prominentClassName =
-                "h-11 w-11 justify-center rounded-sm bg-hypertasks-ai-purple text-white shadow-[0_3px_12px_rgba(198,104,255,0.38)]";
-            } else {
-              prominentClassName +=
-                " bg-shadcn-primary text-primary-foreground";
-            }
+            const { prominent, className: prominentClassName } =
+              mobileMicPresentation({
+                isMobileCreateComment,
+                isMobileTaskWriter,
+                isMobileNewTask,
+                isMobileAiChat,
+                globalRecording,
+                hasText,
+                isProcessing,
+              });
             return (
               <div
                 id={id}

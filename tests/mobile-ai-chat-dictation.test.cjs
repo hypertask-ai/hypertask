@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
@@ -8,10 +7,6 @@ const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
-const audioButtonSource = fs.readFileSync(
-  path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
-  "utf8",
-);
 const jiti = require("jiti")(
   path.join(root, "tests/mobile-ai-chat-dictation.test.cjs"),
   {
@@ -19,6 +14,12 @@ const jiti = require("jiti")(
     jsx: true,
     alias: { "@": path.join(root, "src") },
   },
+);
+const { mobileMicPresentation } = jiti(
+  path.join(
+    root,
+    "src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
 );
 const originalCache = new Map(Object.entries(require.cache));
 const TestChatContext = React.createContext(undefined);
@@ -157,26 +158,36 @@ const renderComposer = (isRecording, isEmpty = true) =>
   );
 
 test("mobile AI chat uses the filled 44px mic and demotes it once text exists", () => {
-  assert.match(
-    audioButtonSource,
-    /isMobileAiChat = isMobileView && id === "ai-chat-audio-button"/,
-  );
-  assert.match(
-    audioButtonSource,
-    /isMobileNewTask \|\|[\s\S]*?isMobileAiChat\)[\s\S]*?!globalRecording/,
-  );
-  assert.match(
-    audioButtonSource,
-    /if \(isMobileAiChat\) prominentShapeClassName = "rounded-full"/,
-  );
-  assert.match(
-    audioButtonSource,
-    /let prominentClassName =\s*"h-11 w-11 justify-center "/,
-  );
-  assert.match(
-    audioButtonSource,
-    /else if \(hasText\)[\s\S]*?text-icon-dark-gray[\s\S]*?else[\s\S]*?bg-shadcn-primary text-primary-foreground/,
-  );
+  const base = {
+    isMobileCreateComment: false,
+    isMobileTaskWriter: false,
+    isMobileNewTask: false,
+    isMobileAiChat: true,
+    isProcessing: false,
+  };
+  const empty = mobileMicPresentation(base);
+  assert.equal(empty.prominent, true);
+  assert.match(empty.className, /h-11 w-11/);
+  assert.match(empty.className, /rounded-full/);
+  assert.match(empty.className, /bg-shadcn-primary/);
+
+  const typed = mobileMicPresentation({ ...base, hasText: true });
+  assert.equal(typed.prominent, true);
+  assert.match(typed.className, /h-11 w-11/);
+  assert.match(typed.className, /text-icon-dark-gray/);
+  assert.doesNotMatch(typed.className, /bg-shadcn-primary/);
+
+  const recording = mobileMicPresentation({
+    ...base,
+    globalRecording: true,
+  });
+  assert.equal(recording.prominent, false);
+
+  const processing = mobileMicPresentation({
+    ...base,
+    isProcessing: true,
+  });
+  assert.equal(processing.className, "h-[34px] gap-2");
 });
 
 test("mobile composer follows live recording state without remounting recorder", async () => {
