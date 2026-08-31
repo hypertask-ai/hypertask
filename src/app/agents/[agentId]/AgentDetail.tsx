@@ -435,6 +435,7 @@ const AgentDetail = (props: IProp) => {
           appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
         if (initialSeq >= appliedSeq) {
           appliedAgentRefreshSeq.current[refreshedAgent.id] = initialSeq;
+          appliedAgentRefreshSeq.current[agentId] = initialSeq;
           setAgent((prev) =>
             prev && prev.id !== refreshedAgent.id ? prev : refreshedAgent,
           );
@@ -447,7 +448,8 @@ const AgentDetail = (props: IProp) => {
         loadActivity(refreshedAgent.id);
       })
       .catch((e) => {
-        if (!cancelled && initialSeq === agentRefreshSeq.current) {
+        const appliedSeq = appliedAgentRefreshSeq.current[agentId] ?? 0;
+        if (!cancelled && initialSeq > appliedSeq) {
           setError(e instanceof Error ? e.message : "Failed to load agent");
         }
       });
@@ -475,6 +477,7 @@ const AgentDetail = (props: IProp) => {
             appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
           if (seq < appliedSeq) return;
           appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+          appliedAgentRefreshSeq.current[agentId] = seq;
           const {
             working,
             heartbeatAt,
@@ -553,6 +556,7 @@ const AgentDetail = (props: IProp) => {
                 appliedAgentRefreshSeq.current[refreshedAgent.id] ?? 0;
               if (seq < appliedSeq) return;
               appliedAgentRefreshSeq.current[refreshedAgent.id] = seq;
+              appliedAgentRefreshSeq.current[agentId] = seq;
               const {
                 working,
                 heartbeatAt,
