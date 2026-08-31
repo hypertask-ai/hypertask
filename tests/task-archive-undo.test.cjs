@@ -98,7 +98,7 @@ test("global Ctrl or Cmd+Z invokes the latest undo outside text editors", () => 
   assert.match(undoSource, /consumedUndoIds\.current\.delete\(undoId\)/);
   assert.match(
     undoSource,
-    /expiresAt: Date\.now\(\) \+ undoWindowMs/,
+    /expiresAt: Date\.now\(\) \+ UNDO_ACTION_WINDOW_MS/,
   );
   // The visible UNDO button is honoured for as long as it is on screen; only
   // the affordance-free Ctrl+Z path is bounded by the action window (HTPR-5528).
@@ -122,28 +122,14 @@ test("global Ctrl or Cmd+Z invokes the latest undo outside text editors", () => 
 test("the undo prompt stays on screen for the whole undo action window", () => {
   const toastSource = read("src/components/undoToast/index.tsx");
   const undoSource = read("src/hooks/General/useUndo.tsx");
-  // Per viewport (HTPR-5872): mobile halves both the window and the toast
-  // duration together; desktop keeps 15s.
   assert.match(toastSource, /UNDO_ACTION_WINDOW_MS = 15_000/);
-  assert.match(toastSource, /MOBILE_UNDO_ACTION_WINDOW_MS = 7_500/);
   assert.match(
     toastSource,
     /UNDO_TOAST_DURATION_MS = UNDO_ACTION_WINDOW_MS/,
   );
-  assert.match(
-    toastSource,
-    /MOBILE_UNDO_TOAST_DURATION_MS = MOBILE_UNDO_ACTION_WINDOW_MS/,
-  );
-  assert.match(
-    toastSource,
-    /duration: isMobile\s*\?\s*MOBILE_UNDO_TOAST_DURATION_MS\s*:\s*UNDO_TOAST_DURATION_MS/,
-  );
+  assert.match(toastSource, /duration: UNDO_TOAST_DURATION_MS/);
   assert.match(
     undoSource,
-    /const undoWindowMs = isMobile\s*\?\s*MOBILE_UNDO_ACTION_WINDOW_MS\s*:\s*UNDO_ACTION_WINDOW_MS/,
-  );
-  assert.match(
-    undoSource,
-    /expiresAt: Date\.now\(\) \+ undoWindowMs/,
+    /expiresAt: Date\.now\(\) \+ UNDO_ACTION_WINDOW_MS/,
   );
 });

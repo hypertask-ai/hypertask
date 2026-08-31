@@ -13,11 +13,6 @@ export const UNDO_ACTION_WINDOW_MS = 15_000;
 // archiving restores the task, at 7s there is no button left to click and the
 // task stays archived. Keep the two timings in lockstep.
 export const UNDO_TOAST_DURATION_MS = UNDO_ACTION_WINDOW_MS;
-// HTPR-5872: mobile halves the undo window; desktop keeps 15s. The mobile
-// toast follows its window in lockstep for the same reason as above: the
-// prompt must never outlive or underlive the action it offers.
-export const MOBILE_UNDO_ACTION_WINDOW_MS = 7_500;
-export const MOBILE_UNDO_TOAST_DURATION_MS = MOBILE_UNDO_ACTION_WINDOW_MS;
 
 /**
  * Rendered inside the <Toaster> tree, so it can read MobileViewContext.
@@ -28,8 +23,7 @@ export const MOBILE_UNDO_TOAST_DURATION_MS = MOBILE_UNDO_ACTION_WINDOW_MS;
  * `.toastContainerMobile { top: 52% }`; the left anchor comes from this
  * toast's own `position: "top-left"`, so ordinary mobile toasts stay on the
  * right). That keeps the task actions clear and stays out of the bottom thumb
- * zone. Undo keeps its full window: 7.5s on mobile (HTPR-5872), 15s on
- * desktop.
+ * zone. Undo keeps its full 15s window; timing is unchanged.
  * Desktop keeps the existing white toast with an explicit X.
  */
 export const UndoToastContent = ({
@@ -135,11 +129,9 @@ export const UndoToaster = (
   const toastHandler: any = toast.custom(
     (t) => <UndoToastContent t={t} toastText={toastText} onUndo={callback} />,
     {
-      // Matches the undo action window on each viewport: the prompt never
-      // disappears while the action behind it can still be undone.
-      duration: isMobile
-        ? MOBILE_UNDO_TOAST_DURATION_MS
-        : UNDO_TOAST_DURATION_MS,
+      // Matches the undo action window: the prompt never disappears while the
+      // action behind it can still be undone.
+      duration: UNDO_TOAST_DURATION_MS,
       // Mobile anchors left so the task actions on the right stay clear
       // (HTPR-5564 wireframe); react-hot-toast aligns each toast row on its
       // own side of the shared `.toastContainerMobile` wrapper. The position

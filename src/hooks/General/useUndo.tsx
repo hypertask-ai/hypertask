@@ -9,11 +9,7 @@ import React, {
   useState,
 } from "react";
 import actions from "@/utils/undoActions";
-import {
-  MOBILE_UNDO_ACTION_WINDOW_MS,
-  UNDO_ACTION_WINDOW_MS,
-  UndoToaster,
-} from "@/components/undoToast";
+import { UNDO_ACTION_WINDOW_MS, UndoToaster } from "@/components/undoToast";
 import toast from "react-hot-toast";
 import { canRunUndo, isUndoWindowExpired, UndoTrigger } from "./undoWindow";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -59,11 +55,6 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
   const performActionAndStoreUndoData = useCallback(
     (actionData: any, undoText: string, undoHandler: any) => {
       let pendingUndoData: any;
-      // The action window is per viewport (HTPR-5872: mobile 7.5s, desktop
-      // 15s) and every timestamp below must use the same one.
-      const undoWindowMs = isMobile
-        ? MOBILE_UNDO_ACTION_WINDOW_MS
-        : UNDO_ACTION_WINDOW_MS;
       const scheduleExpiry = (undoId: string, expiresAt: number) => {
         const existingTimer = expiryTimers.current.get(undoId);
         if (existingTimer) clearTimeout(existingTimer);
@@ -125,7 +116,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           const consumedCleanupTimer = setTimeout(() => {
             consumedUndoIds.current.delete(undoId);
             expiryTimers.current.delete(undoId);
-          }, undoWindowMs);
+          }, UNDO_ACTION_WINDOW_MS);
           expiryTimers.current.set(undoId, consumedCleanupTimer);
         } catch (error) {
           console.error("Undo action failed", error);
@@ -133,7 +124,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           if (isUndoWindowExpired(pendingUndoData, Date.now())) {
             pendingUndoData = {
               ...pendingUndoData,
-              expiresAt: Date.now() + undoWindowMs,
+              expiresAt: Date.now() + UNDO_ACTION_WINDOW_MS,
             };
             commitUndoData((items) =>
               items.map((item) =>
@@ -157,7 +148,7 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
         ...actionData,
         toastId: toasterId,
         undoHandler: handleUndo,
-        expiresAt: Date.now() + undoWindowMs,
+        expiresAt: Date.now() + UNDO_ACTION_WINDOW_MS,
       };
       // console.log("🚀 ~ performActionAndStoreUndoData ~ toasterId:", toasterId)
       setData(pendingUndoData);
