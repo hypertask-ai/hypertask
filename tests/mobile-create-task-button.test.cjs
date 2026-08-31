@@ -17,6 +17,9 @@ const { shouldShowMobileCreateTaskButton } = jiti(
   path.join(root, "src/components/Global/mobileShellVisibility.ts"),
 );
 const button = read("src/components/Global/MobileCreateTaskButton.tsx");
+const floatingButton = read(
+  "src/components/Global/MobileFloatingActionButton.tsx",
+);
 const provider = read("src/components/ProviderGlobal/GloablProviders.tsx");
 
 test("the mobile create-task action is limited to Board, Calendar, and Inbox", () => {
@@ -54,18 +57,26 @@ test("the mobile create-task action follows dock and chat visibility", () => {
   );
 });
 
-test("the mobile create-task button opens the shared modal and clears the dock", () => {
-  assert.match(button, /type="button"/);
-  assert.match(button, /aria-label="Create task"/);
+test("the mobile create-task wrapper opens the shared modal", () => {
+  assert.match(button, /<MobileFloatingActionButton/);
+  assert.match(button, /ariaLabel="Create task"/);
+  assert.match(button, /label="New task"/);
   assert.match(button, /setCreateTaskModal\(\{ show: true \}\)/);
-  assert.match(button, /<span>New task<\/span>/);
-  assert.match(button, /min-h-11/);
-  assert.match(button, /right-4/);
-  assert.match(button, /z-\[200\]/);
-  assert.match(button, /bg-modalBackground/);
-  assert.match(button, /shadow-customshadow-2/);
+});
+
+test("the shared floating action owns the mobile dock clearance and styling", () => {
+  assert.match(floatingButton, /type="button"/);
+  assert.match(floatingButton, /aria-label=\{ariaLabel\}/);
+  assert.match(floatingButton, /\{icon\}/);
+  assert.match(floatingButton, /<span>\{label\}<\/span>/);
+  assert.match(floatingButton, /onClick=\{onClick\}/);
+  assert.match(floatingButton, /min-h-11/);
+  assert.match(floatingButton, /right-4/);
+  assert.match(floatingButton, /z-\[200\]/);
+  assert.match(floatingButton, /bg-modalBackground/);
+  assert.match(floatingButton, /shadow-customshadow-2/);
   assert.match(
-    button,
+    floatingButton,
     /calc\(var\(--mobile-dock-h, 0px\) \+ 16px \+ env\(safe-area-inset-bottom\)\)/,
   );
 });
