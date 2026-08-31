@@ -40,6 +40,25 @@ const classTokens = (className, target) => {
   assert.equal(typeof className, "string", `${target} class list not found`);
   return new Set(className.split(/\s+/).filter(Boolean));
 };
+const staticClassNames = (node, target) => {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return [node.text];
+  }
+  if (ts.isConditionalExpression(node)) {
+    return [
+      ...staticClassNames(node.whenTrue, target),
+      ...staticClassNames(node.whenFalse, target),
+    ];
+  }
+  if (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "cn"
+  ) {
+    return node.arguments.flatMap((argument) => staticClassNames(argument, target));
+  }
+  assert.fail(`${target} has an unsupported computed class: ${node.getText()}`);
+};
 
 const fontSizeConfig = () => {
   const configFile = parse("tailwind.config.ts", ts.ScriptKind.TS);
@@ -130,8 +149,7 @@ const sidebarBoardTabClasses = () => {
       ts.isIdentifier(node.whenTrue.expression) &&
       node.whenTrue.expression.text === "cn"
     ) {
-      const className = node.whenTrue.arguments[0];
-      if (className && ts.isStringLiteral(className)) classes = className.text;
+      classes = staticClassNames(node.whenTrue, "sidebar board tab").join(" ");
     }
     ts.forEachChild(node, visit);
   };
