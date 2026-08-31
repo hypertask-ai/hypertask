@@ -827,16 +827,14 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     /fallbackPersistedPayload = await sharedHydrationReadPromise/,
   );
   assert.match(hook, /readInboxReadModelRevisionFence\(userId\)/);
-  assert.match(hook, /const sharedRevisionFenceReadPromise = enabled/);
   assert.match(
     hook,
     /requiresPersistentInboxFence\(\s*enabled,\s*inboxRevisionStorageAvailable\(userId\)/,
   );
   assert.match(hook, /if \(persistentFenceRequired\)/);
-  assert.match(hook, /if \(!persistentFenceRequired && enabled\)/);
   assert.match(
     hook,
-    /persistedRevisionFence = await sharedRevisionFenceReadPromise/,
+    /if \(!persistentFenceRequired && enabled\) \{[\s\S]*?persistedRevisionFence = await readInboxReadModelRevisionFence\(userId\)/,
   );
   assert.match(hook, /const finalRevision = currentInboxReadModelRevision/);
   assert.match(hook, /Ignored Inbox response after final revision check/);

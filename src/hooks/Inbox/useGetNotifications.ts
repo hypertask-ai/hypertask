@@ -204,13 +204,6 @@ const fetchInboxPayload = async (
         return readInboxReadModel(userId);
       })().catch(() => null)
     : Promise.resolve(null);
-  const sharedRevisionFenceReadPromise = enabled
-    ? (async () => {
-        const { readInboxReadModelRevisionFence } =
-          await import("@/lib/inboxSync/indexedDbReadModel");
-        return readInboxReadModelRevisionFence(userId);
-      })().catch(() => null)
-    : Promise.resolve(null);
   let response: InboxQueryPayload;
   try {
     response = await getAllNotifications(userId);
@@ -260,9 +253,15 @@ const fetchInboxPayload = async (
     }
   }
   if (!persistentFenceRequired && enabled) {
-    // Catch an older durable revision that predates synchronous storage. This
-    // small read runs with the network and does not block on the full snapshot.
-    persistedRevisionFence = await sharedRevisionFenceReadPromise;
+    // Read after the request so an IndexedDB-only revision committed while it
+    // was in flight cannot be overwritten by the network response.
+    try {
+      const { readInboxReadModelRevisionFence } =
+        await import("@/lib/inboxSync/indexedDbReadModel");
+      persistedRevisionFence = await readInboxReadModelRevisionFence(userId);
+    } catch {
+      persistedRevisionFence = null;
+    }
     if (persistedRevisionFence) {
       observeInboxReadModelRevision(userId, persistedRevisionFence);
     }
