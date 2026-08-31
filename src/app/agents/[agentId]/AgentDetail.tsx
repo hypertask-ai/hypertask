@@ -430,10 +430,10 @@ const AgentDetail = (props: IProp) => {
         });
 
     const bootstrapAgent = (refreshedAgent: TDetailAgent) => {
-      if (bootstrappedAgentId.current === refreshedAgent.id) return;
       if (refreshedAgent.slug && refreshedAgent.slug !== agentId) {
         router.replace(`/agents/${refreshedAgent.slug}`, { scroll: false });
       }
+      if (bootstrappedAgentId.current === refreshedAgent.id) return;
       void loadActivity(refreshedAgent.id).then((loaded) => {
         if (loaded) bootstrappedAgentId.current = refreshedAgent.id;
       });
