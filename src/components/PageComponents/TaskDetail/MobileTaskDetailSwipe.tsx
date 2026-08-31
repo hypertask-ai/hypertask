@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
   type ReactNode,
-  type TouchEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 
 import { useRecoilValue } from "@/lib/state";
@@ -58,6 +58,7 @@ const MobileTaskDetailSwipe = ({
   } | null>(null);
   const rawDragXRef = useRef(0);
   const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleTouchMoveRef = useRef<((event: globalThis.TouchEvent) => void) | null>(null);
 
   const clearAnimationTimer = useCallback(() => {
     if (!animationTimerRef.current) return;
@@ -90,7 +91,7 @@ const MobileTaskDetailSwipe = ({
     }, TASK_SWIPE_DURATION_MS);
   };
 
-  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+  const handleTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
     const surface = surfaceRef.current;
     if (
       transitioning ||
@@ -113,7 +114,7 @@ const MobileTaskDetailSwipe = ({
     rawDragXRef.current = 0;
   };
 
-  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+  const handleTouchMove = (event: globalThis.TouchEvent) => {
     const start = touchStartRef.current;
     const touch = event.touches[0];
     if (!start || !touch || transitioning || start.intent === "vertical") return;
@@ -129,6 +130,16 @@ const MobileTaskDetailSwipe = ({
     rawDragXRef.current = deltaX;
     setDragX(resistedTaskSwipeOffset(deltaX, bounds));
   };
+  handleTouchMoveRef.current = handleTouchMove;
+
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!enabled || !surface) return;
+    const listener = (event: globalThis.TouchEvent) =>
+      handleTouchMoveRef.current?.(event);
+    surface.addEventListener("touchmove", listener, { passive: false });
+    return () => surface.removeEventListener("touchmove", listener);
+  }, [enabled]);
 
   const handleTouchEnd = () => {
     const start = touchStartRef.current;
@@ -170,12 +181,10 @@ const MobileTaskDetailSwipe = ({
       <div
         ref={surfaceRef}
         onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchCancel}
         className="w-full"
         style={{
-          touchAction: "pan-y",
           willChange: dragX === 0 && !transitioning ? undefined : "transform",
           transform: dragX === 0 && !transitioning
             ? undefined
