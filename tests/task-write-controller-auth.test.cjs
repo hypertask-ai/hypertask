@@ -310,6 +310,7 @@ test("a post-commit move notification failure preserves the successful update", 
     OWNER_PROJECT,
     { moveShouldNotify: true },
   );
+  let deliveryAttempts = 0;
   const result = await updateTaskSingle(
     {
       id: TASK_ID,
@@ -323,6 +324,8 @@ test("a post-commit move notification failure preserves the successful update", 
       skipRecurrence: true,
       taskMovedActivity: {
         sendNotification: async () => {
+          assert.equal(calls.transactionActive, false);
+          deliveryAttempts += 1;
           throw new Error("delivery unavailable");
         },
       },
@@ -332,6 +335,7 @@ test("a post-commit move notification failure preserves the successful update", 
   assert.equal(result.status, 200);
   assert.deepEqual(calls.order, ["task-update", "move-activity"]);
   assert.equal(result.moveActivity.shouldNotify, true);
+  assert.equal(deliveryAttempts, 1);
 });
 
 function loadMoveController({ targetProjectId, sectionProjectId, agentId }) {

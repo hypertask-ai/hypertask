@@ -1,13 +1,11 @@
 import { IUser } from "@/models/model";
 import createActivity from "./createActivity";
 import { ITaskMoveActivity } from "@/models/ActivityModels.ts";
-import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import {
   classifyTaskMoveCollapse,
   mergeStatusFlipActivity,
 } from "./taskMoveCollapse";
-import { sendTaskMoveNotificationIfNeeded } from "./sendTaskMoveNotification";
 
 export interface TaskMovedActivityProps {
   userObj: IUser;
@@ -143,24 +141,3 @@ export async function createTaskMovedActivityInTransaction({
   });
   return { newComment, shouldNotify: true };
 }
-
-const createTaskMovedActivity = async (props: TaskMovedActivityProps) => {
-  const result = await prisma.$transaction(async (transaction) => {
-    // Legacy callers that do not own the task-write transaction still need to
-    // serialize this read-merge-write sequence so counts cannot be lost.
-    await transaction.$queryRaw(
-      Prisma.sql`SELECT pg_advisory_xact_lock(${props.taskId})`,
-    );
-    return createTaskMovedActivityInTransaction({
-      ...props,
-      transaction,
-    });
-  });
-
-  if (props.sendNotification) {
-    await sendTaskMoveNotificationIfNeeded(result, props.sendNotification);
-  }
-  return result;
-};
-
-export default createTaskMovedActivity;

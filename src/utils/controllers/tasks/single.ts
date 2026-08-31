@@ -515,14 +515,13 @@ export async function updateTaskSingle(
       boardWebhookDeliveryIds.length > 0
         ? publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
         : Promise.resolve(),
+      moveActivity && options.taskMovedActivity?.sendNotification
+        ? sendTaskMoveNotificationIfNeeded(
+            moveActivity,
+            options.taskMovedActivity.sendNotification,
+          )
+        : Promise.resolve(),
     ]);
-
-    if (moveActivity && options.taskMovedActivity?.sendNotification) {
-      await sendTaskMoveNotificationIfNeeded(
-        moveActivity,
-        options.taskMovedActivity.sendNotification,
-      );
-    }
 
     if (requestedMutation.description !== undefined) {
       try {

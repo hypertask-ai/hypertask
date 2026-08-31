@@ -29,13 +29,10 @@ const controllerJiti = createJiti(__filename, {
   },
   interopDefault: true,
 });
-const createTaskMovedActivityModule = controllerJiti(
+const { createTaskMovedActivityInTransaction } = controllerJiti(
   path.join(root, "src/utils/controllers/activities/createTaskMovedActivity.ts"),
 );
-const createTaskMovedActivity =
-  typeof createTaskMovedActivityModule === "function"
-    ? createTaskMovedActivityModule
-    : createTaskMovedActivityModule.default;
+const taskMovePrisma = require("./stubs/task-move-prisma.cjs");
 
 const NOW = 2_000_000_000;
 const move = (
@@ -84,19 +81,19 @@ function controllerState(previousActivity) {
     updates: [],
     deletes: [],
     creates: [],
-    locks: [],
   };
   globalThis.__taskMovePrismaState = state;
   return state;
 }
 
-function moveThroughController({
+async function moveThroughController({
   fromSectionId,
   toSectionId,
   fromAgent = null,
   sendNotification,
 }) {
-  return createTaskMovedActivity({
+  const result = await createTaskMovedActivityInTransaction({
+    transaction: taskMovePrisma,
     userObj: human,
     fromAgent,
     fromSectionId,
@@ -104,8 +101,11 @@ function moveThroughController({
     toSectionId,
     toSection_title: `Section ${toSectionId}`,
     taskId: 42,
-    sendNotification,
   });
+  if (sendNotification) {
+    await sendTaskMoveNotificationIfNeeded(result, sendNotification);
+  }
+  return result;
 }
 
 async function reverseThroughController({ previousActivity, fromAgent = null }) {
@@ -205,7 +205,6 @@ test("the controller collapses a human A-B reversal without notifying again", as
     previousActivity: move(1, 2),
   });
 
-  assert.deepEqual(state.locks.map(({ key }) => key), ["[42]"]);
   assert.equal(state.updates.length, 1);
   assert.equal(state.creates.length, 0);
   assert.equal(result.shouldNotify, false);
@@ -217,27 +216,29 @@ test("the controller collapses a human A-B reversal without notifying again", as
   assert.equal(persisted.data.statusFlipCount, 1);
 });
 
-test("overlapping flips serialize without losing the activity count", async () => {
+test("two fenced flips preserve both activity-count increments", async () => {
   const state = controllerState(move(1, 2));
   let deliveries = 0;
   const sendNotification = async () => {
     deliveries += 1;
   };
 
-  const results = await Promise.all([
-    moveThroughController({
+  const results = [];
+  results.push(
+    await moveThroughController({
       fromSectionId: 2,
       toSectionId: 1,
       sendNotification,
     }),
-    moveThroughController({
+  );
+  results.push(
+    await moveThroughController({
       fromSectionId: 1,
       toSectionId: 2,
       sendNotification,
     }),
-  ]);
+  );
 
-  assert.deepEqual(state.locks.map(({ key }) => key), ["[42]", "[42]"]);
   assert.equal(state.updates.length, 2);
   assert.equal(state.previous.activity.data.statusFlipCount, 2);
   assert.equal(state.previous.activity.data.currentSection.sectionId, 2);
