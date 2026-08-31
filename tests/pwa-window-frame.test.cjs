@@ -4,7 +4,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/pwa-window-frame.test.cjs"), {
-  interopDefault: true,
+  interopDefault: false,
   alias: { "@": path.join(root, "src") },
 });
 const manifest = jiti(path.join(root, "src/app/manifest.ts")).default;

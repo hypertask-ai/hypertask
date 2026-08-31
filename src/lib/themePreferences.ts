@@ -59,6 +59,8 @@ export const resolveThemePreference = (
   return theme;
 };
 
+// Installed PWAs keep the initial document color for their native title bar.
+// Prefer dark until the pre-paint script can resolve an unpinned system theme.
 export const resolveInitialThemeColor = (
   theme: ThemePreference | undefined,
 ): string =>
