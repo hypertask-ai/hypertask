@@ -42,7 +42,7 @@ const SplitTitle = ({
           isSelected ? "text-text-light-gray" : classes.textPrimary
         }`}
       >
-        <h2 className={`footer_tags `}>{tab.project}</h2>
+        <span className="footer_tags">{tab.project}</span>
 
         {tab.length > 0 && (
           <p

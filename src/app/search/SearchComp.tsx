@@ -494,7 +494,7 @@ const SplitTitle = ({
           isSelected ? "text-white-black" : "text-text-light-gray"
         }`}
       >
-        <h2 className={`footer_tags`}>{tab.project}</h2>
+        <span className="footer_tags">{tab.project}</span>
 
         {tab.length > 0 && (
           <p className="font-normal footer_tags text-micro ">{tab.length}</p>
