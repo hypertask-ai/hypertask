@@ -47,14 +47,7 @@ export function TaskCard({
   view: "month" | "week";
 }) {
   const currentProject = useRecoilValue(currentProjectAtom);
-  const { projects } = useCalendarContext();
-  const blockingUser = useMemo(
-    () =>
-      projects
-        .find((project) => project.id === task.projectId)
-        ?.members.find((member) => member.user.id === task.waitingOnUserId)?.user,
-    [projects, task.projectId, task.waitingOnUserId],
-  );
+  const blockingUser = task.waitingOnUser ?? undefined;
   const isOverdue = task.dueDate && task.dueDate < new Date() ? true : false;
   const taskSaved = (task._count?.savedContent ?? 0) > 0;
   const assignees = useMemo<(IUser | IAgent)[]>(() => {
@@ -385,9 +378,7 @@ export function DaySection({
                 (item) => item.id === task.projectId,
               );
               const project = calendarProject ?? task.project;
-              const blockingUser = calendarProject?.members.find(
-                (member) => member.user.id === task.waitingOnUserId,
-              )?.user;
+              const blockingUser = task.waitingOnUser ?? undefined;
               const selected = currentTask === task.id;
               const blocked = isTaskBlocked(task);
               let borderClass = "border-l-transparent";

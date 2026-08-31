@@ -47,6 +47,12 @@ function loadController(prisma, calls) {
         sanitized: true,
       }),
     },
+    "@/utils/controllers/tasks/attachWaitingOnUsers": {
+      attachWaitingOnUsers: async (tasks) => {
+        calls.push(["waiting-on-users", tasks]);
+        return tasks.map((task) => ({ ...task, waitingOnUser: null }));
+      },
+    },
   };
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(
@@ -99,6 +105,9 @@ test("board payload checks access before querying task content", async () => {
     userDbId: 6,
     currentUserId: 6,
   });
+  assert.deepEqual(calls.find(([name]) => name === "waiting-on-users")[1], [
+    { id: 101 },
+  ]);
   assert.deepEqual(result, {
     status: 200,
     json: {
@@ -110,7 +119,7 @@ test("board payload checks access before querying task content", async () => {
         },
         sanitized: true,
       },
-      tasks: [{ id: 101 }],
+      tasks: [{ id: 101, waitingOnUser: null }],
       allViews: ["my-view"],
     },
   });

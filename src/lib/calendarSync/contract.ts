@@ -4,13 +4,17 @@ import { validateCalendarVisibleRange } from "./range";
 import { buildCalendarAuthorizationRevision } from "./access";
 
 export const CALENDAR_SYNC_CONTRACT_VERSION = 1 as const;
-export const CALENDAR_READ_MODEL_SCHEMA_VERSION = 1 as const;
+export const CALENDAR_READ_MODEL_SCHEMA_VERSION = 2 as const;
 export const CALENDAR_READ_MODEL_TTL_MS = 24 * 60 * 60 * 1_000;
 
 export type CalendarUserSummary = {
   id: number;
   displayName: string | null;
   photoURL: string | null;
+};
+
+export type CalendarTaskV1 = Omit<ITask, "waitingOnUser"> & {
+  waitingOnUser: CalendarUserSummary | null;
 };
 
 export type CalendarLabelSummary = {
@@ -32,7 +36,7 @@ export type CalendarSyncPayloadV1 = CalendarVisibleRange & {
   accountId: number;
   authorizationRevision: string;
   retrievedAt: string;
-  tasks: ITask[];
+  tasks: CalendarTaskV1[];
   projects: CalendarProjectV1[];
 };
 
@@ -46,7 +50,7 @@ export type CalendarReadModelSnapshotV1 = CalendarVisibleRange & {
   expiresAt: string;
   retrievedAt: string;
   taskOrder: number[];
-  tasksById: Record<string, ITask>;
+  tasksById: Record<string, CalendarTaskV1>;
   projectOrder: number[];
   projectsById: Record<string, CalendarProjectV1>;
 };
@@ -191,7 +195,7 @@ const isCalendarTaskLabel = (
   value.labelId === value.label.id &&
   value.label.projectId === projectId;
 
-const isCalendarTaskV1 = (value: unknown): value is ITask => {
+const isCalendarTaskV1 = (value: unknown): value is CalendarTaskV1 => {
   if (!isRecord(value)) return false;
   const id = value.id;
   const projectId = value.projectId;
@@ -213,6 +217,9 @@ const isCalendarTaskV1 = (value: unknown): value is ITask => {
     isNullableString(value.recurrence) &&
     value.deletedAt === null &&
     isNullablePositiveInteger(value.waitingOnUserId) &&
+    (value.waitingOnUser === null ||
+      (isCalendarUserSummary(value.waitingOnUser) &&
+        value.waitingOnUser.id === value.waitingOnUserId)) &&
     (value.agentId === null ||
       (typeof value.agentId === "string" && value.agentId.length > 0)) &&
     Array.isArray(value.updatedByUserIds) &&
@@ -238,7 +245,10 @@ export const containsUnsafeCalendarIdentity = (value: unknown): boolean => {
 
   for (const [key, nested] of Object.entries(value)) {
     if (
-      (key === "user" || key === "owner" || key === "agent") &&
+      (key === "user" ||
+        key === "owner" ||
+        key === "agent" ||
+        key === "waitingOnUser") &&
       nested &&
       typeof nested === "object" &&
       !Array.isArray(nested) &&
@@ -262,7 +272,9 @@ const reviveDate = (value: unknown): Date | undefined => {
   return Number.isFinite(date.getTime()) ? date : undefined;
 };
 
-export const rehydrateCalendarTask = (task: ITask): ITask => ({
+export const rehydrateCalendarTask = (
+  task: CalendarTaskV1,
+): CalendarTaskV1 => ({
   ...task,
   dueDate: reviveDate(task.dueDate),
   startDate: reviveDate(task.startDate),
@@ -455,7 +467,7 @@ export const createCalendarReadModelSnapshot = ({
 
   const startMs = Date.parse(range.startIso);
   const endMs = Date.parse(range.endExclusiveIso);
-  const tasksById: Record<string, ITask> = {};
+  const tasksById: Record<string, CalendarTaskV1> = {};
   const taskOrder: number[] = [];
   for (const candidate of payload.tasks) {
     const task = normalizeCalendarTaskForSnapshot(candidate);

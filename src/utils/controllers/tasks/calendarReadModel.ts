@@ -1,8 +1,11 @@
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
-import type { ITask } from "@/models/model";
 import { buildCalendarAuthorizationRevision } from "@/lib/calendarSync/access";
-import type { CalendarProjectV1 } from "@/lib/calendarSync/contract";
+import type {
+  CalendarProjectV1,
+  CalendarTaskV1,
+} from "@/lib/calendarSync/contract";
+import { attachWaitingOnUsers } from "./attachWaitingOnUsers";
 
 const safeUserSelect = {
   id: true,
@@ -48,7 +51,7 @@ export const getCalendarReadModel = async ({
   start: Date;
   endExclusive: Date;
 }): Promise<{
-  tasks: ITask[];
+  tasks: CalendarTaskV1[];
   projects: CalendarProjectV1[];
   authorizationRevision: string;
 }> => {
@@ -177,6 +180,7 @@ export const getCalendarReadModel = async ({
   const authorizedTasks = tasks.filter((task) =>
     authorizedProjectIds.has(task.projectId),
   );
+  const calendarTasks = await attachWaitingOnUsers(authorizedTasks);
 
   const calendarProjects: CalendarProjectV1[] = projects.map((project) => ({
     id: project.id,
@@ -203,7 +207,7 @@ export const getCalendarReadModel = async ({
   }));
 
   return {
-    tasks: authorizedTasks as unknown as ITask[],
+    tasks: calendarTasks as unknown as CalendarTaskV1[],
     projects: calendarProjects,
     authorizationRevision,
   };

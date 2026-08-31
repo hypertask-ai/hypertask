@@ -511,9 +511,10 @@ const Section = ({
                           dragProvided={provided}
                           dragSnapshot={snapshot}
                           blockingUser={
-                            task.waitingOnUserId != null
+                            task.waitingOnUser ??
+                            (task.waitingOnUserId != null
                               ? membersById.get(task.waitingOnUserId)
-                              : undefined
+                              : undefined)
                           }
                         />
                       )
@@ -541,9 +542,10 @@ const Section = ({
                     currentSetting={currentSetting}
                     isArchivedOnBoard
                     blockingUser={
-                      task.waitingOnUserId != null
+                      task.waitingOnUser ??
+                      (task.waitingOnUserId != null
                         ? membersById.get(task.waitingOnUserId)
-                        : undefined
+                        : undefined)
                     }
                   />
                 );

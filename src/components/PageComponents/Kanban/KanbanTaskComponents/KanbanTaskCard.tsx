@@ -14,6 +14,7 @@ import CardSubTasks from "./CardSubTasks";
 import FlattenedParentTask from "./FlattenedParentTask";
 import TaskDraggableContainer from "./TaskDraggableContainer";
 import TaskTagsRow from "./TaskTagsRow";
+import type { BlockerUser } from "./BlockerChip";
 import TaskTopRow from "./TaskTopRow";
 import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -24,7 +25,7 @@ interface KanbanTaskCardProps {
   currentSetting: TBoardSubtaskSetting;
   assignedUsers: IUser[];
   agentAssignees: IAgent[];
-  blockingUser?: IUser;
+  blockingUser?: BlockerUser;
   active: boolean;
   selected?: boolean;
   hover: boolean;

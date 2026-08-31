@@ -6,6 +6,7 @@ import {
   isCalendarReadModelSnapshotV1,
   materializeCalendarReadModelSnapshot,
   type CalendarSyncPayloadV1,
+  type CalendarTaskV1,
 } from "@/lib/calendarSync/contract";
 import {
   buildCalendarVisibleRange,
@@ -616,8 +617,18 @@ export const useSyncedCalendarReadModel = ({
           (candidate) => candidate.id === task.id,
         );
         const tasks = [...current.payload.tasks];
-        if (belongsInRange && existingIndex >= 0) tasks[existingIndex] = task;
-        else if (belongsInRange) tasks.push(task);
+        const projectedTask: CalendarTaskV1 = {
+          ...task,
+          waitingOnUser:
+            task.waitingOnUser !== undefined
+              ? task.waitingOnUser
+              : task.waitingOnUserId == null
+                ? null
+                : (tasks[existingIndex]?.waitingOnUser ?? null),
+        };
+        if (belongsInRange && existingIndex >= 0) {
+          tasks[existingIndex] = projectedTask;
+        } else if (belongsInRange) tasks.push(projectedTask);
         else if (existingIndex >= 0) tasks.splice(existingIndex, 1);
         else return current;
 

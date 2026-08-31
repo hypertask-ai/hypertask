@@ -4,7 +4,7 @@ import { FaRobot } from 'react-icons/fa6';
 import TaskLabelComponent from '@/components/Modals/CreateLabel/TaskLabelComponent';
 import EstimateLabelComponent from '@/components/Modals/TaskEstimate/EstimateLabelComponent';
 import PriorityLabelComponent from '@/components/Modals/TaskPriority/PriorityLabelComponent';
-import { IAgent, IEstimate, IPriority, ITaskLabel, ITask, IUser } from '@/models/model';
+import { IAgent, IEstimate, IPriority, ITaskLabel, ITask } from '@/models/model';
 import { formatElapsed, useTimerNow } from '@/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime';
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking';
 import { displayedBoardTimeSeconds, type BoardTimeTotal } from '@/lib/boardTimeTotals';
@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { CustomFieldType } from '@prisma/client';
 import axios from 'axios';
 import React from 'react'
-import BlockerChip from './BlockerChip';
+import BlockerChip, { type BlockerUser } from './BlockerChip';
 
 interface ITaskTopRow {
     task:ITask;
@@ -27,7 +27,7 @@ interface ITaskTopRow {
     estimate:IEstimate;
     taskLabels?:ITaskLabel[];
     hasDraft?: boolean;
-    blockingUser?: IUser;
+    blockingUser?: BlockerUser;
     agents?: IAgent[];
 }
 const TaskTagsRow:React.FC<ITaskTopRow>  = ({

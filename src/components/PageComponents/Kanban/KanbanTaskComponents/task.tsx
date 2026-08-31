@@ -10,7 +10,7 @@ import {
 } from "@/store";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { IAssignees, IProject, ITask, ITasksPlaylist, IUser } from "@/models/model";
+import { IAssignees, IProject, ITask, ITasksPlaylist } from "@/models/model";
 import { taskBaseUri } from "@/utils";
 import toast from "react-hot-toast";
 import dynamic from "next/dynamic";
@@ -46,6 +46,7 @@ import {
 import { usePrefetchTaskDetail } from "@/hooks/Task Detail/usePrefetchTaskDetail";
 import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import KanbanTaskCard from "./KanbanTaskCard";
+import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import type {
@@ -69,7 +70,7 @@ interface IProps {
   moveItemRight: (sectionId: number, itemId: number) => Promise<void>;
   markAsDone: (section: string, itemId: number, parentTask?: ITask) => void;
   isArchivedOnBoard?: boolean;
-  blockingUser?: IUser;
+  blockingUser?: BlockerUser;
   dragProvided?: DraggableProvided;
   dragSnapshot?: DraggableStateSnapshot;
 }

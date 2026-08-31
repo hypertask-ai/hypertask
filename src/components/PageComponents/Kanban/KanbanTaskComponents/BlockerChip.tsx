@@ -1,6 +1,6 @@
 import UserAvatar from '@/components/Common/UserAvatar';
 
-type BlockerUser = {
+export type BlockerUser = {
   displayName?: string | null;
   email?: string | null;
   photoURL?: string | null;
