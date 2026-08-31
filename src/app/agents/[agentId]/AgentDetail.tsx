@@ -349,9 +349,12 @@ const AgentDetail = (props: IProp) => {
   const renderedAgentIdentity = useRef<{ id: string; slug: string | null } | null>(
     null,
   );
-  renderedAgentIdentity.current = agent
-    ? { id: agent.id, slug: agent.slug ?? null }
-    : null;
+
+  useEffect(() => {
+    renderedAgentIdentity.current = agent
+      ? { id: agent.id, slug: agent.slug ?? null }
+      : null;
+  }, [agent?.id, agent?.slug]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
