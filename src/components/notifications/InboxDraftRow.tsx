@@ -90,7 +90,7 @@ const InboxDraftRow = ({
       <button
         type="button"
         data-inbox-draft-control="true"
-        className="relative flex min-w-0 flex-1 cursor-pointer flex-col justify-between rounded-md px-5 py-2 pr-14 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border-active md:flex-row md:items-center md:space-x-8 md:px-0 md:pr-10"
+        className="relative flex min-w-0 flex-1 cursor-pointer flex-col justify-between rounded-md py-2 pr-14 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border-active md:flex-row md:items-center md:space-x-8 md:px-0 md:pr-10"
         onClick={openDraft}
         onKeyDown={(event) => {
           if (event.key.toLowerCase() !== "e") return;
