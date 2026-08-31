@@ -56,16 +56,20 @@ const TiptapMainContainer = () => {
   if (isMbl) {
     // FOR: New comment on mobile
     if (mode === "create-comment") {
-      const aiComposerOpen = shouldShowInlineDraftAi;
+      const aiRefineOpen =
+        shouldShowInlineDraftAi && !!editor && !editor.isEmpty;
+      const aiComposeOpen =
+        shouldShowInlineDraftAi && !!editor && editor.isEmpty;
       const isComposerExpanded =
         editor?.isFocused ||
         newCommentAttachments.length > 0 ||
         isRecording ||
-        aiComposerOpen;
+        aiComposeOpen;
 
       return (
-        <div
-          className={`
+        <>
+          <div
+            className={`
               ${isComposerExpanded ? "flex-col" : "flex-row items-center"}
               flex w-full gap-[8px]
               scrollbar-none
@@ -91,14 +95,14 @@ const TiptapMainContainer = () => {
           <CreatedInfoTiptap />
           <div
             className={
-              aiComposerOpen
+              aiComposeOpen
                 ? "max-h-[min(38svh,var(--mobile-comment-auto-editor-max-height,55vh))] min-h-[80px] w-full min-w-0 shrink-0 overflow-y-auto"
                 : "w-full min-w-0"
             }
           >
             <TiptapEditor />
           </div>
-          {aiComposerOpen && editor && closeInlineDraftAi && (
+          {aiComposeOpen && closeInlineDraftAi && (
             <InlineDraftAiFloat
               editor={editor}
               onClose={closeInlineDraftAi}
@@ -132,6 +136,20 @@ const TiptapMainContainer = () => {
             />
           </div>
         </div>
+        {aiRefineOpen && closeInlineDraftAi && (
+          <InlineDraftAiFloat
+            editor={editor}
+            onClose={closeInlineDraftAi}
+            projectId={aiProjectId}
+            taskId={aiTaskId}
+            allowSuggestReply
+            toggleRecording={toggleRecording}
+            isRecording={isRecording}
+            presentation="refine-fullscreen"
+            suppressEditorSelectionHighlight
+          />
+        )}
+        </>
       );
     }
 
