@@ -263,6 +263,7 @@ const Tiptap = ({
       },
     }))
   );
+  const autoDescriptionAttachmentsBeforeRef = useRef(newCommentAttachments);
 
   // Debug: Log initial attachments format
   // Commented this out. Too many console logs when I am typing
@@ -898,6 +899,7 @@ const Tiptap = ({
       return;
     }
     const before = editor.getHTML();
+    autoDescriptionAttachmentsBeforeRef.current = [...newCommentAttachments];
     setEditMode("description");
     handleAISave(content, generatedAttachments);
     setAutoDescriptionVisible(false);
@@ -911,6 +913,8 @@ const Tiptap = ({
       return;
     }
     editor.commands.setContent(autoDescriptionTakeover.before, { emitUpdate: true });
+    setNewCommentAttachments(autoDescriptionAttachmentsBeforeRef.current);
+    setTrigger((previous) => !previous);
     setAutoDescriptionTakeover(null);
   };
 

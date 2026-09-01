@@ -1,6 +1,6 @@
 import axios from "axios";
 import toast from "react-hot-toast";
-import { ComponentType, useRef, useState } from "react";
+import { ComponentType, useEffect, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import { useQueryClient } from "@tanstack/react-query";
 import { ToggleSwitch, ToggleSwitchProps } from "./Single section items";
@@ -43,12 +43,20 @@ const UserPreferenceSidebar = ({
   variant?: "task-page" | "inbox";
 } = {}) => {
   const queryClient = useQueryClient();
-  const { data } = useGetUserPreferences();
+  const { data, isFetching } = useGetUserPreferences();
   const autoDescriptionUpdateQueue = useRef(Promise.resolve());
   const autoDescriptionUpdateVersion = useRef(0);
+  const autoDescriptionUpdatesPending = useRef(0);
   const autoDescriptionConfirmedValue = useRef(
     data.autoDescriptionSuggestions ?? true,
   );
+
+  useEffect(() => {
+    if (!isFetching && autoDescriptionUpdatesPending.current === 0) {
+      autoDescriptionConfirmedValue.current =
+        data.autoDescriptionSuggestions ?? true;
+    }
+  }, [data.autoDescriptionSuggestions, isFetching]);
 
   const [isStacked, setIsStacked] = useState<boolean>(data.commentsStacked);
   const [displayAvatar, setDisplayAvatar] = useState<boolean>(
@@ -122,6 +130,7 @@ const UserPreferenceSidebar = ({
 
   const handleAutoDescriptionSuggestionsSetting = () => {
     const updateVersion = ++autoDescriptionUpdateVersion.current;
+    autoDescriptionUpdatesPending.current += 1;
     let nextValue = true;
     queryClient.setQueryData<IUserPreferences>(
       USER_PREFERENCES_QUERY_KEY,
@@ -140,31 +149,35 @@ const UserPreferenceSidebar = ({
     autoDescriptionUpdateQueue.current = autoDescriptionUpdateQueue.current
       .catch(() => undefined)
       .then(async () => {
-        const updated = await updateUserPreferences(
-          { autoDescriptionSuggestions: nextValue },
-          false,
-        );
-        if (updated) {
-          autoDescriptionConfirmedValue.current = nextValue;
-          return;
-        }
-        if (updateVersion !== autoDescriptionUpdateVersion.current) return;
-
-        toast.error("Could not update description suggestions");
         try {
-          await queryClient.invalidateQueries(
-            { queryKey: USER_PREFERENCES_QUERY_KEY },
-            { throwOnError: true },
+          const updated = await updateUserPreferences(
+            { autoDescriptionSuggestions: nextValue },
+            false,
           );
-        } catch {
-          queryClient.setQueryData<IUserPreferences>(
-            USER_PREFERENCES_QUERY_KEY,
-            (previous) => ({
-              ...(previous ?? data),
-              autoDescriptionSuggestions:
-                autoDescriptionConfirmedValue.current,
-            }),
-          );
+          if (updated) {
+            autoDescriptionConfirmedValue.current = nextValue;
+            return;
+          }
+          if (updateVersion !== autoDescriptionUpdateVersion.current) return;
+
+          toast.error("Could not update description suggestions");
+          try {
+            await queryClient.invalidateQueries(
+              { queryKey: USER_PREFERENCES_QUERY_KEY },
+              { throwOnError: true },
+            );
+          } catch {
+            queryClient.setQueryData<IUserPreferences>(
+              USER_PREFERENCES_QUERY_KEY,
+              (previous) => ({
+                ...(previous ?? data),
+                autoDescriptionSuggestions:
+                  autoDescriptionConfirmedValue.current,
+              }),
+            );
+          }
+        } finally {
+          autoDescriptionUpdatesPending.current -= 1;
         }
       });
   };
