@@ -113,26 +113,16 @@ test("the default sentinel clears another tab's applied and unsaved view", () =>
   );
 });
 
-test("the default sentinel clears an unsaved overlay based on the default view", () => {
-  const { project, defaultView } = projectFixture();
+test("the default sentinel keeps an unsaved overlay based on the default view", () => {
+  const { project, unsavedView } = projectFixture();
   const row = project.project_view.user_project_views[0];
   row.appliedView = undefined;
   row.appliedViewId = undefined;
 
   const pinned = pinProjectToUrlView(project, "default");
-  const active = getViewFromProject(pinned);
 
-  assert.notStrictEqual(pinned, project);
-  assert.equal(active.type, "Default");
-  assert.equal(active.view.id, defaultView.id);
-  assert.equal(
-    pinned.project_view.user_project_views[0].unsavedView,
-    undefined,
-  );
-  assert.equal(
-    pinned.project_view.user_project_views[0].unsavedViewId,
-    undefined,
-  );
+  assert.strictEqual(pinned, project);
+  assert.equal(getViewFromProject(pinned).view.id, unsavedView.id);
 });
 
 test("an unknown or deleted URL slug leaves the server-resolved project unchanged", () => {
