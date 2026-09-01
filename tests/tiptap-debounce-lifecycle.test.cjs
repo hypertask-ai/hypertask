@@ -66,3 +66,32 @@ test("task draft autosave captures HTML while the editor is alive and flushes on
   assert.match(editorSource, /taskId: inViewObject\.taskId/);
   assert.match(editorSource, /\}, 750, true\);/);
 });
+
+test("a captured autosave updates only its source task's draft cache", () => {
+  const editorSource = fs.readFileSync(
+    path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
+    "utf8"
+  );
+  const updateDraftsSource = editorSource.match(
+    /const updateDrafts = async[\s\S]*?(?=\n  const \[debouncedRequest)/
+  )?.[0];
+
+  assert.ok(updateDraftsSource, "updateDrafts implementation not found");
+  assert.match(
+    updateDraftsSource,
+    /const targetDraftQueryKey = \[\s*"draft for \[task,userId\]:",\s*taskId,\s*currentUser\?\.id,\s*\]/
+  );
+  assert.match(
+    updateDraftsSource,
+    /queryClient\.getQueryData\(targetDraftQueryKey\)/
+  );
+  assert.equal(
+    (updateDraftsSource.match(/queryClient\.setQueryData\(targetDraftQueryKey/g) ?? [])
+      .length,
+    2
+  );
+  assert.doesNotMatch(
+    updateDraftsSource,
+    /projectId: inViewObject\.taskProjectId|taskId: inViewObject\.taskId/
+  );
+});
