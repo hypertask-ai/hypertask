@@ -636,6 +636,8 @@ const AITaskWriterContainer: React.FC<
     return null;
   }
 
+  // Visible controls are the owner-approved HTPR-5890 flow:
+  // https://app.hypertask.ai/page/cmtiiril300000aht4ztpr236
   if (presentation === "description-suggestion" && !isMobile) {
     return (
       <div
