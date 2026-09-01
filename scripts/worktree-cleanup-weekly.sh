@@ -222,19 +222,27 @@ LOG_FILE="${LOG_FILE:-$STATE_DIR/worktree-cleanup-$(date +%F).log}"
 LOG_DIR=$(dirname -- "$LOG_FILE")
 LOCK_DIR=$(dirname -- "$LOCK_FILE")
 KEY_DIR=$(dirname -- "$MARKER_KEY_FILE")
-ensure_private_path_ancestors "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+ensure_private_path_ancestors "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
 if (( CACHE_CLEANUP_ENABLED )); then
-  ensure_private_path_ancestors "$WORKTREE_ROOT"
+  ensure_private_path_ancestors "$WORKTREE_ROOT" "$CACHE_QUARANTINE_DIR"
 fi
-mkdir -p "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+mkdir -p "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+if (( CACHE_CLEANUP_ENABLED )); then
+  mkdir -p "$CACHE_QUARANTINE_DIR"
+fi
 ensure_private_dir "$STATE_DIR"
 ensure_private_dir "$LEASE_DIR"
 ensure_private_dir "$QUARANTINE_DIR"
-ensure_private_dir "$CACHE_QUARANTINE_DIR"
+if (( CACHE_CLEANUP_ENABLED )); then
+  ensure_private_dir "$CACHE_QUARANTINE_DIR"
+fi
 ensure_private_dir "$KEY_DIR"
 ensure_private_dir "$LOG_DIR"
 ensure_private_dir "$LOCK_DIR"
-chmod 700 "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR"
+chmod 700 "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR"
+if (( CACHE_CLEANUP_ENABLED )); then
+  chmod 700 "$CACHE_QUARANTINE_DIR"
+fi
 ensure_output_target "$LOG_FILE"
 ensure_output_target "$LOCK_FILE"
 
@@ -1083,7 +1091,9 @@ consider_cache_candidate() {
   [[ -d "$path" && ! -L "$path" ]] || return 0
   canonical=$(realpath -e -- "$path") || return 0
   [[ "$canonical" == "$path" && "$path" != "$repo_root" && "$path" == "$WORKTREE_ROOT/"* ]] || return 0
-  if [[ ! -e "$path/node_modules" && ! -e "$path/.next" && ! -e "$path/tsconfig.tsbuildinfo" ]]; then
+  if [[ ! ( -d "$path/node_modules" && ! -L "$path/node_modules" ) \
+      && ! ( -d "$path/.next" && ! -L "$path/.next" ) \
+      && ! ( -f "$path/tsconfig.tsbuildinfo" && ! -L "$path/tsconfig.tsbuildinfo" ) ]]; then
     return 0
   fi
   cache_path_is_idle "$path" || return 0

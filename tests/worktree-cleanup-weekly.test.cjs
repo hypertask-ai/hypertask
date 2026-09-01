@@ -233,8 +233,11 @@ test('lease cleanup still runs when cache cleanup has no worktree root', (t) => 
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));
   writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const unusedCacheQuarantine = path.join(fixture.root, 'cache-quarantine-link');
+  fs.symlinkSync(os.tmpdir(), unusedCacheQuarantine);
   const cacheDisabled = {
     WORKTREE_ROOT: path.join(fixture.root, 'missing-worktree-root'),
+    CACHE_QUARANTINE_DIR: unusedCacheQuarantine,
     CACHE_CLEANUP_LIMIT: '0',
   };
 
