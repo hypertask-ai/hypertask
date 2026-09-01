@@ -72,7 +72,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const titleSaveChainRef = useRef(Promise.resolve());
   const contentSaveChainRef = useRef(Promise.resolve());
   const contentRef = useRef<HTMLDivElement>(null);
-  const { zoom, showIndicator } = useContentZoom(contentRef);
+  const { zoom, showIndicator } = useContentZoom(contentRef, { min: 0.5 });
   const { editor } = useTiptap({
     mode: "read-edit-description",
     defaultContent: page.contentHtml,
@@ -285,9 +285,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
           className={`w-full ${isMobile ? "px-0" : "px-3"}`}
         >
           <div
-            className={`flex h-8 items-center justify-between pt-2 text-meta text-text-light-gray ${
-              isMobile ? "px-3" : "px-0"
-            }`}
+            className="flex h-8 items-center justify-between px-0 pt-2 text-meta text-text-light-gray"
             aria-live="polite"
           >
             <button
@@ -314,11 +312,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
             </div>
           </div>
 
-          <div
-            className={`rounded-none ${
-              isMobile ? "mb-8 px-3 pb-16 pt-2" : "mb-8 px-0 pb-16 pt-2"
-            }`}
-          >
+          <div className="mb-8 rounded-none px-0 pb-16 pt-2">
             <input
               aria-label="Page title"
               value={title}
@@ -332,7 +326,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
             <div
               ref={contentRef}
-              style={{ zoom }}
+              style={{ zoom, width: `${100 / zoom}%` }}
               className={`min-h-[420px] cursor-text touch-pan-y ${
                 isMobile ? "mt-5" : "mt-8"
               } ${styles.hellow}`}
