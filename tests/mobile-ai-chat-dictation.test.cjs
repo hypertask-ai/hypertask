@@ -23,6 +23,7 @@ const { mobileMicPresentation } = jiti(
 );
 const originalCache = new Map(Object.entries(require.cache));
 const TestChatContext = React.createContext(undefined);
+let pathname = "/project";
 
 const stubModule = (filename, exports) => {
   require.cache[filename] = {
@@ -40,7 +41,7 @@ stubModule(require.resolve("@tiptap/react"), {
   useEditorState: ({ editor, selector }) => selector({ editor }),
 });
 stubModule(require.resolve("next/navigation"), {
-  usePathname: () => "/project",
+  usePathname: () => pathname,
 });
 stubSourceModule("src/components/Global/ModelSelectorDropdown.tsx", {
   default: () => React.createElement("button", { "data-control": "model" }),
@@ -277,6 +278,7 @@ test("real mobile microphones apply each composer presentation state", async () 
     assert.match(recordingMic.className, /h-\[32px\]/);
     assert.doesNotMatch(recordingMic.className, /h-11 w-11/);
   } finally {
+    pathname = "/project";
     await act(async () => reactRoot.unmount());
     dom.window.close();
     if (previousWindow === undefined) delete global.window;
@@ -308,6 +310,18 @@ test("mobile composer follows live recording state without remounting recorder",
   const reactRoot = createRoot(container);
 
   try {
+    pathname = "/chat";
+    await act(async () => reactRoot.render(renderComposer(false, true)));
+    assert.ok(container.querySelector("[data-ai-chat-mobile-context-row]"));
+    assert.equal(
+      container.querySelector("[data-ai-chat-mobile-scope]"),
+      null,
+      "standalone chat must not show project scope",
+    );
+    assert.ok(container.querySelector('[data-control="recorder"]'));
+    assert.ok(container.querySelector("[data-ai-chat-mobile-overflow]"));
+
+    pathname = "/project";
     let screenshotUploads = 0;
     await act(async () =>
       reactRoot.render(
@@ -444,6 +458,7 @@ test("mobile composer follows live recording state without remounting recorder",
       null,
     );
   } finally {
+    pathname = "/project";
     await act(async () => reactRoot.unmount());
     dom.window.close();
     if (previousWindow === undefined) delete global.window;

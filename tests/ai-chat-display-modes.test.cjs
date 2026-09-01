@@ -81,7 +81,10 @@ test("mobile chat uses the approved header controls and guarded new-chat action"
       assert.match(button[0], /disabled=\{isStartingNewSession\}/);
     }
   }
-  assert.match(newSessionHandler[0], /if \(isStartingNewSession\) return;/);
+  assert.match(
+    newSessionHandler[0],
+    /if \(isStartingNewSessionRef\.current\) return;/
+  );
   assert.match(
     newSessionHandler[0],
     /setIsStartingNewSession\(true\);[\s\S]*?await startNewSession\(\);/

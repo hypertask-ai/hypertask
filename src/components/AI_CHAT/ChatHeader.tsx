@@ -109,6 +109,7 @@ export const ChatHeader = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
   const [isStartingNewSession, setIsStartingNewSession] = useState(false);
+  const isStartingNewSessionRef = useRef(false);
   const [aiChatPinned, setAiChatPinned] = useRecoilState(aiChatPinnedAtom);
   const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
@@ -143,7 +144,8 @@ export const ChatHeader = () => {
   }, []);
 
   const handleStartNewSession = async () => {
-    if (isStartingNewSession) return;
+    if (isStartingNewSessionRef.current) return;
+    isStartingNewSessionRef.current = true;
     setIsStartingNewSession(true);
     try {
       await startNewSession();
@@ -157,6 +159,7 @@ export const ChatHeader = () => {
     } catch {
       toast.error("Couldn't start a new chat. Please try again.");
     } finally {
+      isStartingNewSessionRef.current = false;
       setIsStartingNewSession(false);
     }
   };
