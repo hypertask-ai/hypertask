@@ -27,6 +27,8 @@ export const calendarTaskOverlapsRange = (
     return false;
   }
 
+  // Missing or invalid intervals retain the calendar's existing one-day due
+  // behavior, so due-date membership takes precedence over span validation.
   if (dueAt >= rangeStart && dueAt < rangeEnd) return true;
 
   const startAt = timestamp(task.startDate);
