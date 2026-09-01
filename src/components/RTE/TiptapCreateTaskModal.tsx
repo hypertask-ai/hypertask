@@ -80,6 +80,7 @@ const TiptapCreateTaskModal = () => {
     recordGeneratedTitle,
     generateTitleFromDescription,
     saveEpochRef,
+    dictationCoordinator,
   } = useContextCreateTaskModal();
 
   const { editor } = useTiptap({
@@ -751,6 +752,7 @@ const TiptapCreateTaskModal = () => {
               audioDefaultContent={editor?.getText()}
               toggleRecording={toggleRecording}
               isRecording={isRecording}
+              dictationCoordinator={dictationCoordinator}
               toggleAiTaskWriter={toggleAiTaskWriter}
               isAiTaskWriterOpen={shouldShowAiTaskWriter}
             />

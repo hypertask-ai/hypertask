@@ -15,6 +15,10 @@ import { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 import { collectDictationTranscriptFromSse } from "@/lib/dictationSse";
 import { mobileMicPresentation } from "./mobileAudioButtonPresentation";
 import type { MobileMicPresentation } from "./mobileAudioButtonPresentation";
+import type {
+  DictationCoordinator,
+  DictationLease,
+} from "@/lib/dictationCoordinator";
 
 interface IProp {
   callbackHandler: (text: string, setContent?: boolean) => void;
@@ -41,6 +45,8 @@ interface IProp {
   ariaLabel?: string;
   /** Explicit mobile hierarchy for field-level mics that must not become a primary CTA. */
   mobilePresentation?: MobileMicPresentation;
+  /** Serializes recorder instances that write into the same draft. */
+  dictationCoordinator?: DictationCoordinator;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -69,6 +75,7 @@ export const AudioButton = ({
   idleLabel,
   ariaLabel,
   mobilePresentation,
+  dictationCoordinator,
 }: IProp) => {
   const [recording, setRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -140,6 +147,7 @@ export const AudioButton = ({
   const waveCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const miniCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
+  const dictationLeaseRef = useRef<DictationLease | null>(null);
 
   // Refs mirror state so the rAF closure and getUserMedia callbacks read fresh values.
   const recordingRef = useRef(false);
@@ -292,21 +300,35 @@ export const AudioButton = ({
     }
   };
 
+  const releaseDictationLease = (lease = dictationLeaseRef.current) => {
+    if (!lease) return;
+    dictationCoordinator?.release(lease);
+    if (dictationLeaseRef.current === lease) dictationLeaseRef.current = null;
+  };
+
   const resetToIdle = () => {
     recordingRef.current = false;
     setRecording(false);
-    toggleRecording(false);
+    if (!dictationCoordinator) toggleRecording(false);
     setIsProcessing(false);
     shouldImprove.current = false;
     audioChunksRef.current = [];
     stopStream();
+    releaseDictationLease();
   };
 
   const startRecording = async (improve: boolean = false) => {
     if (recordingRef.current || isProcessing) return;
+    const lease = dictationCoordinator?.acquire();
+    if (dictationCoordinator && !lease) return;
+    if (lease) dictationLeaseRef.current = lease;
     try {
       shouldImprove.current = improve;
       const stream = await ensureStream(selectedDeviceIdRef.current);
+      if (lease && !dictationCoordinator?.owns(lease)) {
+        stopStream();
+        return;
+      }
 
       audioChunksRef.current = [];
       const mimeType =
@@ -334,7 +356,7 @@ export const AudioButton = ({
       setMenuOpen(false);
       recordingRef.current = true;
       setRecording(true);
-      toggleRecording(true);
+      if (!dictationCoordinator) toggleRecording(true);
       ensureLoop();
     } catch (error) {
       console.error("dictation: could not start recording", error);
@@ -347,10 +369,11 @@ export const AudioButton = ({
     const mediaRecorder = mediaRecorderRef.current;
     recordingRef.current = false;
     setRecording(false);
-    toggleRecording(false);
+    if (!dictationCoordinator) toggleRecording(false);
 
     if (!mediaRecorder) {
       stopStream();
+      releaseDictationLease();
       return;
     }
     // Hide Send and show the processing spinner the instant the user confirms,
@@ -375,9 +398,10 @@ export const AudioButton = ({
         audioChunksRef.current = [];
         mediaRecorderRef.current = null;
         shouldImprove.current = false;
+        releaseDictationLease();
         return;
       }
-      sendAudioToServer(audioBlob);
+      sendAudioToServer(audioBlob, dictationLeaseRef.current);
     };
 
     mediaRecorder.addEventListener("stop", onStop);
@@ -391,7 +415,10 @@ export const AudioButton = ({
 
   const closeHandler = () => stopRecording(false);
 
-  const sendAudioToServer = async (audioBlob: Blob) => {
+  const sendAudioToServer = async (
+    audioBlob: Blob,
+    lease: DictationLease | null,
+  ) => {
     if (audioBlob.size > MAX_DICTATION_AUDIO_BYTES) {
       toast.error("Recording is too long. Send a shorter dictation.");
       onProcessingChange?.(false);
@@ -432,6 +459,10 @@ export const AudioButton = ({
         );
       }
 
+      const canDeliver = () =>
+        !dictationCoordinator ||
+        Boolean(lease && dictationCoordinator.owns(lease));
+
       if (shouldImprove.current) {
         const data = await response.json();
         const audioImproved = data.response_html;
@@ -439,7 +470,7 @@ export const AudioButton = ({
         if (textContent && textContent.length > 0)
           newContent = htmlContent + audioImproved;
         else newContent = audioImproved;
-        callbackHandler(newContent, true);
+        if (canDeliver()) callbackHandler(newContent, true);
       } else {
         const decoder = new TextDecoder();
         const streamReader = response.body?.getReader();
@@ -455,7 +486,7 @@ export const AudioButton = ({
         sseChunks.push(decoder.decode());
 
         const transcript = collectDictationTranscriptFromSse(sseChunks);
-        if (transcript) {
+        if (transcript && canDeliver()) {
           const prefix =
             textContent && textContent.length > 0 ? " " : "";
           callbackHandler(prefix + transcript);
@@ -471,6 +502,7 @@ export const AudioButton = ({
       mediaRecorderRef.current = null;
       shouldImprove.current = false;
       audioChunksRef.current = [];
+      releaseDictationLease(lease);
     }
   };
 
@@ -529,6 +561,7 @@ export const AudioButton = ({
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       stopStream();
+      releaseDictationLease();
       const ac = audioContextRef.current;
       if (ac && ac.state !== "closed") {
         void ac.close().catch(() => undefined);

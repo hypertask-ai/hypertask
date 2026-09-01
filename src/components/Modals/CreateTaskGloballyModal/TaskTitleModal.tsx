@@ -8,6 +8,7 @@ import { useDeviceContext } from '@/lib/contexts/deviceContext';
 import { DIV_ID_CONSTANTS } from '@/lib/configs/general.config';
 import { useTourContext } from '@/lib/tours/context/TourContext';
 import { X } from 'lucide-react';
+import { AudioButton } from '@/components/RTE/Components/AudioButton';
 
 const TaskTitleModal = () => {
     const _mbl = useContext(MobileViewContext);
@@ -15,7 +16,7 @@ const TaskTitleModal = () => {
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const isApple = useDeviceContext()
     const { endTour } = useTourContext();
-    const { currentFocusedElement, editMode, setEditMode, formValues, handleChange, setCurrentFocusedElement, focusOn, isRecording, closeHandler, isGeneratingTitle, titleGenerationError } = useContextCreateTaskModal()
+    const { currentFocusedElement, editMode, setEditMode, formValues, handleChange, appendDictationToTitle, dictationCoordinator, setCurrentFocusedElement, focusOn, isRecording, toggleRecording, closeHandler, isGeneratingTitle, titleGenerationError } = useContextCreateTaskModal()
     useAutosizeTextArea(textAreaRef.current, formValues.title);
     const outsideClickHandler = () => {
         if (editMode!=="title") return
@@ -166,6 +167,20 @@ const TaskTitleModal = () => {
                                         fontWeight:700 }}
                             
                                 />
+                                {_mbl && (
+                                    <AudioButton
+                                        callbackHandler={appendDictationToTitle}
+                                        editor={null}
+                                        id="create-task-title-audio-button"
+                                        toggleRecording={toggleRecording}
+                                        globalRecording={isRecording}
+                                        dictationCoordinator={dictationCoordinator}
+                                        ariaLabel="Dictate task title"
+                                        mobilePresentation="compact"
+                                        className="h-11 w-11 shrink-0 justify-center"
+                                        wrapperClassName="shrink-0"
+                                    />
+                                )}
                                 {/* :
                                 <span
                                 onClick={()=>{
