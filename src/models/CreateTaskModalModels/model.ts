@@ -26,8 +26,7 @@ export type TFormKey = "title"| "description" |"assignees"|"attachments" | "stat
 export type TEditModeCTModal = "title" | "assignees" | "Description" |"Description-ai"| null 
 export type TCurrentFocusedElement = "Title" | "Assignees" |"Save" |"Description"|"title-input"
 export interface ITaskGlobalStates{
-    handleChange: (key: Exclude<TFormKey, "title">, value: any) => void;
-    handleTitleChange: (title: string) => void;
+    handleChange: (key: TFormKey, value: any) => void;
     appendDictationToTitle: (transcript: string) => void;
     dictationCoordinator: DictationCoordinator;
     formValues: IForm;
