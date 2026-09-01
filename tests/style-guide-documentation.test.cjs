@@ -8,6 +8,7 @@ const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
 const guide = read("openwiki/style-guide.md");
+const guideLines = guide.split(/\r?\n/);
 const themeNames = ["amoled", "graphite", "porcelain", "dia"];
 const themes = Object.fromEntries(
   themeNames.map((theme) => [
@@ -43,7 +44,7 @@ test("the style guide carries every required visual contract section", () => {
     "## Reference implementation: mobile comment field",
     "## Pull request review contract",
   ]) {
-    assert.ok(guide.includes(heading), `missing ${heading}`);
+    assert.ok(guideLines.includes(heading), `missing ${heading}`);
   }
 });
 
