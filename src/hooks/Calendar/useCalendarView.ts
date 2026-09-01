@@ -2233,6 +2233,7 @@ export function useCalendarView(accountId: number) {
     handlePrevious,
     handleNext,
     setCurrentView: setCurrentViewFromInteraction,
+    setCurrentDay,
     setCurrentTask,
     handleDateSelect,
     handleProjectToggle,

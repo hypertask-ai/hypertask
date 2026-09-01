@@ -276,6 +276,7 @@ export function DaySection({
   getTasksForDate,
   handleTaskClick,
   dayIndex,
+  excludedTaskIds,
 }: {
   day: Date;
   dayIndex: number;
@@ -287,10 +288,13 @@ export function DaySection({
   toggleDueDateModal: () => void;
   getTasksForDate: (date: Date) => ITask[];
   handleTaskClick: (taskDay: Date, task: ITask) => void;
+  excludedTaskIds?: ReadonlySet<number>;
 }) {
   const [hover, setHover] = useState(false);
   const { projects, setCurrentTask } = useCalendarContext();
-  const tasksForDate = getTasksForDate(day);
+  const tasksForDate = getTasksForDate(day).filter(
+    (task) => !excludedTaskIds?.has(task.id),
+  );
   const hasTasks = tasksForDate.length > 0;
   const isMonthView = view === "month";
   const showMoreTasks = isMonthView && tasksForDate.length > 2;

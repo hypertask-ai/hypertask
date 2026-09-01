@@ -6,6 +6,10 @@ import type {
   CalendarTaskV1,
 } from "@/lib/calendarSync/contract";
 import { attachWaitingOnUsers } from "./attachWaitingOnUsers";
+import {
+  buildCalendarTaskOverlapWhere,
+  calendarTaskOverlapsRange,
+} from "@/lib/calendarSync/taskRange";
 
 const safeUserSelect = {
   id: true,
@@ -101,7 +105,7 @@ export const getCalendarReadModel = async ({
         status: "Normal",
         deletedAt: null,
         updatedAt: { not: null },
-        dueDate: { gte: start, lt: endExclusive },
+        ...buildCalendarTaskOverlapWhere(start, endExclusive),
       },
       select: {
         id: true,
@@ -177,8 +181,10 @@ export const getCalendarReadModel = async ({
   // them could yield tasks for a project absent from `projects`. The projects
   // read is authoritative: drop any task outside its id set.
   const authorizedProjectIds = new Set(projects.map((project) => project.id));
-  const authorizedTasks = tasks.filter((task) =>
-    authorizedProjectIds.has(task.projectId),
+  const authorizedTasks = tasks.filter(
+    (task) =>
+      authorizedProjectIds.has(task.projectId) &&
+      calendarTaskOverlapsRange(task, start, endExclusive),
   );
   const calendarTasks = await attachWaitingOnUsers(authorizedTasks);
 

@@ -2,9 +2,10 @@ import type { ITask } from "@/models/model";
 import type { CalendarVisibleRange } from "./range";
 import { validateCalendarVisibleRange } from "./range";
 import { buildCalendarAuthorizationRevision } from "./access";
+import { calendarTaskOverlapsRange } from "./taskRange";
 
 export const CALENDAR_SYNC_CONTRACT_VERSION = 1 as const;
-export const CALENDAR_READ_MODEL_SCHEMA_VERSION = 2 as const;
+export const CALENDAR_READ_MODEL_SCHEMA_VERSION = 3 as const;
 export const CALENDAR_READ_MODEL_TTL_MS = 24 * 60 * 60 * 1_000;
 
 export type CalendarUserSummary = {
@@ -389,8 +390,8 @@ export const isCalendarReadModelSnapshotV1 = (
     return false;
   }
 
-  const startMs = Date.parse(range.startIso);
-  const endMs = Date.parse(range.endExclusiveIso);
+  const rangeStart = new Date(range.startIso);
+  const rangeEndExclusive = new Date(range.endExclusiveIso);
   const taskIds = new Set(snapshot.taskOrder);
   if (
     taskIds.size !== snapshot.taskOrder.length ||
@@ -403,7 +404,6 @@ export const isCalendarReadModelSnapshotV1 = (
   }
   return snapshot.taskOrder.every((taskId) => {
     const task = snapshot.tasksById?.[String(taskId)];
-    const dueAt = task?.dueDate ? new Date(task.dueDate).getTime() : NaN;
     return (
       isPositiveInteger(taskId) &&
       isCalendarTaskV1(task) &&
@@ -411,9 +411,7 @@ export const isCalendarReadModelSnapshotV1 = (
       task.deletedAt == null &&
       isPositiveInteger(task.projectId) &&
       projectIds.has(task.projectId) &&
-      Number.isFinite(dueAt) &&
-      dueAt >= startMs &&
-      dueAt < endMs
+      calendarTaskOverlapsRange(task, rangeStart, rangeEndExclusive)
     );
   });
 };
@@ -465,23 +463,20 @@ export const createCalendarReadModelSnapshot = ({
     return null;
   }
 
-  const startMs = Date.parse(range.startIso);
-  const endMs = Date.parse(range.endExclusiveIso);
+  const rangeStart = new Date(range.startIso);
+  const rangeEndExclusive = new Date(range.endExclusiveIso);
   const tasksById: Record<string, CalendarTaskV1> = {};
   const taskOrder: number[] = [];
   for (const candidate of payload.tasks) {
     const task = normalizeCalendarTaskForSnapshot(candidate);
     if (!isCalendarTaskV1(task)) return null;
-    const dueAt = task.dueDate ? new Date(task.dueDate).getTime() : NaN;
     if (
       !isPositiveInteger(task?.id) ||
       task.status !== "Normal" ||
       task.deletedAt != null ||
       !isPositiveInteger(task.projectId) ||
       !(String(task.projectId) in projectsById) ||
-      !Number.isFinite(dueAt) ||
-      dueAt < startMs ||
-      dueAt >= endMs
+      !calendarTaskOverlapsRange(task, rangeStart, rangeEndExclusive)
     ) {
       continue;
     }
