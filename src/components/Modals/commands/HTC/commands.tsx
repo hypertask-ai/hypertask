@@ -459,11 +459,7 @@ const Commands = (props: Props) => {
   };
 
   const searchInput = (
-    <div
-      className={isMobile
-        ? "m-2 flex items-center gap-2.5 rounded-[4px] bg-newcomment-well px-3 ring-1 ring-inset ring-hypertasks-purple"
-        : "flex items-center gap-2.5 border-t border-light-black-border-1 px-4"}
-    >
+    <div className="flex items-center gap-2.5 px-4 ring-1 ring-inset ring-hypertasks-purple">
       <Search strokeWidth={1.75} size={16} className="shrink-0 text-text-light-gray" />
       <ModalInput
         ref={setInputRef}
