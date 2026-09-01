@@ -290,7 +290,10 @@ export function useTaskCommentsRealtime(
         if (client.connection.state === "connected") wasConnected.current = true;
         const onConnected = () => {
           // Hidden mounts may miss changes before their deferred first connection.
-          if (wasConnected.current || startedWhileHidden) {
+          if (
+            !fallbackActive &&
+            (wasConnected.current || startedWhileHidden)
+          ) {
             refetch(true, !preserveEditorContent);
           }
           wasConnected.current = true;

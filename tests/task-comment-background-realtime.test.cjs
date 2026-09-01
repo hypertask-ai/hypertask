@@ -419,6 +419,7 @@ test("a later disconnected state starts fallback until subscription recovery", a
 
     assert.equal(harness.intervalCount(), 1);
     assert.equal(harness.refetches.length, 1);
+    harness.invokeConnected();
     harness.setSubscriptionSucceeded();
     await settle();
     assert.equal(harness.intervalCount(), 0);
