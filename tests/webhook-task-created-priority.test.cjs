@@ -92,3 +92,27 @@ test('the global create path writes the priority inside the creation transaction
     'priority creation must not run outside the creation transaction'
   )
 })
+
+// HTPR-5928 review: section_title in the request body is client-supplied, not
+// DB truth. The webhook payload's section title must come from a Section row
+// fetched from the database (sectionRow), never from the raw request field.
+test('the global create path builds the webhook section title from a fetched Section row', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'src/pages/api/tasks/createGlobally.ts'),
+    'utf8'
+  )
+  const webhookTaskBlock = source.slice(
+    source.indexOf('webhookTask: {'),
+    source.indexOf('},', source.indexOf('webhookTask: {')),
+  )
+  assert.match(
+    webhookTaskBlock,
+    /section:\s*sectionRow\??\.\s*section_title/,
+    'webhookTask.section must come from sectionRow, not the raw request body field',
+  )
+  assert.doesNotMatch(
+    webhookTaskBlock,
+    /section:\s*task\.section\s*,/,
+    'webhookTask.section must not read Task\'s own denormalized (client-supplied) section field',
+  )
+})

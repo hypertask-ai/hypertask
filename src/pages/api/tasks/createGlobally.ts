@@ -306,6 +306,18 @@ const handler: NextApiHandler = async (
       }
     }
 
+    // HTPR-5928 review: section_title is client-supplied (destructured from
+    // req.body above), not DB truth — a stale/renamed value must not leak into
+    // the task.created webhook payload. Fetched here, outside the transaction's
+    // advisory lock, so it costs nothing extra inside the locked section below.
+    const sectionRow =
+      sectionId == null
+        ? null
+        : await prisma.section.findUnique({
+            where: { id: sectionId },
+            select: { section_title: true },
+          });
+
     const validationFinishedAt = performance.now();
     let newTask: TaskCreatedGlobally;
     let boardWebhookDeliveryIds: string[] = [];
@@ -420,7 +432,7 @@ const handler: NextApiHandler = async (
             status: task.status,
             dueDate: task.dueDate,
             sectionId: task.sectionId,
-            section: task.section,
+            section: sectionRow?.section_title ?? task.section,
             priority: createdPriority
               ? {
                   id: createdPriority.id,

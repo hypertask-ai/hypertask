@@ -145,3 +145,46 @@ test('HTPR-5928: webhook payload for a task with no priority, no section, no due
     },
   })
 })
+
+// HTPR-5928 review: the section string that ends up in the webhook payload
+// must come from the Section row, never from a caller-supplied string that
+// can be stale or renamed. buildWebhookTaskSnapshot in create.ts takes the
+// section title as a separate argument specifically so callers pass the
+// Section row's title, not Task's own denormalized `section` field (which is
+// written from the request body).
+//
+// Loading create.ts through jiti pulls in its whole transitive module graph
+// (Firebase Admin, FCM, etc.), which needs env vars this test suite doesn't
+// set up — so this checks the source directly, the same pattern already used
+// for createGlobally.ts below, rather than importing and calling the function.
+test('HTPR-5928: create.ts passes the Section row title into buildWebhookTaskSnapshot, not the caller-supplied one', () => {
+  const source = require('node:fs').readFileSync(
+    path.join(root, 'src/utils/controllers/tasks/create.ts'),
+    'utf8',
+  )
+
+  const definition = source.slice(
+    source.indexOf('function buildWebhookTaskSnapshot'),
+    source.indexOf('): WebhookTaskSnapshot {'),
+  )
+  assert.match(
+    definition,
+    /sectionTitle: string/,
+    'buildWebhookTaskSnapshot must take the section title as its own argument',
+  )
+  assert.doesNotMatch(
+    definition.replace(/section: string;/, ''),
+    /section:\s*string/,
+    'the row parameter must not carry its own section field that could be used by mistake',
+  )
+
+  const callSites = [...source.matchAll(/buildWebhookTaskSnapshot\((row[^)]*)\)/g)]
+  assert.ok(callSites.length >= 2, 'expected buildWebhookTaskSnapshot to be called at both create.ts task-create branches')
+  for (const [, args] of callSites) {
+    assert.match(
+      args,
+      /sectionExists\.section_title/,
+      `buildWebhookTaskSnapshot(${args}) must pass sectionExists.section_title (the fetched Section row), not the raw request field`,
+    )
+  }
+})
