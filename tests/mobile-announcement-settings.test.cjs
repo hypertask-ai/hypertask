@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
@@ -8,32 +7,81 @@ const jitiModule = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const modulePath = (relativePath) => path.join(root, relativePath);
-const read = (relativePath) =>
-  fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("mobile announcements live in Settings instead of the top bar", () => {
-  const topBarActions = read(
-    "src/components/Global/MobileTopBarActions.tsx",
-  );
-  const announcements = read(
-    "src/components/Modals/Settings/AnnouncementsSection.tsx",
-  );
-  const desktopRail = read(
-    "src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx",
-  );
+test("Settings renders announcement controls and posts", () => {
+  const previousReact = global.React;
+  const stubs = new Map();
+  const stubModule = (relativePath, exports) => {
+    const filename = modulePath(relativePath);
+    stubs.set(filename, require.cache[filename]);
+    require.cache[filename] = { id: filename, filename, loaded: true, exports };
+  };
 
-  assert.doesNotMatch(topBarActions, /MobileAnnouncementButton|Rocket/);
-  assert.equal(
-    fs.existsSync(
-      path.join(root, "src/components/Global/MobileAnnouncementButton.tsx"),
-    ),
-    false,
-  );
-  assert.match(
-    announcements,
-    /Show an unread indicator when new updates are available\./,
-  );
-  assert.match(desktopRail, /<IconoirRocket/);
+  try {
+    global.React = React;
+    stubModule("src/lib/state.tsx", {
+      useRecoilValue: () => ({ id: 6 }),
+    });
+    stubModule("src/store/index.ts", { currentUserAtom: {} });
+    stubModule("src/hooks/General/useGetUserPreferences.tsx", {
+      useAnnouncementMute: () => ({ muted: false, toggleMute: () => {} }),
+    });
+    stubModule("src/hooks/MultiPages/Sidebar/useGetAnnouncements.ts", {
+      useGetAnnouncements: () => ({ data: [{ id: 1, readAt: null }] }),
+    });
+    stubModule("src/components/sidebars/Announcements/index.tsx", {
+      AnnouncementPosts: ({ allPosts }) =>
+        React.createElement("div", { "data-announcement-count": allPosts.length }),
+    });
+    stubModule("src/components/Modals/Settings/SettingsCard.tsx", {
+      default: ({ children }) => React.createElement("div", null, children),
+    });
+    stubModule("src/components/Modals/Settings/SettingsSectionShell.tsx", {
+      default: ({ children, title }) =>
+        React.createElement(
+          "section",
+          null,
+          React.createElement("h1", null, title),
+          children,
+        ),
+    });
+    stubModule("src/components/Modals/Settings/SettingsToggle.tsx", {
+      default: ({ checked, label }) =>
+        React.createElement("input", {
+          "aria-label": label,
+          checked,
+          readOnly: true,
+          type: "checkbox",
+        }),
+    });
+
+    const jiti = jitiModule.createJiti
+      ? jitiModule.createJiti(__filename, {
+          interopDefault: true,
+          jsx: true,
+          alias: { "@": path.join(root, "src") },
+        })
+      : jitiModule(__filename, {
+          interopDefault: true,
+          jsx: true,
+          alias: { "@": path.join(root, "src") },
+        });
+    const AnnouncementsSection = jiti(
+      modulePath("src/components/Modals/Settings/AnnouncementsSection.tsx"),
+    ).default;
+    const html = renderToStaticMarkup(React.createElement(AnnouncementsSection));
+
+    assert.match(html, /<h1>Latest updates<\/h1>/);
+    assert.match(html, /aria-label="Announcement alerts"[^>]*checked/);
+    assert.match(html, /data-announcement-count="1"/);
+  } finally {
+    for (const [filename, previous] of stubs) {
+      if (previous === undefined) delete require.cache[filename];
+      else require.cache[filename] = previous;
+    }
+    if (previousReact === undefined) delete global.React;
+    else global.React = previousReact;
+  }
 });
 
 test("the mobile top bar renders no announcements action", () => {

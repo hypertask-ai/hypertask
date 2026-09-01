@@ -7,7 +7,7 @@ import {
   shouldShowMobileAnnouncementIndicator,
 } from "../src/components/Modals/Settings/announcementIndicator";
 import SettingsNavGroups from "../src/components/Modals/Settings/SettingsNavGroups";
-import type { SettingsNavGroup } from "../src/components/Modals/Settings/settingsNavigation";
+import { SETTINGS_NAV_GROUPS } from "../src/components/Modals/Settings/settingsNavigation";
 
 const unread = { readAt: null };
 const read = { readAt: "2026-08-31T22:00:00.000Z" };
@@ -78,24 +78,20 @@ test("the visible indicator renders the mobile unread dot", () => {
   assert.equal(hidden, "");
 });
 
-test("the Settings navigation renders the unread dot only on mobile", () => {
-  const groups: SettingsNavGroup[] = [
-    {
-      title: "Help",
-      items: [{ id: "announcements", label: "Latest updates" }],
-    },
-  ];
+test("the real Settings navigation renders the unread dot only on mobile", () => {
   const renderNavigation = (mobile: boolean, hasUnreadAnnouncements: boolean) =>
     renderToStaticMarkup(
       React.createElement(SettingsNavGroups, {
-        groups,
+        groups: SETTINGS_NAV_GROUPS,
         hasUnreadAnnouncements,
         mobile,
         onSelect: () => {},
       }),
     );
 
-  assert.match(renderNavigation(true, true), /bg-\[#51A4F1\]/);
+  const mobileUnread = renderNavigation(true, true);
+  assert.match(mobileUnread, />Latest updates</);
+  assert.match(mobileUnread, /bg-\[#51A4F1\]/);
   assert.doesNotMatch(renderNavigation(true, false), /bg-\[#51A4F1\]/);
   assert.doesNotMatch(renderNavigation(false, true), /bg-\[#51A4F1\]/);
 });
