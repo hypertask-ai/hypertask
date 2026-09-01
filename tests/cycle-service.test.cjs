@@ -25,8 +25,14 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
   const matchesOr = (task, clauses = []) =>
     clauses.some((clause) =>
       Object.entries(clause).every(([field, value]) => {
-        if (value === null) return task[field] == null;
-        if (value.notIn) return task[field] != null && !value.notIn.includes(task[field]);
+        if (value === null) return task[field] === null || task[field] === undefined;
+        if (value.notIn) {
+          return (
+            task[field] !== null &&
+            task[field] !== undefined &&
+            !value.notIn.includes(task[field])
+          );
+        }
         return task[field] === value;
       }),
     );
@@ -67,11 +73,15 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
         );
         return found[0] ?? null;
       },
-      findMany: async ({ where, orderBy, take }) =>
-        state.cycles
+      findMany: async ({ where, orderBy, take }) => {
+        const [field, direction] = Object.entries(orderBy)[0];
+        return state.cycles
           .filter((cycle) => cycleMatches(cycle, where))
-          .sort((left, right) => left.startDate - right.startDate)
-          .slice(0, take),
+          .sort((left, right) =>
+            direction === "asc" ? left[field] - right[field] : right[field] - left[field],
+          )
+          .slice(0, take);
+      },
       findUnique: async ({ where }) => {
         if (where.projectId_startDate) {
           const key = where.projectId_startDate;
@@ -113,7 +123,9 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
             task.assignees.length > 0 &&
             (!where.OR || matchesOr(task, where.OR)) &&
             (!where.section ||
-              (task.section != null && !where.section.notIn.includes(task.section))),
+              (task.section !== null &&
+                task.section !== undefined &&
+                !where.section.notIn.includes(task.section))),
         );
         for (const task of found) Object.assign(task, data);
         return { count: found.length };

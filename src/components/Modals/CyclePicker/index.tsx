@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import toast from "react-hot-toast";
 import { Check } from "lucide-react";
 import { ModalBody } from "reactstrap";
@@ -14,10 +14,17 @@ import {
 import type { ICycle } from "@/models/model";
 import { cycleDateRange } from "@/lib/cycles";
 
+const CYCLE_API_PATH = "/api/tasks/cycle";
+
 interface CycleListResponse {
   assignedCycle: ICycle | null;
   cycles: ICycle[];
   enabled: boolean;
+}
+
+interface CycleMutationResponse {
+  cycle?: ICycle | null;
+  error?: string;
 }
 
 export default function CyclePicker({
@@ -43,7 +50,7 @@ export default function CyclePicker({
       try {
         const params = new URLSearchParams({ taskId: String(taskId) });
         if (keyword.trim()) params.set("query", keyword.trim());
-        const response = await fetch(`/api/tasks/cycle?${params}`, { signal: controller.signal });
+        const response = await fetch(`${CYCLE_API_PATH}?${params}`, { signal: controller.signal });
         if (!response.ok) throw new Error("Unable to load cycles");
         const body = (await response.json()) as CycleListResponse;
         setCycles(body.cycles);
@@ -64,14 +71,14 @@ export default function CyclePicker({
     if (saving || (cycle && !cycle.assignable)) return;
     setSaving(true);
     try {
-      const response = await fetch("/api/tasks/cycle", {
+      const response = await fetch(CYCLE_API_PATH, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ taskId, cycleId: cycle?.id ?? null }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Unable to update cycle");
-      onChange(body.cycle ?? null);
+      const body = (await response.json().catch(() => null)) as CycleMutationResponse | null;
+      if (!response.ok) throw new Error(body?.error ?? "Unable to update cycle");
+      onChange(body?.cycle ?? null);
       closeHandler();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update cycle");
@@ -79,6 +86,32 @@ export default function CyclePicker({
       setSaving(false);
     }
   };
+
+  let cycleList: ReactNode;
+  if (loading) {
+    cycleList = <p className="px-3 py-2 text-dense text-text-light-gray">Loading cycles…</p>;
+  } else if (cycles.length === 0) {
+    cycleList = <p className="px-3 py-2 text-dense text-text-light-gray">No cycles found.</p>;
+  } else {
+    cycleList = cycles.map((cycle, index) => (
+      <ModalRowElementContainer
+        id={`cycle-${cycle.id}`}
+        index={index + 1}
+        isSelected={assignedCycle?.id === cycle.id}
+        key={cycle.id}
+        onClick={() => assign(cycle)}
+        className={cycle.assignable ? "" : "cursor-default opacity-60"}
+      >
+        <span className="min-w-0 flex-1">
+          <strong className="block truncate font-medium">Cycle {cycle.number}</strong>
+          <small className="text-meta text-text-light-gray">
+            {cycleDateRange(cycle)}{cycle.assignable ? "" : " · history"}
+          </small>
+        </span>
+        {assignedCycle?.id === cycle.id && <Check size={16} strokeWidth={1.75} />}
+      </ModalRowElementContainer>
+    ));
+  }
 
   return (
     <ModalContainerCustom
@@ -115,30 +148,7 @@ export default function CyclePicker({
               Cycles are disabled. You can clear this task’s existing cycle.
             </p>
           )}
-          {loading ? (
-            <p className="px-3 py-2 text-dense text-text-light-gray">Loading cycles…</p>
-          ) : cycles.length === 0 ? (
-            <p className="px-3 py-2 text-dense text-text-light-gray">No cycles found.</p>
-          ) : (
-            cycles.map((cycle, index) => (
-              <ModalRowElementContainer
-                id={`cycle-${cycle.id}`}
-                index={index + 1}
-                isSelected={assignedCycle?.id === cycle.id}
-                key={cycle.id}
-                onClick={() => assign(cycle)}
-                className={cycle.assignable ? "" : "cursor-default opacity-60"}
-              >
-                <span className="min-w-0 flex-1">
-                  <strong className="block truncate font-medium">Cycle {cycle.number}</strong>
-                  <small className="text-meta text-text-light-gray">
-                    {cycleDateRange(cycle)}{cycle.assignable ? "" : " · history"}
-                  </small>
-                </span>
-                {assignedCycle?.id === cycle.id && <Check size={16} strokeWidth={1.75} />}
-              </ModalRowElementContainer>
-            ))
-          )}
+          {cycleList}
         </ModalListContainer>
       </ModalBody>
     </ModalContainerCustom>
