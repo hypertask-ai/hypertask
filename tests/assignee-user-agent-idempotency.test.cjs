@@ -26,53 +26,102 @@ const load = (javascript, stubs) => {
   return mod.exports;
 };
 
-test("HTPR-5674 regression passed: a user's agent assignment prevents a duplicate user assignment", async () => {
-  const existingAssignment = {
+const matches = (row, where) =>
+  Object.entries(where).every(
+    ([key, value]) => value === undefined || row[key] === value,
+  );
+
+test("a human assignment coexists with an agent owned by the same user", async () => {
+  const owner = {
+    id: 6,
+    email: "owner@example.test",
+    displayName: "Valentin",
+  };
+  const task = {
+    id: 42,
+    projectId: 15,
+    sectionId: 4309,
+    uniqueIndex: 5905,
+    ticketNumber: "HTPR-5905",
+    title: "Owner assignment",
+  };
+  const agentAssignment = {
     id: 91,
-    taskId: 42,
-    userId: 6,
+    assignerId: 6,
+    taskId: task.id,
+    userId: owner.id,
     agentId: "agent-6",
-    user: { id: 6, displayName: "Valentin" },
-    agent: { id: "agent-6", userId: 6, displayName: "Dev 1" },
+    assignedAt: new Date("2026-09-01T00:00:00Z"),
+    user: owner,
+    agent: { id: "agent-6", userId: owner.id, displayName: "Dev 1" },
     agentAssigner: null,
   };
-  let transactionCalls = 0;
-  let transactionLookup;
+  const rows = [agentAssignment];
+  const calls = {
+    activities: [],
+    cancellations: 0,
+    creates: 0,
+    fences: 0,
+    notificationDeletes: [],
+    transactions: 0,
+    validations: 0,
+  };
 
+  const findAssignment = (where) => rows.find((row) => matches(row, where)) ?? null;
   const prisma = {
-    task: {
-      findUnique: async () => ({
-        id: 42,
-        projectId: 15,
-        sectionId: 4307,
-        uniqueIndex: 5674,
-        ticketNumber: "HTPR-5674",
-        title: "CLI bug: assign duplicates existing assignee",
-      }),
-    },
+    task: { findUnique: async () => task },
     assignees: {
-      findFirst: async ({ where }) =>
-        where.taskId === 42 &&
-        where.userId === 6 &&
-        !Object.hasOwn(where, "agentId")
-          ? existingAssignment
-          : null,
-      findMany: async () => [existingAssignment],
+      findFirst: async ({ where }) => findAssignment(where),
+      findMany: async () => [...rows],
     },
-    subscribedDevices: {
-      findMany: async () => [],
+    subscribedDevices: { findMany: async () => [] },
+    notification: {
+      deleteMany: async ({ where }) => {
+        calls.notificationDeletes.push(where);
+      },
     },
     $transaction: async (callback) => {
-      transactionCalls += 1;
+      calls.transactions += 1;
       return callback({
         $executeRaw: async () => 1,
         $queryRaw: async () => [],
+        task: {
+          findUnique: async () => ({
+            projectId: task.projectId,
+            sectionId: task.sectionId,
+            status: "Normal",
+          }),
+        },
         assignees: {
           findFirst: async ({ where }) => {
-            transactionLookup = where;
-            return { id: 92 };
+            const row = findAssignment(where);
+            return row ? { id: row.id } : null;
+          },
+          findMany: async ({ where }) => rows.filter((row) => matches(row, where)),
+          create: async ({ data }) => {
+            calls.creates += 1;
+            const row = {
+              id: 92,
+              assignerId: data.assignerId,
+              taskId: data.taskId,
+              userId: data.userId,
+              agentId: data.agentId ?? null,
+              assignedAt: new Date("2026-09-01T00:01:00Z"),
+              user: owner,
+              agent: null,
+              agentAssigner: null,
+            };
+            rows.push(row);
+            return row;
+          },
+          deleteMany: async ({ where }) => {
+            const ids = new Set(where.id.in);
+            for (let index = rows.length - 1; index >= 0; index -= 1) {
+              if (ids.has(rows[index].id)) rows.splice(index, 1);
+            }
           },
         },
+        follower: { findFirst: async () => null },
       });
     },
   };
@@ -84,14 +133,14 @@ test("HTPR-5674 regression passed: a user's agent assignment prevents a duplicat
     "../activities/createAssignedActivity": {
       __esModule: true,
       assignmentActivityUserSelect: {},
-      default: () => {},
+      default: (input) => calls.activities.push(input.updatedStatus),
     },
     "../notifications/creation-service/check-reminder_create-notification": {
       __esModule: true,
-      default: async () => {},
+      default: async () => null,
     },
     "../notifications/agentActionRecipients": {
-      shouldSkipSelfAssign: () => false,
+      shouldSkipSelfAssign: (userId, currentUserId) => userId === currentUserId,
     },
     "../notifications/sendAssignEmail": { sendAssignEmail: async () => {} },
     "@/utils": { taskBaseUri: "https://app.hypertask.ai/detail/" },
@@ -99,7 +148,10 @@ test("HTPR-5674 regression passed: a user's agent assignment prevents a duplicat
       isAgentOnBoard: async () => true,
     },
     "@/lib/mcp/tasks/services": {
-      validateProjectMemberIds: async () => ({ invalidIds: [] }),
+      validateProjectMemberIds: async () => {
+        calls.validations += 1;
+        return { invalidIds: [] };
+      },
     },
     "@/lib/agents/publicAgent": { publicAgentSelect: {} },
     "@/lib/agentWebhooks/outbox": {
@@ -107,13 +159,17 @@ test("HTPR-5674 regression passed: a user's agent assignment prevents a duplicat
       publishAgentWebhookDeliveries: async () => {},
     },
     "@/lib/mcp/webhooks/outbox": {
-      persistBoardWebhookEvent: async () => null,
+      persistBoardWebhookEvent: async () => [],
       publishBoardWebhookDeliveries: async () => {},
     },
     "@/lib/mcp/tasks/agentMutationFence": {
       AgentMutationLeaseConflictError: class extends Error {},
-      assertAgentAssignmentChangeAllowed: async () => {},
-      cancelAgentMutationLeaseForHumanOverride: async () => {},
+      assertAgentAssignmentChangeAllowed: async () => {
+        calls.fences += 1;
+      },
+      cancelAgentMutationLeaseForHumanOverride: async () => {
+        calls.cancellations += 1;
+      },
     },
   };
 
@@ -122,61 +178,77 @@ test("HTPR-5674 regression passed: a user's agent assignment prevents a duplicat
     stubs,
   );
 
-  const response = await assign(
-    { id: 6, displayName: "Valentin" },
-    6,
-    42,
-    undefined,
-    "calling-agent",
-    { intent: "assign" },
-  );
-
-  assert.equal(response.status, 200);
-  assert.equal(response.json.assignStatus, "Assigned");
-  assert.equal(response.json.assignmentOutcome, "already-assigned");
-  assert.equal(response.json.body.length, 1);
-  assert.equal(transactionCalls, 0);
-
-  const unassignResponse = await assign(
-    { id: 6, displayName: "Valentin" },
-    6,
-    42,
-    undefined,
-    "calling-agent",
-    { intent: "unassign" },
-  );
-
-  assert.equal(unassignResponse.status, 200);
-  assert.equal(unassignResponse.json.assignStatus, "Unassigned");
-  assert.equal(unassignResponse.json.body[0].agentId, "agent-6");
-  assert.equal(transactionCalls, 0);
-
-  const toggleResponse = await assign(
-    { id: 6, displayName: "Valentin" },
-    6,
-    42,
-    undefined,
-    undefined,
-    { intent: "toggle" },
-  );
-
-  assert.equal(toggleResponse.status, 200);
-  assert.equal(toggleResponse.json.assignStatus, "Assigned");
-  assert.deepEqual(transactionLookup, {
-    taskId: 42,
-    userId: 6,
-    agentId: null,
+  const assigned = await assign(owner, owner.id, task.id, undefined, undefined, {
+    intent: "assign",
   });
-  assert.equal(transactionCalls, 1);
 
-  const route = read("src/app/api/mcp/assignees/assign/route.ts");
-  const service = read("src/lib/mcp-server/lib/services/task.service.ts");
-  assert.match(
-    route,
-    /assignIntent === "assign" && !hasMultipleUsers/,
+  assert.equal(assigned.status, 200);
+  assert.equal(assigned.json.assignmentOutcome, "created");
+  assert.deepEqual(
+    assigned.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
+    [
+      { userId: owner.id, agentId: agentAssignment.agentId },
+      { userId: owner.id, agentId: null },
+    ],
   );
-  assert.match(
-    service,
-    /assignmentOutcome\?: 'created' \| 'already-assigned'/,
+  assert.equal(calls.transactions, 1);
+  assert.equal(calls.creates, 1);
+  assert.equal(calls.validations, 1);
+  assert.equal(calls.fences, 1);
+  assert.equal(calls.cancellations, 1);
+
+  const repeated = await assign(owner, owner.id, task.id, undefined, undefined, {
+    intent: "assign",
+  });
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.json.assignmentOutcome, "already-assigned");
+  assert.equal(calls.transactions, 1);
+  assert.equal(calls.creates, 1);
+
+  const unassigned = await assign(owner, owner.id, task.id, undefined, undefined, {
+    intent: "unassign",
+  });
+  assert.equal(unassigned.status, 200);
+  assert.equal(unassigned.json.assignStatus, "Unassigned");
+  assert.deepEqual(
+    unassigned.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
+    [{ userId: owner.id, agentId: agentAssignment.agentId }],
   );
+  assert.equal(calls.transactions, 2);
+  assert.equal(calls.fences, 2);
+  assert.equal(calls.cancellations, 2);
+
+  const toggledOn = await assign(owner, owner.id, task.id, undefined, undefined, {
+    intent: "toggle",
+  });
+  assert.equal(toggledOn.status, 200);
+  assert.deepEqual(
+    toggledOn.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
+    [
+      { userId: owner.id, agentId: agentAssignment.agentId },
+      { userId: owner.id, agentId: null },
+    ],
+  );
+
+  const toggledOff = await assign(owner, owner.id, task.id, undefined, undefined, {
+    intent: "toggle",
+  });
+  assert.equal(toggledOff.status, 200);
+  assert.deepEqual(
+    toggledOff.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
+    [{ userId: owner.id, agentId: agentAssignment.agentId }],
+  );
+  assert.equal(calls.transactions, 4);
+  assert.equal(calls.fences, 4);
+  assert.equal(calls.cancellations, 4);
+  assert.deepEqual(calls.activities, [
+    "Assigned",
+    "Unassigned",
+    "Assigned",
+    "Unassigned",
+  ]);
+  assert.deepEqual(calls.notificationDeletes, [
+    { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
+    { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
+  ]);
 });

@@ -90,16 +90,9 @@ const assigneesAssign = async (
       };
     }
 
-    let assigneeIdentity:
-      | { agentId: string }
-      | { userId: number; agentId?: null };
-    if (agentId) {
-      assigneeIdentity = { agentId };
-    } else if (intent === "assign") {
-      assigneeIdentity = { userId: assigneeUserId };
-    } else {
-      assigneeIdentity = { userId: assigneeUserId, agentId: null };
-    }
+    const assigneeIdentity = agentId
+      ? { agentId }
+      : { userId: assigneeUserId, agentId: null };
 
     const assign = await prisma.assignees.findFirst({
       where: {
@@ -184,7 +177,6 @@ const assigneesAssign = async (
         const result = await createAssignee({
           ...props,
           assigneeIntent: "Assigned",
-          includeAgentOwnedAssignments: true,
           expectedProjectId: options?.expectedProjectId ?? task.projectId,
           expectedSectionId: options?.expectedSectionId ?? task.sectionId,
         });
@@ -274,7 +266,6 @@ interface ICreateAssigneeProps {
   agentId?: string;
   agentAssignerId?: string;
   assigneeIntent: "Assigned" | "Unassigned";
-  includeAgentOwnedAssignments?: boolean;
   expectedProjectId?: number;
   expectedSectionId?: number | null;
 }
@@ -288,7 +279,6 @@ const createAssignee = async ({
   agentId,
   agentAssignerId,
   assigneeIntent,
-  includeAgentOwnedAssignments = false,
   expectedProjectId,
   expectedSectionId,
 }: ICreateAssigneeProps) => {
@@ -307,16 +297,9 @@ const createAssignee = async ({
     // assigneesAssign reads before entering this transaction. Recheck after
     // taking the fence so two processes cannot both create the same assignment
     // and emit duplicate activities or notifications.
-    let existingIdentity:
-      | { agentId: string }
-      | { userId: number; agentId?: null };
-    if (agentId) {
-      existingIdentity = { agentId };
-    } else if (includeAgentOwnedAssignments) {
-      existingIdentity = { userId };
-    } else {
-      existingIdentity = { userId, agentId: null };
-    }
+    const existingIdentity = agentId
+      ? { agentId }
+      : { userId, agentId: null };
 
     const existing = await tx.assignees.findFirst({
       where: {
@@ -697,6 +680,7 @@ const finishRemovingAssignee = async ({
         type: "Assigned",
         taskId: taskId,
         userId: userId,
+        agentId: assign.agentId ?? null,
       },
     });
   }
