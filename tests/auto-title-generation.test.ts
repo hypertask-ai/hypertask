@@ -186,6 +186,23 @@ test("a description edit during save invalidates that result for a retry", async
   );
 });
 
+test("a manual title during save ends automatic generation", async () => {
+  const saving = deferred<string>();
+  const coordinator = createAutoTitleGenerationCoordinator();
+  const saveResult = coordinator.generateNow("description", {
+    generate: () => saving.promise,
+  });
+
+  coordinator.manualTitleChanged();
+  saving.resolve("Stale generated title");
+
+  assert.equal(await saveResult, null);
+  assert.equal(
+    coordinator.needsGenerationForSave("Manual title", "description"),
+    false,
+  );
+});
+
 test("board changes clear generated titles but preserve manual title ownership", async () => {
   const coordinator = createAutoTitleGenerationCoordinator();
   await coordinator.generateNow("description", {

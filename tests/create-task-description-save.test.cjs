@@ -148,6 +148,10 @@ test("discard, board switch, and newer writing invalidate generated titles", () 
   );
   assert.match(
     stateSource,
+    /const handleProjectChange = \(project: IProject\) => \{[\s\S]{0,200}?saveEpochRef\.current \+= 1;/,
+  );
+  assert.match(
+    stateSource,
     /const clearGeneratedTitle = autoTitleCoordinator\.boardChanged\(\);[\s\S]*?title: clearGeneratedTitle \? "" : prev\.title/,
   );
   assert.match(stateSource, /signal,\s*body: JSON\.stringify/);
