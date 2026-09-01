@@ -220,6 +220,34 @@ test('a no-op cleanup does not require GitHub', (t) => {
   assert.equal(fs.existsSync(fixture.worktree), true);
 });
 
+test('an unrelated vanished process cwd does not abort cleanup', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  const processDir = path.join(fixture.env.PROC_ROOT, '123');
+  const unrelated = path.join(fixture.root, 'vanished-proc-directory');
+  const fakeRealpath = path.join(fixture.root, 'realpath');
+  const realRealpath = command('sh', ['-c', 'command -v realpath']);
+  fs.mkdirSync(processDir);
+  fs.mkdirSync(unrelated);
+  fs.symlinkSync(unrelated, path.join(processDir, 'cwd'));
+  fs.writeFileSync(fakeRealpath, `#!/bin/sh
+if [ "${'$'}1" = '-e' ] && [ "${'$'}3" = "${'$'}REALPATH_FAIL_EXACT" ]; then
+  exit 1
+fi
+exec "${'$'}REAL_REALPATH" "${'$'}@"
+`);
+  fs.chmodSync(fakeRealpath, 0o755);
+
+  runScript(fixture, [], {
+    GH_BIN: path.join(fixture.root, 'missing-gh'),
+    PATH: `${fixture.root}:${process.env.PATH}`,
+    REAL_REALPATH: realRealpath,
+    REALPATH_FAIL_EXACT: unrelated,
+  });
+
+  assert.equal(fs.existsSync(fixture.worktree), true);
+});
+
 test('a cache created after the no-op probe waits for the next run', (t) => {
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));
