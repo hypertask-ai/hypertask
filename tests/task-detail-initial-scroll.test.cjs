@@ -31,6 +31,7 @@ test("an untouched task can run its initial positioning", () => {
   const generation = guard.reset();
 
   assert.deepEqual(runFlag(guard, generation), { allowed: true, ran: true });
+  assert.deepEqual(runFlag(guard, generation), { allowed: true, ran: true });
 });
 
 test("a mobile scroll gesture cancels and blocks delayed positioning", () => {
