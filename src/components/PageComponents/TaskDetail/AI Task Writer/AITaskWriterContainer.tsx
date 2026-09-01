@@ -42,6 +42,7 @@ import Tooltip from "@/components/Common/Tooltip";
 import { DIV_ID_CONSTANTS, MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
+import { buildTaskWriterPrompt } from "@/lib/ai/autoDescriptionSuggestion";
 import {
   recordBoardMemorySignal,
   shouldLearnBoardMemoryFromAiMode,
@@ -213,11 +214,10 @@ const AITaskWriterContainer: React.FC<
       const taskTitle = document.getElementById(
         DIV_ID_CONSTANTS.titleInputModal,
       )?.innerHTML;
-      const finalPrompt = taskTitle
-        ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${initialPrompt}`
-        : initialPrompt;
-
-      void sendAIRequest(finalPrompt, loadingMessage);
+      void sendAIRequest(
+        buildTaskWriterPrompt(initialPrompt, taskTitle),
+        loadingMessage,
+      );
     },
     [initialPrompt, sendAIRequest],
   );
@@ -233,11 +233,10 @@ const AITaskWriterContainer: React.FC<
 
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
-    let finalPrompt = taskTitle
-      ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${userPrompt}`
-      : userPrompt;
-
-    sendAIRequest(finalPrompt, "Thinking...");
+    sendAIRequest(
+      buildTaskWriterPrompt(userPrompt, taskTitle),
+      "Thinking...",
+    );
   }, [isByokBlocked, userPrompt, sendAIRequest, isUploadingAttachments, uploadProgress]);
 
   const regenerateDescriptionSuggestion = useCallback(() => {
@@ -251,11 +250,10 @@ const AITaskWriterContainer: React.FC<
     if (isLoading || isByokBlocked || isUploadingAttachments || !userPrompt.trim()) return;
 
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
-    const finalPrompt = taskTitle
-      ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${userPrompt}`
-      : userPrompt;
-
-    sendAIRequest(finalPrompt, "Thinking...");
+    sendAIRequest(
+      buildTaskWriterPrompt(userPrompt, taskTitle),
+      "Thinking...",
+    );
   }, [isLoading, isByokBlocked, isUploadingAttachments, userPrompt, sendAIRequest]);
 
   // Without autoTrigger an initialPrompt is a suggestion: type it into the box

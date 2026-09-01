@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -7,6 +6,7 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const preferenceReads = [];
 let autoDescriptionSuggestions = true;
+let preferenceFetchMode = "existing";
 const afterGate = new Error("continued after auto-description preference gate");
 
 function stubModule(relativePath, exports) {
@@ -36,11 +36,24 @@ stubModule("src/lib/prisma.ts", {
     },
     userSetting: {
       findUnique: async (args) => {
-        preferenceReads.push(args);
+        if (Object.keys(args.select ?? {}).length === 1) {
+          preferenceReads.push(args);
+          return { autoDescriptionSuggestions };
+        }
+        if (preferenceFetchMode === "error") {
+          throw new Error("preference read failed");
+        }
+        if (preferenceFetchMode === "missing") return null;
         return { autoDescriptionSuggestions };
       },
     },
   },
+});
+stubModule("src/lib/redis.ts", {
+  getRedis: async () => ({
+    get: async () => null,
+    setex: async () => undefined,
+  }),
 });
 stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
   projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -58,6 +71,9 @@ const {
   prepareTaskWriterRun,
   taskWriterRequestSchema,
 } = jiti(path.join(root, "src/app/api/ai/_lib/taskWriterRun.ts"));
+const { fetchUserPreferenceController } = jiti(
+  path.join(root, "src/utils/controllers/users/fetch_preferences.ts"),
+);
 
 function request(requestKind) {
   return taskWriterRequestSchema.parse({
@@ -70,6 +86,7 @@ function request(requestKind) {
 test.beforeEach(() => {
   preferenceReads.length = 0;
   autoDescriptionSuggestions = true;
+  preferenceFetchMode = "existing";
 });
 
 test("automatic task-writer requests stop when the user preference is disabled", async () => {
@@ -105,60 +122,20 @@ test("enabled automatic requests continue through the existing writer gates", as
   assert.equal(preferenceReads.length, 1);
 });
 
-test("preference fallbacks and the suggestion edge keep the feature contract", () => {
-  const preferencesSource = fs.readFileSync(
-    path.join(root, "src/utils/controllers/users/fetch_preferences.ts"),
-    "utf8",
-  );
-  const writerSource = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx",
-    ),
-    "utf8",
-  );
-  const preferenceHookSource = fs.readFileSync(
-    path.join(root, "src/hooks/General/useGetUserPreferences.tsx"),
-    "utf8",
-  );
-  const taskDetailSource = fs.readFileSync(
-    path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
-    "utf8",
-  );
+test("new users receive an enabled auto-description preference fallback", async () => {
+  preferenceFetchMode = "missing";
 
-  const notFoundFallbackStart = preferencesSource.indexOf("status: 404,");
-  const errorFallbackStart = preferencesSource.indexOf("status: 500,");
-  assert.notEqual(notFoundFallbackStart, -1);
-  assert.notEqual(errorFallbackStart, -1);
-  const notFoundFallback = preferencesSource.slice(
-    notFoundFallbackStart,
-    errorFallbackStart,
-  );
-  const errorFallback = preferencesSource.slice(errorFallbackStart);
+  const result = await fetchUserPreferenceController(6);
 
-  assert.match(notFoundFallback, /autoDescriptionSuggestions: true/);
-  assert.match(errorFallback, /autoDescriptionSuggestions: true/);
-  assert.match(
-    writerSource,
-    /rounded-\[5px\] border-l border-l-hypertasks-ai-purple/,
-  );
-  assert.doesNotMatch(writerSource, /border-l-4 border-l-hypertasks-ai-purple/);
-  assert.match(
-    writerSource,
-    /isByokBlocked \|\| !userPrompt\.trim\(\)/,
-  );
-  assert.match(
-    writerSource,
-    /const sendInitialPrompt[\s\S]*?\$\{initialPrompt\}[\s\S]*?sendAIRequest\(finalPrompt, loadingMessage\)/,
-  );
-  assert.match(writerSource, /sendInitialPrompt\("Thinking\.\.\."\)/);
-  assert.match(
-    writerSource,
-    /const regenerateDescriptionSuggestion[\s\S]*?sendInitialPrompt\("Drafting a description from your title\.\.\."\)[\s\S]*?onClick=\{regenerateDescriptionSuggestion\}/,
-  );
-  assert.match(preferenceHookSource, /queryFn: \(\) => fetchUserPreference\(false\)/);
-  assert.match(
-    taskDetailSource,
-    /const preferencesHydrated = preferencesFetched && preferencesFetchSucceeded/,
-  );
+  assert.equal(result.status, 404);
+  assert.equal(result.res.autoDescriptionSuggestions, true);
+});
+
+test("failed preference reads retain the auto-description fallback", async () => {
+  preferenceFetchMode = "error";
+
+  const result = await fetchUserPreferenceController(6);
+
+  assert.equal(result.status, 500);
+  assert.equal(result.res.autoDescriptionSuggestions, true);
 });

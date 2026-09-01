@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildTaskWriterPrompt,
   canTakeOverDescription,
   canUndoDescriptionTakeover,
   dismissDescriptionSuggestion,
@@ -29,6 +30,14 @@ const eligible = {
   preferencesHydrated: true,
   dismissed: false,
 };
+
+test("task-writer prompts preserve user text and add title context once", () => {
+  assert.equal(buildTaskWriterPrompt("Draft details"), "Draft details");
+  assert.equal(
+    buildTaskWriterPrompt("Draft details", "Prepare launch"),
+    "This task has title: Prepare launch. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\nDraft details",
+  );
+});
 
 test("description suggestions require a hydrated desktop title-only task", () => {
   assert.equal(shouldSuggestDescription(eligible), true);

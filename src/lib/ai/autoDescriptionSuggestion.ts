@@ -3,6 +3,15 @@ const MAX_DISMISSED_TASKS = 100;
 
 export const AUTO_DESCRIPTION_SUGGESTION_DELAY_MS = 5_000;
 
+export function buildTaskWriterPrompt(
+  prompt: string,
+  taskTitle?: string | null,
+) {
+  return taskTitle
+    ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${prompt}`
+    : prompt;
+}
+
 export interface AutoDescriptionTakeover {
   before: string;
   inserted: string;
