@@ -12,7 +12,10 @@ const themeNames = ["amoled", "graphite", "porcelain", "dia"];
 const themes = Object.fromEntries(
   themeNames.map((theme) => [
     theme,
-    read(`src/styles/tailwindThemes/${theme}.css`),
+    read(`src/styles/tailwindThemes/${theme}.css`).replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    ),
   ]),
 );
 
