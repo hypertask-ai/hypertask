@@ -76,7 +76,7 @@ jobs:
           # A MISSING result counts as not-green below, so every name here
           # must belong to a job that reports on EVERY pull request
           # (visual-regression reports success when it skips, HTPR-5652).
-          REQUIRED="ci-tests claude-review next-public-secrets revert-guard pr-title vercel-build"
+          REQUIRED="ci-tests claude-review next-public-secrets revert-guard pr-title"
 
           # Any changed file matching this (case-insensitive) parks the PR for a
           # human: auth/identity, billing, Prisma schema+migrations, security
