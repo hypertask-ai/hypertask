@@ -73,6 +73,11 @@ import {
   resolveTaskWriterDescription,
 } from "@/lib/ai/taskWriterAutoDraft";
 import { shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
+import {
+  isInternalTaskDetailHref,
+  preserveInboxFlowOnTaskHref,
+  resolveCommentEnterShortcutAction,
+} from "@/lib/taskDetailInboxFlow";
 const SetLinkModal = dynamic(
   () => import("../Modals/LinksModal/SetLinkModal"),
   {
@@ -565,17 +570,23 @@ const Tiptap = ({
         shiftHandlers[e.keyCode]?.();
       }
       // Enter key combinations
-      if (e.key === "Enter") {
-        if (e.shiftKey && !e.altKey && !isInboxFlow) return;
+      const enterAction = resolveCommentEnterShortcutAction({
+        commandKey: cmdControl,
+        key: e.key,
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        isInboxFlow,
+        isCommentMode: mode === "create-comment",
+        inInbox,
+      });
+      if (enterAction) {
+        if (enterAction === "ignore") return;
         e.preventDefault();
-        if (e.shiftKey && !e.altKey && mode === "create-comment") {
-          // In the inbox this is the escape hatch: send and stay put.
+        if (enterAction === "send-and-stay") {
           handleCallback();
-        } else if (e.shiftKey && e.altKey && mode === "create-comment") {
-          // ctrl+alt+shift+enter
-          inInbox && handleCallback(undefined, inInbox, true);
-        } else {
-          // ctrl+enter
+        } else if (enterAction === "send-and-complete") {
+          handleCallback(undefined, inInbox, true);
+        } else if (enterAction === "send") {
           sendComment();
         }
       }
@@ -821,12 +832,9 @@ const Tiptap = ({
 
     const link = target.closest("a");
     const href = link?.getAttribute("href");
-    if (
-      href &&
-      (href.includes("app.hypertask") || href.startsWith("/detail"))
-    ) {
+    if (href && isInternalTaskDetailHref(href)) {
       event.preventDefault();
-      router.push(href);
+      router.push(preserveInboxFlowOnTaskHref(href, inboxFlow));
     }
   };
 

@@ -148,11 +148,15 @@ test("comment shortcuts advance only from the inbox route", () => {
   const shortcut = tiptap.slice(shortcutStart, shortcutEnd);
 
   assert.ok(shortcutStart >= 0 && shortcutEnd > shortcutStart);
+  assert.match(shortcut, /resolveCommentEnterShortcutAction\(/);
   assert.match(
     shortcut,
-    /if \(e\.shiftKey && !e\.altKey && !isInboxFlow\) return;[\s\S]*?e\.preventDefault\(\)/,
+    /if \(enterAction === "ignore"\) return;[\s\S]*?e\.preventDefault\(\)/,
   );
-  assert.match(shortcut, /handleCallback\(\);/);
+  assert.match(
+    shortcut,
+    /enterAction === "send-and-stay"[\s\S]*?handleCallback\(\)/,
+  );
   assert.doesNotMatch(shortcut, /handleCallback\("moveToNext"/);
 });
 

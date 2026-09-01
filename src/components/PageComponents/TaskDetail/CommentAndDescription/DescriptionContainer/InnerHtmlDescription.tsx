@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import styles from '@/styles/tiptap.module.scss'
 const AttachmentCarousel = dynamic(()=>import("@/components/Common/AttachmentsView/AttachmentsCarousel"),{ssr:false})
 import { IAttachment, IUser, TCarousalItems } from "@/models/model";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { generateAttachmentFromImgEl } from "../CommentContainer/InnerHTMLComment";
 import { HighlightMenu } from "../ContextMenu";
 import QuoteButton from "../ContextMenu/QuoteButton";
@@ -14,6 +14,10 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useGifPlayback } from "@/hooks/General/useGifPlayback";
 import { normalizeRichHtmlForRender } from "@/utils/helperFunctions/normalizeRichHtmlForRender";
 import { normalizeImageSourcesInHtml } from "@/utils/helperFunctions/normalizeImageSource";
+import {
+  isInternalTaskDetailHref,
+  preserveInboxFlowOnTaskHref,
+} from "@/lib/taskDetailInboxFlow";
 
 interface IInnerHTMLDescription{
     descriptionText?:string,
@@ -50,6 +54,7 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
     const [currIdx, setcurrentIdx] = useState(0);
     
     const router = useRouter();
+    const inboxFlow = useSearchParams()?.get("inboxFlow");
 
     const divRef = useRef<HTMLDivElement>(null);
     const gifContainerRef = useRef<HTMLDivElement>(null);
@@ -83,11 +88,10 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
       
             var href = target.getAttribute('href');
             
-            // Check if the href contains the domain 'app.hypertask'
-            if (href && href.includes('app.hypertask') || href.startsWith("/detail")) {
+            if (href && isInternalTaskDetailHref(href)) {
                 event.preventDefault()
                 // Call your custom function here
-                router.push(href)
+                router.push(preserveInboxFlowOnTaskHref(href, inboxFlow))
                 
             }
             else target.setAttribute('target', '_blank');

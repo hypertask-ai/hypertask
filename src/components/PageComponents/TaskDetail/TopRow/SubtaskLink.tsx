@@ -5,6 +5,8 @@ import useUpdateSubtask from "@/hooks/Task Detail/useUpdateSubtask";
 import { Unlink } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useSearchParams } from "next/navigation";
+import { preserveInboxFlowOnTaskHref } from "@/lib/taskDetailInboxFlow";
 
 interface SubTaskLinkProps {
   parentTask?: ITask | null;
@@ -18,6 +20,7 @@ const SubTaskLink: React.FC<SubTaskLinkProps> = ({
   className="",
 }) => {
   const { callBackHandlerRemoveParent } = useUpdateSubtask()
+  const inboxFlow = useSearchParams()?.get("inboxFlow");
   if (!parentTask) {
     return null;
   }
@@ -25,7 +28,10 @@ const SubTaskLink: React.FC<SubTaskLinkProps> = ({
     <span className={cn("mt-2  sm:pb-0 pb-2 text-icon-dark-gray text-dense flex items-center flex-wrap", className)}>
       Sub-task of&nbsp;
       <Link
-        href={`/detail/project-${projectId}/${parentTask.uniqueIndex}`}
+        href={preserveInboxFlowOnTaskHref(
+          `/detail/project-${projectId}/${parentTask.uniqueIndex}`,
+          inboxFlow,
+        )}
         className="text-hypertasks-header-blue font-medium hover:underline cursor-pointer"
       >
         {parentTask.ticketNumber}&nbsp;{parentTask.title}
