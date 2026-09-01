@@ -60,15 +60,21 @@ test("automatic board and task opening do not overwrite the saved mode", () => {
 test("mobile chat uses the approved header controls and guarded new-chat action", () => {
   const header = source("src/components/AI_CHAT/ChatHeader.tsx");
   const mobileBranch = header.match(/if \(isMbl\) \{[\s\S]*?\n  \}\n\n  return \(/);
+  const newSessionHandler = header.match(
+    /const handleStartNewSession = async \(\) => \{[\s\S]*?\n  \};/
+  );
 
   assert.ok(mobileBranch, "mobile header must be a separate rendered branch");
+  assert.ok(newSessionHandler, "new-chat handler must exist");
   assert.match(mobileBranch[0], /data-ai-chat-mobile-header/);
   assert.match(mobileBranch[0], /aria-label="Close AI chat"[\s\S]*?h-11 w-11/);
   assert.match(mobileBranch[0], /<AIModelDropDownButton/);
   assert.match(mobileBranch[0], /aria-label="Chat history"[\s\S]*?h-11 w-11/);
   assert.match(mobileBranch[0], /aria-label="New chat"[\s\S]*?h-11 w-11/);
-  assert.match(header, /if \(isStartingNewSession\) return;/);
-  assert.match(header, /disabled=\{isStartingNewSession\}/);
+  assert.match(mobileBranch[0], /disabled=\{isStartingNewSession\}/);
+  assert.match(newSessionHandler[0], /if \(isStartingNewSession\) return;/);
+  assert.match(newSessionHandler[0], /catch \{[\s\S]*?toast\.error\(/);
+  assert.match(newSessionHandler[0], /finally \{[\s\S]*?setIsStartingNewSession\(false\)/);
 });
 
 test("pinning chat does not overwrite the saved mode", () => {

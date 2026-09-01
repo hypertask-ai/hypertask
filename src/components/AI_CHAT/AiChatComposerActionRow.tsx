@@ -60,6 +60,10 @@ export function AiChatComposerActionRow({
     }
   }, [mobileDictating]);
 
+  let recorderRowClassName = "flex-none gap-2";
+  if (mobileDictating) recorderRowClassName = "min-w-0 flex-1 gap-0";
+  else if (mobile) recorderRowClassName = "w-full gap-2";
+
   return (
     <div
       data-ai-chat-action-row
@@ -77,13 +81,7 @@ export function AiChatComposerActionRow({
       )}
       <div
         data-ai-chat-recorder-row
-        className={`flex items-center justify-center ${
-          mobileDictating
-            ? "min-w-0 flex-1 gap-0"
-            : mobile
-              ? "w-full gap-2"
-              : "flex-none gap-2"
-        }`}
+        className={`flex items-center justify-center ${recorderRowClassName}`}
       >
         {mobile ? (
           <>

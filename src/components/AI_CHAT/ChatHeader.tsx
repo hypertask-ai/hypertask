@@ -27,6 +27,7 @@ import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { IChatSession } from "@/models/model";
 import AIModelDropDownButton from "../Global/ModelSelectorDropdown";
 import { useRecoilState } from "@/lib/state";
+import toast from "react-hot-toast";
 import {
   aiChatAutoOpenSuppressedAtom,
   aiChatPinnedAtom,
@@ -153,6 +154,8 @@ export const ChatHeader = () => {
           // The editor may have unmounted while the request completed.
         }
       }, 0);
+    } catch {
+      toast.error("Couldn't start a new chat. Please try again.");
     } finally {
       setIsStartingNewSession(false);
     }

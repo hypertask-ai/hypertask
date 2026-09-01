@@ -96,8 +96,13 @@ export function AI_Tiptap_Container() {
       input.value = "";
       return;
     }
-    await handleFileUpload(event);
-    input.value = "";
+    try {
+      await handleFileUpload(event);
+    } catch {
+      toast.error("Couldn't attach that screenshot. Please try again.");
+    } finally {
+      input.value = "";
+    }
   };
 
   // Focus the composer as soon as it is on screen. The focus call in
@@ -541,7 +546,7 @@ function ContextList({
   if (mobile) {
     return (
       <div className="contents">
-        {items.map((item: any, index: number) => (
+        {items.map((item: MentionItem, index: number) => (
           <button
             type="button"
             className="flex h-11 max-w-[65vw] shrink-0 items-center gap-2 rounded-full bg-ai-tiptap px-3 text-white-black hover:bg-hover-active"
@@ -560,7 +565,7 @@ function ContextList({
 
   return (
     <div className="flex items-center gap-2 self-start flex-wrap">
-      {items.map((item: any, index: number) => (
+      {items.map((item: MentionItem, index: number) => (
         <div
           className="relative group flex items-center justify-center gap-2 rounded-md border-[2px] border-icon-dark-gray px-2 py-1 text-white-black hover:bg-hover-active"
           key={`context-value-${index}`}
