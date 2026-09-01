@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { MoreHorizontal } from "lucide-react";
+import { Command as CommandIcon } from "lucide-react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { CommandMode } from "@/models/enums";
 import { showCommandsAtom } from "@/store";
@@ -72,7 +72,11 @@ const usePullDownCommand = () => {
     };
 
     const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || showCommands.show) return;
+      if (event.touches.length !== 1) {
+        reset();
+        return;
+      }
+      if (showCommands.show) return;
 
       const target = event.target;
       if (!(target instanceof Element) || isInteractiveEditor(target)) return;
@@ -212,7 +216,7 @@ const MobilePullDownCommand = () => {
           : "opacity 160ms ease-out, transform 160ms ease-out",
       }}
     >
-      <MoreHorizontal size={20} strokeWidth={1.75} />
+      <CommandIcon size={20} strokeWidth={1.75} />
     </div>
   );
 };

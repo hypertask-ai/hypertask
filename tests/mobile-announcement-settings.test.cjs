@@ -145,7 +145,8 @@ test("the mobile top bar renders no announcements action", () => {
       }),
     );
 
-    assert.match(html, /aria-label="Menu"/);
+    assert.match(html, /aria-label="Commands"/);
+    assert.match(html, /<span[^>]*>Commands<\/span>/);
     assert.match(html, /aria-label="Settings"/);
     assert.doesNotMatch(html, /aria-label="Latest updates"/);
   } finally {

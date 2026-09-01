@@ -41,3 +41,17 @@ test("mobile command input focuses only through the synchronous callback ref", (
   );
   assert.match(source, /autoFocus=\{!isMobile\}[\s\S]*?id="htc-mobile-search"/);
 });
+
+test("mobile command opening highlights search without selecting a row", () => {
+  const commands = readSource(
+    "src/components/Modals/commands/HTC/commands.tsx",
+  );
+  const useHtc = readSource("src/hooks/MultiPages/HTC/useHTC.tsx");
+
+  assert.match(commands, /useHTC\(allCommands_, emptyQueryCommands, !isMobile\)/);
+  assert.match(
+    commands,
+    /className=\{isMobile[\s\S]*bg-newcomment-well[\s\S]*ring-hypertasks-purple[\s\S]*border-light-black-border-1/,
+  );
+  assert.match(useHtc, /selectFirstOnEmpty \? emptyQueryCommands\[0\]/);
+});

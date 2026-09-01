@@ -53,7 +53,8 @@ const scoreToken = (command: ICommandList, token: string) => {
 
 const useHTC = (
   allCommands_: CommandGroup[],
-  emptyQueryCommands: CommandGroup[] = allCommands_
+  emptyQueryCommands: CommandGroup[] = allCommands_,
+  selectFirstOnEmpty = true,
 ) => {
   const [_currentProject] = useRecoilState(currentProjectAtom);
   const [frequentlyUsed] = useRecoilState(frequentlyUsedHTCAton);
@@ -64,7 +65,7 @@ const useHTC = (
   const [filterCommands, setFilteredCommands] =
     useState<CommandGroup[]>(emptyQueryCommands);
   const [selectedCommand, setSelectedCommand] = useState<null | ICommandList>(
-    emptyQueryCommands[0]?.commandLists[0] ?? null
+    selectFirstOnEmpty ? emptyQueryCommands[0]?.commandLists[0] ?? null : null
   );
 
   const canUseCommand = useCallback((command: ICommandList) => {
@@ -135,8 +136,12 @@ const useHTC = (
   useEffect(() => {
     setCurrentCommandIndex(0);
     setHoveredGroupIndex(0);
-    setSelectedCommand(filterCommands[0]?.commandLists[0] ?? null);
-  }, [filterCommands]);
+    setSelectedCommand(
+      keyword.trim() || selectFirstOnEmpty
+        ? filterCommands[0]?.commandLists[0] ?? null
+        : null,
+    );
+  }, [filterCommands, keyword, selectFirstOnEmpty]);
 
   useEffect(() => {
     if (!keyword.trim()) setFilteredCommands(emptyQueryCommands);

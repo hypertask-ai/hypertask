@@ -56,6 +56,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
       ref={provided?.innerRef}
       className={cn(
         isMbl ? "shadow-sm" : "shadow-md",
+        isMbl && snapshot?.isDragging && "shadow-md",
         blocked ? "border-l-[3px]" : "border-l-4",
         selected
           ? blocked

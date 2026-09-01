@@ -18,8 +18,34 @@ const mobileAppCommands: CommandGroup = {
 export const getMobileCommandGroups = (
   commandGroups: CommandGroup[],
   isMobile: boolean
-): CommandGroup[] =>
-  isMobile ? [mobileAppCommands, ...commandGroups] : commandGroups;
+): CommandGroup[] => {
+  if (!isMobile) return commandGroups;
+
+  const zoomGroupIndex = commandGroups.findIndex((group) =>
+    group.commandLists.some(
+      (command) => command.commandMode === CommandMode.ToggleBoardZoom
+    )
+  );
+  if (zoomGroupIndex === -1) return [mobileAppCommands, ...commandGroups];
+
+  const zoomGroup = commandGroups[zoomGroupIndex];
+  const zoomCommand = zoomGroup.commandLists.find(
+    (command) => command.commandMode === CommandMode.ToggleBoardZoom
+  )!;
+  return [
+    {
+      ...zoomGroup,
+      commandLists: [
+        zoomCommand,
+        ...zoomGroup.commandLists.filter(
+          (command) => command.commandMode !== CommandMode.ToggleBoardZoom
+        ),
+      ],
+    },
+    mobileAppCommands,
+    ...commandGroups.filter((_, index) => index !== zoomGroupIndex),
+  ];
+};
 
 const getNavigateCommands = (commandOptions: IAllCommands): CommandGroup => ({
   group: "Navigate",
@@ -431,6 +457,18 @@ const teamAndBilling: CommandGroup = {
 const getBoardCommands = (commandOptions: IAllCommands): CommandGroup => ({
   group: "Board",
   commandLists: [
+    ...(commandOptions.boardZoomedOut !== undefined
+      ? [
+          {
+            key: "toggleBoardZoom",
+            name: commandOptions.boardZoomedOut
+              ? "Zoom board in"
+              : "Zoom board out",
+            commandMode: CommandMode.ToggleBoardZoom,
+            keywords: "zoom board overview columns compact in out",
+          },
+        ]
+      : []),
     {
       key: "createTask",
       name: "Create task",
