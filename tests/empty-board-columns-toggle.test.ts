@@ -8,6 +8,11 @@ import {
   patchProjectViewEmptySections,
   settleEmptySectionMutation,
 } from "../src/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getFilteredEmptySections } from "../src/utils/helperFunctions/Views/EmptySectionsHelperFunction";
+import {
+  createBoardReadModelSnapshot,
+  materializeBoardReadModelSnapshot,
+} from "../src/lib/boardSync/contract";
 
 const root = path.resolve(__dirname, "..");
 
@@ -123,6 +128,31 @@ test("a board with no user view still honors its patched default setting", () =>
   );
 });
 
+test("a saved Hidden view still removes empty columns after snapshot restore", () => {
+  const project = {
+    ...projectWith({ applied: view("speed", "Hidden") }),
+    sections: [],
+    tasks: [],
+  };
+  const snapshot = createBoardReadModelSnapshot({
+    accountId: 6,
+    projectId: project.id,
+    payload: { project: project as never, tasks: [], allViews: [] },
+  });
+
+  assert.ok(snapshot);
+  const restored = materializeBoardReadModelSnapshot(snapshot);
+  const sections = [
+    { sectionId: 1, visibility: true, items: [] },
+    { sectionId: 2, visibility: true, items: [{ id: 20 }] },
+  ];
+
+  assert.deepEqual(
+    getFilteredEmptySections(sections as never, restored.project),
+    [sections[1]],
+  );
+});
+
 test("two failed toggles restore the original setting", () => {
   const { project, second } = beginRapidToggles();
   const withUnrelatedChange = {
@@ -199,15 +229,24 @@ test("a successful earlier toggle becomes the rollback baseline", () => {
   );
 });
 
-test("the shared empty-column save applies the setting before starting the API write", () => {
-  const source = fs.readFileSync(
+test("the command toggles both directions through the optimistic shared save", () => {
+  const saveHookSource = fs.readFileSync(
     path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
     "utf8",
   );
-  const saveStart = source.indexOf("const saveEmptySectionsAPI");
-  const nextFunction = source.indexOf("const saveStalenessToViewAPI", saveStart);
-  const saveSource = source.slice(saveStart, nextFunction);
+  const saveStart = saveHookSource.indexOf("const saveEmptySectionsAPI");
+  const nextFunction = saveHookSource.indexOf("const saveStalenessToViewAPI", saveStart);
+  const saveSource = saveHookSource.slice(saveStart, nextFunction);
+  const commandSource = fs.readFileSync(
+    path.join(root, "src/components/commands.tsx"),
+    "utf8",
+  );
+  const commandStart = commandSource.indexOf("case CommandMode.ToggleEmptyColumns");
+  const nextCommand = commandSource.indexOf("case CommandMode.HideColumn", commandStart);
+  const toggleSource = commandSource.slice(commandStart, nextCommand);
 
+  assert.match(toggleSource, /saveEmptySectionsAPI/);
+  assert.match(toggleSource, /current === "Hidden" \? "Show" : "Hidden"/);
   assert.match(saveSource, /beginEmptySectionMutation/);
   assert.match(saveSource, /settleEmptySectionMutation/);
   assert.ok(
@@ -215,4 +254,17 @@ test("the shared empty-column save applies the setting before starting the API w
       saveSource.indexOf("apiHandler("),
     "the active board must update before the network request starts",
   );
+});
+
+test("the canonical URL view reaches the durable unsaved-view branch", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/unsaved-view.ts"),
+    "utf8",
+  );
+  const transientGuard = source.indexOf("shouldUseTransientTabSettings(");
+  const durableWrite = source.indexOf("const createUnsavedViewHandler", transientGuard);
+
+  assert.ok(transientGuard >= 0);
+  assert.ok(durableWrite > transientGuard);
+  assert.match(source.slice(durableWrite), /board_empty_sections/);
 });

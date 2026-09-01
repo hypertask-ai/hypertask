@@ -9,6 +9,7 @@ import { defaultSubtaskSettings } from "@/utils/helperFunctions/Views/SubtaskHel
 import {
   applyTransientTabSettings,
   canUseViewAsTabBase,
+  shouldUseTransientTabSettings,
 } from "@/utils/helperFunctions/Views/TransientTabView";
 import {
   defaultBoardSortingOrder,
@@ -189,11 +190,16 @@ const handler: NextApiHandler = async (
         board_layout: resolvedBoardLayout,
       };
 
-      // URL-aware clients keep unsaved settings in this tab's query cache.
-      // Persisting them through User_Project_View would give every tab one
-      // shared slot, so editing view B could erase view A's unsaved filters.
-      // Explicit Save View calls persist the settings through create/update.
-      if (hasBaseViewId) {
+      // A tab pinned away from the user's canonical applied view cannot use the
+      // one persisted unsaved slot without overwriting that other view's work.
+      // The canonical tab still needs the slot so its settings survive reloads.
+      if (
+        shouldUseTransientTabSettings(
+          hasBaseViewId,
+          baseViewId,
+          user_project_view?.appliedViewId,
+        )
+      ) {
         const comparisonSettings = baseView
           ? {
               board_columns_view: baseView.board_columns_view,

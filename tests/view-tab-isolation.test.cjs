@@ -14,7 +14,11 @@ const { getViewFromProject, pinProjectToUrlView } = jiti(
     "src/utils/helperFunctions/Views/ViewsHelperFunctions.ts",
   ),
 );
-const { applyTransientTabSettings, canUseViewAsTabBase } = jiti(
+const {
+  applyTransientTabSettings,
+  canUseViewAsTabBase,
+  shouldUseTransientTabSettings,
+} = jiti(
   path.join(
     root,
     "src/utils/helperFunctions/Views/TransientTabView.ts",
@@ -153,6 +157,19 @@ test("a private view cannot become another user's tab base", () => {
     ),
     true,
   );
+});
+
+test("the canonical named and default views keep durable unsaved settings", () => {
+  assert.equal(shouldUseTransientTabSettings(true, "view-a", "view-a"), false);
+  assert.equal(shouldUseTransientTabSettings(true, null, null), false);
+  assert.equal(shouldUseTransientTabSettings(true, undefined, undefined), false);
+});
+
+test("only a URL-pinned noncanonical view uses transient tab settings", () => {
+  assert.equal(shouldUseTransientTabSettings(true, "view-b", "view-a"), true);
+  assert.equal(shouldUseTransientTabSettings(true, "view-a", null), true);
+  assert.equal(shouldUseTransientTabSettings(true, null, "view-a"), true);
+  assert.equal(shouldUseTransientTabSettings(false, "view-b", "view-a"), false);
 });
 
 test("different tabs receive independent unsaved overlays without changing the shared row", () => {
