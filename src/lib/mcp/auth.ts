@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
 import { randomUUID, createHash } from 'crypto'
 import createLog from '@/utils/controllers/logs/createLog'
-import { LogType, Status } from '@prisma/client'
+import { LogType, Prisma, Status } from '@prisma/client'
 import { getRedis } from '@/lib/redis'
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision'
 import { hashApiKey } from '@/lib/apiKeys'
@@ -25,7 +25,8 @@ import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry'
 
 const JWT_SECRET = process.env.JWT_SECRET as string
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
-const JWT_MCP_AUDIENCE = 'mcp-api' // Specific audience for MCP routes
+export const JWT_MCP_AUDIENCE = 'mcp-api'
+export const JWT_LEGACY_MCP_AUDIENCE = 'hypertasks-mcp'
 const AGENT_TOKEN_GENERATION_CLAIM = 'agentTokenGeneration'
 const MCP_TOKEN_ISSUED_AT_MS_CLAIM = 'mcpIssuedAtMs'
 export const MANAGEMENT_KEY_PREFIX = 'htmk_'
@@ -36,6 +37,26 @@ export function extractBearerToken(authHeader: string | null): string | null {
 }
 const scopedTokenRevocationJti = (userId: number, jti: string) =>
   `user:${userId}:${jti}`
+
+export function legacyTokenRevocationJti(token: string): string {
+  const digest = createHash('sha256')
+    .update('hypertask:mcp:legacy-token-revocation\0')
+    .update(token)
+    .digest('hex')
+  return `legacy:${digest}`
+}
+
+function tokenRevocationJtis(
+  userId: number,
+  token: string,
+  decoded: jwt.JwtPayload
+): string[] {
+  const jti = decoded.jti || decoded.jwtid
+  if (typeof jti === 'string' && jti.length > 0) {
+    return [jti, scopedTokenRevocationJti(userId, jti)]
+  }
+  return [legacyTokenRevocationJti(token)]
+}
 
 // ponytail: in-memory per-process throttle, resets on deploy/restart — fine for a
 // UX nice-to-have status pill; upgrade to Redis if cross-instance accuracy matters.
@@ -532,7 +553,7 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
       try {
         decoded = jwt.verify(token, JWT_SECRET, {
           issuer: 'hypertasks', // Legacy issuer
-          audience: 'hypertasks-mcp', // Legacy audience
+          audience: JWT_LEGACY_MCP_AUDIENCE,
         }) as jwt.JwtPayload
         console.log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
       } catch (err2: any) {
@@ -556,7 +577,7 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
             console.log('[MCP Auth] Signature error details:', err3?.message)
             console.log('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
             console.log('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
-            console.log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', ['hypertasks-mcp', JWT_MCP_AUDIENCE])
+            console.log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
             return null
           }
         }
@@ -700,27 +721,16 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
       return null
     }
 
-    // Check if token has been revoked
-    const jti = decoded.jti || decoded.jwtid
-    
-    // Check specific token revocation (for tokens with jti)
-    if (jti) {
-      const revokedToken = await prisma.revokedToken.findFirst({
-        where: {
-          user_id: user.id,
-          jti: {
-            in: [
-              jti as string,
-              scopedTokenRevocationJti(user.id, jti as string),
-            ],
-          },
-        },
-      })
+    const revokedToken = await prisma.revokedToken.findFirst({
+      where: {
+        user_id: user.id,
+        jti: { in: tokenRevocationJtis(user.id, token, decoded) },
+      },
+    })
 
-      if (revokedToken) {
-        console.log('[MCP Auth] Token has been revoked:', jti)
-        return null
-      }
+    if (revokedToken) {
+      console.log('[MCP Auth] Token has been revoked')
+      return null
     }
 
     // Check user-level token revocation (for old tokens without jti)
@@ -955,6 +965,32 @@ export async function revokeTokenByJti(jti: string, userId: number, expiresAt: D
   }
 }
 
+export async function claimTokenRotation(
+  jti: string,
+  userId: number,
+  expiresAt: Date
+): Promise<boolean> {
+  try {
+    await prisma.revokedToken.create({
+      data: {
+        jti,
+        user_id: userId,
+        revoked_at: new Date(),
+        expires_at: expiresAt,
+      },
+    })
+    return true
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return false
+    }
+    throw error
+  }
+}
+
 /**
  * Revokes a user-owned token identifier supplied through an administrative
  * surface. Namespacing prevents a caller who learns another account's jti
@@ -1052,17 +1088,14 @@ export async function classifyMcpAuthFailure(
     }
     if (!user) return 'invalid_token'
 
-    const jti = verified.jti || verified.jwtid
-    if (typeof jti === 'string' && jti.length > 0) {
-      const revoked = await db.revokedToken.findFirst({
-        where: {
-          user_id: user.id,
-          jti: { in: [jti, scopedTokenRevocationJti(user.id, jti)] },
-        },
-        select: { jti: true },
-      })
-      if (revoked) return 'token_revoked'
-    }
+    const revoked = await db.revokedToken.findFirst({
+      where: {
+        user_id: user.id,
+        jti: { in: tokenRevocationJtis(user.id, token, verified) },
+      },
+      select: { jti: true },
+    })
+    if (revoked) return 'token_revoked'
 
     // "Revoke every token" is recorded on the user, not per token, so a token
     // minted before that moment is revoked even with no row of its own.

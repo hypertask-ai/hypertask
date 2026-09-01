@@ -5,10 +5,13 @@ import {
   MCP_AGENT_REVOKED_MESSAGE,
   MCP_AGENT_TOKEN_REFRESH_MESSAGE,
   MCP_AGENT_TOKEN_SUPERSEDED_MESSAGE,
+  claimTokenRotation,
   createMcpToken,
   createUnauthorizedResponse,
+  JWT_LEGACY_MCP_AUDIENCE,
+  JWT_MCP_AUDIENCE,
+  legacyTokenRevocationJti,
   MCP_LEGACY_TOKEN_MESSAGE,
-  revokeTokenByJti,
   validateMcpAuth,
   verifyMcpJwtToken,
 } from '@/lib/mcp/auth'
@@ -23,9 +26,13 @@ type TokenRefreshDependencies = {
     mcpTokenJti: string | null
   } | null>
   createToken: typeof createMcpToken
-  revokeToken: typeof revokeTokenByJti
+  claimRotation: typeof claimTokenRotation
   createAuditLog: typeof createLog
 }
+
+// Keep this rollout boundary immutable so configuration cannot widen legacy-token eligibility.
+export const LEGACY_REFRESH_ISSUED_BEFORE_SECONDS =
+  Date.parse('2026-09-02T00:00:00.000Z') / 1000
 
 const tokenRefreshDependencies: TokenRefreshDependencies = {
   validateAuth: validateMcpAuth,
@@ -35,7 +42,7 @@ const tokenRefreshDependencies: TokenRefreshDependencies = {
     select: { revokedAt: true, mcpTokenJti: true },
   }),
   createToken: createMcpToken,
-  revokeToken: revokeTokenByJti,
+  claimRotation: claimTokenRotation,
   createAuditLog: createLog,
 }
 
@@ -90,42 +97,71 @@ export async function handleMcpTokenRefresh(
     ? (jwt.decode(oldToken) as jwt.JwtPayload | null)
     : null
 
-  if (!oldDecoded) {
+  if (!oldToken || !oldDecoded?.exp) {
     return createUnauthorizedResponse(
       'Invalid or missing authentication token.',
       'invalid_token'
     )
   }
 
-  // Only tokens we can revoke may be rotated. Without a jti the old token
-  // stays valid after refresh, letting a caller multiply live 30-day
-  // tokens or extend lifetime indefinitely. Force re-login instead.
-  if (!oldDecoded.jti) {
-    return createUnauthorizedResponse(MCP_LEGACY_TOKEN_MESSAGE, 'legacy_token')
+  const oldJti = oldDecoded.jti || oldDecoded.jwtid
+  let revocationJti: string
+  if (typeof oldJti === 'string' && oldJti.length > 0) {
+    revocationJti = oldJti
+  } else {
+    const oldAudiences: string[] = []
+    if (typeof oldDecoded.aud === 'string') {
+      oldAudiences.push(oldDecoded.aud)
+    } else if (Array.isArray(oldDecoded.aud)) {
+      oldAudiences.push(...oldDecoded.aud)
+    }
+    const hasMcpAudience = oldAudiences.some(
+      (audience) =>
+        audience === JWT_MCP_AUDIENCE ||
+        audience === JWT_LEGACY_MCP_AUDIENCE
+    )
+    if (
+      typeof oldDecoded.iat !== 'number' ||
+      oldDecoded.iat >= LEGACY_REFRESH_ISSUED_BEFORE_SECONDS ||
+      !hasMcpAudience
+    ) {
+      return createUnauthorizedResponse(MCP_LEGACY_TOKEN_MESSAGE, 'legacy_token')
+    }
+    revocationJti = legacyTokenRevocationJti(oldToken)
   }
 
+  // Mint before claiming the old credential. A signing failure leaves the
+  // current token usable, while the unique claim permits only one concurrent
+  // request to receive a replacement.
   const token = dependencies.createToken(user.id, user.email, '30d')
   const decoded = jwt.decode(token) as jwt.JwtPayload | null
   if (!decoded?.exp) {
     throw new Error('Failed to decode refreshed MCP token expiration')
   }
 
-  // Revoke only after the replacement token exists, so a failure here
-  // can never leave the caller with no valid token.
-  if (oldDecoded.exp) {
-    await dependencies.revokeToken(
-      oldDecoded.jti,
-      user.id,
-      new Date(oldDecoded.exp * 1000)
+  const claimed = await dependencies.claimRotation(
+    revocationJti,
+    user.id,
+    new Date(oldDecoded.exp * 1000)
+  )
+  if (!claimed) {
+    return createUnauthorizedResponse(
+      'This token has already been refreshed.',
+      'token_revoked'
     )
   }
 
-  await dependencies.createAuditLog({
-    log: 'mcp_token_refresh',
-    type: LogType.Signup,
-    status: Status.Normal,
-    LoggedById: user.id,
-  })
+  // Logging must not strand the caller after the one-time claim succeeds.
+  try {
+    await dependencies.createAuditLog({
+      log: 'mcp_token_refresh',
+      type: LogType.Signup,
+      status: Status.Normal,
+      LoggedById: user.id,
+    })
+  } catch (error) {
+    console.error('Failed to record MCP token refresh audit log:', error)
+  }
 
   return NextResponse.json({
     success: true,

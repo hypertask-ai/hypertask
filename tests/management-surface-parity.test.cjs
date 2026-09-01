@@ -50,7 +50,8 @@ test("management-only keys can authenticate the MCP transport without gaining da
   assert.match(auth, /export const isManagementKeyToken/);
   assert.match(auth, /isManagementKeyToken\(token\)/);
   assert.match(auth, /!hasDataPermission/);
-  assert.match(auth, /scopedTokenRevocationJti\(user\.id/);
+  assert.match(auth, /scopedTokenRevocationJti\(userId/);
+  assert.match(auth, /tokenRevocationJtis\(user\.id, token/);
   assert.match(auth, /user_id: user\.id/);
   assert.match(auth, /MCP_TOKEN_ISSUED_AT_MS_CLAIM/);
   assert.match(auth, /typeof issuedAtMs === ['"]number['"]/);
