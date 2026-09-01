@@ -1,5 +1,5 @@
 import axios from "axios";
-import { ComponentType, useState } from "react";
+import { ComponentType, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import { useQueryClient } from "@tanstack/react-query";
 import { ToggleSwitch, ToggleSwitchProps } from "./Single section items";
@@ -42,6 +42,7 @@ const UserPreferenceSidebar = ({
 } = {}) => {
   const queryClient = useQueryClient();
   const { data } = useGetUserPreferences();
+  const autoDescriptionUpdateQueue = useRef(Promise.resolve());
 
   const [isStacked, setIsStacked] = useState<boolean>(data.commentsStacked);
   const [displayAvatar, setDisplayAvatar] = useState<boolean>(
@@ -114,15 +115,24 @@ const UserPreferenceSidebar = ({
   };
 
   const handleAutoDescriptionSuggestionsSetting = () => {
-    const nextValue = !autoDescriptionSuggestions;
+    let nextValue = true;
     queryClient.setQueryData<IUserPreferences>(
       USER_PREFERENCES_QUERY_KEY,
-      (previous) => ({
-        ...(previous ?? data),
-        autoDescriptionSuggestions: nextValue,
-      }),
+      (previous) => {
+        nextValue = !(
+          previous?.autoDescriptionSuggestions ??
+          data.autoDescriptionSuggestions ??
+          true
+        );
+        return {
+          ...(previous ?? data),
+          autoDescriptionSuggestions: nextValue,
+        };
+      },
     );
-    updateUserPreferences({ autoDescriptionSuggestions: nextValue });
+    autoDescriptionUpdateQueue.current = autoDescriptionUpdateQueue.current.then(
+      () => updateUserPreferences({ autoDescriptionSuggestions: nextValue }),
+    );
   };
 
   const handleReadReceiptsSetting = () => {
