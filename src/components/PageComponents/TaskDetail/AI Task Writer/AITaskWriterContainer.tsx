@@ -648,7 +648,7 @@ const AITaskWriterContainer: React.FC<
             Draft from your title
           </span>
         </div>
-        <div className="rounded-[4px] border-l border-l-hypertasks-ai-purple bg-comment-description px-4 py-3 shadow-md">
+        <div className="rounded-[5px] border-l border-l-hypertasks-ai-purple bg-comment-description px-4 py-3 shadow-md">
           {currentDisplayResponse ? responseBodyEl : inputAndToolbarEl}
         </div>
         {currentDisplayResponse && !isLoading && !hasError ? (

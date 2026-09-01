@@ -138,7 +138,10 @@ test("preference fallbacks and the suggestion edge keep the feature contract", (
 
   assert.match(notFoundFallback, /autoDescriptionSuggestions: true/);
   assert.match(errorFallback, /autoDescriptionSuggestions: true/);
-  assert.match(writerSource, /border-l border-l-hypertasks-ai-purple/);
+  assert.match(
+    writerSource,
+    /rounded-\[5px\] border-l border-l-hypertasks-ai-purple/,
+  );
   assert.doesNotMatch(writerSource, /border-l-4 border-l-hypertasks-ai-purple/);
   assert.match(
     writerSource,
