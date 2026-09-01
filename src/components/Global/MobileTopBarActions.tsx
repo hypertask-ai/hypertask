@@ -8,6 +8,7 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import UserAvatar from "@/components/Common/UserAvatar";
+import MobileAnnouncementButton from "./MobileAnnouncementButton";
 
 const MobileTopBarActions = ({
   currentUser,
@@ -24,6 +25,8 @@ const MobileTopBarActions = ({
 
   return (
     <>
+      <MobileAnnouncementButton currentUserId={currentUser.id} />
+
       {onCalendar && (
         <button
           type="button"

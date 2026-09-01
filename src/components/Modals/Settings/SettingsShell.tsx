@@ -23,12 +23,8 @@ import { SidebarContextProvider } from "@/lib/contexts/Sidebars/SidebarProvider"
 import { currentUserAtom } from "@/store";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRecoilValue } from "@/lib/state";
-import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
-import { useGetAnnouncements } from "@/hooks/MultiPages/Sidebar/useGetAnnouncements";
 import SettingsBoardPicker from "./SettingsBoardPicker";
 import SettingsTeamPicker from "./SettingsTeamPicker";
-import { shouldShowMobileAnnouncementIndicator } from "./announcementIndicator";
-import SettingsNavGroups from "./SettingsNavGroups";
 import { useSettingsTeam } from "./useSettingsTeam";
 import {
   SETTINGS_CROSS_TAB_GROUPS,
@@ -258,33 +254,73 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
   inbox: InboxSection,
 };
 
+const NAV_ENTRY_CLASS =
+  "w-full rounded-[5px] px-2 py-1.5 text-left text-content font-medium text-white-black transition hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none";
+
+interface SettingsNavGroupsProps {
+  activeSection?: SettingsSectionId;
+  compact?: boolean;
+  groups: SettingsNavGroup[];
+  mobile?: boolean;
+  onSelect: (section: SettingsSectionId) => void;
+}
+
+const SettingsNavGroups: React.FC<SettingsNavGroupsProps> = ({
+  activeSection,
+  compact = false,
+  groups,
+  mobile = false,
+  onSelect,
+}) => (
+  <div className={cn("flex flex-col", compact ? "gap-3" : "gap-5")}>
+    {groups.map((group) => (
+      <div key={group.title} className="flex flex-col gap-1">
+        <div className="px-2 pb-1">
+          <h3 className="text-meta font-semibold uppercase tracking-wide text-text-light-gray">
+            {group.title}
+          </h3>
+          {group.description && (
+            <p className="mt-0.5 text-micro text-text-light-gray">
+              {group.description}
+            </p>
+          )}
+        </div>
+        {group.items.map((item) =>
+          isSettingsNavLink(item) ? (
+            <a
+              key={item.href}
+              className={cn(NAV_ENTRY_CLASS, "block")}
+              href={item.href}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {item.label}
+            </a>
+          ) : (
+            <button
+              key={item.id}
+              type="button"
+              className={cn(
+                NAV_ENTRY_CLASS,
+                mobile && "py-3",
+                activeSection === item.id && "bg-active-modal-element",
+              )}
+              onClick={() => onSelect(item.id)}
+            >
+              {item.label}
+            </button>
+          ),
+        )}
+      </div>
+    ))}
+  </div>
+);
+
 const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const activeSection = normalizeSettingsSection(section);
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useContext(MobileViewContext);
   const currentUser = useRecoilValue(currentUserAtom);
-  const { data: announcementsData } = useGetAnnouncements(
-    currentUser?.id,
-    undefined,
-    { enabled: mbl },
-  );
-  const { data: userPreferences, isFetched: userPreferencesFetched } =
-    useGetUserPreferences(undefined, undefined, { enabled: mbl });
-  const hasUnreadAnnouncements = useMemo(
-    () =>
-      shouldShowMobileAnnouncementIndicator({
-        announcements: announcementsData,
-        mobile: mbl,
-        muted: userPreferences?.muteAnnouncements,
-        preferencesFetched: userPreferencesFetched,
-      }),
-    [
-      announcementsData,
-      mbl,
-      userPreferences?.muteAnnouncements,
-      userPreferencesFetched,
-    ],
-  );
   const { billing } = useSettingsTeam();
   const { clearSettingsSection, closeSettings, setSettingsSection } =
     useSettingsNavigation();
@@ -467,7 +503,6 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                   <SettingsNavGroups
                     activeSection={mbl ? undefined : activeSection}
                     groups={primaryGroups}
-                    hasUnreadAnnouncements={hasUnreadAnnouncements}
                     mobile={mbl}
                     onSelect={setSettingsSection}
                   />
@@ -477,7 +512,6 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                         activeSection={mbl ? undefined : activeSection}
                         compact
                         groups={bottomGroups}
-                        hasUnreadAnnouncements={hasUnreadAnnouncements}
                         mobile={mbl}
                         onSelect={setSettingsSection}
                       />

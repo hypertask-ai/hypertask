@@ -32,7 +32,7 @@ const AnnouncementsSection = () => {
               Announcement alerts
             </div>
             <p className="mt-1 text-dense font-medium leading-snug text-text-light-gray">
-              Show an unread indicator when new updates are available.
+              Show the rocket when new updates are available.
             </p>
           </div>
           <SettingsToggle
