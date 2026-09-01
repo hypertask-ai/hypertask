@@ -459,7 +459,7 @@ const Commands = (props: Props) => {
   };
 
   const searchInput = (
-    <div className="flex items-center gap-2.5 px-4 ring-1 ring-inset ring-hypertasks-purple">
+    <div className="flex items-center gap-2.5 rounded-[4px] px-4 ring-1 ring-inset ring-hypertasks-purple">
       <Search strokeWidth={1.75} size={16} className="shrink-0 text-text-light-gray" />
       <ModalInput
         ref={setInputRef}

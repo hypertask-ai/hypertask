@@ -46,7 +46,7 @@ test("mobile command input focuses only through the synchronous callback ref", (
   assert.match(source, /autoFocus=\{!isMobile\}[\s\S]*?id="htc-mobile-search"/);
 });
 
-test("mobile command search uses one flush focus ring", () => {
+test("mobile command search uses one flush rounded focus ring", () => {
   const commands = readSource(
     "src/components/Modals/commands/HTC/commands.tsx",
   );
@@ -58,9 +58,9 @@ test("mobile command search uses one flush focus ring", () => {
   assert.match(commands, /useHTC\(allCommands_, emptyQueryCommands, !isMobile\)/);
   assert.match(
     searchInput,
-    /className="flex items-center gap-2\.5 px-4 ring-1 ring-inset ring-hypertasks-purple"/,
+    /className="flex items-center gap-2\.5 rounded-\[4px\] px-4 ring-1 ring-inset ring-hypertasks-purple"/,
   );
-  assert.doesNotMatch(searchInput, /\bm-2\b|bg-newcomment-well|rounded-\[4px\]/);
+  assert.doesNotMatch(searchInput, /\bm-2\b|bg-newcomment-well/);
 });
 
 test("mobile commands select no row until the user searches", async () => {
