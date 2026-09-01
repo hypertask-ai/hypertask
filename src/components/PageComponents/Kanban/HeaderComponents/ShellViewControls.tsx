@@ -31,7 +31,16 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   // Tie-break levels are invisible until the popover is open, so surface the total on the icon.
   const sortLevels = getActiveSortingStackFromProject(project).length + 1
 
-  if (isMbl) return null
+  if (isMbl)
+    return (
+      // Mobile has no other Save affordance (MobileTopBar owns the header and the
+      // legacy board header is desktop-only), so an unsaved sort/filter change was
+      // impossible to persist on a phone (HTPR-5900). Render just the dirty-gated
+      // Save/Reset pills; the rest of the controls stay desktop-only.
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <SaveView project={project} variant="shell" />
+      </div>
+    )
 
   const openModal = (mode: CommandMode) =>
     setShowCommands({ show: true, mode })
