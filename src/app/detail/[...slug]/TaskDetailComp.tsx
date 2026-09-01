@@ -1954,7 +1954,6 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
       isMobile: _mbl,
     };
 
-    if (!_mbl) return;
     return initialScrollGuard.listen(scrollElementRef?.current ?? window);
   }, [_mbl, _parsedTask.id, initialScrollGuard, scrollElementRef]);
 

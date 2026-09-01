@@ -155,6 +155,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     viewportLifecycle,
     /initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\)/
   );
+  assert.doesNotMatch(viewportLifecycle, /if \(!_mbl\) return/);
   assert.match(
     viewportLifecycle,
     /\}, \[_mbl, _parsedTask\.id, initialScrollGuard, scrollElementRef\]\);$/
