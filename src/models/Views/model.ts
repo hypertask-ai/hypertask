@@ -8,6 +8,10 @@ export type TBoardSortingLevel = { mode: TBoardSortingViewMode; order: TBoardSor
 export type TBoardSubtaskSetting = SubtaskSetting
 export const DEFAULT_SUBTASK_SETTING: TBoardSubtaskSetting = "Flattened_Card"
 export type TBoardEmptySections = EmptySections
+export const PERSONAL_EMPTY_SECTIONS_UPDATE_MODE = "personal-empty-sections" as const
+export const BOARD_EMPTY_SECTION_SETTINGS = Object.values(EmptySections) as EmptySections[]
+export const isBoardEmptySectionSetting = (value: unknown): value is EmptySections =>
+    BOARD_EMPTY_SECTION_SETTINGS.includes(value as EmptySections)
 export type TSavedBoardLayout = "Board" | "Table"
 
 const sortingModeLabels: Record<SortingMode, string> = {

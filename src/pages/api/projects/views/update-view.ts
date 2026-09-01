@@ -1,6 +1,10 @@
 // route = "/api/projects/views/update-view"
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import {
+  isBoardEmptySectionSetting,
+  PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
+} from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { sanitizeBoardLayout, sanitizeTableSort } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -26,14 +30,28 @@ const handler: NextApiHandler = async (
 
     const { projectId, viewId, view_settings } = req.body;
     const layoutOnly = req.body.updateMode === "layout";
+    const personalEmptySectionsOnly =
+      req.body.updateMode === PERSONAL_EMPTY_SECTIONS_UPDATE_MODE;
     const hasBoardLayout = Object.prototype.hasOwnProperty.call(
       view_settings ?? {},
       "board_layout"
     );
 
-    const currentUser = JSON.parse(req.cookies.nookies_user ?? "{}");
+    let currentUser: unknown;
     try {
-      if (!projectId || !Number.isInteger(currentUser.id))
+      currentUser = JSON.parse(req.cookies.nookies_user ?? "{}");
+    } catch {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    try {
+      if (
+        !projectId ||
+        typeof currentUser !== "object" ||
+        currentUser === null ||
+        !("id" in currentUser) ||
+        typeof currentUser.id !== "number" ||
+        !Number.isInteger(currentUser.id)
+      )
         return res
           .status(401)
           .json({ message: "Authentication required" });
@@ -59,6 +77,32 @@ const handler: NextApiHandler = async (
       });
       if (!targetView) {
         return res.status(404).json({ message: "View not found on this board" });
+      }
+      if (personalEmptySectionsOnly) {
+        const boardEmptySections = view_settings?.board_empty_sections;
+        if (!isBoardEmptySectionSetting(boardEmptySections)) {
+          return res.status(400).json({ message: "Invalid empty column visibility" });
+        }
+        await prisma.view_Last_Used.upsert({
+          create: {
+            userId: currentUser.id,
+            viewId,
+            board_empty_sections: boardEmptySections,
+          },
+          update: {
+            board_empty_sections: boardEmptySections,
+          },
+          where: {
+            user_view_last_used: {
+              userId: currentUser.id,
+              viewId,
+            },
+          },
+        });
+        return res.status(200).json({
+          viewId,
+          board_empty_sections: boardEmptySections,
+        });
       }
       const mutateView = <T>(
         boardFilters: unknown,
@@ -211,6 +255,7 @@ const handler: NextApiHandler = async (
       return res.status(500).json(error);
     }
   }
+  return res.status(405).json({ message: "Method not allowed" });
 };
 
 export default handler;

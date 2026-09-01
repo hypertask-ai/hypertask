@@ -356,6 +356,7 @@ export interface IView_Last_Used {
   id: string;
   createdAt: Date;
   lastUsedAt?: Date | null;
+  board_empty_sections?: EmptySections | null;
   userId: number;
   viewId: string;
   user: IUser;

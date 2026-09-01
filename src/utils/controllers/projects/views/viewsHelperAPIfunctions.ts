@@ -10,7 +10,15 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
           userId: currentUserId,
         },
         select: {
-          appliedView: true,
+          appliedView: {
+            include: {
+              ViewLastUsed: {
+                where: { userId: currentUserId },
+                select: { board_empty_sections: true },
+                take: 1,
+              },
+            },
+          },
           unsavedView: true,
           userId: true,
           project_view_id: true,
@@ -18,7 +26,15 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
         },
         take: 1,
       },
-      default_view: true,
+      default_view: {
+        include: {
+          ViewLastUsed: {
+            where: { userId: currentUserId },
+            select: { board_empty_sections: true },
+            take: 1,
+          },
+        },
+      },
       allViews: {
         where: {
           OR: [
@@ -43,6 +59,7 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
             },
             select: {
               lastUsedAt: true,
+              board_empty_sections: true,
             },
             take: 1,
           },

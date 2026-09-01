@@ -5,7 +5,9 @@ import path from "node:path";
 import {
   beginEmptySectionMutation,
   getActiveEmptySectionSettingFromProject,
+  getEmptySectionSettingForView,
   patchProjectViewEmptySections,
+  pinProjectToUrlView,
   settleEmptySectionMutation,
 } from "../src/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getFilteredEmptySections } from "../src/utils/helperFunctions/Views/EmptySectionsHelperFunction";
@@ -153,6 +155,104 @@ test("a saved Hidden view still removes empty columns after snapshot restore", (
   );
 });
 
+test("a personal setting overrides shared and legacy unsaved values", () => {
+  const applied = {
+    ...view("speed", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const project = projectWith({
+    unsaved: view("unsaved", "Show"),
+    applied: applied as never,
+  });
+
+  assert.equal(
+    getActiveEmptySectionSettingFromProject(project as never),
+    "Hidden",
+  );
+  assert.equal(
+    getEmptySectionSettingForView(project.project_view as never, "speed"),
+    "Hidden",
+  );
+
+  const legacyProject = projectWith({
+    unsaved: view("unsaved", "Hidden"),
+    applied: view("speed", "Show"),
+  });
+  assert.equal(
+    getActiveEmptySectionSettingFromProject(legacyProject as never),
+    "Hidden",
+  );
+});
+
+test("a URL-pinned view keeps its personal setting through snapshot restore", () => {
+  const canonical = { ...view("canonical", "Show"), slug: "canonical" };
+  const speed = { ...view("speed", "Show"), slug: "speed-2" };
+  const project = {
+    ...projectWith({ applied: canonical }),
+    sections: [
+      { sectionId: 1, visibility: true, items: [] },
+      { sectionId: 2, visibility: true, items: [{ id: 20 }] },
+    ],
+    tasks: [],
+  };
+  project.project_view.allViews = [canonical, speed];
+  project.project_view = patchProjectViewEmptySections(
+    project.project_view as never,
+    "Hidden",
+    "speed",
+  ) as never;
+
+  assert.equal(
+    getActiveEmptySectionSettingFromProject(project as never),
+    "Show",
+    "the canonical tab must remain isolated",
+  );
+
+  const snapshot = createBoardReadModelSnapshot({
+    accountId: 6,
+    projectId: project.id,
+    payload: { project: project as never, tasks: [], allViews: [] },
+  });
+  assert.ok(snapshot);
+  const restored = materializeBoardReadModelSnapshot(snapshot);
+  const pinned = pinProjectToUrlView(restored.project, "speed-2");
+
+  assert.equal(getActiveEmptySectionSettingFromProject(pinned), "Hidden");
+  assert.deepEqual(
+    getFilteredEmptySections(project.sections as never, pinned),
+    [project.sections[1]],
+  );
+});
+
+test("mutation state rejects reuse by another view", () => {
+  const firstView = {
+    ...view("first", "Hidden"),
+    ViewLastUsed: [{ board_empty_sections: "Hidden" }],
+  };
+  const secondView = {
+    ...view("second", "Show"),
+    ViewLastUsed: [{ board_empty_sections: "Show" }],
+  };
+  const project = projectWith({ applied: firstView as never });
+  project.project_view.allViews = [firstView, secondView] as never;
+
+  const first = beginEmptySectionMutation(
+    undefined,
+    project.project_view as never,
+    { id: 1, setting: "Show", viewId: "first" },
+  );
+  assert.throws(
+    () => beginEmptySectionMutation(
+      first.state,
+      first.projectView,
+      { id: 2, setting: "Hidden", viewId: "second" },
+    ),
+    /belongs to another view/,
+  );
+  assert.equal(first.state.viewId, "first");
+  assert.deepEqual(first.state.pending.map(({ id }) => id), [1]);
+});
+
 test("two failed toggles restore the original setting", () => {
   const { project, second } = beginRapidToggles();
   const withUnrelatedChange = {
@@ -256,15 +356,17 @@ test("the command toggles both directions through the optimistic shared save", (
   );
 });
 
-test("the canonical URL view reaches the durable unsaved-view branch", () => {
+test("the command saves against the URL-pinned view instead of the raw cache view", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/pages/api/projects/views/unsaved-view.ts"),
+    path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
     "utf8",
   );
-  const transientGuard = source.indexOf("shouldUseTransientTabSettings(");
-  const durableWrite = source.indexOf("const createUnsavedViewHandler", transientGuard);
+  const saveStart = source.indexOf("const saveEmptySectionsAPI");
+  const nextFunction = source.indexOf("const saveStalenessToViewAPI", saveStart);
+  const saveSource = source.slice(saveStart, nextFunction);
 
-  assert.ok(transientGuard >= 0);
-  assert.ok(durableWrite > transientGuard);
-  assert.match(source.slice(durableWrite), /board_empty_sections/);
+  assert.match(saveSource, /project\.project_view\?\.user_project_views\[0\]\?\.appliedView/);
+  assert.match(saveSource, /viewId: targetViewId/);
+  assert.match(saveSource, /updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE/);
+  assert.doesNotMatch(saveSource, /baseViewId/);
 });
