@@ -58,7 +58,7 @@ const NoBoardsEmptyState = ({ user }: { user: IUser }) => {
         />
         <button
           type="button"
-          className="mt-4 rounded-[4px] bg-hypertasks-purple px-5 py-2 text-[14px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-4 rounded-2xl bg-hypertasks-purple px-5 py-2 text-[14px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!name.trim() || creating}
           onClick={handleCreateBoard}
         >
