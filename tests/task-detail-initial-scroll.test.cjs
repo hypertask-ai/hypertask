@@ -71,7 +71,10 @@ test("task changes reject stale callbacks and allow the next untouched task", ()
   const guard = createTaskDetailInitialScrollGuard(() => {
     cancellations += 1;
   });
+  const target = new EventTarget();
+  const cleanup = guard.listen(target);
   const firstGeneration = guard.reset();
+  target.dispatchEvent(new Event("wheel"));
   const secondGeneration = guard.reset();
 
   assert.equal(cancellations, 1);
@@ -79,6 +82,7 @@ test("task changes reject stale callbacks and allow the next untouched task", ()
   assert.equal(guard.invalidate(firstGeneration), false);
   assert.equal(cancellations, 1);
   assert.deepEqual(runFlag(guard, secondGeneration), { allowed: true, ran: true });
+  cleanup();
 });
 
 test("unmount invalidation rejects pending callbacks", () => {
