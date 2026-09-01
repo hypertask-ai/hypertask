@@ -4,6 +4,12 @@ import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
 import { extractPrLinks } from '@/lib/mcp/tasks/extractPrLinks';
 import {
+  derivePullRequestDisplayState,
+  parseGithubPullRequestUrl,
+  type PullRequestCheckState,
+  type PullRequestLifecycle,
+} from '@/lib/pullRequests/githubPullRequests';
+import {
   mapTaskToMcpGetResponse,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
@@ -134,6 +140,21 @@ export async function GET(request: NextRequest) {
           },
           include: {
             ...taskMcpGetInclude,
+            pullRequests: {
+              orderBy: { createdAt: 'asc' },
+              select: {
+                id: true,
+                repositoryOwner: true,
+                repositoryName: true,
+                number: true,
+                url: true,
+                title: true,
+                lifecycle: true,
+                checkState: true,
+                headSha: true,
+                updatedAt: true,
+              },
+            },
             savedContent: {
               where: { userId: ctx.agentId ? -1 : ctx.user.id, commentId: null, type: 'Private' },
               select: { id: true, type: true },
@@ -230,10 +251,26 @@ export async function GET(request: NextRequest) {
         direction: outgoing ? 'outgoing' : 'incoming',
       };
     });
-    const linkedPRs = extractPrLinks(
+    const pullRequests = task.pullRequests.map((pullRequest) => {
+      const lifecycle = pullRequest.lifecycle as PullRequestLifecycle;
+      const checkState = pullRequest.checkState as PullRequestCheckState;
+      return {
+        ...pullRequest,
+        displayState: derivePullRequestDisplayState(lifecycle, checkState),
+      };
+    });
+    const legacyPullRequestUrls = extractPrLinks(
       mappedTask.description,
       ...prComments.flatMap((comment) => [comment.text, comment.commentText])
-    );
+    )
+      .map((url) => parseGithubPullRequestUrl(url)?.url)
+      .filter((url): url is string => Boolean(url));
+    const linkedPRs = [
+      ...new Set([
+        ...pullRequests.map((pullRequest) => pullRequest.url),
+        ...legacyPullRequestUrls,
+      ]),
+    ];
 
     return NextResponse.json({
       success: true,
@@ -253,6 +290,7 @@ export async function GET(request: NextRequest) {
       subtasks: mappedTask.sub_tasks,
       relatedTasks,
       comments,
+      pullRequests,
       linkedPRs,
       commentCount,
       truncated: commentCount > commentLimit,

@@ -1,6 +1,7 @@
 import React, {
   Suspense,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -29,13 +30,20 @@ import {
   ISection,
   ITask,
   ITaskLabel,
+  ITaskPullRequest,
   IUser,
   IAssignees,
   ICycle,
 } from "@/models/model";
 import RelatedTaskLabel from "./RelatedTaskLabel";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
-import { ArrowRight, CornerLeftUp, TriangleAlert } from "lucide-react";
+import {
+  ArrowRight,
+  CornerLeftUp,
+  GitMerge,
+  GitPullRequest,
+  TriangleAlert,
+} from "lucide-react";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { EstimateConstants } from "@/lib/constants/constants";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
@@ -51,6 +59,7 @@ import {
   formatWaitingOnAge,
   WAITING_ON_OVERDUE_MS,
 } from "@/lib/waitingOn";
+import { derivePullRequestDisplayState } from "@/lib/pullRequests/githubPullRequests";
 
 type RelationDirection = "from" | "to";
 
@@ -167,6 +176,46 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     ? waitingOnNow - new Date(currentTask.waitingOnSetAt).getTime() >
       WAITING_ON_OVERDUE_MS
     : false;
+  const [pullRequests, setPullRequests] = useState<ITaskPullRequest[]>(
+    currentTask.pullRequests ?? []
+  );
+  const [showPullRequestInput, setShowPullRequestInput] = useState(false);
+  const [pullRequestUrl, setPullRequestUrl] = useState("");
+  const [linkingPullRequest, setLinkingPullRequest] = useState(false);
+  useEffect(() => {
+    setPullRequests(currentTask.pullRequests ?? []);
+    setShowPullRequestInput(false);
+    setPullRequestUrl("");
+  }, [currentTask.id, currentTask.pullRequests]);
+  const linkPullRequest = async () => {
+    if (!pullRequestUrl.trim() || linkingPullRequest) return;
+    setLinkingPullRequest(true);
+    try {
+      const response = await axios.post("/api/tasks/linkPullRequest", {
+        taskId: currentTask.id,
+        url: pullRequestUrl.trim(),
+      });
+      const pullRequest = response.data.pullRequest as ITaskPullRequest;
+      setPullRequests((current) =>
+        current.some((item) => item.id === pullRequest.id)
+          ? current
+          : [...current, pullRequest]
+      );
+      setPullRequestUrl("");
+      setShowPullRequestInput(false);
+      await queryClient.invalidateQueries({
+        queryKey: ["task-", currentTask.id],
+      });
+    } catch (error) {
+      toast.error(
+        axios.isAxiosError(error)
+          ? error.response?.data?.message ?? "Unable to link pull request"
+          : "Unable to link pull request"
+      );
+    } finally {
+      setLinkingPullRequest(false);
+    }
+  };
   const openWaitingOnPicker = () =>
     setShowCommands({ show: true, mode: CommandMode.OpenBlockedByModal });
   const clearWaitingOn = async (event: React.MouseEvent) => {
@@ -403,6 +452,94 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         })()}
       </TaskInfoRow>
 
+      <TaskInfoRow alignTop>
+        <LocalRightSideInfo
+          onClick={() => setShowPullRequestInput(true)}
+          title="Pull requests"
+          left={0}
+          bottom={-40}
+          tooltipText="Link pull request"
+          KeyCombination={null}
+          showTooltip={false}
+        />
+        <TaskInfoValue className="flex flex-col gap-1">
+          {pullRequests.map((pullRequest) => {
+            const displayState = derivePullRequestDisplayState(
+              pullRequest.lifecycle,
+              pullRequest.checkState
+            );
+            const badge =
+              displayState === "merged"
+                ? { label: "Merged", color: "#a371f7", background: "rgba(163,113,247,.12)" }
+                : displayState === "checks_red"
+                  ? { label: "Checks red", color: "#f85149", background: "rgba(248,81,73,.12)" }
+                  : displayState === "green"
+                    ? { label: "Checks green", color: "#3fb950", background: "rgba(63,185,80,.12)" }
+                    : { label: "Open", color: "#3fb950", background: "rgba(63,185,80,.12)" };
+            const PullRequestIcon =
+              displayState === "merged" ? GitMerge : GitPullRequest;
+            return (
+              <a
+                key={pullRequest.id}
+                href={pullRequest.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-w-0 items-center gap-1.5 py-0.5"
+                title={pullRequest.title}
+              >
+                <PullRequestIcon
+                  size={14}
+                  strokeWidth={1.8}
+                  className="shrink-0"
+                  style={{ color: badge.color }}
+                />
+                <span className="min-w-0 truncate text-white-black hover:underline">
+                  #{pullRequest.number} {pullRequest.repositoryName}
+                </span>
+                <span
+                  className="inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none"
+                  style={{ color: badge.color, backgroundColor: badge.background }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: badge.color }}
+                  />
+                  {badge.label}
+                </span>
+              </a>
+            );
+          })}
+          {showPullRequestInput ? (
+            <input
+              autoFocus
+              type="url"
+              value={pullRequestUrl}
+              disabled={linkingPullRequest}
+              aria-label="GitHub pull request URL"
+              placeholder="GitHub pull request URL"
+              className="w-full rounded-[4px] border-0 bg-dropdownBackground px-2 py-1 text-content text-white-black shadow-lg outline-none placeholder:text-text-light-gray disabled:opacity-60"
+              onChange={(event) => setPullRequestUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void linkPullRequest();
+                } else if (event.key === "Escape") {
+                  setPullRequestUrl("");
+                  setShowPullRequestInput(false);
+                }
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="w-fit border-0 bg-transparent p-0 text-left text-text-light-gray hover:text-white-black"
+              onClick={() => setShowPullRequestInput(true)}
+            >
+              + Link pull request
+            </button>
+          )}
+        </TaskInfoValue>
+      </TaskInfoRow>
       {(currentTask.project?.cyclesEnabled || currentTask.cycle) && (
         <TaskInfoRow>
           <LocalRightSideInfo

@@ -36,6 +36,8 @@ import {
     isActiveTaskMutationTarget,
 } from "@/lib/mcp/tasks/activeTaskMutation";
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests";
+import { linkTaskPullRequest } from "@/lib/pullRequests/taskPullRequests";
 
 export interface UpdateTaskResponse {
     success: boolean;
@@ -84,6 +86,7 @@ export interface UpdateTaskBody {
     risk_level?: string;
     acceptance_criteria?: string;
     verify_command?: string;
+    pull_request_url?: string;
 }
 
 export interface TaskUpdateExecutionResult {
@@ -123,6 +126,7 @@ interface ExecuteTaskUpdateOptions {
     dryRun?: boolean;
     assignAssignees?: TaskUpdateAssigneeHandler;
     clearAssignees?: TaskClearAssigneesHandler;
+    linkPullRequest?: typeof linkTaskPullRequest;
     strictSideEffectFailures?: boolean;
     persist?: (
         persistTaskUpdates: () => Promise<UpdateTaskResponse>
@@ -200,6 +204,7 @@ export async function executeTaskUpdate({
     dryRun = false,
     assignAssignees,
     clearAssignees,
+    linkPullRequest = linkTaskPullRequest,
     strictSideEffectFailures = false,
     persist,
 }: ExecuteTaskUpdateOptions): Promise<TaskUpdateExecutionResult> {
@@ -264,6 +269,7 @@ export async function executeTaskUpdate({
     const hasAssigneeField = requestBody.assignee !== undefined;
     const hasDescriptionUpdate = requestBody.description !== undefined;
     const hasTextOrParentUpdate = hasSingleTaskUpdate(requestBody);
+    const hasPullRequestUpdate = requestBody.pull_request_url !== undefined;
     const hasContractFieldUpdate =
         requestBody.risk_level !== undefined ||
         requestBody.acceptance_criteria !== undefined ||
@@ -290,7 +296,7 @@ export async function executeTaskUpdate({
         }
         contractFieldUpdates = parsedContractFields.value;
     }
-    if (!hasTextOrParentUpdate && requestBody.estimate === undefined && requestBody.priority === undefined && !requestBody.sectionId && !requestBody.status && !hasLabels && !hasLabelMutation && !hasDueDate && !hasAssigneeField && !hasContractFieldUpdate) {
+    if (!hasTextOrParentUpdate && requestBody.estimate === undefined && requestBody.priority === undefined && !requestBody.sectionId && !requestBody.status && !hasLabels && !hasLabelMutation && !hasDueDate && !hasAssigneeField && !hasContractFieldUpdate && !hasPullRequestUpdate) {
         console.log('[MCP Update Task] Validation failed: No fields to update')
         return NextResponse.json(
             {
@@ -318,6 +324,23 @@ export async function executeTaskUpdate({
         return NextResponse.json(
             {
                 ...buildFieldError('invalid_field', 'description', 'description must be a string'),
+                ...(dryRun && { valid: false })
+            },
+            { status: 400 }
+        )
+    }
+
+    const parsedPullRequest = hasPullRequestUpdate
+        ? parseGithubPullRequestUrl(requestBody.pull_request_url)
+        : null;
+    if (hasPullRequestUpdate && !parsedPullRequest) {
+        return NextResponse.json(
+            {
+                ...buildFieldError(
+                    'invalid_field',
+                    'pull_request_url',
+                    'Use a full GitHub pull request URL'
+                ),
                 ...(dryRun && { valid: false })
             },
             { status: 400 }
@@ -535,6 +558,9 @@ export async function executeTaskUpdate({
     delete normalizedRequestBody.dry_run
     if (priorityIndex !== undefined) {
         normalizedRequestBody.priority = priorityIndex
+    }
+    if (parsedPullRequest) {
+        normalizedRequestBody.pull_request_url = parsedPullRequest.url
     }
 
     // Find tasks by identifier
@@ -902,6 +928,15 @@ export async function executeTaskUpdate({
                     console.warn(`[MCP Update Task] Failed to update contract fields for task ${task.id}:`, contractFieldError);
                     throw contractFieldError;
                 }
+            }
+
+            if (parsedPullRequest) {
+                await linkPullRequest({
+                    taskId: task.id,
+                    userId: user.id,
+                    agentId: ctx.agentId,
+                    url: parsedPullRequest.url,
+                });
             }
 
             // Assignees via MCP route (validates project membership for all user ids)

@@ -1004,6 +1004,7 @@ model Task {
   evidence            TaskEvidence[]
   taskSessions        TaskSession[]
   sectionEvents       TaskSectionEvent[]
+  pullRequests        TaskPullRequest[]
   customFieldValues   CustomFieldValue[]
   updatedByUserIds    Int[]
   //If provided, task is created by an agent
@@ -1040,6 +1041,46 @@ model Task {
   // ticket refs on most turns); applied to prod Neon via CREATE INDEX CONCURRENTLY.
   @@index([ticketNumber])
   @@unique([projectId, uniqueIndex])
+}
+
+model TaskPullRequest {
+  id                  String   @id @default(uuid())
+  taskId              Int
+  task                Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  repositoryOwner     String   @db.VarChar(100)
+  repositoryName      String   @db.VarChar(100)
+  githubRepositoryId  String?  @db.VarChar(32)
+  githubPullRequestId String?  @db.VarChar(32)
+  number              Int
+  url                 String   @db.Text
+  title               String   @db.Text
+  lifecycle           String   @default("open") @db.VarChar(16)
+  checkState          String   @default("pending") @db.VarChar(16)
+  headSha             String?  @db.VarChar(64)
+  sourceUpdatedAt     DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  checkSuites         TaskPullRequestCheckSuite[]
+
+  @@unique([taskId, repositoryOwner, repositoryName, number], map: "TaskPullRequest_task_repo_pr_key")
+  @@index([repositoryOwner, repositoryName, number])
+}
+
+model TaskPullRequestCheckSuite {
+  id              String          @id @default(uuid())
+  pullRequestId   String
+  pullRequest     TaskPullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  githubAppId     String          @db.VarChar(32)
+  appName         String          @db.VarChar(255)
+  headSha         String          @db.VarChar(64)
+  status          String          @db.VarChar(32)
+  conclusion      String?         @db.VarChar(32)
+  sourceUpdatedAt DateTime
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@unique([pullRequestId, githubAppId])
+  @@index([pullRequestId, headSha])
 }
 
 model TaskSectionEvent {

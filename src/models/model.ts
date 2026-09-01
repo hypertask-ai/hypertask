@@ -23,6 +23,7 @@ import {
   ITaskLabelActivity,
   ITaskMoveActivity,
   ITaskPriorityActivity,
+  ITaskPullRequestActivity,
   ITaskUpdateDescriptionActivity,
   ITaskWaitingOnActivity,
 } from "./ActivityModels.ts";
@@ -473,6 +474,7 @@ export interface IComment {
     | ITaskLabelActivity
     | ITaskArchiveActivity
     | ITaskDueDateActivity
+    | ITaskPullRequestActivity
     | ITaskUpdateDescriptionActivity
     | ITaskWaitingOnActivity;
 }
@@ -487,6 +489,19 @@ export interface IReaction {
   names?: string[];
   user?: IUser;
 }
+export interface ITaskPullRequest {
+  id: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  number: number;
+  url: string;
+  title: string;
+  lifecycle: "open" | "closed" | "merged";
+  checkState: "pending" | "passing" | "failing";
+  headSha?: string | null;
+  updatedAt: string | Date;
+}
+
 export interface ITask {
   assignees?: IAssignees[];
   notifications?: INotification[];
@@ -553,6 +568,7 @@ export interface ITask {
   updatedByUserIds?: number[];
   agentId?: string;
   agent?: IAgent;
+  pullRequests?: ITaskPullRequest[];
 }
 
 export interface TaskRelations {

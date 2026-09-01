@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { generalConfig } from "@/lib/configs/general.config";
-import { broadcastBoardChange } from "@/lib/realtime/server";
+import {
+  broadcastBoardChange,
+  broadcastTaskChange,
+} from "@/lib/realtime/server";
 import generateRank from "@/utils/generateRank";
-import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
+import {
+  boardForGithubRepository,
+  parseGithubPullRequestUrl,
+  type PullRequestLifecycle,
+} from "@/lib/pullRequests/githubPullRequests";
+import {
+  syncCheckSuiteFromWebhook,
+  syncPullRequestFromWebhook,
+} from "@/lib/pullRequests/syncTaskPullRequests";
 import {
   chooseReviewSectionName,
   extractTicketId,
@@ -14,264 +25,340 @@ import {
 
 interface GithubPullRequestPayload {
   action: string;
+  repository: {
+    id: number;
+    full_name: string;
+    private: boolean;
+    fork: boolean;
+  };
   pull_request: {
+    id: number;
     number: number;
     title: string;
     body: string | null;
     html_url: string;
     merged: boolean;
-    head: {
-      ref: string;
-    };
+    state: string;
+    updated_at: string;
+    head: { ref: string; sha: string };
+    base: { repo: { id: number; full_name: string } };
   };
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+interface GithubCheckSuitePayload {
+  action: string;
+  repository: { full_name: string; private: boolean; fork: boolean };
+  check_suite: {
+    app: { id: number; name: string };
+    head_sha: string;
+    status: string;
+    conclusion: string | null;
+    updated_at: string;
+    pull_requests: Array<{
+      number: number;
+      base: { repo: { full_name: string } };
+    }>;
+  };
+}
+
+type WebhookTask = {
+  id: number;
+  projectId: number;
+  userId: number;
+  sectionId: number | null;
+  riskLevel: "Low" | "Medium" | "High" | null;
+};
+
+function repositoryParts(fullName: unknown) {
+  if (typeof fullName !== "string") return null;
+  const [owner, repository, ...extra] = fullName.toLowerCase().split("/");
+  return owner && repository && extra.length === 0
+    ? { owner, repository }
+    : null;
+}
+
+async function moveTaskForPullRequest(
+  task: WebhookTask,
+  targetSectionName: "AI Review" | "Valentin Review" | "Done" | null,
+): Promise<boolean> {
+  if (!targetSectionName) return false;
+  const section = await prisma.section.findFirst({
+    where: {
+      projectId: task.projectId,
+      deleted: false,
+      section_title: { equals: targetSectionName, mode: "insensitive" },
+    },
+  });
+  if (!section) {
+    console.warn(
+      `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
+    );
+    return false;
+  }
+  if (section.id === task.sectionId) return false;
+
+  const [lastTask, botUser] = await Promise.all([
+    prisma.task.findFirst({
+      where: { sectionId: section.id, status: "Normal" },
+      orderBy: { ranking: "desc" },
+      select: { ranking: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: generalConfig.hyperAiId },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        photoURL: true,
+      },
+    }),
+  ]);
+  if (!botUser) throw new Error("HyperAI user not found");
+
+  const currentUser = {
+    id: botUser.id,
+    email: botUser.email ?? "",
+    displayName: botUser.displayName ?? undefined,
+    photoURL: botUser.photoURL ?? undefined,
+    uid: "",
+    stripe_customer_id: "",
+    joinedAt: new Date(),
+    UserSettingId: "",
+    UserSetting: {} as any,
+  };
+  const moveResult = await updateTaskSingle(
+    {
+      id: task.id,
+      sectionId: section.id,
+      section: section.section_title,
+      ranking: generateRank(lastTask?.ranking, undefined),
+      updatedAt: new Date(),
+    },
+    currentUser,
+    null,
+    {
+      trustedCaller: true,
+      taskMovedActivity: {
+        sendNotification: () =>
+          sendNotificationForTask(
+            generalConfig.hyperAiId,
+            "TaskMoved",
+            task.id,
+            task.projectId,
+            null,
+          ),
+      },
+    },
+  );
+  if (moveResult.status !== 200) throw new Error("Task move failed");
+  return true;
+}
+
+function invalidPayload(message: string) {
+  return NextResponse.json(
+    { success: false, error: message },
+    { status: 400 },
+  );
 }
 
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
-    const signatureIsValid = verifyGithubSignature(
-      rawBody,
-      request.headers.get("x-hub-signature-256"),
-      process.env.GITHUB_WEBHOOK_SECRET,
-    );
-
-    if (!signatureIsValid) {
+    if (
+      !verifyGithubSignature(
+        rawBody,
+        request.headers.get("x-hub-signature-256"),
+        process.env.GITHUB_WEBHOOK_SECRET,
+      )
+    ) {
       return NextResponse.json(
         { success: false, error: "Invalid webhook signature" },
         { status: 401 },
       );
     }
 
-    const event = request.headers.get("x-github-event");
-    if (event !== "pull_request") {
-      return NextResponse.json(
-        { success: true, ignored: `Unsupported event: ${event ?? "missing"}` },
-        { status: 200 },
-      );
-    }
-
-    let payload: GithubPullRequestPayload;
+    let payload: GithubPullRequestPayload | GithubCheckSuitePayload;
     try {
-      payload = JSON.parse(rawBody) as GithubPullRequestPayload;
+      payload = JSON.parse(rawBody);
     } catch {
-      return NextResponse.json(
-        { success: false, error: "Invalid JSON payload" },
-        { status: 400 },
-      );
+      return invalidPayload("Invalid JSON payload");
     }
 
-    if (!["opened", "reopened", "closed"].includes(payload.action)) {
-      return NextResponse.json(
-        { success: true, ignored: `Unsupported action: ${payload.action}` },
-        { status: 200 },
-      );
+    const event = request.headers.get("x-github-event");
+    const fullName = payload.repository?.full_name;
+    const boardId = boardForGithubRepository({
+      fullName,
+      isPrivate: payload.repository?.private,
+      isFork: payload.repository?.fork,
+    });
+    const repository = repositoryParts(fullName ?? "");
+    if (!boardId || !repository) {
+      return NextResponse.json({
+        success: true,
+        ignored: "Repository is not configured for a board",
+      });
     }
 
-    const pullRequest = payload.pull_request;
+    if (event === "check_suite") {
+      const checkPayload = payload as GithubCheckSuitePayload;
+      if (!["requested", "rerequested", "completed"].includes(checkPayload.action)) {
+        return NextResponse.json({
+          success: true,
+          ignored: `Unsupported action: ${checkPayload.action}`,
+        });
+      }
+      const suite = checkPayload.check_suite;
+      const sourceUpdatedAt = new Date(suite.updated_at);
+      if (
+        !suite.app?.id ||
+        !suite.head_sha ||
+        !suite.status ||
+        Number.isNaN(sourceUpdatedAt.getTime())
+      ) {
+        return invalidPayload("Invalid check suite payload");
+      }
+
+      const taskIds = new Set<number>();
+      let updated = 0;
+      for (const pullRequest of suite.pull_requests ?? []) {
+        if (
+          pullRequest.base?.repo?.full_name.toLowerCase() !==
+            fullName.toLowerCase() ||
+          !Number.isInteger(pullRequest.number)
+        ) {
+          continue;
+        }
+        const result = await syncCheckSuiteFromWebhook({
+          repositoryOwner: repository.owner,
+          repositoryName: repository.repository,
+          number: pullRequest.number,
+          githubAppId: String(suite.app.id),
+          appName: suite.app.name,
+          headSha: suite.head_sha,
+          status: suite.status,
+          conclusion: suite.conclusion,
+          sourceUpdatedAt,
+        });
+        updated += result.updated;
+        result.taskIds.forEach((taskId) => taskIds.add(taskId));
+      }
+      if (updated > 0) {
+        await Promise.all([
+          broadcastBoardChange(boardId, {
+            originUserId: generalConfig.hyperAiId,
+          }),
+          ...[...taskIds].map((taskId) =>
+            broadcastTaskChange(taskId, {
+              originUserId: generalConfig.hyperAiId,
+            }),
+          ),
+        ]);
+      }
+      return NextResponse.json({ success: true, updated, taskIds: [...taskIds] });
+    }
+
+    if (event !== "pull_request") {
+      return NextResponse.json({
+        success: true,
+        ignored: `Unsupported event: ${event ?? "missing"}`,
+      });
+    }
+
+    const prPayload = payload as GithubPullRequestPayload;
+    if (!["opened", "reopened", "synchronize", "closed"].includes(prPayload.action)) {
+      return NextResponse.json({
+        success: true,
+        ignored: `Unsupported action: ${prPayload.action}`,
+      });
+    }
+    const pullRequest = prPayload.pull_request;
+    const sourceUpdatedAt = new Date(pullRequest.updated_at);
+    const parsedUrl = parseGithubPullRequestUrl(pullRequest.html_url);
+    if (
+      pullRequest.base?.repo?.full_name.toLowerCase() !== fullName.toLowerCase() ||
+      String(pullRequest.base.repo.id) !== String(prPayload.repository.id) ||
+      !parsedUrl ||
+      parsedUrl.owner !== repository.owner ||
+      parsedUrl.repository !== repository.repository ||
+      parsedUrl.number !== pullRequest.number ||
+      !Number.isInteger(pullRequest.number) ||
+      !pullRequest.head?.sha ||
+      Number.isNaN(sourceUpdatedAt.getTime())
+    ) {
+      return invalidPayload("Invalid pull request payload");
+    }
+
     const ticketId = extractTicketId({
       title: pullRequest.title,
-      headRef: pullRequest.head?.ref,
+      headRef: pullRequest.head.ref,
       body: pullRequest.body,
     });
+    const lifecycle: PullRequestLifecycle = pullRequest.merged
+      ? "merged"
+      : pullRequest.state === "closed"
+        ? "closed"
+        : "open";
+    const syncResult = await syncPullRequestFromWebhook({
+      boardId,
+      ticketNumber: ticketId,
+      repositoryOwner: repository.owner,
+      repositoryName: repository.repository,
+      repositoryId: String(prPayload.repository.id),
+      pullRequestId: String(pullRequest.id),
+      number: pullRequest.number,
+      url: pullRequest.html_url,
+      title: pullRequest.title,
+      lifecycle,
+      headSha: pullRequest.head.sha,
+      sourceUpdatedAt,
+      action: prPayload.action as
+        | "opened"
+        | "reopened"
+        | "synchronize"
+        | "closed",
+      actorUserId: generalConfig.hyperAiId,
+    });
 
-    if (!ticketId) {
-      return NextResponse.json(
-        { success: true, ignored: "No ticket reference found" },
-        { status: 200 },
-      );
-    }
-
-    const task = await prisma.task.findFirst({
-      where: {
-        ticketNumber: ticketId,
-        status: { not: "Deleted" },
-      },
+    const tasks = await prisma.task.findMany({
+      where: { id: { in: syncResult.taskIds }, status: { not: "Deleted" } },
       select: {
         id: true,
         projectId: true,
         userId: true,
         sectionId: true,
-        uniqueIndex: true,
-        ticketNumber: true,
         riskLevel: true,
       },
     });
-
-    if (!task) {
-      return NextResponse.json(
-        { success: true, ticketId, ignored: "Ticket not found" },
-        { status: 200 },
-      );
+    let moved = 0;
+    for (const task of tasks) {
+      const targetSectionName =
+        prPayload.action === "opened" || prPayload.action === "reopened"
+          ? chooseReviewSectionName(task.riskLevel)
+          : pullRequest.merged
+            ? "Done"
+            : null;
+      if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
     }
-
-    const ticketUrl = `https://app.hypertask.ai/detail/project-${task.projectId}/${task.uniqueIndex}`;
-    const escapedTitle = escapeHtml(pullRequest.title);
-
-    let targetSectionName:
-      | "AI Review"
-      | "Valentin Review"
-      | "Done"
-      | null = null;
-    let commentLead: string;
-    let commentText: string;
-
-    if (payload.action === "opened" || payload.action === "reopened") {
-      targetSectionName = chooseReviewSectionName(task.riskLevel);
-      commentLead = "Pull request opened:";
-      commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p><p>Linked to <a href="${ticketUrl}">${ticketId}</a>.</p>`;
-    } else if (pullRequest.merged) {
-      targetSectionName = "Done";
-      commentLead = "Pull request merged:";
-      commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
-    } else {
-      commentLead = "Pull request closed without merging:";
-      commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
-    }
-
-    // ponytail: read-then-write, not a DB unique constraint. Two genuinely
-    // concurrent redeliveries of the same event could both pass this check
-    // and both post. GitHub redelivers sequentially in practice, so this is
-    // accepted; upgrade path if that ever changes is a unique index on
-    // (taskId, commentLead-derived key).
-    const existingComment = await prisma.comment.findFirst({
-      where: {
-        taskId: task.id,
-        AND: [
-          { text: { contains: pullRequest.html_url } },
-          { text: { contains: commentLead } },
-        ],
-      },
-      select: { id: true },
-    });
-
-    let commented = false;
-    if (!existingComment) {
-      await createCommentService({
-        taskId: task.id,
-        ownerId: task.userId,
-        creatorId: generalConfig.hyperAiId,
-        currentUser: { id: generalConfig.hyperAiId },
-        agentId: null,
-        text: commentText,
-        trustedCaller: true,
-      });
-      commented = true;
-    }
-
-    let moved = false;
-    if (targetSectionName) {
-      const section = await prisma.section.findFirst({
-        where: {
-          projectId: task.projectId,
-          deleted: false,
-          section_title: {
-            equals: targetSectionName,
-            mode: "insensitive",
-          },
-        },
-      });
-
-      if (!section) {
-        console.warn(
-          `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
-        );
-      } else if (section.id !== task.sectionId) {
-        const [lastTask, botUser] = await Promise.all([
-          prisma.task.findFirst({
-            where: { sectionId: section.id, status: "Normal" },
-            orderBy: { ranking: "desc" },
-            select: { ranking: true },
-          }),
-          prisma.user.findUnique({
-            where: { id: generalConfig.hyperAiId },
-            select: {
-              id: true,
-              email: true,
-              displayName: true,
-              photoURL: true,
-            },
-          }),
-        ]);
-
-        if (!botUser) {
-          throw new Error("HyperAI user not found");
-        }
-
-        const currentUser = {
-          id: botUser.id,
-          email: botUser.email ?? "",
-          displayName: botUser.displayName ?? undefined,
-          photoURL: botUser.photoURL ?? undefined,
-          uid: "",
-          stripe_customer_id: "",
-          joinedAt: new Date(),
-          UserSettingId: "",
-          UserSetting: {} as any,
-        };
-        const ranking = generateRank(lastTask?.ranking, undefined);
-        const moveResult = await updateTaskSingle(
-          {
-            id: task.id,
-            sectionId: section.id,
-            section: section.section_title,
-            ranking,
-            updatedAt: new Date(),
-          },
-          currentUser,
-          null,
-          {
-            // The signature check above is the gate. currentUser is the
-            // synthetic bot, which is on no board.
-            trustedCaller: true,
-            taskMovedActivity: {
-              sendNotification: () =>
-                sendNotificationForTask(
-                  generalConfig.hyperAiId,
-                  "TaskMoved",
-                  task.id,
-                  task.projectId,
-                  null,
-                ),
-            },
-          },
-        );
-
-        if (moveResult.status !== 200) {
-          throw new Error("Task move failed");
-        }
-
-        moved = true;
-
-        try {
-          await broadcastBoardChange(task.projectId, {
+    if (syncResult.linked > 0 || syncResult.updated > 0) {
+      await Promise.all([
+        broadcastBoardChange(boardId, {
+          originUserId: generalConfig.hyperAiId,
+        }),
+        ...syncResult.taskIds.map((taskId) =>
+          broadcastTaskChange(taskId, {
             originUserId: generalConfig.hyperAiId,
-          });
-        } catch (error) {
-          console.warn(
-            `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
-            error,
-          );
-        }
-      }
+          }),
+        ),
+      ]);
     }
 
-    return NextResponse.json(
-      {
-        success: true,
-        ticketId,
-        commented,
-        moved,
-        targetSection: targetSectionName,
-      },
-      { status: 200 },
-    );
+    return NextResponse.json({
+      success: true,
+      ticketId,
+      linked: syncResult.linked,
+      updated: syncResult.updated,
+      moved,
+    });
   } catch (error) {
     console.error("[GitHub webhook] Unexpected error:", error);
     return NextResponse.json(
