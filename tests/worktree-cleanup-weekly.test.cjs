@@ -193,6 +193,21 @@ test('places default state in the common Git directory from a linked worktree', 
   );
 });
 
+test('lease cleanup still runs when cache cleanup has no worktree root', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const cacheDisabled = {
+    WORKTREE_ROOT: path.join(fixture.root, 'missing-worktree-root'),
+    CACHE_CLEANUP_LIMIT: '0',
+  };
+
+  runScript(fixture, ['--mark-ready', fixture.worktree], cacheDisabled);
+  runScript(fixture, [], cacheDisabled);
+
+  assert.equal(fs.existsSync(fixture.worktree), false);
+});
+
 test('rejects a non-sticky writable state ancestor owned by the current user', (t) => {
   const writableParent = fs.mkdtempSync(path.join(os.tmpdir(), 'htpr-5106-writable-'));
   fs.chmodSync(writableParent, 0o777);
@@ -403,6 +418,25 @@ test('cache cleanup dry-run leaves every target intact', (t) => {
   assert.match(fs.readFileSync(fixture.log, 'utf8'), /dry-run would remove cache=/);
 });
 
+test('cache cleanup removes a stale quarantine left by an interrupted run', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const quarantineDir = path.join(fixture.state, 'cache-quarantine');
+  fs.mkdirSync(quarantineDir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(fixture.state, 0o700);
+  fs.chmodSync(quarantineDir, 0o700);
+  const target = path.join(fixture.worktree, 'node_modules');
+  const targetId = crypto.createHash('sha256').update(target).digest('hex');
+  const quarantine = path.join(quarantineDir, `${targetId}-node_modules`);
+  fs.renameSync(target, quarantine);
+
+  runScript(fixture);
+
+  assert.equal(fs.existsSync(quarantine), false);
+});
+
 test('cache cleanup treats nested cache writes as recent activity', (t) => {
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));
@@ -458,7 +492,6 @@ test('cache cleanup accepts a missing remote branch but preserves tracked and sy
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));
   createReproducibleCaches(fixture);
-  git(fixture.repo, ['push', 'origin', '--delete', fixture.branch]);
   const external = path.join(fixture.root, 'external-cache');
   fs.rmSync(path.join(fixture.worktree, 'node_modules'), { recursive: true });
   fs.mkdirSync(external);
@@ -466,6 +499,9 @@ test('cache cleanup accepts a missing remote branch but preserves tracked and sy
   fs.symlinkSync(external, path.join(fixture.worktree, 'node_modules'));
   git(fixture.worktree, ['add', '-f', 'tsconfig.tsbuildinfo']);
   git(fixture.worktree, ['commit', '-m', 'track build info']);
+  git(fixture.worktree, ['push', 'origin', fixture.branch]);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  git(fixture.repo, ['push', 'origin', '--delete', fixture.branch]);
   runScript(fixture);
 
   assert.equal(fs.existsSync(path.join(external, 'keep')), true);

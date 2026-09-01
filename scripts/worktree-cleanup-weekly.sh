@@ -194,9 +194,21 @@ git_common_dir=$(realpath -e -- "$git_common_dir") \
 
 [[ "$CACHE_MIN_IDLE_SECONDS" =~ ^[0-9]+$ ]] || fatal "CACHE_MIN_IDLE_SECONDS must be a non-negative integer"
 [[ "$CACHE_CLEANUP_LIMIT" =~ ^[0-9]+$ ]] || fatal "CACHE_CLEANUP_LIMIT must be a non-negative integer"
-[[ -d "$WORKTREE_ROOT" && ! -L "$WORKTREE_ROOT" ]] || fatal "WORKTREE_ROOT is missing or a symlink"
-WORKTREE_ROOT=$(realpath -e -- "$WORKTREE_ROOT") || fatal "cannot resolve WORKTREE_ROOT"
-[[ "$WORKTREE_ROOT" != "$repo_root" ]] || fatal "WORKTREE_ROOT cannot be the primary repository"
+CACHE_CLEANUP_ENABLED=1
+CACHE_CLEANUP_DISABLED_REASON=""
+if (( CACHE_CLEANUP_LIMIT == 0 )); then
+  CACHE_CLEANUP_ENABLED=0
+  CACHE_CLEANUP_DISABLED_REASON="cleanup limit is zero"
+elif [[ ! -d "$WORKTREE_ROOT" || -L "$WORKTREE_ROOT" ]]; then
+  CACHE_CLEANUP_ENABLED=0
+  CACHE_CLEANUP_DISABLED_REASON="WORKTREE_ROOT is missing or a symlink"
+else
+  WORKTREE_ROOT=$(realpath -e -- "$WORKTREE_ROOT") || fatal "cannot resolve WORKTREE_ROOT"
+  if [[ "$WORKTREE_ROOT" == "$repo_root" ]]; then
+    CACHE_CLEANUP_ENABLED=0
+    CACHE_CLEANUP_DISABLED_REASON="WORKTREE_ROOT is the primary repository"
+  fi
+fi
 
 STATE_DIR="${STATE_DIR:-$git_common_dir/hypertask-worktree-cleanup}"
 LEASE_DIR="${LEASE_DIR:-$STATE_DIR/leases}"
@@ -209,7 +221,10 @@ LOG_FILE="${LOG_FILE:-$STATE_DIR/worktree-cleanup-$(date +%F).log}"
 LOG_DIR=$(dirname -- "$LOG_FILE")
 LOCK_DIR=$(dirname -- "$LOCK_FILE")
 KEY_DIR=$(dirname -- "$MARKER_KEY_FILE")
-ensure_private_path_ancestors "$WORKTREE_ROOT" "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+ensure_private_path_ancestors "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+if (( CACHE_CLEANUP_ENABLED )); then
+  ensure_private_path_ancestors "$WORKTREE_ROOT"
+fi
 mkdir -p "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
 ensure_private_dir "$STATE_DIR"
 ensure_private_dir "$LEASE_DIR"
@@ -254,6 +269,9 @@ fi
 
 [[ "${1:-}" != "--dry-run" ]] || DRY_RUN=1
 log "=== worktree-cleanup-weekly start repo=$REPO_DIR dry_run=$DRY_RUN ==="
+if (( ! CACHE_CLEANUP_ENABLED )); then
+  log "cache cleanup disabled: $CACHE_CLEANUP_DISABLED_REASON"
+fi
 
 cleanup_tmp() {
   if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
@@ -861,6 +879,38 @@ clean_cache_target() {
   log "removed reproducible cache: $target"
 }
 
+purge_stale_cache_quarantine() {
+  local entry base removed=0
+  while IFS= read -r -d '' entry; do
+    (( removed < CACHE_CLEANUP_LIMIT )) || break
+    base=${entry##*/}
+    [[ "$base" =~ ^[0-9a-f]{64}-(node_modules|\.next|tsconfig\.tsbuildinfo)$ ]] || {
+      log "preserving unexpected cache quarantine entry: $entry"
+      continue
+    }
+    [[ ! -L "$entry" ]] || continue
+    case "$base" in
+      *-node_modules|*-.next) [[ -d "$entry" ]] || continue ;;
+      *-tsconfig.tsbuildinfo) [[ -f "$entry" ]] || continue ;;
+    esac
+    mountpoint -q -- "$entry" && continue
+    cache_target_is_idle "$entry" || continue
+    refresh_live_cwds
+    path_is_in_use "$entry" && continue
+    if [[ "$DRY_RUN" == "1" ]]; then
+      log "dry-run would remove stale cache quarantine=$entry"
+      ((removed += 1))
+      continue
+    fi
+    case "$base" in
+      *-tsconfig.tsbuildinfo) rm -f -- "$entry" || fatal "cannot remove stale cache quarantine: $entry" ;;
+      *) rm -rf --one-file-system -- "$entry" || fatal "cannot remove stale cache quarantine: $entry" ;;
+    esac
+    log "removed stale cache quarantine: $entry"
+    ((removed += 1))
+  done < <(find "$CACHE_QUARANTINE_DIR" -mindepth 1 -maxdepth 1 -print0)
+}
+
 mark_ready() {
   local requested=$1 path branch tip lease_file temp
   [[ ! -L "$requested" ]] || fatal "worktree path is a symlink: $requested"
@@ -981,8 +1031,13 @@ declare -a CACHE_CANDIDATE_PATHS=()
 declare -a CACHE_CANDIDATE_BRANCHES=()
 declare -a CACHE_CANDIDATE_TIPS=()
 
+if (( CACHE_CLEANUP_ENABLED )); then
+  purge_stale_cache_quarantine
+fi
+
 consider_cache_candidate() {
   local path=$1 branch=$2 tip=$3 canonical remote
+  (( CACHE_CLEANUP_ENABLED )) || return 0
   (( ${#CACHE_CANDIDATE_PATHS[@]} < CACHE_CLEANUP_LIMIT )) || return 0
   [[ -n "$path" && -n "$branch" && "$tip" =~ ^[0-9a-f]{40}$ ]] || return 0
   [[ "$branch" != "$BASE_BRANCH" && "$branch" != "main" ]] || return 0
