@@ -773,6 +773,7 @@ const useCreateTaskModalGlobalStates = () => {
   useEffect(
     () => () => {
       sectionDefaultsRequestRef.current?.abort();
+      saveEpochRef.current += 1;
       autoTitleCoordinator.cancelPending();
     },
     [autoTitleCoordinator]

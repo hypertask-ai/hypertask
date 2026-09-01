@@ -81,6 +81,11 @@ test("discard during title generation cancels the pending save", () => {
     /const resetFormValues = \(\) => \{\s*saveEpochRef\.current \+= 1;/,
     "every composer reset must invalidate in-flight saves",
   );
+  assert.match(
+    hook,
+    /\(\) => \(\) => \{[\s\S]*?saveEpochRef\.current \+= 1;[\s\S]*?autoTitleCoordinator\.cancelPending\(\);/,
+    "closing the composer must stop an aborted generation from retrying save",
+  );
 });
 
 
@@ -149,6 +154,11 @@ test("discard, board switch, and newer writing invalidate generated titles", () 
   assert.match(
     coordinatorSource,
     /request\?\.abort\(\);[\s\S]*?generationRevision !== revision/,
+  );
+  assert.match(
+    modalSource,
+    /const onChangeHandler = \(\) => \{[\s\S]*?scheduleTitleGeneration\(description\);/,
+    "description edits must invalidate pending generated titles",
   );
   assert.match(
     modalSource,
