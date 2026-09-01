@@ -94,6 +94,7 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   assert.match(button[1], /w-12/);
   assert.match(button[1], /rounded-\[4px\]/);
   assert.doesNotMatch(button[1], /bg-hypertasks-ai-purple/);
+  assert.doesNotMatch(button[1], /(?:^|\s)text-white(?:\s|$)/);
 });
 
 test("mobile create-comment uses AppSheet for both refine and compose", () => {
@@ -144,6 +145,7 @@ test("empty-state mobile comment microphone is a 48 by 44 inverted-theme action"
   assert.match(presentation.className, /h-11/);
   assert.match(presentation.className, /w-12/);
   assert.match(presentation.className, /rounded-\[4px\]/);
+  assert.doesNotMatch(presentation.className, /rounded-full/);
   assert.match(presentation.className, /bg-white-black/);
   assert.match(presentation.className, /text-white-black-inverted/);
   assert.doesNotMatch(presentation.className, /bg-hypertasks-ai-purple/);

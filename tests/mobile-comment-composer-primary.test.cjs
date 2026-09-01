@@ -69,9 +69,15 @@ test("Send occupies the 48 by 44 inverted-theme primary slot", () => {
   assert.match(send[1], /text-white-black-inverted/);
   assert.doesNotMatch(send[1], /bg-hypertasks-ai-purple/);
 
-  const slot = composer.match(/<span className="([^"]*)">\s*<SaveButtonMobile/);
+  const slot = composer.match(
+    /<span\s+className=\{cn\([\s\S]*?"order-6 flex items-center"[\s\S]*?\)\}\s*>\s*<SaveButtonMobile/,
+  );
   assert.ok(slot, "Send must be wrapped in an ordered slot");
-  assert.doesNotMatch(slot[1], /ml-auto/, "the mic owns the spacer before Send");
+  assert.match(
+    slot[0],
+    /\(!audioTiptapCallback \|\| hideComposerDictation\) && "ml-auto"/,
+    "Send must own the spacer only when the mic is unavailable",
+  );
 });
 
 test("the mic loses its fill as soon as there is text", () => {
@@ -126,16 +132,22 @@ test("every child of the flattened row carries an order", () => {
     composer.indexOf('<div className="attachment-button p-0 flex flex-row'),
     composer.indexOf('_mbl && mode === "create-task-modal"'),
   );
-  const saves = [...row.matchAll(/<span className="([^"]*)">\s*<SaveButtonMobile/g)];
-  assert.equal(saves.length, 2, "both Save/Send slots must be wrapped");
-  for (const [, cls] of saves) {
-    assert.match(cls, /order-6/, "Save/Send must take the trailing slot");
-  }
-  assert.doesNotMatch(saves[0][1], /ml-auto/, "comment mic owns the spacer");
-  assert.match(saves[1][1], /ml-auto/, "shared edit Save stays pinned right");
+  const commentSave = row.match(
+    /<span\s+className=\{cn\([\s\S]*?"order-6 flex items-center"[\s\S]*?\)\}\s*>\s*<SaveButtonMobile/,
+  );
+  const editSave = row.match(
+    /<span className="([^"]*order-6[^"]*)">\s*<SaveButtonMobile/,
+  );
+  assert.ok(commentSave, "comment Send must have the trailing slot");
+  assert.match(
+    commentSave[0],
+    /\(!audioTiptapCallback \|\| hideComposerDictation\) && "ml-auto"/,
+  );
+  assert.ok(editSave, "shared edit Save must have the trailing slot");
+  assert.match(editSave[1], /ml-auto/, "shared edit Save stays pinned right");
   assert.equal(
-    /\n\s*<SaveButtonMobile/.test(row.replace(/<span className="[^"]*">\s*<SaveButtonMobile/g, "")),
-    false,
+    (row.match(/<SaveButtonMobile/g) || []).length,
+    2,
     "no bare, unordered SaveButtonMobile may remain in the row",
   );
 });

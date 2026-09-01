@@ -417,7 +417,12 @@ const AttachmentsUpload = (props: IProps) => {
                   />
                 )}
                 {!isRecording && !audioProcessing && hasText ? (
-                  <span className="order-6 flex items-center">
+                  <span
+                    className={cn(
+                      "order-6 flex items-center",
+                      (!audioTiptapCallback || hideComposerDictation) && "ml-auto",
+                    )}
+                  >
                     <SaveButtonMobile
                       sendOnClick={props.sendOnClick}
                       mode={mode}

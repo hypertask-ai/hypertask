@@ -105,6 +105,7 @@ test("the reference composer still implements the documented geometry", () => {
 
   const shellClasses = classesContaining(composer, "fixed");
   assert.ok(shellClasses.has("bg-transparent"));
+  assert.equal(shellClasses.has("bg-cardBackground"), false);
 
   const paddingClasses = classesContaining(composer, "pb-[6px]");
   assert.ok(paddingClasses.has("px-[12px]"));
