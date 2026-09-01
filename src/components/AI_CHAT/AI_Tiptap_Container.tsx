@@ -207,15 +207,20 @@ export function AI_Tiptap_Container() {
       {isMbl && (
         <div
           data-ai-chat-mobile-context-row
-          className="mb-2 flex min-w-0 items-center gap-2 overflow-x-auto scrollbar-none"
+          className="mb-2 flex min-w-0 items-center gap-2"
         >
           {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile />}
-          <ContextList
-            items={contextList}
-            onClick={handleRemoveContext}
-            mobile
-          />
-          <AddContextButton onClick={handleAddContext} mobile />
+          <div
+            data-ai-chat-mobile-context-scroll
+            className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
+          >
+            <ContextList
+              items={contextList}
+              onClick={handleRemoveContext}
+              mobile
+            />
+            <AddContextButton onClick={handleAddContext} mobile />
+          </div>
         </div>
       )}
       <div

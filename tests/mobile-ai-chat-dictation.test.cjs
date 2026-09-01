@@ -344,8 +344,19 @@ test("mobile composer follows live recording state without remounting recorder",
       null,
       "mobile must not mount the desktop model and scope controls",
     );
-    assert.ok(container.querySelector("[data-ai-chat-mobile-context-row]"));
-    assert.ok(container.querySelector("[data-ai-chat-mobile-scope]"));
+    const contextRow = container.querySelector(
+      "[data-ai-chat-mobile-context-row]",
+    );
+    const contextScroll = container.querySelector(
+      "[data-ai-chat-mobile-context-scroll]",
+    );
+    const scopeControl = container.querySelector("[data-ai-chat-mobile-scope]");
+    assert.ok(contextRow);
+    assert.ok(contextScroll);
+    assert.ok(scopeControl);
+    assert.strictEqual(scopeControl.parentElement, contextRow);
+    assert.doesNotMatch(contextRow.className, /overflow-/);
+    assert.match(contextScroll.className, /overflow-x-auto/);
     assert.ok(container.querySelector("[data-ai-chat-mobile-add-context]"));
     assert.equal(overflow.hidden, false);
     const overflowActions = overflow
