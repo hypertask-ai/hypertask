@@ -22,20 +22,15 @@ const commentMicState = {
   isProcessing: false,
 };
 
-// HTPR-5684 reverses what this test used to assert. It required the mic to
-// stay the filled purple primary after typing, with Send as a neutral arrow
-// beside it. Valentin's call: Send takes the right-hand slot the moment there
-// is text. HTPR-5659: that slot swap must not recolour Send purple — it keeps
-// the same neutral colour as the demoted mic. The empty-composer half of the
-// old rule survives unchanged and is still checked here.
-test("empty mobile comment composer keeps the microphone as the filled primary", () => {
+test("empty mobile comment composer keeps the microphone as the inverted primary", () => {
   const presentation = mobileMicPresentation(commentMicState);
   assert.equal(presentation.prominent, true);
-  assert.match(presentation.className, /h-11 w-11/);
-  assert.match(presentation.className, /bg-hypertasks-ai-purple/);
+  assert.match(presentation.className, /h-11 w-12/);
+  assert.match(presentation.className, /bg-white-black/);
+  assert.match(presentation.className, /text-white-black-inverted/);
 });
 
-test("typed mobile comments hand the primary slot to Send without a colour change", () => {
+test("typed mobile comments hand the inverted primary slot to Send", () => {
   const presentation = mobileMicPresentation({
     ...commentMicState,
     hasText: true,
@@ -53,12 +48,12 @@ test("typed mobile comments hand the primary slot to Send without a colour chang
     /<AudioButton[\s\S]*?id=\{mode \+ "-audio-button"\}[\s\S]*?globalRecording=\{isRecording\}[\s\S]*?hasText=\{hasText\}/,
   );
 
-  // HTPR-5659: Send takes the right-hand slot but keeps the demoted-mic colour.
   const send = attachments.match(
     /aria-label="Send comment"[\s\S]{0,400}?className="([^"]+)"/,
   );
   assert.ok(send, "Send button must exist");
-  assert.match(send[1], /text-icon-dark-gray/);
+  assert.match(send[1], /bg-white-black/);
+  assert.match(send[1], /text-white-black-inverted/);
   assert.doesNotMatch(send[1], /bg-hypertasks-ai-purple/);
 
   // And the mic renders before Send in the row rather than after it.

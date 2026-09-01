@@ -105,6 +105,7 @@ test("the reference composer still implements the documented geometry", () => {
 
   const sheetClasses = classesContaining(composer, "rounded-[5px]");
   assert.ok(sheetClasses.has("bg-cardBackground"));
+  assert.ok(sheetClasses.has("shadow-md"));
 
   const paddingClasses = classesContaining(composer, "pb-[6px]");
   assert.ok(paddingClasses.has("px-[12px]"));
@@ -113,16 +114,14 @@ test("the reference composer still implements the documented geometry", () => {
   for (const token of ["rounded-lg", "px-[12px]", "py-[4px]"]) {
     assert.ok(wellClasses.has(token), `comment well missing ${token}`);
   }
+  assert.equal(wellClasses.has("border"), false);
 
-  const commentAttachStart = attachments.indexOf(
-    '{mode === "create-comment" && !isRecording && (',
+  const commentActions = attachments.slice(
+    attachments.indexOf('aria-label="More comment actions"'),
+    attachments.indexOf("<AudioButton", attachments.indexOf('aria-label="More comment actions"')),
   );
-  const commentAttachEnd = attachments.indexOf("</button>", commentAttachStart);
-  assert.notEqual(commentAttachStart, -1, "missing mobile comment attach branch");
-  assert.notEqual(commentAttachEnd, -1, "missing mobile comment attach button");
-  const commentAttach = attachments.slice(commentAttachStart, commentAttachEnd);
-  assert.match(commentAttach, /aria-label="Attach files"/);
-  assert.match(commentAttach, /<Paperclip\b[^>]*\bsize=\{16\}[^>]*>/);
+  assert.match(commentActions, /<Plus\b[^>]*\bsize=\{20\}[^>]*>/);
+  assert.match(commentActions, /Attach image[\s\S]*Attach file[\s\S]*Mention someone[\s\S]*Commands[\s\S]*Discard draft/);
 
   const commentSendStart = attachments.indexOf(
     '{mode === "create-comment" ? (',

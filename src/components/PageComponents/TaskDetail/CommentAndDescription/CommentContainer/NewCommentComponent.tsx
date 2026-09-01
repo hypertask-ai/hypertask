@@ -521,7 +521,6 @@ const NewCommentComponent = (
                     </div>
                     <div className="relative w-full px-[12px] pb-[6px]">
                       <TaskOptions show={showTaskOptions}/>
-                      {/* Darker recessed well so the comment field reads clearly as a tap-to-type input (no outline). */}
                       <div className="rounded-lg bg-newcomment-well px-[12px] py-[4px]">
                       {shouldRenderCommentEditor ? (
                       <Tiptap

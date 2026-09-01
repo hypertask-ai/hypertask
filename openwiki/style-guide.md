@@ -125,8 +125,8 @@ The mobile comment composer is the reference for combining shape, spacing, token
 3. Twelve pixels of horizontal sheet padding and 6px below the field.
 4. A borderless recessed input well using `bg-newcomment-well`, 8px corners, 12px horizontal padding, and 4px vertical padding.
 5. A 14px editor with 8px vertical padding and the “Add a comment…” placeholder.
-6. One flat action row with an 8px gap. Attach uses a 16px icon. Empty-state dictation owns the trailing primary slot. Once text exists, dictation becomes a ghost action and the 22px Send arrow owns that slot.
-7. Every icon action keeps a 44px touch target through `MOBILE_TARGET` without growing the glyph.
+6. One flat action row with an 8px gap: Plus, purple `PencilSparkles`, spacer, mic, then Send. The Plus menu contains attachments, mention, commands, and discard.
+7. Empty dictation, recording confirmation, and Send use a 48×44 inverted-theme action with 4px corners. With text, the ghost mic sits immediately left of Send.
 
 Relevant markup lives in `NewCommentComponent.tsx`; action ordering lives in `AttachmentsUpload/index.tsx` and `mobileCommentComposer.ts`. Preserve the single-row ordering because re-parenting the microphone destroys an in-flight recording.
 
