@@ -113,6 +113,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   const unreadPositioning = source.match(
     /\/\/ Where a freshly-opened task lands[\s\S]*?visibleCommentIndices,[\s\S]*?\]\);/
   )?.[0];
+  const unreadDependencyStart = unreadPositioning?.lastIndexOf("}, [") ?? -1;
 
   assert.ok(taskLifecycle, "the guard must reset only with the canonical task ID");
   assert.ok(viewportLifecycle, "the mobile listener must follow the active viewport");
@@ -126,10 +127,12 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   assert.match(mountPositioning, /runInitialPositioning\(\(\) =>\s*focusOn/);
   assert.ok(unreadPositioning, "the unread positioning effect must remain guarded");
   assert.match(unreadPositioning, /initialScrollGuard\.allows\(generation\)/);
-  assert.doesNotMatch(
-    unreadPositioning.slice(unreadPositioning.lastIndexOf("}, [")),
-    /_mbl/
+  assert.notEqual(
+    unreadDependencyStart,
+    -1,
+    "the unread effect dependency array must be found"
   );
+  assert.doesNotMatch(unreadPositioning.slice(unreadDependencyStart), /_mbl/);
   assert.match(
     unreadPositioning,
     /requestAnimationFrame\(\(\) => \{\s*runInitialPositioning\(\(\) => \{/
