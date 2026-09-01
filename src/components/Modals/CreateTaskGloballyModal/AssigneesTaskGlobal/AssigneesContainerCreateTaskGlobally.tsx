@@ -68,7 +68,7 @@ const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
       >
         {formValues.assignees.length < 1 && (
           <span
-            className="relative whitespace-nowrap text-meta xl:text-content"
+            className="relative whitespace-nowrap"
             style={{ color: "#8E9093" }}
           >
             The Assignees
