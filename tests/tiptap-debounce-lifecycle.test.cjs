@@ -152,14 +152,23 @@ test("a captured autosave updates only its source task's draft cache", async () 
 
   const [debounced, , flush] = debounceWithCancel(callbackModule.exports, 20);
   debounced({ content: "task A draft", projectId: 15, taskId: 101 });
+  inViewObject.taskProjectId = 16;
   inViewObject.taskId = 202;
   flush();
   await wait(0);
 
   assert.deepEqual(apiCalls, [[15, 101, 7, "Comment", "task A draft"]]);
-  assert.equal(
-    cache.get(JSON.stringify(["draft for [task,userId]:", 101, 7]))[0].content,
-    "task A draft"
+  assert.deepEqual(
+    cache.get(JSON.stringify(["draft for [task,userId]:", 101, 7]))[0],
+    {
+      id: -1,
+      type: "Comment",
+      content: "task A draft",
+      saved: false,
+      userId: 7,
+      projectId: 15,
+      taskId: 101,
+    }
   );
   assert.equal(cache.get(JSON.stringify(taskBCacheKey))[0].content, "task B draft");
 });
