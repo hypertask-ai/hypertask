@@ -46,11 +46,13 @@ test("board zoom leads the mobile board commands and has exactly two labels", ()
       .filter((command) => command.commandMode === CommandMode.ToggleBoardZoom);
 
     assert.equal(matches.length, 1);
+    const boardGroups = mobileCommands.filter((group) => group.group === "Board");
+    assert.equal(boardGroups.length, 1);
     assert.equal(
-      mobileCommands.filter((group) => group.group === "Board").length,
-      1,
+      boardGroups[0].commandLists[0].commandMode,
+      CommandMode.ToggleBoardZoom,
     );
-    assert.equal(mobileCommands[0].commandLists[0].commandMode, CommandMode.ToggleBoardZoom);
+    assert.strictEqual(mobileCommands[0], boardGroups[0]);
     return matches[0];
   };
 
