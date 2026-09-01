@@ -245,7 +245,9 @@ function loadUpdateController(
       taskLifecycleTimestampChanges: () => ({}),
     },
     "@/lib/cycleService": {
-      assertCycleAssignable: async () => undefined,
+      assertCycleAssignable: async (_transaction, cycleProjectId, cycleId) => {
+        calls.cycleValidation = { cycleId, projectId: cycleProjectId };
+      },
       CycleAssignmentError: class extends Error {},
     },
   };
@@ -286,6 +288,25 @@ test("the shared update controller rejects project changes outside the dedicated
 
   assert.equal(result.status, 400);
   assert.deepEqual(calls, { transaction: 0, sideEffects: 0 });
+});
+
+test("cycle assignment validates against the effective destination board", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+  );
+  const result = await updateTaskSingle(
+    { id: TASK_ID, projectId: MEMBER_PROJECT, cycleId: 77 },
+    { id: USER_ID },
+    null,
+    { allowProjectChange: true },
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls.cycleValidation, {
+    cycleId: 77,
+    projectId: MEMBER_PROJECT,
+  });
 });
 
 test("the shared update controller validates a moved section against the destination board", async () => {

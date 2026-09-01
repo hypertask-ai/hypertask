@@ -1,6 +1,6 @@
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
-import { utcDate } from "@/lib/cycles";
+import { CYCLE_WINDOW_SIZE, utcDate } from "@/lib/cycles";
 
 export type GetAllIncludesOptions = {
   userId: number;
@@ -503,7 +503,7 @@ export const getProjectIncludeWithoutTasks = (
   cycles: {
     where: { endDate: { gt: utcDate() } },
     orderBy: { startDate: "asc" },
-    take: 2,
+    take: CYCLE_WINDOW_SIZE,
   },
   team: {
     include: {

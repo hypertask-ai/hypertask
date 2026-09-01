@@ -21,6 +21,15 @@ function loadRoute({ enabled = true, session = { userId: 6 }, task = undefined }
     endDate: new Date(Date.UTC(2026, 7, 31 - index * 14)),
     rolledOverAt: index > 1 ? new Date() : null,
   }));
+  const foreignCycle = {
+    id: 99,
+    number: 1,
+    projectId: 20,
+    startDate: new Date("2026-08-17T00:00:00Z"),
+    endDate: new Date("2026-08-31T00:00:00Z"),
+    rolledOverAt: null,
+  };
+  const allCycles = [...cycles, foreignCycle];
   const accessible =
     task === undefined
       ? {
@@ -69,9 +78,13 @@ function loadRoute({ enabled = true, session = { userId: 6 }, task = undefined }
       cycle: {
         findMany: async (args) => {
           calls.cycleQueries.push(args);
-          return cycles;
+          return allCycles.filter(
+            (cycle) =>
+              cycle.projectId === args.where.projectId &&
+              (args.where.number === undefined || cycle.number === args.where.number),
+          );
         },
-        findUnique: async ({ where }) => cycles.find(({ id }) => id === where.id) ?? null,
+        findUnique: async ({ where }) => allCycles.find(({ id }) => id === where.id) ?? null,
       },
       task: {
         findFirst: async (args) => {
@@ -102,10 +115,21 @@ function request(method, body, query = "taskId=50") {
 test("cycle task routes require authentication and board write access", async () => {
   const signedOut = loadRoute({ session: null });
   assert.equal((await signedOut.GET(request("GET"))).status, 401);
+  assert.equal(
+    (await signedOut.POST(request("POST", { taskId: 50, cycleId: 11 }))).status,
+    401,
+  );
+  assert.equal(signedOut.calls.writes.length, 0);
 
   const inaccessible = loadRoute({ task: null });
   assert.equal((await inaccessible.GET(request("GET"))).status, 404);
+  assert.equal(
+    (await inaccessible.POST(request("POST", { taskId: 50, cycleId: 11 }))).status,
+    404,
+  );
   assert.deepEqual(inaccessible.calls.taskQueries[0].where.project.writeAccessFor, 6);
+  assert.equal(inaccessible.calls.writes.length, 0);
+  assert.equal(inaccessible.calls.boardBroadcasts.length, 0);
 });
 
 test("cycle history is bounded and only current and next are assignable", async () => {
@@ -136,8 +160,20 @@ test("history and foreign cycle ids cannot be assigned", async () => {
   const { POST, calls } = loadRoute();
   const history = await POST(request("POST", { taskId: 50, cycleId: 13 }));
   assert.equal(history.status, 400);
-  const foreign = await POST(request("POST", { taskId: 50, cycleId: 999 }));
+  const foreign = await POST(request("POST", { taskId: 50, cycleId: 99 }));
   assert.equal(foreign.status, 400);
+  assert.equal(calls.writes.length, 0);
+});
+
+test("POST rejects IDs that only coerce to database integers", async () => {
+  const { POST, calls } = loadRoute();
+  for (const body of [
+    { taskId: true, cycleId: 11 },
+    { taskId: 50, cycleId: "11" },
+    { taskId: 50, cycleId: Number.MAX_SAFE_INTEGER },
+  ]) {
+    assert.equal((await POST(request("POST", body))).status, 400);
+  }
   assert.equal(calls.writes.length, 0);
 });
 

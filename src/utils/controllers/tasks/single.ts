@@ -188,7 +188,7 @@ export async function updateTaskSingle(
         if (typeof requestedMutation.cycleId === "number") {
           await assertCycleAssignable(
             tx,
-            oldTask.projectId,
+            (requestedMutation.projectId as number | undefined) ?? oldTask.projectId,
             requestedMutation.cycleId,
           );
         }

@@ -206,10 +206,10 @@ test("rollover catches up oldest-first and moves only assigned unfinished normal
   const service = loadService({
     enabled: true,
     cycles: [
-      cycle(1, 1, "2026-08-04", "2026-08-18"),
-      cycle(2, 2, "2026-08-18", "2026-09-01"),
-      cycle(3, 3, "2026-09-01", "2026-09-15"),
-      cycle(4, 4, "2026-09-15", "2026-09-29"),
+      cycle(1, 1, "2026-08-03", "2026-08-17"),
+      cycle(2, 2, "2026-08-17", "2026-08-31"),
+      cycle(3, 3, "2026-08-31", "2026-09-14"),
+      cycle(4, 4, "2026-09-14", "2026-09-28"),
     ],
     sections: [
       { deleted: false, id: 10, isDone: false, projectId: 15, section_title: "Todo" },

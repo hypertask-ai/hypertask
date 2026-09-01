@@ -217,6 +217,13 @@ test("only board admins can enable cycles", async () => {
   assert.equal(enabled.status, 200);
   assert.deepEqual(adminRoute.calls.cyclesEnabled, [true]);
   assert.equal((await enabled.json()).planning.cycles.enabled, true);
+
+  const disabled = await adminRoute.POST(
+    request("POST", { action: "set_cycles", enabled: false, projectId: 15 }),
+  );
+  assert.equal(disabled.status, 200);
+  assert.deepEqual(adminRoute.calls.cyclesEnabled, [true, false]);
+  assert.equal((await disabled.json()).planning.cycles.enabled, false);
 });
 
 test("ordinary members can post a health update", async () => {

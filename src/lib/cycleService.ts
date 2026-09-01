@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import {
+  CYCLE_WINDOW_SIZE,
   cycleEndFor,
   dateOnly,
   resolveCycleWindow,
@@ -88,7 +89,7 @@ export const getProjectCycleOverview = async (
       endDate: { gt: today },
     },
     orderBy: { startDate: "asc" },
-    take: 2,
+    take: CYCLE_WINDOW_SIZE,
   });
   const window = resolveCycleWindow(cycles, today);
   return {
@@ -244,6 +245,13 @@ export const sweepCycleRollovers = async (
       console.error("[cycle-rollover] project failed", candidate.projectId, error);
     }
   }
-  for (const projectId of touchedProjects) void broadcastBoardChange(projectId);
+  const broadcasts = await Promise.allSettled(
+    [...touchedProjects].map((projectId) => broadcastBoardChange(projectId)),
+  );
+  for (const broadcast of broadcasts) {
+    if (broadcast.status === "rejected") {
+      console.error("[cycle-rollover] realtime broadcast failed", broadcast.reason);
+    }
+  }
   return moved;
 };

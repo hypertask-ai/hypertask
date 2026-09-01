@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
-import { cycleDateRange } from "@/lib/cycles";
+import { CYCLE_LENGTH_DAYS, cycleDateRange } from "@/lib/cycles";
 import {
   PROJECT_HEALTH_LABELS,
   PROJECT_HEALTH_VALUES,
@@ -139,7 +139,7 @@ export default function BoardPlanningSection() {
           <SettingsCard title="Cycles">
             <SettingsToggle
               checked={data.cycles.enabled}
-              description="Organize work into fixed two-week periods."
+              description={`Organize work into fixed ${CYCLE_LENGTH_DAYS / 7}-week periods.`}
               disabled={!data.canManage || mutation.isPending}
               inputId="board-cycles-enabled"
               label="Enable cycles"
@@ -153,7 +153,7 @@ export default function BoardPlanningSection() {
             {data.cycles.enabled && (
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-2 text-dense">
                 <dt className="text-text-light-gray">Duration</dt>
-                <dd className="text-white-black">2 weeks</dd>
+                <dd className="text-white-black">{CYCLE_LENGTH_DAYS / 7} weeks</dd>
                 <dt className="text-text-light-gray">Current starts</dt>
                 <dd className="text-white-black">
                   {data.cycles.current

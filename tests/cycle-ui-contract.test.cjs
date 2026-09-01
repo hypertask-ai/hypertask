@@ -11,7 +11,7 @@ test("board planning exposes the optional fixed two-week cycle setting", () => {
   assert.match(source, /<SettingsCard title="Cycles">/);
   assert.match(source, /<SettingsToggle/);
   assert.match(source, /action: "set_cycles"/);
-  assert.match(source, />2 weeks</);
+  assert.match(source, /\{CYCLE_LENGTH_DAYS \/ 7\} weeks/);
   assert.match(source, />Current starts</);
   assert.match(source, />Next cycle</);
 });

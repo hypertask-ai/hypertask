@@ -1,4 +1,5 @@
 export const CYCLE_LENGTH_DAYS = 14;
+export const CYCLE_WINDOW_SIZE = 2;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface CycleSummary {
