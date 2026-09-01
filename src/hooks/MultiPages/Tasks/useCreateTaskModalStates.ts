@@ -257,12 +257,17 @@ const useCreateTaskModalGlobalStates = () => {
 
   const appendDictationToTitle = useCallback((transcript: string) => {
     if (!transcript.trim()) return;
-    autoTitleCoordinator.manualTitleChanged();
+    autoTitleCoordinatorRef.current?.manualTitleChanged();
     setTitleGenerationError(null);
-    const title = appendTitleDictation(formValuesRef.current.title, transcript);
-    formValuesRef.current = { ...formValuesRef.current, title };
-    setFormValues((current) => ({ ...current, title }));
-  }, [autoTitleCoordinator]);
+    formValuesRef.current = {
+      ...formValuesRef.current,
+      title: appendTitleDictation(formValuesRef.current.title, transcript),
+    };
+    setFormValues((current) => ({
+      ...current,
+      title: appendTitleDictation(current.title, transcript),
+    }));
+  }, []);
 
   const applyTaskWriterTitle = useCallback((title: string) => {
     autoTitleCoordinator.taskWriterTitleApplied();
