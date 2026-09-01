@@ -482,6 +482,7 @@ const NewCommentComponent = (
               // {/* ------------------------- New Comment ------------------------- */}
               // {/* ====================== MOBILE ===================== */}
               : (
+                  // HTPR-5919's owner-approved prototype intentionally replaces the prior sheet and recessed well.
                   <div
                     tabIndex={-1}
                     onClick={handleOpenCommentEditor}
