@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import { Droppable } from "@hello-pangea/dnd";
+import { useContext, useMemo } from "react";
+import { Draggable, Droppable } from "@hello-pangea/dnd";
 import { DaySection } from "./task-card";
 import { useCalendarContext } from "@/lib/contexts/Calendar/calendar.context";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { calendarConfig } from "@/lib/configs/ calendar.config";
 import { buildWeekTaskBars } from "@/lib/calendarSync/weekLayout";
 
@@ -31,11 +32,15 @@ export function WeekView() {
     setCurrentTask,
     toggleDueDateModal,
   } = useCalendarContext();
+  const isMbl = useContext(MobileViewContext);
   const visibleDays = weeks[0] ?? [];
   const dayCount = visibleDays.length;
   const bars = useMemo(
-    () => (currentView === "week" ? buildWeekTaskBars(visibleDays, tasks) : []),
-    [currentView, tasks, visibleDays],
+    () =>
+      currentView === "week" && !isMbl
+        ? buildWeekTaskBars(visibleDays, tasks)
+        : [],
+    [currentView, isMbl, tasks, visibleDays],
   );
   const barTaskIds = useMemo(
     () => new Set(bars.map((bar) => bar.task.id)),
@@ -85,60 +90,82 @@ export function WeekView() {
       )}
 
       {bars.length > 0 && (
-        <div
-          className={`grid ${gridColumnsClass(dayCount)} max-h-[40%] flex-shrink-0 gap-y-1 overflow-y-auto border-b border-border bg-muted/30 py-2 scrollbar-thin`}
-          aria-label="Task timeframes"
+        <Droppable
+          droppableId={calendarConfig.element_ids.week_timeframes}
+          isDropDisabled
         >
-          {bars.map((bar) => {
-            const selected = currentTask === bar.task.id;
-            const visibleDueDay = visibleDays[bar.endColumn];
-            const start = dateLabel.format(bar.startDate);
-            const due = dateLabel.format(bar.dueDate);
-            return (
-              <button
-                key={bar.task.id}
-                id={calendarConfig.element_ids.task_card(bar.task.id)}
-                type="button"
-                aria-label={`${bar.task.ticketNumber ?? "Task"} ${bar.task.title}, ${start} to ${due}`}
-                onFocus={() => {
-                  setCurrentTask(bar.task.id);
-                  setCurrentDay(visibleDueDay);
-                }}
-                onClick={() => {
-                  setCurrentTask(bar.task.id);
-                  setCurrentDay(visibleDueDay);
-                  handleTaskClick(bar.dueDate, bar.task);
-                }}
-                style={{
-                  gridColumn: `${bar.startColumn + 1} / ${bar.endColumn + 2}`,
-                  gridRow: bar.lane + 1,
-                }}
-                className={`mx-1 flex min-w-0 items-center gap-2 px-2 py-1 text-left shadow-sm outline-none ${
-                  bar.continuesBefore ? "rounded-l-none" : "rounded-l-[5px]"
-                } ${bar.continuesAfter ? "rounded-r-none" : "rounded-r-[5px] border-r-2 border-hypertasks-purple"} ${
-                  selected
-                    ? "bg-active-elementBg"
-                    : "bg-cardBackground hover:bg-hoverCardBackground"
-                }`}
-              >
-                <span className="shrink-0 text-micro font-medium text-text-light-gray">
-                  {bar.continuesBefore ? "← " : ""}
-                  {start}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-dense text-white-black">
-                  <span className="mr-1 font-medium text-text-light-gray">
-                    {bar.task.ticketNumber}
-                  </span>
-                  {bar.task.title}
-                </span>
-                <span className="shrink-0 text-micro font-medium text-text-light-gray">
-                  {due}
-                  {bar.continuesAfter ? " →" : ""}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+          {(dropProvided) => (
+            <div
+              ref={dropProvided.innerRef}
+              {...dropProvided.droppableProps}
+              id={calendarConfig.element_ids.week_timeframes}
+              className={`grid ${gridColumnsClass(dayCount)} max-h-[40%] flex-shrink-0 gap-y-1 overflow-y-auto border-b border-border bg-muted/30 py-2 scrollbar-thin`}
+              aria-label="Task timeframes"
+            >
+              {bars.map((bar, index) => {
+                const selected = currentTask === bar.task.id;
+                const visibleDueDay = visibleDays[bar.endColumn];
+                const start = dateLabel.format(bar.startDate);
+                const due = dateLabel.format(bar.dueDate);
+                return (
+                  <Draggable
+                    key={bar.task.id}
+                    draggableId={calendarConfig.element_ids.task_card(bar.task.id)}
+                    index={index}
+                  >
+                    {(dragProvided) => (
+                      <button
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        {...dragProvided.dragHandleProps}
+                        id={calendarConfig.element_ids.task_card(bar.task.id)}
+                        type="button"
+                        aria-label={`${bar.task.ticketNumber ?? "Task"} ${bar.task.title}, ${start} to ${due}`}
+                        onFocus={() => {
+                          setCurrentTask(bar.task.id);
+                          setCurrentDay(visibleDueDay);
+                        }}
+                        onClick={() => {
+                          setCurrentTask(bar.task.id);
+                          setCurrentDay(visibleDueDay);
+                          handleTaskClick(bar.dueDate, bar.task);
+                        }}
+                        style={{
+                          ...dragProvided.draggableProps.style,
+                          gridColumn: `${bar.startColumn + 1} / ${bar.endColumn + 2}`,
+                          gridRow: bar.lane + 1,
+                        }}
+                        className={`mx-1 flex min-w-0 items-center gap-2 px-2 py-1 text-left shadow-sm outline-none ${
+                          bar.continuesBefore ? "rounded-l-none" : "rounded-l-[5px]"
+                        } ${bar.continuesAfter ? "rounded-r-none" : "rounded-r-[5px] border-r-2 border-hypertasks-purple"} ${
+                          selected
+                            ? "bg-active-elementBg"
+                            : "bg-cardBackground hover:bg-hoverCardBackground"
+                        }`}
+                      >
+                        <span className="shrink-0 text-micro font-medium text-text-light-gray">
+                          {bar.continuesBefore ? "← " : ""}
+                          {start}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-dense text-white-black">
+                          <span className="mr-1 font-medium text-text-light-gray">
+                            {bar.task.ticketNumber}
+                          </span>
+                          {bar.task.title}
+                        </span>
+                        <span className="shrink-0 text-micro font-medium text-text-light-gray">
+                          {due}
+                          {bar.continuesAfter ? " →" : ""}
+                        </span>
+                      </button>
+                    )}
+                  </Draggable>
+                );
+              })}
+              {dropProvided.placeholder}
+            </div>
+          )}
+        </Droppable>
       )}
 
       <div
