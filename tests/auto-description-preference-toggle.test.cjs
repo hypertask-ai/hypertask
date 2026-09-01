@@ -26,9 +26,11 @@ function deferred() {
   return { promise, resolve };
 }
 
-test("rapid description preference toggles persist each cache-derived value in order", async () => {
+test("rapid description preference toggles recover from a failed save and persist in order", async () => {
   const firstRequest = deferred();
   const posts = [];
+  const toastErrors = [];
+  let invalidations = 0;
   let preferenceToggle;
   let cachedPreferences = {
     displayAvatar: "Hidden",
@@ -46,16 +48,25 @@ test("rapid description preference toggles persist each cache-derived value in o
     setQueryData: (_key, updater) => {
       cachedPreferences = updater(cachedPreferences);
     },
+    invalidateQueries: async () => {
+      invalidations += 1;
+    },
   };
   const axiosStub = {
     post: async (_url, body) => {
       posts.push(body);
-      if (posts.length === 1) await firstRequest.promise;
+      if (posts.length === 1) {
+        await firstRequest.promise;
+        throw new Error("preference save failed");
+      }
       return { status: 200, data: { settings: body } };
     },
   };
 
   stubModule(require.resolve("axios"), { default: axiosStub });
+  stubModule(require.resolve("react-hot-toast"), {
+    default: { error: (message) => toastErrors.push(message) },
+  });
   stubModule(require.resolve("@tanstack/react-query"), {
     useQueryClient: () => queryClient,
   });
@@ -121,6 +132,8 @@ test("rapid description preference toggles persist each cache-derived value in o
       { autoDescriptionSuggestions: false },
       { autoDescriptionSuggestions: true },
     ]);
+    assert.deepEqual(toastErrors, ["Could not update description suggestions"]);
+    assert.equal(invalidations, 1);
     assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
   } finally {
     for (const [filename, previous] of stubs) {

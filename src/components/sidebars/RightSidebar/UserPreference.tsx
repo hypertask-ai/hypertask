@@ -1,4 +1,5 @@
 import axios from "axios";
+import toast from "react-hot-toast";
 import { ComponentType, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import { useQueryClient } from "@tanstack/react-query";
@@ -132,9 +133,16 @@ const UserPreferenceSidebar = ({
     );
     autoDescriptionUpdateQueue.current = autoDescriptionUpdateQueue.current
       .catch(() => undefined)
-      .then(() =>
-        updateUserPreferences({ autoDescriptionSuggestions: nextValue }),
-      );
+      .then(async () => {
+        const updated = await updateUserPreferences({
+          autoDescriptionSuggestions: nextValue,
+        });
+        if (updated) return;
+        toast.error("Could not update description suggestions");
+        await queryClient
+          .invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY })
+          .catch(() => undefined);
+      });
   };
 
   const handleReadReceiptsSetting = () => {
@@ -154,14 +162,15 @@ const UserPreferenceSidebar = ({
   ) => {
     try {
       const response = await axios.post("/api/users/preferences", toUpdate);
-      if (response.status === 200 && response.data.settings) {
-        queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, (prev) => ({
-          ...(prev ?? data),
-          ...response.data.settings,
-        }));
-      }
+      if (response.status !== 200 || !response.data.settings) return false;
+      queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, (prev) => ({
+        ...(prev ?? data),
+        ...response.data.settings,
+      }));
+      return true;
     } catch (error) {
       console.log("🚀 ~ updateUserPreferences ~ error:", error);
+      return false;
     }
   };
 
