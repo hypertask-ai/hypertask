@@ -19,6 +19,7 @@ import {
   persistBoardSyncPilotPreference,
 } from "@/lib/boardSync/pilot";
 import { buildCalendarAuthorizationRevision } from "@/lib/calendarSync/access";
+import { calendarTaskOverlapsRange } from "@/lib/calendarSync/taskRange";
 import {
   beginCalendarAccessRevalidation,
   canRenderCalendarProjection,
@@ -607,12 +608,12 @@ export const useSyncedCalendarReadModel = ({
         ) {
           return current;
         }
-        const dueAt = task.dueDate ? new Date(task.dueDate).getTime() : NaN;
         const belongsInRange =
-          Number.isFinite(dueAt) &&
-          dueAt >= Date.parse(range.startIso) &&
-          dueAt < Date.parse(range.endExclusiveIso) &&
-          !task.deletedAt;
+          calendarTaskOverlapsRange(
+            task,
+            new Date(range.startIso),
+            new Date(range.endExclusiveIso),
+          ) && !task.deletedAt;
         const existingIndex = current.payload.tasks.findIndex(
           (candidate) => candidate.id === task.id,
         );
@@ -642,7 +643,13 @@ export const useSyncedCalendarReadModel = ({
         return { ...current, payload };
       });
     },
-    [accountId, activeRangeKey, updateProjection],
+    [
+      accountId,
+      activeRangeKey,
+      range.endExclusiveIso,
+      range.startIso,
+      updateProjection,
+    ],
   );
 
   const activeLoadState =

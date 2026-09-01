@@ -143,6 +143,17 @@ const payloadFor = (range) => ({
       title: "Outside requested range",
       dueDate: range.endExclusiveIso,
     }),
+    calendarTask({
+      id: 104,
+      projectId: 15,
+      title: "Interval overlapping requested range",
+      startDate: new Date(
+        Date.parse(range.startIso) + 12 * 60 * 60 * 1_000,
+      ).toISOString(),
+      dueDate: new Date(
+        Date.parse(range.endExclusiveIso) + 12 * 60 * 60 * 1_000,
+      ).toISOString(),
+    }),
   ],
 });
 
@@ -192,7 +203,7 @@ test("calendar snapshots are account, schema, timezone, range, and expiry scoped
     savedAt: "2026-08-09T10:00:00.000Z",
   });
   assert.ok(snapshot);
-  assert.deepEqual(snapshot.taskOrder, [100, 101]);
+  assert.deepEqual(snapshot.taskOrder, [100, 101, 104]);
   assert.equal(
     isCalendarReadModelSnapshotV1(snapshot, {
       accountId: 6,
@@ -546,8 +557,8 @@ test("authoritative replacement removes tasks missing from the next response", (
 
   assert.ok(first);
   assert.ok(next);
-  assert.deepEqual(first.taskOrder, [100, 101]);
-  assert.deepEqual(next.taskOrder, [101]);
+  assert.deepEqual(first.taskOrder, [100, 101, 104]);
+  assert.deepEqual(next.taskOrder, [101, 104]);
 });
 
 test("cache hydration requires current access and failed cold loads settle to retry", () => {
@@ -579,7 +590,7 @@ test("cache hydration requires current access and failed cold loads settle to re
   );
   assert.deepEqual(
     defenseInDepth.tasks.map((item) => item.id),
-    [100],
+    [100, 104],
   );
 
   const revokedDuringReconciliation = restrictCalendarPayloadToAccess(cached, {
@@ -595,7 +606,7 @@ test("cache hydration requires current access and failed cold loads settle to re
   );
   assert.deepEqual(
     revokedDuringReconciliation.tasks.map((item) => item.id),
-    [100],
+    [100, 104],
   );
 
   assert.deepEqual(
@@ -981,6 +992,11 @@ test("Calendar integrates cache-first hydration, authoritative reconciliation, r
   assert.doesNotMatch(
     taskCard,
     /members\.find\([\s\S]*?waitingOnUserId/,
+  );
+  assert.match(controller, /buildCalendarTaskOverlapWhere\(start, endExclusive\)/);
+  assert.match(
+    controller,
+    /calendarTaskOverlapsRange\(task, start, endExclusive\)/,
   );
   assert.match(controller, /attachWaitingOnUsers\(authorizedTasks\)/);
   assert.match(

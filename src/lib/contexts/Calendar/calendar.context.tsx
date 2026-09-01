@@ -74,6 +74,7 @@ interface IContextProps {
   handlePrevious: () => void;
   handleNext: () => void;
   setCurrentView: Dispatch<SetStateAction<"month" | "week" | "day">>;
+  setCurrentDay: Dispatch<SetStateAction<Date>>;
   setCurrentTask: Dispatch<SetStateAction<number>>;
   handleDateSelect: (date: Date | undefined) => void;
   handleProjectToggle: (projectId: number, checked: boolean) => void;
