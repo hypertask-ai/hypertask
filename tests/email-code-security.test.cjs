@@ -75,6 +75,75 @@ test('verification codes are generated through crypto.randomInt', () => {
   assert.deepEqual(calls, [[100000, 1000000]])
 })
 
+test('verification code storage replaces active and expired rows with one upsert', async () => {
+  const scenarios = [
+    {
+      name: 'used active row',
+      expiresAt: new Date(Date.now() + 60_000),
+      used: true,
+    },
+    {
+      name: 'expired row',
+      expiresAt: new Date(Date.now() - 60_000),
+      used: false,
+    },
+  ]
+
+  for (const scenario of scenarios) {
+    const initialCreatedAt = new Date(Date.now() - 120_000)
+    const record = {
+      code: '111111',
+      email: 'owner@example.test',
+      expiresAt: scenario.expiresAt,
+      createdAt: initialCreatedAt,
+      used: scenario.used,
+    }
+    const calls = []
+    const prisma = {
+      verificationCode: {
+        upsert: async (args) => {
+          calls.push(args)
+          Object.assign(record, args.update)
+          return record
+        },
+      },
+    }
+    const { VerificationCodeService } = loadTypescriptModule(
+      'src/lib/services/verificationCodeService.ts',
+      { '@/lib/prisma': prisma }
+    )
+    const originalConsoleLog = console.log
+    console.log = () => {}
+    try {
+      await VerificationCodeService.storeCode(
+        '654321',
+        ' Owner@Example.Test ',
+        30
+      )
+    } finally {
+      console.log = originalConsoleLog
+    }
+
+    assert.equal(calls.length, 1, scenario.name)
+    assert.deepEqual(calls[0].where, { email: 'owner@example.test' })
+    assert.equal(calls[0].update.code, '654321')
+    assert.equal(calls[0].update.used, false)
+    assert.ok(calls[0].update.expiresAt instanceof Date)
+    assert.ok(calls[0].update.createdAt instanceof Date)
+    assert.equal(calls[0].create.code, '654321')
+    assert.equal(calls[0].create.email, 'owner@example.test')
+    assert.equal(calls[0].create.used, false)
+    assert.ok(calls[0].create.expiresAt instanceof Date)
+    assert.equal(record.code, '654321')
+    assert.equal(record.used, false)
+    assert.notEqual(record.createdAt, initialCreatedAt)
+    assert.equal(
+      VerificationCodeService.isRateLimited('owner@example.test').limited,
+      true
+    )
+  }
+})
+
 test('send-email-link never returns authentication secrets', async () => {
   const previousNodeEnv = process.env.NODE_ENV
   const previousJwtSecret = process.env.JWT_SECRET
@@ -120,6 +189,65 @@ test('send-email-link never returns authentication secrets', async () => {
   } finally {
     if (previousNodeEnv === undefined) delete process.env.NODE_ENV
     else process.env.NODE_ENV = previousNodeEnv
+    if (previousJwtSecret === undefined) delete process.env.JWT_SECRET
+    else process.env.JWT_SECRET = previousJwtSecret
+    if (previousResendKey === undefined) delete process.env.RESEND_API_KEY
+    else process.env.RESEND_API_KEY = previousResendKey
+  }
+})
+
+test('send-email-link keeps the stored code when Resend times out', async () => {
+  const previousJwtSecret = process.env.JWT_SECRET
+  const previousResendKey = process.env.RESEND_API_KEY
+  const storedCodes = []
+  process.env.JWT_SECRET = 'test-only-email-link-secret'
+  process.env.RESEND_API_KEY = 'test-only-resend-key'
+
+  try {
+    const { POST } = loadTypescriptModule(
+      'src/app/api/auth/send-email-link/route.ts',
+      {
+        '@/lib/services/verificationCodeService': {
+          VerificationCodeService: {
+            generateCode: () => '123456',
+            isRateLimited: () => ({ limited: false, waitTime: 0 }),
+            storeCode: async (...args) => storedCodes.push(args),
+          },
+        },
+        '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
+        '@/lib/auth/requestBaseUrl': {
+          getRequestBaseUrl: () => 'https://app.hypertask.ai',
+        },
+        '@/lib/email/sendEmail': {
+          sendEmail: async () => {
+            throw new Error('Resend API request timed out after 5000ms')
+          },
+        },
+      }
+    )
+    const originalConsoleError = console.error
+    console.error = () => {}
+    let response
+    try {
+      response = await POST(
+        new NextRequest('https://app.hypertask.ai/api/auth/send-email-link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'owner@example.test' }),
+        })
+      )
+    } finally {
+      console.error = originalConsoleError
+    }
+
+    assert.equal(response.status, 500)
+    assert.deepEqual(await response.json(), {
+      success: false,
+      error: 'Failed to generate sign-in email',
+      code: 'INTERNAL_ERROR',
+    })
+    assert.deepEqual(storedCodes, [['123456', 'owner@example.test', 30]])
+  } finally {
     if (previousJwtSecret === undefined) delete process.env.JWT_SECRET
     else process.env.JWT_SECRET = previousJwtSecret
     if (previousResendKey === undefined) delete process.env.RESEND_API_KEY
