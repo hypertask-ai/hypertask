@@ -106,12 +106,22 @@ test("mobile create-comment uses AppSheet for both refine and compose", () => {
   assert.doesNotMatch(mobileBranch, /MobileBottomSheet/);
   assert.match(inlineDraftAi, /AppSheet/);
   assert.match(inlineDraftAi, /mobileOverlayAppSheetPanelClass/);
-  assert.match(inlineDraftAi, /EditorContent editor=\{editor\}/);
   assert.match(inlineDraftAi, /isRefineFullscreen \|\| isComposer/);
-  assert.match(inlineDraftAi, /mobileOverlayAppSheetEditorWellClass/);
-  assert.match(inlineDraftAi, /editorHasText/);
+  assert.match(inlineDraftAi, /data-mobile-write-ai-prompt/);
+  assert.match(inlineDraftAi, /Your draft/);
+  assert.match(inlineDraftAi, /Nothing written yet\. Describe it and AI will draft the comment/);
+  assert.match(inlineDraftAi, /Improve readability/);
+  assert.match(inlineDraftAi, /Fix spelling/);
+  assert.match(inlineDraftAi, /Use this text/);
+  assert.match(inlineDraftAi, /Try again/);
+  assert.match(inlineDraftAi, /Refine…/);
+  assert.match(inlineDraftAi, /Discard/);
+  assert.match(inlineDraftAi, /createInlineDraftAiSourceSnapshot/);
+  assert.match(inlineDraftAi, /applyInlineDraftAiProposalIfFresh/);
+  assert.match(inlineDraftAi, /dispatchMobileReview\(\{ type: "resolve"/);
   assert.match(inlineDraftAi, /getMobileOverlaySheetContainerStyle/);
-  assert.match(inlineDraftAi, /onOpenEnd=\{focusEditorInSheet\}/);
+  assert.match(inlineDraftAi, /onOpenEnd=\{focusPromptInSheet\}/);
+  assert.doesNotMatch(inlineDraftAi, /EditorContent editor=\{editor\}/);
   assert.doesNotMatch(inlineDraftAi, /createPortal/);
 });
 

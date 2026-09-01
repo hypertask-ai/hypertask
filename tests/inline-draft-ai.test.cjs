@@ -15,7 +15,11 @@ const { tiptapForwardSlashRequestSchema } = jiti(
   path.join(root, "src/app/api/ai/tiptap-forwardslash/requestSchema.ts"),
 );
 const {
+  applyInlineDraftAiProposalIfFresh,
+  createInlineDraftAiSourceSnapshot,
+  initialInlineDraftAiReviewState,
   inlineDraftAiCommandForInstruction,
+  inlineDraftAiReviewReducer,
   nextInlineDraftAiScope,
   resolveInitialInlineDraftAiRange,
   rewrittenInlineDraftAiRange,
@@ -108,6 +112,174 @@ test("inline draft AI keeps scope when the editor selection collapses", () => {
     nextInlineDraftAiScope({ from: 2, to: 9 }, { from: 1, to: 4 }),
     { from: 1, to: 4 },
   );
+});
+
+test("mobile Write with AI keeps a generated proposal isolated until review", () => {
+  const descriptor = {
+    command: "ImproveReadability",
+    label: "Improve readability",
+    sourceContent: "<p>rough draft</p>",
+  };
+  const loading = inlineDraftAiReviewReducer(initialInlineDraftAiReviewState, {
+    type: "request",
+    requestId: 1,
+    descriptor,
+  });
+  assert.equal(loading.phase, "loading");
+  assert.equal(loading.proposal, "");
+  assert.deepEqual(loading.lastRequest, descriptor);
+  descriptor.sourceContent = "<p>mutated elsewhere</p>";
+  assert.equal(loading.lastRequest.sourceContent, "<p>rough draft</p>");
+
+  const review = inlineDraftAiReviewReducer(loading, {
+    type: "resolve",
+    requestId: 1,
+    proposal: "<p>Clear draft</p>",
+  });
+  assert.equal(review.phase, "review");
+  assert.equal(review.proposal, "<p>Clear draft</p>");
+  assert.equal(review.lastRequest.sourceContent, "<p>rough draft</p>");
+});
+
+test("mobile Write with AI ignores late responses and replays immutable request descriptors", () => {
+  const first = {
+    command: "WriteContent",
+    instruction: "Draft a reply",
+    label: "Write comment",
+    sourceContent: "",
+  };
+  const second = {
+    command: "WriteContent",
+    instruction: "Draft a shorter reply",
+    label: "Write comment",
+    sourceContent: "",
+  };
+  const requestOne = inlineDraftAiReviewReducer(initialInlineDraftAiReviewState, {
+    type: "request",
+    requestId: 4,
+    descriptor: first,
+  });
+  const requestTwo = inlineDraftAiReviewReducer(requestOne, {
+    type: "request",
+    requestId: 5,
+    descriptor: second,
+  });
+  const late = inlineDraftAiReviewReducer(requestTwo, {
+    type: "resolve",
+    requestId: 4,
+    proposal: "<p>stale</p>",
+  });
+  assert.strictEqual(late, requestTwo);
+  assert.deepEqual(late.lastRequest, second);
+
+  const current = inlineDraftAiReviewReducer(late, {
+    type: "resolve",
+    requestId: 5,
+    proposal: "<p>current</p>",
+  });
+  assert.equal(current.proposal, "<p>current</p>");
+  assert.deepEqual(current.lastRequest, second);
+});
+
+test("mobile Write with AI refine and original preview preserve the proposal", () => {
+  const descriptor = {
+    command: "Simplify",
+    label: "Simplify",
+    sourceContent: "<p>Original</p>",
+  };
+  const review = inlineDraftAiReviewReducer(
+    inlineDraftAiReviewReducer(initialInlineDraftAiReviewState, {
+      type: "request",
+      requestId: 7,
+      descriptor,
+    }),
+    { type: "resolve", requestId: 7, proposal: "<p>Proposal</p>" },
+  );
+  const showingOriginal = inlineDraftAiReviewReducer(review, {
+    type: "toggle-original",
+  });
+  assert.equal(showingOriginal.showOriginal, true);
+  assert.equal(showingOriginal.proposal, "<p>Proposal</p>");
+
+  const refining = inlineDraftAiReviewReducer(showingOriginal, {
+    type: "refine",
+  });
+  assert.equal(refining.phase, "input");
+  assert.equal(refining.isRefining, true);
+  assert.equal(refining.proposal, "<p>Proposal</p>");
+  assert.deepEqual(refining.lastRequest, descriptor);
+
+  const failedRefine = inlineDraftAiReviewReducer(
+    inlineDraftAiReviewReducer(refining, {
+      type: "request",
+      requestId: 8,
+      descriptor: {
+        command: "CustomEdit",
+        instruction: "Make it warmer",
+        label: "Refine",
+        sourceContent: refining.proposal,
+      },
+    }),
+    { type: "reject", requestId: 8 },
+  );
+  assert.equal(failedRefine.phase, "review");
+  assert.equal(failedRefine.proposal, "<p>Proposal</p>");
+
+  assert.deepEqual(
+    inlineDraftAiReviewReducer(failedRefine, { type: "reset" }),
+    initialInlineDraftAiReviewState,
+  );
+});
+
+test("mobile Write with AI binds acceptance to the opening ProseMirror document", () => {
+  const { Schema } = require("@tiptap/pm/model");
+  const schema = new Schema({
+    nodes: {
+      doc: { content: "block+" },
+      paragraph: { content: "text*", group: "block" },
+      text: { group: "inline" },
+    },
+  });
+  const paragraph = (text) =>
+    schema.node("paragraph", null, text ? [schema.text(text)] : []);
+  const original = schema.node("doc", null, [paragraph("Original draft")]);
+  const snapshot = createInlineDraftAiSourceSnapshot(original, {
+    from: 0,
+    to: original.content.size,
+  });
+
+  const changed = schema.node("doc", null, [paragraph("Changed draft")]);
+  const changedJson = changed.toJSON();
+  let applied = null;
+  assert.equal(
+    applyInlineDraftAiProposalIfFresh({
+      document: changed,
+      snapshot,
+      proposal: "<p>AI proposal</p>",
+      apply: (proposal, range) => {
+        applied = { proposal, range };
+      },
+    }),
+    false,
+  );
+  assert.equal(applied, null);
+  assert.deepEqual(changed.toJSON(), changedJson);
+
+  assert.equal(
+    applyInlineDraftAiProposalIfFresh({
+      document: original,
+      snapshot,
+      proposal: "<p>AI proposal</p>",
+      apply: (proposal, range) => {
+        applied = { proposal, range };
+      },
+    }),
+    true,
+  );
+  assert.deepEqual(applied, {
+    proposal: "<p>AI proposal</p>",
+    range: snapshot.range,
+  });
 });
 
 test("inline draft AI request validation allows writing empty content only with an instruction", () => {
