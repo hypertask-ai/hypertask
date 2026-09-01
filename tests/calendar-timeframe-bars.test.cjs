@@ -40,7 +40,7 @@ test("timeframe buttons remain draggable interactive elements", () => {
     "utf8",
   );
 
-  assert.match(weekView, /<Draggable[\s\S]*?disableInteractiveElementBlocking/);
+  assert.match(weekView, /<Draggable[^>]*disableInteractiveElementBlocking[^>]*>/);
 });
 
 test("calendar interval membership uses half-open visible boundaries", () => {
