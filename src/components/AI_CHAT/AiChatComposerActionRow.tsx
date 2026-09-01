@@ -2,7 +2,7 @@ import { Plus } from "lucide-react";
 import React, { type ReactNode, useEffect, useRef } from "react";
 
 const mobileActionClass =
-  "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:text-white-black";
+  "flex h-11 w-11 touch-manipulation items-center justify-center rounded-sm text-icon-dark-gray hover:text-white-black";
 
 type AiChatComposerActionRowProps = {
   mobile: boolean;

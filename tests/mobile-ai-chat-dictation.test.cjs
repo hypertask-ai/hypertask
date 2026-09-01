@@ -162,10 +162,15 @@ const chatContextValue = (isRecording, isEmpty = true, overrides = {}) => ({
   ...overrides,
 });
 
-const renderComposer = (isRecording, isEmpty = true, overrides = {}) =>
+const renderComposer = (
+  isRecording,
+  isEmpty = true,
+  overrides = {},
+  isMobile = true,
+) =>
   React.createElement(
     MobileViewContext.Provider,
-    { value: true },
+    { value: isMobile },
     React.createElement(
       TestChatContext.Provider,
       { value: chatContextValue(isRecording, isEmpty, overrides) },
@@ -184,7 +189,8 @@ test("mobile AI chat uses the filled 44px mic and demotes it once text exists", 
   const empty = mobileMicPresentation(base);
   assert.equal(empty.prominent, true);
   assert.match(empty.className, /h-11 w-11/);
-  assert.match(empty.className, /rounded-full/);
+  assert.match(empty.className, /rounded-sm/);
+  assert.doesNotMatch(empty.className, /rounded-full/);
   assert.match(empty.className, /bg-shadcn-primary/);
 
   const typed = mobileMicPresentation({ ...base, hasText: true });
@@ -252,7 +258,7 @@ test("real mobile microphones apply each composer presentation state", async () 
     },
     {
       id: "ai-chat-audio-button",
-      shape: /rounded-full/,
+      shape: /rounded-sm/,
       fill: /bg-shadcn-primary/,
     },
   ];
@@ -326,6 +332,7 @@ test("mobile composer follows live recording state without remounting recorder",
     await act(async () =>
       reactRoot.render(
         renderComposer(false, true, {
+          contextList: [{ type: "project", name: "Hypertask" }],
           handleFileUpload: async () => {
             screenshotUploads += 1;
           },
@@ -357,7 +364,34 @@ test("mobile composer follows live recording state without remounting recorder",
     assert.strictEqual(scopeControl.parentElement, contextRow);
     assert.doesNotMatch(contextRow.className, /overflow-/);
     assert.match(contextScroll.className, /overflow-x-auto/);
-    assert.ok(container.querySelector("[data-ai-chat-mobile-add-context]"));
+
+    const composer = container.querySelector("[data-ai-chat-composer]");
+    assert.match(composer.className, /!rounded-\[5px\]/);
+    assert.doesNotMatch(composer.className, /!rounded-\[22px\]/);
+    assert.doesNotMatch(composer.className, /!rounded-lg/);
+    assert.match(composer.className, /bg-ai-tiptap/);
+    assert.match(composer.className, /border-0/);
+
+    const scopeButton = scopeControl.querySelector("button");
+    assert.match(scopeButton.className, /h-11/);
+    assert.match(scopeButton.className, /rounded-\[4px\]/);
+    assert.doesNotMatch(scopeButton.className, /rounded-full/);
+
+    const contextBubble = container.querySelector(
+      '[aria-label="Remove Hypertask from context"]',
+    );
+    assert.ok(contextBubble);
+    assert.match(contextBubble.className, /h-11/);
+    assert.match(contextBubble.className, /rounded-\[4px\]/);
+    assert.doesNotMatch(contextBubble.className, /rounded-full/);
+
+    const addContext = container.querySelector(
+      "[data-ai-chat-mobile-add-context]",
+    );
+    assert.ok(addContext);
+    assert.match(addContext.className, /h-11/);
+    assert.match(addContext.className, /rounded-\[4px\]/);
+    assert.doesNotMatch(addContext.className, /rounded-full/);
     assert.equal(overflow.hidden, false);
     const overflowActions = overflow
       .querySelector('[role="group"]')
@@ -367,11 +401,14 @@ test("mobile composer follows live recording state without remounting recorder",
       3,
       "attachment, context, and screenshot controls belong inside the + overflow",
     );
+    const moreActions = overflow.querySelector("summary");
     assert.match(
-      overflow.querySelector("summary").className,
+      moreActions.className,
       /h-11 w-11/,
       "the + trigger must keep a 44px touch target",
     );
+    assert.match(moreActions.className, /rounded-sm/);
+    assert.doesNotMatch(moreActions.className, /rounded-full/);
     const screenshotInput = container.querySelector(
       "#ai-chat-screenshot-upload",
     );
@@ -427,7 +464,8 @@ test("mobile composer follows live recording state without remounting recorder",
     );
     assert.ok(primarySend);
     assert.match(primarySend.className, /h-11 w-11/);
-    assert.match(primarySend.className, /rounded-full/);
+    assert.match(primarySend.className, /rounded-sm/);
+    assert.doesNotMatch(primarySend.className, /rounded-full/);
     assert.match(primarySend.className, /bg-shadcn-primary/);
     assert.equal(primarySend.querySelector("svg")?.getAttribute("viewBox"), "0 0 105 105");
 
@@ -468,6 +506,14 @@ test("mobile composer follows live recording state without remounting recorder",
       container.querySelector("[data-ai-chat-leading-controls]"),
       null,
     );
+
+    await act(async () =>
+      reactRoot.render(renderComposer(false, true, {}, false)),
+    );
+    const desktopComposer = container.querySelector("[data-ai-chat-composer]");
+    assert.match(desktopComposer.className, /!rounded-lg/);
+    assert.match(desktopComposer.className, /\bp-2\b/);
+    assert.doesNotMatch(desktopComposer.className, /\bpx-3\b/);
   } finally {
     pathname = "/project";
     await act(async () => reactRoot.unmount());

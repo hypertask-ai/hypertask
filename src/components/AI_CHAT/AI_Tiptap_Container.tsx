@@ -230,7 +230,7 @@ export function AI_Tiptap_Container() {
               flex flex-col
               scrollbar-none items-center bg-ai-tiptap
               ${styles.aiChatInput} outline-none border-0
-              ${isMbl ? "!rounded-[22px] px-3 pb-2 pt-3" : "!rounded-lg p-2"}
+              ${isMbl ? "!rounded-[5px] px-3 pb-2 pt-3" : "!rounded-lg p-2"}
             `}
         onKeyDown={tiptapKeydown}
       >
@@ -450,7 +450,7 @@ function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
         aria-expanded={isOpen}
         className={`inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${
           mobile
-            ? "h-11 max-w-[65vw] rounded-full bg-ai-tiptap px-3"
+            ? "h-11 max-w-[65vw] rounded-[4px] bg-ai-tiptap px-3"
             : "rounded-[4px] px-2 py-1"
         }`}
         onClick={() => setIsOpen((open) => !open)}
@@ -554,7 +554,7 @@ function ContextList({
         {items.map((item: MentionItem, index: number) => (
           <button
             type="button"
-            className="flex h-11 max-w-[65vw] shrink-0 items-center gap-2 rounded-full bg-ai-tiptap px-3 text-white-black hover:bg-hover-active"
+            className="flex h-11 max-w-[65vw] shrink-0 items-center gap-2 rounded-[4px] bg-ai-tiptap px-3 text-white-black hover:bg-hover-active"
             key={`context-value-${index}`}
             onClick={() => onClick(index)}
             aria-label={`Remove ${item.name} from context`}
@@ -627,7 +627,7 @@ function AttachmentButton({
   const isApple = useDeviceContext();
   return (
     <button
-      className="relative group rounded-full text-icon-dark-gray hover:text-white-black"
+      className="relative group rounded-sm text-icon-dark-gray hover:text-white-black"
       onClick={(e) => onClick(e)}
       disabled={disabled}
       aria-label="Attach files"
@@ -646,7 +646,7 @@ function ScreenshotButton({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
-      className="relative rounded-full text-icon-dark-gray hover:text-white-black"
+      className="relative rounded-sm text-icon-dark-gray hover:text-white-black"
       onClick={onClick}
       aria-label="Attach screenshot"
     >
@@ -735,10 +735,10 @@ function SendMessageButton({
   }
 
   let buttonClassName =
-    "relative group disabled:text-gray-400 disabled:cursor-not-allowed rounded-full";
+    "relative group disabled:text-gray-400 disabled:cursor-not-allowed rounded-sm";
   if (mobile) {
     buttonClassName =
-      "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-full bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+      "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-sm bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
   } else if (!disabled && queueMode) {
     buttonClassName += " text-text-light-gray hover:text-white-black";
   } else if (!disabled) {
@@ -789,7 +789,7 @@ function AddContextButton({
       data-ai-chat-mobile-add-context={mobile || undefined}
       className={
         mobile
-          ? "flex h-11 shrink-0 items-center rounded-full bg-ai-tiptap px-3 text-text-light-gray hover:bg-hover-active hover:text-white-black"
+          ? "flex h-11 shrink-0 items-center rounded-[4px] bg-ai-tiptap px-3 text-text-light-gray hover:bg-hover-active hover:text-white-black"
           : "relative group text-white"
       }
       onClick={onClick}
