@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
-import { EditorContent, useEditorState } from "@tiptap/react";
+
 import { LoaderCircle, X } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -13,7 +13,6 @@ import { AppSheet } from "@/components/Modals/Sheets/AppSheet";
 import {
   MOBILE_OVERLAY_SHEET_Z,
   mobileOverlayAppSheetBodyClass,
-  mobileOverlayAppSheetEditorWellClass,
   mobileOverlayAppSheetHandleBarClass,
   mobileOverlayAppSheetHandleHeaderClass,
   mobileOverlayAppSheetHandleRowClass,
@@ -26,15 +25,22 @@ import styles from "@/styles/tiptap.module.scss";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import {
+  createInlineDraftAiSourceSnapshot,
+  initialInlineDraftAiReviewState,
   inlineDraftAiCommandForInstruction,
+  inlineDraftAiReviewReducer,
   inlineDraftAiWritePlaceholder,
+  isInlineDraftAiSourceFresh,
   mergeInlineDraftAiDictation,
   nextInlineDraftAiScope,
   resolveInitialInlineDraftAiRange,
   rewrittenInlineDraftAiRange,
   shouldShowInlineDraftAiChips,
   type InlineDraftAiRange,
+  type InlineDraftAiRequestDescriptor,
+  type InlineDraftAiSourceSnapshot,
 } from "./inlineDraftAi";
+import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
 
 const CHIP_LINK_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 text-text-light-gray hover:bg-hover-active hover:text-white-black focus-visible:outline-none focus-visible:bg-hypertasks-ai-purple focus-visible:font-semibold focus-visible:text-white disabled:opacity-50";
@@ -43,7 +49,7 @@ const CHIP_DONE_CLASS =
 const CHIP_PRIMARY_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold bg-hypertasks-ai-purple text-white hover:opacity-90 focus-visible:outline-none disabled:opacity-50";
 const CHIP_SHEET_ROW_CLASS =
-  "flex min-h-[52px] w-full items-center px-3 text-left text-content text-white-black hover:bg-hover-active focus-visible:bg-hover-active disabled:opacity-50";
+  "flex min-h-11 items-center rounded-full bg-hover-active px-3 text-left text-dense text-white-black active:opacity-80 disabled:opacity-50";
 
 const EDIT_ACTIONS = [
   ["Improve readability", "ImproveReadability"],
@@ -56,6 +62,13 @@ const EDIT_ACTIONS = [
 interface LastAction {
   command: string;
   instruction?: string;
+  label?: string;
+  sourceContent?: string;
+}
+
+interface MobileOpeningSource {
+  html: string;
+  snapshot: InlineDraftAiSourceSnapshot;
 }
 
 function selectedHtml(editor: Editor, range: InlineDraftAiRange) {
@@ -102,6 +115,10 @@ const InlineDraftAiFloat = ({
   const [hasResult, setHasResult] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [audioProcessing, setAudioProcessing] = useState(false);
+  const [mobileReview, dispatchMobileReview] = useReducer(
+    inlineDraftAiReviewReducer,
+    initialInlineDraftAiReviewState,
+  );
   const requestIdRef = useRef(0);
   const toastIdRef = useRef<string | null>(null);
   const loadingRef = useRef(false);
@@ -112,6 +129,8 @@ const InlineDraftAiFloat = ({
   const audioProcessingRef = useRef(false);
   const allowSuggestReplyRef = useRef(allowSuggestReply);
   const promptRef = useRef(prompt);
+  const mobilePromptInputRef = useRef<HTMLInputElement>(null);
+  const mobileOpeningSourceRef = useRef<MobileOpeningSource | null>(null);
 
   useEffect(() => {
     allowSuggestReplyRef.current = allowSuggestReply;
@@ -138,34 +157,33 @@ const InlineDraftAiFloat = ({
   const isMobileAiSheet = isRefineFullscreen || isComposer;
   const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
   const sheetContainerStyle = getMobileOverlaySheetContainerStyle(sheetViewport);
-  const editorHasText =
-    useEditorState({
-      editor,
-      selector: ({ editor: activeEditor }) => !(activeEditor?.isEmpty ?? true),
-    }) ?? false;
 
-  const focusEditorInSheet = useCallback(() => {
-    if (!isMobileAiSheet || !editor) return;
+  const focusPromptInSheet = useCallback(() => {
+    if (!isMobileAiSheet || mobileReview.phase !== "input") return;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        try {
-          editor.commands.focus(isRefineFullscreen ? "end" : "start");
-        } catch {
-          // Editor view may not be mounted yet.
-        }
+        const input = mobilePromptInputRef.current;
+        input?.focus({ preventScroll: true });
+        input?.setSelectionRange(input.value.length, input.value.length);
       });
     });
-  }, [editor, isMobileAiSheet, isRefineFullscreen]);
+  }, [isMobileAiSheet, mobileReview.phase]);
 
   useEffect(() => {
-    if (!isMobileAiSheet || !editor) return;
-    const dom = editor.view.dom;
-    if (document.activeElement !== dom && !dom.contains(document.activeElement)) {
+    if (mobileReview.isRefining) focusPromptInSheet();
+  }, [focusPromptInSheet, mobileReview.isRefining]);
+
+  useEffect(() => {
+    const input = mobilePromptInputRef.current;
+    if (
+      !isMobileAiSheet ||
+      !input ||
+      document.activeElement !== input
+    ) {
       return;
     }
-    dom.scrollIntoView({ block: "nearest" });
+    input.scrollIntoView({ block: "nearest" });
   }, [
-    editor,
     isMobileAiSheet,
     sheetViewport?.bottomInset,
     sheetViewport?.visibleHeight,
@@ -326,9 +344,17 @@ const InlineDraftAiFloat = ({
 
   if (!editor || !scope) return null;
 
+  if (isMobileAiSheet && !mobileOpeningSourceRef.current) {
+    mobileOpeningSourceRef.current = {
+      html: selectedHtml(editor, scope),
+      snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, scope),
+    };
+  }
+  const mobileOpeningSource = mobileOpeningSourceRef.current;
+  const hasOpeningDraft = Boolean(mobileOpeningSource?.html);
   const hasSelection = scope.to > scope.from;
   const showEditChips =
-    (isMobileAiSheet && editorHasText) ||
+    (isMobileAiSheet && hasOpeningDraft) ||
     shouldShowInlineDraftAiChips(hasSelection, prompt);
   const showDictation = Boolean(toggleRecording);
   const dictationActive = isRecording || audioProcessing;
@@ -350,6 +376,11 @@ const InlineDraftAiFloat = ({
       hasText={Boolean(prompt.trim())}
       onProcessingChange={setAudioProcessing}
       ariaLabel="Dictate AI prompt"
+      mobilePresentation={isMobileAiSheet ? "prominent" : undefined}
+      wrapperClassName={
+        isMobileAiSheet && !prompt.trim() ? "ml-auto" : undefined
+      }
+      disabled={isLoading}
     />
   ) : null;
 
@@ -393,10 +424,15 @@ const InlineDraftAiFloat = ({
 
     const range = { ...scope };
     const selectionPresent = range.to > range.from;
-    // Media-only / text drafts: require a range for edits. True empty docs
-    // may WriteContent. Never treat media-only as empty write.
-    if (!selectionPresent && action.command !== "WriteContent") return;
+    const content =
+      action.sourceContent ??
+      (selectionPresent ? selectedHtml(editor, range) : "");
+    // Media-only / text drafts require content for edits. True empty docs may
+    // WriteContent. The mobile refine path intentionally edits its proposal,
+    // while the opening editor remains untouched.
+    if (!content && action.command !== "WriteContent") return;
     if (
+      !isMobileAiSheet &&
       !selectionPresent &&
       !editor.isEmpty &&
       action.command === "WriteContent"
@@ -404,14 +440,29 @@ const InlineDraftAiFloat = ({
       return;
     }
 
-    const content = selectionPresent ? selectedHtml(editor, range) : "";
     const requestId = ++requestIdRef.current;
     const toastId = `inline-draft-ai-${requestId}`;
+    const mobileDescriptor: InlineDraftAiRequestDescriptor | null =
+      isMobileAiSheet
+        ? {
+            command: action.command,
+            instruction: action.instruction,
+            label: action.label ?? "AI edit",
+            sourceContent: content,
+          }
+        : null;
     toastIdRef.current = toastId;
     loadingRef.current = true;
     setIsLoading(true);
     setHasResult(false);
     setLastAction(action);
+    if (mobileDescriptor) {
+      dispatchMobileReview({
+        type: "request",
+        requestId,
+        descriptor: mobileDescriptor,
+      });
+    }
     wasEditableRef.current = editor.isEditable;
     editor.setEditable(false);
 
@@ -438,29 +489,40 @@ const InlineDraftAiFloat = ({
       if (typeof data?.corrected_html !== "string" || !data.corrected_html) {
         throw new Error("AI returned no draft. Please try again.");
       }
-      return data.corrected_html as string;
+      if (!isMobileAiSheet) return data.corrected_html as string;
+      const sanitizedHtml = sanitizeAiHtml(data.corrected_html as string);
+      if (!sanitizedHtml) {
+        throw new Error("AI returned no usable draft. Please try again.");
+      }
+      return sanitizedHtml;
     })();
 
     try {
       const html = await toast.promise(
         request,
         {
-          loading: "Rewriting draft",
-          success: "Draft updated",
+          loading:
+            action.command === "WriteContent"
+              ? "Writing draft"
+              : "Rewriting draft",
+          success: isMobileAiSheet ? "Draft ready to review" : "Draft updated",
           error: (error) =>
             error instanceof Error ? error.message : "AI edit failed",
         },
         { id: toastId },
       );
       if (requestId !== requestIdRef.current) return;
-      replaceScope(html, range);
       setPrompt("");
       if (isMobileAiSheet) {
-        closeRef.current();
+        dispatchMobileReview({ type: "resolve", requestId, proposal: html });
         return;
       }
+      replaceScope(html, range);
       setHasResult(true);
     } catch {
+      if (isMobileAiSheet) {
+        dispatchMobileReview({ type: "reject", requestId });
+      }
       // toast.promise already reports the request error.
     } finally {
       if (requestId === requestIdRef.current) {
@@ -474,6 +536,22 @@ const InlineDraftAiFloat = ({
   const submitPrompt = () => {
     const instruction = prompt.trim();
     if (!instruction) return;
+    if (isMobileAiSheet) {
+      const sourceContent = mobileReview.isRefining
+        ? mobileReview.proposal
+        : mobileOpeningSource?.html ?? "";
+      void runAction({
+        command: sourceContent ? "CustomEdit" : "WriteContent",
+        instruction,
+        label: mobileReview.isRefining
+          ? "Refine"
+          : hasOpeningDraft
+            ? "Custom instruction"
+            : "Write comment",
+        sourceContent,
+      });
+      return;
+    }
     void runAction({
       command: inlineDraftAiCommandForInstruction(hasSelection),
       instruction,
@@ -481,6 +559,11 @@ const InlineDraftAiFloat = ({
   };
 
   const retry = () => {
+    if (isMobileAiSheet) {
+      if (!mobileReview.lastRequest) return;
+      void runAction(mobileReview.lastRequest);
+      return;
+    }
     if (!lastAction) return;
     void runAction(
       lastAction.instruction
@@ -576,43 +659,81 @@ const InlineDraftAiFloat = ({
     </div>
   ) : null;
 
-  const sheetEditChips = showEditChips ? (
-    <div className="px-2 pt-1">
-      {EDIT_ACTIONS.map(([label, command]) => (
-        <button
-          key={command}
-          type="button"
-          disabled={isLoading}
-          className={CHIP_SHEET_ROW_CLASS}
-          onClick={() => void runAction({ command })}
-        >
-          {label}
-        </button>
-      ))}
+  const useMobileProposal = () => {
+    if (!mobileOpeningSource || !mobileReview.proposal) return;
+    if (
+      !isInlineDraftAiSourceFresh(
+        editor.state.doc,
+        mobileOpeningSource.snapshot,
+      )
+    ) {
+      toast.error(
+        "This comment changed while AI was working. Your draft and the proposal were both preserved.",
+      );
+      return;
+    }
+    replaceScope(
+      mobileReview.proposal,
+      mobileOpeningSource.snapshot.range,
+    );
+    closeRef.current();
+  };
+
+  const beginMobileRefine = () => {
+    setPrompt(mobileReview.lastRequest?.instruction ?? "");
+    dispatchMobileReview({ type: "refine" });
+  };
+
+  const mobilePromptComposer = (
+    <div
+      data-mobile-write-ai-prompt
+      className="mt-3 rounded-lg bg-newcomment-well px-3 pb-2 pt-3"
+      onKeyDown={handlePanelKeyDown}
+    >
+      {!dictationActive && (
+        <input
+          ref={mobilePromptInputRef}
+          autoFocus
+          maxLength={2_000}
+          value={prompt}
+          disabled={isLoading || audioProcessing}
+          onChange={(event) => setPrompt(event.target.value)}
+          placeholder={
+            mobileReview.isRefining
+              ? "Tell AI how to refine this proposal…"
+              : hasOpeningDraft
+                ? "Or tell it what to change…"
+                : "Describe the comment you want to write…"
+          }
+          className="min-h-11 w-full border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
+        />
+      )}
+      <div className="flex min-h-11 w-full items-center gap-2">
+        {dictationButton}
+        {prompt.trim() && !dictationActive ? (
+          <button
+            type="button"
+            aria-label="Send AI instruction"
+            disabled={isLoading || audioProcessing}
+            onClick={submitPrompt}
+            className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:opacity-50"
+          >
+            <SendArrow size={18} />
+          </button>
+        ) : null}
+      </div>
     </div>
-  ) : null;
+  );
 
   if (isRefineFullscreen || isComposer) {
-    const showSheetActions = editorHasText;
-    const sheetFooter = showSheetActions
-      ? isLoading
-        ? (
-            <div
-              className="flex items-center gap-2 px-2 py-2 text-meta text-text-light-gray"
-              role="status"
-            >
-              <LoaderCircle
-                size={16}
-                className="animate-spin text-hypertasks-ai-purple"
-                aria-hidden
-              />
-              {isRefineFullscreen ? "Rewriting draft…" : "Writing draft…"}
-            </div>
-          )
-        : (
-          sheetEditChips
-        )
-      : null;
+    const inputSource = mobileReview.isRefining
+      ? mobileReview.proposal
+      : mobileOpeningSource?.html ?? "";
+    const reviewContent = sanitizeAiHtml(
+      mobileReview.showOriginal
+        ? mobileOpeningSource?.html ?? ""
+        : mobileReview.proposal,
+    );
 
     return (
       <AppSheet
@@ -623,8 +744,8 @@ const InlineDraftAiFloat = ({
         zIndex={MOBILE_OVERLAY_SHEET_Z}
         detent="full-height"
         disableScrollLocking
-        onOpenStart={focusEditorInSheet}
-        onOpenEnd={focusEditorInSheet}
+        onOpenStart={focusPromptInSheet}
+        onOpenEnd={focusPromptInSheet}
         panelClassName={cn(
           mobileOverlayAppSheetPanelClass,
           sheetContainerStyle && "!h-full !max-h-full",
@@ -640,38 +761,155 @@ const InlineDraftAiFloat = ({
       >
         <div
           ref={rootRef}
-          className={cn(
-            "bg-ai-chat text-meta flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden",
-          )}
+          className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-ai-chat text-meta"
         >
-          <div className="z-10 flex shrink-0 items-center justify-between gap-4 px-2 py-2 text-content font-bold text-white-black">
-            <h2 className="min-w-0 truncate px-1 font-medium">Write with AI</h2>
+          <div className="z-10 flex shrink-0 items-center justify-between gap-4 px-3 py-2 text-content text-white-black">
+            <h2 className="min-w-0 truncate font-medium">Write with AI</h2>
             <button
               type="button"
               onClick={close}
-              disabled={isLoading}
               aria-label="Close Write with AI"
-              className="text-icon-dark-gray hover:text-white-black"
+              className="flex h-11 w-11 items-center justify-center text-icon-dark-gray hover:text-white-black"
             >
               <X size={18} strokeWidth={1.75} />
             </button>
           </div>
 
-          <div
-            className={cn(
-              mobileOverlayAppSheetEditorWellClass,
-              styles.editorContainer,
-              "break-normal",
-            )}
-          >
-            <EditorContent editor={editor} />
-          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-icon-dark-gray">
+            {mobileReview.phase === "review" ? (
+              <>
+                <div className="rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
+                  <p className="mb-2 text-micro font-bold uppercase tracking-wide text-hypertasks-ai-purple">
+                    {mobileReview.showOriginal
+                      ? "Your original"
+                      : `AI proposal · ${mobileReview.lastRequest?.label ?? "Rewrite"}`}
+                  </p>
+                  {reviewContent ? (
+                    <div
+                      className={styles.editorContainer}
+                      dangerouslySetInnerHTML={{ __html: reviewContent }}
+                    />
+                  ) : (
+                    <p className="text-text-light-gray">Nothing written yet.</p>
+                  )}
+                </div>
 
-          {sheetFooter ? (
-            <div className="shrink-0 border-t border-thin border-border-light-gray-thin p-2">
-              {sheetFooter}
-            </div>
-          ) : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={retry}
+                    className={CHIP_SHEET_ROW_CLASS}
+                  >
+                    Try again
+                  </button>
+                  <button
+                    type="button"
+                    onClick={beginMobileRefine}
+                    className={CHIP_SHEET_ROW_CLASS}
+                  >
+                    Refine…
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      dispatchMobileReview({ type: "toggle-original" })
+                    }
+                    className={CHIP_SHEET_ROW_CLASS}
+                  >
+                    {mobileReview.showOriginal
+                      ? "Show proposal"
+                      : "Show original"}
+                  </button>
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={close}
+                    className="min-h-11 flex-1 rounded-sm bg-hover-active px-3 text-content font-semibold text-white-black"
+                  >
+                    Discard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={useMobileProposal}
+                    className="min-h-11 flex-1 rounded-sm bg-shadcn-primary px-3 text-content font-semibold text-primary-foreground"
+                  >
+                    Use this text
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
+                  <p className="mb-2 text-micro font-medium uppercase tracking-wide text-text-light-gray">
+                    {mobileReview.isRefining
+                      ? "AI proposal"
+                      : hasOpeningDraft
+                        ? "Your draft"
+                        : "Comment"}
+                  </p>
+                  {inputSource ? (
+                    <div
+                      className={styles.editorContainer}
+                      dangerouslySetInnerHTML={{
+                        __html: sanitizeAiHtml(inputSource),
+                      }}
+                    />
+                  ) : (
+                    <p className="text-text-light-gray">
+                      Nothing written yet. Describe it and AI will draft the comment.
+                    </p>
+                  )}
+                </div>
+
+                {mobileReview.phase === "loading" ? (
+                  <div
+                    className="flex min-h-[88px] items-center justify-center gap-2 text-content text-text-light-gray"
+                    role="status"
+                  >
+                    <LoaderCircle
+                      size={18}
+                      className="animate-spin text-hypertasks-ai-purple"
+                      aria-hidden
+                    />
+                    {mobileReview.lastRequest?.command === "WriteContent"
+                      ? "Writing draft…"
+                      : "Rewriting draft…"}
+                  </div>
+                ) : (
+                  <>
+                    {hasOpeningDraft && !mobileReview.isRefining ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {EDIT_ACTIONS.map(([label, command]) => (
+                          <button
+                            key={command}
+                            type="button"
+                            className={CHIP_SHEET_ROW_CLASS}
+                            onClick={() =>
+                              void runAction({
+                                command,
+                                label:
+                                  command === "FixSpellingAndGrammar"
+                                    ? "Fix spelling"
+                                    : label,
+                                sourceContent: mobileOpeningSource?.html ?? "",
+                              })
+                            }
+                          >
+                            {command === "FixSpellingAndGrammar"
+                              ? "Fix spelling"
+                              : label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {mobilePromptComposer}
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </AppSheet>
     );
