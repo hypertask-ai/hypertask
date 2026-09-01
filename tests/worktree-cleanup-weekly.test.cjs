@@ -211,6 +211,19 @@ test('a no-op cleanup does not require GitHub', (t) => {
   assert.equal(fs.existsSync(fixture.worktree), true);
 });
 
+test('cache limits use bounded decimal parsing', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+
+  runScript(fixture, [], {
+    CACHE_MIN_IDLE_SECONDS: '000',
+    CACHE_CLEANUP_LIMIT: '08',
+  });
+  assert.throws(() => runScript(fixture, [], {
+    CACHE_MIN_IDLE_SECONDS: '999999999999999999999',
+  }));
+});
+
 test('nested registered worktrees still load remote cleanup proof', (t) => {
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));

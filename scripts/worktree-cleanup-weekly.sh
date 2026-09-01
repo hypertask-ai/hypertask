@@ -193,8 +193,21 @@ fi
 git_common_dir=$(realpath -e -- "$git_common_dir") \
   || fatal "cannot resolve repository common directory"
 
-[[ "$CACHE_MIN_IDLE_SECONDS" =~ ^[0-9]+$ ]] || fatal "CACHE_MIN_IDLE_SECONDS must be a non-negative integer"
-[[ "$CACHE_CLEANUP_LIMIT" =~ ^[0-9]+$ ]] || fatal "CACHE_CLEANUP_LIMIT must be a non-negative integer"
+normalize_nonnegative_integer() {
+  local name=$1 value=${!1} max=2147483647
+  [[ "$value" =~ ^[0-9]+$ ]] || fatal "$name must be a non-negative integer"
+  while [[ ${#value} -gt 1 && "$value" == 0* ]]; do
+    value=${value:1}
+  done
+  if [[ ${#value} -gt ${#max} \
+      || ( ${#value} -eq ${#max} && "$value" > "$max" ) ]]; then
+    fatal "$name exceeds the supported maximum"
+  fi
+  printf -v "$name" '%s' "$value"
+}
+
+normalize_nonnegative_integer CACHE_MIN_IDLE_SECONDS
+normalize_nonnegative_integer CACHE_CLEANUP_LIMIT
 CACHE_CLEANUP_ENABLED=1
 CACHE_CLEANUP_DISABLED_REASON=""
 if (( CACHE_CLEANUP_LIMIT == 0 )); then
