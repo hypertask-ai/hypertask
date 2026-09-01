@@ -472,8 +472,8 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
   );
 
   // "Latest updates" is hosted here, once, so every entry point (the rail
-  // rocket, the mobile top-bar rocket, the floating gear stack and the Ctrl+K
-  // "What's new" command) opens the same panel on every route. The rail sits at
+  // rocket, the floating gear stack and the Ctrl+K "What's new" command) opens
+  // the same panel on every route. The rail sits at
   // x=48px, so the panel slides in from the left next to it; everywhere else
   // (mobile, rail off) it comes from the right.
   // No refetch on close: the panel marks the cache read when it opens, and a
