@@ -172,6 +172,15 @@ test("mobile new-task flow keeps the Back pill removed", () => {
 });
 
 test("mobile new-task fields follow writing order without remounting a second tree", () => {
+  assert.equal((createTaskBodySource.match(/<TaskTitleModal \/>/g) || []).length, 1);
+  assert.equal(
+    (createTaskBodySource.match(/<DescriptionCreateTaskModal \/>/g) || []).length,
+    1,
+  );
+  assert.equal(
+    (createTaskBodySource.match(/<TaskInfoColumnContainer(?:\s|>)/g) || []).length,
+    1,
+  );
   assert.match(
     createTaskBodySource,
     /<TaskTitleModal \/>[\s\S]*?<DescriptionCreateTaskModal \/>[\s\S]*?<TaskInfoColumnContainer/,
