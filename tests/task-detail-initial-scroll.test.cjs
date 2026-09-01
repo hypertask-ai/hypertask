@@ -101,8 +101,11 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8"
   );
-  const lifecycle = source.match(
-    /useLayoutEffect\(\(\) => \{[\s\S]*?initialScrollGuard\.invalidate\(generation\);[\s\S]*?\}, \[_mbl, _parsedTask\.id, initialScrollGuard, scrollElementRef\]\);/
+  const taskLifecycle = source.match(
+    /useLayoutEffect\(\(\) => \{[\s\S]*?initialScrollGuard\.reset\(\);[\s\S]*?initialScrollGuard\.invalidate\(generation\);[\s\S]*?\}, \[_parsedTask\.id, initialScrollGuard\]\);/
+  )?.[0];
+  const viewportLifecycle = source.match(
+    /useLayoutEffect\(\(\) => \{\s*const previousViewport[\s\S]*?initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\);[\s\S]*?\}, \[_mbl, _parsedTask\.id, initialScrollGuard, scrollElementRef\]\);/
   )?.[0];
   const mountPositioning = source.match(
     /\/\/Initial Scroll and focus when page loads[\s\S]*?\}, \[\]\);/
@@ -111,14 +114,22 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     /\/\/ Where a freshly-opened task lands[\s\S]*?visibleCommentIndices,[\s\S]*?\]\);/
   )?.[0];
 
-  assert.ok(lifecycle, "the listener must reset and invalidate with the canonical task ID");
-  assert.match(lifecycle, /initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\)/);
+  assert.ok(taskLifecycle, "the guard must reset only with the canonical task ID");
+  assert.ok(viewportLifecycle, "the mobile listener must follow the active viewport");
+  assert.match(
+    viewportLifecycle,
+    /previousViewport\.taskId === _parsedTask\.id[\s\S]*?previousViewport\.isMobile !== _mbl[\s\S]*?initialScrollGuard\.invalidate/
+  );
   assert.match(source, /!initialScrollGuard\.allows\(generation\)/);
   assert.ok(mountPositioning, "the mount positioning effect must remain guarded");
   assert.match(mountPositioning, /runInitialPositioning\(scrollToElement\)/);
   assert.match(mountPositioning, /runInitialPositioning\(\(\) =>\s*focusOn/);
   assert.ok(unreadPositioning, "the unread positioning effect must remain guarded");
   assert.match(unreadPositioning, /initialScrollGuard\.allows\(generation\)/);
+  assert.doesNotMatch(
+    unreadPositioning.slice(unreadPositioning.lastIndexOf("}, [")),
+    /_mbl/
+  );
   assert.match(
     unreadPositioning,
     /requestAnimationFrame\(\(\) => \{\s*runInitialPositioning\(\(\) => \{/

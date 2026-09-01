@@ -408,6 +408,10 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const { copyCommentToAiChat, summarizeComment, summarizeTicket } = useCommentToAiChat();
 
   const _mbl = useContext(MobileViewContext);
+  const initialScrollViewportRef = useRef({
+    taskId: _parsedTask.id,
+    isMobile: _mbl,
+  });
   const appShellRailOn =
     useRecoilValue(appShellRailAtom) && !_mbl && !embedded;
 
@@ -1930,25 +1934,33 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     hasScrolledToUnreadRef.current = false;
     hasBottomScrolledRef.current = false;
 
-    const stopListening = _mbl
-      ? initialScrollGuard.listen(scrollElementRef?.current ?? window)
-      : () => {};
     return () => {
-      stopListening();
       initialScrollGuard.invalidate(generation);
     };
+  }, [_parsedTask.id, initialScrollGuard]);
+
+  useLayoutEffect(() => {
+    const previousViewport = initialScrollViewportRef.current;
+    if (
+      previousViewport.taskId === _parsedTask.id &&
+      previousViewport.isMobile !== _mbl
+    ) {
+      initialScrollGuard.invalidate(initialScrollGenerationRef.current);
+    }
+    initialScrollViewportRef.current = {
+      taskId: _parsedTask.id,
+      isMobile: _mbl,
+    };
+
+    if (!_mbl) return;
+    return initialScrollGuard.listen(scrollElementRef?.current ?? window);
   }, [_mbl, _parsedTask.id, initialScrollGuard, scrollElementRef]);
 
   //Initial Scroll and focus when page loads
   useEffect(() => {
     const generation = initialScrollGenerationRef.current;
-    const runInitialPositioning = (callback: () => void) => {
-      if (!_mbl) {
-        callback();
-        return true;
-      }
-      return initialScrollGuard.run(generation, callback);
-    };
+    const runInitialPositioning = (callback: () => void) =>
+      initialScrollGuard.run(generation, callback);
     const hash = window.location.hash.substring(1);
     window.history.scrollRestoration = "manual";
     const commentIdFromParams = searchParams?.get(taskDetailConfig.searchParams.commentId);
@@ -2038,17 +2050,12 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   // comment sits fully above the composer. Explicit deep-links win over both.
   useEffect(() => {
     const generation = initialScrollGenerationRef.current;
-    const runInitialPositioning = (callback: () => void) => {
-      if (!_mbl) {
-        callback();
-        return true;
-      }
-      return initialScrollGuard.run(generation, callback);
-    };
+    const runInitialPositioning = (callback: () => void) =>
+      initialScrollGuard.run(generation, callback);
     if (
       hasScrolledToUnreadRef.current ||
       !newCommentsSnapshotReady ||
-      (_mbl && !initialScrollGuard.allows(generation))
+      !initialScrollGuard.allows(generation)
     )
       return;
 
@@ -2119,7 +2126,6 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
     return () => clearTimeout(timeout);
   }, [
-    _mbl,
     comments,
     focusOn,
     initialScrollGuard,
