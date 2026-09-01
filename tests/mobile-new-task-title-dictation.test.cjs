@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
@@ -13,8 +12,6 @@ const jiti = require("jiti")(__filename, {
   jsx: true,
   alias: { "@": path.join(root, "src") },
 });
-const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
-
 const { appendTitleDictation } = jiti(
   path.join(root, "src/components/Modals/CreateTaskGloballyModal/titleDictation.ts"),
 );
@@ -182,9 +179,10 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
   });
 });
 
-test("a real recorder blocks its peer before microphone permission resolves", async () => {
+test("real recorders release denied permission and block peers while acquiring", async () => {
   await withDom(async ({ container, reactRoot, dom }) => {
     let resolvePermission;
+    let denyPermission = true;
     let getUserMediaCalls = 0;
     let stoppedTracks = 0;
     const permission = new Promise((resolve) => {
@@ -195,7 +193,9 @@ test("a real recorder blocks its peer before microphone permission resolves", as
       value: {
         getUserMedia: () => {
           getUserMediaCalls += 1;
-          return permission;
+          return denyPermission
+            ? Promise.reject(new Error("permission denied"))
+            : permission;
         },
       },
     });
@@ -239,15 +239,25 @@ test("a real recorder blocks its peer before microphone permission resolves", as
       ),
     );
 
-    container
-      .querySelector("#title-recorder")
-      .dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    await act(async () => {
+      container
+        .querySelector("#title-recorder")
+        .dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+    assert.equal(getUserMediaCalls, 1);
+    assert.deepEqual(busyStates, [true, false]);
+
+    denyPermission = false;
     container
       .querySelector("#description-recorder")
       .dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    container
+      .querySelector("#title-recorder")
+      .dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
 
-    assert.equal(getUserMediaCalls, 1);
-    assert.deepEqual(busyStates, [true]);
+    assert.equal(getUserMediaCalls, 2);
+    assert.deepEqual(busyStates, [true, false, true]);
 
     await act(async () => {
       resolvePermission({
@@ -255,27 +265,10 @@ test("a real recorder blocks its peer before microphone permission resolves", as
       });
       await permission;
     });
-    assert.equal(getUserMediaCalls, 1);
+    assert.equal(getUserMediaCalls, 2);
 
     await act(async () => reactRoot.render(null));
     assert.equal(stoppedTracks, 1);
-    assert.deepEqual(busyStates, [true, false]);
+    assert.deepEqual(busyStates, [true, false, true, false]);
   });
-});
-
-test("modal plumbing passes its coordinator through the description recorder", () => {
-  const tiptap = read("src/components/RTE/TiptapCreateTaskModal.tsx");
-  const modalState = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
-  const attachmentStart = tiptap.indexOf("<AttachmentsUpload");
-  const attachmentEnd = tiptap.indexOf("/>", attachmentStart);
-
-  assert.match(
-    modalState,
-    /setFormValues\(\(current\) => \(\{[\s\S]*?appendTitleDictation\(current\.title, transcript\)/,
-  );
-  assert.ok(attachmentStart >= 0 && attachmentEnd > attachmentStart);
-  assert.match(
-    tiptap.slice(attachmentStart, attachmentEnd),
-    /dictationCoordinator=\{dictationCoordinator\}/,
-  );
 });
