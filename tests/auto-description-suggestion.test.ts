@@ -8,6 +8,7 @@ import {
   hasDescriptionContent,
   isDescriptionSuggestionDismissed,
   shouldSuggestDescription,
+  snapshotDescriptionAttachments,
 } from "../src/lib/ai/autoDescriptionSuggestion";
 
 class MemoryStorage implements Storage {
@@ -68,10 +69,17 @@ test("empty markup stays eligible while text and media count as descriptions", (
   assert.equal(hasDescriptionContent('<p><img src="example.png"></p>'), true);
 });
 
-test("takeover requires an empty editor and Undo requires an exact inserted document", () => {
+test("takeover requires an empty editor and Undo requires unchanged generated content", () => {
   const takeover = {
     before: "<p></p>",
     inserted: "<p>AI draft</p>",
+  };
+  const generatedFile = {
+    id: "ai-0",
+    name: "draft.png",
+    size: "42",
+    type: "image/png",
+    source: "https://example.com/draft.png",
   };
 
   assert.equal(canTakeOverDescription(takeover.before), true);
@@ -80,6 +88,14 @@ test("takeover requires an empty editor and Undo requires an exact inserted docu
   assert.equal(
     canUndoDescriptionTakeover("<p>AI draft with user edit</p>", takeover),
     false,
+  );
+  assert.equal(
+    snapshotDescriptionAttachments([{ id: 0, file: generatedFile }]),
+    snapshotDescriptionAttachments([generatedFile]),
+  );
+  assert.notEqual(
+    snapshotDescriptionAttachments([generatedFile, { name: "user.png" }]),
+    snapshotDescriptionAttachments([generatedFile]),
   );
 });
 

@@ -156,6 +156,15 @@ const UserPreferenceSidebar = ({
           );
           if (updated) {
             autoDescriptionConfirmedValue.current = nextValue;
+            if (updateVersion === autoDescriptionUpdateVersion.current) {
+              queryClient.setQueryData<IUserPreferences>(
+                USER_PREFERENCES_QUERY_KEY,
+                (previous) => ({
+                  ...(previous ?? data),
+                  autoDescriptionSuggestions: nextValue,
+                }),
+              );
+            }
             return;
           }
           if (updateVersion !== autoDescriptionUpdateVersion.current) return;

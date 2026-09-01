@@ -57,6 +57,22 @@ export function canUndoDescriptionTakeover(
   return currentHtml === takeover.inserted;
 }
 
+export function snapshotDescriptionAttachments(attachments: readonly unknown[]) {
+  return JSON.stringify(
+    attachments.map((attachment) => {
+      const item =
+        attachment && typeof attachment === "object"
+          ? (attachment as Record<string, unknown>)
+          : {};
+      const file =
+        item.file && typeof item.file === "object"
+          ? (item.file as Record<string, unknown>)
+          : item;
+      return [file.id, file.name, file.size, file.type, file.source];
+    }),
+  );
+}
+
 export function shouldSuggestDescription(input: AutoDescriptionEligibility) {
   return (
     input.enabled &&

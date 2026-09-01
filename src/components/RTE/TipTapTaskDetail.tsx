@@ -87,6 +87,7 @@ import {
   type AutoDescriptionTakeover,
   isDescriptionSuggestionDismissed,
   shouldSuggestDescription,
+  snapshotDescriptionAttachments,
 } from "@/lib/ai/autoDescriptionSuggestion";
 import { shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
 import {
@@ -264,6 +265,7 @@ const Tiptap = ({
     }))
   );
   const autoDescriptionAttachmentsBeforeRef = useRef(newCommentAttachments);
+  const autoDescriptionAttachmentsAfterSnapshotRef = useRef("");
 
   // Debug: Log initial attachments format
   // Commented this out. Too many console logs when I am typing
@@ -887,6 +889,7 @@ const Tiptap = ({
     editor?.commands.unsetHighlight();
     handleFocus(true);
     setAiTriggerData({ initialPrompt: "", autoTrigger: false });
+    return mappedAttachments;
   };
 
   const handleAutoDescriptionTakeover = (
@@ -901,14 +904,20 @@ const Tiptap = ({
     const before = editor.getHTML();
     autoDescriptionAttachmentsBeforeRef.current = [...newCommentAttachments];
     setEditMode("description");
-    handleAISave(content, generatedAttachments);
+    const insertedAttachments = handleAISave(content, generatedAttachments);
+    autoDescriptionAttachmentsAfterSnapshotRef.current =
+      snapshotDescriptionAttachments(insertedAttachments);
     setAutoDescriptionVisible(false);
     setAutoDescriptionTakeover({ before, inserted: editor.getHTML() });
   };
 
   const undoAutoDescriptionTakeover = () => {
     if (!editor || !autoDescriptionTakeover) return;
-    if (!canUndoDescriptionTakeover(editor.getHTML(), autoDescriptionTakeover)) {
+    if (
+      !canUndoDescriptionTakeover(editor.getHTML(), autoDescriptionTakeover) ||
+      snapshotDescriptionAttachments(newCommentAttachments) !==
+        autoDescriptionAttachmentsAfterSnapshotRef.current
+    ) {
       setAutoDescriptionTakeover(null);
       return;
     }
