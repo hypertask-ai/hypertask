@@ -93,6 +93,7 @@ const TiptapCreateTaskModal = () => {
   });
   const asyncPush = useAsyncRoutePush();
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
+  const titleGenerationForSaveRef = useRef(false);
   const [toggleHighlight, setToggleHighlight] = useState<boolean>(false);
   const [trigger, setTrigger] = useState(false);
   const [newCommentAttachments, setNewCommentAttachments] = useState<any[]>(
@@ -311,6 +312,8 @@ const TiptapCreateTaskModal = () => {
     let titleAtSave = getCurrentTitle();
     const epochAtSave = saveEpochRef.current;
     if (shouldGenerateTitleForSave(titleAtSave, descriptionAtSave)) {
+      if (titleGenerationForSaveRef.current) return;
+      titleGenerationForSaveRef.current = true;
       setUploadInProgress(true);
       try {
         // More writing invalidates the current request. Keep taking the latest
@@ -337,6 +340,8 @@ const TiptapCreateTaskModal = () => {
         setCurrentFocusedElement("Title");
         toast.error("Couldn’t generate a title. Add one to save.");
         return;
+      } finally {
+        titleGenerationForSaveRef.current = false;
       }
     }
     if (!titleAtSave) {

@@ -107,6 +107,14 @@ test("a save without a mode exits before any work starts", () => {
   assert.match(modal, /if \(!param\) return;/);
 });
 
+test("save-time title generation admits only one concurrent attempt", () => {
+  const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
+  assert.match(
+    modal,
+    /if \(titleGenerationForSaveRef\.current\) return;\s*titleGenerationForSaveRef\.current = true;[\s\S]*?finally \{\s*titleGenerationForSaveRef\.current = false;/,
+  );
+});
+
 // Switching boards mid-generation invalidates the request: it was scoped to
 // the previous board's AI configuration (claude-review MINOR on #2756).
 test("switching boards cancels an in-flight title request", () => {
