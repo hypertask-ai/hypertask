@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import { JSDOM } from "jsdom";
 import { writingAssistanceEditorProps } from "../src/components/RTE/writingAssistance";
 
+const require = createRequire(import.meta.url);
+const { JSDOM } = require("jsdom");
 const root = path.resolve(import.meta.dirname, "..");
-type DOMWindow = InstanceType<typeof JSDOM>["window"];
 
-function installBrowserGlobals(window: DOMWindow) {
+function installBrowserGlobals(window: Window & typeof globalThis) {
   const globals = {
     window,
     document: window.document,
