@@ -312,8 +312,14 @@ const Tiptap = ({
     }
     if (autoDescriptionVisitRef.current.started) return;
 
+    const taskId = currentTask.id;
     const timeout = window.setTimeout(() => {
-      if (hasDescriptionContent(editor.getHTML())) return;
+      if (
+        autoDescriptionVisitRef.current.taskId !== taskId ||
+        hasDescriptionContent(editor.getHTML())
+      ) {
+        return;
+      }
       autoDescriptionVisitRef.current.started = true;
       setAutoDescriptionVisible(true);
     }, AUTO_DESCRIPTION_SUGGESTION_DELAY_MS);
@@ -1335,9 +1341,13 @@ const Tiptap = ({
     autoDescriptionSlotId && typeof document !== "undefined"
       ? document.getElementById(autoDescriptionSlotId)
       : null;
+  const autoDescriptionStateMatchesTask =
+    autoDescriptionVisitRef.current.taskId === currentTask?.id;
   const autoDescriptionPortal = autoDescriptionSlot
     ? createPortal(
-        autoDescriptionVisible && autoDraftPrompt ? (
+        autoDescriptionStateMatchesTask &&
+        autoDescriptionVisible &&
+        autoDraftPrompt ? (
           <AITaskWriterContainer
             key={`auto-description-${currentTask.id}-${autoDraftPrompt}`}
             id={`auto-description-writer-${currentTask.id}`}
@@ -1357,7 +1367,7 @@ const Tiptap = ({
             toggleRecording={toggleRecording}
             isRecording={isRecording}
           />
-        ) : autoDescriptionTakeover ? (
+        ) : autoDescriptionStateMatchesTask && autoDescriptionTakeover ? (
           <div className="mt-3 flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense text-text-light-gray">
             <span>Draft moved into the description.</span>
             <button
