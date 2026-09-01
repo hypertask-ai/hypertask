@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -102,4 +103,29 @@ test("enabled automatic requests continue through the existing writer gates", as
     (error) => error === afterGate,
   );
   assert.equal(preferenceReads.length, 1);
+});
+
+test("preference fallbacks and the suggestion edge keep the feature contract", () => {
+  const preferencesSource = fs.readFileSync(
+    path.join(root, "src/utils/controllers/users/fetch_preferences.ts"),
+    "utf8",
+  );
+  const writerSource = fs.readFileSync(
+    path.join(
+      root,
+      "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    preferencesSource,
+    /status: 404,[\s\S]*?autoDescriptionSuggestions: true/,
+  );
+  assert.match(
+    preferencesSource,
+    /status: 500,[\s\S]*?autoDescriptionSuggestions: true/,
+  );
+  assert.match(writerSource, /border-l border-l-hypertasks-ai-purple/);
+  assert.doesNotMatch(writerSource, /border-l-4 border-l-hypertasks-ai-purple/);
 });

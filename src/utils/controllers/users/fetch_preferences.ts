@@ -96,6 +96,7 @@ export async function fetchUserPreferenceController(userId: number) {
         snippets: [],
         muteAnnouncements: false,
         playGifs: true,
+        autoDescriptionSuggestions: true,
         dictationLanguage: "en",
         inboxAdvanceOnSend: true,
         emojiFrequency: null,
