@@ -9,6 +9,7 @@ import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
 import useRenderedViews from "@/hooks/Homepage/Views/useRenderedViews";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { getActiveBoardViewId } from "@/lib/constants/builtinViews";
+import MobileBoardViewPicker from "./MobileBoardViewPicker";
 
 interface IStripItem {
   key: string;
@@ -126,19 +127,22 @@ const BoardStrip = ({ project }: { project: IProject }) => {
         </button>
       </span>
     )}
-    <Strip
+    <MobileBoardViewPicker
       items={renderedViews.map((view) => ({
-        key: String(view.id),
+        id: String(view.id),
         label:
           view.id === defaultViewId
             ? project.title || project.name
             : view.title,
         count: viewTaskCounts.get(view.id) ?? 0,
-        active: view.id === activeViewId,
-        onSelect: () => {
-          if (view.id !== activeViewId) switchViewHandler(view);
-        },
       }))}
+      activeViewId={activeViewId}
+      fallbackLabel={project.title || project.name}
+      onSelect={async (viewId) => {
+        const view = renderedViews.find((candidate) => candidate.id === viewId);
+        if (!view) throw new Error("View is no longer available");
+        await switchViewHandler(view);
+      }}
     />
     {showSaveModal && (
       <Suspense fallback={null}>
