@@ -9,6 +9,7 @@ import {
 } from "@/utils/api/Homepage";
 import { PROJECTS_ALL_QUERY_KEY } from "./useGetBoards";
 import { isBoardRevocationTombstoned } from "@/lib/boardSync/revocationTombstone";
+import { hasBoardReadModelMarker } from "@/lib/boardSync/readModelMarker";
 import {
   type BoardReadinessTraceScope,
   getBoardReadinessTraceScope,
@@ -243,22 +244,6 @@ export const publishPreparedLocalBoard = async ({
   return true;
 };
 
-const BOARD_READ_MODEL_DATABASE_NAME = "hypertask-board-read-model";
-
-const hasExistingBoardReadModelDatabase = async (): Promise<boolean> => {
-  if (typeof indexedDB === "undefined") return false;
-  if (typeof indexedDB.databases !== "function") return true;
-  try {
-    const databases = await indexedDB.databases();
-    return databases.some(
-      (database) => database.name === BOARD_READ_MODEL_DATABASE_NAME,
-    );
-  } catch {
-    // Browsers that deny database enumeration may still allow the keyed read.
-    return true;
-  }
-};
-
 export const usePreparedBoardReadModel = ({
   enabled,
   accountId,
@@ -330,7 +315,14 @@ export const usePreparedBoardReadModel = ({
     const traceScope = getBoardReadinessTraceScope();
     markBoardReadinessPhase("localReadStart", traceScope);
     const promise = (async () => {
-      if (!(await hasExistingBoardReadModelDatabase())) return null;
+      // HTPR-5927: no marker means no snapshot has ever been written in this
+      // browser, so there is nothing IndexedDB can offer -- skip both the
+      // databases() enumeration and the keyed open, and let the network path
+      // run alone (same as the /speed lab's "without local DB" variant on a
+      // first-ever visit). A marker just means "may exist" -- the keyed open
+      // below already handles a false positive (cleared store, stale marker)
+      // the same way it always has: it finds nothing and returns null.
+      if (!hasBoardReadModelMarker()) return null;
       const { readBoardReadModel } =
         await import("@/lib/boardSync/indexedDbReadModel");
       return readBoardReadModel(preparedAccountId, preparedProjectId);
