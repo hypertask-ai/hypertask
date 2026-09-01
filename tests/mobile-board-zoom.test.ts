@@ -13,7 +13,7 @@ import {
 } from "../src/hooks/Kanban/mobileBoardGestures";
 
 test("mobile board pinch jumps from normal to the fixed overview state", () => {
-  assert.equal(BOARD_OVERVIEW_SCALE, 0.5);
+  assert.equal(BOARD_OVERVIEW_SCALE, 0.6);
   assert.equal(
     getPinchZoomState({
       zoomedOut: false,
@@ -99,4 +99,7 @@ test("overview styling and drag blocking stay mobile-only", () => {
   assert.match(source, /isDragDisabled=\{[^}]*mobileBoardZoomedOut\}/);
   assert.match(source, /dragDisabled=\{mobileBoardZoomedOut\}/);
   assert.match(source, /style=\{mobileBoardZoomedOut \? \{/);
+  assert.match(source, /alignSelf: "flex-start"/);
+  assert.match(source, /width: "max-content"/);
+  assert.match(source, /maxWidth: "none"/);
 });

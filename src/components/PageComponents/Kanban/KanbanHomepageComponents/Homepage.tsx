@@ -921,8 +921,9 @@ const HomePage = ({
             id="sectionsContainer"
             style={mobileBoardZoomedOut ? {
               zoom: BOARD_OVERVIEW_SCALE,
-              width: `${100 / BOARD_OVERVIEW_SCALE}%`,
-              maxWidth: `${100 / BOARD_OVERVIEW_SCALE}%`,
+              alignSelf: "flex-start",
+              width: "max-content",
+              maxWidth: "none",
               height: `${100 / BOARD_OVERVIEW_SCALE}%`,
               maxHeight: `${100 / BOARD_OVERVIEW_SCALE}%`,
             } : undefined}
