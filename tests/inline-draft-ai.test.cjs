@@ -224,6 +224,11 @@ test("mobile Write with AI refine and original preview preserve the proposal", (
   );
   assert.equal(failedRefine.phase, "review");
   assert.equal(failedRefine.proposal, "<p>Proposal</p>");
+
+  assert.deepEqual(
+    inlineDraftAiReviewReducer(failedRefine, { type: "reset" }),
+    initialInlineDraftAiReviewState,
+  );
 });
 
 test("mobile Write with AI binds acceptance to the opening ProseMirror document", () => {

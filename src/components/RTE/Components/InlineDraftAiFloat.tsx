@@ -221,14 +221,15 @@ const InlineDraftAiFloat = ({
       editor.commands.setTextSelection(initial);
     }
     setScope(initial);
-    setMobileOpeningSource(
-      isMobileAiSheet
-        ? {
-            html: selectedHtml(editor, initial),
-            snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, initial),
-          }
-        : null,
-    );
+    if (isMobileAiSheet) {
+      dispatchMobileReview({ type: "reset" });
+      setMobileOpeningSource({
+        html: selectedHtml(editor, initial),
+        snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, initial),
+      });
+    } else {
+      setMobileOpeningSource(null);
+    }
 
     // Only adopt non-collapsed selections. Focusing the prompt blurs the
     // editor and collapses PM selection — that must not wipe the AI scope.

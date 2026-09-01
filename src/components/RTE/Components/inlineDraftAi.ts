@@ -32,7 +32,8 @@ export type InlineDraftAiReviewEvent =
   | { type: "resolve"; requestId: number; proposal: string }
   | { type: "reject"; requestId: number }
   | { type: "refine" }
-  | { type: "toggle-original" };
+  | { type: "toggle-original" }
+  | { type: "reset" };
 
 export const initialInlineDraftAiReviewState: InlineDraftAiReviewState = {
   phase: "input",
@@ -48,6 +49,8 @@ export function inlineDraftAiReviewReducer(
   event: InlineDraftAiReviewEvent,
 ): InlineDraftAiReviewState {
   switch (event.type) {
+    case "reset":
+      return { ...initialInlineDraftAiReviewState };
     case "request":
       return {
         ...state,
