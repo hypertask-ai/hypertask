@@ -84,6 +84,8 @@ function createHarness({
   let rejectClient;
   let resolveClient;
   let nextTimerId = 1;
+  let channelRegistered = false;
+  let subscribeCount = 0;
   const intervals = new Map();
   const warnings = [];
   const refetches = [];
@@ -92,15 +94,26 @@ function createHarness({
     resolveClient = resolve;
     rejectClient = reject;
   });
-  const channel = createBindingTarget({ subscribed: false });
+  let connectionResult = clientPromise;
+  let delayedConnectionResolver;
+  let connectCount = 0;
+  const channel = createBindingTarget({
+    name: "private-task-42",
+    subscribed: false,
+  });
   const connection = createBindingTarget({ state: "connecting" });
   const client = {
-    allChannels: () => [channel],
+    allChannels: () => (channelRegistered ? [channel] : []),
     connection,
     subscribe() {
+      channelRegistered = true;
+      subscribeCount += 1;
       return channel;
     },
-    unsubscribe() {},
+    unsubscribe() {
+      channelRegistered = false;
+      channel.subscribed = false;
+    },
   };
   const queryClient = {
     refetchQueries(options) {
@@ -152,7 +165,10 @@ function createHarness({
         useQueryClient: () => queryClient,
       },
       "@/lib/realtime/client": {
-        connectRealtimeClient: () => clientPromise,
+        connectRealtimeClient: () => {
+          connectCount += 1;
+          return connectionResult;
+        },
         releaseRealtimeClientIfIdle() {},
       },
       "@/lib/realtime/shared": {
@@ -197,21 +213,39 @@ function createHarness({
     connect() {
       resolveClient(client);
     },
+    connectCount: () => connectCount,
     connectWithoutRealtime() {
       resolveClient(null);
     },
     connection,
+    delayRealtimeConnection() {
+      connectionResult = new Promise((resolve) => {
+        delayedConnectionResolver = resolve;
+      });
+    },
     intervalCount: () => intervals.size,
     invokeConnected() {
       connection.state = "connected";
       connection.emit("connected");
     },
+    makeRealtimeAvailable() {
+      connectionResult = Promise.resolve(client);
+    },
     refetches,
     rejectConnection() {
       rejectClient(new Error("realtime client unavailable"));
     },
+    removeChannel() {
+      channelRegistered = false;
+      channel.subscribed = false;
+    },
     render() {
       hook.useTaskCommentsRealtime(42);
+    },
+    resolveDelayedConnection() {
+      delayedConnectionResolver?.(client);
+      delayedConnectionResolver = undefined;
+      connectionResult = Promise.resolve(client);
     },
     resolveNextRefetch() {
       refetchResolvers.shift()?.();
@@ -228,6 +262,7 @@ function createHarness({
       channel.subscribed = true;
       channel.emit("pusher:subscription_succeeded");
     },
+    subscribeCount: () => subscribeCount,
     setVisibility(visibilityState) {
       documentTarget.visibilityState = visibilityState;
       documentTarget.dispatch("visibilitychange");
@@ -320,7 +355,44 @@ test("a rejected realtime client starts fallback reconciliation", async () => {
   });
 });
 
-test("a successful subscription stops fallback reconciliation", async () => {
+test("fallback retries a transiently unavailable realtime client", async () => {
+  await withHarness({}, async (harness) => {
+    harness.render();
+    harness.connectWithoutRealtime();
+    await settle();
+
+    assert.equal(harness.connectCount(), 1);
+    assert.equal(harness.subscribeCount(), 0);
+
+    harness.makeRealtimeAvailable();
+    harness.tickIntervals();
+    await settle();
+
+    assert.equal(harness.connectCount(), 2);
+    assert.equal(harness.subscribeCount(), 1);
+    assert.equal(harness.intervalCount(), 1);
+  });
+});
+
+test("fallback does not overlap realtime connection attempts", async () => {
+  await withHarness({}, async (harness) => {
+    harness.render();
+    harness.connectWithoutRealtime();
+    await settle();
+    harness.delayRealtimeConnection();
+
+    harness.tickIntervals();
+    harness.tickIntervals();
+    await settle();
+
+    assert.equal(harness.connectCount(), 2);
+    harness.resolveDelayedConnection();
+    await settle();
+    assert.equal(harness.subscribeCount(), 1);
+  });
+});
+
+test("a successful subscription stops fallback after a final catch-up", async () => {
   await withHarness({}, async (harness) => {
     harness.render();
     harness.connect();
@@ -332,7 +404,7 @@ test("a successful subscription stops fallback reconciliation", async () => {
     assert.equal(harness.intervalCount(), 0);
     harness.tickIntervals();
     await settle();
-    assert.equal(harness.refetches.length, 1);
+    assert.equal(harness.refetches.length, 2);
   });
 });
 
@@ -348,7 +420,29 @@ test("a later disconnected state starts fallback until subscription recovery", a
     assert.equal(harness.intervalCount(), 1);
     assert.equal(harness.refetches.length, 1);
     harness.setSubscriptionSucceeded();
+    await settle();
     assert.equal(harness.intervalCount(), 0);
+    assert.equal(harness.refetches.length, 2);
+  });
+});
+
+test("fallback resubscribes when the channel watchdog removed its channel", async () => {
+  await withHarness({}, async (harness) => {
+    harness.render();
+    harness.connect();
+    await settle();
+    harness.setSubscriptionSucceeded();
+    harness.removeChannel();
+
+    harness.setConnectionState("disconnected");
+    await settle();
+
+    assert.equal(harness.subscribeCount(), 2);
+    assert.equal(harness.intervalCount(), 1);
+    harness.setSubscriptionSucceeded();
+    await settle();
+    assert.equal(harness.intervalCount(), 0);
+    assert.equal(harness.refetches.length, 2);
   });
 });
 

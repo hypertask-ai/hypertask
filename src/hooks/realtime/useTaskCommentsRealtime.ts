@@ -66,6 +66,7 @@ export function useTaskCommentsRealtime(
 
   useEffect(() => {
     if (taskId == null) return;
+    const activeTaskId = taskId;
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
@@ -75,6 +76,7 @@ export function useTaskCommentsRealtime(
     let fallbackActive = false;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
     let fallbackWarningLogged = false;
+    let connectionAttemptInFlight = false;
     const startedWhileHidden =
       typeof document !== "undefined" && document.visibilityState === "hidden";
     shouldRefetchTask.current = false;
@@ -171,6 +173,11 @@ export function useTaskCommentsRealtime(
     const reconcileWhileUnhealthy = () => {
       if (fallbackActive && !subscriptionHealthy && canReconcile()) refetch();
     };
+    const runFallbackCycle = () => {
+      if (!fallbackActive) return;
+      reconcileWhileUnhealthy();
+      void connectAndSubscribe();
+    };
     const stopFallback = () => {
       subscriptionHealthy = true;
       fallbackActive = false;
@@ -188,14 +195,14 @@ export function useTaskCommentsRealtime(
         );
         fallbackWarningLogged = true;
       }
-      reconcileWhileUnhealthy();
+      runFallbackCycle();
       fallbackTimer = setInterval(
-        reconcileWhileUnhealthy,
+        runFallbackCycle,
         TASK_COMMENTS_RECONCILE_INTERVAL_MS
       );
     };
-    const onVisibilityChange = () => reconcileWhileUnhealthy();
-    const onOnline = () => reconcileWhileUnhealthy();
+    const onVisibilityChange = () => runFallbackCycle();
+    const onOnline = () => runFallbackCycle();
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("online", onOnline);
 
@@ -222,66 +229,95 @@ export function useTaskCommentsRealtime(
       );
     };
 
-    void (async () => {
-      const client = await connectRealtimeClient().catch(() => null);
-      if (!client) {
-        startFallback("unavailable");
-        return;
-      }
-      if (cancelled) {
-        releaseRealtimeClientIfIdle(client);
-        return;
-      }
-
-      const channelName = taskChannel(taskId);
-      const channel = client.subscribe(channelName);
-      const onSubscriptionSucceeded = () => stopFallback();
-      const onSubscriptionError = () => startFallback("failed");
-      const onConnectionStateChange = ({ current }: { current?: string }) => {
-        if (
-          current === "unavailable" ||
-          current === "failed" ||
-          current === "disconnected"
-        ) {
-          startFallback(current);
+    async function connectAndSubscribe() {
+      if (cancelled || connectionAttemptInFlight) return;
+      connectionAttemptInFlight = true;
+      try {
+        const client = await connectRealtimeClient().catch(() => null);
+        if (!client) {
+          startFallback("unavailable");
+          return;
         }
-      };
-      channel.bind(COMMENT_EVENT, refetchActivity);
-      channel.bind(TASK_EVENT, refetchTaskAndActivity);
-      channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
-      channel.bind("pusher:subscription_error", onSubscriptionError);
-      client.connection.bind("state_change", onConnectionStateChange);
-      if (channel.subscribed) stopFallback();
-      onConnectionStateChange({ current: client.connection.state });
-      // Reconnect safety-net: pull once after a dropped connection recovers.
-      // Skipped on the INITIAL connection (HTPR-3998) — the queries are already
-      // fetching on mount, so refetching there just doubled every page load.
-      // Mounted while already connected (e.g. view opened later in the session):
-      // count that as connected so a real drop+recover still refetches.
-      if (client.connection.state === "connected") wasConnected.current = true;
-      const onConnected = () => {
-        // Hidden mounts may miss changes before their deferred first connection.
-        if (wasConnected.current || startedWhileHidden) {
-          refetch(true, !preserveEditorContent);
+        if (cancelled) {
+          releaseRealtimeClientIfIdle(client);
+          return;
         }
-        wasConnected.current = true;
-      };
-      client.connection.bind("connected", onConnected);
 
-      unsubscribe = () => {
-        channel.unbind(COMMENT_EVENT, refetchActivity);
-        channel.unbind(TASK_EVENT, refetchTaskAndActivity);
-        channel.unbind(
-          "pusher:subscription_succeeded",
-          onSubscriptionSucceeded
-        );
-        channel.unbind("pusher:subscription_error", onSubscriptionError);
-        client.connection.unbind("state_change", onConnectionStateChange);
-        client.connection.unbind("connected", onConnected);
-        client.unsubscribe(channelName);
-        releaseRealtimeClientIfIdle(client);
-      };
-    })();
+        const channelName = taskChannel(activeTaskId);
+        if (unsubscribe) {
+          const channelStillRegistered = client
+            .allChannels()
+            .some((channel) => channel.name === channelName);
+          if (channelStillRegistered) return;
+          const teardown = unsubscribe;
+          unsubscribe = undefined;
+          teardown();
+        }
+
+        const channel = client.subscribe(channelName);
+        const onSubscriptionSucceeded = () => {
+          if (cancelled) return;
+          const recovered = fallbackActive;
+          stopFallback();
+          if (recovered) refetch(true, !preserveEditorContent);
+        };
+        const onSubscriptionError = () => {
+          if (cancelled) return;
+          const teardown = unsubscribe;
+          unsubscribe = undefined;
+          teardown?.();
+          startFallback("failed");
+        };
+        const onConnectionStateChange = ({ current }: { current?: string }) => {
+          if (
+            current === "unavailable" ||
+            current === "failed" ||
+            current === "disconnected"
+          ) {
+            startFallback(current);
+          }
+        };
+        channel.bind(COMMENT_EVENT, refetchActivity);
+        channel.bind(TASK_EVENT, refetchTaskAndActivity);
+        channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
+        channel.bind("pusher:subscription_error", onSubscriptionError);
+        client.connection.bind("state_change", onConnectionStateChange);
+        // Reconnect safety-net: pull once after a dropped connection recovers.
+        // Skipped on the INITIAL connection (HTPR-3998) — the queries are already
+        // fetching on mount, so refetching there just doubled every page load.
+        // Mounted while already connected (e.g. view opened later in the session):
+        // count that as connected so a real drop+recover still refetches.
+        if (client.connection.state === "connected") wasConnected.current = true;
+        const onConnected = () => {
+          // Hidden mounts may miss changes before their deferred first connection.
+          if (wasConnected.current || startedWhileHidden) {
+            refetch(true, !preserveEditorContent);
+          }
+          wasConnected.current = true;
+        };
+        client.connection.bind("connected", onConnected);
+
+        unsubscribe = () => {
+          channel.unbind(COMMENT_EVENT, refetchActivity);
+          channel.unbind(TASK_EVENT, refetchTaskAndActivity);
+          channel.unbind(
+            "pusher:subscription_succeeded",
+            onSubscriptionSucceeded
+          );
+          channel.unbind("pusher:subscription_error", onSubscriptionError);
+          client.connection.unbind("state_change", onConnectionStateChange);
+          client.connection.unbind("connected", onConnected);
+          client.unsubscribe(channelName);
+          releaseRealtimeClientIfIdle(client);
+        };
+        if (channel.subscribed) onSubscriptionSucceeded();
+        onConnectionStateChange({ current: client.connection.state });
+      } finally {
+        connectionAttemptInFlight = false;
+      }
+    }
+
+    void connectAndSubscribe();
 
     return () => {
       cancelled = true;
