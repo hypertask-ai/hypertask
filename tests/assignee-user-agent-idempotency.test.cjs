@@ -27,7 +27,9 @@ const load = (javascript, stubs) => {
 };
 
 const matches = (row, where) =>
-  Object.entries(where).every(([key, value]) => row[key] === value);
+  Object.entries(where).every(
+    ([key, value]) => value === undefined || row[key] === value,
+  );
 
 test("a human assignment coexists with an agent owned by the same user", async () => {
   const owner = {
