@@ -215,8 +215,38 @@ test("a human assignment coexists with an agent owned by the same user", async (
   assert.equal(calls.transactions, 2);
   assert.equal(calls.fences, 2);
   assert.equal(calls.cancellations, 2);
-  assert.deepEqual(calls.activities, ["Assigned", "Unassigned"]);
+
+  const toggledOn = await assign(owner, owner.id, task.id, undefined, undefined, {
+    intent: "toggle",
+  });
+  assert.equal(toggledOn.status, 200);
+  assert.deepEqual(
+    toggledOn.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
+    [
+      { userId: owner.id, agentId: agentAssignment.agentId },
+      { userId: owner.id, agentId: null },
+    ],
+  );
+
+  const toggledOff = await assign(owner, owner.id, task.id, undefined, undefined, {
+    intent: "toggle",
+  });
+  assert.equal(toggledOff.status, 200);
+  assert.deepEqual(
+    toggledOff.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
+    [{ userId: owner.id, agentId: agentAssignment.agentId }],
+  );
+  assert.equal(calls.transactions, 4);
+  assert.equal(calls.fences, 4);
+  assert.equal(calls.cancellations, 4);
+  assert.deepEqual(calls.activities, [
+    "Assigned",
+    "Unassigned",
+    "Assigned",
+    "Unassigned",
+  ]);
   assert.deepEqual(calls.notificationDeletes, [
+    { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
     { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
   ]);
 });
