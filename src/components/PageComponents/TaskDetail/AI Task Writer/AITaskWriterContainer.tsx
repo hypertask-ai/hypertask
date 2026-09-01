@@ -17,7 +17,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 // Components
 import AILogo from "@/assets/AILogo.png";
-import { Paperclip, RotateCw } from "lucide-react";
+import { ArrowUp, ChevronDown, Paperclip, RotateCw } from "lucide-react";
 import { SendArrow } from "@/components/Common/SendArrow";
 import ConfirmModal from "@/components/Modals/Common Modals/ConfirmActionModal";
 import AudioButton from "@/components/RTE/Components/AudioButton";
@@ -70,7 +70,10 @@ const AITaskWriterContainer: React.FC<
   dictationCoordinator,
   autoTrigger = false,
   initialPrompt = "",
-  editMode
+  editMode,
+  presentation = "overlay",
+  onTurnOffTask,
+  onTurnOffPermanently,
 }) => {
   // Context
   const {
@@ -103,6 +106,7 @@ const AITaskWriterContainer: React.FC<
   // Local state for modal and initialization
   const [showConfirmationModal, setShowConfirmationModal] = useState(triggerConfirmModal ?? false);
   const [isInitializing, setIsInitializing] = useState(autoTrigger);
+  const [showTurnOffMenu, setShowTurnOffMenu] = useState(false);
 
   // Refs
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -214,7 +218,8 @@ const AITaskWriterContainer: React.FC<
       return;
     }
 
-    const promptToUse = autoTrigger ? initialPrompt : userPrompt;
+    const promptToUse =
+      autoTrigger && !hasAutoTriggered.current ? initialPrompt : userPrompt;
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
     let finalPrompt = taskTitle
@@ -366,12 +371,15 @@ const AITaskWriterContainer: React.FC<
   );
 
   const handleEscape = useCallback(() => {
-    if (currentDisplayResponse.length > 0) {
+    if (
+      presentation !== "description-suggestion" &&
+      currentDisplayResponse.length > 0
+    ) {
       setShowConfirmationModal(true);
     } else {
       setTimeout(EscapeHandler, 0);
     }
-  }, [currentDisplayResponse, EscapeHandler]);
+  }, [currentDisplayResponse, EscapeHandler, presentation]);
 
   // Modal Handlers
   const onConfirmDiscard = useCallback(() => {
@@ -386,10 +394,26 @@ const AITaskWriterContainer: React.FC<
   // Handle Accept from Navigator
   const handleAccept = useCallback(() => {
     const currentItem = getCurrentResponseItem();
-    AISaveHandler(currentDisplayResponse, currentItem?.attachments);
+    const acceptedContent =
+      presentation === "description-suggestion"
+        ? extractTitleAndDescription(currentDisplayResponse).description
+        : currentDisplayResponse;
+    AISaveHandler(
+      presentation === "description-suggestion"
+        ? sanitizeAiHtml(acceptedContent)
+        : acceptedContent,
+      currentItem?.attachments,
+    );
     clearHistory();
     setTimeout(EscapeHandler, 0);
-  }, [AISaveHandler, currentDisplayResponse, getCurrentResponseItem, clearHistory, EscapeHandler]);
+  }, [
+    AISaveHandler,
+    currentDisplayResponse,
+    getCurrentResponseItem,
+    clearHistory,
+    EscapeHandler,
+    presentation,
+  ]);
 
   const headlineEl = (
     <AITaskWriterHeadline
@@ -600,6 +624,85 @@ const AITaskWriterContainer: React.FC<
   // Don't render if still initializing
   if (isInitializing) {
     return null;
+  }
+
+  if (presentation === "description-suggestion" && !isMobile) {
+    return (
+      <div
+        id={id}
+        className="mt-3 flex w-full flex-col gap-2 text-white-black"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">{headlineEl}</div>
+          <span className="text-micro text-text-light-gray">
+            Draft from your title
+          </span>
+        </div>
+        <div className="rounded-[4px] border-l-4 border-l-hypertasks-ai-purple bg-comment-description px-4 py-3 shadow-md">
+          {currentDisplayResponse ? responseBodyEl : inputAndToolbarEl}
+        </div>
+        {currentDisplayResponse && !isLoading && !hasError ? (
+          <div className="relative flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAccept}
+              className="flex items-center gap-2 rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense font-semibold text-primary-foreground"
+            >
+              <ArrowUp size={16} strokeWidth={1.75} />
+              Take over description
+            </button>
+            <button
+              type="button"
+              onClick={() => sendAIRequest(initialPrompt, "Drafting a description from your title...")}
+              className="flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense font-semibold"
+            >
+              <RotateCw size={16} strokeWidth={1.75} />
+              Regenerate
+            </button>
+            <div className="ml-auto">
+              <button
+                type="button"
+                aria-expanded={showTurnOffMenu}
+                onClick={() => setShowTurnOffMenu((current) => !current)}
+                className="flex items-center gap-1 px-2 py-2 text-dense text-text-light-gray"
+              >
+                Turn off <ChevronDown size={15} strokeWidth={1.75} />
+              </button>
+              {showTurnOffMenu ? (
+                <div className="absolute right-0 top-full z-[6000] mt-1 w-60 rounded-[4px] bg-modalBackground p-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={onTurnOffTask}
+                    className="w-full rounded-[4px] px-3 py-2 text-left hover:bg-active-modal-element"
+                  >
+                    <span className="block text-dense">Not for this task</span>
+                    <span className="block text-micro text-text-light-gray">
+                      Hide this draft on this task
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onTurnOffPermanently}
+                    className="w-full rounded-[4px] px-3 py-2 text-left hover:bg-active-modal-element"
+                  >
+                    <span className="block text-dense">Never suggest descriptions</span>
+                    <span className="block text-micro text-text-light-gray">
+                      Re-enable in Task page settings
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {currentDisplayResponse && !isLoading ? (
+          <div className="rounded-[4px] bg-comment-description px-3 py-1">
+            {inputAndToolbarEl}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   // Mobile: full bottom sheet (like task Summary) — response scrolls; Accept / actions stay in view

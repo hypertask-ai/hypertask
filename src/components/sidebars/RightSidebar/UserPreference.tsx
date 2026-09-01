@@ -26,6 +26,7 @@ interface IUserPreferences {
   notification: boolean;
   notificationPreference: MentionPreference;
   playGifs: boolean;
+  autoDescriptionSuggestions: boolean;
   dictationLanguage: string;
   inboxAdvanceOnSend: boolean;
 }
@@ -50,6 +51,7 @@ const UserPreferenceSidebar = ({
     useRecoilState(showTaskHistoryAtom);
   const shareReadReceipts = data.shareReadReceipts ?? false;
   const playGifs = data.playGifs ?? true;
+  const autoDescriptionSuggestions = data.autoDescriptionSuggestions ?? true;
   const advanceOnSend = data.inboxAdvanceOnSend ?? true;
   const dictationLanguage = data.dictationLanguage ?? DEFAULT_DICTATION_LANGUAGE;
 
@@ -109,6 +111,18 @@ const UserPreferenceSidebar = ({
       }),
     );
     updateUserPreferences({ playGifs: nextPlayGifs });
+  };
+
+  const handleAutoDescriptionSuggestionsSetting = () => {
+    const nextValue = !autoDescriptionSuggestions;
+    queryClient.setQueryData<IUserPreferences>(
+      USER_PREFERENCES_QUERY_KEY,
+      (previous) => ({
+        ...(previous ?? data),
+        autoDescriptionSuggestions: nextValue,
+      }),
+    );
+    updateUserPreferences({ autoDescriptionSuggestions: nextValue });
   };
 
   const handleReadReceiptsSetting = () => {
@@ -175,6 +189,14 @@ const UserPreferenceSidebar = ({
         value={playGifs}
         checked={playGifs}
         onChange={handlePlayGifsSetting}
+      />
+      <ToggleComponent
+        label="Suggest descriptions from task titles"
+        description="Show an AI draft below empty task descriptions"
+        inputId="auto-description-suggestions-toggle"
+        value={autoDescriptionSuggestions}
+        checked={autoDescriptionSuggestions}
+        onChange={handleAutoDescriptionSuggestionsSetting}
       />
       <ToggleComponent
         label="Show task history"

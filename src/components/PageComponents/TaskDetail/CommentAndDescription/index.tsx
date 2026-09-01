@@ -252,6 +252,7 @@ const Description = ({
           </TaskPagesProvider>
         )}
       </DescriptionContainer>
+      <div id="auto-description-suggestion-slot" />
     </>
   );
 };

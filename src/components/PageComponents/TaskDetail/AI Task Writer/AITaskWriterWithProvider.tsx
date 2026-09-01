@@ -20,6 +20,7 @@ interface AITaskWriterWithProviderProps extends Omit<IAITaskWriterContainerProps
   projectSections?: { id?: number; section_title?: string }[];
   /** Destination board for global task creation. */
   project?: IProject;
+  requestKind?: "manual" | "auto-description";
 }
 
 const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
@@ -32,6 +33,7 @@ const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
   projectLabels,
   projectSections,
   project,
+  requestKind,
   // Container props
   ...containerProps
 }) => {
@@ -45,6 +47,7 @@ const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
       projectLabels={projectLabels}
       projectSections={projectSections}
       project={project}
+      requestKind={requestKind}
     >
       <AITaskWriterContainer
         {...containerProps}

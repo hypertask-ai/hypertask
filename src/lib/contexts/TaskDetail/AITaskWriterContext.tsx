@@ -131,6 +131,7 @@ interface AITaskWriterProviderProps {
   projectSections?: { id?: number; section_title?: string }[];
   /** Destination board for global task creation. Defaults to the open board. */
   project?: IProject;
+  requestKind?: "manual" | "auto-description";
 }
 
 // ============================================================================
@@ -176,6 +177,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
   projectLabels,
   projectSections,
   project,
+  requestKind = "manual",
 }) => {
   // --------------------------------------------------------------------------
   // STATE - Core AI Configuration
@@ -666,6 +668,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     description,
     currentTask,
     billing,
+    requestKind,
   );
 
   // --------------------------------------------------------------------------

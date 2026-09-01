@@ -11,6 +11,7 @@ import {
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
 import {
   AiFeatureDisabledError,
+  AutoDescriptionSuggestionsDisabledError,
   ProjectAccessError,
   missingRequiredFields,
   prepareTaskWriterRun,
@@ -129,6 +130,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (
       error instanceof AiFeatureDisabledError ||
+      error instanceof AutoDescriptionSuggestionsDisabledError ||
       error instanceof ProjectAccessError
     ) {
       return createSseErrorResponse(error.message, 403);

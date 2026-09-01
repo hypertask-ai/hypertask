@@ -37,7 +37,8 @@ const useAITaskWriter = (
   attachments?: any[],
   description?: string,
   currentTask?: ITask,
-  billingOverride?: CurrentBoardBilling | null
+  billingOverride?: CurrentBoardBilling | null,
+  requestKind: "manual" | "auto-description" = "manual",
 ) => {
   const [isLoading, setLoading] = useState(false);
   const [aiResponse, setAIResponse] = useState("");
@@ -226,6 +227,7 @@ const useAITaskWriter = (
           taskIds,
           taskTitle: currentTask?.title ?? "",
           taskDescription: mediaExtraction.html,
+          requestKind,
         }
         console.log("🚀 ~ sendAIRequest ~ payload:", payload)
         const response = await fetch(taskWriterRoute, {
@@ -282,6 +284,7 @@ const useAITaskWriter = (
       aiMode,
       additionalContext,
       processImagesForTaskWriter,
+      requestKind,
     ]
   );
 

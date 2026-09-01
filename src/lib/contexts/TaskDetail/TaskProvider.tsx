@@ -166,6 +166,7 @@ interface GlobalStates extends TaskContextProps {
   setShowScrollToTop: React.Dispatch<React.SetStateAction<boolean>>;
   defaultCommentFocus: () => void;
   draftsFromTQ: IDraft[];
+  draftsHydrated: boolean;
 }
 
 const TaskContext = createContext<GlobalStates | undefined>(undefined);
