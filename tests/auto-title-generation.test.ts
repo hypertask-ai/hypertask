@@ -45,22 +45,35 @@ const flushPromises = async () => {
 test("description writing waits five seconds and only the latest title applies", async () => {
   const timers = fakeTimers();
   const applied: string[] = [];
+  const first = deferred<string>();
+  let firstSignal: AbortSignal | undefined;
   const coordinator = createAutoTitleGenerationCoordinator({
     setTimer: timers.setTimer,
     clearTimer: timers.clearTimer,
   });
 
+  coordinator.schedule("waiting", { generate: async () => "Unused title" });
   coordinator.schedule("first", {
-    generate: async () => "First title",
+    generate: (signal) => {
+      firstSignal = signal;
+      return first.promise;
+    },
     apply: (title) => applied.push(title),
   });
+  assert.equal(timers.size, 1, "further writing must replace the timer");
+  timers.runNext();
+
   coordinator.schedule("second", {
     generate: async () => "Second title",
     apply: (title) => applied.push(title),
   });
-
-  assert.equal(timers.size, 1, "further writing must replace the timer");
+  assert.equal(
+    firstSignal?.aborted,
+    true,
+    "new writing must abort old requests",
+  );
   timers.runNext();
+  first.resolve("Stale title");
   await flushPromises();
   assert.deepEqual(applied, ["Second title"]);
 });
@@ -230,4 +243,22 @@ test("current request failures propagate while superseded failures are ignored",
   coordinator.manualTitleChanged();
   superseded.reject(failure);
   assert.equal(await oldResult, null);
+
+  const timers = fakeTimers();
+  let backgroundError: unknown;
+  const scheduled = createAutoTitleGenerationCoordinator({
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+  });
+  scheduled.schedule("description", {
+    generate: async () => {
+      throw failure;
+    },
+    onError: (error) => {
+      backgroundError = error;
+    },
+  });
+  timers.runNext();
+  await flushPromises();
+  assert.equal(backgroundError, failure);
 });

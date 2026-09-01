@@ -344,9 +344,14 @@ const useCreateTaskModalGlobalStates = () => {
     const plainDescription = descriptionText(description);
     if (plainDescription === lastDescriptionTextRef.current) return;
     lastDescriptionTextRef.current = plainDescription;
+    setTitleGenerationError(null);
     autoTitleCoordinator.schedule(plainDescription ? description : "", {
       generate: (signal) => requestTitleFromDescription(description, signal),
       apply: applyGeneratedTitle,
+      onError: () =>
+        setTitleGenerationError(
+          "Couldn’t refresh the title. Keep writing or add one manually.",
+        ),
     });
   }, [applyGeneratedTitle, autoTitleCoordinator, requestTitleFromDescription]);
 
