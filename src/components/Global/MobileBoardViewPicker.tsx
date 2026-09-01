@@ -48,6 +48,7 @@ export const MobileBoardViewPicker = ({
   SheetComponent = LazyMobileBottomSheet,
 }: MobileBoardViewPickerProps) => {
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const selectionRequestRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [error, setError] = useState(false);
@@ -58,6 +59,7 @@ export const MobileBoardViewPicker = ({
   const selectedItemId = activeItem?.id;
 
   const closePicker = useCallback(() => {
+    selectionRequestRef.current += 1;
     setOpen(false);
     setSelectingId(null);
     setError(false);
@@ -78,12 +80,15 @@ export const MobileBoardViewPicker = ({
       return;
     }
 
+    const requestId = selectionRequestRef.current + 1;
+    selectionRequestRef.current = requestId;
     setSelectingId(viewId);
     setError(false);
     try {
       await onSelect(viewId);
-      closePicker();
+      if (selectionRequestRef.current === requestId) closePicker();
     } catch {
+      if (selectionRequestRef.current !== requestId) return;
       setError(true);
       setSelectingId(null);
     }

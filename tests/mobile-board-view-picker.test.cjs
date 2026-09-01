@@ -148,6 +148,35 @@ test("selection waits for a successful switch, closes, and restores trigger focu
   assert.equal(document.activeElement, trigger);
 });
 
+test("a dismissed request cannot close or overwrite a newer picker session", async () => {
+  const requests = [];
+  const container = await renderPicker({
+    onSelect: (viewId) =>
+      new Promise((resolve) => requests.push({ viewId, resolve })),
+  });
+  const trigger = container.querySelector('button[aria-haspopup="dialog"]');
+
+  await click(trigger);
+  let options = [...container.querySelectorAll("[aria-label='Board views'] button")];
+  await click(options[1]);
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  });
+
+  await click(trigger);
+  options = [...container.querySelectorAll("[aria-label='Board views'] button")];
+  await click(options[2]);
+  assert.deepEqual(requests.map((request) => request.viewId), ["bugs", "mine"]);
+
+  await act(async () => requests[0].resolve());
+  assert.ok(container.querySelector('[role="dialog"]'));
+  assert.equal(options[2].getAttribute("aria-busy"), "true");
+
+  await act(async () => requests[1].resolve());
+  assert.equal(container.querySelector('[role="dialog"]'), null);
+  assert.equal(document.activeElement, trigger);
+});
+
 test("a failed switch keeps the picker open with a retry message", async () => {
   const container = await renderPicker({
     onSelect: async () => {
