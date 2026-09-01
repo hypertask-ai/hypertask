@@ -28,6 +28,7 @@ type TokenRefreshDependencies = {
   createAuditLog: typeof createLog
 }
 
+// Keep this rollout boundary immutable so configuration cannot widen legacy-token eligibility.
 export const LEGACY_REFRESH_ISSUED_BEFORE_SECONDS =
   Date.parse('2026-09-02T00:00:00.000Z') / 1000
 
