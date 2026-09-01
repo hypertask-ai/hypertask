@@ -1339,7 +1339,7 @@ const Tiptap = ({
     ? createPortal(
         autoDescriptionVisible && autoDraftPrompt ? (
           <AITaskWriterContainer
-            key={`auto-description-${currentTask.id}`}
+            key={`auto-description-${currentTask.id}-${autoDraftPrompt}`}
             id={`auto-description-writer-${currentTask.id}`}
             backgroundContent=""
             EscapeHandler={() => setAutoDescriptionVisible(false)}
