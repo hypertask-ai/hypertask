@@ -73,7 +73,21 @@ test("task creation commits with its task.created outbox row", async () => {
     { userId: 6, agentId: null },
     async (tx) => {
       const task = await tx.task.create({ data: { title: "Atomic task" } });
-      return { taskId: task.id, result: task };
+      return {
+        taskId: task.id,
+        result: task,
+        webhookTask: {
+          id: task.id,
+          ticketNumber: task.ticketNumber,
+          projectId: task.projectId,
+          title: task.title,
+          status: task.status,
+          dueDate: task.dueDate,
+          sectionId: task.sectionId,
+          section: "Bugs",
+          priority: task.priority,
+        },
+      };
     },
   );
 
@@ -98,7 +112,21 @@ test("task creation rolls back when its outbox row cannot be written", async () 
       { userId: 6, agentId: "agent-1" },
       async (tx) => {
         const task = await tx.task.create({ data: { title: "Must roll back" } });
-        return { taskId: task.id, result: task };
+        return {
+          taskId: task.id,
+          result: task,
+          webhookTask: {
+            id: task.id,
+            ticketNumber: task.ticketNumber,
+            projectId: task.projectId,
+            title: task.title,
+            status: task.status,
+            dueDate: task.dueDate,
+            sectionId: task.sectionId,
+            section: "Bugs",
+            priority: task.priority,
+          },
+        };
       },
     ),
     /outbox unavailable/,

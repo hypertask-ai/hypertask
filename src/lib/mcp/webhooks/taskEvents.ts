@@ -4,8 +4,6 @@ import type { WebhookDelivery, WebhookTaskStatus } from './events'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type TaskCreatedDb = {
-  task: { findUnique: (args: any) => Promise<any> }
-  section: { findUnique: (args: any) => Promise<any> }
   webhookSubscription: { findMany: (args: any) => Promise<any> }
   boardWebhookDelivery: { create: (args: any) => Promise<any> }
 }
@@ -18,9 +16,28 @@ interface TaskCreatedActor {
   agentId: string | null
 }
 
+/**
+ * Exactly what task.created needs, taken from the row the caller's own
+ * tx.task.create already returned/built (HTPR-5928) instead of re-reading it
+ * from the database. `section` is Task's own denormalized title field, so no
+ * separate Section lookup is needed either.
+ */
+export interface WebhookTaskSnapshot {
+  id: number
+  ticketNumber: string | null
+  projectId: number
+  title: string
+  status: WebhookTaskStatus
+  dueDate: Date | null
+  sectionId: number | null
+  section: string
+  priority: { id: string; priority_index: number; Priority_Value: string } | null
+}
+
 interface CreatedTaskResult<T> {
   taskId: number
   result: T
+  webhookTask: WebhookTaskSnapshot
 }
 
 /**
@@ -39,7 +56,7 @@ export async function createTaskWithBoardWebhookOutbox<T>(
     const created = await createTask(tx)
     const boardWebhookDeliveryIds = await persistTaskCreatedWebhook(
       tx,
-      created.taskId,
+      created.webhookTask,
       actor.userId,
       actor.agentId
     )
@@ -51,71 +68,45 @@ export async function createTaskWithBoardWebhookOutbox<T>(
  * Persist task.created for board subscribers inside the caller's creation
  * transaction (HTPR-4530). Returns the delivery ids to publish once that
  * transaction commits, so the event either exists with the task or neither
- * does. Reading through `tx` also means the payload is the creation state, not
- * whatever a concurrent update wrote a moment later.
+ * does.
  *
- * Task creation is spread across three controllers that each build the row
- * differently, so this re-reads the task instead of asking every caller to
- * assemble the public payload.
+ * `task` is built by the caller from the row its own tx.task.create already
+ * returned (HTPR-5928) — this used to re-read the task and its section here,
+ * which cost two extra round trips while the caller's per-project advisory
+ * lock (createGlobally.ts) was held.
  */
 export async function persistTaskCreatedWebhook(
   tx: TaskCreatedDb,
-  taskId: number,
+  task: WebhookTaskSnapshot,
   actorUserId: number | null,
   actorAgentId: string | null
 ): Promise<string[]> {
-  {
-    const task = await tx.task.findUnique({
-      where: { id: taskId },
-      select: {
-        id: true,
-        ticketNumber: true,
-        projectId: true,
-        title: true,
-        status: true,
-        dueDate: true,
-        sectionId: true,
-        priority: {
-          select: { id: true, priority_index: true, Priority_Value: true },
-        },
+  const createdEvent: WebhookDelivery = {
+    event: 'task.created',
+    data: {
+      task: {
+        id: task.id,
+        ticketNumber: task.ticketNumber,
+        projectId: task.projectId,
+        title: task.title,
       },
-    })
-    if (!task) return []
-
-    const section =
-      task.sectionId == null
-        ? null
-        : await tx.section.findUnique({
-            where: { id: task.sectionId },
-            select: { id: true, section_title: true },
-          })
-
-    const createdEvent: WebhookDelivery = {
-      event: 'task.created',
-      data: {
-        task: {
-          id: task.id,
-          ticketNumber: task.ticketNumber,
-          projectId: task.projectId,
-          title: task.title,
-        },
-        state: {
-          section: section
-            ? { id: section.id, title: section.section_title }
-            : null,
-          status: task.status as WebhookTaskStatus,
-          priority: task.priority
-            ? {
-                id: task.priority.id,
-                index: task.priority.priority_index,
-                value: task.priority.Priority_Value,
-              }
-            : null,
-          dueDate: task.dueDate ? task.dueDate.toISOString() : null,
-        },
-        actor: { userId: actorUserId, agentId: actorAgentId },
+      state: {
+        section:
+          task.sectionId == null
+            ? null
+            : { id: task.sectionId, title: task.section },
+        status: task.status,
+        priority: task.priority
+          ? {
+              id: task.priority.id,
+              index: task.priority.priority_index,
+              value: task.priority.Priority_Value,
+            }
+          : null,
+        dueDate: task.dueDate ? task.dueDate.toISOString() : null,
       },
-    }
-    return persistBoardWebhookEvent(tx, task.projectId, createdEvent)
+      actor: { userId: actorUserId, agentId: actorAgentId },
+    },
   }
+  return persistBoardWebhookEvent(tx, task.projectId, createdEvent)
 }

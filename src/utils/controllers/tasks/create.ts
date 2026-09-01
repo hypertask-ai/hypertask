@@ -6,7 +6,7 @@ import { scheduleClassifyTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
-import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents";
+import { createTaskWithBoardWebhookOutbox, WebhookTaskSnapshot } from "@/lib/mcp/webhooks/taskEvents";
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import {
   emitAgentTaskCreatedWebhook,
@@ -16,6 +16,42 @@ import {
 
 /** Subset used by uniqueIndex helpers — works with root client and interactive transaction `tx`. */
 type TaskDb = Pick<PrismaClient, "task">
+
+// HTPR-5928: builds the task.created webhook payload from the row tx.task.create
+// already returned (both branches below `include: { priority: true, ... }`),
+// instead of persistTaskCreatedWebhook re-reading the task and its section.
+//
+// `sectionTitle` is passed in separately rather than read off `row.section`:
+// row.section is Task's denormalized string field, written here from the
+// caller-supplied `body.section` (IProps.section) — not DB truth. Callers pass
+// the title from the Section row they already fetched (`sectionExists`) so a
+// stale/renamed client value can't leak into the webhook payload (HTPR-5928
+// review).
+export function buildWebhookTaskSnapshot(
+  row: {
+    id: number;
+    ticketNumber: string | null;
+    projectId: number;
+    title: string;
+    status: WebhookTaskSnapshot["status"];
+    dueDate: Date | null;
+    sectionId: number | null;
+    priority: { id: string; priority_index: number; Priority_Value: string } | null;
+  },
+  sectionTitle: string,
+): WebhookTaskSnapshot {
+  return {
+    id: row.id,
+    ticketNumber: row.ticketNumber,
+    projectId: row.projectId,
+    title: row.title,
+    status: row.status,
+    dueDate: row.dueDate,
+    sectionId: row.sectionId,
+    section: sectionTitle,
+    priority: row.priority,
+  };
+}
 interface IProps {
     title: string;
     description: string;
@@ -138,7 +174,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                   // Same transaction as the task row, so a subscriber can never
                   // miss task.created for a task that exists (HTPR-4530).
                   await persistAgentTaskCreatedPending(tx, row.id)
-                  return { taskId: row.id, result: row }
+                  return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
                 })
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
@@ -165,7 +201,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     }
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
-                  return { taskId: row.id, result: row }
+                  return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
                 })
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
