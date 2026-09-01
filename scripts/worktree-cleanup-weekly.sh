@@ -1012,20 +1012,29 @@ if [[ $# -gt 1 || ( $# -eq 1 && "${1:-}" != "--dry-run" ) ]]; then
 fi
 [[ "${1:-}" != "--dry-run" ]] || DRY_RUN=1
 
-command -v "$GH_BIN" >/dev/null 2>&1 || fatal "GitHub CLI is unavailable: $GH_BIN"
-command -v jq >/dev/null 2>&1 || fatal "jq is unavailable"
-$GIT_BIN -C "$REPO_DIR" worktree list --porcelain >/dev/null \
+WORKTREE_LIST=$($GIT_BIN -C "$REPO_DIR" worktree list --porcelain) \
   || fatal "cannot enumerate worktrees"
 
 TMP_DIR=$(mktemp -d)
 refresh_live_cwds
 LEASE_LIST=$(find "$LEASE_DIR" -maxdepth 1 -type f -name '*.lease' -print | sort) \
   || fatal "cannot enumerate cleanup leases"
+CACHE_INPUT=""
+if (( CACHE_CLEANUP_ENABLED )); then
+  CACHE_INPUT=$(find "$WORKTREE_ROOT" -mindepth 2 -maxdepth 2 \
+    \( -type d \( -name node_modules -o -name .next \) \
+      -o -type f -name tsconfig.tsbuildinfo \) -print -quit) \
+    || fatal "cannot inspect worktree caches"
+fi
 
 declare -A PRELOADED_REMOTE_TIPS=()
 PRELOADED_PR_JSON='[]'
-preload_remote_refs
-preload_prs
+if [[ -n "$LEASE_LIST" || -n "$CACHE_INPUT" ]]; then
+  command -v "$GH_BIN" >/dev/null 2>&1 || fatal "GitHub CLI is unavailable: $GH_BIN"
+  command -v jq >/dev/null 2>&1 || fatal "jq is unavailable"
+  preload_remote_refs
+  preload_prs
+fi
 
 declare -a CACHE_CANDIDATE_PATHS=()
 declare -a CACHE_CANDIDATE_BRANCHES=()
@@ -1084,7 +1093,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       fi
       ;;
   esac
-done < <($GIT_BIN -C "$REPO_DIR" worktree list --porcelain)
+done <<<"$WORKTREE_LIST"
 if [[ -n "$worktree_path" ]]; then
   consider_cache_candidate "$worktree_path" "$worktree_branch" "$worktree_tip"
 fi

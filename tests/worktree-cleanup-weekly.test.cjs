@@ -193,6 +193,15 @@ test('places default state in the common Git directory from a linked worktree', 
   );
 });
 
+test('a no-op cleanup does not require GitHub', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+
+  runScript(fixture, [], { GH_BIN: path.join(fixture.root, 'missing-gh') });
+
+  assert.equal(fs.existsSync(fixture.worktree), true);
+});
+
 test('lease cleanup still runs when cache cleanup has no worktree root', (t) => {
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));
