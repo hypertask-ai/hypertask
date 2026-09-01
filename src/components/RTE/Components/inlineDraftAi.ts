@@ -112,6 +112,24 @@ export function isInlineDraftAiSourceFresh(
   );
 }
 
+export function applyInlineDraftAiProposalIfFresh({
+  document,
+  snapshot,
+  proposal,
+  apply,
+}: {
+  document: ProseMirrorNode;
+  snapshot: InlineDraftAiSourceSnapshot;
+  proposal: string;
+  apply: (proposal: string, range: InlineDraftAiRange) => void;
+}): boolean {
+  if (!proposal || !isInlineDraftAiSourceFresh(document, snapshot)) {
+    return false;
+  }
+  apply(proposal, snapshot.range);
+  return true;
+}
+
 export function resolveInitialInlineDraftAiRange({
   from,
   to,

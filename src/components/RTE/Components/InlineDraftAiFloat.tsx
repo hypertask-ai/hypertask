@@ -25,13 +25,13 @@ import styles from "@/styles/tiptap.module.scss";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import {
+  applyInlineDraftAiProposalIfFresh,
   createInlineDraftAiSourceSnapshot,
   initialInlineDraftAiReviewState,
   INLINE_DRAFT_AI_PROMPT_MAX_LENGTH,
   inlineDraftAiCommandForInstruction,
   inlineDraftAiReviewReducer,
   inlineDraftAiWritePlaceholder,
-  isInlineDraftAiSourceFresh,
   mergeInlineDraftAiDictation,
   nextInlineDraftAiScope,
   resolveInitialInlineDraftAiRange,
@@ -116,6 +116,8 @@ const InlineDraftAiFloat = ({
   const [hasResult, setHasResult] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [audioProcessing, setAudioProcessing] = useState(false);
+  const [mobileOpeningSource, setMobileOpeningSource] =
+    useState<MobileOpeningSource | null>(null);
   const [mobileReview, dispatchMobileReview] = useReducer(
     inlineDraftAiReviewReducer,
     initialInlineDraftAiReviewState,
@@ -131,7 +133,6 @@ const InlineDraftAiFloat = ({
   const allowSuggestReplyRef = useRef(allowSuggestReply);
   const promptRef = useRef(prompt);
   const mobilePromptInputRef = useRef<HTMLInputElement>(null);
-  const mobileOpeningSourceRef = useRef<MobileOpeningSource | null>(null);
 
   useEffect(() => {
     allowSuggestReplyRef.current = allowSuggestReply;
@@ -220,6 +221,14 @@ const InlineDraftAiFloat = ({
       editor.commands.setTextSelection(initial);
     }
     setScope(initial);
+    setMobileOpeningSource(
+      isMobileAiSheet
+        ? {
+            html: selectedHtml(editor, initial),
+            snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, initial),
+          }
+        : null,
+    );
 
     // Only adopt non-collapsed selections. Focusing the prompt blurs the
     // editor and collapses PM selection — that must not wipe the AI scope.
@@ -242,7 +251,7 @@ const InlineDraftAiFloat = ({
         editor.setEditable(true);
       }
     };
-  }, [editor, suppressEditorSelectionHighlight]);
+  }, [editor, isMobileAiSheet, suppressEditorSelectionHighlight]);
 
   const close = () => {
     requestIdRef.current += 1;
@@ -345,13 +354,6 @@ const InlineDraftAiFloat = ({
 
   if (!editor || !scope) return null;
 
-  if (isMobileAiSheet && !mobileOpeningSourceRef.current) {
-    mobileOpeningSourceRef.current = {
-      html: selectedHtml(editor, scope),
-      snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, scope),
-    };
-  }
-  const mobileOpeningSource = mobileOpeningSourceRef.current;
   const hasOpeningDraft = Boolean(mobileOpeningSource?.html);
   const hasSelection = scope.to > scope.from;
   const showEditChips =
@@ -660,22 +662,19 @@ const InlineDraftAiFloat = ({
   ) : null;
 
   const useMobileProposal = () => {
-    if (!mobileOpeningSource || !mobileReview.proposal) return;
-    if (
-      !isInlineDraftAiSourceFresh(
-        editor.state.doc,
-        mobileOpeningSource.snapshot,
-      )
-    ) {
+    if (!mobileOpeningSource) return;
+    const applied = applyInlineDraftAiProposalIfFresh({
+      document: editor.state.doc,
+      snapshot: mobileOpeningSource.snapshot,
+      proposal: mobileReview.proposal,
+      apply: replaceScope,
+    });
+    if (!applied) {
       toast.error(
         "This comment changed while AI was working. Your draft and the proposal were both preserved.",
       );
       return;
     }
-    replaceScope(
-      mobileReview.proposal,
-      mobileOpeningSource.snapshot.range,
-    );
     closeRef.current();
   };
 
@@ -690,6 +689,10 @@ const InlineDraftAiFloat = ({
   } else if (hasOpeningDraft) {
     mobilePromptPlaceholder = "Or tell it what to change…";
   }
+
+  let mobileInputLabel = "Comment";
+  if (mobileReview.isRefining) mobileInputLabel = "AI proposal";
+  else if (hasOpeningDraft) mobileInputLabel = "Your draft";
 
   const mobilePromptComposer = (
     <div
@@ -844,11 +847,7 @@ const InlineDraftAiFloat = ({
               <>
                 <div className="rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
                   <p className="mb-2 text-micro font-medium uppercase tracking-wide text-text-light-gray">
-                    {mobileReview.isRefining
-                      ? "AI proposal"
-                      : hasOpeningDraft
-                        ? "Your draft"
-                        : "Comment"}
+                    {mobileInputLabel}
                   </p>
                   {inputSource ? (
                     <div

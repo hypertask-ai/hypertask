@@ -117,7 +117,7 @@ test("mobile create-comment uses AppSheet for both refine and compose", () => {
   assert.match(inlineDraftAi, /Refine…/);
   assert.match(inlineDraftAi, /Discard/);
   assert.match(inlineDraftAi, /createInlineDraftAiSourceSnapshot/);
-  assert.match(inlineDraftAi, /isInlineDraftAiSourceFresh/);
+  assert.match(inlineDraftAi, /applyInlineDraftAiProposalIfFresh/);
   assert.match(inlineDraftAi, /dispatchMobileReview\(\{ type: "resolve"/);
   assert.match(inlineDraftAi, /getMobileOverlaySheetContainerStyle/);
   assert.match(inlineDraftAi, /onOpenEnd=\{focusPromptInSheet\}/);

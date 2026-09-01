@@ -15,11 +15,11 @@ const { tiptapForwardSlashRequestSchema } = jiti(
   path.join(root, "src/app/api/ai/tiptap-forwardslash/requestSchema.ts"),
 );
 const {
+  applyInlineDraftAiProposalIfFresh,
   createInlineDraftAiSourceSnapshot,
   initialInlineDraftAiReviewState,
   inlineDraftAiCommandForInstruction,
   inlineDraftAiReviewReducer,
-  isInlineDraftAiSourceFresh,
   nextInlineDraftAiScope,
   resolveInitialInlineDraftAiRange,
   rewrittenInlineDraftAiRange,
@@ -243,21 +243,38 @@ test("mobile Write with AI binds acceptance to the opening ProseMirror document"
     to: original.content.size,
   });
 
-  assert.equal(isInlineDraftAiSourceFresh(original, snapshot), true);
+  const changed = schema.node("doc", null, [paragraph("Changed draft")]);
+  const changedJson = changed.toJSON();
+  let applied = null;
   assert.equal(
-    isInlineDraftAiSourceFresh(
-      schema.node("doc", null, [paragraph("Changed draft")]),
+    applyInlineDraftAiProposalIfFresh({
+      document: changed,
       snapshot,
-    ),
+      proposal: "<p>AI proposal</p>",
+      apply: (proposal, range) => {
+        applied = { proposal, range };
+      },
+    }),
     false,
   );
+  assert.equal(applied, null);
+  assert.deepEqual(changed.toJSON(), changedJson);
+
   assert.equal(
-    isInlineDraftAiSourceFresh(
-      schema.node("doc", null, [paragraph("Original draft"), paragraph("new")]),
+    applyInlineDraftAiProposalIfFresh({
+      document: original,
       snapshot,
-    ),
-    false,
+      proposal: "<p>AI proposal</p>",
+      apply: (proposal, range) => {
+        applied = { proposal, range };
+      },
+    }),
+    true,
   );
+  assert.deepEqual(applied, {
+    proposal: "<p>AI proposal</p>",
+    range: snapshot.range,
+  });
 });
 
 test("inline draft AI request validation allows writing empty content only with an instruction", () => {
