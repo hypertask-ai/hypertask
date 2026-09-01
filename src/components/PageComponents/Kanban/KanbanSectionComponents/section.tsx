@@ -102,6 +102,7 @@ const Section = ({
   membersById,
   progressiveRendering,
   renderAllTasks,
+  dragDisabled = false,
 }: {
   section: ISection;
   currentSetting: TBoardSubtaskSetting;
@@ -123,6 +124,7 @@ const Section = ({
   membersById: Map<number, IUser>;
   progressiveRendering: boolean;
   renderAllTasks: boolean;
+  dragDisabled?: boolean;
 }) => {
   const currentProject = useRecoilValue(currentProjectAtom);
   const activeItem = useRecoilValue(activeItemAtom);
@@ -479,7 +481,7 @@ const Section = ({
                     key={`task-${task.id}`}
                     draggableId={`task-${task.id}`}
                     index={i}
-                    isDragDisabled={!taskModuleReady}
+                    isDragDisabled={!taskModuleReady || dragDisabled}
                   >
                     {(provided, snapshot) =>
                       renderMode === "skeleton" ? (

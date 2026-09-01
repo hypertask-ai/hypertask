@@ -203,6 +203,7 @@ export enum CommandMode {
   TaskDescriptionVersions,
   SuggestReply,
   ToggleArchivedSearchResults,
+  ToggleBoardZoom,
 }
 
 export enum ELogType {

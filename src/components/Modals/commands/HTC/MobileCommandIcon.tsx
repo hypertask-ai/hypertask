@@ -25,6 +25,8 @@ import {
   Trash2,
   UserPlus,
   UserRoundPlus,
+  ZoomIn,
+  ZoomOut,
   type LucideIcon,
 } from "lucide-react";
 import { CommandMode } from "@/models/enums";
@@ -34,6 +36,8 @@ const iconForCommand = (command: ICommandList): LucideIcon => {
   switch (command.commandMode) {
     case CommandMode.ReloadApp:
       return RefreshCw;
+    case CommandMode.ToggleBoardZoom:
+      return command.name === "Zoom board in" ? ZoomIn : ZoomOut;
     case CommandMode.GotoInbox:
     case CommandMode.GotoProjectInbox:
     case CommandMode.GotoInboxArchives:

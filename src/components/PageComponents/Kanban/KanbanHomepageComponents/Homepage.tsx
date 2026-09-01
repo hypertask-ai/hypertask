@@ -25,6 +25,8 @@ import {
   Droppable,
   type DragStart,
   type DropResult,
+  useKeyboardSensor,
+  useMouseSensor,
 } from "@hello-pangea/dnd";
 // const DragDropContext = dynamic(() => import("@hello-pangea/dnd").then(x => x.DragDropContext));
 import useHandleKeyDownOperations from "@/hooks/Homepage/useHandleKeyDownOperations";
@@ -63,8 +65,15 @@ import {
 } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import KanbanBulkActionBar from "./KanbanBulkActionBar";
 import { useBoardEdgeAutoScroll } from "@/hooks/Kanban/useBoardEdgeAutoScroll";
+import { useMobileBoardZoom } from "@/hooks/Kanban/useMobileBoardZoom";
+import { useLongPressTouchSensor } from "@/hooks/Kanban/useLongPressTouchSensor";
+import { BOARD_OVERVIEW_SCALE } from "@/hooks/Kanban/mobileBoardGestures";
 
-
+const BOARD_SENSORS = [
+  useMouseSensor,
+  useKeyboardSensor,
+  useLongPressTouchSensor,
+];
 
 const HomePage = ({
   currentUser,
@@ -205,6 +214,8 @@ const HomePage = ({
   const showCommands = useRecoilValue(showCommandsAtom);
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
   const _mbl = useContext(MobileViewContext);
+  const boardZoomedOut = useMobileBoardZoom(_mbl);
+  const mobileBoardZoomedOut = _mbl && boardZoomedOut;
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !_mbl;
   const progressiveRendering = useMemo(
     () =>
@@ -356,8 +367,9 @@ const HomePage = ({
   // scroll container. Only card drags need the manual edge scroll (HTPR-5546).
   const handleDragStart = useCallback((start: DragStart) => {
     if (start.type === "COLUMN") return;
+    if (_mbl) navigator.vibrate?.(10);
     startEdgeAutoScroll();
-  }, [startEdgeAutoScroll]);
+  }, [_mbl, startEdgeAutoScroll]);
 
   const handleDragEnd = useCallback((result: DropResult) => {
     stopEdgeAutoScroll();
@@ -806,10 +818,11 @@ const HomePage = ({
         sectionId: currentTask.sectionId ?? null,
       } : undefined,
       showArchivedOnBoard,
+      boardZoomedOut: _mbl ? boardZoomedOut : undefined,
       taskOptions: currentTask ? { ...getTaskOptions(currentTask) } : undefined,
       commentOptions: undefined
     }
-  }, [getTaskOptions, sectionsToDisplay, showArchivedOnBoard, store]);
+  }, [_mbl, boardZoomedOut, getTaskOptions, sectionsToDisplay, showArchivedOnBoard, store]);
 
   // Detect empty board state, but only once this board's tasks have actually
   // loaded. Since getAll ships boards without tasks (HTPR-3811), tasks is
@@ -831,7 +844,7 @@ const HomePage = ({
                 // Hidden columns keep their slot in the drag order, so a drop
                 // could reorder onto one you cannot see. Reordering columns
                 // mid-search is not a thing anyone wants anyway.
-                isDragDisabled={hiddenSectionIndexes.size > 0}
+                isDragDisabled={hiddenSectionIndexes.size > 0 || mobileBoardZoomedOut}
               >
               {(provided) => (<Section
                 archiveNotification={archiveNotification}
@@ -854,11 +867,13 @@ const HomePage = ({
                 membersById={membersById}
                 progressiveRendering={progressiveRendering}
                 renderAllTasks={renderAllTasks}
+                dragDisabled={mobileBoardZoomedOut}
               />)}
               </Draggable>
             )), [
               _activeSortingMode,
               archiveNotification,
+              mobileBoardZoomedOut,
               currentSetting,
               displaySections,
               hiddenSectionIndexes,
@@ -885,6 +900,8 @@ const HomePage = ({
     >
       <>
       <DragDropContext
+        enableDefaultSensors={false}
+        sensors={BOARD_SENSORS}
         onBeforeCapture={handleBeforeCapture}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
@@ -902,6 +919,13 @@ const HomePage = ({
             {...provided.droppableProps}
             // onKeyDown={(e)=>debouncedKeyDown(e)}
             id="sectionsContainer"
+            style={mobileBoardZoomedOut ? {
+              zoom: BOARD_OVERVIEW_SCALE,
+              width: `${100 / BOARD_OVERVIEW_SCALE}%`,
+              maxWidth: `${100 / BOARD_OVERVIEW_SCALE}%`,
+              height: `${100 / BOARD_OVERVIEW_SCALE}%`,
+              maxHeight: `${100 / BOARD_OVERVIEW_SCALE}%`,
+            } : undefined}
             className={`
               ${_mbl ?
                 "flex gap-[12px] max-w-[98%] min-w-[90%]"

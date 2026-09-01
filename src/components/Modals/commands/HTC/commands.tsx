@@ -245,7 +245,7 @@ const Commands = (props: Props) => {
     filterCommands,
     handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex, currentCommandIndex,
     setSelectedCommand,
-  } = useHTC(allCommands_, emptyQueryCommands);
+  } = useHTC(allCommands_, emptyQueryCommands, !isMobile);
   const currentHoveredDiv = useRef<number | null>(null);
   // const blurTimeout = useRef<NodeJS.Timeout | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -459,7 +459,11 @@ const Commands = (props: Props) => {
   };
 
   const searchInput = (
-    <div className="flex items-center gap-2.5 border-t border-light-black-border-1 px-4">
+    <div
+      className={isMobile
+        ? "m-2 flex items-center gap-2.5 rounded-[4px] bg-newcomment-well px-3 ring-1 ring-inset ring-hypertasks-purple"
+        : "flex items-center gap-2.5 border-t border-light-black-border-1 px-4"}
+    >
       <Search strokeWidth={1.75} size={16} className="shrink-0 text-text-light-gray" />
       <ModalInput
         ref={setInputRef}

@@ -33,3 +33,35 @@ test("Reload app is the first mobile command and is absent on desktop", () => {
     keywords: "reload refresh restart app page",
   });
 });
+
+test("board zoom leads the mobile board commands and has exactly two labels", () => {
+  const zoomCommand = (zoomedOut) => {
+    const commands = getAllCommands({
+      context: "Kanban",
+      boardZoomedOut: zoomedOut,
+    });
+    const mobileCommands = getMobileCommandGroups(commands, true);
+    const matches = mobileCommands
+      .flatMap((group) => group.commandLists)
+      .filter((command) => command.commandMode === CommandMode.ToggleBoardZoom);
+
+    assert.equal(matches.length, 1);
+    assert.equal(
+      mobileCommands.filter((group) => group.group === "Board").length,
+      1,
+    );
+    assert.equal(mobileCommands[0].commandLists[0].commandMode, CommandMode.ToggleBoardZoom);
+    return matches[0];
+  };
+
+  assert.equal(zoomCommand(false).name, "Zoom board out");
+  assert.equal(zoomCommand(true).name, "Zoom board in");
+  assert.equal(
+    getAllCommands({ context: "Kanban" }).some((group) =>
+      group.commandLists.some(
+        (command) => command.commandMode === CommandMode.ToggleBoardZoom,
+      ),
+    ),
+    false,
+  );
+});

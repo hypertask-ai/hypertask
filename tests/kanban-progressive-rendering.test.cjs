@@ -24,7 +24,10 @@ test("large boards progressively mount cards near the viewport", () => {
   assert.match(section, /LARGE_BOARD_PROGRESSIVE_RENDER_THRESHOLD = 40/);
   assert.match(section, /new IntersectionObserver/);
   assert.match(section, /void loadTask\(\)\s*\.then/);
-  assert.match(section, /isDragDisabled={!taskModuleReady}/);
+  assert.match(
+    section,
+    /isDragDisabled={!taskModuleReady \|\| dragDisabled}/,
+  );
   assert.match(section, /setTimeout\(\(\) => preloadTask\(1\), 1_500\)/);
   assert.match(section, /setTaskModuleFailed\(true\)/);
   assert.match(section, /typeof IntersectionObserver === "undefined"/);

@@ -18,6 +18,7 @@ import {
   toggleAllCommentsSignalAtom,
   archiveBoardScopeAtom,
   boardLayoutAtom,
+  boardZoomedOutAtom,
   tableVisibleColumnsAtom,
   setTableStalenessColumns,
   appShellRailAtom,
@@ -235,6 +236,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     cancelInvite,
   } = useInviteCallbackHandlers();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
+  const [, setBoardZoomedOut] = useRecoilState(boardZoomedOutAtom);
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [isSidebarMode, setIsSidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(aiChatAutoOpenSuppressedAtom);
@@ -746,6 +748,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         return;
       case CommandMode.ReloadApp:
         window.location.reload();
+        return;
+      case CommandMode.ToggleBoardZoom:
+        setBoardZoomedOut((current) => !current);
+        boardCloseHandler();
         return;
       case CommandMode.EditBoard:
       case CommandMode.AutoAssignColumn:

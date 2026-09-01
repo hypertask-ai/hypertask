@@ -1071,6 +1071,7 @@ export interface IAllCommands {
   };
   appShellRailOn?: boolean;
   showArchivedOnBoard?: boolean;
+  boardZoomedOut?: boolean;
   searchOptions?: {
     includeArchived: boolean;
   };

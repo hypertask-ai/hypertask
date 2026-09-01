@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal, SlidersHorizontal } from "lucide-react";
+import { Command as CommandIcon, SlidersHorizontal } from "lucide-react";
 import { useSetRecoilState } from "@/lib/state";
 import { calendarBoardsSidebarOpenAtom } from "@/store";
 import type { IUser } from "@/models/model";
@@ -37,11 +37,12 @@ const MobileTopBarActions = ({
 
       <button
         type="button"
-        aria-label="Menu"
+        aria-label="Commands"
         onClick={() => toggleShowCommands()}
-        className={`${MOBILE_TARGET} text-white-black`}
+        className={`${MOBILE_TARGET} gap-1 px-1 text-white-black`}
       >
-        <MoreHorizontal size={20} strokeWidth={1.75} />
+        <CommandIcon size={17} strokeWidth={1.75} />
+        <span className="text-meta">Commands</span>
       </button>
 
       <button
