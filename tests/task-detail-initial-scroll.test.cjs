@@ -18,6 +18,14 @@ function runFlag(guard, generation) {
   return { allowed, ran };
 }
 
+function sourceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(start, -1, `missing source marker: ${startMarker}`);
+  assert.notEqual(end, -1, `missing source marker: ${endMarker}`);
+  return source.slice(start, end).trimEnd();
+}
+
 test("an untouched task can run its initial positioning", () => {
   const guard = createTaskDetailInitialScrollGuard(() => {});
   const generation = guard.reset();
@@ -101,31 +109,59 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8"
   );
-  const taskLifecycle = source.match(
-    /useLayoutEffect\(\(\) => \{[\s\S]*?initialScrollGuard\.reset\(\);[\s\S]*?initialScrollGuard\.invalidate\(generation\);[\s\S]*?\}, \[_parsedTask\.id, initialScrollGuard\]\);/
-  )?.[0];
-  const viewportLifecycle = source.match(
-    /useLayoutEffect\(\(\) => \{\s*const previousViewport[\s\S]*?initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\);[\s\S]*?\}, \[_mbl, _parsedTask\.id, initialScrollGuard, scrollElementRef\]\);/
-  )?.[0];
-  const mountPositioning = source.match(
-    /\/\/Initial Scroll and focus when page loads[\s\S]*?\}, \[_parsedTask\.id\]\);/
-  )?.[0];
-  const unreadPositioning = source.match(
-    /\/\/ Where a freshly-opened task lands[\s\S]*?visibleCommentIndices,[\s\S]*?\]\);/
-  )?.[0];
+  const bottomPositioning = sourceBetween(
+    source,
+    "// Reliably land at the very bottom of the thread on mobile.",
+    "// A scroll gesture owns initial positioning for one task."
+  );
+  const taskLifecycle = sourceBetween(
+    source,
+    "// A scroll gesture owns initial positioning for one task.",
+    "// Rebind input listeners without restarting initial positioning."
+  );
+  const viewportLifecycle = sourceBetween(
+    source,
+    "// Rebind input listeners without restarting initial positioning.",
+    "//Initial Scroll and focus when page loads"
+  );
+  const mountPositioning = sourceBetween(
+    source,
+    "//Initial Scroll and focus when page loads",
+    "// Where a freshly-opened task lands."
+  );
+  const unreadPositioning = sourceBetween(
+    source,
+    "// Where a freshly-opened task lands.",
+    "  useEffect(() => {\n    if (embedded) return;"
+  );
   const unreadDependencyStart = unreadPositioning?.lastIndexOf("}, [") ?? -1;
 
-  assert.ok(taskLifecycle, "the guard must reset only with the canonical task ID");
-  assert.ok(viewportLifecycle, "the mobile listener must follow the active viewport");
+  assert.match(bottomPositioning, /!initialScrollGuard\.allows\(generation\)/);
+  assert.match(
+    bottomPositioning,
+    /\}, \[initialScrollGuard, scrollElementRef\]\);$/
+  );
+  assert.match(taskLifecycle, /initialScrollGuard\.reset\(\)/);
+  assert.match(taskLifecycle, /initialScrollGuard\.invalidate\(generation\)/);
+  assert.match(
+    taskLifecycle,
+    /\}, \[_parsedTask\.id, initialScrollGuard\]\);$/
+  );
   assert.match(
     viewportLifecycle,
     /previousViewport\.taskId === _parsedTask\.id[\s\S]*?previousViewport\.isMobile !== _mbl[\s\S]*?initialScrollGuard\.invalidate/
   );
-  assert.match(source, /!initialScrollGuard\.allows\(generation\)/);
-  assert.ok(mountPositioning, "the mount positioning effect must remain guarded");
+  assert.match(
+    viewportLifecycle,
+    /initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\)/
+  );
+  assert.match(
+    viewportLifecycle,
+    /\}, \[_mbl, _parsedTask\.id, initialScrollGuard, scrollElementRef\]\);$/
+  );
   assert.match(mountPositioning, /runInitialPositioning\(scrollToElement\)/);
   assert.match(mountPositioning, /runInitialPositioning\(\(\) =>\s*focusOn/);
-  assert.ok(unreadPositioning, "the unread positioning effect must remain guarded");
+  assert.match(mountPositioning, /\}, \[_parsedTask\.id\]\);$/);
   assert.match(unreadPositioning, /initialScrollGuard\.allows\(generation\)/);
   assert.notEqual(
     unreadDependencyStart,

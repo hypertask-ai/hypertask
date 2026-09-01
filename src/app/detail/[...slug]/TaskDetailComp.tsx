@@ -1928,6 +1928,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     return cleanup;
   }, [initialScrollGuard, scrollElementRef]);
 
+  // A scroll gesture owns initial positioning for one task.
   useLayoutEffect(() => {
     const generation = initialScrollGuard.reset();
     initialScrollGenerationRef.current = generation;
@@ -1939,6 +1940,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     };
   }, [_parsedTask.id, initialScrollGuard]);
 
+  // Rebind input listeners without restarting initial positioning.
   useLayoutEffect(() => {
     const previousViewport = initialScrollViewportRef.current;
     if (
