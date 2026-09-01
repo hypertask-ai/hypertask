@@ -266,10 +266,16 @@ test("a real recorder blocks its peer before microphone permission resolves", as
 test("modal plumbing passes its coordinator through the description recorder", () => {
   const tiptap = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   const modalState = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
+  const attachmentStart = tiptap.indexOf("<AttachmentsUpload");
+  const attachmentEnd = tiptap.indexOf("/>", attachmentStart);
 
   assert.match(
     modalState,
     /setFormValues\(\(current\) => \(\{[\s\S]*?appendTitleDictation\(current\.title, transcript\)/,
   );
-  assert.match(tiptap, /<AttachmentsUpload[\s\S]*?dictationCoordinator=\{dictationCoordinator\}/);
+  assert.ok(attachmentStart >= 0 && attachmentEnd > attachmentStart);
+  assert.match(
+    tiptap.slice(attachmentStart, attachmentEnd),
+    /dictationCoordinator=\{dictationCoordinator\}/,
+  );
 });
