@@ -175,6 +175,7 @@ const TaskTitleModal = () => {
                                         toggleRecording={toggleRecording}
                                         globalRecording={isRecording}
                                         dictationCoordinator={dictationCoordinator}
+                                        disabled={isGeneratingTitle}
                                         ariaLabel="Dictate task title"
                                         mobilePresentation="compact"
                                         className="h-11 w-11 shrink-0 justify-center"

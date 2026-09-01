@@ -47,6 +47,7 @@ interface IProp {
   mobilePresentation?: MobileMicPresentation;
   /** Serializes recorder instances that write into the same draft. */
   dictationCoordinator?: DictationCoordinator;
+  disabled?: boolean;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -76,6 +77,7 @@ export const AudioButton = ({
   ariaLabel,
   mobilePresentation,
   dictationCoordinator,
+  disabled = false,
 }: IProp) => {
   const [recording, setRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -318,7 +320,7 @@ export const AudioButton = ({
   };
 
   const startRecording = async (improve: boolean = false) => {
-    if (recordingRef.current || isProcessing) return;
+    if (disabled || recordingRef.current || isProcessing) return;
     const lease = dictationCoordinator?.acquire();
     if (dictationCoordinator && !lease) return;
     if (lease) dictationLeaseRef.current = lease;
@@ -673,6 +675,7 @@ export const AudioButton = ({
                 className={cn(
                   "group relative flex cursor-pointer items-center touch-manipulation",
                   prominent ? prominentClassName : "h-[32px]",
+                  disabled && "cursor-not-allowed opacity-50",
                   className,
                 )}
                 onClick={onMicActivate}
@@ -681,7 +684,8 @@ export const AudioButton = ({
                 onTouchStart={onMicTouchStart}
                 onTouchMove={onMicTouchMove}
                 role={isKeyboardAccessible ? "button" : undefined}
-                tabIndex={isKeyboardAccessible ? 0 : undefined}
+                tabIndex={isKeyboardAccessible && !disabled ? 0 : undefined}
+                aria-disabled={isKeyboardAccessible ? disabled : undefined}
                 aria-label={isMobileTaskWriter ? "Start dictation" : dictationAriaLabel}
                 onKeyDown={(event) => {
                   if (

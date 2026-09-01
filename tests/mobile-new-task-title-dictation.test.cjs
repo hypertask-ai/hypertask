@@ -140,8 +140,9 @@ test("dictation coordinator rejects peers and ignores stale releases", () => {
 });
 
 test("new-task title renders one accessible mobile recorder and none on desktop", async () => {
-  await withDom(async ({ container, reactRoot }) => {
-    const coordinator = createDictationCoordinator(() => {});
+  await withDom(async ({ container, reactRoot, dom }) => {
+    const busyStates = [];
+    const coordinator = createDictationCoordinator((busy) => busyStates.push(busy));
     const noop = () => {};
     createTaskModalValue = {
       currentFocusedElement: null,
@@ -172,7 +173,18 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
     assert.equal(titleMics.length, 1);
     assert.equal(titleMics[0].getAttribute("role"), "button");
     assert.equal(titleMics[0].getAttribute("aria-label"), "Dictate task title");
+    assert.equal(titleMics[0].getAttribute("aria-disabled"), "false");
     assert.match(titleMics[0].className, /h-11 w-11/);
+
+    createTaskModalValue = {
+      ...createTaskModalValue,
+      isGeneratingTitle: true,
+    };
+    await act(async () => reactRoot.render(renderTitle(true)));
+    const disabledMic = container.querySelector("#create-task-title-audio-button");
+    assert.equal(disabledMic.getAttribute("aria-disabled"), "true");
+    disabledMic.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    assert.deepEqual(busyStates, []);
 
     await act(async () => reactRoot.render(renderTitle(false)));
     assert.equal(container.querySelector("#create-task-title-audio-button"), null);

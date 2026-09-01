@@ -691,6 +691,7 @@ const TiptapCreateTaskModal = () => {
                 returnUserInputHandler={handleSetUserInput}
                 toggleRecording={toggleRecording}
                 isRecording={isRecording}
+                dictationCoordinator={dictationCoordinator}
                 createTask={true}
               />
             )}
