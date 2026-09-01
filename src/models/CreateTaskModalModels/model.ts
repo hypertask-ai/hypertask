@@ -45,10 +45,14 @@ export interface ITaskGlobalStates{
     setCurrentTask: Dispatch<SetStateAction<ITask | undefined>>;
     closeHandler: (save?:boolean) => void;
     CreateTaskAndDescription: (descriptionOverride?: string, titleOverride?: string) => Promise<string | undefined>;
-    recordGeneratedTitle: (title: string) => void;
+    applyTaskWriterTitle: (title: string) => void;
+    enableAutoTitleGeneration: () => void;
+    scheduleTitleGeneration: (description: string) => void;
     generateTitleFromDescription: (
       description: string,
     ) => Promise<string | null>;
+    shouldGenerateTitleForSave: (title: string, description: string) => boolean;
+    getCurrentTitle: () => string;
     saveEpochRef: MutableRefObject<number>;
     isGeneratingTitle: boolean;
     titleGenerationError: string | null;

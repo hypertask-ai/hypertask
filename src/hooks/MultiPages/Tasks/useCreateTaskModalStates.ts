@@ -52,6 +52,17 @@ import {
   beginTaskCreatePerformanceTrace,
   type TaskCreateTraceScope,
 } from "@/lib/analytics/productPerformance";
+import { createAutoTitleGenerationCoordinator } from "@/lib/ai/autoTitleGeneration";
+
+const descriptionText = (description: string) => {
+  if (typeof DOMParser === "undefined") {
+    return description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  return new DOMParser()
+    .parseFromString(description, "text/html")
+    .body.textContent?.replace(/\s+/g, " ")
+    .trim() ?? "";
+};
 
 interface IProccessed {
   description: String;
@@ -111,6 +122,25 @@ const useCreateTaskModalGlobalStates = () => {
   // can't materialize after the user already discarded the draft.
   const saveEpochRef = useRef(0);
   const generatedTitleTrackerRef = useRef(createAiTitleEditTracker());
+  const autoTitleCoordinatorRef = useRef<ReturnType<
+    typeof createAutoTitleGenerationCoordinator
+  > | null>(null);
+  if (!autoTitleCoordinatorRef.current) {
+    autoTitleCoordinatorRef.current = createAutoTitleGenerationCoordinator({
+      initialTitle:
+        createTaskModal.duplicate?.title ??
+        createTaskModal.column_payload?.prefilledTitle ??
+        "",
+    });
+  }
+  const autoTitleCoordinator = autoTitleCoordinatorRef.current;
+  const lastDescriptionTextRef = useRef(
+    descriptionText(
+      createTaskModal.duplicate?.description ??
+        createTaskModal.column_payload?.prefilledDescription ??
+        "<p></p>",
+    ),
+  );
   const [titleGenerationError, setTitleGenerationError] = useState<string | null>(null);
   const [tempMentionProjectId, setTempMentionProjectId] = useState<string>("");
   const { postHyperMention } = useHyperMention();
@@ -182,6 +212,10 @@ const useCreateTaskModalGlobalStates = () => {
     []
   );
   const [formValues, setFormValues] = useState<IForm>(defaultFormValues);
+  const formValuesRef = useRef(formValues);
+  formValuesRef.current = formValues;
+  const aiModelPreferencesRef = useRef(userPreferences.aiModelPreferences);
+  aiModelPreferencesRef.current = userPreferences.aiModelPreferences;
   const [canSave, setUploadingStateCreateTaskModal] = useRecoilState(
     uploadingStateCreateTaskModalAtom
   );
@@ -195,51 +229,70 @@ const useCreateTaskModalGlobalStates = () => {
 
   const toggleRecording = (val: boolean) => setIsRecording(val);
 
+  const applyGeneratedTitle = useCallback((title: string) => {
+    setTitleGenerationError(null);
+    formValuesRef.current = { ...formValuesRef.current, title };
+    setFormValues((current) => ({ ...current, title }));
+    generatedTitleTrackerRef.current.record(title);
+  }, []);
+
   const resetFormValues = () => {
     saveEpochRef.current += 1;
     generatedTitleTrackerRef.current.reset();
-    // The invalidated request will no longer clear the spinner itself.
+    autoTitleCoordinator.reset(defaultFormValues.title);
+    lastDescriptionTextRef.current = descriptionText(defaultFormValues.description);
+    formValuesRef.current = defaultFormValues;
     setIsGeneratingTitle(false);
     setFormValues(defaultFormValues);
   };
+
   const handleChange = (key: TFormKey, value: any) => {
-    if (key === "title" && String(value).trim()) setTitleGenerationError(null);
+    if (key === "title") {
+      autoTitleCoordinator.manualTitleChanged();
+      if (String(value).trim()) setTitleGenerationError(null);
+      formValuesRef.current = { ...formValuesRef.current, title: String(value) };
+    }
     setFormValues((prev) => ({ ...prev, [key]: value }));
   };
 
   const appendDictationToTitle = useCallback((transcript: string) => {
     if (!transcript.trim()) return;
+    autoTitleCoordinatorRef.current?.manualTitleChanged();
     setTitleGenerationError(null);
+    formValuesRef.current = {
+      ...formValuesRef.current,
+      title: appendTitleDictation(formValuesRef.current.title, transcript),
+    };
     setFormValues((current) => ({
       ...current,
       title: appendTitleDictation(current.title, transcript),
     }));
   }, []);
 
-  const recordGeneratedTitle = (title: string) => {
-    generatedTitleTrackerRef.current.record(title);
-  };
+  const applyTaskWriterTitle = useCallback((title: string) => {
+    autoTitleCoordinator.taskWriterTitleApplied();
+    applyGeneratedTitle(title);
+  }, [applyGeneratedTitle, autoTitleCoordinator]);
 
-  const generateTitleFromDescription = useCallback(async (description: string) => {
-    // Snapshot the epoch before the request. A discard or a board switch bumps
-    // it, and a response that lands afterwards belongs to a draft that no
-    // longer exists, so it must never be written into the current one.
-    const epochAtRequest = saveEpochRef.current;
-    const project = formValues.currentProject;
+  const enableAutoTitleGeneration = useCallback(() => {
+    autoTitleCoordinator.enableFromTaskWriter();
+  }, [autoTitleCoordinator]);
+
+  const requestTitleFromDescription = useCallback(async (
+    description: string,
+    signal: AbortSignal,
+  ) => {
+    const project = formValuesRef.current.currentProject;
     if (!project) throw new Error("Choose a board before generating a title");
 
-    const parser = new DOMParser();
-    const plainDescription = parser
-      .parseFromString(description, "text/html")
-      .body.textContent?.replace(/\s+/g, " ")
-      .trim();
+    const plainDescription = descriptionText(description);
     if (!plainDescription) throw new Error("Add a description or enter a title");
 
     // Derive the AI model from the board this request is for. The hook-level
     // improveWriting* values follow _currentProject, which lags behind
     // formValues.currentProject after a board switch in the composer.
     const titleOptionIds = getAiModelPreferenceIds(
-      userPreferences.aiModelPreferences,
+      aiModelPreferencesRef.current,
       "improveWriting",
       project.teamId,
     );
@@ -255,75 +308,115 @@ const useCreateTaskModalGlobalStates = () => {
       project.ai_custom_instructions?.[0]?.source_selected ??
       defaultAiModelOption.source;
 
+    const response = await fetch(taskWriterRoute, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        ...buildTaskWriterRequestScope(project, deriveCurrentBoardBilling(project)),
+        // The description must live inside the prompt. A bare instruction gets
+        // echoed as the title instead of improving the user's task wording.
+        PROMPT:
+          "Write a title for the task described below. Use only details from the description, do not invent any. Keep the title under 80 characters.\n\nTask description:\n" +
+          plainDescription,
+        customInstructions:
+          project.ai_custom_instructions?.[0]?.customInstruction ?? "",
+        sourceSelected: titleSource,
+        modelSelected: titleModel,
+        modelOptionId: titleModel,
+        aiMode: "AiTaskWriter",
+        images64: [],
+        pdfs64: [],
+        docx64: [],
+        taskIds: [],
+        taskDescription: description,
+        taskTitle: "",
+      }),
+    });
+    if (!response.ok) throw new Error("Title generation is unavailable");
+
+    const generatedHtml = await response.text();
+    const generatedTitle = extractTitleAndDescription(generatedHtml).title
+      ?.replace(/\s+/g, " ")
+      .trim();
+    if (!generatedTitle) throw new Error("No title was generated");
+    return generatedTitle.slice(0, 80);
+  }, []);
+
+  const scheduleTitleGeneration = useCallback((description: string) => {
+    const plainDescription = descriptionText(description);
+    if (plainDescription === lastDescriptionTextRef.current) return;
+    lastDescriptionTextRef.current = plainDescription;
+    setTitleGenerationError(null);
+    autoTitleCoordinator.schedule(plainDescription ? description : "", {
+      generate: (signal) => requestTitleFromDescription(description, signal),
+      apply: applyGeneratedTitle,
+      onError: () =>
+        setTitleGenerationError(
+          "Couldn’t refresh the title. Keep writing or add one manually.",
+        ),
+    });
+  }, [applyGeneratedTitle, autoTitleCoordinator, requestTitleFromDescription]);
+
+  const generateTitleFromDescription = useCallback(async (description: string) => {
+    const epochAtRequest = saveEpochRef.current;
     setIsGeneratingTitle(true);
     setTitleGenerationError(null);
     try {
-      const response = await fetch(taskWriterRoute, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...buildTaskWriterRequestScope(project, deriveCurrentBoardBilling(project)),
-          // The description must live INSIDE the prompt: the task-writer
-          // route builds its generation around PROMPT, and a bare
-          // meta-instruction gets echoed back as the "title" (verified live:
-          // a CRM description produced the title "Generate concise task
-          // title from existing description").
-          PROMPT:
-            "Write a title for the task described below. Use only details from the description, do not invent any. Keep the title under 80 characters.\n\nTask description:\n" +
-            plainDescription,
-          customInstructions:
-            project.ai_custom_instructions?.[0]?.customInstruction ?? "",
-          sourceSelected: titleSource,
-          modelSelected: titleModel,
-          modelOptionId: titleModel,
-          aiMode: "AiTaskWriter",
-          images64: [],
-          pdfs64: [],
-          docx64: [],
-          taskIds: [],
-          taskDescription: description,
-          taskTitle: "",
-        }),
+      const title = await autoTitleCoordinator.generateNow(description, {
+        generate: (signal) => requestTitleFromDescription(description, signal),
       });
-      if (!response.ok) throw new Error("Title generation is unavailable");
-
-      const generatedHtml = await response.text();
-      const generatedTitle = extractTitleAndDescription(generatedHtml).title
-        ?.replace(/\s+/g, " ")
-        .trim();
-      if (!generatedTitle) throw new Error("No title was generated");
-
-      const title = generatedTitle.slice(0, 80);
-      if (saveEpochRef.current !== epochAtRequest) return null;
-      handleChange("title", title);
-      generatedTitleTrackerRef.current.record(title);
+      if (title === null || saveEpochRef.current !== epochAtRequest) return null;
+      applyGeneratedTitle(title);
       return title;
     } catch (error) {
-      // Same rule for failures: an error from a draft the user has left must
-      // not surface on the draft they are looking at now.
       if (saveEpochRef.current === epochAtRequest) {
         setTitleGenerationError("Couldn’t generate a title. Add one to save.");
       }
       throw error;
     } finally {
-      // A newer request owns the spinner once the epoch has moved on.
       if (saveEpochRef.current === epochAtRequest) setIsGeneratingTitle(false);
     }
-  }, [formValues.currentProject, userPreferences.aiModelPreferences]);
+  }, [applyGeneratedTitle, autoTitleCoordinator, requestTitleFromDescription]);
+
+  const shouldGenerateTitleForSave = useCallback(
+    (title: string, description: string) =>
+      autoTitleCoordinator.needsGenerationForSave(
+        title,
+        descriptionText(description),
+      ),
+    [autoTitleCoordinator],
+  );
+
+  const getCurrentTitle = useCallback(
+    () => formValuesRef.current.title.trim(),
+    [],
+  );
 
   const handleProjectChange = (project: IProject) => {
-    // A board switch invalidates an in-flight title request: the response was
-    // scoped to the previous board's AI configuration.
+    // Generated titles carry the previous board's AI context. Manual titles do
+    // not, so a board switch invalidates only generated title ownership.
     saveEpochRef.current += 1;
     setIsGeneratingTitle(false);
     generatedTitleTrackerRef.current.reset();
-    setFormValues((prev) => ({
-      ...prev,
+    const clearGeneratedTitle = autoTitleCoordinator.boardChanged();
+    const tags = getActiveFiltersFromProject(project).addedFilters.find(
+      (filter) => filter.type === "Labels"
+    )?.searchPayload;
+    formValuesRef.current = {
+      ...formValuesRef.current,
+      title: clearGeneratedTitle ? "" : formValuesRef.current.title,
       currentProject: project,
       assignees: [],
-      tags: getActiveFiltersFromProject(project).addedFilters.find(
-        (filter) => filter.type === "Labels"
-      )?.searchPayload,
+      tags,
+      status: undefined,
+    };
+    setFormValues((prev) => ({
+      ...prev,
+      title: clearGeneratedTitle ? "" : prev.title,
+      currentProject: project,
+      assignees: [],
+      tags,
       status: undefined,
     }));
     if (pathname === "/new") {
@@ -681,8 +774,12 @@ const useCreateTaskModalGlobalStates = () => {
   }, [initializeDefaults, handleChange]);
 
   useEffect(
-    () => () => sectionDefaultsRequestRef.current?.abort(),
-    []
+    () => () => {
+      sectionDefaultsRequestRef.current?.abort();
+      saveEpochRef.current += 1;
+      autoTitleCoordinator.cancelPending();
+    },
+    [autoTitleCoordinator]
   );
 
   //set All projects to be given to SetProjects Modal.
@@ -729,8 +826,12 @@ const useCreateTaskModalGlobalStates = () => {
     focusOn,
     closeHandler,
     CreateTaskAndDescription,
-    recordGeneratedTitle,
+    applyTaskWriterTitle,
+    enableAutoTitleGeneration,
+    scheduleTitleGeneration,
     generateTitleFromDescription,
+    shouldGenerateTitleForSave,
+    getCurrentTitle,
     saveEpochRef,
     isGeneratingTitle,
     titleGenerationError,
