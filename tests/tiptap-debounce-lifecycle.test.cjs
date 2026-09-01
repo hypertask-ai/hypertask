@@ -90,6 +90,14 @@ test("a captured autosave updates only its source task's draft cache", () => {
       .length,
     2
   );
+  assert.equal(
+    (updateDraftsSource.match(/queryClient\.setQueryData\(/g) ?? []).length,
+    2
+  );
+  assert.doesNotMatch(
+    updateDraftsSource,
+    /queryClient\.(?:get|set)QueryData\(draftQueryKey/
+  );
   assert.doesNotMatch(
     updateDraftsSource,
     /projectId: inViewObject\.taskProjectId|taskId: inViewObject\.taskId/
