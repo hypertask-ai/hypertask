@@ -3,11 +3,18 @@ import { pathToFileURL } from "node:url";
 import path from "node:path";
 
 export function shouldRunProductionMigrations(env) {
-  return (
-    env.VERCEL === "1" &&
-    env.VERCEL_ENV === "production" &&
-    env.VERCEL_GIT_COMMIT_REF === "staging"
-  );
+  if (env.VERCEL !== "1" || env.VERCEL_ENV !== "production") {
+    return false;
+  }
+
+  const productionBranch = env.PRODUCTION_BRANCH?.trim() || "production";
+  if (env.VERCEL_GIT_COMMIT_REF !== productionBranch) {
+    throw new Error(
+      `Refusing a Vercel production build outside the ${productionBranch} branch.`,
+    );
+  }
+
+  return true;
 }
 
 export function runProductionMigrations({
@@ -16,14 +23,14 @@ export function runProductionMigrations({
   cwd = process.cwd(),
 } = {}) {
   if (!shouldRunProductionMigrations(env)) {
-    console.log("Skipping database migrations outside a staging production build.");
+    console.log("Skipping database migrations outside a Vercel production build.");
     return { status: "skipped" };
   }
 
   const directUrl = env.DIRECT_URL?.trim();
   if (!directUrl) {
     throw new Error(
-      "DIRECT_URL is required for database migrations in staging production builds.",
+      "DIRECT_URL is required for database migrations in production builds.",
     );
   }
 
