@@ -146,7 +146,12 @@ test("preference fallbacks and the suggestion edge keep the feature contract", (
   );
   assert.match(
     writerSource,
-    /const regenerateDescriptionSuggestion[\s\S]*?sendAIRequest\(\s*initialPrompt,[\s\S]*?onClick=\{regenerateDescriptionSuggestion\}/,
+    /const sendInitialPrompt[\s\S]*?\$\{initialPrompt\}[\s\S]*?sendAIRequest\(finalPrompt, loadingMessage\)/,
+  );
+  assert.match(writerSource, /sendInitialPrompt\("Thinking\.\.\."\)/);
+  assert.match(
+    writerSource,
+    /const regenerateDescriptionSuggestion[\s\S]*?sendInitialPrompt\("Drafting a description from your title\.\.\."\)[\s\S]*?onClick=\{regenerateDescriptionSuggestion\}/,
   );
   assert.match(preferenceHookSource, /queryFn: \(\) => fetchUserPreference\(false\)/);
   assert.match(

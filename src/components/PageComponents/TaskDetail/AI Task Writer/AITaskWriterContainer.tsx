@@ -207,6 +207,21 @@ const AITaskWriterContainer: React.FC<
   );
 
   // Core Functions
+  const sendInitialPrompt = useCallback(
+    (loadingMessage: string) => {
+      if (!initialPrompt) return;
+      const taskTitle = document.getElementById(
+        DIV_ID_CONSTANTS.titleInputModal,
+      )?.innerHTML;
+      const finalPrompt = taskTitle
+        ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${initialPrompt}`
+        : initialPrompt;
+
+      void sendAIRequest(finalPrompt, loadingMessage);
+    },
+    [initialPrompt, sendAIRequest],
+  );
+
   const onClickHandler = useCallback(() => {
     if (isByokBlocked || !userPrompt.trim()) return;
 
@@ -226,12 +241,8 @@ const AITaskWriterContainer: React.FC<
   }, [isByokBlocked, userPrompt, sendAIRequest, isUploadingAttachments, uploadProgress]);
 
   const regenerateDescriptionSuggestion = useCallback(() => {
-    if (!initialPrompt) return;
-    void sendAIRequest(
-      initialPrompt,
-      "Drafting a description from your title...",
-    );
-  }, [initialPrompt, sendAIRequest]);
+    sendInitialPrompt("Drafting a description from your title...");
+  }, [sendInitialPrompt]);
 
   // A completed mobile response leaves the composer open for a new request.
   // Unlike auto-trigger's first request, this always sends exactly what the
@@ -260,15 +271,9 @@ const AITaskWriterContainer: React.FC<
     if (autoTrigger && !hasAutoTriggered.current && initialPrompt) {
       hasAutoTriggered.current = true;
       setIsInitializing(false);
-
-      const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
-      let finalPrompt = taskTitle
-        ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${initialPrompt}`
-        : initialPrompt;
-
-      sendAIRequest(finalPrompt, "Thinking...");
+      sendInitialPrompt("Thinking...");
     }
-  }, [autoTrigger, initialPrompt, sendAIRequest]);
+  }, [autoTrigger, initialPrompt, sendInitialPrompt]);
 
   // Callback Handlers
   const handleAIOptionCallback = useCallback(
