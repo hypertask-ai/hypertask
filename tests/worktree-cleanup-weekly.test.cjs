@@ -66,7 +66,13 @@ function createFixture(tempRoot = os.tmpdir()) {
   fs.writeFileSync(fakeGh, '#!/bin/sh\nif [ "${GH_FAIL:-0}" = "1" ]; then exit 17; fi\nif [ -n "${GH_FAIL_AFTER_FILE:-}" ] && [ -e "$GH_FAIL_AFTER_FILE" ]; then exit 17; fi\nif [ -n "${GH_READY_FILE:-}" ]; then : > "$GH_READY_FILE"; fi\nif [ -n "${GH_SLEEP:-}" ]; then sleep "$GH_SLEEP"; fi\ncase " $* " in *" --state open "*) cat "$GH_OPEN_RESPONSE" ;; *) cat "$GH_RESPONSE" ;; esac\n');
   fs.chmodSync(fakeGh, 0o755);
   fs.writeFileSync(findmntResponse, '{"filesystems":[]}');
-  fs.writeFileSync(fakeFindmnt, '#!/bin/sh\ncat "$FINDMNT_RESPONSE"\n');
+  fs.writeFileSync(fakeFindmnt, `#!/bin/sh
+if [ -n "${'$'}{FINDMNT_CWD_ON_QUARANTINE:-}" ] && echo "${'$'}3" | grep -Fq '/cache-quarantine/'; then
+  mkdir -p "${'$'}PROC_ROOT/456"
+  ln -s "${'$'}3" "${'$'}PROC_ROOT/456/cwd"
+fi
+cat "${'$'}FINDMNT_RESPONSE"
+`);
   fs.chmodSync(fakeFindmnt, 0o755);
   fs.writeFileSync(fakeGit, `#!/bin/sh
 REAL_GIT=$(command -v git) || exit 127
@@ -474,6 +480,18 @@ test('cache cleanup preserves a target with a nested bind mount', (t) => {
 
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
   assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), false);
+});
+
+test('cache cleanup restores a target used after quarantine', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+
+  runScript(fixture, [], { FINDMNT_CWD_ON_QUARANTINE: '1' });
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
+  assert.match(fs.readFileSync(fixture.log, 'utf8'), /cache became active during quarantine; restored/);
 });
 
 test('cache cleanup dry-run leaves every target intact', (t) => {

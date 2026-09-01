@@ -908,6 +908,13 @@ clean_cache_target() {
     log "cache became active during quarantine; restored: $target"
     return 0
   fi
+  refresh_live_cwds
+  if path_is_in_use "$quarantine"; then
+    restore_cache_target "$quarantine" "$target" \
+      || fatal "cache became active and could not be restored: $target"
+    log "cache became active during quarantine; restored: $target"
+    return 0
+  fi
   if [[ "$name" == "tsconfig.tsbuildinfo" ]]; then
     rm -f -- "$quarantine" || {
       restore_cache_target "$quarantine" "$target" || true
