@@ -297,6 +297,12 @@ const Tiptap = ({
       return;
     }
 
+    const targetDraftQueryKey = [
+      "draft for [task,userId]:",
+      taskId,
+      currentUser?.id,
+    ];
+
     // Editing an existing comment must NOT autosave a draft. The edit editor
     // always initialises from comment.text (never the draft), so this write is
     // never read back for the edit — it only lands in the shared "Comment"
@@ -322,16 +328,17 @@ const Tiptap = ({
       if (response?.status === 200) invalidateUserDrafts();
     });
 
-    const currentDrafts: IDraft[] = queryClient.getQueryData(draftQueryKey) ?? [];
+    const currentDrafts: IDraft[] =
+      queryClient.getQueryData(targetDraftQueryKey) ?? [];
     const existingDraft = currentDrafts.find((draft) => draft.type === draftType);
 
     if (existingDraft) {
       const updatedDrafts = currentDrafts.map((draft) =>
         draft.type === draftType ? { ...draft, content: input } : draft
       );
-      queryClient.setQueryData(draftQueryKey, updatedDrafts);
+      queryClient.setQueryData(targetDraftQueryKey, updatedDrafts);
     } else {
-      queryClient.setQueryData(draftQueryKey, [
+      queryClient.setQueryData(targetDraftQueryKey, [
         ...currentDrafts,
         {
           id: -1,
@@ -339,8 +346,8 @@ const Tiptap = ({
           content: input,
           saved: false,
           userId: currentUser.id!,
-          projectId: inViewObject.taskProjectId,
-          taskId: inViewObject.taskId,
+          projectId,
+          taskId,
         },
       ]);
     }
