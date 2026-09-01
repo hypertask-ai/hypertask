@@ -35,6 +35,7 @@ const {
   classifyMcpAuthFailure,
   mcpUnauthorizedResponse,
   createMcpToken,
+  legacyTokenRevocationJti,
 } = jiti(path.join(root, 'src/lib/mcp/auth.ts'))
 
 const USER = { id: 6, email: 'valentin@hypertask.ai' }
@@ -112,6 +113,31 @@ test('a token revoked through the administrative namespaced jti is still named a
   const reason = await classifyMcpAuthFailure(requestWithToken(token), db)
 
   assert.equal(reason, 'token_revoked')
+})
+
+test('legacy revocation identifies one exact bearer without affecting another user token', async () => {
+  const first = jwt.sign(
+    { sub: USER.email, userId: USER.id, marker: 'first' },
+    testSigningKey,
+    { issuer: 'hypertask', audience: 'mcp-api', expiresIn: '30d' }
+  )
+  const second = jwt.sign(
+    { sub: USER.email, userId: USER.id, marker: 'second' },
+    testSigningKey,
+    { issuer: 'hypertask', audience: 'mcp-api', expiresIn: '30d' }
+  )
+  const revokedJti = legacyTokenRevocationJti(first)
+  const { db } = lookup({ revokedJtis: [revokedJti] })
+
+  assert.equal(
+    await classifyMcpAuthFailure(requestWithToken(first), db),
+    'token_revoked'
+  )
+  assert.equal(
+    await classifyMcpAuthFailure(requestWithToken(second), db),
+    'invalid_token'
+  )
+  assert.notEqual(legacyTokenRevocationJti(second), revokedJti)
 })
 
 test('a token minted before the owner revoked every token is named as revoked', async () => {
