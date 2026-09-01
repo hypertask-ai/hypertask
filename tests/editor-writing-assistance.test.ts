@@ -1,31 +1,16 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const ts = require("typescript");
-const { JSDOM } = require("jsdom");
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+import { Editor } from "@tiptap/core";
+import StarterKit from "@tiptap/starter-kit";
+import { JSDOM } from "jsdom";
+import { writingAssistanceEditorProps } from "../src/components/RTE/writingAssistance";
 
-const root = path.resolve(__dirname, "..");
+const root = path.resolve(import.meta.dirname, "..");
+type DOMWindow = InstanceType<typeof JSDOM>["window"];
 
-function loadTypescriptModule(filePath) {
-  const source = fs.readFileSync(filePath, "utf8");
-  const javascript = ts.transpileModule(source, {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
-  const module_ = { exports: {} };
-  new Function("require", "module", "exports", javascript)(
-    require,
-    module_,
-    module_.exports,
-  );
-  return module_.exports;
-}
-
-function installBrowserGlobals(window) {
+function installBrowserGlobals(window: DOMWindow) {
   const globals = {
     window,
     document: window.document,
@@ -36,7 +21,8 @@ function installBrowserGlobals(window) {
     DOMParser: window.DOMParser,
     navigator: window.navigator,
     getSelection: window.getSelection.bind(window),
-    requestAnimationFrame: (callback) => setTimeout(callback, 0),
+    requestAnimationFrame: (callback: FrameRequestCallback) =>
+      setTimeout(callback, 0),
   };
   const previous = new Map(
     Object.keys(globals).map((key) => [
@@ -54,7 +40,7 @@ function installBrowserGlobals(window) {
   return () => {
     for (const [key, descriptor] of previous) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else delete globalThis[key];
+      else delete (globalThis as Record<string, unknown>)[key];
     }
   };
 }
@@ -62,18 +48,12 @@ function installBrowserGlobals(window) {
 test("shared writing assistance attributes reach the editable ProseMirror node", (t) => {
   const dom = new JSDOM('<div id="editor"></div>');
   const restoreGlobals = installBrowserGlobals(dom.window);
-  let editor;
+  let editor: Editor | undefined;
   t.after(() => {
     editor?.destroy();
     restoreGlobals();
     dom.window.close();
   });
-
-  const { Editor } = require("@tiptap/core");
-  const StarterKit = require("@tiptap/starter-kit").default;
-  const { writingAssistanceEditorProps } = loadTypescriptModule(
-    path.join(root, "src/components/RTE/writingAssistance.ts"),
-  );
 
   editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
