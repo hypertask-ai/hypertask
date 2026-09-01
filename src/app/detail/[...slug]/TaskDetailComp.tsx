@@ -148,6 +148,7 @@ import {
 } from "@/lib/tutorial/learnTutorialState";
 import { emitProductPerformanceEvent } from "@/lib/analytics/productPerformance";
 import { performanceDeviceClass } from "@/lib/analytics/appPerformanceScope";
+import { createTaskDetailInitialScrollGuard } from "@/lib/taskDetailInitialScroll";
 import {
   consumeTaskDetailReadinessSample,
   TASK_DETAIL_READINESS_MAX_MS,
@@ -249,8 +250,17 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const hasBottomScrolledRef = useRef(false);
   // Cancel handle for the in-flight bottom-settling scroll. Held in a ref (not
   // returned from the deciding effect) so a dependency change mid-settle doesn't
-  // kill the ~2.5s loop and land short; only unmount cancels it.
+  // kill the ~2.5s loop and land short; task changes or user input cancel it.
   const bottomScrollCancelRef = useRef<null | (() => void)>(null);
+  const initialScrollGuard = useMemo(
+    () =>
+      createTaskDetailInitialScrollGuard(() => {
+        bottomScrollCancelRef.current?.();
+        bottomScrollCancelRef.current = null;
+      }),
+    []
+  );
+  const initialScrollGenerationRef = useRef(0);
   // const assignInputRef = useRef<HTMLInputElement>(null);
   const lastM_APress = useRef<number | null>(null);
   const [movingItem, setMovingItem] = useState(false);
@@ -398,6 +408,10 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const { copyCommentToAiChat, summarizeComment, summarizeTicket } = useCommentToAiChat();
 
   const _mbl = useContext(MobileViewContext);
+  const initialScrollViewportRef = useRef({
+    taskId: _parsedTask.id,
+    isMobile: _mbl,
+  });
   const appShellRailOn =
     useRecoilValue(appShellRailAtom) && !_mbl && !embedded;
 
@@ -1885,30 +1899,14 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     let lastHeight = -1;
     let stableFrames = 0;
     const startedAt = performance.now();
-
-    // Cancel on a real user scroll GESTURE (touch drag / wheel), not on a scrollY
-    // heuristic. The mobile virtualizer estimates each row at 500px and measures
-    // the real heights after mount, so the document height keeps shifting on its
-    // own (shrinking for short rows, growing for long ones) and the browser
-    // re-clamps scrollY with it. Any scrollY-based "did the user move?" test
-    // mistakes that reflow for input and stops mid-thread. A programmatic
-    // scrollTo emits only a 'scroll' event, never wheel/touchmove, so listening
-    // for the gesture itself yields to the user without fighting reflow.
-    const stop = () => {
-      cancelled = true;
-    };
+    const generation = initialScrollGenerationRef.current;
     const scrollTarget = scrollElementRef?.current;
-    const gestureTarget = scrollTarget ?? window;
-    gestureTarget.addEventListener("wheel", stop, { passive: true });
-    gestureTarget.addEventListener("touchmove", stop, { passive: true });
     const cleanup = () => {
       cancelled = true;
-      gestureTarget.removeEventListener("wheel", stop);
-      gestureTarget.removeEventListener("touchmove", stop);
     };
 
     const step = () => {
-      if (cancelled) return cleanup();
+      if (cancelled || !initialScrollGuard.allows(generation)) return cleanup();
       const height =
         scrollTarget?.scrollHeight ?? document.documentElement.scrollHeight;
       (scrollTarget ?? window).scrollTo({ top: height, behavior: "auto" });
@@ -1928,10 +1926,42 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     };
     requestAnimationFrame(step);
     return cleanup;
-  }, [scrollElementRef]);
+  }, [initialScrollGuard, scrollElementRef]);
+
+  // A scroll gesture owns initial positioning for one task.
+  useLayoutEffect(() => {
+    const generation = initialScrollGuard.reset();
+    initialScrollGenerationRef.current = generation;
+    hasScrolledToUnreadRef.current = false;
+    hasBottomScrolledRef.current = false;
+
+    return () => {
+      initialScrollGuard.invalidate(generation);
+    };
+  }, [_parsedTask.id, initialScrollGuard]);
+
+  // Rebind input listeners without restarting initial positioning.
+  useLayoutEffect(() => {
+    const previousViewport = initialScrollViewportRef.current;
+    if (
+      previousViewport.taskId === _parsedTask.id &&
+      previousViewport.isMobile !== _mbl
+    ) {
+      initialScrollGuard.invalidate(initialScrollGenerationRef.current);
+    }
+    initialScrollViewportRef.current = {
+      taskId: _parsedTask.id,
+      isMobile: _mbl,
+    };
+
+    return initialScrollGuard.listen(scrollElementRef?.current ?? window);
+  }, [_mbl, _parsedTask.id, initialScrollGuard, scrollElementRef]);
 
   //Initial Scroll and focus when page loads
   useEffect(() => {
+    const generation = initialScrollGenerationRef.current;
+    const runInitialPositioning = (callback: () => void) =>
+      initialScrollGuard.run(generation, callback);
     const hash = window.location.hash.substring(1);
     window.history.scrollRestoration = "manual";
     const commentIdFromParams = searchParams?.get(taskDetailConfig.searchParams.commentId);
@@ -1942,29 +1972,49 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
         );
         scrollVirtualize(taskDetailConfig.elementIds.comment, commentIndex, undefined, true);
       };
-      const timeout = setTimeout(scrollToElement, taskDetailConfig.delays.scrollToElement);
+      const timeout = setTimeout(
+        () => runInitialPositioning(scrollToElement),
+        taskDetailConfig.delays.scrollToElement
+      );
       return () => clearTimeout(timeout);
     } else {
       if (searchParams?.get(taskDetailConfig.searchParams.reply)) {
-        const timeout = setTimeout(() => focusOn(taskDetailConfig.elementIds.commentInput), taskDetailConfig.delays.focusCommentInput);
+        const timeout = setTimeout(
+          () =>
+            runInitialPositioning(() =>
+              focusOn(taskDetailConfig.elementIds.commentInput)
+            ),
+          taskDetailConfig.delays.focusCommentInput
+        );
         return () => clearTimeout(timeout);
       } else if (searchParams?.get(taskDetailConfig.searchParams.audio)) {
-        const timeout = setTimeout(() => focusOn(taskDetailConfig.elementIds.commentInput), taskDetailConfig.delays.focusCommentInput);
+        const timeout = setTimeout(
+          () =>
+            runInitialPositioning(() =>
+              focusOn(taskDetailConfig.elementIds.commentInput)
+            ),
+          taskDetailConfig.delays.focusCommentInput
+        );
         document.getElementById(`${taskDetailConfig.audioButtons.createComment}-${taskDetailConfig.audioButtons.suffix}`)?.click();
         return () => clearTimeout(timeout);
       } else if (searchParams?.get(taskDetailConfig.searchParams.inboxFlow)) {
         // Coming from the inbox: "Bottom" and "Inbox" both scroll to the bottom;
         // "None" leaves focus on the description.
         if (scrollSetting === taskDetailConfig.scrollSettings.none) {
-          focusOn(descriptionContainerId);
+          runInitialPositioning(() => focusOn(descriptionContainerId));
         } else if (_mbl) {
           // Select the composer, but DEFER the actual scroll to the snapshot-ready
           // effect below: it lands on the first unread comment (read new-onwards),
           // or the bottom when nothing is new. Scrolling here too would fight it.
-          focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true);
+          runInitialPositioning(() =>
+            focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true)
+          );
           return;
         } else {
-          const timeout = setTimeout(() => defaultCommentFocus(), taskDetailConfig.delays.defaultCommentFocus);
+          const timeout = setTimeout(
+            () => runInitialPositioning(defaultCommentFocus),
+            taskDetailConfig.delays.defaultCommentFocus
+          );
           return () => clearTimeout(timeout);
         }
       } else {
@@ -1972,24 +2022,27 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
           // Select the composer; the snapshot-ready effect below owns the mobile
           // scroll (first unread, else bottom) so it can decide from unread state.
           const timeout = setTimeout(
-            () => focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true),
+            () =>
+              runInitialPositioning(() =>
+                focusOn(taskDetailConfig.elementIds.comment, false, undefined, undefined, true)
+              ),
             taskDetailConfig.delays.mobileFocusComment
           );
           return () => clearTimeout(timeout);
         } else {
-          if (scrollSetting !== taskDetailConfig.scrollSettings.bottom) focusOn(descriptionContainerId);
-          else {
-            const timeout = setTimeout(() => defaultCommentFocus(), taskDetailConfig.delays.defaultCommentFocus);
+          if (scrollSetting !== taskDetailConfig.scrollSettings.bottom) {
+            runInitialPositioning(() => focusOn(descriptionContainerId));
+          } else {
+            const timeout = setTimeout(
+              () => runInitialPositioning(defaultCommentFocus),
+              taskDetailConfig.delays.defaultCommentFocus
+            );
             return () => clearTimeout(timeout);
           }
         }
       }
     }
-  }, []);
-
-  // Cancel any in-flight bottom-settling scroll on unmount ONLY (not on every
-  // dependency change), so the ~2.5s settle loop can run to the true bottom.
-  useEffect(() => () => bottomScrollCancelRef.current?.(), []);
+  }, [_parsedTask.id]);
 
   // Where a freshly-opened task lands. Runs once the unread snapshot is ready so
   // it knows whether anything is new; the mount effect defers its mobile scroll
@@ -1997,7 +2050,15 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   // (read new-onwards); if nothing is new, fall to the very bottom so the last
   // comment sits fully above the composer. Explicit deep-links win over both.
   useEffect(() => {
-    if (hasScrolledToUnreadRef.current || !newCommentsSnapshotReady) return;
+    const generation = initialScrollGenerationRef.current;
+    const runInitialPositioning = (callback: () => void) =>
+      initialScrollGuard.run(generation, callback);
+    if (
+      hasScrolledToUnreadRef.current ||
+      !newCommentsSnapshotReady ||
+      !initialScrollGuard.allows(generation)
+    )
+      return;
 
     const hash = window.location.hash.substring(1);
     const hasDeepLink =
@@ -2046,25 +2107,30 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     bottomScrollCancelRef.current?.();
     bottomScrollCancelRef.current = null;
     const timeout = setTimeout(() => {
-      hasScrolledToUnreadRef.current = true;
-      focusOn(`comment-${firstNewCommentIndex}`, false);
-      virtualizer.scrollToIndex(
-        virtualizeIndexes.commentsStartVirtualIndex + visiblePosition,
-        { align: "start", behavior: "auto" }
-      );
-      requestAnimationFrame(() => {
-        (scrollElementRef?.current ?? window).scrollBy({
-          top: -Math.round(window.innerHeight / 3),
-          behavior: "auto",
+      runInitialPositioning(() => {
+        hasScrolledToUnreadRef.current = true;
+        focusOn(`comment-${firstNewCommentIndex}`, false);
+        virtualizer.scrollToIndex(
+          virtualizeIndexes.commentsStartVirtualIndex + visiblePosition,
+          { align: "start", behavior: "auto" }
+        );
+        requestAnimationFrame(() => {
+          runInitialPositioning(() => {
+            (scrollElementRef?.current ?? window).scrollBy({
+              top: -Math.round(window.innerHeight / 3),
+              behavior: "auto",
+            });
+          });
         });
       });
     }, taskDetailConfig.delays.scrollToElement);
 
     return () => clearTimeout(timeout);
   }, [
-    _mbl,
+    _parsedTask.id,
     comments,
     focusOn,
+    initialScrollGuard,
     newCommentIds,
     newCommentsSnapshotReady,
     scrollSetting,
