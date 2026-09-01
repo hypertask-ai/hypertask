@@ -207,8 +207,12 @@ const Tiptap = ({
   const isReadEditMode =
     mode === "read-edit-description" || mode === "read-edit-comments";
   const isReadOnlyContent = isReadEditMode && !allowEdit;
-  const { data: userPreferences, isFetched: preferencesHydrated } =
-    useGetUserPreferences();
+  const {
+    data: userPreferences,
+    isFetched: preferencesFetched,
+    isSuccess: preferencesFetchSucceeded,
+  } = useGetUserPreferences();
+  const preferencesHydrated = preferencesFetched && preferencesFetchSucceeded;
   const advanceOnSend = userPreferences.inboxAdvanceOnSend ?? true;
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
   

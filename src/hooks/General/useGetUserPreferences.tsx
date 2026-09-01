@@ -54,7 +54,7 @@ export const useGetUserPreferences = (
 ) => {
   return useQuery({
     queryKey,
-    queryFn: () => fetchUserPreference(),
+    queryFn: () => fetchUserPreference(false),
     enabled: options?.enabled ?? true,
     initialData: initialData ?? DEFAULT_USER_PREFERENCES,
     initialDataUpdatedAt: initialData ? undefined : 0,

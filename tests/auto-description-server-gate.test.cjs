@@ -117,6 +117,14 @@ test("preference fallbacks and the suggestion edge keep the feature contract", (
     ),
     "utf8",
   );
+  const preferenceHookSource = fs.readFileSync(
+    path.join(root, "src/hooks/General/useGetUserPreferences.tsx"),
+    "utf8",
+  );
+  const taskDetailSource = fs.readFileSync(
+    path.join(root, "src/components/RTE/TipTapTaskDetail.tsx"),
+    "utf8",
+  );
 
   assert.match(
     preferencesSource,
@@ -128,4 +136,9 @@ test("preference fallbacks and the suggestion edge keep the feature contract", (
   );
   assert.match(writerSource, /border-l border-l-hypertasks-ai-purple/);
   assert.doesNotMatch(writerSource, /border-l-4 border-l-hypertasks-ai-purple/);
+  assert.match(preferenceHookSource, /queryFn: \(\) => fetchUserPreference\(false\)/);
+  assert.match(
+    taskDetailSource,
+    /const preferencesHydrated = preferencesFetched && preferencesFetchSucceeded/,
+  );
 });
