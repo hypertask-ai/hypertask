@@ -13,8 +13,10 @@ import {
   shouldRefetchTaskDetail,
   shouldSyncTaskDetailContent,
 } from "@/lib/realtime/taskDetailRefresh";
-import globalConstants from "@/lib/constants";
+import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import type { IAttachment, ITask } from "@/models/model";
+
+export const TASK_COMMENTS_RECONCILE_INTERVAL_MS = 10_000;
 
 type RealtimePayload = {
   originUserId?: number | string | null;
@@ -69,6 +71,10 @@ export function useTaskCommentsRealtime(
     let unsubscribe: (() => void) | undefined;
     let refreshInFlight = false;
     let refreshRequestedDuringFlight = false;
+    let subscriptionHealthy = false;
+    let fallbackActive = false;
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null;
+    let fallbackWarningLogged = false;
     const startedWhileHidden =
       typeof document !== "undefined" && document.visibilityState === "hidden";
     shouldRefetchTask.current = false;
@@ -86,9 +92,7 @@ export function useTaskCommentsRealtime(
       shouldRefetchTask.current = false;
       shouldSyncTaskContent.current = false;
 
-      const commentsRefetch = queryClient.refetchQueries({
-        queryKey: [globalConstants.CommentsTQPrefixKey, taskId],
-      });
+      const commentsRefetch = refreshTaskComments(queryClient, taskId);
 
       if (
         includeTaskRefetch &&
@@ -149,6 +153,7 @@ export function useTaskCommentsRealtime(
     };
 
     const refetch = (includeTask = false, includeTaskContent = false) => {
+      if (cancelled) return;
       if (includeTask) shouldRefetchTask.current = true;
       if (includeTaskContent) shouldSyncTaskContent.current = true;
       if (refreshInFlight) {
@@ -157,6 +162,42 @@ export function useTaskCommentsRealtime(
       }
       void runRefetch();
     };
+
+    const canReconcile = () =>
+      !cancelled &&
+      (typeof document === "undefined" ||
+        document.visibilityState === "visible") &&
+      (typeof navigator === "undefined" || navigator.onLine !== false);
+    const reconcileWhileUnhealthy = () => {
+      if (fallbackActive && !subscriptionHealthy && canReconcile()) refetch();
+    };
+    const stopFallback = () => {
+      subscriptionHealthy = true;
+      fallbackActive = false;
+      if (fallbackTimer !== null) clearInterval(fallbackTimer);
+      fallbackTimer = null;
+    };
+    const startFallback = (reason: string) => {
+      if (cancelled) return;
+      subscriptionHealthy = false;
+      if (fallbackActive) return;
+      fallbackActive = true;
+      if (!fallbackWarningLogged) {
+        console.warn(
+          `[realtime] task comment subscription ${reason}; enabling reconciliation`
+        );
+        fallbackWarningLogged = true;
+      }
+      reconcileWhileUnhealthy();
+      fallbackTimer = setInterval(
+        reconcileWhileUnhealthy,
+        TASK_COMMENTS_RECONCILE_INTERVAL_MS
+      );
+    };
+    const onVisibilityChange = () => reconcileWhileUnhealthy();
+    const onOnline = () => reconcileWhileUnhealthy();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", onOnline);
 
     const refetchActivity = (payload?: RealtimePayload) => {
       const event = COMMENT_EVENT;
@@ -182,8 +223,11 @@ export function useTaskCommentsRealtime(
     };
 
     void (async () => {
-      const client = await connectRealtimeClient();
-      if (!client) return;
+      const client = await connectRealtimeClient().catch(() => null);
+      if (!client) {
+        startFallback("unavailable");
+        return;
+      }
       if (cancelled) {
         releaseRealtimeClientIfIdle(client);
         return;
@@ -191,8 +235,24 @@ export function useTaskCommentsRealtime(
 
       const channelName = taskChannel(taskId);
       const channel = client.subscribe(channelName);
+      const onSubscriptionSucceeded = () => stopFallback();
+      const onSubscriptionError = () => startFallback("failed");
+      const onConnectionStateChange = ({ current }: { current?: string }) => {
+        if (
+          current === "unavailable" ||
+          current === "failed" ||
+          current === "disconnected"
+        ) {
+          startFallback(current);
+        }
+      };
       channel.bind(COMMENT_EVENT, refetchActivity);
       channel.bind(TASK_EVENT, refetchTaskAndActivity);
+      channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
+      channel.bind("pusher:subscription_error", onSubscriptionError);
+      client.connection.bind("state_change", onConnectionStateChange);
+      if (channel.subscribed) stopFallback();
+      onConnectionStateChange({ current: client.connection.state });
       // Reconnect safety-net: pull once after a dropped connection recovers.
       // Skipped on the INITIAL connection (HTPR-3998) — the queries are already
       // fetching on mount, so refetching there just doubled every page load.
@@ -211,6 +271,12 @@ export function useTaskCommentsRealtime(
       unsubscribe = () => {
         channel.unbind(COMMENT_EVENT, refetchActivity);
         channel.unbind(TASK_EVENT, refetchTaskAndActivity);
+        channel.unbind(
+          "pusher:subscription_succeeded",
+          onSubscriptionSucceeded
+        );
+        channel.unbind("pusher:subscription_error", onSubscriptionError);
+        client.connection.unbind("state_change", onConnectionStateChange);
         client.connection.unbind("connected", onConnected);
         client.unsubscribe(channelName);
         releaseRealtimeClientIfIdle(client);
@@ -222,6 +288,11 @@ export function useTaskCommentsRealtime(
       shouldRefetchTask.current = false;
       shouldSyncTaskContent.current = false;
       refreshRequestedDuringFlight = false;
+      fallbackActive = false;
+      if (fallbackTimer !== null) clearInterval(fallbackTimer);
+      fallbackTimer = null;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", onOnline);
       unsubscribe?.();
     };
   }, [
