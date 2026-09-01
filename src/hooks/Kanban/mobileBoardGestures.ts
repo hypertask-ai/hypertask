@@ -1,4 +1,4 @@
-export const BOARD_OVERVIEW_SCALE = 0.5;
+export const BOARD_OVERVIEW_SCALE = 0.6;
 export const BOARD_PINCH_THRESHOLD = 0.15;
 export const MOBILE_TASK_DRAG_DELAY_MS = 900;
 export const MOBILE_COLUMN_DRAG_DELAY_MS = 120;
