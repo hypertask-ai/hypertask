@@ -8,6 +8,17 @@ export const getMobileDragDelay = (draggableId: string) =>
     ? MOBILE_TASK_DRAG_DELAY_MS
     : MOBILE_COLUMN_DRAG_DELAY_MS;
 
+export const setProjectBoardZoom = (
+  current: Record<number, boolean>,
+  projectId: number,
+  zoomedOut: boolean,
+) => ({ ...current, [projectId]: zoomedOut });
+
+export const toggleProjectBoardZoom = (
+  current: Record<number, boolean>,
+  projectId: number,
+) => setProjectBoardZoom(current, projectId, !(current[projectId] ?? false));
+
 export const getPinchZoomState = ({
   zoomedOut,
   startDistance,

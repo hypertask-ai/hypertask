@@ -437,9 +437,9 @@ export const showCommandsAtom = atom<IShowHypertaskHTC>({
     },
 });
 
-export const boardZoomedOutAtom = atom<boolean>({
+export const boardZoomedOutAtom = atom<Record<number, boolean>>({
     key: "boardZoomedOut",
-    default: false,
+    default: {},
 });
 
 export const showPriorityModal = atom({

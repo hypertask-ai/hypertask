@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import { useRecoilState } from "@/lib/state";
 import { boardZoomedOutAtom } from "@/store";
-import { getPinchZoomState } from "./mobileBoardGestures";
+import {
+  getPinchZoomState,
+  setProjectBoardZoom,
+} from "./mobileBoardGestures";
 
 type Pinch = {
   ids: [number, number];
@@ -41,8 +44,10 @@ const isBoardTouch = (touch: Touch) => {
   );
 };
 
-export const useMobileBoardZoom = (enabled: boolean) => {
-  const [zoomedOut, setZoomedOut] = useRecoilState(boardZoomedOutAtom);
+export const useMobileBoardZoom = (enabled: boolean, projectId: number) => {
+  const [zoomedOutByProject, setZoomedOutByProject] =
+    useRecoilState(boardZoomedOutAtom);
+  const zoomedOut = zoomedOutByProject[projectId] ?? false;
   const zoomedOutRef = useRef(zoomedOut);
   const pinchRef = useRef<Pinch | null>(null);
   zoomedOutRef.current = zoomedOut;
@@ -114,7 +119,9 @@ export const useMobileBoardZoom = (enabled: boolean) => {
       if (next !== pinch.initialZoomedOut) {
         pinch.committed = true;
         zoomedOutRef.current = next;
-        setZoomedOut(next);
+        setZoomedOutByProject((current) =>
+          setProjectBoardZoom(current, projectId, next)
+        );
       }
     }
     function onTouchEnd(event: TouchEvent) {
@@ -126,7 +133,7 @@ export const useMobileBoardZoom = (enabled: boolean) => {
       document.removeEventListener("touchstart", onTouchStart, true);
       reset();
     };
-  }, [enabled, setZoomedOut]);
+  }, [enabled, projectId, setZoomedOutByProject]);
 
   return zoomedOut;
 };

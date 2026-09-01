@@ -8,6 +8,8 @@ import {
   getPinchZoomState,
   MOBILE_COLUMN_DRAG_DELAY_MS,
   MOBILE_TASK_DRAG_DELAY_MS,
+  setProjectBoardZoom,
+  toggleProjectBoardZoom,
 } from "../src/hooks/Kanban/mobileBoardGestures";
 
 test("mobile board pinch jumps from normal to the fixed overview state", () => {
@@ -69,6 +71,16 @@ test("mobile task pickup waits roughly a second without changing column pickup",
   assert.equal(MOBILE_TASK_DRAG_DELAY_MS, 900);
   assert.equal(getMobileDragDelay("column-7"), MOBILE_COLUMN_DRAG_DELAY_MS);
   assert.equal(MOBILE_COLUMN_DRAG_DELAY_MS, 120);
+});
+
+test("zoom state stays scoped to its board", () => {
+  const firstBoardOverview = toggleProjectBoardZoom({}, 10);
+  const secondBoardOverview = toggleProjectBoardZoom(firstBoardOverview, 20);
+  const firstBoardNormal = setProjectBoardZoom(secondBoardOverview, 10, false);
+
+  assert.deepEqual(firstBoardOverview, { 10: true });
+  assert.deepEqual(secondBoardOverview, { 10: true, 20: true });
+  assert.deepEqual(firstBoardNormal, { 10: false, 20: true });
 });
 
 test("overview styling and drag blocking stay mobile-only", () => {

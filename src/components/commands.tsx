@@ -27,6 +27,7 @@ import {
   type IShowHypertaskHTC,
 } from "@/store";
 import { CommandMode } from "@/models/enums";
+import { toggleProjectBoardZoom } from "@/hooks/Kanban/mobileBoardGestures";
 import {
   IAgent,
   IAllCommands,
@@ -236,7 +237,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     cancelInvite,
   } = useInviteCallbackHandlers();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
-  const [, setBoardZoomedOut] = useRecoilState(boardZoomedOutAtom);
+  const [, setBoardZoomedOutByProject] = useRecoilState(boardZoomedOutAtom);
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [isSidebarMode, setIsSidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(aiChatAutoOpenSuppressedAtom);
@@ -749,10 +750,16 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       case CommandMode.ReloadApp:
         window.location.reload();
         return;
-      case CommandMode.ToggleBoardZoom:
-        setBoardZoomedOut((current) => !current);
+      case CommandMode.ToggleBoardZoom: {
+        const boardId = _currentProject?.id;
+        if (boardId !== undefined) {
+          setBoardZoomedOutByProject((current) =>
+            toggleProjectBoardZoom(current, boardId)
+          );
+        }
         boardCloseHandler();
         return;
+      }
       case CommandMode.EditBoard:
       case CommandMode.AutoAssignColumn:
         break;
