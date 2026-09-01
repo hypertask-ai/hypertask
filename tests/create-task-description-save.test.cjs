@@ -83,8 +83,8 @@ test("discard during title generation cancels the pending save", () => {
   );
   assert.match(
     hook,
-    /\(\) => \(\) => \{[\s\S]*?saveEpochRef\.current \+= 1;[\s\S]*?autoTitleCoordinator\.cancelPending\(\);/,
-    "closing the composer must stop an aborted generation from retrying save",
+    /const closeHandler = useCallback\([\s\S]*?if \(!hasUnsavedChanges\(\) \|\| save\) \{\s*saveEpochRef\.current \+= 1;\s*autoTitleCoordinator\.cancelPending\(\);/,
+    "closing the mounted composer must stop an aborted generation from retrying save",
   );
 });
 
