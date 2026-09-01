@@ -68,6 +68,8 @@ test("a dragged built-in keeps its new position ahead of saved views", () => {
     BUILTIN_VIEW_IDS.myTasks,
     BUILTIN_VIEW_IDS.blocked,
     BUILTIN_VIEW_IDS.agents,
+    BUILTIN_VIEW_IDS.currentCycle,
+    BUILTIN_VIEW_IDS.nextCycle,
   ];
 
   assert.deepEqual(ids(sortViewsByOrder(views, order, "default")), order);

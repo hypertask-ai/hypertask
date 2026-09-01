@@ -31,6 +31,7 @@ import {
   ITaskLabel,
   IUser,
   IAssignees,
+  ICycle,
 } from "@/models/model";
 import RelatedTaskLabel from "./RelatedTaskLabel";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
@@ -45,6 +46,7 @@ import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 import { RECURRENCE_LABELS, type RecurrenceRule } from "@/lib/recurrence";
 import { useGetAllMembersForAssign } from "@/hooks/MultiPages/useGetMembersForAssignees";
+import CyclePicker from "@/components/Modals/CyclePicker";
 import {
   formatWaitingOnAge,
   WAITING_ON_OVERDUE_MS,
@@ -109,6 +111,7 @@ export interface ITaskInfoContainer {
     waitingOnSetById: number | null;
     waitingOnSetAt: string | null;
   }) => void;
+  updateCycle: (cycle: ICycle | null) => void;
 }
 
 const TaskInfo = (props: ITaskInfoContainer) => {
@@ -133,8 +136,10 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     toggleModal,
     followers,
     updateWaitingOn,
+    updateCycle,
   } = props;
   const queryClient = useQueryClient();
+  const [showCyclePicker, setShowCyclePicker] = useState(false);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
   const isApple = useDeviceContext();
   const _mbl = useContext(MobileViewContext);
@@ -397,6 +402,33 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           );
         })()}
       </TaskInfoRow>
+
+      {(currentTask.project?.cyclesEnabled || currentTask.cycle) && (
+        <TaskInfoRow>
+          <LocalRightSideInfo
+            onClick={() => setShowCyclePicker(true)}
+            title="Cycle"
+            left={0}
+            bottom={-40}
+            tooltipText="Set cycle"
+            KeyCombination={null}
+          />
+          <TaskInfoValue
+            onClick={() => setShowCyclePicker(true)}
+            className="cursor-pointer group"
+          >
+            <ClickableSpan title={currentTask.cycle ? `Cycle ${currentTask.cycle.number}` : "No cycle"} />
+          </TaskInfoValue>
+          {showCyclePicker && (
+            <CyclePicker
+              assignedCycle={currentTask.cycle ?? null}
+              closeHandler={() => setShowCyclePicker(false)}
+              onChange={updateCycle}
+              taskId={currentTask.id}
+            />
+          )}
+        </TaskInfoRow>
+      )}
 
       {/* ====================================== TASK DUE DATE ================================ */}
       <TaskInfoRow>

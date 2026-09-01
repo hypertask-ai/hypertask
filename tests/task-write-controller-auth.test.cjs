@@ -244,6 +244,12 @@ function loadUpdateController(
       requestedTaskStateChanges: (_task, mutation) => mutation,
       taskLifecycleTimestampChanges: () => ({}),
     },
+    "@/lib/cycleService": {
+      assertCycleAssignable: async (_transaction, cycleProjectId, cycleId) => {
+        calls.cycleValidation = { cycleId, projectId: cycleProjectId };
+      },
+      CycleAssignmentError: class extends Error {},
+    },
   };
   return {
     updateTaskSingle: execute(
@@ -282,6 +288,25 @@ test("the shared update controller rejects project changes outside the dedicated
 
   assert.equal(result.status, 400);
   assert.deepEqual(calls, { transaction: 0, sideEffects: 0 });
+});
+
+test("cycle assignment validates against the effective destination board", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+  );
+  const result = await updateTaskSingle(
+    { id: TASK_ID, projectId: MEMBER_PROJECT, cycleId: 77 },
+    { id: USER_ID },
+    null,
+    { allowProjectChange: true },
+  );
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(calls.cycleValidation, {
+    cycleId: 77,
+    projectId: MEMBER_PROJECT,
+  });
 });
 
 test("the shared update controller validates a moved section against the destination board", async () => {
@@ -606,6 +631,7 @@ test("cross-board moves preserve the ticket key while allocating a destination i
   assert.equal(result.task.uniqueIndex, 1);
   assert.equal(result.task.ticketNumber, "HTPR-5731");
   assert.equal(calls.updatedTask.ticketNumber, undefined);
+  assert.equal(calls.updatedTask.cycleId, null);
   assert.equal(calls.allowProjectChange, true);
 });
 

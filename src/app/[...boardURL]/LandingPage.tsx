@@ -42,8 +42,9 @@ import NoBoardsEmptyState from "./NoBoardsEmptyState";
 import { getFilteredSections } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
-import { buildBuiltinViewContext, getBuiltinView, isBuiltinViewId } from "@/lib/constants/builtinViews";
+import { buildBuiltinViewContext, getActiveBoardViewId, getBuiltinView, isBuiltinViewId } from "@/lib/constants/builtinViews";
 import { buildBoardDocumentTitle } from "@/lib/boardDocumentTitle";
+import CycleBoardMeta from "@/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta";
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import {
   type BoardAuthorizationProof,
@@ -1168,11 +1169,11 @@ const filteredSectionsForActiveView = useMemo(() => {
   // PREVIOUS view's tasks until a refetch. Built-in views were unaffected only
   // because they already recomputed here. Recompute for saved views too, so the
   // rendered set always matches the view that is actually applied.
-  const builtinViewId = activeBuiltinViews[_currentProject.id];
+  const activeViewId = getActiveBoardViewId(_currentProject, activeBuiltinViews);
   const filtered = getFilteredSections(
     sections,
     _currentProject,
-    isBuiltinViewId(builtinViewId) ? builtinViewId : undefined,
+    isBuiltinViewId(activeViewId) ? activeViewId : undefined,
     buildBuiltinViewContext(_currentProject, _currentUser.id),
     filterRuntimeContext,
   );
@@ -1272,7 +1273,9 @@ useViewCyclingShortcuts(_currentProject)
 
 // ================= update tab title
   useEffect(()=>{
-    const builtinView = getBuiltinView(activeBuiltinViews[_currentProject.id]);
+    const builtinView = getBuiltinView(
+      getActiveBoardViewId(_currentProject, activeBuiltinViews),
+    );
     const savedView = getViewFromProject(_currentProject);
     const viewTitle =
       builtinView?.title ??
@@ -1494,6 +1497,16 @@ return (
                 {_currentProject && <ViewTabsBar project={_currentProject} />}
               </Suspense>
             )}
+
+          {_currentProject && (
+            <CycleBoardMeta
+              activeViewId={getActiveBoardViewId(
+                _currentProject,
+                activeBuiltinViews,
+              )}
+              project={_currentProject}
+            />
+          )}
 
           {/* {showBoardManager && <LeftSidebar teams={teams!} />} */}
           <div

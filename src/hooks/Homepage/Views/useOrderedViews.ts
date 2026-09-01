@@ -4,7 +4,7 @@ import { IProject } from '@/models/model'
 import { optimisticViewTabsOrderAtom, viewTabsOrderAtom } from '@/store'
 import { saveViewOrder } from '@/utils/api/viewOrder'
 import { asViewOrder, sortViewsByOrder } from '@/utils/helperFunctions/Views/ViewOrderHelperFunctions'
-import { BUILTIN_VIEWS, type BoardView } from '@/lib/constants/builtinViews'
+import { BUILTIN_VIEWS, buildBuiltinViewContext, type BoardView } from '@/lib/constants/builtinViews'
 
 const localOrderMigrations = new Set<number>()
 
@@ -45,12 +45,13 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
   return useMemo(() => {
     const all = project?.project_view?.allViews ?? []
     // Drop the live "unsaved" pseudo-view; keep the default view first.
+    const context = buildBuiltinViewContext(project)
     const views: BoardView[] = [
       ...all.filter((view) => view.id !== unsavedViewId),
-      ...BUILTIN_VIEWS,
+      ...BUILTIN_VIEWS.filter((view) => !view.available || view.available(context)),
     ]
     return sortViewsByOrder(views, effectiveOrder, defaultViewId)
-  }, [project?.project_view?.allViews, defaultViewId, unsavedViewId, effectiveOrder])
+  }, [project, defaultViewId, unsavedViewId, effectiveOrder])
 }
 
 export default useOrderedViews

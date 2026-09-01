@@ -65,6 +65,7 @@ async function moveAllSubtasksRecursively(
     const newTask = {
       id: subtask.id,
       projectId,
+      cycleId: null,
       sectionId,
       ranking,
       section: section?.section_title ?? "",
@@ -379,6 +380,7 @@ export async function moveTaskToDifferentBoard(
   const newTask = {
     id: taskToMove.id,
     projectId: targetProjectId,
+    cycleId: null,
     sectionId: targetSectionId,
     ranking,
     section: section?.section_title ?? "",

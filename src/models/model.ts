@@ -257,6 +257,16 @@ export interface ITeam {
   allowedEmailDomains?: string[];
 }
 
+export interface ICycle {
+  id: number;
+  projectId: number;
+  number: number;
+  startDate: Date | string;
+  endDate: Date | string;
+  rolledOverAt?: Date | string | null;
+  assignable?: boolean;
+}
+
 export interface IProject {
   googleAccount: IGoogleAccount;
   googleAccountId?: string;
@@ -290,6 +300,8 @@ export interface IProject {
   staleHotDays?: number | null;
   staleNudgeEnabled: boolean;
   autoArchiveAfterDays?: number | null;
+  cyclesEnabled?: boolean;
+  cycles?: ICycle[];
   _count?: {
     section: number;
     tasks: number;
@@ -487,6 +499,8 @@ export interface ITask {
   uniqueIndex: number;
   index?: number;
   projectId: number;
+  cycleId?: number | null;
+  cycle?: ICycle | null;
   status?: Status;
   userId?: string;
   user?: IUser;

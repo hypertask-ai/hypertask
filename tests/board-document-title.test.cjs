@@ -32,7 +32,10 @@ test("the board reacts to both saved and built-in view changes", () => {
     path.join(root, "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
-  assert.match(source, /getBuiltinView\(activeBuiltinViews\[_currentProject\.id\]\)/);
+  assert.match(
+    source,
+    /getBuiltinView\(\s*getActiveBoardViewId\(_currentProject, activeBuiltinViews\)/,
+  );
   assert.match(source, /savedView\?\.type === "Default" \? undefined/);
   assert.match(source, /\[_currentProject, activeBuiltinViews\]/);
 });

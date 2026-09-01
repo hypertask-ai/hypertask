@@ -47,6 +47,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     toggleModal,
     followers,
     updateWaitingOn,
+    updateCycle,
   } = props;
   const _mbl = useContext(MobileViewContext);
   const { uploadingDescription, comments, stacked } =
@@ -118,6 +119,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
                 moveTaskToNextColumn={moveTaskToNextColumn}
                 followers={followers}
                 updateWaitingOn={updateWaitingOn}
+                updateCycle={updateCycle}
               />
             );
           } else if (currentItemIndex === descriptionVirtualIndex) {

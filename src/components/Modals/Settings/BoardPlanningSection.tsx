@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
+import { CYCLE_LENGTH_DAYS, cycleDateRange } from "@/lib/cycles";
 import {
   PROJECT_HEALTH_LABELS,
   PROJECT_HEALTH_VALUES,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/projectPlanning";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
+import SettingsToggle from "./SettingsToggle";
 import { useSettingsTeam } from "./useSettingsTeam";
 
 interface ProjectMilestone {
@@ -31,8 +33,22 @@ interface ProjectStatusUpdate {
   message: string;
 }
 
+interface ProjectCycle {
+  endDate: string;
+  id: number;
+  number: number;
+  projectId: number;
+  rolledOverAt: string | null;
+  startDate: string;
+}
+
 interface ProjectPlanning {
   canManage: boolean;
+  cycles: {
+    current: ProjectCycle | null;
+    enabled: boolean;
+    next: ProjectCycle | null;
+  };
   id: number;
   milestones: ProjectMilestone[];
   statusUpdates: ProjectStatusUpdate[];
@@ -120,6 +136,40 @@ export default function BoardPlanningSection() {
         <p className="text-dense text-text-light-gray">Loading planning…</p>
       ) : (
         <>
+          <SettingsCard title="Cycles">
+            <SettingsToggle
+              checked={data.cycles.enabled}
+              description={`Organize work into fixed ${CYCLE_LENGTH_DAYS / 7}-week periods.`}
+              disabled={!data.canManage || mutation.isPending}
+              inputId="board-cycles-enabled"
+              label="Enable cycles"
+              onChange={() =>
+                mutation.mutate({
+                  action: "set_cycles",
+                  enabled: !data.cycles.enabled,
+                })
+              }
+            />
+            {data.cycles.enabled && (
+              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-2 text-dense">
+                <dt className="text-text-light-gray">Duration</dt>
+                <dd className="text-white-black">{CYCLE_LENGTH_DAYS / 7} weeks</dd>
+                <dt className="text-text-light-gray">Current starts</dt>
+                <dd className="text-white-black">
+                  {data.cycles.current
+                    ? formatDate(data.cycles.current.startDate)
+                    : "Not scheduled"}
+                </dd>
+                <dt className="text-text-light-gray">Next cycle</dt>
+                <dd className="text-white-black">
+                  {data.cycles.next
+                    ? cycleDateRange(data.cycles.next)
+                    : "Not scheduled"}
+                </dd>
+              </dl>
+            )}
+          </SettingsCard>
+
           <SettingsCard title="Target date">
             {data.canManage ? (
               <input

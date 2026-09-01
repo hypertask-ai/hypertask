@@ -44,6 +44,10 @@ import {
   requestedTaskStateChanges,
   taskLifecycleTimestampChanges,
 } from "@/lib/mcp/tasks/humanMutationOverride";
+import {
+  assertCycleAssignable,
+  CycleAssignmentError,
+} from "@/lib/cycleService";
 
 type UpdateTaskSingleOptions = {
   allowProjectChange?: boolean;
@@ -181,6 +185,13 @@ export async function updateTaskSingle(
       agentWebhookDeliveryIds = [],
     } = await prisma.$transaction(
       async (tx) => {
+        if (typeof requestedMutation.cycleId === "number") {
+          await assertCycleAssignable(
+            tx,
+            (requestedMutation.projectId as number | undefined) ?? oldTask.projectId,
+            requestedMutation.cycleId,
+          );
+        }
         // A person's explicit task change always outranks autonomous work.
         // The browser does not carry an agentId, so moving, editing, restoring,
         // archiving, or deleting a task must cancel any live agent lease while
@@ -635,6 +646,12 @@ export async function updateTaskSingle(
     if (error instanceof AgentMutationLeaseConflictError) {
       return {
         status: 409,
+        json: { message: error.message },
+      };
+    }
+    if (error instanceof CycleAssignmentError) {
+      return {
+        status: error.status,
         json: { message: error.message },
       };
     }

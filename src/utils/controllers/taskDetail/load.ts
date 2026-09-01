@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
+import { CYCLE_WINDOW_SIZE } from "@/lib/cycles";
 import {
   publicAgentSelect,
   sanitizeAgentCredentials,
@@ -130,6 +131,7 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
     },
     priority: true,
     estimate: true,
+    cycle: true,
     drafts: { where: { userId, saved: false } },
     notifications: {
       where: {
@@ -166,6 +168,12 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
         staleHotDays: true,
         staleNudgeEnabled: true,
         autoArchiveAfterDays: true,
+        cyclesEnabled: true,
+        cycles: {
+          where: { endDate: { gt: new Date() } },
+          orderBy: { startDate: "asc" },
+          take: CYCLE_WINDOW_SIZE,
+        },
         // The detail page sets `currentProjectAtom` from this payload, and the
         // AI model picker derives the board's plan from it. Without the
         // subscription rows and BYOK flags a paid board reads as Free, so a

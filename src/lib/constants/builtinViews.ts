@@ -1,11 +1,14 @@
 import type { IProject, ITask, IView } from "@/models/model";
 import { doneColumnTitles, isDoneColumn } from "@/lib/doneColumns";
+import { resolveCycleWindow } from "@/lib/cycles";
 
 export const BUILTIN_VIEW_IDS = {
   myTasks: "builtin:my-tasks",
   overdue: "builtin:overdue",
   blocked: "builtin:blocked",
   agents: "builtin:agents",
+  currentCycle: "builtin:current-cycle",
+  nextCycle: "builtin:next-cycle",
 } as const;
 
 export type BuiltinViewId =
@@ -15,6 +18,9 @@ export interface BuiltinViewContext {
   currentUserId?: number | null;
   now?: Date | number;
   doneSectionTitles?: ReadonlySet<string>;
+  currentCycleId?: number | null;
+  nextCycleId?: number | null;
+  cyclesEnabled?: boolean;
 }
 
 export interface BuiltinView {
@@ -22,6 +28,7 @@ export interface BuiltinView {
   title: string;
   builtin: true;
   predicate: (task: ITask, context: BuiltinViewContext) => boolean;
+  available?: (context: BuiltinViewContext) => boolean;
 }
 
 export type BoardView = IView | BuiltinView;
@@ -52,6 +59,12 @@ export const blockedPredicate: BuiltinView["predicate"] = (task) =>
 export const agentsPredicate: BuiltinView["predicate"] = (task) =>
   (task.assignees ?? []).some((assignee) => assignee.agentId != null);
 
+export const currentCyclePredicate: BuiltinView["predicate"] = (task, context) =>
+  context.currentCycleId != null && task.cycleId === context.currentCycleId;
+
+export const nextCyclePredicate: BuiltinView["predicate"] = (task, context) =>
+  context.nextCycleId != null && task.cycleId === context.nextCycleId;
+
 export const BUILTIN_VIEWS: readonly BuiltinView[] = [
   {
     id: BUILTIN_VIEW_IDS.myTasks,
@@ -76,6 +89,20 @@ export const BUILTIN_VIEWS: readonly BuiltinView[] = [
     title: "Agents",
     builtin: true,
     predicate: agentsPredicate,
+  },
+  {
+    id: BUILTIN_VIEW_IDS.currentCycle,
+    title: "Current cycle",
+    builtin: true,
+    predicate: currentCyclePredicate,
+    available: (context) => Boolean(context.cyclesEnabled && context.currentCycleId),
+  },
+  {
+    id: BUILTIN_VIEW_IDS.nextCycle,
+    title: "Next cycle",
+    builtin: true,
+    predicate: nextCyclePredicate,
+    available: (context) => Boolean(context.cyclesEnabled && context.nextCycleId),
   },
 ];
 
@@ -103,11 +130,17 @@ export const buildBuiltinViewContext = (
   project: IProject | null | undefined,
   currentUserId?: number | null,
   now?: Date | number,
-): BuiltinViewContext => ({
-  currentUserId,
-  now,
-  doneSectionTitles: doneColumnTitles(project?.section ?? []),
-});
+): BuiltinViewContext => {
+  const cycleWindow = resolveCycleWindow(project?.cycles ?? [], now);
+  return {
+    currentUserId,
+    now,
+    doneSectionTitles: doneColumnTitles(project?.section ?? []),
+    cyclesEnabled: project?.cyclesEnabled,
+    currentCycleId: cycleWindow.current?.id ?? null,
+    nextCycleId: cycleWindow.next?.id ?? null,
+  };
+};
 
 export const getActiveBoardViewId = (
   project: IProject | null | undefined,
@@ -115,7 +148,10 @@ export const getActiveBoardViewId = (
 ) => {
   if (!project) return undefined;
   const builtinViewId = activeBuiltinViews[project.id];
-  if (isBuiltinViewId(builtinViewId)) return builtinViewId;
+  const builtinView = getBuiltinView(builtinViewId);
+  if (builtinView && (!builtinView.available || builtinView.available(buildBuiltinViewContext(project)))) {
+    return builtinViewId;
+  }
   return (
     project.project_view?.user_project_views[0]?.appliedView?.id ??
     project.project_view?.default_view_id
