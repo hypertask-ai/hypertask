@@ -1374,7 +1374,13 @@ export function useAiChat() {
                         true
                       );
                       if (streamTaskId != null) {
-                        void refreshTaskComments(queryClient, streamTaskId);
+                        void refreshTaskComments(queryClient, streamTaskId).catch(
+                          (error) =>
+                            console.warn(
+                              "[AI chat] task comments refresh failed",
+                              error
+                            )
+                        );
                       }
                     }
                     setIsTyping(false);
