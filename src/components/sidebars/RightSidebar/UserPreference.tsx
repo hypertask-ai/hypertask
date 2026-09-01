@@ -46,6 +46,9 @@ const UserPreferenceSidebar = ({
   const { data } = useGetUserPreferences();
   const autoDescriptionUpdateQueue = useRef(Promise.resolve());
   const autoDescriptionUpdateVersion = useRef(0);
+  const autoDescriptionConfirmedValue = useRef(
+    data.autoDescriptionSuggestions ?? true,
+  );
 
   const [isStacked, setIsStacked] = useState<boolean>(data.commentsStacked);
   const [displayAvatar, setDisplayAvatar] = useState<boolean>(
@@ -141,13 +144,28 @@ const UserPreferenceSidebar = ({
           { autoDescriptionSuggestions: nextValue },
           false,
         );
-        if (updated || updateVersion !== autoDescriptionUpdateVersion.current) {
+        if (updated) {
+          autoDescriptionConfirmedValue.current = nextValue;
           return;
         }
+        if (updateVersion !== autoDescriptionUpdateVersion.current) return;
+
         toast.error("Could not update description suggestions");
-        await queryClient
-          .invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY })
-          .catch(() => undefined);
+        try {
+          await queryClient.invalidateQueries(
+            { queryKey: USER_PREFERENCES_QUERY_KEY },
+            { throwOnError: true },
+          );
+        } catch {
+          queryClient.setQueryData<IUserPreferences>(
+            USER_PREFERENCES_QUERY_KEY,
+            (previous) => ({
+              ...(previous ?? data),
+              autoDescriptionSuggestions:
+                autoDescriptionConfirmedValue.current,
+            }),
+          );
+        }
       });
   };
 

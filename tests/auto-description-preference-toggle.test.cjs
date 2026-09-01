@@ -51,6 +51,7 @@ test("rapid description preference toggles preserve the latest value and persist
     },
     invalidateQueries: async () => {
       invalidations += 1;
+      throw new Error("preference refetch failed");
     },
   };
   const axiosStub = {
@@ -145,16 +146,16 @@ test("rapid description preference toggles preserve the latest value and persist
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(toastErrors, ["Could not update description suggestions"]);
     assert.equal(invalidations, 1);
-    assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
+    assert.equal(cachedPreferences.autoDescriptionSuggestions, false);
 
     preferenceToggle();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(posts, [
       { autoDescriptionSuggestions: false },
       { autoDescriptionSuggestions: true },
-      { autoDescriptionSuggestions: false },
+      { autoDescriptionSuggestions: true },
     ]);
-    assert.equal(cachedPreferences.autoDescriptionSuggestions, false);
+    assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
   } finally {
     for (const [filename, previous] of stubs) {
       if (previous === undefined) delete require.cache[filename];
