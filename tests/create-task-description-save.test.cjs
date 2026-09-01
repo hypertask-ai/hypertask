@@ -83,8 +83,8 @@ test("discard during title generation cancels the pending save", () => {
   );
   assert.match(
     hook,
-    /\(\) => \(\) => \{[\s\S]*?saveEpochRef\.current \+= 1;[\s\S]*?autoTitleCoordinator\.cancelPending\(\);/,
-    "closing the composer must stop an aborted generation from retrying save",
+    /const closeHandler = useCallback\([\s\S]*?if \(!hasUnsavedChanges\(\) \|\| save\) \{\s*saveEpochRef\.current \+= 1;\s*autoTitleCoordinator\.cancelPending\(\);/,
+    "closing the mounted composer must stop an aborted generation from retrying save",
   );
 });
 
@@ -105,6 +105,14 @@ test("edits made while a title generates are still saved", () => {
 test("a save without a mode exits before any work starts", () => {
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   assert.match(modal, /if \(!param\) return;/);
+});
+
+test("save-time title generation admits only one concurrent attempt", () => {
+  const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
+  assert.match(
+    modal,
+    /if \(titleGenerationForSaveRef\.current\) return;\s*titleGenerationForSaveRef\.current = true;[\s\S]*?finally \{\s*titleGenerationForSaveRef\.current = false;/,
+  );
 });
 
 // Switching boards mid-generation invalidates the request: it was scoped to

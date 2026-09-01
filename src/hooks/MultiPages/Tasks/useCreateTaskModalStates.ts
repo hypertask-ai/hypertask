@@ -473,6 +473,9 @@ const useCreateTaskModalGlobalStates = () => {
   const closeHandler = useCallback(
     (save = true) => {
       if (!hasUnsavedChanges() || save) {
+        saveEpochRef.current += 1;
+        autoTitleCoordinator.cancelPending();
+        setIsGeneratingTitle(false);
         if (pathname === "/new") {
           setUploadingStateCreateTaskModal(undefined);
           return goToProjectShortcut(formValues.currentProject?.id!, true)
