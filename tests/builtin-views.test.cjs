@@ -119,6 +119,15 @@ test("cycle views match only their resolved cycle and hide when cycles are unava
     getActiveBoardViewId(project, { 15: "builtin:current-cycle" }),
     "builtin:current-cycle",
   );
+  project.cycles = [];
+  assert.equal(
+    getActiveBoardViewId(project, { 15: "builtin:current-cycle" }),
+    "saved-default",
+  );
+  assert.equal(
+    getActiveBoardViewId(project, { 15: "builtin:next-cycle" }),
+    "saved-default",
+  );
   project.cyclesEnabled = false;
   assert.equal(
     getActiveBoardViewId(project, { 15: "builtin:current-cycle" }),

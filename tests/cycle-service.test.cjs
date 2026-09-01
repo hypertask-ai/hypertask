@@ -15,11 +15,21 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
     broadcasts: [],
     cycles: cycles.map((cycle) => ({ createdAt: new Date(), rolledOverAt: null, ...cycle })),
     enabled,
+    locks: [],
     nextId: Math.max(0, ...cycles.map(({ id }) => id)) + 1,
     rolloverSources: [],
     sections,
     tasks: tasks.map((task) => ({ ...task })),
   };
+
+  const matchesOr = (task, clauses = []) =>
+    clauses.some((clause) =>
+      Object.entries(clause).every(([field, value]) => {
+        if (value === null) return task[field] == null;
+        if (value.notIn) return task[field] != null && !value.notIn.includes(task[field]);
+        return task[field] === value;
+      }),
+    );
 
   const cycleMatches = (cycle, where) => {
     if (where.id !== undefined && cycle.id !== where.id) return false;
@@ -101,8 +111,9 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
             task.cycleId === where.cycleId &&
             task.status === where.status &&
             task.assignees.length > 0 &&
-            (!where.sectionId || !where.sectionId.notIn.includes(task.sectionId)) &&
-            (!where.section || !where.section.notIn.includes(task.section)),
+            (!where.OR || matchesOr(task, where.OR)) &&
+            (!where.section ||
+              (task.section != null && !where.section.notIn.includes(task.section))),
         );
         for (const task of found) Object.assign(task, data);
         return { count: found.length };
@@ -114,6 +125,7 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
   state.queryNow = new Date("1970-01-01T00:00:00Z");
   db.$queryRaw = async (parts, ...values) => {
     if (typeof parts === "object" && "raw" in parts && String(parts.raw).includes("pg_advisory")) {
+      state.locks.push(values.at(-1));
       return undefined;
     }
     const dateValue = values.find((value) => value instanceof Date);
@@ -184,22 +196,25 @@ test("enabling creates the current and next Monday cycles while preserving histo
   assert.equal(service.state.tasks[0].cycleId, 1);
 });
 
-test("assignment validation is serialized with enablement and current-cycle state", async () => {
-  const current = cycle(1, 1, "2026-08-31", "2026-09-14");
-  const next = cycle(2, 2, "2026-09-14", "2026-09-28");
-  const service = loadService({ cycles: [current, next], enabled: true });
+test("assignment validation locks the board and accepts only current or next cycles", async () => {
+  const history = cycle(3, 1, "2026-08-03", "2026-08-17");
+  const current = cycle(1, 2, "2026-08-31", "2026-09-14");
+  const next = cycle(2, 3, "2026-09-14", "2026-09-28");
+  const service = loadService({ cycles: [history, current, next], enabled: true });
   const now = new Date("2026-09-02T09:00:00Z");
 
-  await service.assertCycleAssignable(service.db, 15, 1, now);
+  await service.assertCycleAssignable(service.db, 15, current.id, now);
+  await service.assertCycleAssignable(service.db, 15, next.id, now);
   await assert.rejects(
-    service.assertCycleAssignable(service.db, 15, 3, now),
+    service.assertCycleAssignable(service.db, 15, history.id, now),
     (error) => error.status === 400,
   );
   service.state.enabled = false;
   await assert.rejects(
-    service.assertCycleAssignable(service.db, 15, 1, now),
+    service.assertCycleAssignable(service.db, 15, current.id, now),
     (error) => error.status === 409,
   );
+  assert.deepEqual(service.state.locks, [15, 15, 15, 15]);
 });
 
 test("rollover catches up oldest-first and moves only assigned unfinished normal tasks", async () => {
@@ -222,12 +237,14 @@ test("rollover catches up oldest-first and moves only assigned unfinished normal
       { id: 4, assignees: [{}], cycleId: 1, projectId: 15, section: "Released", sectionId: 20, status: "Normal" },
       { id: 5, assignees: [{}], cycleId: 2, projectId: 15, section: "Todo", sectionId: 10, status: "Normal" },
       { id: 6, assignees: [{}], cycleId: 1, projectId: 15, section: "Todo", sectionId: 10, status: "Normal" },
+      { id: 7, assignees: [{}], cycleId: 2, projectId: 15, section: "Todo", sectionId: null, status: "Normal" },
+      { id: 8, assignees: [{}], cycleId: 2, projectId: 15, section: "Released", sectionId: null, status: "Normal" },
     ],
   });
   service.state.raceTaskId = 6;
   const now = new Date("2026-09-02T09:00:00Z");
 
-  assert.equal(await service.sweepCycleRollovers(now), 3);
+  assert.equal(await service.sweepCycleRollovers(now), 4);
   assert.deepEqual(service.state.rolloverSources, [1, 2]);
   assert.deepEqual(
     service.state.tasks.map(({ id, cycleId }) => [id, cycleId]),
@@ -238,6 +255,8 @@ test("rollover catches up oldest-first and moves only assigned unfinished normal
       [4, 1],
       [5, 3],
       [6, 999],
+      [7, 3],
+      [8, 2],
     ],
   );
   assert.equal(service.state.cycles[0].rolledOverAt, now);

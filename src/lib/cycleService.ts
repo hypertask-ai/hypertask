@@ -1,4 +1,4 @@
-import type { Cycle, Prisma } from "@prisma/client";
+import { Status, type Cycle, type Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { doneColumnTitles } from "@/lib/doneColumns";
@@ -207,9 +207,11 @@ const rolloverOneProjectCycle = async (
       where: {
         projectId,
         cycleId: source.id,
-        status: "Normal",
+        status: Status.Normal,
         assignees: { some: {} },
-        ...(doneSectionIds.length > 0 ? { sectionId: { notIn: doneSectionIds } } : {}),
+        ...(doneSectionIds.length > 0
+          ? { OR: [{ sectionId: null }, { sectionId: { notIn: doneSectionIds } }] }
+          : {}),
         ...(doneSectionNames.length > 0 ? { section: { notIn: doneSectionNames } } : {}),
       },
       data: { cycleId: destination.id, updatedAt: now },

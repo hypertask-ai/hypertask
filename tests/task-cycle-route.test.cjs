@@ -78,11 +78,18 @@ function loadRoute({ enabled = true, session = { userId: 6 }, task = undefined }
       cycle: {
         findMany: async (args) => {
           calls.cycleQueries.push(args);
-          return allCycles.filter(
-            (cycle) =>
-              cycle.projectId === args.where.projectId &&
-              (args.where.number === undefined || cycle.number === args.where.number),
-          );
+          const ordered = allCycles
+            .filter(
+              (cycle) =>
+                cycle.projectId === args.where.projectId &&
+                (args.where.number === undefined || cycle.number === args.where.number),
+            )
+            .sort((left, right) => right.startDate - left.startDate || right.id - left.id);
+          const cursorIndex = args.cursor
+            ? ordered.findIndex(({ id }) => id === args.cursor.id)
+            : 0;
+          const start = Math.max(0, cursorIndex) + (args.skip ?? 0);
+          return ordered.slice(start, start + args.take);
         },
         findUnique: async ({ where }) => allCycles.find(({ id }) => id === where.id) ?? null,
       },
@@ -144,6 +151,20 @@ test("cycle history is bounded and only current and next are assignable", async 
   assert.equal(body.cycles[0].assignable, true);
   assert.equal(body.cycles[1].assignable, true);
   assert.equal(body.cycles[2].assignable, false);
+
+  const secondResponse = await GET(
+    request("GET", undefined, `taskId=50&cursor=${body.nextCursor}`),
+  );
+  assert.equal(secondResponse.status, 200);
+  const secondBody = await secondResponse.json();
+  assert.equal(secondBody.cycles.length, 1);
+  assert.equal(secondBody.nextCursor, null);
+  assert.equal(calls.cycleQueries[1].cursor.id, body.nextCursor);
+  assert.equal(calls.cycleQueries[1].skip, 1);
+  assert.equal(
+    body.cycles.some(({ id }) => id === secondBody.cycles[0].id),
+    false,
+  );
 });
 
 test("assigning current or next cycle uses the authorized task write path", async () => {
