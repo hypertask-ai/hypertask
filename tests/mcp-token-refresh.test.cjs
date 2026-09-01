@@ -80,16 +80,21 @@ function signedAgentToken(jti, secret = process.env.JWT_SECRET) {
   )
 }
 
-function signedUserToken({ jti, iat } = {}) {
+function signedUserToken({ jti, iat, exp } = {}) {
   return jwt.sign(
     {
       sub: user.email,
       userId: user.id,
       ...(typeof iat === 'number' ? { iat } : {}),
+      ...(typeof exp === 'number' ? { exp } : {}),
       ...(jti ? { jti } : {}),
     },
     process.env.JWT_SECRET,
-    { expiresIn: '30d', issuer: 'hypertask', audience: 'mcp-api' }
+    {
+      ...(typeof exp === 'number' ? {} : { expiresIn: '30d' }),
+      issuer: 'hypertask',
+      audience: 'mcp-api',
+    }
   )
 }
 
@@ -175,6 +180,7 @@ test('a valid agent token points to owner-authorized token rotation', async () =
 test('a valid pre-cutoff legacy token migrates to a refreshable token', async () => {
   const legacyToken = signedUserToken({
     iat: Date.parse('2026-08-03T00:00:00.000Z') / 1000,
+    exp: Date.parse('2100-01-01T00:00:00.000Z') / 1000,
   })
   const replacementToken = signedUserToken({ jti: 'new-token-jti' })
   const deps = dependencies({
@@ -205,6 +211,7 @@ test('a valid pre-cutoff legacy token migrates to a refreshable token', async ()
 test('a legacy token issued after the migration cutoff is not refreshable', async () => {
   const legacyToken = signedUserToken({
     iat: Date.parse('2026-09-02T00:00:00.000Z') / 1000,
+    exp: Date.parse('2100-01-01T00:00:00.000Z') / 1000,
   })
   const deps = dependencies({ authContext: { user, agentId: null } })
 
@@ -247,6 +254,7 @@ test('a valid token with jti refreshes through a unique revocation claim', async
 test('concurrent legacy refreshes return exactly one replacement', async () => {
   const legacyToken = signedUserToken({
     iat: Date.parse('2026-08-03T00:00:00.000Z') / 1000,
+    exp: Date.parse('2100-01-01T00:00:00.000Z') / 1000,
   })
   const replacementToken = signedUserToken({ jti: 'race-winner-jti' })
   let arrivals = 0
