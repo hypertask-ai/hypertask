@@ -115,6 +115,11 @@ test("inline draft AI prompt clicks do not bubble back to the comment editor", a
     CustomEvent: global.CustomEvent,
     IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT,
   };
+  const existingGlobals = new Set(
+    Object.keys(previousGlobals).filter((key) =>
+      Object.prototype.hasOwnProperty.call(global, key),
+    ),
+  );
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
   Object.assign(global, {
@@ -152,7 +157,10 @@ test("inline draft AI prompt clicks do not bubble back to the comment editor", a
 
   t.after(async () => {
     await act(async () => reactRoot.unmount());
-    Object.assign(global, previousGlobals);
+    for (const [key, value] of Object.entries(previousGlobals)) {
+      if (existingGlobals.has(key)) global[key] = value;
+      else delete global[key];
+    }
     dom.window.close();
   });
 
