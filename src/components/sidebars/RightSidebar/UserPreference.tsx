@@ -130,9 +130,11 @@ const UserPreferenceSidebar = ({
         };
       },
     );
-    autoDescriptionUpdateQueue.current = autoDescriptionUpdateQueue.current.then(
-      () => updateUserPreferences({ autoDescriptionSuggestions: nextValue }),
-    );
+    autoDescriptionUpdateQueue.current = autoDescriptionUpdateQueue.current
+      .catch(() => undefined)
+      .then(() =>
+        updateUserPreferences({ autoDescriptionSuggestions: nextValue }),
+      );
   };
 
   const handleReadReceiptsSetting = () => {

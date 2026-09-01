@@ -112,7 +112,7 @@ test("rapid description preference toggles persist each cache-derived value in o
     preferenceToggle();
 
     assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
-    await Promise.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(posts, [{ autoDescriptionSuggestions: false }]);
 
     firstRequest.resolve();
