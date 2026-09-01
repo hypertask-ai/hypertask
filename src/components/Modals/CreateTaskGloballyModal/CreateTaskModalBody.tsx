@@ -305,7 +305,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                 <div
                     id="taskInfo_comments_description_container"
                     className={`  ${_mbl ?
-                        "flex-col gap-2 xs:px-[18px] scrollbar-none  comments_description_container" : "mt-0 pl-1"} `}
+                        "flex-col-reverse gap-2 xs:px-[18px] scrollbar-none  comments_description_container" : "mt-0 pl-1"} `}
                     style={{
 
                         display: "flex",
@@ -322,8 +322,8 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                     <TaskInfoColumnContainer
                         heightVariant="fit"
                         // Keep the property rows at their natural height on mobile. The
-                        // flex column scrolls; shrinking this card instead made it look
-                        // like a divider once the description/keyboard grew.
+                        // reversed flex column scrolls; shrinking this card instead made
+                        // it look like a divider once the description/keyboard grew.
                         className={_mbl ? "shrink-0" : undefined}
                     >
                         <TaskInfoColumnGloballyCreate />

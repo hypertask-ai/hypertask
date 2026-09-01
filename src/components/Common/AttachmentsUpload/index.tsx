@@ -567,10 +567,10 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           globalRecording={isRecording}
           hasText={hasText}
           onProcessingChange={onProcessingChange}
-          ariaLabel="Dictate description"
-          mobilePresentation="compact"
-          // This field-level mic stays a bare secondary action. Flex order moves
-          // the one mounted recorder without losing an in-flight MediaRecorder.
+          // Empty composer: the mic is the filled primary at the far right, per
+          // the approved wireframe. Once text exists Save takes the primary slot
+          // and the mic joins attach as a bare glyph. Flex order moves it so this
+          // instance never remounts mid-recording (#2666).
           className={isDictating ? undefined : MOBILE_TARGET}
           // order lives on the wrapper: only the .audio-recorder root is a
           // direct child of this flex row, so order on className is a no-op.

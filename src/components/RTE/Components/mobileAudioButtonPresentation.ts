@@ -1,5 +1,3 @@
-export type MobileMicPresentation = "compact" | "prominent";
-
 type MobileMicPresentationState = {
   isMobileCreateComment: boolean;
   isMobileTaskWriter: boolean;
@@ -8,7 +6,6 @@ type MobileMicPresentationState = {
   globalRecording?: boolean;
   hasText?: boolean;
   isProcessing: boolean;
-  mobilePresentation?: MobileMicPresentation;
 };
 
 export function mobileMicPresentation({
@@ -19,15 +16,9 @@ export function mobileMicPresentation({
   globalRecording,
   hasText,
   isProcessing,
-  mobilePresentation,
 }: MobileMicPresentationState) {
-  if (mobilePresentation === "compact") {
-    return { prominent: false, className: "h-[32px]" };
-  }
-
   const prominent =
-    (mobilePresentation === "prominent" ||
-      isMobileCreateComment ||
+    (isMobileCreateComment ||
       isMobileTaskWriter ||
       isMobileNewTask ||
       isMobileAiChat) &&

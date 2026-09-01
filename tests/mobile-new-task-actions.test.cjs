@@ -12,16 +12,6 @@ const createTaskSource = read("src/components/RTE/TiptapCreateTaskModal.tsx");
 const createTaskBodySource = read(
   "src/components/Modals/CreateTaskGloballyModal/CreateTaskModalBody.tsx",
 );
-const audioButtonSource = read(
-  "src/components/RTE/Components/AudioButton.tsx",
-);
-const jiti = require("jiti")(__filename, { interopDefault: true });
-const { mobileMicPresentation } = jiti(
-  path.join(
-    root,
-    "src/components/RTE/Components/mobileAudioButtonPresentation.ts",
-  ),
-);
 
 const mobileBar = attachmentSource.match(
   /const MobileBottomBar:[\s\S]*?\/\/ ====================================/,
@@ -100,26 +90,6 @@ test("recent mobile waveform, dictation, and touch-target fixes remain", () => {
   );
 });
 
-test("description dictation uses an explicit compact mobile presentation", () => {
-  assert.match(mobileBar, /mobilePresentation="compact"/);
-  assert.match(mobileBar, /ariaLabel="Dictate description"/);
-  assert.match(
-    audioButtonSource,
-    /mobilePresentation,[\s\S]*?mobileMicPresentation\(\{[\s\S]*?mobilePresentation,/,
-  );
-
-  const presentation = mobileMicPresentation({
-    isMobileCreateComment: false,
-    isMobileTaskWriter: false,
-    isMobileNewTask: true,
-    isMobileAiChat: false,
-    isProcessing: false,
-    mobilePresentation: "compact",
-  });
-  assert.equal(presentation.prominent, false);
-  assert.doesNotMatch(presentation.className, /bg-shadcn-primary/);
-});
-
 test("transcription keeps the mobile action row in its recording layout", () => {
   assert.match(
     attachmentSource,
@@ -169,24 +139,6 @@ test("mobile new-task flow keeps the Back pill removed", () => {
   assert.match(backButton, /fixed xs:hidden sm:flex/);
   assert.match(backButton, /The mobile Back pill is gone/);
   assert.doesNotMatch(backButton, /xs:flex[\s\S]*?closeHandler\(false\)/);
-});
-
-test("mobile new-task fields follow writing order without remounting a second tree", () => {
-  assert.equal((createTaskBodySource.match(/<TaskTitleModal \/>/g) || []).length, 1);
-  assert.equal(
-    (createTaskBodySource.match(/<DescriptionCreateTaskModal \/>/g) || []).length,
-    1,
-  );
-  assert.equal(
-    (createTaskBodySource.match(/<TaskInfoColumnContainer(?:\s|>)/g) || []).length,
-    1,
-  );
-  assert.match(
-    createTaskBodySource,
-    /<TaskTitleModal \/>[\s\S]*?<DescriptionCreateTaskModal \/>[\s\S]*?<TaskInfoColumnContainer/,
-  );
-  assert.match(createTaskBodySource, /_mbl \?[\s\S]*?"flex-col gap-2/);
-  assert.doesNotMatch(createTaskBodySource, /flex-col-reverse/);
 });
 
 test("mobile new-task properties do not collapse beneath a long description", () => {
