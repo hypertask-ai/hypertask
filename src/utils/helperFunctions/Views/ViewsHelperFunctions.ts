@@ -730,13 +730,15 @@ export const pinProjectToUrlView = (project: IProject, viewSlug?: string | null)
     const appliedOrDefaultView = userProjectView.appliedView ?? projectView.default_view
     // Tabs pinned to the same view intentionally share one unsaved working context.
     if (targetView && appliedOrDefaultView?.id === targetView.id) return project
-    // The default sentinel pins the base, not the user's unsaved overlay on that base.
+    // A tab pinned to the default sentinel with no applied view is already on
+    // the default base, so its unsaved overlay IS this tab's working context,
+    // the same rule as pinning to a named view's own base above. Clearing it
+    // hid the Save-view affordance after any sort/filter change on the default
+    // view, because the URL always carries view=default there (HTPR-5900).
     if (
       !targetView &&
       !userProjectView.appliedView &&
-      !userProjectView.appliedViewId &&
-      !userProjectView.unsavedView &&
-      !userProjectView.unsavedViewId
+      !userProjectView.appliedViewId
     ) return project
   }
 
