@@ -226,7 +226,9 @@ const AITaskWriterContainer: React.FC<
   );
 
   const onClickHandler = useCallback(() => {
-    if (isByokBlocked || !userPrompt.trim()) return;
+    if (isByokBlocked) return;
+    const promptToUse = autoTrigger ? initialPrompt : userPrompt;
+    if (!promptToUse.trim()) return;
 
     // Don't send if attachments are still uploading
     if (isUploadingAttachments) {
@@ -237,10 +239,18 @@ const AITaskWriterContainer: React.FC<
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
     sendAIRequest(
-      buildTaskWriterPrompt(userPrompt, taskTitle),
+      buildTaskWriterPrompt(promptToUse, taskTitle),
       "Thinking...",
     );
-  }, [isByokBlocked, userPrompt, sendAIRequest, isUploadingAttachments, uploadProgress]);
+  }, [
+    autoTrigger,
+    initialPrompt,
+    isByokBlocked,
+    userPrompt,
+    sendAIRequest,
+    isUploadingAttachments,
+    uploadProgress,
+  ]);
 
   const regenerateDescriptionSuggestion = useCallback(() => {
     sendInitialPrompt("Drafting a description from your title...");

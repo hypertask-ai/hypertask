@@ -109,6 +109,12 @@ const generateAttachmentFromImgEl = (img: HTMLImageElement, idx: number) => ({
   fileName: "Image.png",
 });
 
+type AIGeneratedAttachment = {
+  id?: string;
+  file: Pick<File, "name" | "size" | "type">;
+  preview: string;
+};
+
 interface TiptapProps {
   attachments?: IAttachment[];
   carouselAttachments?: IAttachment[];
@@ -883,7 +889,7 @@ const Tiptap = ({
 
   const handleAutoDescriptionTakeover = (
     content: Node | Content | Fragment,
-    generatedAttachments?: any[],
+    generatedAttachments?: AIGeneratedAttachment[],
   ) => {
     if (!editor || !canTakeOverDescription(editor.getHTML())) {
       setAutoDescriptionVisible(false);
