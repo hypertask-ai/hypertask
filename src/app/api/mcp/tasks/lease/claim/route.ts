@@ -230,6 +230,7 @@ export async function POST(request: NextRequest) {
               ctx.user.id,
               ctx.agentId
             ) ? 'current_user' : 'another_user',
+            agentId: conflictingLease?.agentId ?? null,
           },
         },
         { status: 409 }
