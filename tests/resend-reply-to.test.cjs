@@ -23,14 +23,21 @@ function stubModule(relativePath, exports) {
   };
 }
 
-test("the shared Resend mailer forwards Reply-To using the API field", async () => {
+test("the shared Resend mailer forwards Reply-To and bounds the request", async () => {
   const { sendEmail } = jiti(path.join(root, "src/lib/email/sendEmail.ts"));
   const originalFetch = global.fetch;
+  const originalTimeout = AbortSignal.timeout;
   const originalKey = process.env.RESEND_API_KEY;
+  const timeoutSignal = new AbortController().signal;
+  const timeoutCalls = [];
   const requests = [];
   process.env.RESEND_API_KEY = crypto.randomBytes(32).toString("hex");
+  AbortSignal.timeout = (milliseconds) => {
+    timeoutCalls.push(milliseconds);
+    return timeoutSignal;
+  };
   global.fetch = async (_url, options) => {
-    requests.push(JSON.parse(options.body));
+    requests.push({ body: JSON.parse(options.body), signal: options.signal });
     return new Response(JSON.stringify({ id: "email-1" }), {
       status: 200,
       headers: { "content-type": "application/json" },
@@ -47,12 +54,65 @@ test("the shared Resend mailer forwards Reply-To using the API field", async () 
     });
   } finally {
     global.fetch = originalFetch;
+    AbortSignal.timeout = originalTimeout;
     if (originalKey === undefined) delete process.env.RESEND_API_KEY;
     else process.env.RESEND_API_KEY = originalKey;
   }
 
+  assert.deepEqual(timeoutCalls, [5000]);
   assert.equal(requests.length, 1);
-  assert.equal(requests[0].reply_to, "reply+abc@example.com");
+  assert.equal(requests[0].signal, timeoutSignal);
+  assert.equal(requests[0].body.reply_to, "reply+abc@example.com");
+});
+
+test("the shared Resend mailer reports its request timeout clearly", async () => {
+  const { sendEmail } = jiti(path.join(root, "src/lib/email/sendEmail.ts"));
+  const originalFetch = global.fetch;
+  const originalTimeout = AbortSignal.timeout;
+  const timeoutSignal = new AbortController().signal;
+  AbortSignal.timeout = () => timeoutSignal;
+  global.fetch = async (_url, options) => {
+    assert.equal(options.signal, timeoutSignal);
+    throw new DOMException("The operation timed out", "TimeoutError");
+  };
+
+  try {
+    await assert.rejects(
+      sendEmail({
+        to: "person@example.com",
+        from: "Hypertask <notifications@hypertask.ai>",
+        subject: "Update",
+        text: "Body",
+      }),
+      /Resend API request timed out after 5000ms/,
+    );
+  } finally {
+    global.fetch = originalFetch;
+    AbortSignal.timeout = originalTimeout;
+  }
+});
+
+test("the shared Resend mailer preserves non-timeout failures", async () => {
+  const { sendEmail } = jiti(path.join(root, "src/lib/email/sendEmail.ts"));
+  const originalFetch = global.fetch;
+  const providerError = new Error("network unavailable");
+  global.fetch = async () => {
+    throw providerError;
+  };
+
+  try {
+    await assert.rejects(
+      sendEmail({
+        to: "person@example.com",
+        from: "Hypertask <notifications@hypertask.ai>",
+        subject: "Update",
+        text: "Body",
+      }),
+      (error) => error === providerError,
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("an immediate task notification gets a signed Reply-To address", async () => {

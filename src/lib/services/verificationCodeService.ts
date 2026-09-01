@@ -39,32 +39,21 @@ export class VerificationCodeService {
     const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000)
     
     try {
-      // Transaction: Clean up expired codes and store new one atomically
-      await prisma.$transaction(async (tx) => {
-        // Clean up any expired codes for this email first
-        await tx.verificationCode.deleteMany({
-          where: {
-            email: normalizedEmail,
-            expiresAt: { lt: new Date() }
-          }
-        })
-        
-        // Upsert: Replace any existing unused code for this email
-        await tx.verificationCode.upsert({
-          where: { email: normalizedEmail },
-          update: {
-            code,
-            expiresAt,
-            used: false,
-            createdAt: new Date()
-          },
-          create: {
-            code,
-            email: normalizedEmail,
-            expiresAt,
-            used: false
-          }
-        })
+      // The email key identifies the sole row, so upsert replaces active and expired codes.
+      await prisma.verificationCode.upsert({
+        where: { email: normalizedEmail },
+        update: {
+          code,
+          expiresAt,
+          used: false,
+          createdAt: new Date()
+        },
+        create: {
+          code,
+          email: normalizedEmail,
+          expiresAt,
+          used: false
+        }
       })
       
       // Update rate limiting after successful storage
