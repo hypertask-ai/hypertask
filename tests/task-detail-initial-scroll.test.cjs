@@ -108,7 +108,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     /useLayoutEffect\(\(\) => \{\s*const previousViewport[\s\S]*?initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\);[\s\S]*?\}, \[_mbl, _parsedTask\.id, initialScrollGuard, scrollElementRef\]\);/
   )?.[0];
   const mountPositioning = source.match(
-    /\/\/Initial Scroll and focus when page loads[\s\S]*?\}, \[\]\);/
+    /\/\/Initial Scroll and focus when page loads[\s\S]*?\}, \[_parsedTask\.id\]\);/
   )?.[0];
   const unreadPositioning = source.match(
     /\/\/ Where a freshly-opened task lands[\s\S]*?visibleCommentIndices,[\s\S]*?\]\);/

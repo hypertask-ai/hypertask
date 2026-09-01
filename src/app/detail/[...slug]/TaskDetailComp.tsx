@@ -2041,7 +2041,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
         }
       }
     }
-  }, []);
+  }, [_parsedTask.id]);
 
   // Where a freshly-opened task lands. Runs once the unread snapshot is ready so
   // it knows whether anything is new; the mount effect defers its mobile scroll
