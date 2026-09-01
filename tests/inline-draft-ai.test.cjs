@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -27,6 +28,21 @@ const {
   inlineDraftAiWritePlaceholder,
   mergeInlineDraftAiDictation,
 } = jiti(path.join(root, "src/components/RTE/Components/inlineDraftAi.ts"));
+
+test("inline draft AI prompt clicks do not bubble back to the comment editor", () => {
+  const source = fs.readFileSync(
+    path.join(
+      root,
+      "src/components/RTE/Components/InlineDraftAiFloat.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(
+    source,
+    /aria-label="Write with AI"[\s\S]*?onClick=\{\(event\) => event\.stopPropagation\(\)\}/,
+  );
+});
 
 test("inline draft AI preserves a range and expands a collapsed caret over existing content", () => {
   assert.deepEqual(
