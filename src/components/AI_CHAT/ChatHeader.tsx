@@ -4,6 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   Ellipsis,
+  History,
   Maximize2,
   Minus,
   PanelRight,
@@ -24,6 +25,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { IChatSession } from "@/models/model";
+import AIModelDropDownButton from "../Global/ModelSelectorDropdown";
 import { useRecoilState } from "@/lib/state";
 import {
   aiChatAutoOpenSuppressedAtom,
@@ -97,11 +99,15 @@ export const ChatHeader = () => {
     toggleRenameChatModal,
     deleteSession,
     editor,
+    dropDownButtonAICallback,
+    currentAiOption,
+    displayAiOptions,
   } = useAiChatContext();
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
+  const [isStartingNewSession, setIsStartingNewSession] = useState(false);
   const [aiChatPinned, setAiChatPinned] = useRecoilState(aiChatPinnedAtom);
   const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
@@ -134,6 +140,130 @@ export const ChatHeader = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const handleStartNewSession = async () => {
+    if (isStartingNewSession) return;
+    setIsStartingNewSession(true);
+    try {
+      await startNewSession();
+      setTimeout(() => {
+        try {
+          editor?.view.dom.focus();
+        } catch {
+          // The editor may have unmounted while the request completed.
+        }
+      }, 0);
+    } finally {
+      setIsStartingNewSession(false);
+    }
+  };
+
+  const renderSessionMenu = (alignmentClass: string) =>
+    isDropdownOpen ? (
+      <div
+        id="ai-chat-session-history"
+        className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-[1200] ${alignmentClass}`}
+      >
+        {previous7Days.length > 0 && (
+          <div className="pt-1">
+            <div className="px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">
+              Previous 7 days
+            </div>
+            <ul className="pb-1">
+              {previous7Days.map((chat: IChatSession) => (
+                <ChatSessionRow
+                  key={chat.id}
+                  chat={chat}
+                  isActive={chat.id === activeSessionId}
+                  onSelect={() => {
+                    setIsDropdownOpen(false);
+                    selectSession(chat.id);
+                  }}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+        {previous7Days.length > 0 && older.length > 0 && (
+          <div className="mx-2 h-px bg-gray-600/60" role="separator" />
+        )}
+        {older.length > 0 && (
+          <div className="pb-1">
+            <div className="px-3 pb-1 pt-2 text-micro font-medium text-icon-dark-gray">
+              Older
+            </div>
+            <ul>
+              {older.map((chat: IChatSession) => (
+                <ChatSessionRow
+                  key={chat.id}
+                  chat={chat}
+                  isActive={chat.id === activeSessionId}
+                  onSelect={() => {
+                    setIsDropdownOpen(false);
+                    selectSession(chat.id);
+                  }}
+                />
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    ) : null;
+
+  if (isMbl) {
+    return (
+      <div
+        data-ai-chat-mobile-header
+        className="z-10 flex min-h-[68px] items-center gap-1 px-2 py-2 text-white-black"
+      >
+        <button
+          type="button"
+          onClick={togglePopover}
+          aria-label="Close AI chat"
+          className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
+        >
+          <ChevronDown size={22} strokeWidth={1.75} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div
+            className="truncate px-2 text-modalSmall font-semibold leading-5"
+            title={sessions[0]?.title ?? undefined}
+          >
+            {sessions[0]?.title ?? "AI Chat"}
+          </div>
+          <AIModelDropDownButton
+            optionCallback={dropDownButtonAICallback}
+            aiSelected={currentAiOption}
+            currentOptions={displayAiOptions}
+            dropDownClassName="-my-2 min-h-11 px-2 py-2 text-text-light-gray"
+            stackSubmenus
+          />
+        </div>
+        <div className="relative shrink-0" ref={dropdownRef}>
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen((open) => !open)}
+            aria-label="Chat history"
+            aria-controls="ai-chat-session-history"
+            aria-expanded={isDropdownOpen}
+            className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
+          >
+            <History size={20} strokeWidth={1.75} />
+          </button>
+          {renderSessionMenu("right-0")}
+        </div>
+        <button
+          type="button"
+          onClick={handleStartNewSession}
+          disabled={isStartingNewSession}
+          aria-label="New chat"
+          className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black disabled:cursor-wait disabled:opacity-50"
+        >
+          <SquarePen size={20} strokeWidth={1.75} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -178,65 +308,15 @@ export const ChatHeader = () => {
           </span>
         </button>
 
-        {isDropdownOpen && (
-          <div className="absolute left-0 mt-2 w-64 max-h-60 overflow-y-auto scrollbar-none bg-modalBackground rounded-md shadow-lg z-20">
-            {previous7Days.length > 0 && (
-              <div className="pt-1">
-                <div className="px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">
-                  Previous 7 days
-                </div>
-                <ul className="pb-1">
-                  {previous7Days.map((chat: IChatSession) => (
-                    <ChatSessionRow
-                      key={chat.id}
-                      chat={chat}
-                      isActive={chat.id === activeSessionId}
-                      onSelect={() => {
-                        setIsDropdownOpen(false);
-                        selectSession(chat.id);
-                      }}
-                    />
-                  ))}
-                </ul>
-              </div>
-            )}
-            {previous7Days.length > 0 && older.length > 0 && (
-              <div className="mx-2 h-px bg-gray-600/60" role="separator" />
-            )}
-            {older.length > 0 && (
-              <div className="pb-1">
-                <div className="px-3 pb-1 pt-2 text-micro font-medium text-icon-dark-gray">
-                  Older
-                </div>
-                <ul>
-                  {older.map((chat: IChatSession) => (
-                    <ChatSessionRow
-                      key={chat.id}
-                      chat={chat}
-                      isActive={chat.id === activeSessionId}
-                      onSelect={() => {
-                        setIsDropdownOpen(false);
-                        selectSession(chat.id);
-                      }}
-                    />
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
+        {renderSessionMenu("left-0")}
       </div>
 
       {/* right side */}
       <div className="flex shrink-0 items-center space-x-2">
         <button
-          onClick={() => {
-            startNewSession();
-            // Cursor into the fresh composer; DOM focus, not the Tiptap
-            // command, which can silently no-op (HTPR-4565).
-            setTimeout(() => { try { editor?.view.dom.focus(); } catch { /* view unmounted */ } }, 0);
-          }}
-          className="text-icon-dark-gray hover:text-white-black relative group"
+          onClick={handleStartNewSession}
+          disabled={isStartingNewSession}
+          className="text-icon-dark-gray hover:text-white-black relative group disabled:cursor-wait disabled:opacity-50"
         >
           <SquarePen size={16} strokeWidth={1.75} />
           <Tooltip

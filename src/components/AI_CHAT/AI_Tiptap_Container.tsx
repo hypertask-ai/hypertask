@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   Clipboard,
+  Image as ImageIcon,
   Layers,
   ListTodo,
   Paperclip,
@@ -26,6 +27,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { usePathname } from "next/navigation";
 import {
+  type ChangeEvent,
   type ComponentProps,
   useContext,
   useEffect,
@@ -44,6 +46,13 @@ import {
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
+import toast from "react-hot-toast";
+
+const SCREENSHOT_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 export function AI_Tiptap_Container() {
   const pathname = usePathname();
@@ -75,7 +84,21 @@ export function AI_Tiptap_Container() {
     removeFile,
   } = useAiChatContext();
   const [audioProcessing, setAudioProcessing] = useState(false);
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
   const mobileDictating = Boolean(isMbl && (isRecording || audioProcessing));
+  const handleScreenshotUpload = async (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const input = event.currentTarget;
+    const files = Array.from(input.files ?? []);
+    if (files.some((file) => !SCREENSHOT_MIME_TYPES.has(file.type))) {
+      toast.error("Choose a PNG, JPEG, or WebP screenshot.");
+      input.value = "";
+      return;
+    }
+    await handleFileUpload(event);
+    input.value = "";
+  };
 
   // Focus the composer as soon as it is on screen. The focus call in
   // useAiChat fires when the open-toggle flips, before the dynamically
@@ -162,7 +185,7 @@ export function AI_Tiptap_Container() {
   } else if (isMbl) {
     recorderWrapperClassName = isEditorEmpty
       ? "order-4 ml-auto"
-      : "order-2";
+      : "order-3 ml-auto";
   }
 
   return (
@@ -176,12 +199,28 @@ export function AI_Tiptap_Container() {
           onRemove={removeQueuedMessage}
         />
       )}
+      {isMbl && (
+        <div
+          data-ai-chat-mobile-context-row
+          className="mb-2 flex min-w-0 items-center gap-2 overflow-x-auto scrollbar-none"
+        >
+          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile />}
+          <ContextList
+            items={contextList}
+            onClick={handleRemoveContext}
+            mobile
+          />
+          <AddContextButton onClick={handleAddContext} mobile />
+        </div>
+      )}
       <div
+        data-ai-chat-composer
         className={`
               w-full
               flex flex-col
               scrollbar-none items-center bg-ai-tiptap
-              ${styles.aiChatInput} !rounded-lg outline-none border-0 p-2
+              ${styles.aiChatInput} outline-none border-0
+              ${isMbl ? "!rounded-[22px] px-3 pb-2 pt-3" : "!rounded-lg p-2"}
             `}
         onKeyDown={tiptapKeydown}
       >
@@ -198,7 +237,7 @@ export function AI_Tiptap_Container() {
             />
           </div>
         )}
-        {contextList.length > 0 && (
+        {!isMbl && contextList.length > 0 && (
           <ContextList items={contextList} onClick={handleRemoveContext} />
         )}
         <div
@@ -250,6 +289,11 @@ export function AI_Tiptap_Container() {
             />
           }
           contextControl={<AddContextButton onClick={handleAddContext} />}
+          screenshotControl={
+            <ScreenshotButton
+              onClick={() => screenshotInputRef.current?.click()}
+            />
+          }
           recorder={
             <AudioButton
               callbackHandler={audioTiptapCallback}
@@ -292,12 +336,23 @@ export function AI_Tiptap_Container() {
           aria-hidden
           ref={fileInputRef}
         />
+        {isMbl && (
+          <input
+            id="ai-chat-screenshot-upload"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={handleScreenshotUpload}
+            className="hidden"
+            aria-hidden
+            ref={screenshotInputRef}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function ChatScopeDropdown() {
+function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -374,15 +429,26 @@ function ChatScopeDropdown() {
   };
 
   return (
-    <div ref={rootRef} className="relative inline-block min-w-0 max-w-full text-left">
+    <div
+      ref={rootRef}
+      data-ai-chat-mobile-scope={mobile || undefined}
+      className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
+    >
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        className="inline-flex w-full min-w-0 items-center rounded-[4px] px-2 py-1 text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active"
+        className={`inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${
+          mobile
+            ? "h-11 max-w-[65vw] rounded-full bg-ai-tiptap px-3"
+            : "rounded-[4px] px-2 py-1"
+        }`}
         onClick={() => setIsOpen((open) => !open)}
         title={scopeChip.title}
       >
+        {mobile && (
+          <span className="mr-1 flex-none text-text-light-gray">Context:</span>
+        )}
         <span className="mr-1 flex-none text-text-light-gray">
           {scopeChip.kind === "task" ? (
             <ListTodo size={13} strokeWidth={1.75} />
@@ -466,15 +532,37 @@ function ScopeMenuRow({
 function ContextList({
   items,
   onClick,
+  mobile = false,
 }: {
   items: MentionItem[];
   onClick: (index: number) => void;
+  mobile?: boolean;
 }) {
+  if (mobile) {
+    return (
+      <div className="contents">
+        {items.map((item: any, index: number) => (
+          <button
+            type="button"
+            className="flex h-11 max-w-[65vw] shrink-0 items-center gap-2 rounded-full bg-ai-tiptap px-3 text-white-black hover:bg-hover-active"
+            key={`context-value-${index}`}
+            onClick={() => onClick(index)}
+            aria-label={`Remove ${item.name} from context`}
+          >
+            <ContextIcon type={item.type} />
+            <span className="min-w-0 truncate text-meta">{item.name}</span>
+            <X size={14} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} />
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 self-start flex-wrap">
       {items.map((item: any, index: number) => (
         <div
-          className={`relative group p-1 rounded-md flex justify-center items-center gap-2 hover:bg-hover-active px-2 py-1 border-[2px] border-icon-dark-gray text-white-black`}
+          className="relative group flex items-center justify-center gap-2 rounded-md border-[2px] border-icon-dark-gray px-2 py-1 text-white-black hover:bg-hover-active"
           key={`context-value-${index}`}
         >
           <X
@@ -509,6 +597,16 @@ function ContextList({
   );
 }
 
+function ContextIcon({ type }: { type: string }) {
+  if (type === "task") {
+    return <ListTodo size={14} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} />;
+  }
+  if (type === "project") {
+    return <Clipboard size={14} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} />;
+  }
+  return <User size={14} className="shrink-0 text-icon-dark-gray" strokeWidth={1.75} />;
+}
+
 function AttachmentButton({
   disabled,
   onClick,
@@ -530,6 +628,19 @@ function AttachmentButton({
         )}
       />
       <Paperclip size={16} strokeWidth={1.75} />
+    </button>
+  );
+}
+
+function ScreenshotButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="relative rounded-full text-icon-dark-gray hover:text-white-black"
+      onClick={onClick}
+      aria-label="Attach screenshot"
+    >
+      <ImageIcon size={18} strokeWidth={1.75} />
     </button>
   );
 }
@@ -656,19 +767,32 @@ function CancelStreamButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function AddContextButton({ onClick }: { onClick: () => void }) {
+function AddContextButton({
+  onClick,
+  mobile = false,
+}: {
+  onClick: () => void;
+  mobile?: boolean;
+}) {
   return (
     <button
-      className="relative group text-white"
+      data-ai-chat-mobile-add-context={mobile || undefined}
+      className={
+        mobile
+          ? "flex h-11 shrink-0 items-center rounded-full bg-ai-tiptap px-3 text-text-light-gray hover:bg-hover-active hover:text-white-black"
+          : "relative group text-white"
+      }
       onClick={onClick}
       aria-label="Add context"
     >
-      <Tooltip
-        {...(aiTaskWriterConfig.shortcutsAndTooltips.ai_chat
-          .add_context_button as any)}
-      />
-      <span className="text-emphasis font-bold text-icon-dark-gray hover:text-white-black">
-        @
+      {!mobile && (
+        <Tooltip
+          {...(aiTaskWriterConfig.shortcutsAndTooltips.ai_chat
+            .add_context_button as any)}
+        />
+      )}
+      <span className={mobile ? "text-meta" : "text-emphasis font-bold text-icon-dark-gray hover:text-white-black"}>
+        {mobile ? "@ add" : "@"}
       </span>
     </button>
   );
