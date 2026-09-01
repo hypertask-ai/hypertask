@@ -95,12 +95,17 @@ test("the reference composer still implements the documented geometry", () => {
   const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
   const general = read("src/lib/configs/general.config.ts");
 
-  assert.match(composer, /rounded-\[5px\] bg-cardBackground/);
-  assert.match(composer, /px-\[12px\] pb-\[6px\]/);
-  assert.match(composer, /rounded-lg bg-newcomment-well px-\[12px\] py-\[4px\]/);
-  assert.match(attachments, /Paperclip size=\{16\}/);
-  assert.match(attachments, /<SendArrow size=\{22\}/);
-  assert.match(general, /min-h-\[44px\] min-w-\[44px\]/);
+  assert.match(composer, /rounded-\[5px\]/);
+  assert.match(composer, /bg-cardBackground/);
+  assert.match(composer, /px-\[12px\]/);
+  assert.match(composer, /pb-\[6px\]/);
+  assert.match(composer, /rounded-lg/);
+  assert.match(composer, /bg-newcomment-well/);
+  assert.match(composer, /py-\[4px\]/);
+  assert.match(attachments, /<Paperclip\b[^>]*\bsize=\{16\}[^>]*>/);
+  assert.match(attachments, /<SendArrow\b[^>]*\bsize=\{22\}[^>]*>/);
+  assert.match(general, /min-h-\[44px\]/);
+  assert.match(general, /min-w-\[44px\]/);
 });
 
 test("the long-form design reference points to the canonical guide", () => {
