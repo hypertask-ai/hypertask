@@ -759,18 +759,37 @@ cache_pr_state_is_proven() {
       )' >/dev/null
 }
 
+cache_target_is_idle() {
+  local target=$1 cutoff=$((NOW - CACHE_MIN_IDLE_SECONDS)) modified_at recent
+  (( CACHE_MIN_IDLE_SECONDS > 0 )) || return 0
+  modified_at=$(stat -c '%Y' -- "$target") && (( modified_at <= cutoff )) || return 1
+  [[ -d "$target" ]] || return 0
+  recent=$(find "$target" -xdev -mindepth 1 -newermt "@$cutoff" -print -quit 2>/dev/null) || return 1
+  [[ -z "$recent" ]]
+}
+cache_path_is_idle() {
+  local path=$1 cutoff status committed_at cache
+  (( CACHE_MIN_IDLE_SECONDS > 0 )) || return 0
+  cutoff=$((NOW - CACHE_MIN_IDLE_SECONDS))
+  status=$(GIT_OPTIONAL_LOCKS=0 "$GIT_BIN" -C "$path" status --porcelain --untracked-files=normal 2>/dev/null) || return 1
+  [[ -z "$status" ]] || return 1
+  committed_at=$($GIT_BIN -C "$path" show -s --format=%ct HEAD 2>/dev/null) || return 1
+  [[ "$committed_at" =~ ^[0-9]+$ ]] && (( committed_at <= cutoff )) || return 1
+  for cache in node_modules .next tsconfig.tsbuildinfo; do
+    [[ -e "$path/$cache" && ! -L "$path/$cache" ]] || continue
+    cache_target_is_idle "$path/$cache" || return 1
+  done
+}
+
 cache_local_candidate_is_proven() {
-  local path=$1 branch=$2 tip=$3 require_idle=${4:-1} canonical current_tip modified_at
+  local path=$1 branch=$2 tip=$3 require_idle=${4:-1} canonical current_tip
   [[ -d "$path" && ! -L "$path" ]] || return 1
   canonical=$(realpath -e -- "$path") || return 1
-  [[ "$canonical" == "$path" && "$path" == "$WORKTREE_ROOT/"* ]] || return 1
+  [[ "$canonical" == "$path" && "$path" != "$repo_root" && "$path" == "$WORKTREE_ROOT/"* ]] || return 1
   path_is_registered "$path" "$branch" || return 1
   current_tip=$($GIT_BIN -C "$path" rev-parse --verify HEAD 2>/dev/null) || return 1
   [[ "$current_tip" == "$tip" ]] || return 1
-  if [[ "$require_idle" == "1" ]]; then
-    modified_at=$(stat -c '%Y' -- "$path") || return 1
-    (( modified_at <= NOW - CACHE_MIN_IDLE_SECONDS )) || return 1
-  fi
+  [[ "$require_idle" != "1" ]] || cache_path_is_idle "$path" || return 1
   refresh_live_cwds
   ! path_is_in_use "$path"
 }
@@ -824,7 +843,7 @@ clean_cache_target() {
     log "cache quarantine failed: $target"
     return 0
   }
-  if ! cache_local_candidate_is_proven "$path" "$branch" "$tip" 0; then
+  if ! cache_local_candidate_is_proven "$path" "$branch" "$tip" || ! cache_target_is_idle "$quarantine"; then
     restore_cache_target "$quarantine" "$target" \
       || fatal "cache became active and could not be restored: $target"
     log "cache became active during quarantine; restored: $target"
@@ -836,10 +855,8 @@ clean_cache_target() {
       fatal "cannot remove quarantined cache: $target"
     }
   else
-    rm -rf --one-file-system -- "$quarantine" || {
-      restore_cache_target "$quarantine" "$target" || true
-      fatal "cannot remove quarantined cache: $target"
-    }
+    rm -rf --one-file-system -- "$quarantine" \
+      || fatal "cannot remove quarantined cache: $target"
   fi
   log "removed reproducible cache: $target"
 }
@@ -965,18 +982,17 @@ declare -a CACHE_CANDIDATE_BRANCHES=()
 declare -a CACHE_CANDIDATE_TIPS=()
 
 consider_cache_candidate() {
-  local path=$1 branch=$2 tip=$3 canonical modified_at remote
+  local path=$1 branch=$2 tip=$3 canonical remote
   (( ${#CACHE_CANDIDATE_PATHS[@]} < CACHE_CLEANUP_LIMIT )) || return 0
   [[ -n "$path" && -n "$branch" && "$tip" =~ ^[0-9a-f]{40}$ ]] || return 0
   [[ "$branch" != "$BASE_BRANCH" && "$branch" != "main" ]] || return 0
   [[ -d "$path" && ! -L "$path" ]] || return 0
   canonical=$(realpath -e -- "$path") || return 0
-  [[ "$canonical" == "$path" && "$path" == "$WORKTREE_ROOT/"* ]] || return 0
+  [[ "$canonical" == "$path" && "$path" != "$repo_root" && "$path" == "$WORKTREE_ROOT/"* ]] || return 0
   if [[ ! -e "$path/node_modules" && ! -e "$path/.next" && ! -e "$path/tsconfig.tsbuildinfo" ]]; then
     return 0
   fi
-  modified_at=$(stat -c '%Y' -- "$path") || return 0
-  (( modified_at <= NOW - CACHE_MIN_IDLE_SECONDS )) || return 0
+  cache_path_is_idle "$path" || return 0
   remote=$(preloaded_remote_tip "$branch")
   [[ -z "$remote" || "$remote" == "$tip" ]] || return 0
   preloaded_query_prs "$branch"

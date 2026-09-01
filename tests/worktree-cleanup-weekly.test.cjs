@@ -294,22 +294,20 @@ function createReproducibleCaches(fixture) {
   );
   fs.mkdirSync(path.join(fixture.worktree, 'node_modules', 'package'), { recursive: true });
   fs.writeFileSync(path.join(fixture.worktree, 'node_modules', 'package', 'index.js'), 'cache\n');
-  fs.mkdirSync(path.join(fixture.worktree, '.next', 'cache'), { recursive: true });
-  fs.writeFileSync(path.join(fixture.worktree, '.next', 'cache', 'entry'), 'cache\n');
+  fs.mkdirSync(path.join(fixture.worktree, '.next', 'cache', 'webpack', 'client'), { recursive: true });
+  fs.writeFileSync(path.join(fixture.worktree, '.next', 'cache', 'webpack', 'client', 'entry'), 'cache\n');
   fs.writeFileSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo'), 'cache\n');
 }
-
 function mergedPrForFixture(fixture) {
   return {
     number: 5106,
     state: 'MERGED',
-    mergedAt: '2026-08-21T10:00:00Z',
+    mergedAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
     headRefName: fixture.branch,
     headRefOid: tip(fixture),
     baseRefName: 'staging',
   };
 }
-
 function leasePath(fixture, target = fixture.worktree) {
   const id = crypto.createHash('sha256').update(target).digest('hex');
   return path.join(fixture.state, 'leases', `${id}.lease`);
@@ -380,9 +378,7 @@ test('removes only reproducible caches after an exact merged PR', (t) => {
   createReproducibleCaches(fixture);
   writePrResponse(fixture, [mergedPrForFixture(fixture)]);
   const originalTip = tip(fixture);
-
   runScript(fixture);
-
   assert.equal(fs.existsSync(fixture.worktree), true);
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'README.md')), true);
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), false);
@@ -397,13 +393,27 @@ test('cache cleanup dry-run leaves every target intact', (t) => {
   t.after(() => cleanupFixture(fixture));
   createReproducibleCaches(fixture);
   writePrResponse(fixture, [mergedPrForFixture(fixture)]);
-
   runScript(fixture, ['--dry-run']);
-
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
   assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), true);
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo')), true);
   assert.match(fs.readFileSync(fixture.log, 'utf8'), /dry-run would remove cache=/);
+});
+
+test('cache cleanup treats nested cache writes as recent activity', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  const old = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  command('git', ['-C', fixture.worktree, 'commit', '--amend', '--no-edit'], {
+    env: { ...process.env, GIT_AUTHOR_DATE: old, GIT_COMMITTER_DATE: old },
+  });
+  git(fixture.worktree, ['push', '--force', 'origin', fixture.branch]);
+  createReproducibleCaches(fixture);
+  command('find', [fixture.worktree, '-exec', 'touch', '-d', old, '{}', '+']);
+  fs.writeFileSync(path.join(fixture.worktree, '.next', 'cache', 'webpack', 'client', 'entry'), 'active build\n');
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  runScript(fixture, [], { CACHE_MIN_IDLE_SECONDS: '3600' });
+  assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), true);
 });
 
 test('cache cleanup preserves active and unmerged worktrees', (t) => {
@@ -414,19 +424,14 @@ test('cache cleanup preserves active and unmerged worktrees', (t) => {
   const processDir = path.join(active.env.PROC_ROOT, '123');
   fs.mkdirSync(processDir);
   fs.symlinkSync(active.worktree, path.join(processDir, 'cwd'));
-
   runScript(active);
   assert.equal(fs.existsSync(path.join(active.worktree, 'node_modules')), true);
-
   const open = createFixture();
   t.after(() => cleanupFixture(open));
   createReproducibleCaches(open);
   writePrResponse(open, [{
-    ...mergedPrForFixture(open),
-    state: 'OPEN',
-    mergedAt: null,
+    ...mergedPrForFixture(open), state: 'OPEN', mergedAt: null,
   }]);
-
   runScript(open);
   assert.equal(fs.existsSync(path.join(open.worktree, 'node_modules')), true);
 });
@@ -443,7 +448,6 @@ test('cache cleanup accepts a missing remote branch but preserves tracked and sy
   fs.symlinkSync(external, path.join(fixture.worktree, 'node_modules'));
   git(fixture.worktree, ['add', '-f', 'tsconfig.tsbuildinfo']);
   git(fixture.worktree, ['commit', '-m', 'track build info']);
-
   runScript(fixture);
 
   assert.equal(fs.existsSync(path.join(external, 'keep')), true);
