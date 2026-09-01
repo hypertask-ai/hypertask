@@ -4,6 +4,7 @@ import type {
   TAiReasoningVariant,
   TModelProvider,
 } from "@/lib/aiModelOptions";
+import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 
 export interface IOption {
   display: string;
@@ -37,6 +38,7 @@ export interface IAITaskWriterContainerProps {
   attachments?: any[];
   toggleRecording?: (val: boolean) => void;
   isRecording?: boolean;
+  dictationCoordinator?: DictationCoordinator;
   currentTask?: ITask;
   editMode?: ITaskDetailEditMode
 }

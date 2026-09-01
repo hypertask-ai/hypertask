@@ -31,6 +31,7 @@ import { useFileUpload } from "./FileUploadHandler";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { SendArrow } from "@/components/Common/SendArrow";
+import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 
 interface IProps {
   /** create-task-modal only: the modal's title field has text. Save must
@@ -63,6 +64,7 @@ interface IProps {
   isAiTaskWriterOpen?: boolean;
   /** Hide the toolbar mic while the inline draft AI float owns dictation. */
   hideComposerDictation?: boolean;
+  dictationCoordinator?: DictationCoordinator;
 }
 
 const AttachmentsUpload = (props: IProps) => {
@@ -86,6 +88,7 @@ const AttachmentsUpload = (props: IProps) => {
     isRecording,
     isAiTaskWriterOpen,
     hideComposerDictation,
+    dictationCoordinator,
   } = props;
   const _mbl = useContext(MobileViewContext);
   // Reactive: Tiptap v3 useEditor does not re-render on typing, so subscribe
@@ -335,6 +338,7 @@ const AttachmentsUpload = (props: IProps) => {
             isRecording={isRecording}
             isProcessing={audioProcessing}
             onProcessingChange={setAudioProcessing}
+            dictationCoordinator={dictationCoordinator}
             toggleAiTaskWriter={toggleAiTaskWriter}
             isAiTaskWriterOpen={isAiTaskWriterOpen}
           />
@@ -430,6 +434,7 @@ interface IMobileBottomBar {
   isRecording?: boolean;
   isProcessing?: boolean;
   onProcessingChange?: (processing: boolean) => void;
+  dictationCoordinator?: DictationCoordinator;
   toggleAiTaskWriter?: () => void;
   isAiTaskWriterOpen?: boolean;
 }
@@ -471,6 +476,7 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
   isRecording,
   isProcessing,
   onProcessingChange,
+  dictationCoordinator,
   toggleAiTaskWriter,
   isAiTaskWriterOpen,
 }) => {
@@ -567,6 +573,7 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           globalRecording={isRecording}
           hasText={hasText}
           onProcessingChange={onProcessingChange}
+          dictationCoordinator={dictationCoordinator}
           ariaLabel="Dictate description"
           mobilePresentation="compact"
           // This field-level mic stays a bare secondary action. Flex order moves

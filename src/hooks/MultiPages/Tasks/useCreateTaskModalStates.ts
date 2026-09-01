@@ -46,6 +46,8 @@ import {
   createAiTitleEditTracker,
   recordBoardMemorySignal,
 } from "@/lib/ai/boardMemoryClient";
+import { createDictationCoordinator } from "@/lib/dictationCoordinator";
+import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import {
   beginTaskCreatePerformanceTrace,
   type TaskCreateTraceScope,
@@ -98,6 +100,11 @@ const useCreateTaskModalGlobalStates = () => {
   const [allProjects, setAllProjects] = useState<IProject[]>([]);
   const [_, setNewTaskCreated] = useRecoilState(newTaskCreatedAtom);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const dictationCoordinatorRef = useRef<ReturnType<typeof createDictationCoordinator> | null>(null);
+  if (!dictationCoordinatorRef.current) {
+    dictationCoordinatorRef.current = createDictationCoordinator(setIsRecording);
+  }
+  const dictationCoordinator = dictationCoordinatorRef.current;
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
   // Bumped whenever the composer is reset (discard, close, post-create). A
   // save that awaited title generation checks it before creating, so a task
@@ -199,6 +206,15 @@ const useCreateTaskModalGlobalStates = () => {
     if (key === "title" && String(value).trim()) setTitleGenerationError(null);
     setFormValues((prev) => ({ ...prev, [key]: value }));
   };
+
+  const appendDictationToTitle = useCallback((transcript: string) => {
+    if (!transcript.trim()) return;
+    setTitleGenerationError(null);
+    setFormValues((current) => ({
+      ...current,
+      title: appendTitleDictation(current.title, transcript),
+    }));
+  }, []);
 
   const recordGeneratedTitle = (title: string) => {
     generatedTitleTrackerRef.current.record(title);
@@ -695,6 +711,8 @@ const useCreateTaskModalGlobalStates = () => {
 
   return {
     handleChange,
+    appendDictationToTitle,
+    dictationCoordinator,
     formValues,
     currentTask,
     setCurrentTask,

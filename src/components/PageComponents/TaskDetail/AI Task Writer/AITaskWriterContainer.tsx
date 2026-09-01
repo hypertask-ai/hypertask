@@ -67,6 +67,7 @@ const AITaskWriterContainer: React.FC<
   createTask,
   toggleRecording,
   isRecording,
+  dictationCoordinator,
   autoTrigger = false,
   initialPrompt = "",
   editMode
@@ -483,6 +484,7 @@ const AITaskWriterContainer: React.FC<
               editor={null}
               id="ai-writer-audio-button"
               hasText={Boolean(userPrompt.trim())}
+              dictationCoordinator={dictationCoordinator}
               className={isMobile ? MOBILE_TARGET : undefined}
               // Empty composer: the filled mic is the primary and sits far
               // right (clip - spacer - mic, per the approved wireframe). Once

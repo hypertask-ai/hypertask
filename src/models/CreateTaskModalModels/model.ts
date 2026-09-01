@@ -1,6 +1,7 @@
 import { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { IAgent, ILabel, IProject, ITask, IUser } from "../model";
 import { IEstimateConstants, IPrioritiesConstants } from "@/lib/constants/constants";
+import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 
 export interface IForm{
     "title":string;
@@ -26,6 +27,8 @@ export type TEditModeCTModal = "title" | "assignees" | "Description" |"Descripti
 export type TCurrentFocusedElement = "Title" | "Assignees" |"Save" |"Description"|"title-input"
 export interface ITaskGlobalStates{
     handleChange: (key: TFormKey, value: any) => void;
+    appendDictationToTitle: (transcript: string) => void;
+    dictationCoordinator: DictationCoordinator;
     formValues: IForm;
     editMode: TEditModeCTModal;
     setEditMode: Dispatch<SetStateAction<TEditModeCTModal>>;
