@@ -10,6 +10,9 @@ const jiti = require("jiti")(path.join(root, "tests/skills-resolver.test.cjs"), 
 const { resolveSkills } = jiti(
   path.join(root, "src/app/api/ai/_lib/skills.ts")
 );
+const { STRUCTURED_WRITING_STYLE } = jiti(
+  path.join(root, "src/app/api/ai/_lib/writingSkills.ts")
+);
 
 const foo = {
   id: 1,
@@ -57,8 +60,11 @@ test("resolves /i as the built-in Improve Readability skill", async () => {
   assert.equal(result.skills[0]?.slug, "i");
   assert.equal(result.skills[0]?.name, "Improve Readability");
   assert.match(result.systemPromptAddition, /built-in formatting template/);
-  assert.match(result.systemPromptAddition, /Lead with the outcome or answer/);
-  assert.match(result.systemPromptAddition, /short paragraphs and bullets/);
+  assert.match(result.systemPromptAddition, /Restructure for an ADHD reader/i);
+  assert.match(result.systemPromptAddition, /numbered steps for multi-step work/i);
+  assert.match(result.systemPromptAddition, /ONLY rewriting existing text/i);
+  assert.ok(result.systemPromptAddition.includes(STRUCTURED_WRITING_STYLE));
+  assert.doesNotMatch(result.systemPromptAddition, /Lead with the outcome or answer/);
 });
 
 test("injects a repeated skill token only once", async () => {

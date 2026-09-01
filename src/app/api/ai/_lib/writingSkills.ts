@@ -1,10 +1,11 @@
-// HTPR-5587: the VERBATIM contents of Valentin's two writing skills.
-// Improve with AI (button + /improve slash command) runs these, in this
-// order, as its entire style instruction. Do NOT paraphrase, curate, or
-// "adapt" them into hand-written rules: sync the text from the skill files
-// (~/.claude/skills/unslop/SKILL.md and the i-have-adhd plugin skill)
-// whenever they change.
+export const STRUCTURED_WRITING_STYLE = `- Restructure for an ADHD reader: lead with the next action, use short sentences, numbered steps for multi-step work, one idea per sentence.
+- Prefer concrete verbs and visible outcomes. Cut fluff and closing pleasantries.
+- You are ONLY rewriting existing text. DO NOT answer questions or add new information.`;
 
+// HTPR-5587: the VERBATIM contents of Valentin's two writing skills.
+// Task authoring runs these in order as its writing style. Do NOT paraphrase,
+// curate, or adapt them into hand-written rules: sync the text from the skill
+// files whenever they change.
 export const UNSLOP_SKILL = `# Unslop
 
 Edit text to remove AI patterns and add human voice.

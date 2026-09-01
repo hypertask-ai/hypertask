@@ -1,5 +1,7 @@
 import type { AI_Skill } from "@prisma/client";
 
+import { STRUCTURED_WRITING_STYLE } from "@/app/api/ai/_lib/writingSkills";
+
 type SkillContext = { userId: number; projectId?: number };
 type SkillLookup = (
   slugs: string[],
@@ -16,15 +18,7 @@ const IMPROVE_READABILITY_SKILL: AI_Skill = {
   name: "Improve Readability",
   description: "Make the response concise, scannable, and easy to understand.",
   argumentHint: null,
-  body: [
-    "Write the response in Hypertask's Improve Readability format:",
-    "- Lead with the outcome or answer.",
-    "- Use short paragraphs and bullets for multiple points.",
-    "- Bold only the most important words or conclusions.",
-    "- Remove filler, repetition, and unnecessary hedging.",
-    "- Use neutral, non-blaming language.",
-    "- Preserve the facts, questions, and intended meaning.",
-  ].join("\n"),
+  body: STRUCTURED_WRITING_STYLE,
   sourceUrl: null,
   enabled: true,
   createdById: 0,
