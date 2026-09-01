@@ -31,6 +31,8 @@ function createFixture(tempRoot = os.tmpdir()) {
   const openResponse = path.join(root, 'open-prs.json');
   const fakeGh = path.join(root, 'fake-gh');
   const fakeGit = path.join(root, 'fake-git');
+  const fakeFindmnt = path.join(root, 'fake-findmnt');
+  const findmntResponse = path.join(root, 'findmnt.json');
   const fakeFlock = path.join(root, 'flock');
   const mutationMarker = path.join(root, 'mutation-once');
   const flockCount = path.join(root, 'flock-count');
@@ -63,6 +65,18 @@ function createFixture(tempRoot = os.tmpdir()) {
   fs.writeFileSync(openResponse, '[]');
   fs.writeFileSync(fakeGh, '#!/bin/sh\nif [ "${GH_FAIL:-0}" = "1" ]; then exit 17; fi\nif [ -n "${GH_FAIL_AFTER_FILE:-}" ] && [ -e "$GH_FAIL_AFTER_FILE" ]; then exit 17; fi\nif [ -n "${GH_READY_FILE:-}" ]; then : > "$GH_READY_FILE"; fi\nif [ -n "${GH_SLEEP:-}" ]; then sleep "$GH_SLEEP"; fi\ncase " $* " in *" --state open "*) cat "$GH_OPEN_RESPONSE" ;; *) cat "$GH_RESPONSE" ;; esac\n');
   fs.chmodSync(fakeGh, 0o755);
+  fs.writeFileSync(findmntResponse, '{"filesystems":[]}');
+  fs.writeFileSync(fakeFindmnt, `#!/bin/sh
+if [ -n "${'$'}{FINDMNT_CWD_ON_QUARANTINE:-}" ] && echo "${'$'}3" | grep -Fq '/cache-quarantine/'; then
+  mkdir -p "${'$'}PROC_ROOT/456"
+  ln -s "${'$'}3" "${'$'}PROC_ROOT/456/cwd"
+  if [ -n "${'$'}{FINDMNT_RECREATE_TARGET:-}" ]; then
+    mkdir -p "${'$'}FINDMNT_RECREATE_TARGET"
+  fi
+fi
+cat "${'$'}FINDMNT_RESPONSE"
+`);
+  fs.chmodSync(fakeFindmnt, 0o755);
   fs.writeFileSync(fakeGit, `#!/bin/sh
 REAL_GIT=$(command -v git) || exit 127
 if [ "${'$'}{GIT_MUTATE_MODE:-}" = "remote-query-fail" ] && [ "${'$'}3" = "ls-remote" ] && [ -n "${'$'}{6:-}" ]; then
@@ -143,6 +157,8 @@ exit "${'$'}status"
     LOG_FILE: log,
     PROC_ROOT: procRoot,
     GH_BIN: fakeGh,
+    FINDMNT_BIN: fakeFindmnt,
+    FINDMNT_RESPONSE: findmntResponse,
     GH_RESPONSE: response,
     GH_OPEN_RESPONSE: openResponse,
     GH_READY_FILE: path.join(root, 'gh-ready'),
@@ -162,6 +178,8 @@ exit "${'$'}status"
     openResponse,
     fakeGh,
     fakeGit,
+    fakeFindmnt,
+    findmntResponse,
     fakeFlock,
     mutationMarker,
     flockCount,
@@ -193,12 +211,80 @@ test('places default state in the common Git directory from a linked worktree', 
   );
 });
 
+test('a no-op cleanup does not require GitHub', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+
+  runScript(fixture, [], { GH_BIN: path.join(fixture.root, 'missing-gh') });
+
+  assert.equal(fs.existsSync(fixture.worktree), true);
+});
+
+test('a cache created after the no-op probe waits for the next run', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  const fakeFind = path.join(fixture.root, 'find');
+  const realFind = command('sh', ['-c', 'command -v find']);
+  const target = path.join(fixture.worktree, 'node_modules');
+  fs.writeFileSync(fakeFind, `#!/bin/sh
+if [ "${'$'}1" = "${'$'}FIND_QUARANTINE_DIR" ]; then
+  mkdir -p "${'$'}FIND_CREATE_CACHE"
+fi
+exec "${'$'}REAL_FIND" "${'$'}@"
+`);
+  fs.chmodSync(fakeFind, 0o755);
+
+  runScript(fixture, [], {
+    GH_BIN: path.join(fixture.root, 'missing-gh'),
+    PATH: `${fixture.root}:${process.env.PATH}`,
+    REAL_FIND: realFind,
+    FIND_QUARANTINE_DIR: path.join(fixture.state, 'cache-quarantine'),
+    FIND_CREATE_CACHE: target,
+  });
+
+  assert.equal(fs.existsSync(target), true);
+});
+
+test('cache limits use bounded decimal parsing', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+
+  runScript(fixture, [], {
+    CACHE_MIN_IDLE_SECONDS: '000',
+    CACHE_CLEANUP_LIMIT: '08',
+  });
+  assert.throws(() => runScript(fixture, [], {
+    CACHE_MIN_IDLE_SECONDS: '999999999999999999999',
+  }));
+});
+
+test('nested registered worktrees still load remote cleanup proof', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  const nestedWorktree = path.join(fixture.root, 'nested', 'worktree');
+  fs.mkdirSync(path.dirname(nestedWorktree));
+  git(fixture.repo, ['worktree', 'move', fixture.worktree, nestedWorktree]);
+  fixture.worktree = nestedWorktree;
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+
+  assert.throws(() => runScript(fixture, [], {
+    GH_BIN: path.join(fixture.root, 'missing-gh'),
+  }));
+  runScript(fixture);
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), false);
+});
+
 test('lease cleanup still runs when cache cleanup has no worktree root', (t) => {
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));
   writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const unusedCacheQuarantine = path.join(fixture.root, 'cache-quarantine-link');
+  fs.symlinkSync(os.tmpdir(), unusedCacheQuarantine);
   const cacheDisabled = {
     WORKTREE_ROOT: path.join(fixture.root, 'missing-worktree-root'),
+    CACHE_QUARANTINE_DIR: unusedCacheQuarantine,
     CACHE_CLEANUP_LIMIT: '0',
   };
 
@@ -404,6 +490,55 @@ test('removes only reproducible caches after an exact merged PR', (t) => {
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo')), false);
   assert.equal(tip(fixture), originalTip);
   assert.notEqual(remoteBranchTip(fixture), '');
+});
+
+test('cache cleanup preserves a target with a nested bind mount', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const mounted = path.join(fixture.worktree, 'node_modules', 'mounted');
+  fs.mkdirSync(mounted);
+  fs.writeFileSync(
+    fixture.findmntResponse,
+    JSON.stringify({ filesystems: [{ target: '/', children: [{ target: mounted }] }] }),
+  );
+
+  runScript(fixture);
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), false);
+});
+
+test('cache cleanup restores a target used after quarantine', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+
+  runScript(fixture, [], { FINDMNT_CWD_ON_QUARANTINE: '1' });
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
+  assert.match(fs.readFileSync(fixture.log, 'utf8'), /cache became active during quarantine; restored/);
+});
+
+test('cache cleanup preserves quarantine when its target is recreated', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const target = path.join(fixture.worktree, 'node_modules');
+  const targetId = crypto.createHash('sha256').update(target).digest('hex');
+  const quarantine = path.join(fixture.state, 'cache-quarantine', `${targetId}-node_modules`);
+
+  runScript(fixture, [], {
+    FINDMNT_CWD_ON_QUARANTINE: '1',
+    FINDMNT_RECREATE_TARGET: target,
+  });
+
+  assert.equal(fs.existsSync(target), true);
+  assert.equal(fs.existsSync(quarantine), true);
+  assert.match(fs.readFileSync(fixture.log, 'utf8'), /cache target was recreated; preserving quarantine/);
 });
 
 test('cache cleanup dry-run leaves every target intact', (t) => {

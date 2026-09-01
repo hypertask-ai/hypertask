@@ -39,6 +39,7 @@ CACHE_CLEANUP_LIMIT="${CACHE_CLEANUP_LIMIT:-25}"
 DRY_RUN="${DRY_RUN:-0}"
 GH_BIN="${GH_BIN:-gh}"
 GIT_BIN="${GIT_BIN:-git}"
+FINDMNT_BIN="${FINDMNT_BIN:-findmnt}"
 LS_BIN="${LS_BIN:-ls}"
 ID_BIN="${ID_BIN:-id}"
 MARK_READY_REQUESTED=0
@@ -192,8 +193,21 @@ fi
 git_common_dir=$(realpath -e -- "$git_common_dir") \
   || fatal "cannot resolve repository common directory"
 
-[[ "$CACHE_MIN_IDLE_SECONDS" =~ ^[0-9]+$ ]] || fatal "CACHE_MIN_IDLE_SECONDS must be a non-negative integer"
-[[ "$CACHE_CLEANUP_LIMIT" =~ ^[0-9]+$ ]] || fatal "CACHE_CLEANUP_LIMIT must be a non-negative integer"
+normalize_nonnegative_integer() {
+  local name=$1 value=${!1} max=2147483647
+  [[ "$value" =~ ^[0-9]+$ ]] || fatal "$name must be a non-negative integer"
+  while [[ ${#value} -gt 1 && "$value" == 0* ]]; do
+    value=${value:1}
+  done
+  if [[ ${#value} -gt ${#max} \
+      || ( ${#value} -eq ${#max} && "$value" > "$max" ) ]]; then
+    fatal "$name exceeds the supported maximum"
+  fi
+  printf -v "$name" '%s' "$value"
+}
+
+normalize_nonnegative_integer CACHE_MIN_IDLE_SECONDS
+normalize_nonnegative_integer CACHE_CLEANUP_LIMIT
 CACHE_CLEANUP_ENABLED=1
 CACHE_CLEANUP_DISABLED_REASON=""
 if (( CACHE_CLEANUP_LIMIT == 0 )); then
@@ -221,19 +235,27 @@ LOG_FILE="${LOG_FILE:-$STATE_DIR/worktree-cleanup-$(date +%F).log}"
 LOG_DIR=$(dirname -- "$LOG_FILE")
 LOCK_DIR=$(dirname -- "$LOCK_FILE")
 KEY_DIR=$(dirname -- "$MARKER_KEY_FILE")
-ensure_private_path_ancestors "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+ensure_private_path_ancestors "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
 if (( CACHE_CLEANUP_ENABLED )); then
-  ensure_private_path_ancestors "$WORKTREE_ROOT"
+  ensure_private_path_ancestors "$WORKTREE_ROOT" "$CACHE_QUARANTINE_DIR"
 fi
-mkdir -p "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+mkdir -p "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$KEY_DIR" "$LOG_DIR" "$LOCK_DIR"
+if (( CACHE_CLEANUP_ENABLED )); then
+  mkdir -p "$CACHE_QUARANTINE_DIR"
+fi
 ensure_private_dir "$STATE_DIR"
 ensure_private_dir "$LEASE_DIR"
 ensure_private_dir "$QUARANTINE_DIR"
-ensure_private_dir "$CACHE_QUARANTINE_DIR"
+if (( CACHE_CLEANUP_ENABLED )); then
+  ensure_private_dir "$CACHE_QUARANTINE_DIR"
+fi
 ensure_private_dir "$KEY_DIR"
 ensure_private_dir "$LOG_DIR"
 ensure_private_dir "$LOCK_DIR"
-chmod 700 "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR" "$CACHE_QUARANTINE_DIR"
+chmod 700 "$STATE_DIR" "$LEASE_DIR" "$QUARANTINE_DIR"
+if (( CACHE_CLEANUP_ENABLED )); then
+  chmod 700 "$CACHE_QUARANTINE_DIR"
+fi
 ensure_output_target "$LOG_FILE"
 ensure_output_target "$LOCK_FILE"
 
@@ -824,6 +846,23 @@ cache_candidate_is_proven() {
   [[ -z "$current_remote_tip" ]] || cache_pr_state_is_proven "$branch" "$tip"
 }
 
+cache_path_has_mount() {
+  local target=$1 mounts status
+  command -v "$FINDMNT_BIN" >/dev/null 2>&1 || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+  mounts=$($FINDMNT_BIN --json --target "$target" --submounts 2>/dev/null) || return 0
+  if printf '%s' "$mounts" | jq -e --arg target "$target" '
+      any(.. | objects | .target? // empty;
+        . == $target or startswith($target + "/")
+      )' >/dev/null 2>&1; then
+    return 0
+  else
+    status=$?
+  fi
+  (( status == 1 )) && return 1
+  return 0
+}
+
 cache_target_is_safe() {
   local path=$1 name=$2 target=$1/$2 tracked
   [[ -e "$target" && ! -L "$target" ]] || return 1
@@ -832,7 +871,7 @@ cache_target_is_safe() {
     tsconfig.tsbuildinfo) [[ -f "$target" ]] || return 1 ;;
     *) return 1 ;;
   esac
-  mountpoint -q -- "$target" && return 1
+  cache_path_has_mount "$target" && return 1
   tracked=$($GIT_BIN -C "$path" ls-files -- "$name" "$name/**") || return 1
   [[ -z "$tracked" ]] || return 1
   $GIT_BIN -C "$path" check-ignore -q -- "$name" || return 1
@@ -861,9 +900,27 @@ clean_cache_target() {
     log "cache quarantine failed: $target"
     return 0
   }
-  if ! cache_local_candidate_is_proven "$path" "$branch" "$tip" || ! cache_target_is_idle "$quarantine"; then
-    restore_cache_target "$quarantine" "$target" \
-      || fatal "cache became active and could not be restored: $target"
+  # Preflight checked every cache; only the quarantined target needs another full idle scan.
+  if ! cache_local_candidate_is_proven "$path" "$branch" "$tip" 0 \
+      || ! cache_target_is_idle "$quarantine" \
+      || cache_path_has_mount "$quarantine"; then
+    if ! restore_cache_target "$quarantine" "$target"; then
+      [[ -e "$target" || -L "$target" ]] \
+        || fatal "cache became active and could not be restored: $target"
+      log "cache target was recreated; preserving quarantine: $target"
+      return 0
+    fi
+    log "cache became active during quarantine; restored: $target"
+    return 0
+  fi
+  refresh_live_cwds
+  if path_is_in_use "$quarantine"; then
+    if ! restore_cache_target "$quarantine" "$target"; then
+      [[ -e "$target" || -L "$target" ]] \
+        || fatal "cache became active and could not be restored: $target"
+      log "cache target was recreated; preserving quarantine: $target"
+      return 0
+    fi
     log "cache became active during quarantine; restored: $target"
     return 0
   fi
@@ -893,7 +950,7 @@ purge_stale_cache_quarantine() {
       *-node_modules|*-.next) [[ -d "$entry" ]] || continue ;;
       *-tsconfig.tsbuildinfo) [[ -f "$entry" ]] || continue ;;
     esac
-    mountpoint -q -- "$entry" && continue
+    cache_path_has_mount "$entry" && continue
     cache_target_is_idle "$entry" || continue
     refresh_live_cwds
     path_is_in_use "$entry" && continue
@@ -1012,20 +1069,40 @@ if [[ $# -gt 1 || ( $# -eq 1 && "${1:-}" != "--dry-run" ) ]]; then
 fi
 [[ "${1:-}" != "--dry-run" ]] || DRY_RUN=1
 
-command -v "$GH_BIN" >/dev/null 2>&1 || fatal "GitHub CLI is unavailable: $GH_BIN"
-command -v jq >/dev/null 2>&1 || fatal "jq is unavailable"
-$GIT_BIN -C "$REPO_DIR" worktree list --porcelain >/dev/null \
+WORKTREE_LIST=$($GIT_BIN -C "$REPO_DIR" worktree list --porcelain) \
   || fatal "cannot enumerate worktrees"
 
 TMP_DIR=$(mktemp -d)
 refresh_live_cwds
 LEASE_LIST=$(find "$LEASE_DIR" -maxdepth 1 -type f -name '*.lease' -print | sort) \
   || fatal "cannot enumerate cleanup leases"
+CACHE_INPUT=""
+declare -A CACHE_PROBED_PATHS=()
+if (( CACHE_CLEANUP_ENABLED )); then
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == "worktree "* ]] || continue
+    cache_probe_path=${line#worktree }
+    [[ -d "$cache_probe_path" && ! -L "$cache_probe_path" ]] || continue
+    cache_probe_canonical=$(realpath -e -- "$cache_probe_path") || continue
+    [[ "$cache_probe_canonical" == "$cache_probe_path" \
+      && "$cache_probe_path" == "$WORKTREE_ROOT/"* ]] || continue
+    if [[ ( -d "$cache_probe_path/node_modules" && ! -L "$cache_probe_path/node_modules" ) \
+        || ( -d "$cache_probe_path/.next" && ! -L "$cache_probe_path/.next" ) \
+        || ( -f "$cache_probe_path/tsconfig.tsbuildinfo" && ! -L "$cache_probe_path/tsconfig.tsbuildinfo" ) ]]; then
+      CACHE_INPUT=$cache_probe_path
+      CACHE_PROBED_PATHS[$cache_probe_path]=1
+    fi
+  done <<<"$WORKTREE_LIST"
+fi
 
 declare -A PRELOADED_REMOTE_TIPS=()
 PRELOADED_PR_JSON='[]'
-preload_remote_refs
-preload_prs
+if [[ -n "$LEASE_LIST" || -n "$CACHE_INPUT" ]]; then
+  command -v "$GH_BIN" >/dev/null 2>&1 || fatal "GitHub CLI is unavailable: $GH_BIN"
+  command -v jq >/dev/null 2>&1 || fatal "jq is unavailable"
+  preload_remote_refs
+  preload_prs
+fi
 
 declare -a CACHE_CANDIDATE_PATHS=()
 declare -a CACHE_CANDIDATE_BRANCHES=()
@@ -1040,11 +1117,14 @@ consider_cache_candidate() {
   (( CACHE_CLEANUP_ENABLED )) || return 0
   (( ${#CACHE_CANDIDATE_PATHS[@]} < CACHE_CLEANUP_LIMIT )) || return 0
   [[ -n "$path" && -n "$branch" && "$tip" =~ ^[0-9a-f]{40}$ ]] || return 0
+  [[ -n "${CACHE_PROBED_PATHS[$path]:-}" ]] || return 0
   [[ "$branch" != "$BASE_BRANCH" && "$branch" != "main" ]] || return 0
   [[ -d "$path" && ! -L "$path" ]] || return 0
   canonical=$(realpath -e -- "$path") || return 0
   [[ "$canonical" == "$path" && "$path" != "$repo_root" && "$path" == "$WORKTREE_ROOT/"* ]] || return 0
-  if [[ ! -e "$path/node_modules" && ! -e "$path/.next" && ! -e "$path/tsconfig.tsbuildinfo" ]]; then
+  if [[ ! ( -d "$path/node_modules" && ! -L "$path/node_modules" ) \
+      && ! ( -d "$path/.next" && ! -L "$path/.next" ) \
+      && ! ( -f "$path/tsconfig.tsbuildinfo" && ! -L "$path/tsconfig.tsbuildinfo" ) ]]; then
     return 0
   fi
   cache_path_is_idle "$path" || return 0
@@ -1084,7 +1164,7 @@ while IFS= read -r line || [[ -n "$line" ]]; do
       fi
       ;;
   esac
-done < <($GIT_BIN -C "$REPO_DIR" worktree list --porcelain)
+done <<<"$WORKTREE_LIST"
 if [[ -n "$worktree_path" ]]; then
   consider_cache_candidate "$worktree_path" "$worktree_branch" "$worktree_tip"
 fi
