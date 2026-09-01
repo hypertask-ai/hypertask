@@ -8,6 +8,10 @@ import {
   materializeBoardReadModelSnapshot,
 } from "./contract";
 import { boardRetentionEvictionKeys } from "./retention";
+import {
+  clearBoardReadModelMarker,
+  setBoardReadModelMarker,
+} from "./readModelMarker";
 
 const DATABASE_NAME = "hypertask-board-read-model";
 const DATABASE_VERSION = 1;
@@ -154,12 +158,14 @@ export const writeBoardReadModel = async ({
     const store = transaction.objectStore(STORE_NAME);
     // Another tab may have revoked this board mid-write. Revocation wins until
     // fresh network authorization lifts it.
+    let wroteSnapshot = false;
     const existing = store.get(snapshot.key);
     existing.onsuccess = () => {
       if (isBoardReadModelRevocationV1(existing.result, accountId, projectId)) {
         return;
       }
       store.put(snapshot);
+      wroteSnapshot = true;
     };
 
     // HTPR-5753: the pilot keeps the RETENTION_LIMIT most-recently-written
@@ -188,7 +194,12 @@ export const writeBoardReadModel = async ({
     };
 
     await transactionComplete;
-    return startedGeneration === operationGeneration;
+    const committed = startedGeneration === operationGeneration;
+    // HTPR-5927: first successful snapshot write proves this origin has a
+    // board-read-model database, so later loads can skip indexedDB.databases()
+    // and go straight to the keyed open (see readModelMarker.ts).
+    if (committed && wroteSnapshot) setBoardReadModelMarker();
+    return committed;
   } catch {
     return false;
   } finally {
@@ -263,6 +274,11 @@ export const clearBoardReadModels = async (): Promise<boolean> => {
   operationsDisabled = true;
   closeActiveDatabases();
   clearChannel?.postMessage(CLEAR_MESSAGE);
+  // HTPR-5927: this deletes the whole database, so the marker (which only
+  // claims "some snapshot may exist") must go with it. revokeBoardReadModel
+  // and clearBoardReadModelRevocation, below, touch a single board's record
+  // and leave the rest of the store intact, so they don't clear this.
+  clearBoardReadModelMarker();
   if (typeof indexedDB === "undefined") return true;
 
   return new Promise<boolean>((resolve) => {

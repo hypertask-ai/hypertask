@@ -1267,8 +1267,16 @@ test("the product integration restores, reconciles, measures, and clears", () =>
     hook,
     /readBoardReadModel\(preparedAccountId, preparedProjectId\)/,
   );
-  assert.match(hook, /hasExistingBoardReadModelDatabase/);
-  assert.match(hook, /indexedDB\.databases\(\)/);
+  assert.match(
+    hook,
+    /if \(!hasBoardReadModelMarker\(\)\) return null;/,
+    "no marker must skip the local read entirely -- no databases() call, no keyed open",
+  );
+  assert.doesNotMatch(
+    hook,
+    /indexedDB\.databases\(\)/,
+    "HTPR-5927: the databases() enumeration is gone, replaced by the marker",
+  );
   assert.match(hook, /authorizedProjectIds\.includes/);
   assert.match(hook, /proof\.accountId === accountId/);
   assert.match(hook, /proof\.projectId === projectId/);
