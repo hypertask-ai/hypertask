@@ -33,10 +33,7 @@ export function mobileMicPresentation({
       isMobileAiChat) &&
     !globalRecording;
 
-  let shapeClassName = "rounded-sm";
-  if (isMobileAiChat) shapeClassName = "rounded-full";
-
-  let className = "h-11 w-11 justify-center " + shapeClassName;
+  let className = "h-11 w-11 justify-center rounded-sm";
   if (isProcessing) {
     className = "h-[34px] gap-2";
   } else if (hasText) {
