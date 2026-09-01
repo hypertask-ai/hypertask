@@ -107,9 +107,18 @@ export async function handleMcpTokenRefresh(
   if (typeof oldJti === 'string' && oldJti.length > 0) {
     revocationJti = oldJti
   } else {
+    const oldAudiences = Array.isArray(oldDecoded.aud)
+      ? oldDecoded.aud
+      : oldDecoded.aud
+        ? [oldDecoded.aud]
+        : []
+    const hasMcpAudience = oldAudiences.some(
+      (audience) => audience === 'mcp-api' || audience === 'hypertasks-mcp'
+    )
     if (
       typeof oldDecoded.iat !== 'number' ||
       oldDecoded.iat >= LEGACY_REFRESH_ISSUED_BEFORE_SECONDS ||
+      !hasMcpAudience ||
       !oldToken
     ) {
       return createUnauthorizedResponse(MCP_LEGACY_TOKEN_MESSAGE, 'legacy_token')

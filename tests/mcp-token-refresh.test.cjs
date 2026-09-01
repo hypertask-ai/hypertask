@@ -80,7 +80,7 @@ function signedAgentToken(jti, secret = process.env.JWT_SECRET) {
   )
 }
 
-function signedUserToken({ jti, iat, exp } = {}) {
+function signedUserToken({ jti, iat, exp, audience = 'mcp-api' } = {}) {
   return jwt.sign(
     {
       sub: user.email,
@@ -93,7 +93,7 @@ function signedUserToken({ jti, iat, exp } = {}) {
     {
       ...(typeof exp === 'number' ? {} : { expiresIn: '30d' }),
       issuer: 'hypertask',
-      audience: 'mcp-api',
+      audience,
     }
   )
 }
@@ -217,6 +217,26 @@ test('a legacy token issued after the migration cutoff is not refreshable', asyn
 
   const response = await handleMcpTokenRefresh(
     requestWithToken(legacyToken),
+    deps.value
+  )
+  const body = await response.json()
+
+  assert.equal(response.status, 401)
+  assert.equal(body.reason, 'legacy_token')
+  assert.deepEqual(deps.calls.created, [])
+  assert.deepEqual(deps.calls.claimed, [])
+})
+
+test('a same-secret non-MCP token cannot use legacy migration', async () => {
+  const nonMcpToken = signedUserToken({
+    iat: Date.parse('2026-08-03T00:00:00.000Z') / 1000,
+    exp: Date.parse('2100-01-01T00:00:00.000Z') / 1000,
+    audience: 'email-link',
+  })
+  const deps = dependencies({ authContext: { user, agentId: null } })
+
+  const response = await handleMcpTokenRefresh(
+    requestWithToken(nonMcpToken),
     deps.value
   )
   const body = await response.json()
