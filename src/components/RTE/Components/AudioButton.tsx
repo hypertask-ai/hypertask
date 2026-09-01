@@ -14,6 +14,7 @@ import { createTapGuard } from "@/lib/utils/deliberateTap";
 import { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 import { collectDictationTranscriptFromSse } from "@/lib/dictationSse";
 import { mobileMicPresentation } from "./mobileAudioButtonPresentation";
+import type { MobileMicPresentation } from "./mobileAudioButtonPresentation";
 
 interface IProp {
   callbackHandler: (text: string, setContent?: boolean) => void;
@@ -38,6 +39,8 @@ interface IProp {
   idleLabel?: string;
   /** Makes non-task-writer instances keyboard accessible with a specific name. */
   ariaLabel?: string;
+  /** Explicit mobile hierarchy for field-level mics that must not become a primary CTA. */
+  mobilePresentation?: MobileMicPresentation;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -65,6 +68,7 @@ export const AudioButton = ({
   wrapperClassName,
   idleLabel,
   ariaLabel,
+  mobilePresentation,
 }: IProp) => {
   const [recording, setRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -628,6 +632,7 @@ export const AudioButton = ({
                 globalRecording,
                 hasText,
                 isProcessing,
+                mobilePresentation,
               });
             return (
               <div
