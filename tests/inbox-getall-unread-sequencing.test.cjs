@@ -32,6 +32,7 @@ function loadNotificationGetAll({
   slowWave1 = false,
   failUserSettingFast = false,
   failTaskReadStateSlow = false,
+  failInboxNotificationsFast = false,
 } = {}) {
   const calls = [];
   const record = (name, args) => {
@@ -137,6 +138,10 @@ function loadNotificationGetAll({
           Array.isArray(query?.strings) ? query.strings.join("?") : String(query)
         ).replace(/\s+/g, " ");
         if (sql.includes('"notification_inviteId"')) {
+          if (failInboxNotificationsFast) {
+            record("selectInboxIds:rejected");
+            throw new Error("boom: getInboxNotifications unavailable");
+          }
           record("selectInboxIds");
           return notifications.map((row) => ({ id: row.id }));
         }
@@ -292,6 +297,30 @@ test("HTPR-5881: a rejected readStatesPromise never surfaces as an unhandled rej
     assert.equal(result.status, 500);
     // Give the deliberately-delayed taskReadState rejection a chance to settle
     // and, if unguarded, reach the process as an unhandled rejection.
+    await delay(30);
+  } finally {
+    process.off("unhandledRejection", onUnhandledRejection);
+  }
+
+  assert.deepEqual(unhandled, []);
+});
+
+test("HTPR-5881: taskIdsPromise never surfaces as an unhandled rejection when getInboxNotifications itself rejects", async () => {
+  // getInboxNotifications is the root of both taskIdsPromise and
+  // readStatesPromise. If it rejects, that rejection propagates into
+  // taskIdsPromise via .then() — which needs its own guard, since
+  // notificationGetAll's catch block returns as soon as the outer
+  // Promise.all rejects, before `await taskIdsPromise` further down ever runs.
+  const { notificationGetAll } = loadNotificationGetAll({
+    failInboxNotificationsFast: true,
+  });
+
+  const unhandled = [];
+  const onUnhandledRejection = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandledRejection);
+  try {
+    const result = await notificationGetAll("6");
+    assert.equal(result.status, 500);
     await delay(30);
   } finally {
     process.off("unhandledRejection", onUnhandledRejection);

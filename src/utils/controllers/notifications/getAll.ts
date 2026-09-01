@@ -223,10 +223,12 @@ const notificationGetAll = async (userId: string | string[]) => {
     );
     // Started ahead of the outer Promise.all it feeds into below. If that
     // Promise.all (or getInboxNotifications itself) rejects first, the catch
-    // block returns before the later `await readStatesPromise` runs, which
-    // would otherwise leave this chain's own rejection unobserved and trip
-    // Node's unhandled-rejection handling. This no-op catch only marks it
-    // handled — the real await further down still throws normally.
+    // block returns before the later `await readStatesPromise`/`taskIdsPromise`
+    // runs, which would otherwise leave these chains' own rejections
+    // unobserved and trip Node's unhandled-rejection handling. These no-op
+    // catches only mark them handled — the real awaits further down still
+    // throw normally.
+    void taskIdsPromise.catch(() => undefined);
     void readStatesPromise.catch(() => undefined);
     const [
       notifications,
