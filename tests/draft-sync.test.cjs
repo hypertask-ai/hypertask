@@ -19,7 +19,11 @@ const javascript = ts.transpileModule(source, {
 
 const loaded = { exports: {} };
 new Function("module", "exports", javascript)(loaded, loaded.exports);
-const { shouldSyncDraft, normalizeEditorHtml } = loaded.exports;
+const {
+  getTaskDraftContent,
+  normalizeEditorHtml,
+  shouldSyncDraft,
+} = loaded.exports;
 
 // An editor the user has emptied serialises to "<p></p>", the API stores "". If
 // those read as different documents, a deleted draft can never clear the composer.
@@ -58,4 +62,41 @@ test("a comment already posted cannot reappear in the composer", () => {
 
 test("no work when the editor already shows the stored draft", () => {
   assert.equal(shouldSyncDraft("<p>same</p>", "<p>same</p>", false), false);
+});
+
+test("comment hydration accepts only the open task's comment draft", () => {
+  const drafts = [
+    { taskId: 101, type: "Description", content: "<p>task description</p>" },
+    { taskId: 202, type: "Comment", content: "<p>foreign comment</p>" },
+    { taskId: 101, type: "Comment", content: "<p>matching comment</p>" },
+  ];
+
+  assert.equal(
+    getTaskDraftContent(drafts, 101, "Comment"),
+    "<p>matching comment</p>",
+  );
+});
+
+test("comment hydration ignores foreign and unscoped drafts", () => {
+  const drafts = [
+    { taskId: 202, type: "Comment", content: "<p>foreign comment</p>" },
+    { type: "Comment", content: "<p>unscoped comment</p>" },
+  ];
+
+  assert.equal(getTaskDraftContent(drafts, 101, "Comment"), "");
+  assert.equal(getTaskDraftContent(drafts, undefined, "Comment"), "");
+});
+
+test("desktop and mobile comment editors remount for each task", () => {
+  const component = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent.tsx",
+    ),
+    "utf8",
+  );
+  const taskBoundKey = 'key={`comment-input-${_parsedTask.id}`}';
+
+  assert.equal(component.split(taskBoundKey).length - 1, 2);
+  assert.match(component, /getTaskDraftContent\(\s*draftsFromTQ,\s*_parsedTask\?\.id,\s*"Comment"/);
 });

@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { IAttachment, IComment, IDraft, RedirectAPIParams, StackedType } from "@/models/model";
+import { IAttachment, IComment, RedirectAPIParams, StackedType } from "@/models/model";
 import { useRecoilState } from "@/lib/state";
 import { currentUserAtom, mobileCommentComposerOpenAtom } from "@/store";
 
@@ -36,6 +36,7 @@ import {
 } from "@/lib/mobileCommentViewport";
 import { shouldShowMobileDock } from "@/components/Global/mobileShellVisibility";
 import { usePathname } from "next/navigation";
+import { getTaskDraftContent } from "@/components/RTE/draftSync";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
 
@@ -88,7 +89,11 @@ const NewCommentComponent = (
       const [composerOpen, setMobileCommentComposerOpen] = useRecoilState(
         mobileCommentComposerOpenAtom
       );
-      const defaultCommentContent = draftsFromTQ?.find((draft: IDraft) => draft?.type === "Comment")?.content ?? "";
+      const defaultCommentContent = getTaskDraftContent(
+        draftsFromTQ,
+        _parsedTask?.id,
+        "Comment",
+      );
       // auto-saved drafts are often "<p></p>": strip tags so visually-empty drafts don't mount the editor (media tags count as content)
       const hasDraftContent =
         /<(img|video|iframe)/i.test(defaultCommentContent) ||
@@ -448,6 +453,7 @@ const NewCommentComponent = (
                       <div className="pt-[20px] pb-1 px-[16px] w-full">
                         {shouldRenderCommentEditor ? (
                           <Tiptap
+                              key={`comment-input-${_parsedTask.id}`}
                               allowPerks={allowPerks}
                               handleSave={redirectAPI}
                               mode={"create-comment"}
@@ -519,6 +525,7 @@ const NewCommentComponent = (
                       <div className="rounded-lg bg-newcomment-well px-[12px] py-[4px]">
                       {shouldRenderCommentEditor ? (
                       <Tiptap
+                        key={`comment-input-${_parsedTask.id}`}
                         allowPerks={allowPerks}
                         handleSave={redirectMiddleware}
                         mode={"create-comment"}
