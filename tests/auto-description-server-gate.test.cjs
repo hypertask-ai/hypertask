@@ -126,16 +126,28 @@ test("preference fallbacks and the suggestion edge keep the feature contract", (
     "utf8",
   );
 
-  assert.match(
-    preferencesSource,
-    /status: 404,[\s\S]*?autoDescriptionSuggestions: true/,
+  const notFoundFallbackStart = preferencesSource.indexOf("status: 404,");
+  const errorFallbackStart = preferencesSource.indexOf("status: 500,");
+  assert.notEqual(notFoundFallbackStart, -1);
+  assert.notEqual(errorFallbackStart, -1);
+  const notFoundFallback = preferencesSource.slice(
+    notFoundFallbackStart,
+    errorFallbackStart,
   );
-  assert.match(
-    preferencesSource,
-    /status: 500,[\s\S]*?autoDescriptionSuggestions: true/,
-  );
+  const errorFallback = preferencesSource.slice(errorFallbackStart);
+
+  assert.match(notFoundFallback, /autoDescriptionSuggestions: true/);
+  assert.match(errorFallback, /autoDescriptionSuggestions: true/);
   assert.match(writerSource, /border-l border-l-hypertasks-ai-purple/);
   assert.doesNotMatch(writerSource, /border-l-4 border-l-hypertasks-ai-purple/);
+  assert.match(
+    writerSource,
+    /isByokBlocked \|\| !userPrompt\.trim\(\)/,
+  );
+  assert.match(
+    writerSource,
+    /const regenerateDescriptionSuggestion[\s\S]*?sendAIRequest\(\s*initialPrompt,[\s\S]*?onClick=\{regenerateDescriptionSuggestion\}/,
+  );
   assert.match(preferenceHookSource, /queryFn: \(\) => fetchUserPreference\(false\)/);
   assert.match(
     taskDetailSource,

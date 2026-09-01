@@ -208,9 +208,7 @@ const AITaskWriterContainer: React.FC<
 
   // Core Functions
   const onClickHandler = useCallback(() => {
-    if (isByokBlocked) return;
-    // Don't send if no prompt and not auto-trigger
-    if (!userPrompt.trim() && !autoTrigger) return;
+    if (isByokBlocked || !userPrompt.trim()) return;
 
     // Don't send if attachments are still uploading
     if (isUploadingAttachments) {
@@ -218,16 +216,22 @@ const AITaskWriterContainer: React.FC<
       return;
     }
 
-    const promptToUse =
-      autoTrigger && !hasAutoTriggered.current ? initialPrompt : userPrompt;
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
     let finalPrompt = taskTitle
-      ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${promptToUse}`
-      : promptToUse;
+      ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${userPrompt}`
+      : userPrompt;
 
     sendAIRequest(finalPrompt, "Thinking...");
-  }, [isByokBlocked, userPrompt, autoTrigger, initialPrompt, sendAIRequest, isUploadingAttachments, uploadProgress]);
+  }, [isByokBlocked, userPrompt, sendAIRequest, isUploadingAttachments, uploadProgress]);
+
+  const regenerateDescriptionSuggestion = useCallback(() => {
+    if (!initialPrompt) return;
+    void sendAIRequest(
+      initialPrompt,
+      "Drafting a description from your title...",
+    );
+  }, [initialPrompt, sendAIRequest]);
 
   // A completed mobile response leaves the composer open for a new request.
   // Unlike auto-trigger's first request, this always sends exactly what the
@@ -654,7 +658,7 @@ const AITaskWriterContainer: React.FC<
             </button>
             <button
               type="button"
-              onClick={() => sendAIRequest(initialPrompt, "Drafting a description from your title...")}
+              onClick={regenerateDescriptionSuggestion}
               className="flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense font-semibold"
             >
               <RotateCw size={16} strokeWidth={1.75} />
