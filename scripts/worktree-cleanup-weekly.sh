@@ -900,7 +900,8 @@ clean_cache_target() {
     log "cache quarantine failed: $target"
     return 0
   }
-  if ! cache_local_candidate_is_proven "$path" "$branch" "$tip" \
+  # Preflight checked every cache; only the quarantined target needs another full idle scan.
+  if ! cache_local_candidate_is_proven "$path" "$branch" "$tip" 0 \
       || ! cache_target_is_idle "$quarantine" \
       || cache_path_has_mount "$quarantine"; then
     if ! restore_cache_target "$quarantine" "$target"; then
