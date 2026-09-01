@@ -1,3 +1,5 @@
+import type { IDraft } from "@/models/model";
+
 // Keeping an editor in step with a draft that can be written outside this browser
 // (hypertask CLI/MCP `draft create`, or another tab).
 //
@@ -15,6 +17,19 @@
 //      rather than a content comparison: an editor whose content happens to match
 //      the cache again is NOT proof the cache is authoritative, and treating it as
 //      proof lets a stale response erase what they typed.
+
+type TaskDraftContent = Pick<IDraft, "content" | "type"> &
+  Partial<Pick<IDraft, "taskId">>;
+
+export const getTaskDraftContent = (
+  drafts: readonly TaskDraftContent[] | undefined,
+  taskId: number | undefined,
+  type: IDraft["type"],
+) => {
+  if (!taskId) return "";
+  return drafts?.find((draft) => draft.taskId === taskId && draft.type === type)
+    ?.content ?? "";
+};
 
 /** An empty editor serialises to "<p></p>", never "" — the two are one document. */
 export const normalizeEditorHtml = (html?: string) => {
