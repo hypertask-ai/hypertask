@@ -27,7 +27,12 @@ function stubModule(relativePath, exports) {
 // settle rather than after.
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function loadNotificationGetAll({ onCall, slowWave1 = false } = {}) {
+function loadNotificationGetAll({
+  onCall,
+  slowWave1 = false,
+  failUserSettingFast = false,
+  failTaskReadStateSlow = false,
+} = {}) {
   const calls = [];
   const record = (name, args) => {
     calls.push({ name, args, at: calls.length });
@@ -171,6 +176,10 @@ function loadNotificationGetAll({ onCall, slowWave1 = false } = {}) {
       },
       userSetting: {
         findUnique: async (args) => {
+          if (failUserSettingFast) {
+            record("userSetting:rejected", args);
+            throw new Error("boom: userSetting unavailable");
+          }
           if (slowWave1) await delay(20);
           record("userSetting:resolved", args);
           return null;
@@ -181,6 +190,14 @@ function loadNotificationGetAll({ onCall, slowWave1 = false } = {}) {
           // Recorded at invocation, before any await, so this timestamp marks
           // when the query was *started*, not when it settles.
           record("taskReadStates:invoked", args);
+          if (failTaskReadStateSlow) {
+            // Settles after the wave-1 Promise.all has already rejected and
+            // notificationGetAll's catch block has returned, so nothing ever
+            // reaches `await readStatesPromise` for this rejection.
+            await delay(10);
+            record("taskReadStates:rejected", args);
+            throw new Error("boom: taskReadState unavailable");
+          }
           return readStates;
         },
       },
@@ -253,4 +270,32 @@ test("HTPR-5881: the TaskReadState lookup starts before the unrelated wave-1 que
     readStateIndex < blockedTasksIndex,
     `expected taskReadStates (${readStateIndex}) to start before blockedTasks resolves (${blockedTasksIndex})`,
   );
+});
+
+test("HTPR-5881: a rejected readStatesPromise never surfaces as an unhandled rejection", async () => {
+  // userSetting rejects fast (wave 1 fails and notificationGetAll's catch
+  // returns), while taskReadState.findMany rejects only afterwards — the
+  // exact ordering the reviewer flagged as capable of leaving the early
+  // readStatesPromise chain's rejection unobserved.
+  const { notificationGetAll } = loadNotificationGetAll({
+    failUserSettingFast: true,
+    failTaskReadStateSlow: true,
+  });
+
+  const unhandled = [];
+  const onUnhandledRejection = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandledRejection);
+  try {
+    const result = await notificationGetAll("6");
+    // notificationGetAll's own try/catch turns the wave-1 failure into a 500,
+    // it does not rethrow.
+    assert.equal(result.status, 500);
+    // Give the deliberately-delayed taskReadState rejection a chance to settle
+    // and, if unguarded, reach the process as an unhandled rejection.
+    await delay(30);
+  } finally {
+    process.off("unhandledRejection", onUnhandledRejection);
+  }
+
+  assert.deepEqual(unhandled, []);
 });
