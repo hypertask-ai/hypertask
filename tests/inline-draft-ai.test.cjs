@@ -128,6 +128,8 @@ test("mobile Write with AI keeps a generated proposal isolated until review", ()
   assert.equal(loading.phase, "loading");
   assert.equal(loading.proposal, "");
   assert.deepEqual(loading.lastRequest, descriptor);
+  descriptor.sourceContent = "<p>mutated elsewhere</p>";
+  assert.equal(loading.lastRequest.sourceContent, "<p>rough draft</p>");
 
   const review = inlineDraftAiReviewReducer(loading, {
     type: "resolve",
@@ -136,7 +138,7 @@ test("mobile Write with AI keeps a generated proposal isolated until review", ()
   });
   assert.equal(review.phase, "review");
   assert.equal(review.proposal, "<p>Clear draft</p>");
-  assert.equal(descriptor.sourceContent, "<p>rough draft</p>");
+  assert.equal(review.lastRequest.sourceContent, "<p>rough draft</p>");
 });
 
 test("mobile Write with AI ignores late responses and replays immutable request descriptors", () => {

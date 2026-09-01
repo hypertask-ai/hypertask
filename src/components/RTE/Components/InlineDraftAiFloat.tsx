@@ -27,6 +27,7 @@ import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport
 import {
   createInlineDraftAiSourceSnapshot,
   initialInlineDraftAiReviewState,
+  INLINE_DRAFT_AI_PROMPT_MAX_LENGTH,
   inlineDraftAiCommandForInstruction,
   inlineDraftAiReviewReducer,
   inlineDraftAiWritePlaceholder,
@@ -540,14 +541,13 @@ const InlineDraftAiFloat = ({
       const sourceContent = mobileReview.isRefining
         ? mobileReview.proposal
         : mobileOpeningSource?.html ?? "";
+      let label = "Write comment";
+      if (mobileReview.isRefining) label = "Refine";
+      else if (hasOpeningDraft) label = "Custom instruction";
       void runAction({
         command: sourceContent ? "CustomEdit" : "WriteContent",
         instruction,
-        label: mobileReview.isRefining
-          ? "Refine"
-          : hasOpeningDraft
-            ? "Custom instruction"
-            : "Write comment",
+        label,
         sourceContent,
       });
       return;
@@ -588,7 +588,7 @@ const InlineDraftAiFloat = ({
       <div className={dictationActive ? "hidden" : "min-w-[150px] flex-1"}>
         <input
           autoFocus
-          maxLength={2_000}
+          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
           disabled={isLoading || audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
@@ -684,6 +684,13 @@ const InlineDraftAiFloat = ({
     dispatchMobileReview({ type: "refine" });
   };
 
+  let mobilePromptPlaceholder = "Describe the comment you want to write…";
+  if (mobileReview.isRefining) {
+    mobilePromptPlaceholder = "Tell AI how to refine this proposal…";
+  } else if (hasOpeningDraft) {
+    mobilePromptPlaceholder = "Or tell it what to change…";
+  }
+
   const mobilePromptComposer = (
     <div
       data-mobile-write-ai-prompt
@@ -694,17 +701,11 @@ const InlineDraftAiFloat = ({
         <input
           ref={mobilePromptInputRef}
           autoFocus
-          maxLength={2_000}
+          maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
           disabled={isLoading || audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
-          placeholder={
-            mobileReview.isRefining
-              ? "Tell AI how to refine this proposal…"
-              : hasOpeningDraft
-                ? "Or tell it what to change…"
-                : "Describe the comment you want to write…"
-          }
+          placeholder={mobilePromptPlaceholder}
           className="min-h-11 w-full border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
         />
       )}

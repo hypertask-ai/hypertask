@@ -1,15 +1,17 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
+export const INLINE_DRAFT_AI_PROMPT_MAX_LENGTH = 2_000;
+
 export interface InlineDraftAiRange {
   from: number;
   to: number;
 }
 
 export interface InlineDraftAiRequestDescriptor {
-  command: string;
-  instruction?: string;
-  label: string;
-  sourceContent: string;
+  readonly command: string;
+  readonly instruction?: string;
+  readonly label: string;
+  readonly sourceContent: string;
 }
 
 export interface InlineDraftAiReviewState {
@@ -52,7 +54,7 @@ export function inlineDraftAiReviewReducer(
         phase: "loading",
         showOriginal: false,
         activeRequestId: event.requestId,
-        lastRequest: event.descriptor,
+        lastRequest: Object.freeze({ ...event.descriptor }),
       };
     case "resolve":
       if (event.requestId !== state.activeRequestId) return state;
@@ -147,7 +149,10 @@ export function mergeInlineDraftAiDictation(
   dictated: string,
   replace: boolean,
 ) {
-  return (replace ? dictated : current + dictated).slice(0, 2_000);
+  return (replace ? dictated : current + dictated).slice(
+    0,
+    INLINE_DRAFT_AI_PROMPT_MAX_LENGTH,
+  );
 }
 
 export function inlineDraftAiCommandForInstruction(hasSelection: boolean) {
