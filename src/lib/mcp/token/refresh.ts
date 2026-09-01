@@ -8,6 +8,8 @@ import {
   claimTokenRotation,
   createMcpToken,
   createUnauthorizedResponse,
+  JWT_LEGACY_MCP_AUDIENCE,
+  JWT_MCP_AUDIENCE,
   legacyTokenRevocationJti,
   MCP_LEGACY_TOKEN_MESSAGE,
   validateMcpAuth,
@@ -95,7 +97,7 @@ export async function handleMcpTokenRefresh(
     ? (jwt.decode(oldToken) as jwt.JwtPayload | null)
     : null
 
-  if (!oldDecoded?.exp) {
+  if (!oldToken || !oldDecoded?.exp) {
     return createUnauthorizedResponse(
       'Invalid or missing authentication token.',
       'invalid_token'
@@ -107,19 +109,21 @@ export async function handleMcpTokenRefresh(
   if (typeof oldJti === 'string' && oldJti.length > 0) {
     revocationJti = oldJti
   } else {
-    const oldAudiences = Array.isArray(oldDecoded.aud)
-      ? oldDecoded.aud
-      : oldDecoded.aud
-        ? [oldDecoded.aud]
-        : []
+    const oldAudiences: string[] = []
+    if (typeof oldDecoded.aud === 'string') {
+      oldAudiences.push(oldDecoded.aud)
+    } else if (Array.isArray(oldDecoded.aud)) {
+      oldAudiences.push(...oldDecoded.aud)
+    }
     const hasMcpAudience = oldAudiences.some(
-      (audience) => audience === 'mcp-api' || audience === 'hypertasks-mcp'
+      (audience) =>
+        audience === JWT_MCP_AUDIENCE ||
+        audience === JWT_LEGACY_MCP_AUDIENCE
     )
     if (
       typeof oldDecoded.iat !== 'number' ||
       oldDecoded.iat >= LEGACY_REFRESH_ISSUED_BEFORE_SECONDS ||
-      !hasMcpAudience ||
-      !oldToken
+      !hasMcpAudience
     ) {
       return createUnauthorizedResponse(MCP_LEGACY_TOKEN_MESSAGE, 'legacy_token')
     }

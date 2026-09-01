@@ -25,7 +25,8 @@ import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry'
 
 const JWT_SECRET = process.env.JWT_SECRET as string
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
-const JWT_MCP_AUDIENCE = 'mcp-api' // Specific audience for MCP routes
+export const JWT_MCP_AUDIENCE = 'mcp-api'
+export const JWT_LEGACY_MCP_AUDIENCE = 'hypertasks-mcp'
 const AGENT_TOKEN_GENERATION_CLAIM = 'agentTokenGeneration'
 const MCP_TOKEN_ISSUED_AT_MS_CLAIM = 'mcpIssuedAtMs'
 export const MANAGEMENT_KEY_PREFIX = 'htmk_'
@@ -552,7 +553,7 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
       try {
         decoded = jwt.verify(token, JWT_SECRET, {
           issuer: 'hypertasks', // Legacy issuer
-          audience: 'hypertasks-mcp', // Legacy audience
+          audience: JWT_LEGACY_MCP_AUDIENCE,
         }) as jwt.JwtPayload
         console.log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
       } catch (err2: any) {
@@ -576,7 +577,7 @@ export function verifyMcpJwtToken(token: string): jwt.JwtPayload | null {
             console.log('[MCP Auth] Signature error details:', err3?.message)
             console.log('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
             console.log('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
-            console.log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', ['hypertasks-mcp', JWT_MCP_AUDIENCE])
+            console.log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
             return null
           }
         }
