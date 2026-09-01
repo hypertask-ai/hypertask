@@ -7,7 +7,7 @@ const runnerModule = import("../scripts/run-production-migrations.mjs");
 const productionEnv = {
   VERCEL: "1",
   VERCEL_ENV: "production",
-  VERCEL_GIT_COMMIT_REF: "staging",
+  VERCEL_GIT_COMMIT_REF: "production",
 };
 
 test("production build compiles the app before applying migrations", () => {
@@ -18,7 +18,7 @@ test("production build compiles the app before applying migrations", () => {
   ]);
 });
 
-test("production migration gate runs only for staging production builds", async () => {
+test("production migration gate runs only for production branch deployments", async () => {
   const { shouldRunProductionMigrations } = await runnerModule;
 
   assert.equal(shouldRunProductionMigrations(productionEnv), true);
@@ -26,12 +26,21 @@ test("production migration gate runs only for staging production builds", async 
     shouldRunProductionMigrations({ ...productionEnv, VERCEL_ENV: "preview" }),
     false,
   );
-  assert.equal(
-    shouldRunProductionMigrations({
-      ...productionEnv,
-      VERCEL_GIT_COMMIT_REF: "feature-branch",
-    }),
-    false,
+  assert.throws(
+    () =>
+      shouldRunProductionMigrations({
+        ...productionEnv,
+        VERCEL_GIT_COMMIT_REF: "feature-branch",
+      }),
+    /outside the production branch/,
+  );
+  assert.throws(
+    () =>
+      shouldRunProductionMigrations({
+        VERCEL: "1",
+        VERCEL_ENV: "production",
+      }),
+    /outside the production branch/,
   );
   assert.equal(shouldRunProductionMigrations({}), false);
 });
@@ -52,7 +61,7 @@ test("non-production builds skip without invoking Prisma", async () => {
   assert.equal(invoked, false);
 });
 
-test("staging production builds fail closed without DIRECT_URL", async () => {
+test("production builds fail closed without DIRECT_URL", async () => {
   const { runProductionMigrations } = await runnerModule;
 
   assert.throws(
@@ -61,7 +70,7 @@ test("staging production builds fail closed without DIRECT_URL", async () => {
   );
 });
 
-test("staging production builds deploy through the direct database URL", async () => {
+test("production builds deploy through the direct database URL", async () => {
   const { runProductionMigrations } = await runnerModule;
   const calls = [];
 
@@ -86,7 +95,7 @@ test("staging production builds deploy through the direct database URL", async (
   assert.equal(calls[0][2].env.DIRECT_URL, "postgresql://direct.example/db");
 });
 
-test("staging production builds propagate Prisma failures", async () => {
+test("production builds propagate Prisma failures", async () => {
   const { runProductionMigrations } = await runnerModule;
 
   assert.throws(

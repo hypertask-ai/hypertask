@@ -59,6 +59,7 @@ function createFixture(tempRoot = os.tmpdir()) {
   git(repo, ['merge', '--ff-only', branch]);
   git(repo, ['push', 'origin', 'staging']);
 
+  fs.writeFileSync(response, '[]');
   fs.writeFileSync(openResponse, '[]');
   fs.writeFileSync(fakeGh, '#!/bin/sh\nif [ "${GH_FAIL:-0}" = "1" ]; then exit 17; fi\nif [ -n "${GH_FAIL_AFTER_FILE:-}" ] && [ -e "$GH_FAIL_AFTER_FILE" ]; then exit 17; fi\nif [ -n "${GH_READY_FILE:-}" ]; then : > "$GH_READY_FILE"; fi\nif [ -n "${GH_SLEEP:-}" ]; then sleep "$GH_SLEEP"; fi\ncase " $* " in *" --state open "*) cat "$GH_OPEN_RESPONSE" ;; *) cat "$GH_RESPONSE" ;; esac\n');
   fs.chmodSync(fakeGh, 0o755);
@@ -132,6 +133,7 @@ exit "${'$'}status"
     REPO_DIR: repo,
     REPO_SLUG: 'example/hypertasks',
     BASE_BRANCH: 'staging',
+    WORKTREE_ROOT: root,
     STATE_DIR: state,
     LEASE_DIR: path.join(state, 'leases'),
     LOCK_FILE: path.join(state, 'cleanup.lock'),
@@ -143,6 +145,8 @@ exit "${'$'}status"
     GH_READY_FILE: path.join(root, 'gh-ready'),
     LEASE_TTL_SECONDS: '3600',
     MIN_MERGED_AGE_SECONDS: '0',
+    CACHE_MIN_IDLE_SECONDS: '0',
+    CACHE_CLEANUP_LIMIT: '25',
   };
 
   return {
@@ -283,6 +287,29 @@ function writeOpenPrResponse(fixture, records) {
   fs.writeFileSync(fixture.openResponse, JSON.stringify(records));
 }
 
+function createReproducibleCaches(fixture) {
+  fs.appendFileSync(
+    path.join(fixture.repo, '.git', 'info', 'exclude'),
+    '\nnode_modules/\n.next/\n*.tsbuildinfo\n',
+  );
+  fs.mkdirSync(path.join(fixture.worktree, 'node_modules', 'package'), { recursive: true });
+  fs.writeFileSync(path.join(fixture.worktree, 'node_modules', 'package', 'index.js'), 'cache\n');
+  fs.mkdirSync(path.join(fixture.worktree, '.next', 'cache'), { recursive: true });
+  fs.writeFileSync(path.join(fixture.worktree, '.next', 'cache', 'entry'), 'cache\n');
+  fs.writeFileSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo'), 'cache\n');
+}
+
+function mergedPrForFixture(fixture) {
+  return {
+    number: 5106,
+    state: 'MERGED',
+    mergedAt: '2026-08-21T10:00:00Z',
+    headRefName: fixture.branch,
+    headRefOid: tip(fixture),
+    baseRefName: 'staging',
+  };
+}
+
 function leasePath(fixture, target = fixture.worktree) {
   const id = crypto.createHash('sha256').update(target).digest('hex');
   return path.join(fixture.state, 'leases', `${id}.lease`);
@@ -346,6 +373,84 @@ function spawnScript(fixture, args = [], extraEnv = {}) {
     stdio: 'ignore',
   });
 }
+
+test('removes only reproducible caches after an exact merged PR', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const originalTip = tip(fixture);
+
+  runScript(fixture);
+
+  assert.equal(fs.existsSync(fixture.worktree), true);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'README.md')), true);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), false);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), false);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo')), false);
+  assert.equal(tip(fixture), originalTip);
+  assert.notEqual(remoteBranchTip(fixture), '');
+});
+
+test('cache cleanup dry-run leaves every target intact', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+
+  runScript(fixture, ['--dry-run']);
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), true);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo')), true);
+  assert.match(fs.readFileSync(fixture.log, 'utf8'), /dry-run would remove cache=/);
+});
+
+test('cache cleanup preserves active and unmerged worktrees', (t) => {
+  const active = createFixture();
+  t.after(() => cleanupFixture(active));
+  createReproducibleCaches(active);
+  writePrResponse(active, [mergedPrForFixture(active)]);
+  const processDir = path.join(active.env.PROC_ROOT, '123');
+  fs.mkdirSync(processDir);
+  fs.symlinkSync(active.worktree, path.join(processDir, 'cwd'));
+
+  runScript(active);
+  assert.equal(fs.existsSync(path.join(active.worktree, 'node_modules')), true);
+
+  const open = createFixture();
+  t.after(() => cleanupFixture(open));
+  createReproducibleCaches(open);
+  writePrResponse(open, [{
+    ...mergedPrForFixture(open),
+    state: 'OPEN',
+    mergedAt: null,
+  }]);
+
+  runScript(open);
+  assert.equal(fs.existsSync(path.join(open.worktree, 'node_modules')), true);
+});
+
+test('cache cleanup accepts a missing remote branch but preserves tracked and symlinked targets', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  git(fixture.repo, ['push', 'origin', '--delete', fixture.branch]);
+  const external = path.join(fixture.root, 'external-cache');
+  fs.rmSync(path.join(fixture.worktree, 'node_modules'), { recursive: true });
+  fs.mkdirSync(external);
+  fs.writeFileSync(path.join(external, 'keep'), 'keep\n');
+  fs.symlinkSync(external, path.join(fixture.worktree, 'node_modules'));
+  git(fixture.worktree, ['add', '-f', 'tsconfig.tsbuildinfo']);
+  git(fixture.worktree, ['commit', '-m', 'track build info']);
+
+  runScript(fixture);
+
+  assert.equal(fs.existsSync(path.join(external, 'keep')), true);
+  assert.equal(fs.lstatSync(path.join(fixture.worktree, 'node_modules')).isSymbolicLink(), true);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), false);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo')), true);
+});
 
 test('removes only a leased worktree and branch with an exact merged PR tip', (t) => {
   const fixture = createFixture();

@@ -144,6 +144,17 @@ test('auto-merge evaluates and merges a ready PR with isolated scratch state', a
 
 
 
+test('a Prisma migration is parked and cannot auto-merge', async () => {
+  const changedFile = 'src/prisma/migrations/20260901110000_example/migration.sql'
+  const { result, scratchEntries } = await runWorkflow({ changedFile })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /PARK: risky paths/)
+  assert.match(result.stdout, /src\/prisma\/migrations/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
 test('a normal PR changing the trusted speed gate is parked for manual review', async () => {
   for (const changedFile of [
     'scripts/check-speed-pr-evidence.mjs',
