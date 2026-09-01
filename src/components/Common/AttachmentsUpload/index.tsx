@@ -361,6 +361,7 @@ const AttachmentsUpload = (props: IProps) => {
             editor={editor}
             isRecording={isRecording}
             hideComposerDictation={hideComposerDictation}
+            dictationCoordinator={dictationCoordinator}
           />
         )
       }
@@ -763,6 +764,7 @@ const DesktopAttachment = ({
   editor,
   isRecording,
   hideComposerDictation,
+  dictationCoordinator,
 }: {
   sendOnClick?: TSendBackAttachmentButton;
   mode: RedirectMode;
@@ -785,6 +787,7 @@ const DesktopAttachment = ({
   editor: Editor | null;
   isRecording?: boolean;
   hideComposerDictation?: boolean;
+  dictationCoordinator?: DictationCoordinator;
 }) => {
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
@@ -855,6 +858,7 @@ const DesktopAttachment = ({
             editor={editor}
             id={mode + "-audio-button"}
             toggleRecording={toggleRecording!}
+            dictationCoordinator={dictationCoordinator}
           />
         )}
         {!isRecording &&
