@@ -69,7 +69,9 @@ test("the shared Resend mailer reports its request timeout clearly", async () =>
   const { sendEmail } = jiti(path.join(root, "src/lib/email/sendEmail.ts"));
   const originalFetch = global.fetch;
   const originalTimeout = AbortSignal.timeout;
+  const originalKey = process.env.RESEND_API_KEY;
   const timeoutSignal = new AbortController().signal;
+  process.env.RESEND_API_KEY = crypto.randomBytes(32).toString("hex");
   AbortSignal.timeout = () => timeoutSignal;
   global.fetch = async (_url, options) => {
     assert.equal(options.signal, timeoutSignal);
@@ -89,13 +91,17 @@ test("the shared Resend mailer reports its request timeout clearly", async () =>
   } finally {
     global.fetch = originalFetch;
     AbortSignal.timeout = originalTimeout;
+    if (originalKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = originalKey;
   }
 });
 
 test("the shared Resend mailer preserves non-timeout failures", async () => {
   const { sendEmail } = jiti(path.join(root, "src/lib/email/sendEmail.ts"));
   const originalFetch = global.fetch;
+  const originalKey = process.env.RESEND_API_KEY;
   const providerError = new Error("network unavailable");
+  process.env.RESEND_API_KEY = crypto.randomBytes(32).toString("hex");
   global.fetch = async () => {
     throw providerError;
   };
@@ -112,6 +118,8 @@ test("the shared Resend mailer preserves non-timeout failures", async () => {
     );
   } finally {
     global.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = originalKey;
   }
 });
 
