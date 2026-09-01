@@ -903,15 +903,23 @@ clean_cache_target() {
   if ! cache_local_candidate_is_proven "$path" "$branch" "$tip" \
       || ! cache_target_is_idle "$quarantine" \
       || cache_path_has_mount "$quarantine"; then
-    restore_cache_target "$quarantine" "$target" \
-      || fatal "cache became active and could not be restored: $target"
+    if ! restore_cache_target "$quarantine" "$target"; then
+      [[ -e "$target" || -L "$target" ]] \
+        || fatal "cache became active and could not be restored: $target"
+      log "cache target was recreated; preserving quarantine: $target"
+      return 0
+    fi
     log "cache became active during quarantine; restored: $target"
     return 0
   fi
   refresh_live_cwds
   if path_is_in_use "$quarantine"; then
-    restore_cache_target "$quarantine" "$target" \
-      || fatal "cache became active and could not be restored: $target"
+    if ! restore_cache_target "$quarantine" "$target"; then
+      [[ -e "$target" || -L "$target" ]] \
+        || fatal "cache became active and could not be restored: $target"
+      log "cache target was recreated; preserving quarantine: $target"
+      return 0
+    fi
     log "cache became active during quarantine; restored: $target"
     return 0
   fi

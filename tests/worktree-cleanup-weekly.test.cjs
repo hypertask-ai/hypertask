@@ -70,6 +70,9 @@ function createFixture(tempRoot = os.tmpdir()) {
 if [ -n "${'$'}{FINDMNT_CWD_ON_QUARANTINE:-}" ] && echo "${'$'}3" | grep -Fq '/cache-quarantine/'; then
   mkdir -p "${'$'}PROC_ROOT/456"
   ln -s "${'$'}3" "${'$'}PROC_ROOT/456/cwd"
+  if [ -n "${'$'}{FINDMNT_RECREATE_TARGET:-}" ]; then
+    mkdir -p "${'$'}FINDMNT_RECREATE_TARGET"
+  fi
 fi
 cat "${'$'}FINDMNT_RESPONSE"
 `);
@@ -492,6 +495,25 @@ test('cache cleanup restores a target used after quarantine', (t) => {
 
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
   assert.match(fs.readFileSync(fixture.log, 'utf8'), /cache became active during quarantine; restored/);
+});
+
+test('cache cleanup preserves quarantine when its target is recreated', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const target = path.join(fixture.worktree, 'node_modules');
+  const targetId = crypto.createHash('sha256').update(target).digest('hex');
+  const quarantine = path.join(fixture.state, 'cache-quarantine', `${targetId}-node_modules`);
+
+  runScript(fixture, [], {
+    FINDMNT_CWD_ON_QUARANTINE: '1',
+    FINDMNT_RECREATE_TARGET: target,
+  });
+
+  assert.equal(fs.existsSync(target), true);
+  assert.equal(fs.existsSync(quarantine), true);
+  assert.match(fs.readFileSync(fixture.log, 'utf8'), /cache target was recreated; preserving quarantine/);
 });
 
 test('cache cleanup dry-run leaves every target intact', (t) => {
