@@ -253,8 +253,12 @@ const AITaskWriterContainer: React.FC<
   ]);
 
   const regenerateDescriptionSuggestion = useCallback(() => {
+    if (isUploadingAttachments) {
+      console.log("Cannot send while attachments are uploading...", { uploadProgress });
+      return;
+    }
     sendInitialPrompt("Drafting a description from your title...");
-  }, [sendInitialPrompt]);
+  }, [isUploadingAttachments, sendInitialPrompt, uploadProgress]);
 
   // A completed mobile response leaves the composer open for a new request.
   // Unlike auto-trigger's first request, this always sends exactly what the

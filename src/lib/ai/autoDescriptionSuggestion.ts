@@ -29,12 +29,15 @@ export interface AutoDescriptionEligibility {
 }
 
 const DESCRIPTION_MEDIA_RE = /<(?:audio|embed|iframe|img|object|video)\b/i;
+const ZERO_WIDTH_RE =
+  /[\u200B-\u200D\uFEFF]|&(?:#(?:8203|8204|8205|65279)|#x(?:200B|200C|200D|FEFF)|ZeroWidthSpace);/gi;
 
 export function hasDescriptionContent(value?: string | null) {
   if (!value) return false;
   if (DESCRIPTION_MEDIA_RE.test(value)) return true;
   return Boolean(
     value
+      .replace(ZERO_WIDTH_RE, "")
       .replace(/<br\s*\/?>/gi, " ")
       .replace(/<[^>]+>/g, " ")
       .replace(/&(?:nbsp|#160|#xA0);/gi, " ")

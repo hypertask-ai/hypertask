@@ -26,8 +26,9 @@ function deferred() {
   return { promise, resolve };
 }
 
-test("rapid description preference toggles recover from a failed save and persist in order", async () => {
+test("rapid description preference toggles preserve the latest value and persist in order", async () => {
   const firstRequest = deferred();
+  const secondRequest = deferred();
   const posts = [];
   const toastErrors = [];
   let invalidations = 0;
@@ -57,6 +58,10 @@ test("rapid description preference toggles recover from a failed save and persis
       posts.push(body);
       if (posts.length === 1) {
         await firstRequest.promise;
+        return { status: 200, data: { settings: body } };
+      }
+      if (posts.length === 2) {
+        await secondRequest.promise;
         throw new Error("preference save failed");
       }
       return { status: 200, data: { settings: body } };
@@ -132,9 +137,24 @@ test("rapid description preference toggles recover from a failed save and persis
       { autoDescriptionSuggestions: false },
       { autoDescriptionSuggestions: true },
     ]);
+    assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
+    assert.deepEqual(toastErrors, []);
+    assert.equal(invalidations, 0);
+
+    secondRequest.resolve();
+    await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(toastErrors, ["Could not update description suggestions"]);
     assert.equal(invalidations, 1);
     assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
+
+    preferenceToggle();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(posts, [
+      { autoDescriptionSuggestions: false },
+      { autoDescriptionSuggestions: true },
+      { autoDescriptionSuggestions: false },
+    ]);
+    assert.equal(cachedPreferences.autoDescriptionSuggestions, false);
   } finally {
     for (const [filename, previous] of stubs) {
       if (previous === undefined) delete require.cache[filename];

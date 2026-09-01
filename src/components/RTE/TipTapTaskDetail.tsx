@@ -46,6 +46,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useDescriptionAndCommentsContext } from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import axios from "axios";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
+import { userPreferencesRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_TASK_WRITER_EVENT, AITaskWriterEventDetail } from "../PageComponents/TaskDetail/TopRow/CreateSummaryButton";
 import {
   AI_SUGGEST_REPLY_ENDPOINT,
@@ -927,7 +928,7 @@ const Tiptap = ({
 
   const turnOffAutoDescriptionsPermanently = async () => {
     try {
-      const response = await axios.post("/api/users/preferences", {
+      const response = await axios.post(userPreferencesRoute, {
         autoDescriptionSuggestions: false,
       });
       if (response.status !== 200) throw new Error("Preference update failed");

@@ -18,6 +18,7 @@ import {
   MentionPreference,
   ScrollSetting,
 } from "@prisma/client";
+import { userPreferencesRoute } from "@/lib/constants/APIRouteConstants";
 
 interface IUserPreferences {
   displayAvatar: DisplayAvatar;
@@ -44,6 +45,7 @@ const UserPreferenceSidebar = ({
   const queryClient = useQueryClient();
   const { data } = useGetUserPreferences();
   const autoDescriptionUpdateQueue = useRef(Promise.resolve());
+  const autoDescriptionUpdateVersion = useRef(0);
 
   const [isStacked, setIsStacked] = useState<boolean>(data.commentsStacked);
   const [displayAvatar, setDisplayAvatar] = useState<boolean>(
@@ -116,6 +118,7 @@ const UserPreferenceSidebar = ({
   };
 
   const handleAutoDescriptionSuggestionsSetting = () => {
+    const updateVersion = ++autoDescriptionUpdateVersion.current;
     let nextValue = true;
     queryClient.setQueryData<IUserPreferences>(
       USER_PREFERENCES_QUERY_KEY,
@@ -134,10 +137,13 @@ const UserPreferenceSidebar = ({
     autoDescriptionUpdateQueue.current = autoDescriptionUpdateQueue.current
       .catch(() => undefined)
       .then(async () => {
-        const updated = await updateUserPreferences({
-          autoDescriptionSuggestions: nextValue,
-        });
-        if (updated) return;
+        const updated = await updateUserPreferences(
+          { autoDescriptionSuggestions: nextValue },
+          false,
+        );
+        if (updated || updateVersion !== autoDescriptionUpdateVersion.current) {
+          return;
+        }
         toast.error("Could not update description suggestions");
         await queryClient
           .invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY })
@@ -159,14 +165,17 @@ const UserPreferenceSidebar = ({
 
   const updateUserPreferences = async (
     toUpdate: Partial<IUserPreferences>,
+    reconcileResponse = true,
   ) => {
     try {
-      const response = await axios.post("/api/users/preferences", toUpdate);
+      const response = await axios.post(userPreferencesRoute, toUpdate);
       if (response.status !== 200 || !response.data.settings) return false;
-      queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, (prev) => ({
-        ...(prev ?? data),
-        ...response.data.settings,
-      }));
+      if (reconcileResponse) {
+        queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, (prev) => ({
+          ...(prev ?? data),
+          ...response.data.settings,
+        }));
+      }
       return true;
     } catch (error) {
       console.log("🚀 ~ updateUserPreferences ~ error:", error);

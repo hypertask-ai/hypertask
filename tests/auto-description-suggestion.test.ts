@@ -63,6 +63,7 @@ test("description suggestions require a hydrated desktop title-only task", () =>
 test("empty markup stays eligible while text and media count as descriptions", () => {
   assert.equal(hasDescriptionContent("<html><body><p><br></p></body></html>"), false);
   assert.equal(hasDescriptionContent("<p>&nbsp;</p>"), false);
+  assert.equal(hasDescriptionContent("<p>\u200B&#8203;&#x200C;</p>"), false);
   assert.equal(hasDescriptionContent("<p>Existing details</p>"), true);
   assert.equal(hasDescriptionContent('<p><img src="example.png"></p>'), true);
 });
