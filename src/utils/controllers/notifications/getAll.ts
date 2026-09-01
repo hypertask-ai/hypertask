@@ -190,6 +190,37 @@ const notificationGetAll = async (userId: string | string[]) => {
   const parsedUserId = parseInt(userId as string);
   try {
     const inboxWhere = visibleUserInboxWhere(parsedUserId);
+    // Kick off as soon as the Inbox row selection resolves rather than after
+    // every other wave-1 query — taskIds only ever comes from `notifications`,
+    // so waiting on actor/direct-reply/blocked/settings queries first was one
+    // unconditional round trip this didn't need.
+    const notificationsPromise = getInboxNotifications(parsedUserId);
+    const taskIdsPromise = notificationsPromise.then((rows) =>
+      Array.from(
+        new Set(
+          rows
+            .map((notification) => notification.taskId)
+            .filter(
+              (taskId): taskId is number =>
+                typeof taskId === "number" && Number.isFinite(taskId)
+            )
+        )
+      )
+    );
+    const readStatesPromise = taskIdsPromise.then((taskIds) =>
+      taskIds.length
+        ? prisma.taskReadState.findMany({
+            where: {
+              userId: parsedUserId,
+              taskId: { in: taskIds },
+            },
+            select: {
+              taskId: true,
+              lastReadAt: true,
+            },
+          })
+        : Promise.resolve([])
+    );
     const [
       notifications,
       actorActivityRows,
@@ -198,7 +229,7 @@ const notificationGetAll = async (userId: string | string[]) => {
       blockedTasks,
       userSetting,
     ] = await Promise.all([
-      getInboxNotifications(parsedUserId),
+      notificationsPromise,
       getRecentInboxActorActivity(parsedUserId),
       prisma.notification.findMany({
         where: { ...inboxWhere, directReply: true },
@@ -360,29 +391,14 @@ const notificationGetAll = async (userId: string | string[]) => {
       agentsById,
       usersById,
     });
-    const taskIds = Array.from(
-      new Set(
-        notifications
-          .map((notification) => notification.taskId)
-          .filter(
-            (taskId): taskId is number =>
-              typeof taskId === "number" && Number.isFinite(taskId)
-          )
-      )
-    );
+    // Already in flight since notificationsPromise resolved — this awaits
+    // work that has been running concurrently with the wave-1/wave-2 queries
+    // above instead of starting it fresh.
+    const taskIds = await taskIdsPromise;
 
     const unreadCountByTaskId = new Map<number, number>();
     if (taskIds.length) {
-      const readStates = await prisma.taskReadState.findMany({
-        where: {
-          userId: parsedUserId,
-          taskId: { in: taskIds },
-        },
-        select: {
-          taskId: true,
-          lastReadAt: true,
-        },
-      });
+      const readStates = await readStatesPromise;
 
       const taskIdsWithReadState = new Set(
         readStates.map((readState) => readState.taskId)
