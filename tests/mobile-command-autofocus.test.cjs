@@ -70,12 +70,14 @@ test("mobile commands select no row until the user searches", async () => {
   const statePath = path.join(root, "src/lib/state.tsx");
   const storePath = path.join(root, "src/store/index.ts");
   const userPath = path.join(root, "src/utils/getCurrentUser.ts");
+  const hookPath = path.join(root, "src/hooks/MultiPages/HTC/useHTC.tsx");
   const previousModules = new Map(
-    [statePath, storePath, userPath].map((filename) => [
+    [statePath, storePath, userPath, hookPath].map((filename) => [
       filename,
       require.cache[filename],
     ]),
   );
+  delete require.cache[hookPath];
   require.cache[statePath] = {
     id: statePath,
     filename: statePath,
@@ -103,9 +105,7 @@ test("mobile commands select no row until the user searches", async () => {
   const jiti = createJiti(__filename, {
     alias: { "@": path.join(root, "src") },
   });
-  const useHTC = jiti(
-    path.join(root, "src/hooks/MultiPages/HTC/useHTC.tsx"),
-  ).default;
+  const useHTC = jiti(hookPath).default;
   const commandGroups = [{
     group: "Board",
     commandLists: [{
