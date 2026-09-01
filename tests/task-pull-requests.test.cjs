@@ -1,8 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
-const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
@@ -18,9 +16,13 @@ const {
   parseGithubPullRequestUrl,
 } = jiti(path.join(root, "src/lib/pullRequests/githubPullRequests.ts"));
 const {
+  fetchGithubPullRequest,
   linkTaskPullRequest,
   PullRequestLinkError,
 } = jiti(path.join(root, "src/lib/pullRequests/taskPullRequests.ts"));
+const { createLinkPullRequestHandler } = jiti(
+  path.join(root, "src/pages/api/tasks/linkPullRequest.ts"),
+);
 
 test("parseGithubPullRequestUrl accepts only canonical GitHub pull request URLs", () => {
   assert.deepEqual(
@@ -143,6 +145,8 @@ test("GitHub webhook repository policy cannot target another board", () => {
   );
 });
 
+const canonicalPullRequestUrl =
+  "https://github.com/hypertask-ai/hypertask/pull/110";
 const githubMetadata = {
   repositoryId: "1",
   pullRequestId: "110",
@@ -152,8 +156,67 @@ const githubMetadata = {
   sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
 };
 
-function fakeLinkDb({ authorized = true, existing = null } = {}) {
-  const calls = { pullRequestCreates: [], activities: [], taskWhere: null };
+async function withMockFetch(mock, callback) {
+  const originalFetch = global.fetch;
+  global.fetch = mock;
+  try {
+    await callback();
+  } finally {
+    global.fetch = originalFetch;
+  }
+}
+
+test("fetchGithubPullRequest normalizes network failures", async () => {
+  const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
+  await withMockFetch(
+    async () => {
+      throw new Error("network unavailable");
+    },
+    async () => {
+      await assert.rejects(
+        fetchGithubPullRequest(parsed),
+        (error) =>
+          error instanceof PullRequestLinkError &&
+          error.status === 502 &&
+          error.code === "github_unavailable",
+      );
+    },
+  );
+});
+
+test("fetchGithubPullRequest rejects malformed GitHub JSON", async () => {
+  const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
+  await withMockFetch(
+    async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("invalid JSON");
+      },
+    }),
+    async () => {
+      await assert.rejects(
+        fetchGithubPullRequest(parsed),
+        (error) =>
+          error instanceof PullRequestLinkError &&
+          error.status === 502 &&
+          error.code === "invalid_github_response",
+      );
+    },
+  );
+});
+
+function fakeLinkDb({
+  authorized = true,
+  existing = null,
+  updatedByUserIds = [],
+} = {}) {
+  const calls = {
+    pullRequestCreates: [],
+    activities: [],
+    taskUpdates: [],
+    taskWhere: null,
+  };
   const tx = {
     $executeRaw: async () => 0,
     $queryRaw: async () => [],
@@ -161,9 +224,12 @@ function fakeLinkDb({ authorized = true, existing = null } = {}) {
     task: {
       findFirst: async ({ where }) => {
         calls.taskWhere = where;
-        return authorized ? { id: 36202, updatedByUserIds: [] } : null;
+        return authorized ? { id: 36202, updatedByUserIds } : null;
       },
-      update: async () => ({ id: 36202 }),
+      update: async (input) => {
+        calls.taskUpdates.push(input);
+        return { id: 36202 };
+      },
     },
     taskPullRequest: {
       findUnique: async () => existing,
@@ -228,6 +294,22 @@ test("linkTaskPullRequest authorizes the task and writes one durable activity", 
   assert.equal(calls.activities[0].activity.data.action, "linked");
 });
 
+test("linkTaskPullRequest updates the task timestamp for a repeated user", async () => {
+  const { db, calls } = fakeLinkDb({ updatedByUserIds: [6] });
+  const result = await linkTaskPullRequest({
+    taskId: 36202,
+    userId: 6,
+    url: canonicalPullRequestUrl,
+    fetchMetadata: async () => githubMetadata,
+    db,
+  });
+
+  assert.equal(result.created, true);
+  assert.equal(calls.taskUpdates.length, 1);
+  assert.equal(calls.taskUpdates[0].data.updatedAt instanceof Date, true);
+  assert.equal("updatedByUserIds" in calls.taskUpdates[0].data, false);
+});
+
 test("linkTaskPullRequest rejects an inaccessible task without writing", async () => {
   const { db, calls } = fakeLinkDb({ authorized: false });
   await assert.rejects(
@@ -274,48 +356,21 @@ test("linkTaskPullRequest is idempotent and does not duplicate activity", async 
   assert.equal(calls.activities.length, 0);
 });
 
-function loadBrowserLinkRoute(verifySession) {
-  const filename = path.join(root, "src/pages/api/tasks/linkPullRequest.ts");
-  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-    fileName: filename,
-  }).outputText;
+function loadBrowserLinkRoute(verifySession, { broadcastError = null } = {}) {
   const linkCalls = [];
   const broadcastCalls = [];
-  const loadedModule = { exports: {} };
-  const stubs = {
-    "@/lib/auth/session": {
-      SESSION_COOKIE: "ht_session",
-      verifySession,
+  const handler = createLinkPullRequestHandler({
+    verifySession,
+    linkTaskPullRequest: async (input) => {
+      linkCalls.push(input);
+      return { created: false, pullRequest: { id: "linked-pr-id" } };
     },
-    "@/lib/pullRequests/taskPullRequests": {
-      PullRequestLinkError,
-      linkTaskPullRequest: async (input) => {
-        linkCalls.push(input);
-        return { created: false, pullRequest: { id: "linked-pr-id" } };
-      },
+    broadcastTaskChange: async (...args) => {
+      broadcastCalls.push(args);
+      if (broadcastError) throw broadcastError;
     },
-    "@/lib/mcp/tasks/agentMutationFence": {
-      AgentMutationLeaseConflictError: class extends Error {},
-    },
-    "@/lib/realtime/server": {
-      broadcastTaskChange: async (...args) => broadcastCalls.push(args),
-    },
-  };
-  new Function("module", "exports", "require", javascript)(
-    loadedModule,
-    loadedModule.exports,
-    (request) => stubs[request] ?? require(request),
-  );
-  return {
-    handler: loadedModule.exports.default,
-    linkCalls,
-    broadcastCalls,
-  };
+  });
+  return { handler, linkCalls, broadcastCalls };
 }
 
 function responseRecorder() {
@@ -340,7 +395,7 @@ test("browser linking rejects an unsigned profile cookie", async () => {
     {
       method: "POST",
       cookies: { nookies_user: JSON.stringify({ id: 999 }) },
-      body: { taskId: 36202, url: githubMetadata.url },
+      body: { taskId: 36202, url: canonicalPullRequestUrl },
     },
     response,
   );
@@ -369,7 +424,29 @@ test("browser linking uses only the signed session identity", async () => {
 
   assert.equal(result.status, 200);
   assert.deepEqual(linkCalls, [{ taskId: 36202, userId: 6, url }]);
-  assert.deepEqual(broadcastCalls, [
-    [36202, { originUserId: 6 }],
-  ]);
+  assert.deepEqual(broadcastCalls, [[36202, { originUserId: 6 }]]);
+});
+
+test("browser linking succeeds when realtime delivery fails", async () => {
+  const warning = console.warn;
+  console.warn = () => {};
+  try {
+    const { handler } = loadBrowserLinkRoute(() => ({ id: 6 }), {
+      broadcastError: new Error("realtime unavailable"),
+    });
+    const { response, result } = responseRecorder();
+    await handler(
+      {
+        method: "POST",
+        cookies: { ht_session: "signed" },
+        body: { taskId: 36202, url: canonicalPullRequestUrl },
+      },
+      response,
+    );
+
+    assert.equal(result.status, 200);
+    assert.equal(result.body.created, false);
+  } finally {
+    console.warn = warning;
+  }
 });

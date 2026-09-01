@@ -161,6 +161,27 @@ function invalidPayload(message: string) {
   );
 }
 
+async function broadcastPullRequestChanges(
+  boardId: number,
+  taskIds: Iterable<number>,
+): Promise<void> {
+  const results = await Promise.allSettled([
+    broadcastBoardChange(boardId, {
+      originUserId: generalConfig.hyperAiId,
+    }),
+    ...[...taskIds].map((taskId) =>
+      broadcastTaskChange(taskId, {
+        originUserId: generalConfig.hyperAiId,
+      }),
+    ),
+  ]);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.warn("[GitHub webhook] Realtime delivery failed", result.reason);
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
@@ -218,41 +239,41 @@ export async function POST(request: NextRequest) {
         return invalidPayload("Invalid check suite payload");
       }
 
+      const pullRequestNumbers = [
+        ...new Set(
+          (suite.pull_requests ?? [])
+            .filter(
+              (pullRequest) =>
+                pullRequest.base?.repo?.full_name?.toLowerCase() ===
+                  fullName.toLowerCase() &&
+                Number.isInteger(pullRequest.number),
+            )
+            .map((pullRequest) => pullRequest.number),
+        ),
+      ];
+      const syncResults = await Promise.all(
+        pullRequestNumbers.map((number) =>
+          syncCheckSuiteFromWebhook({
+            repositoryOwner: repository.owner,
+            repositoryName: repository.repository,
+            number,
+            githubAppId: String(suite.app.id),
+            appName: suite.app.name,
+            headSha: suite.head_sha,
+            status: suite.status,
+            conclusion: suite.conclusion,
+            sourceUpdatedAt,
+          }),
+        ),
+      );
       const taskIds = new Set<number>();
       let updated = 0;
-      for (const pullRequest of suite.pull_requests ?? []) {
-        if (
-          pullRequest.base?.repo?.full_name.toLowerCase() !==
-            fullName.toLowerCase() ||
-          !Number.isInteger(pullRequest.number)
-        ) {
-          continue;
-        }
-        const result = await syncCheckSuiteFromWebhook({
-          repositoryOwner: repository.owner,
-          repositoryName: repository.repository,
-          number: pullRequest.number,
-          githubAppId: String(suite.app.id),
-          appName: suite.app.name,
-          headSha: suite.head_sha,
-          status: suite.status,
-          conclusion: suite.conclusion,
-          sourceUpdatedAt,
-        });
+      for (const result of syncResults) {
         updated += result.updated;
         result.taskIds.forEach((taskId) => taskIds.add(taskId));
       }
       if (updated > 0) {
-        await Promise.all([
-          broadcastBoardChange(boardId, {
-            originUserId: generalConfig.hyperAiId,
-          }),
-          ...[...taskIds].map((taskId) =>
-            broadcastTaskChange(taskId, {
-              originUserId: generalConfig.hyperAiId,
-            }),
-          ),
-        ]);
+        await broadcastPullRequestChanges(boardId, taskIds);
       }
       return NextResponse.json({ success: true, updated, taskIds: [...taskIds] });
     }
@@ -293,11 +314,9 @@ export async function POST(request: NextRequest) {
       headRef: pullRequest.head.ref,
       body: pullRequest.body,
     });
-    const lifecycle: PullRequestLifecycle = pullRequest.merged
-      ? "merged"
-      : pullRequest.state === "closed"
-        ? "closed"
-        : "open";
+    let lifecycle: PullRequestLifecycle = "open";
+    if (pullRequest.merged) lifecycle = "merged";
+    else if (pullRequest.state === "closed") lifecycle = "closed";
     const syncResult = await syncPullRequestFromWebhook({
       boardId,
       ticketNumber: ticketId,
@@ -331,25 +350,17 @@ export async function POST(request: NextRequest) {
     });
     let moved = 0;
     for (const task of tasks) {
-      const targetSectionName =
-        prPayload.action === "opened" || prPayload.action === "reopened"
-          ? chooseReviewSectionName(task.riskLevel)
-          : pullRequest.merged
-            ? "Done"
-            : null;
+      let targetSectionName: "AI Review" | "Valentin Review" | "Done" | null =
+        null;
+      if (prPayload.action === "opened" || prPayload.action === "reopened") {
+        targetSectionName = chooseReviewSectionName(task.riskLevel);
+      } else if (pullRequest.merged) {
+        targetSectionName = "Done";
+      }
       if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
     }
     if (syncResult.linked > 0 || syncResult.updated > 0) {
-      await Promise.all([
-        broadcastBoardChange(boardId, {
-          originUserId: generalConfig.hyperAiId,
-        }),
-        ...syncResult.taskIds.map((taskId) =>
-          broadcastTaskChange(taskId, {
-            originUserId: generalConfig.hyperAiId,
-          }),
-        ),
-      ]);
+      await broadcastPullRequestChanges(boardId, syncResult.taskIds);
     }
 
     return NextResponse.json({

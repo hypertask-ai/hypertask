@@ -96,13 +96,36 @@ function githubHeaders(): HeadersInit {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function githubId(value: unknown): string | null {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    !/^\d+$/.test(String(value))
+  ) {
+    return null;
+  }
+  return String(value);
+}
+
 export async function fetchGithubPullRequest(
   parsed: ParsedGithubPullRequestUrl,
 ): Promise<GithubPullRequestMetadata> {
-  const response = await fetch(
-    `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/pulls/${parsed.number}`,
-    { headers: githubHeaders(), cache: "no-store" },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/pulls/${parsed.number}`,
+      { headers: githubHeaders(), cache: "no-store" },
+    );
+  } catch {
+    throw new PullRequestLinkError(
+      "GitHub could not verify this pull request",
+      502,
+      "github_unavailable",
+    );
+  }
 
   if (response.status === 404) {
     throw new PullRequestLinkError("Pull request not found", 404, "pr_not_found");
@@ -115,14 +138,35 @@ export async function fetchGithubPullRequest(
     );
   }
 
-  const value = (await response.json()) as Record<string, any>;
-  const updatedAt = new Date(value.updated_at);
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    throw new PullRequestLinkError(
+      "GitHub returned invalid pull request metadata",
+      502,
+      "invalid_github_response",
+    );
+  }
+  const base = isRecord(value) && isRecord(value.base) ? value.base : null;
+  const repository = base && isRecord(base.repo) ? base.repo : null;
+  const head = isRecord(value) && isRecord(value.head) ? value.head : null;
+  const repositoryId = githubId(repository?.id);
+  const pullRequestId = isRecord(value) ? githubId(value.id) : null;
+  const updatedAt = new Date(
+    isRecord(value) && typeof value.updated_at === "string"
+      ? value.updated_at
+      : Number.NaN,
+  );
   if (
-    String(value.html_url).toLowerCase() !== parsed.url ||
-    !value.base?.repo?.id ||
-    !value.id ||
+    !isRecord(value) ||
+    typeof value.html_url !== "string" ||
+    value.html_url.toLowerCase() !== parsed.url ||
+    !repositoryId ||
+    !pullRequestId ||
     typeof value.title !== "string" ||
-    typeof value.head?.sha !== "string" ||
+    !head ||
+    typeof head.sha !== "string" ||
     Number.isNaN(updatedAt.getTime())
   ) {
     throw new PullRequestLinkError(
@@ -132,16 +176,16 @@ export async function fetchGithubPullRequest(
     );
   }
 
+  let lifecycle: PullRequestLifecycle = "open";
+  if (value.merged_at) lifecycle = "merged";
+  else if (value.state === "closed") lifecycle = "closed";
+
   return {
-    repositoryId: String(value.base.repo.id),
-    pullRequestId: String(value.id),
+    repositoryId,
+    pullRequestId,
     title: value.title,
-    lifecycle: value.merged_at
-      ? "merged"
-      : value.state === "closed"
-        ? "closed"
-        : "open",
-    headSha: value.head.sha,
+    lifecycle,
+    headSha: head.sha,
     sourceUpdatedAt: updatedAt,
   };
 }
@@ -310,15 +354,15 @@ export async function linkTaskPullRequest({
         },
       });
 
-      if (!task.updatedByUserIds.includes(userId)) {
-        await transaction.task.update({
-          where: { id: taskId },
-          data: {
-            updatedAt: new Date(),
-            updatedByUserIds: { push: userId },
-          },
-        });
-      }
+      await transaction.task.update({
+        where: { id: taskId },
+        data: {
+          updatedAt: new Date(),
+          ...(!task.updatedByUserIds.includes(userId)
+            ? { updatedByUserIds: { push: userId } }
+            : {}),
+        },
+      });
 
       return { created: true, pullRequest: toPublicTaskPullRequest(created) };
     });

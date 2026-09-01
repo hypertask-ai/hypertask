@@ -21,6 +21,7 @@ import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelCompone
 import CreatedBy from "../Common/CreatedBy";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { activityAgentId } from "@/lib/agents/activityAttribution";
+import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
 
 const CommentTaskActivity = () => {
   const { comment } = useCommentsContext();
@@ -227,14 +228,7 @@ const TaskPullRequestActivity = ({
   activity: ITaskPullRequestActivity;
 }) => {
   const { action, pullRequest, fromAgent, fromUser } = activity.data;
-  const badge =
-    pullRequest.displayState === "merged"
-      ? { label: "Merged", color: "#a371f7", background: "rgba(163,113,247,.12)" }
-      : pullRequest.displayState === "checks_red"
-        ? { label: "Checks red", color: "#f85149", background: "rgba(248,81,73,.12)" }
-        : pullRequest.displayState === "green"
-          ? { label: "Checks green", color: "#3fb950", background: "rgba(63,185,80,.12)" }
-          : { label: "Open", color: "#3fb950", background: "rgba(63,185,80,.12)" };
+  const badge = pullRequestBadgeByState[pullRequest.displayState];
   const statusBadge = (
     <span
       className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none"

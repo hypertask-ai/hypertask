@@ -203,14 +203,15 @@ export async function syncPullRequestFromWebhook(
       );
 
       if (wasCreated || displayState !== previousDisplayState) {
+        let activityAction: "linked" | "state_changed" | "closed" = "closed";
+        if (wasCreated) activityAction = "linked";
+        else if (pullRequest.lifecycle === "open") {
+          activityAction = "state_changed";
+        }
         await writePullRequestActivity(transaction, {
           taskId,
           actor: wasCreated ? actor : null,
-          action: wasCreated
-            ? "linked"
-            : pullRequest.lifecycle === "open"
-              ? "state_changed"
-              : "closed",
+          action: activityAction,
           pullRequest: {
             url: pullRequest.url,
             title: pullRequest.title,

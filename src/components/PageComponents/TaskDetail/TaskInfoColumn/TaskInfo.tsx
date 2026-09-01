@@ -60,6 +60,7 @@ import {
   WAITING_ON_OVERDUE_MS,
 } from "@/lib/waitingOn";
 import { derivePullRequestDisplayState } from "@/lib/pullRequests/githubPullRequests";
+import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
 
 type RelationDirection = "from" | "to";
 
@@ -468,14 +469,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
               pullRequest.lifecycle,
               pullRequest.checkState
             );
-            const badge =
-              displayState === "merged"
-                ? { label: "Merged", color: "#a371f7", background: "rgba(163,113,247,.12)" }
-                : displayState === "checks_red"
-                  ? { label: "Checks red", color: "#f85149", background: "rgba(248,81,73,.12)" }
-                  : displayState === "green"
-                    ? { label: "Checks green", color: "#3fb950", background: "rgba(63,185,80,.12)" }
-                    : { label: "Open", color: "#3fb950", background: "rgba(63,185,80,.12)" };
+            const badge = pullRequestBadgeByState[displayState];
             const PullRequestIcon =
               displayState === "merged" ? GitMerge : GitPullRequest;
             return (
