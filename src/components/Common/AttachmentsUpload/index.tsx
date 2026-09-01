@@ -364,19 +364,21 @@ const AttachmentsUpload = (props: IProps) => {
                         <Slash size={18} strokeWidth={1.75} aria-hidden />
                         Commands
                       </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        id={mode + "-discard-draft-button"}
-                        className="flex min-h-11 w-full items-center gap-3 rounded-[4px] px-3 text-left text-destructive hover:bg-active-modal-element"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleDiscardDrafts();
-                        }}
-                      >
-                        <Trash2 size={18} strokeWidth={1.75} aria-hidden />
-                        Discard draft
-                      </button>
+                      {showDeleteComment === true && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          id={mode + "-discard-draft-button"}
+                          className="flex min-h-11 w-full items-center gap-3 rounded-[4px] px-3 text-left text-destructive hover:bg-active-modal-element"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDiscardDrafts();
+                          }}
+                        >
+                          <Trash2 size={18} strokeWidth={1.75} aria-hidden />
+                          Discard draft
+                        </button>
+                      )}
                     </div>
                   </details>
                 )}

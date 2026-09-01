@@ -168,18 +168,27 @@ test("Plus menu exposes the five specified actions through existing handlers", (
     assert.match(branch, new RegExp(label));
   }
   assert.match(branch, /openAttachmentPicker\("image\/\*"\)/);
+  assert.match(branch, /openAttachmentPicker\(\);[\s\S]*?Attach file/);
   assert.match(branch, /insertEditorTrigger\("@"\)/);
   assert.match(branch, /insertEditorTrigger\("\/"\)/);
-  assert.match(branch, /handleDiscardDrafts\(\)/);
+  assert.match(branch, /showDeleteComment === true[\s\S]*?handleDiscardDrafts\(\)/);
   assert.match(branch, /text-destructive/);
   assert.doesNotMatch(branch, /aria-label="Attach files"/);
 });
 
 test("Plus menu closes on outside press, Escape, and dictation", () => {
-  assert.match(composer, /document\.addEventListener\("pointerdown", closeOnOutsidePress\)/);
-  assert.match(composer, /event\.key !== "Escape"/);
-  assert.match(composer, /mobileCommentActionsTriggerRef\.current\?\.focus\(\)/);
-  assert.match(composer, /isRecording \|\| audioProcessing/);
+  assert.match(
+    composer,
+    /const closeOnOutsidePress[\s\S]*?mobileCommentActionsRef\.current\.contains[\s\S]*?closeMobileCommentActions\(\);/,
+  );
+  assert.match(
+    composer,
+    /const closeOnEscape[\s\S]*?event\.key !== "Escape"[\s\S]*?closeMobileCommentActions\(\);[\s\S]*?mobileCommentActionsTriggerRef\.current\?\.focus\(\)/,
+  );
+  assert.match(
+    composer,
+    /useEffect\(\(\) => \{\s*if \(isRecording \|\| audioProcessing\) closeMobileCommentActions\(\)/,
+  );
 });
 
 test("ai stays hidden while recording or transcribing", () => {

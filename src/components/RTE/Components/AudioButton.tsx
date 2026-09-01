@@ -669,6 +669,12 @@ export const AudioButton = ({
                 isProcessing,
                 mobilePresentation,
               });
+            let micColorClassName = "text-icon-dark-gray hover:text-white-black";
+            if (prominent) {
+              micColorClassName = hasText
+                ? "text-icon-dark-gray"
+                : "text-white-black-inverted";
+            }
             return (
               <div
                 id={id}
@@ -738,14 +744,7 @@ export const AudioButton = ({
                 ) : (
                   <Mic
                     size={isMobileTaskWriter || isMobileNewTask ? 20 : 18}
-                    className={cn(
-                      "animated-icon",
-                      prominent
-                        ? hasText
-                          ? "text-icon-dark-gray"
-                          : "text-white-black-inverted"
-                        : "text-icon-dark-gray hover:text-white-black",
-                    )}
+                    className={cn("animated-icon", micColorClassName)}
                     style={{ fontSize: aiTaskWriterConfig.fontSizes.moderateIcon }}
                     strokeWidth={1.75}
                   />
