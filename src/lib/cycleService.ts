@@ -28,7 +28,7 @@ export class CycleAssignmentError extends Error {
 }
 
 const lockProjectCycles = async (tx: Prisma.TransactionClient, projectId: number) => {
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(${CYCLE_LOCK_NAMESPACE}, ${projectId})`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${CYCLE_LOCK_NAMESPACE}::int, ${projectId}::int)`;
 };
 
 const nextCycleNumber = async (db: CycleDb, projectId: number): Promise<number> => {

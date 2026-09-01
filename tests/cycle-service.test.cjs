@@ -48,6 +48,7 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
     return true;
   };
   const db = {
+    $executeRaw: async () => 0,
     $queryRaw: async () => undefined,
     cycle: {
       aggregate: async ({ where }) => ({
@@ -135,10 +136,18 @@ function loadService({ cycles = [], enabled = false, sections = [], tasks = [] }
   db.$transaction = async (callback) => callback(db);
 
   state.queryNow = new Date("1970-01-01T00:00:00Z");
+  const executeLock = async (parts, ...values) => {
+    const sql = Array.from(parts).join("?");
+    if (!/pg_advisory_xact_lock\(\?::int, \?::int\)/.test(sql)) {
+      throw new Error("function pg_advisory_xact_lock(bigint, bigint) does not exist");
+    }
+    state.locks.push(values.at(-1));
+    return 0;
+  };
+  db.$executeRaw = executeLock;
   db.$queryRaw = async (parts, ...values) => {
     if (typeof parts === "object" && "raw" in parts && String(parts.raw).includes("pg_advisory")) {
-      state.locks.push(values.at(-1));
-      return undefined;
+      return executeLock(parts, ...values);
     }
     const dateValue = values.find((value) => value instanceof Date);
     if (dateValue) state.queryNow = dateValue;
