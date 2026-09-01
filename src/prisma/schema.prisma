@@ -1492,7 +1492,10 @@ model Comment {
   @@index([agentId, createdAt])
   // comment_Reactions Comment_Reactions[]
 
-  // @@index([taskId, createdAt])
+  // HTPR-5881: the Inbox unread-count query filters by taskId and a per-task
+  // createdAt threshold; only [taskId, creatorId] existed, leaving createdAt
+  // unindexed for that filter.
+  @@index([taskId, createdAt])
   @@index([taskId, creatorId]) // For comment counting
 }
 
