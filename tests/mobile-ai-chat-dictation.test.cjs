@@ -23,6 +23,7 @@ const { mobileMicPresentation } = jiti(
 );
 const originalCache = new Map(Object.entries(require.cache));
 const TestChatContext = React.createContext(undefined);
+let pathname = "/project";
 
 const stubModule = (filename, exports) => {
   require.cache[filename] = {
@@ -40,13 +41,16 @@ stubModule(require.resolve("@tiptap/react"), {
   useEditorState: ({ editor, selector }) => selector({ editor }),
 });
 stubModule(require.resolve("next/navigation"), {
-  usePathname: () => "/chat",
+  usePathname: () => pathname,
 });
 stubSourceModule("src/components/Global/ModelSelectorDropdown.tsx", {
   default: () => React.createElement("button", { "data-control": "model" }),
 });
 stubSourceModule("src/components/Common/Tooltip.tsx", {
   default: () => null,
+});
+stubModule(require.resolve("react-hot-toast"), {
+  default: { error: () => {} },
 });
 stubSourceModule("src/lib/configs/aiTaskWriter.config.ts", {
   aiTaskWriterConfig: {
@@ -130,7 +134,7 @@ for (const [filename, cachedModule] of originalCache) {
   require.cache[filename] = cachedModule;
 }
 
-const chatContextValue = (isRecording, isEmpty = true) => ({
+const chatContextValue = (isRecording, isEmpty = true, overrides = {}) => ({
   tiptapKeydown: () => {},
   editor: { isEmpty },
   isTyping: false,
@@ -155,15 +159,16 @@ const chatContextValue = (isRecording, isEmpty = true) => ({
   fileInputRef: { current: null },
   fileItems: [],
   removeFile: () => {},
+  ...overrides,
 });
 
-const renderComposer = (isRecording, isEmpty = true) =>
+const renderComposer = (isRecording, isEmpty = true, overrides = {}) =>
   React.createElement(
     MobileViewContext.Provider,
     { value: true },
     React.createElement(
       TestChatContext.Provider,
-      { value: chatContextValue(isRecording, isEmpty) },
+      { value: chatContextValue(isRecording, isEmpty, overrides) },
       React.createElement(AI_Tiptap_Container),
     ),
   );
@@ -273,6 +278,7 @@ test("real mobile microphones apply each composer presentation state", async () 
     assert.match(recordingMic.className, /h-\[32px\]/);
     assert.doesNotMatch(recordingMic.className, /h-11 w-11/);
   } finally {
+    pathname = "/project";
     await act(async () => reactRoot.unmount());
     dom.window.close();
     if (previousWindow === undefined) delete global.window;
@@ -304,7 +310,28 @@ test("mobile composer follows live recording state without remounting recorder",
   const reactRoot = createRoot(container);
 
   try {
+    pathname = "/chat";
     await act(async () => reactRoot.render(renderComposer(false, true)));
+    assert.ok(container.querySelector("[data-ai-chat-mobile-context-row]"));
+    assert.equal(
+      container.querySelector("[data-ai-chat-mobile-scope]"),
+      null,
+      "standalone chat must not show project scope",
+    );
+    assert.ok(container.querySelector('[data-control="recorder"]'));
+    assert.ok(container.querySelector("[data-ai-chat-mobile-overflow]"));
+
+    pathname = "/project";
+    let screenshotUploads = 0;
+    await act(async () =>
+      reactRoot.render(
+        renderComposer(false, true, {
+          handleFileUpload: async () => {
+            screenshotUploads += 1;
+          },
+        }),
+      ),
+    );
     const recorderBefore = container.querySelector('[data-control="recorder"]');
     const overflow = container.querySelector("[data-ai-chat-mobile-overflow]");
     assert.ok(recorderBefore);
@@ -313,18 +340,61 @@ test("mobile composer follows live recording state without remounting recorder",
     assert.equal(recorderBefore.dataset.globalRecording, "false");
     assert.match(recorderBefore.className, /order-4 ml-auto/);
     assert.equal(
-      container.querySelector("[data-ai-chat-leading-controls]").hidden,
-      false,
+      container.querySelector("[data-ai-chat-leading-controls]"),
+      null,
+      "mobile must not mount the desktop model and scope controls",
     );
+    const contextRow = container.querySelector(
+      "[data-ai-chat-mobile-context-row]",
+    );
+    const contextScroll = container.querySelector(
+      "[data-ai-chat-mobile-context-scroll]",
+    );
+    const scopeControl = container.querySelector("[data-ai-chat-mobile-scope]");
+    assert.ok(contextRow);
+    assert.ok(contextScroll);
+    assert.ok(scopeControl);
+    assert.strictEqual(scopeControl.parentElement, contextRow);
+    assert.doesNotMatch(contextRow.className, /overflow-/);
+    assert.match(contextScroll.className, /overflow-x-auto/);
+    assert.ok(container.querySelector("[data-ai-chat-mobile-add-context]"));
     assert.equal(overflow.hidden, false);
     const overflowActions = overflow
       .querySelector('[role="group"]')
       .querySelectorAll("button");
     assert.equal(
       overflowActions.length,
-      2,
-      "attachment and context controls belong inside the + overflow",
+      3,
+      "attachment, context, and screenshot controls belong inside the + overflow",
     );
+    assert.match(
+      overflow.querySelector("summary").className,
+      /h-11 w-11/,
+      "the + trigger must keep a 44px touch target",
+    );
+    const screenshotInput = container.querySelector(
+      "#ai-chat-screenshot-upload",
+    );
+    assert.equal(
+      screenshotInput.accept,
+      "image/png,image/jpeg,image/webp",
+    );
+    Object.defineProperty(screenshotInput, "files", {
+      configurable: true,
+      value: [new dom.window.File(["gif"], "not-a-screenshot.gif", { type: "image/gif" })],
+    });
+    await act(async () =>
+      screenshotInput.dispatchEvent(new dom.window.Event("change", { bubbles: true })),
+    );
+    assert.equal(screenshotUploads, 0, "unsupported image types must be rejected");
+    Object.defineProperty(screenshotInput, "files", {
+      configurable: true,
+      value: [new dom.window.File(["png"], "screenshot.png", { type: "image/png" })],
+    });
+    await act(async () =>
+      screenshotInput.dispatchEvent(new dom.window.Event("change", { bubbles: true })),
+    );
+    assert.equal(screenshotUploads, 1, "supported screenshots use the existing draft path");
     overflow.open = true;
     await act(async () => overflowActions[0].click());
     assert.equal(overflow.open, false, "an action must close the overflow");
@@ -351,8 +421,7 @@ test("mobile composer follows live recording state without remounting recorder",
     );
     assert.equal(recorderWithText.dataset.hasText, "true");
     assert.equal(recorderWithText.dataset.globalRecording, "false");
-    assert.match(recorderWithText.className, /order-2/);
-    assert.doesNotMatch(recorderWithText.className, /ml-auto/);
+    assert.match(recorderWithText.className, /order-3 ml-auto/);
     const primarySend = container.querySelector(
       "[data-ai-chat-primary-send] button",
     );
@@ -373,8 +442,8 @@ test("mobile composer follows live recording state without remounting recorder",
     );
     assert.equal(recorderAfter.dataset.globalRecording, "true");
     assert.equal(
-      container.querySelector("[data-ai-chat-leading-controls]").hidden,
-      true,
+      container.querySelector("[data-ai-chat-leading-controls]"),
+      null,
     );
     assert.equal(
       container.querySelector("[data-ai-chat-mobile-overflow]").hidden,
@@ -396,10 +465,11 @@ test("mobile composer follows live recording state without remounting recorder",
       "transcription state must not remount the recorder",
     );
     assert.equal(
-      container.querySelector("[data-ai-chat-leading-controls]").hidden,
-      true,
+      container.querySelector("[data-ai-chat-leading-controls]"),
+      null,
     );
   } finally {
+    pathname = "/project";
     await act(async () => reactRoot.unmount());
     dom.window.close();
     if (previousWindow === undefined) delete global.window;

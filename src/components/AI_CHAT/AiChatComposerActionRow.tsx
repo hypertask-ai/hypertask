@@ -11,6 +11,7 @@ type AiChatComposerActionRowProps = {
   leadingControls: ReactNode;
   attachmentControl: ReactNode;
   contextControl: ReactNode;
+  screenshotControl: ReactNode;
   recorder: ReactNode;
   streamControl: ReactNode;
   sendControl: ReactNode;
@@ -23,6 +24,7 @@ export function AiChatComposerActionRow({
   leadingControls,
   attachmentControl,
   contextControl,
+  screenshotControl,
   recorder,
   streamControl,
   sendControl,
@@ -58,6 +60,10 @@ export function AiChatComposerActionRow({
     }
   }, [mobileDictating]);
 
+  let recorderRowClassName = "flex-none gap-2";
+  if (mobileDictating) recorderRowClassName = "min-w-0 flex-1 gap-0";
+  else if (mobile) recorderRowClassName = "w-full gap-2";
+
   return (
     <div
       data-ai-chat-action-row
@@ -65,20 +71,17 @@ export function AiChatComposerActionRow({
         mobileDictating ? "min-w-0 gap-0" : "gap-2"
       }`}
     >
-      <div
-        data-ai-chat-leading-controls
-        hidden={mobileDictating}
-        className={`flex min-w-0 items-center gap-2 text-meta text-gray-400 ${
-          mobileDictating ? "hidden" : ""
-        }`}
-      >
-        {leadingControls}
-      </div>
+      {!mobile && (
+        <div
+          data-ai-chat-leading-controls
+          className="flex min-w-0 items-center gap-2 text-meta text-gray-400"
+        >
+          {leadingControls}
+        </div>
+      )}
       <div
         data-ai-chat-recorder-row
-        className={`flex items-center justify-center ${
-          mobileDictating ? "min-w-0 flex-1 gap-0" : "flex-none gap-2"
-        }`}
+        className={`flex items-center justify-center ${recorderRowClassName}`}
       >
         {mobile ? (
           <>
@@ -100,17 +103,20 @@ export function AiChatComposerActionRow({
                 onClick={() => {
                   if (overflowRef.current) overflowRef.current.open = false;
                 }}
-                className="absolute bottom-[calc(100%_+_0.5rem)] right-0 z-[1100] flex items-center gap-3 rounded-[4px] bg-modalBackground p-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
+                className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] flex items-center gap-3 rounded-[4px] bg-modalBackground p-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
               >
                 {attachmentControl}
                 {contextControl}
+                {screenshotControl}
               </div>
             </details>
             {recorder}
             <div
               data-ai-chat-stream-control
               hidden={mobileDictating}
-              className={`order-3 ${mobileDictating ? "hidden" : ""}`}
+              className={`order-2 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center ${
+                mobileDictating ? "hidden" : ""
+              }`}
             >
               {streamControl}
             </div>

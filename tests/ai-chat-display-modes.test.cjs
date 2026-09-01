@@ -57,6 +57,42 @@ test("automatic board and task opening do not overwrite the saved mode", () => {
   assert.match(taskAutoOpen[0], /setShowAiChatInterface\(true\)/);
 });
 
+test("mobile chat uses the approved header controls and guarded new-chat action", () => {
+  const header = source("src/components/AI_CHAT/ChatHeader.tsx");
+  const mobileBranch = header.match(/if \(isMbl\) \{[\s\S]*?\n  \}\n\n  return \(/);
+  const newSessionHandler = header.match(
+    /const handleStartNewSession = async \(\) => \{[\s\S]*?\n  \};/
+  );
+
+  assert.ok(mobileBranch, "mobile header must be a separate rendered branch");
+  assert.ok(newSessionHandler, "new-chat handler must exist");
+  assert.match(mobileBranch[0], /data-ai-chat-mobile-header/);
+  assert.match(mobileBranch[0], /currentSession\?\.title/);
+  assert.doesNotMatch(mobileBranch[0], /sessions\[0\]\?\.title/);
+  assert.match(mobileBranch[0], /<AIModelDropDownButton/);
+  for (const label of ["Close AI chat", "Chat history", "New chat"]) {
+    const button = mobileBranch[0].match(
+      new RegExp(`<button(?:(?!</button>)[\\s\\S])*?aria-label="${label}"(?:(?!</button>)[\\s\\S])*?</button>`)
+    );
+    assert.ok(button, `${label} button must exist`);
+    assert.match(button[0], /className="[^"]*h-11 w-11[^"]*"/);
+    if (label === "New chat") {
+      assert.match(button[0], /onClick=\{handleStartNewSession\}/);
+      assert.match(button[0], /disabled=\{isStartingNewSession\}/);
+    }
+  }
+  assert.match(
+    newSessionHandler[0],
+    /if \(isStartingNewSessionRef\.current\) return;/
+  );
+  assert.match(
+    newSessionHandler[0],
+    /setIsStartingNewSession\(true\);[\s\S]*?await startNewSession\(\);/
+  );
+  assert.match(newSessionHandler[0], /catch \{[\s\S]*?toast\.error\(/);
+  assert.match(newSessionHandler[0], /finally \{[\s\S]*?setIsStartingNewSession\(false\)/);
+});
+
 test("pinning chat does not overwrite the saved mode", () => {
   const header = source("src/components/AI_CHAT/ChatHeader.tsx");
   const commands = source("src/components/commands.tsx");
