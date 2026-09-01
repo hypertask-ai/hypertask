@@ -17,20 +17,18 @@ function txWithPriority(priority) {
   const created = []
   return {
     created,
+    task: {
+      id: 7,
+      ticketNumber: 'HTPR-7',
+      projectId: 15,
+      title: 'Created with a priority',
+      status: 'Normal',
+      dueDate: null,
+      sectionId: null,
+      section: 'To Do',
+      priority,
+    },
     tx: {
-      task: {
-        findUnique: async () => ({
-          id: 7,
-          ticketNumber: 'HTPR-7',
-          projectId: 15,
-          title: 'Created with a priority',
-          status: 'Normal',
-          dueDate: null,
-          sectionId: null,
-          priority,
-        }),
-      },
-      section: { findUnique: async () => null },
       webhookSubscription: {
         findMany: async () => [
           { id: 'sub-1', events: ['task.created'], projectId: 15 },
@@ -51,12 +49,12 @@ function txWithPriority(priority) {
 // a null priority, so a task born Urgent that reports priority: null is a lie
 // subscribers cannot recover from (HTPR-4530).
 test('task.created carries the priority the task was created with', async () => {
-  const { tx, created } = txWithPriority({
+  const { tx, task, created } = txWithPriority({
     id: 99,
     priority_index: 1,
     Priority_Value: 'Urgent',
   })
-  await persistTaskCreatedWebhook(tx, 7, 6, null)
+  await persistTaskCreatedWebhook(tx, task, 6, null)
   assert.equal(created.length, 1)
   const payload = created[0].payload ?? created[0].delivery ?? created[0]
   const body = JSON.stringify(payload)
@@ -64,8 +62,8 @@ test('task.created carries the priority the task was created with', async () => 
 })
 
 test('task.created reports no priority when the task was created without one', async () => {
-  const { tx, created } = txWithPriority(null)
-  await persistTaskCreatedWebhook(tx, 7, 6, null)
+  const { tx, task, created } = txWithPriority(null)
+  await persistTaskCreatedWebhook(tx, task, 6, null)
   const body = JSON.stringify(created[0])
   assert.match(body, /"priority":null/)
 })

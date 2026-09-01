@@ -151,11 +151,36 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                     select: {
                         teamId: true
                     }
+                },
+                // Needed for the task.created webhook payload (HTPR-5928) — taskData
+                // can nest a priority create above, and without this include Prisma
+                // won't return it on the created row.
+                priority: {
+                    select: { id: true, priority_index: true, Priority_Value: true }
                 }
             }
         });
         await persistAgentTaskCreatedPending(tx, created.id);
-        return { taskId: created.id, result: created };
+        return { taskId: created.id,
+            result: created,
+            webhookTask: {
+                id: created.id,
+                ticketNumber: created.ticketNumber,
+                projectId: created.projectId,
+                title: created.title,
+                status: created.status,
+                dueDate: created.dueDate,
+                sectionId: created.sectionId,
+                section: created.section,
+                priority: created.priority
+                    ? {
+                        id: created.priority.id,
+                        priority_index: created.priority.priority_index,
+                        Priority_Value: created.priority.Priority_Value
+                    }
+                    : null
+            }
+        };
     });
     const newTask = createdTask.result;
     const boardWebhookDeliveryIds = createdTask.boardWebhookDeliveryIds;

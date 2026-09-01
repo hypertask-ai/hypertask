@@ -412,6 +412,23 @@ const handler: NextApiHandler = async (
             taskLabels: createdTaskLabels,
             assignments: createdAssignments,
           },
+          webhookTask: {
+            id: task.id,
+            ticketNumber: task.ticketNumber,
+            projectId: task.projectId,
+            title: task.title,
+            status: task.status,
+            dueDate: task.dueDate,
+            sectionId: task.sectionId,
+            section: task.section,
+            priority: createdPriority
+              ? {
+                  id: createdPriority.id,
+                  priority_index: createdPriority.priority_index,
+                  Priority_Value: createdPriority.Priority_Value,
+                }
+              : null,
+          },
         };
       });
       newTask = created.result.task as TaskCreatedGlobally;
