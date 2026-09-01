@@ -61,6 +61,8 @@ import {
   readChatOpenForSession,
   writeChatOpenForSession,
 } from "@/lib/aiChat/chatOpenSession";
+import { useQueryClient } from "@tanstack/react-query";
+import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 
 const aiOptionsWithoutOpenRouter = aiOptions.filter(
   (option) => option.source !== "openrouter"
@@ -103,6 +105,7 @@ export type AiChatProcessedAttachment = {
 
 export function useAiChat() {
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
+  const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const [showAiChatInterface, setShowAIChat] = useRecoilState(
@@ -1035,6 +1038,10 @@ export function useAiChat() {
 
     if (!content.trim()) return;
     sendInFlightRef.current = true;
+    const streamTaskId =
+      !isFullScreenChat && isDetailPage && inViewObject?.taskId
+        ? inViewObject.taskId
+        : undefined;
 
     try {
       const session = await waitForChatSession();
@@ -1141,9 +1148,7 @@ export function useAiChat() {
         view_name:
           currentProject?.project_view?.user_project_views?.[0]?.appliedView?.title ??
           currentProject?.title,
-        ...(!isFullScreenChat && isDetailPage && inViewObject?.taskId
-          ? { task_id: inViewObject.taskId }
-          : {}),
+        ...(streamTaskId ? { task_id: streamTaskId } : {}),
       },
       user_context: {
         id: currentUser?.id,
@@ -1368,6 +1373,15 @@ export function useAiChat() {
                         parsed.assistant_persisted === true,
                         true
                       );
+                      if (streamTaskId != null) {
+                        void refreshTaskComments(queryClient, streamTaskId).catch(
+                          (error) =>
+                            console.warn(
+                              "[AI chat] task comments refresh failed",
+                              error
+                            )
+                        );
+                      }
                     }
                     setIsTyping(false);
                     break;
