@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useLayoutEffect, useRef } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { activeBuiltinViewsAtom, currentProjectAtom } from "@/store";
 import { IProject } from "@/models/model";
@@ -88,14 +88,44 @@ const Strip = ({ lead, items }: { lead?: string; items: IStripItem[] }) => {
   );
 };
 
+const SaveViewModal = lazy(
+  () => import("@/components/Modals/ViewModals/SaveViewModal"),
+);
+
 const BoardStrip = ({ project }: { project: IProject }) => {
-  const { switchViewHandler } = useKanbanViews(project);
+  const { switchViewHandler, resetView } = useKanbanViews(project);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  // ShellViewControls (desktop) never mounts on mobile and the legacy board
+  // header is md-and-up only, so without this the Save view affordance did not
+  // exist on phones: sort/filter changes could never be persisted (HTPR-5900).
+  const isDirty = Boolean(
+    project.project_view?.user_project_views[0]?.unsavedView,
+  );
   const { renderedViews, viewTaskCounts } = useRenderedViews(project);
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
   const defaultViewId = project.project_view?.default_view_id;
   const activeViewId = getActiveBoardViewId(project, activeBuiltinViews);
 
   return (
+    <>
+    {isDirty && (
+      <span className="flex shrink-0 items-center gap-2 pr-1">
+        <button
+          type="button"
+          onClick={() => setShowSaveModal(true)}
+          className="h-8 shrink-0 rounded-full bg-hover-active px-2 text-dense font-medium text-[#E28C28]"
+        >
+          Save view
+        </button>
+        <button
+          type="button"
+          onClick={() => resetView("ResetCurrent")}
+          className="h-8 shrink-0 rounded-full bg-hover-active px-2 text-dense font-medium text-text-light-gray"
+        >
+          Reset
+        </button>
+      </span>
+    )}
     <Strip
       items={renderedViews.map((view) => ({
         key: String(view.id),
@@ -110,6 +140,12 @@ const BoardStrip = ({ project }: { project: IProject }) => {
         },
       }))}
     />
+    {showSaveModal && (
+      <Suspense fallback={null}>
+        <SaveViewModal toggle={() => setShowSaveModal(false)} project={project} />
+      </Suspense>
+    )}
+    </>
   );
 };
 
