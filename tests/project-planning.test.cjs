@@ -71,6 +71,7 @@ function loadRoute({ admin = true, project = undefined, session = { userId: 6 } 
       : project;
   const calls = {
     broadcasts: [],
+    cyclesEnabled: [],
     milestonesCreated: [],
     milestonesDeleted: [],
     milestonesUpdated: [],
@@ -81,6 +82,7 @@ function loadRoute({ admin = true, project = undefined, session = { userId: 6 } 
   resetModules([
     "src/app/api/projects/planning/route.ts",
     "src/lib/auth/getSessionUser.ts",
+    "src/lib/cycleService.ts",
     "src/lib/prisma.ts",
     "src/lib/realtime/server.ts",
     "src/utils/controllers/projects/getAllIncludes.ts",
@@ -97,6 +99,31 @@ function loadRoute({ admin = true, project = undefined, session = { userId: 6 } 
   });
   stubModule("src/lib/realtime/server.ts", {
     broadcastBoardChange: (...args) => calls.broadcasts.push(args),
+  });
+  stubModule("src/lib/cycleService.ts", {
+    getProjectCycleOverview: async () => ({
+      current: {
+        endDate: "2026-08-31",
+        id: 1,
+        number: 1,
+        projectId: 15,
+        rolledOverAt: null,
+        startDate: "2026-08-17",
+      },
+      enabled: calls.cyclesEnabled.at(-1) ?? false,
+      next: {
+        endDate: "2026-09-14",
+        id: 2,
+        number: 2,
+        projectId: 15,
+        rolledOverAt: null,
+        startDate: "2026-08-31",
+      },
+    }),
+    setProjectCyclesEnabled: async (projectId, enabled) => {
+      calls.cyclesEnabled.push(enabled);
+      assert.equal(projectId, 15);
+    },
   });
   stubModule("src/lib/prisma.ts", {
     default: {
@@ -171,6 +198,25 @@ test("project planning returns date-only values and management permission", asyn
   assert.equal(body.planning.canManage, true);
   assert.equal(body.planning.targetDate, "2026-10-15");
   assert.equal(body.planning.milestones[0].targetDate, "2026-09-30");
+  assert.equal(body.planning.cycles.enabled, false);
+  assert.equal(body.planning.cycles.current.number, 1);
+});
+
+test("only board admins can enable cycles", async () => {
+  const memberRoute = loadRoute({ admin: false });
+  const denied = await memberRoute.POST(
+    request("POST", { action: "set_cycles", enabled: true, projectId: 15 }),
+  );
+  assert.equal(denied.status, 403);
+  assert.deepEqual(memberRoute.calls.cyclesEnabled, []);
+
+  const adminRoute = loadRoute();
+  const enabled = await adminRoute.POST(
+    request("POST", { action: "set_cycles", enabled: true, projectId: 15 }),
+  );
+  assert.equal(enabled.status, 200);
+  assert.deepEqual(adminRoute.calls.cyclesEnabled, [true]);
+  assert.equal((await enabled.json()).planning.cycles.enabled, true);
 });
 
 test("ordinary members can post a health update", async () => {

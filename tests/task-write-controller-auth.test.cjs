@@ -244,6 +244,10 @@ function loadUpdateController(
       requestedTaskStateChanges: (_task, mutation) => mutation,
       taskLifecycleTimestampChanges: () => ({}),
     },
+    "@/lib/cycleService": {
+      assertCycleAssignable: async () => undefined,
+      CycleAssignmentError: class extends Error {},
+    },
   };
   return {
     updateTaskSingle: execute(
@@ -606,6 +610,7 @@ test("cross-board moves preserve the ticket key while allocating a destination i
   assert.equal(result.task.uniqueIndex, 1);
   assert.equal(result.task.ticketNumber, "HTPR-5731");
   assert.equal(calls.updatedTask.ticketNumber, undefined);
+  assert.equal(calls.updatedTask.cycleId, null);
   assert.equal(calls.allowProjectChange, true);
 });
 

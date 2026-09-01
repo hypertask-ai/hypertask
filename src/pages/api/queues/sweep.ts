@@ -15,6 +15,7 @@ import {
 import type { IReminder } from "@/models/model";
 import { sweepAutoArchives } from "@/utils/controllers/tasks/sweepAutoArchive";
 import { sweepStaleNudges } from "@/utils/controllers/tasks/sweepStaleNudges";
+import { sweepCycleRollovers } from "@/lib/cycleService";
 import { getRedis } from "@/lib/redis";
 import { sweepAgentWebhookDeliveries } from "@/lib/agentWebhooks/delivery";
 import { sweepPendingAgentTaskCreatedWebhooks } from "@/lib/agentWebhooks/taskCreatedRecovery";
@@ -42,6 +43,7 @@ interface SweepSummary {
   chatExpiries: number;
   autoArchives: number;
   staleNudges: number;
+  cycleRollovers: number;
   agentWebhooks: number;
   agentTaskCreated: number;
   boardWebhooks: number;
@@ -242,6 +244,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     chatExpiries: 0,
     autoArchives: 0,
     staleNudges: 0,
+    cycleRollovers: 0,
     agentWebhooks: 0,
     agentTaskCreated: 0,
     boardWebhooks: 0,
@@ -283,6 +286,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       summary.staleNudges = await sweepStaleNudges();
     } catch (error) {
       console.log("🚀 ~ sweep ~ staleNudges error:", error);
+    }
+
+    try {
+      summary.cycleRollovers = await sweepCycleRollovers();
+    } catch (error) {
+      console.log("🚀 ~ sweep ~ cycleRollovers error:", error);
     }
 
     try {

@@ -7,6 +7,10 @@ import {
   toDateOnly,
 } from "@/lib/projectPlanning";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import {
+  getProjectCycleOverview,
+  setProjectCyclesEnabled,
+} from "@/lib/cycleService";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 import { NextRequest, NextResponse } from "next/server";
@@ -51,6 +55,11 @@ const planningResponse = async (projectId: number, userId: number) => {
   });
   if (!project) return null;
 
+  const [canManage, cycles] = await Promise.all([
+    isProjectAdmin(userId, projectId),
+    getProjectCycleOverview(projectId),
+  ]);
+
   return {
     ...project,
     targetDate: toDateOnly(project.targetDate),
@@ -63,7 +72,8 @@ const planningResponse = async (projectId: number, userId: number) => {
         ...milestone,
         targetDate: toDateOnly(milestone.targetDate),
       })),
-    canManage: await isProjectAdmin(userId, projectId),
+    canManage,
+    cycles,
   };
 };
 
@@ -120,7 +130,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (body.action === "set_target_date") {
+  if (body.action === "set_cycles") {
+    if (typeof body.enabled !== "boolean") {
+      return invalid("enabled must be a boolean");
+    }
+    await setProjectCyclesEnabled(projectId, body.enabled);
+  } else if (body.action === "set_target_date") {
     const targetDate = body.targetDate === null ? null : parseDateOnly(body.targetDate);
     if (body.targetDate !== null && !targetDate) {
       return invalid("targetDate must be a valid YYYY-MM-DD date or null");

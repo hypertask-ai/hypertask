@@ -1,5 +1,6 @@
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
+import { utcDate } from "@/lib/cycles";
 
 export type GetAllIncludesOptions = {
   userId: number;
@@ -450,6 +451,7 @@ export const projectBootstrapSelect = {
   staleHotDays: true,
   staleNudgeEnabled: true,
   autoArchiveAfterDays: true,
+  cyclesEnabled: true,
   _count: {
     select: {
       section: {
@@ -497,6 +499,11 @@ export const getProjectIncludeWithoutTasks = (
     orderBy: {
       ranking: "asc",
     },
+  },
+  cycles: {
+    where: { endDate: { gt: utcDate() } },
+    orderBy: { startDate: "asc" },
+    take: 2,
   },
   team: {
     include: {

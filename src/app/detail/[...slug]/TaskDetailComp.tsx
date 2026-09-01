@@ -14,6 +14,7 @@ import {
   TaskRelations,
   ISection,
   IAssignees,
+  ICycle,
 } from "@/models/model";
 import {
   activeItemAtom,
@@ -2261,6 +2262,10 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     waitingOnSetById: number | null;
     waitingOnSetAt: string | null;
   }) => setCurrentTask((task) => (task ? { ...task, ...fields } : task));
+  const updateCycle = (cycle: ICycle | null) =>
+    setCurrentTask((task) =>
+      task ? { ...task, cycle, cycleId: cycle?.id ?? null } : task,
+    );
 
   const content = (
     <>
@@ -2333,6 +2338,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
                   moveTaskToNextColumn={moveTaskToNextColumn}
                   followers={followers}
                   updateWaitingOn={updateWaitingOn}
+                  updateCycle={updateCycle}
                 />
                 {!_mbl && (
                   <TaskInfo
@@ -2356,6 +2362,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
                     moveTaskToNextColumn={moveTaskToNextColumn}
                     followers={followers}
                     updateWaitingOn={updateWaitingOn}
+                  updateCycle={updateCycle}
                   />
                 )}
               </div>

@@ -11,7 +11,10 @@ const {
   agentsPredicate,
   blockedPredicate,
   BUILTIN_VIEWS,
+  currentCyclePredicate,
+  getActiveBoardViewId,
   myTasksPredicate,
+  nextCyclePredicate,
   overduePredicate,
 } = jiti(path.join(root, "src/lib/constants/builtinViews.ts"));
 
@@ -23,6 +26,8 @@ test("built-in views have stable ids in their fixed order", () => {
       ["builtin:overdue", "Overdue"],
       ["builtin:blocked", "Blocked"],
       ["builtin:agents", "Agents"],
+      ["builtin:current-cycle", "Current cycle"],
+      ["builtin:next-cycle", "Next cycle"],
     ],
   );
 });
@@ -81,4 +86,42 @@ test("Agents matches any assignee row with an agent id", () => {
   assert.equal(agentsPredicate({ assignees: [{ agentId: "agent-1" }] }, {}), true);
   assert.equal(agentsPredicate({ assignees: [{ agentId: null }] }, {}), false);
   assert.equal(agentsPredicate({ assignees: [] }, {}), false);
+});
+
+test("cycle views match only their resolved cycle and hide when cycles are unavailable", () => {
+  assert.equal(currentCyclePredicate({ cycleId: 11 }, { currentCycleId: 11 }), true);
+  assert.equal(currentCyclePredicate({ cycleId: 12 }, { currentCycleId: 11 }), false);
+  assert.equal(nextCyclePredicate({ cycleId: 12 }, { nextCycleId: 12 }), true);
+  assert.equal(nextCyclePredicate({ cycleId: null }, { nextCycleId: 12 }), false);
+
+  const current = BUILTIN_VIEWS.find(({ id }) => id === "builtin:current-cycle");
+  const next = BUILTIN_VIEWS.find(({ id }) => id === "builtin:next-cycle");
+  assert.equal(current.available({ cyclesEnabled: true, currentCycleId: 11 }), true);
+  assert.equal(current.available({ cyclesEnabled: false, currentCycleId: 11 }), false);
+  assert.equal(next.available({ cyclesEnabled: true, nextCycleId: null }), false);
+
+  const project = {
+    cycles: [
+      {
+        endDate: "2100-01-01",
+        id: 11,
+        number: 1,
+        projectId: 15,
+        startDate: "2000-01-01",
+      },
+    ],
+    cyclesEnabled: true,
+    id: 15,
+    project_view: { default_view_id: "saved-default", user_project_views: [] },
+    section: [],
+  };
+  assert.equal(
+    getActiveBoardViewId(project, { 15: "builtin:current-cycle" }),
+    "builtin:current-cycle",
+  );
+  project.cyclesEnabled = false;
+  assert.equal(
+    getActiveBoardViewId(project, { 15: "builtin:current-cycle" }),
+    "saved-default",
+  );
 });

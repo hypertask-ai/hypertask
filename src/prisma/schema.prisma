@@ -680,6 +680,8 @@ model Project {
   staleNudgeEnabled      Boolean                  @default(false)
   // null = auto-archive off; N = archive tasks untouched (no edit, no comment) for N days.
   autoArchiveAfterDays   Int?
+  cyclesEnabled          Boolean                  @default(false)
+  cycles                 Cycle[]
   aiSkills               AI_Skill[]
   reports                Report[]
   // Per-board playbook agents fetch: working rules + a definition-of-done
@@ -704,6 +706,23 @@ enum ProjectHealth {
   OnTrack
   AtRisk
   OffTrack
+}
+
+model Cycle {
+  id           Int       @id @default(autoincrement())
+  projectId    Int
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  number       Int
+  startDate    DateTime  @db.Date
+  endDate      DateTime  @db.Date
+  rolledOverAt DateTime?
+  createdAt    DateTime  @default(now())
+  tasks        Task[]
+
+  @@unique([projectId, id])
+  @@unique([projectId, number])
+  @@unique([projectId, startDate])
+  @@index([projectId, endDate, rolledOverAt])
 }
 
 model ProjectMilestone {
@@ -919,6 +938,8 @@ model Task {
   description         String
   projectId           Int
   project             Project         @relation(fields: [projectId], references: [id])
+  cycleId             Int?
+  cycle               Cycle?          @relation(fields: [projectId, cycleId], references: [projectId, id])
   status              Status          @default(Normal)
   userId              Int
   user                User            @relation(fields: [userId], references: [id])
@@ -1003,6 +1024,7 @@ model Task {
   // @@index([deletedAt]) // For filtering deleted tasks
   // @@index([status]) // If you filter by status frequently
   @@index([projectId, status])
+  @@index([projectId, cycleId, status])
   @@index([projectId, status, archivedAt])
   @@index([parentTaskId, status])
   // Back the minute-ly sweep (src/pages/api/queues/sweep.ts) so its due-date and

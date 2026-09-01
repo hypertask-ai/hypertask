@@ -142,6 +142,10 @@ function loadDeleteController(deleteOutcome) {
       requestedTaskStateChanges: (_task, mutation) => mutation,
       taskLifecycleTimestampChanges: () => ({}),
     },
+    "@/lib/cycleService": {
+      assertCycleAssignable: async () => undefined,
+      CycleAssignmentError: class extends Error {},
+    },
   };
   return execute(compile("src/utils/controllers/tasks/single.ts"), stubs);
 }

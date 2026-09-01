@@ -367,7 +367,7 @@ export const getFilteredSections = (
   runtimeContext?: IFilterRuntimeContext,
 ) => {
   const builtinView = getBuiltinView(builtinViewId);
-  if (builtinView) {
+  if (builtinView && (!builtinView.available || builtinView.available(builtinContext))) {
     return sections.map((section) => ({
       ...section,
       items: (section.items ?? []).filter((task) =>
