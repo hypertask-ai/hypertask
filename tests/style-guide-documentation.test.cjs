@@ -95,17 +95,56 @@ test("the reference composer still implements the documented geometry", () => {
   const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
   const general = read("src/lib/configs/general.config.ts");
 
-  assert.match(composer, /rounded-\[5px\]/);
-  assert.match(composer, /bg-cardBackground/);
-  assert.match(composer, /px-\[12px\]/);
-  assert.match(composer, /pb-\[6px\]/);
-  assert.match(composer, /rounded-lg/);
-  assert.match(composer, /bg-newcomment-well/);
-  assert.match(composer, /py-\[4px\]/);
-  assert.match(attachments, /<Paperclip\b[^>]*\bsize=\{16\}[^>]*>/);
-  assert.match(attachments, /<SendArrow\b[^>]*\bsize=\{22\}[^>]*>/);
-  assert.match(general, /min-h-\[44px\]/);
-  assert.match(general, /min-w-\[44px\]/);
+  const classesContaining = (source, token) => {
+    const match = [...source.matchAll(/className="([^"]*)"/g)].find((entry) =>
+      entry[1].split(/\s+/).includes(token),
+    );
+    assert.ok(match, `missing className containing ${token}`);
+    return new Set(match[1].split(/\s+/));
+  };
+
+  const sheetClasses = classesContaining(composer, "rounded-[5px]");
+  assert.ok(sheetClasses.has("bg-cardBackground"));
+
+  const paddingClasses = classesContaining(composer, "pb-[6px]");
+  assert.ok(paddingClasses.has("px-[12px]"));
+
+  const wellClasses = classesContaining(composer, "bg-newcomment-well");
+  for (const token of ["rounded-lg", "px-[12px]", "py-[4px]"]) {
+    assert.ok(wellClasses.has(token), `comment well missing ${token}`);
+  }
+
+  const commentAttachStart = attachments.indexOf(
+    '{mode === "create-comment" && !isRecording && (',
+  );
+  const commentAttachEnd = attachments.indexOf("</button>", commentAttachStart);
+  assert.notEqual(commentAttachStart, -1, "missing mobile comment attach branch");
+  assert.notEqual(commentAttachEnd, -1, "missing mobile comment attach button");
+  const commentAttach = attachments.slice(commentAttachStart, commentAttachEnd);
+  assert.match(commentAttach, /aria-label="Attach files"/);
+  assert.match(commentAttach, /<Paperclip\b[^>]*\bsize=\{16\}[^>]*>/);
+
+  const commentSendStart = attachments.indexOf(
+    '{mode === "create-comment" ? (',
+    attachments.indexOf("const SaveButtonMobile"),
+  );
+  const commentSendEnd = attachments.indexOf(
+    ') : mode === "create-task-modal"',
+    commentSendStart,
+  );
+  assert.notEqual(commentSendStart, -1, "missing mobile comment send branch");
+  assert.notEqual(commentSendEnd, -1, "missing mobile comment send boundary");
+  const commentSend = attachments.slice(commentSendStart, commentSendEnd);
+  assert.match(commentSend, /aria-label="Send comment"/);
+  assert.match(commentSend, /<SendArrow\b[^>]*\bsize=\{22\}[^>]*>/);
+
+  const mobileTarget = general.match(
+    /export const MOBILE_TARGET\s*=\s*"([^"]+)";/,
+  );
+  assert.ok(mobileTarget, "missing MOBILE_TARGET declaration");
+  const mobileTargetClasses = new Set(mobileTarget[1].split(/\s+/));
+  assert.ok(mobileTargetClasses.has("min-h-[44px]"));
+  assert.ok(mobileTargetClasses.has("min-w-[44px]"));
 });
 
 test("the long-form design reference points to the canonical guide", () => {
