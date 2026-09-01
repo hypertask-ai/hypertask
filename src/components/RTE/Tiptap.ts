@@ -44,6 +44,7 @@ import {
 } from "@/lib/snippets";
 import { ReplyBlockquote } from "./Extensions/ReplyBlockquote";
 import { withMentionBackspaceDeletion } from "./Extensions/DeleteMentionOnBackspace";
+import { writingAssistanceEditorProps } from "./writingAssistance";
 
 const defaultScrollMargin = 5;
 const descriptionCaretTopGutter = 8;
@@ -119,11 +120,12 @@ const useTiptap = ({
   // itself after mount, so freezing the initial value is safe.
   const [initialContent] = useState(defaultContent);
   const editorProps = useMemo(() => {
-    if (mode !== "read-edit-description") return {};
+    if (mode !== "read-edit-description") return writingAssistanceEditorProps;
 
     const stickyHeaderOffset = getTaskDetailStickyHeaderOffset();
 
     return {
+      ...writingAssistanceEditorProps,
       scrollThreshold: {
         top: stickyHeaderOffset,
         right: 0,
