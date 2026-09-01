@@ -1,6 +1,6 @@
 # Hypertask Design System
 
-The single source of truth for what Hypertask looks like and how to extend it. **Read this before any UI work.** Values are extracted from `tailwind.config.ts` and `src/styles/tailwindThemes/{light,dark}.css`; component patterns from the real components. If a value here disagrees with the code, the code wins — update this file.
+The canonical visual contract is [`openwiki/style-guide.md`](../openwiki/style-guide.md). This page keeps longer component and workflow examples. If an example here disagrees with the canonical guide or production code, follow the guide and update this page.
 
 ## The one rule
 
