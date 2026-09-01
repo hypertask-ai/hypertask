@@ -608,7 +608,8 @@ refresh_live_cwds() {
     [[ "$cwd_link" == *' (deleted)' ]] && continue
     if ! cwd=$(realpath -e -- "$cwd_link" 2>/dev/null); then
       [[ ! -e "$proc" ]] && continue
-      fatal "cannot resolve process cwd: $proc"
+      cwd=$(realpath -m -- "$cwd_link" 2>/dev/null) \
+        || fatal "cannot resolve process cwd: $proc"
     fi
     printf '%s\n' "$cwd" >>"$TMP_DIR/live-cwds"
   done
