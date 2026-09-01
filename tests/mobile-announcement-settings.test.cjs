@@ -11,6 +11,8 @@ const modulePath = (relativePath) => path.join(root, relativePath);
 test("Settings renders announcement controls and posts", () => {
   const previousReact = global.React;
   const stubs = new Map();
+  let announcementToggle;
+  let toggleMuteCalls = 0;
   const stubModule = (relativePath, exports) => {
     const filename = modulePath(relativePath);
     stubs.set(filename, require.cache[filename]);
@@ -24,7 +26,12 @@ test("Settings renders announcement controls and posts", () => {
     });
     stubModule("src/store/index.ts", { currentUserAtom: {} });
     stubModule("src/hooks/General/useGetUserPreferences.tsx", {
-      useAnnouncementMute: () => ({ muted: false, toggleMute: () => {} }),
+      useAnnouncementMute: () => ({
+        muted: false,
+        toggleMute: () => {
+          toggleMuteCalls += 1;
+        },
+      }),
     });
     stubModule("src/hooks/MultiPages/Sidebar/useGetAnnouncements.ts", {
       useGetAnnouncements: () => ({ data: [{ id: 1, readAt: null }] }),
@@ -46,13 +53,15 @@ test("Settings renders announcement controls and posts", () => {
         ),
     });
     stubModule("src/components/Modals/Settings/SettingsToggle.tsx", {
-      default: ({ checked, label }) =>
-        React.createElement("input", {
+      default: ({ checked, label, onChange }) => {
+        announcementToggle = onChange;
+        return React.createElement("input", {
           "aria-label": label,
           checked,
           readOnly: true,
           type: "checkbox",
-        }),
+        });
+      },
     });
 
     const jiti = jitiModule.createJiti
@@ -74,6 +83,9 @@ test("Settings renders announcement controls and posts", () => {
     assert.match(html, /<h1>Latest updates<\/h1>/);
     assert.match(html, /aria-label="Announcement alerts"[^>]*checked/);
     assert.match(html, /data-announcement-count="1"/);
+    assert.equal(typeof announcementToggle, "function");
+    announcementToggle();
+    assert.equal(toggleMuteCalls, 1);
   } finally {
     for (const [filename, previous] of stubs) {
       if (previous === undefined) delete require.cache[filename];
