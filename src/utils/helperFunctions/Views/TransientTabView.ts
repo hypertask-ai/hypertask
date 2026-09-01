@@ -17,6 +17,17 @@ export function canUseViewAsTabBase(
   return view.visibility === "Public" || view.userId === currentUserId;
 }
 
+export function shouldUseTransientTabSettings(
+  hasBaseViewId: boolean,
+  requestedBaseViewId: string | null | undefined,
+  appliedViewId: string | null | undefined,
+) {
+  return (
+    hasBaseViewId &&
+    (requestedBaseViewId ?? null) !== (appliedViewId ?? null)
+  );
+}
+
 export function applyTransientTabSettings(
   projectView: ProjectViewResponse,
   currentUserId: number,
