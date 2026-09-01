@@ -7,9 +7,10 @@ export function shouldRunProductionMigrations(env) {
     return false;
   }
 
-  if (env.VERCEL_GIT_COMMIT_REF !== "production") {
+  const productionBranch = env.PRODUCTION_BRANCH?.trim() || "production";
+  if (env.VERCEL_GIT_COMMIT_REF !== productionBranch) {
     throw new Error(
-      "Refusing a Vercel production build outside the production branch.",
+      `Refusing a Vercel production build outside the ${productionBranch} branch.`,
     );
   }
 

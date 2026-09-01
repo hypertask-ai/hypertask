@@ -797,9 +797,9 @@ cache_local_candidate_is_proven() {
 cache_candidate_is_proven() {
   local path=$1 branch=$2 tip=$3 current_remote_tip
   cache_local_candidate_is_proven "$path" "$branch" "$tip" || return 1
-  current_remote_tip=$(remote_tip "$branch")
+  current_remote_tip=$(remote_tip "$branch") || return 1
   [[ -z "$current_remote_tip" || "$current_remote_tip" == "$tip" ]] || return 1
-  query_prs "$branch"
+  query_prs "$branch" || return 1
   if printf '%s' "$PR_JSON" | jq -e 'any(.[]; .state == "OPEN")' >/dev/null; then
     return 1
   fi

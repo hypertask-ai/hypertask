@@ -23,6 +23,14 @@ test("production migration gate runs only for production branch deployments", as
 
   assert.equal(shouldRunProductionMigrations(productionEnv), true);
   assert.equal(
+    shouldRunProductionMigrations({
+      ...productionEnv,
+      PRODUCTION_BRANCH: "release",
+      VERCEL_GIT_COMMIT_REF: "release",
+    }),
+    true,
+  );
+  assert.equal(
     shouldRunProductionMigrations({ ...productionEnv, VERCEL_ENV: "preview" }),
     false,
   );

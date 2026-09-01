@@ -65,6 +65,9 @@ function createFixture(tempRoot = os.tmpdir()) {
   fs.chmodSync(fakeGh, 0o755);
   fs.writeFileSync(fakeGit, `#!/bin/sh
 REAL_GIT=$(command -v git) || exit 127
+if [ "${'$'}{GIT_MUTATE_MODE:-}" = "remote-query-fail" ] && [ "${'$'}3" = "ls-remote" ] && [ -n "${'$'}{6:-}" ]; then
+  exit 17
+fi
 if [ "${'$'}{GIT_MUTATE_MODE:-}" = "local-fail" ] && [ "${'$'}{GIT_MUTATE_MARKER:-}" != "" ] && [ ! -e "${'$'}GIT_MUTATE_MARKER" ] && [ "${'$'}1" = "-C" ] && [ "${'$'}3" = "update-ref" ] && [ "${'$'}4" = "-d" ]; then
   : > "${'$'}GIT_MUTATE_MARKER"
   exit 1
@@ -413,6 +416,21 @@ test('cache cleanup treats nested cache writes as recent activity', (t) => {
   fs.writeFileSync(path.join(fixture.worktree, '.next', 'cache', 'webpack', 'client', 'entry'), 'active build\n');
   writePrResponse(fixture, [mergedPrForFixture(fixture)]);
   runScript(fixture, [], { CACHE_MIN_IDLE_SECONDS: '3600' });
+  assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), true);
+});
+
+test('cache cleanup preserves a candidate when remote revalidation fails', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+
+  runScript(fixture, [], {
+    GIT_BIN: fixture.fakeGit,
+    GIT_MUTATE_MODE: 'remote-query-fail',
+  });
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
   assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), true);
 });
 
