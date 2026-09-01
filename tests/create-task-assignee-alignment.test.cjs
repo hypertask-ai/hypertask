@@ -10,10 +10,12 @@ const source = fs.readFileSync(
 test("the create-task assignee row uses the shared aligned field primitives", () => {
   assert.match(source, /<TaskInfoLabel[\s\S]*Assignees[\s\S]*<\/TaskInfoLabel>/);
   assert.match(source, /<TaskInfoValue[\s\S]*The Assignees[\s\S]*<\/TaskInfoValue>/);
-  assert.match(
-    source,
-    /formValues\.assignees\.length < 1[\s\S]*className="relative whitespace-nowrap"[\s\S]*The Assignees/,
+  const emptyAssigneeValue = source.match(
+    /\{formValues\.assignees\.length < 1 && \(\s*(<span[\s\S]*?<\/span>)\s*\)\}/,
   );
+  assert.ok(emptyAssigneeValue, "empty assignee value should render a span");
+  assert.match(emptyAssigneeValue[1], /className="relative whitespace-nowrap"/);
+  assert.match(emptyAssigneeValue[1], />\s*The Assignees/);
   assert.doesNotMatch(source, /style=\{\{ height: 40 \}\}/);
   assert.doesNotMatch(source, /flex flex-col ml-\[20px\]/);
 });
