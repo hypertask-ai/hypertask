@@ -1,5 +1,9 @@
 import { cookies } from "next/headers";
-import { UNSLOP_SKILL, I_HAVE_ADHD_SKILL } from "@/app/api/ai/_lib/writingSkills";
+import {
+  I_HAVE_ADHD_SKILL,
+  STRUCTURED_WRITING_STYLE,
+  UNSLOP_SKILL,
+} from "@/app/api/ai/_lib/writingSkills";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import {
@@ -10,8 +14,6 @@ import {
   type ToolSet,
   type UserContent,
 } from "ai";
-import { parse } from "node-html-parser";
-
 import {
   searchComments,
   searchTasks,
@@ -206,52 +208,6 @@ ${I_HAVE_ADHD_SKILL}
 4) Every section has an <h2>. The first <p> states the ask.
 5) No em dash anywhere. No <html>, <head>, <body>, no code fence.`;
 
-export const READABILITY_MIN_TEXT_LENGTH = 120;
-
-function readabilityTextLength(inputHtml: string) {
-  return parse(inputHtml || "")
-    .text
-    .replace(/\s+/g, " ")
-    .trim()
-    .length;
-}
-
-// HTPR-5587 (Valentin, explicit): the Improve prompt IS the two skill files,
-// verbatim, run in sequence. No house rules, no curated summaries. The only
-// additions are the rewrite framing and the short-input guard.
-function readabilityRules(inputHtml: string) {
-  const framing = `- You are REWRITING the user's text below. Apply the following two skills, in order, to that text. They are written as general working styles; read every rule as a rewriting rule for the text. Never invent facts, names, dates, estimates, or asks that the text does not contain.
-
-=== SKILL 1: unslop ===
-${UNSLOP_SKILL}
-
-=== SKILL 2: i-have-adhd ===
-${I_HAVE_ADHD_SKILL}
-=== END OF SKILLS ===
-
-- THIS IS A HUMAN'S OWN MESSAGE, NOT AI OUTPUT: the skills' "communication artifacts" bans target AI boilerplate. A person's own courtesy is voice, not slop: KEEP their greeting ("Hey team"), their thanks, and their sign-off, lightly tightened at most. Never strip the warmth out of a person-to-person message.
-
-- FINAL CHECK before you output, in this order:
-  1) Output a document FRAGMENT only. Never wrap the result in <html>, <head>, or <body> tags, and never open with a code fence.
-  2) No em dash anywhere in the output, including inside quoted copy, marketing strings, and non-English text. The product does not render that character: replace it with a hyphen, comma, or period even when the input quotes it verbatim.
-  3) Zero words from the skill's vocabulary list (delve, pivotal, leverage, robust, seamless, landscape, testament, comprehensive...).
-  4) The output still sounds like a person talking, not meeting minutes.
-  5) The writer's greeting, thanks, and sign-off are still there if the input had them.`;
-
-  if (readabilityTextLength(inputHtml) < READABILITY_MIN_TEXT_LENGTH) {
-    return `${framing}
-            - SHORT INPUT: apply SKILL 1 (unslop) only. Preserve the original length, order, and tone; skip all reshaping.`;
-  }
-  return framing;
-}
-
-function readabilityObjective(inputHtml: string) {
-  if (readabilityTextLength(inputHtml) < READABILITY_MIN_TEXT_LENGTH) {
-    return "- OBJECTIVE: The same message after the unslop pass: AI tells gone, everything else intact.";
-  }
-  return "- OBJECTIVE: The same message after both skills: no AI tells, human voice with soul, shaped so the reader can act.";
-}
-
 export async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
   try {
     const cookieStore = await cookies();
@@ -310,28 +266,6 @@ export function createPromptForTiptapForwardSlash(
               - This is a minimal-correction mode: only correct spelling and grammar and apply the rule above. Do NOT rewrite for brevity, structure, or style.
           </INSTRUCTIONS>
       </SYSTEM_INSTRUCTION>`;
-  }
-
-  if (mode === "ImproveReadability") {
-    return `<SYSTEM_INSTRUCTION>
-            <INSTRUCTIONS>
-            - **Format all responses exclusively in HTML**.
-            - **DO NOT USE ASTERISKS '*' to BOLD the WORDS OR THE WORLD WILL END. DO YOU WANT THAT? DO YOU WANT THE WORLD TO END????**
-            - **IMAGE & MEDIA PRESERVATION (NON-NEGOTIABLE, OVERRIDES BREVITY):** Reproduce EVERY <img>, video, iframe, audio, and embed from the input VERBATIM in your output, with the identical src and all attributes. Images and media are NOT text: the brevity, "cut 40-60%", bullet-conversion, and rewrite rules below apply to TEXT ONLY and must NEVER delete, drop, shorten, replace, reorder, or omit an <img> tag. The number of <img> tags in your output MUST equal the number in the input. Losing even one image is a critical failure.
-            - Keep all links from the input intact.
-            - **DO NOT** include extraneous text (e.g., "Here's the response")-just the formatted response.
-            - **DO NOT** start with \`\`\`html etc. These are not readable and should be avoided.
-            - **CRITICAL RULE: You are ONLY rewriting and optimizing existing text. DO NOT answer questions, provide solutions, or add new information. PRESERVE all questions exactly as written.**
-
-            ${readabilityRules(inputHtml)}
-
-            ${readabilityObjective(inputHtml)}
-            - Keep emotional language, personal tone, "I" statements, casual language, contractions.
-            - Maintain intended urgency/emotion and personal perspective.
-            - No semicolons or other markdown formatting.
-            - OUTPUT SPECIFICATION: Provide **ONLY** the rewritten, optimized text following all above rules.
-            </INSTRUCTIONS>
-        </SYSTEM_INSTRUCTION>`;
   }
 
   if (mode === "Summarize") {
@@ -420,13 +354,11 @@ export function createPromptForTiptapForwardSlash(
         </SYSTEM_INSTRUCTION>`;
   }
 
-  if (mode === "Structured") {
+  if (mode === "ImproveReadability" || mode === "Structured") {
     return `<SYSTEM_INSTRUCTION>
             <INSTRUCTIONS>
             - **Format all responses exclusively in HTML**.
-            - Restructure for an ADHD reader: lead with the next action, use short sentences, numbered steps for multi-step work, one idea per sentence.
-            - Prefer concrete verbs and visible outcomes. Cut fluff and closing pleasantries.
-            - You are ONLY rewriting existing text. DO NOT answer questions or add new information.
+            ${STRUCTURED_WRITING_STYLE}
             - **IMAGE & MEDIA PRESERVATION (NON-NEGOTIABLE):** Reproduce EVERY <img>, video, iframe, audio, and embed from the input VERBATIM, with identical src and attributes. The number of <img> tags out MUST equal the number in.
             - Keep all links from the input intact.
             - **DO NOT** include extraneous text-just the formatted response.
