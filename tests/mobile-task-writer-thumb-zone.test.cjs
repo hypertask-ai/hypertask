@@ -103,7 +103,9 @@ test("mobile controls sit in a left-aligned row with the primary pushed right", 
       [mode]: true,
     });
     assert.equal(presentation.prominent, true);
-    assert.match(presentation.className, /bg-shadcn-primary/);
+    assert.match(presentation.className, /h-11 w-12/);
+    assert.match(presentation.className, /bg-white-black/);
+    assert.match(presentation.className, /text-white-black-inverted/);
   }
   // One glyph size (HTPR-5517): the writer and new-task mics are 20px like
   // every other icon in the row, no longer a 24px outlier.

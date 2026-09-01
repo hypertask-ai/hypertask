@@ -32,6 +32,10 @@ const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
 const sendArrow = read("src/components/Common/SendArrow.tsx");
 const tiptapStyles = read("src/styles/tiptap.module.scss");
 const mainContainer = read("src/components/RTE/Components/TiptapMainContainer.tsx");
+const newComment = read(
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent.tsx",
+);
+const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
 const tailwindConfig = read("tailwind.config.ts");
 const jiti = require("jiti")(__filename, { interopDefault: true });
 const { mobileMicPresentation } = jiti(
@@ -84,9 +88,12 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
     /aria-label="Send comment"[\s\S]{0,500}?className="([^"]+)"/,
   );
   assert.ok(button, "Send button not found");
-  assert.match(button[1], /text-icon-dark-gray/);
+  assert.match(button[1], /bg-white-black/);
+  assert.match(button[1], /text-white-black-inverted/);
+  assert.match(button[1], /h-11/);
+  assert.match(button[1], /w-12/);
+  assert.match(button[1], /rounded-\[4px\]/);
   assert.doesNotMatch(button[1], /bg-hypertasks-ai-purple/);
-  assert.doesNotMatch(button[1], /(?:^|\s)text-white(?:\s|$)/);
 });
 
 test("mobile create-comment uses AppSheet for both refine and compose", () => {
@@ -125,7 +132,7 @@ test("mobile create-comment uses AppSheet for both refine and compose", () => {
   assert.doesNotMatch(inlineDraftAi, /createPortal/);
 });
 
-test("empty-state mobile comment microphone is rectangular, still purple", () => {
+test("empty-state mobile comment microphone is a 48 by 44 inverted-theme action", () => {
   const presentation = mobileMicPresentation({
     isMobileCreateComment: true,
     isMobileTaskWriter: false,
@@ -134,7 +141,35 @@ test("empty-state mobile comment microphone is rectangular, still purple", () =>
     isProcessing: false,
   });
   assert.equal(presentation.prominent, true);
-  assert.match(presentation.className, /\brounded-sm\b/);
-  assert.doesNotMatch(presentation.className, /\brounded-full\b/);
-  assert.match(presentation.className, /\bbg-hypertasks-ai-purple\b/);
+  assert.match(presentation.className, /h-11/);
+  assert.match(presentation.className, /w-12/);
+  assert.match(presentation.className, /rounded-\[4px\]/);
+  assert.match(presentation.className, /bg-white-black/);
+  assert.match(presentation.className, /text-white-black-inverted/);
+  assert.doesNotMatch(presentation.className, /bg-hypertasks-ai-purple/);
+});
+
+test("mobile recording confirmation uses the same 48 by 44 action", () => {
+  const recordingBranch = audioButton.slice(
+    audioButton.indexOf('aria-label="Cancel"'),
+    audioButton.indexOf('text={"Send recording"}'),
+  );
+  assert.match(recordingBranch, /isMobileView[\s\S]*?h-11 w-12 bg-white-black text-white-black-inverted/);
+  assert.doesNotMatch(
+    recordingBranch.match(/isMobileView[\s\S]*?:\s*"([^"]*bg-hypertasks-ai-purple[^"]*)"/)?.[1] ?? "",
+    /h-11 w-12/,
+  );
+});
+
+test("mobile composer uses the 8px card well and quiet theme border", () => {
+  const mobileBranch = newComment.slice(
+    newComment.indexOf("// {/* ====================== MOBILE"),
+    newComment.indexOf("const NewCommentPlaceholder"),
+  );
+  assert.match(mobileBranch, /bg-transparent/);
+  assert.match(
+    mobileBranch,
+    /rounded-\[8px\] border border-comment-description-border bg-cardBackground/,
+  );
+  assert.doesNotMatch(mobileBranch, /bg-newcomment-well/);
 });

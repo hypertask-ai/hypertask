@@ -33,16 +33,14 @@ export function mobileMicPresentation({
       isMobileAiChat) &&
     !globalRecording;
 
-  let className = "h-11 w-11 justify-center rounded-sm";
+  let className = "h-11 w-11 justify-center rounded-[4px]";
   if (isProcessing) {
-    className = "h-[34px] gap-2";
+    className = "h-11 w-12 justify-center rounded-[4px]";
   } else if (hasText) {
     className += " text-icon-dark-gray";
-  } else if (isMobileCreateComment) {
-    className =
-      "h-11 w-11 justify-center rounded-sm bg-hypertasks-ai-purple text-white shadow-[0_3px_12px_rgba(198,104,255,0.38)]";
   } else {
-    className += " bg-shadcn-primary text-primary-foreground";
+    className =
+      "h-11 w-12 justify-center rounded-[4px] bg-white-black text-white-black-inverted";
   }
 
   return { prominent, className };

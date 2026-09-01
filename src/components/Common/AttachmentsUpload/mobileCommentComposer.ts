@@ -8,8 +8,8 @@
  *
  * Empty composer: the mic IS the primary action, filled and pinned right.
  * The moment there is text, Send owns that slot and the mic steps back to a
- * bare glyph beside the attach icon (HTPR-5684). Recording overrides both and
- * takes the full row for the waveform.
+ * bare glyph immediately beside Send. Recording overrides both and takes the
+ * full row for the waveform.
  *
  * Transcribing keeps the right-hand slot too. Streamed transcript lands in the
  * editor before `onProcessingChange(false)` fires, so `hasText` flips true
@@ -31,7 +31,7 @@ export function mobileCommentMicWrapperClass({
   isProcessing?: boolean;
 }) {
   if (isRecording) return "order-7 flex-1 w-full";
-  if (isProcessing) return "order-7 ml-auto";
-  return hasText ? "order-4" : "order-7 ml-auto";
+  if (isProcessing) return "order-6 ml-auto";
+  return hasText ? "order-5 ml-auto" : "order-6 ml-auto";
 }
 

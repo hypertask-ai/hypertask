@@ -8,7 +8,18 @@ import React, {
 import ImageGallery from "./ImageGalleryView";
 import { processFiles } from "@/utils/helperFunctions/helperFunctions";
 import "@/styles/attachmentUpload.scss";
-import { Check, CodeXml, Ellipsis, Paperclip, Trash2 } from "lucide-react";
+import {
+  AtSign,
+  Check,
+  CodeXml,
+  Ellipsis,
+  Image as ImageIcon,
+  Paperclip,
+  PencilSparkles,
+  Plus,
+  Slash,
+  Trash2,
+} from "lucide-react";
 export interface FileItem {
   id: number;
   file: File;
@@ -113,8 +124,61 @@ const AttachmentsUpload = (props: IProps) => {
     clearFiles,
     resetFiles,
     setFileItems,
-    handleAttachmentClick,
   } = useFileUpload(props.filesFromParent);
+  const mobileCommentActionsRef = useRef<HTMLDetailsElement>(null);
+  const mobileCommentActionsTriggerRef = useRef<HTMLElement>(null);
+
+  const closeMobileCommentActions = () => {
+    if (mobileCommentActionsRef.current) {
+      mobileCommentActionsRef.current.open = false;
+    }
+  };
+
+  const openAttachmentPicker = (accept = "") => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.accept = accept;
+    input.value = "";
+    input.click();
+  };
+
+  const handleAnyAttachmentClick = (event?: { stopPropagation?: () => void }) => {
+    event?.stopPropagation?.();
+    openAttachmentPicker();
+  };
+
+  const insertEditorTrigger = (trigger: "@" | "/") => {
+    editor?.chain().focus().insertContent(trigger).run();
+  };
+
+  useEffect(() => {
+    if (!_mbl || mode !== "create-comment") return;
+
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (
+        mobileCommentActionsRef.current?.open &&
+        !mobileCommentActionsRef.current.contains(event.target as Node)
+      ) {
+        closeMobileCommentActions();
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !mobileCommentActionsRef.current?.open) return;
+      closeMobileCommentActions();
+      mobileCommentActionsTriggerRef.current?.focus();
+    };
+
+    document.addEventListener("pointerdown", closeOnOutsidePress);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePress);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [_mbl, mode]);
+
+  useEffect(() => {
+    if (isRecording || audioProcessing) closeMobileCommentActions();
+  }, [isRecording, audioProcessing]);
 
   const handleDrop = async (files: File[]) => {
     const startingId = fileItems.length;
@@ -191,36 +255,6 @@ const AttachmentsUpload = (props: IProps) => {
             {(fileItems.length > 0 || editor?.isFocused || isRecording || audioProcessing) &&
               !(mode === "create-comment" && isRecording) && (
                 <>
-                  {mode === "create-comment" &&
-                    !isRecording &&
-                    showDeleteComment === true && (
-                      <Trash2
-                        size={20}
-                        className="order-1 text-icon-dark-gray hover:text-white-black text-subheading  cursor-pointer self-center"
-                        id={mode + "-discard-draft-button"}
-                        strokeWidth={1.75}
-                        onTouchEnd={(e: any) => {
-                          e.stopPropagation();
-                          handleDiscardDrafts();
-                        }}
-                      />
-                    )}
-                  {mode === "create-comment" && !isRecording && (
-                    <button
-                      type="button"
-                      aria-label="Attach files"
-                      className={cn(
-                        MOBILE_TARGET,
-                        "order-2 touch-manipulation rounded-sm text-icon-dark-gray hover:text-white-black",
-                      )}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAttachmentClick();
-                      }}
-                    >
-                      <Paperclip size={16} strokeWidth={1.75} aria-hidden />
-                    </button>
-                  )}
                   {audioTiptapCallback && mode !== "create-comment" && (
                     <AudioButton
                       callbackHandler={audioTiptapCallback}
@@ -260,6 +294,92 @@ const AttachmentsUpload = (props: IProps) => {
               )}
             {mode === "create-comment" ? (
               <>
+                {!isRecording && !audioProcessing && (
+                  <details
+                    ref={mobileCommentActionsRef}
+                    className="order-1 relative shrink-0"
+                  >
+                    <summary
+                      ref={mobileCommentActionsTriggerRef}
+                      aria-label="More comment actions"
+                      className={cn(
+                        MOBILE_TARGET,
+                        "flex list-none cursor-pointer items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black [&::-webkit-details-marker]:hidden",
+                      )}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <Plus size={20} strokeWidth={1.75} aria-hidden />
+                    </summary>
+                    <div
+                      role="menu"
+                      aria-label="More comment actions"
+                      className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] w-[240px] overflow-hidden rounded-[4px] bg-modalBackground p-1.5 text-content text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
+                      onClickCapture={closeMobileCommentActions}
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex min-h-11 w-full items-center gap-3 rounded-[4px] px-3 text-left hover:bg-active-modal-element"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openAttachmentPicker("image/*");
+                        }}
+                      >
+                        <ImageIcon size={18} strokeWidth={1.75} aria-hidden />
+                        Attach image
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex min-h-11 w-full items-center gap-3 rounded-[4px] px-3 text-left hover:bg-active-modal-element"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openAttachmentPicker();
+                        }}
+                      >
+                        <Paperclip size={18} strokeWidth={1.75} aria-hidden />
+                        Attach file
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex min-h-11 w-full items-center gap-3 rounded-[4px] px-3 text-left hover:bg-active-modal-element"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          insertEditorTrigger("@");
+                        }}
+                      >
+                        <AtSign size={18} strokeWidth={1.75} aria-hidden />
+                        Mention someone
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="flex min-h-11 w-full items-center gap-3 rounded-[4px] px-3 text-left hover:bg-active-modal-element"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          insertEditorTrigger("/");
+                        }}
+                      >
+                        <Slash size={18} strokeWidth={1.75} aria-hidden />
+                        Commands
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        id={mode + "-discard-draft-button"}
+                        className="flex min-h-11 w-full items-center gap-3 rounded-[4px] px-3 text-left text-destructive hover:bg-active-modal-element"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleDiscardDrafts();
+                        }}
+                      >
+                        <Trash2 size={18} strokeWidth={1.75} aria-hidden />
+                        Discard draft
+                      </button>
+                    </div>
+                  </details>
+                )}
                 {!isRecording && !audioProcessing && toggleAiTaskWriter && (
                   <button
                     type="button"
@@ -267,14 +387,14 @@ const AttachmentsUpload = (props: IProps) => {
                     aria-label="Write with AI"
                     className={cn(
                       MOBILE_TARGET,
-                      "order-3 inline-flex touch-manipulation items-center rounded-sm px-2 text-meta font-semibold text-hypertasks-ai-purple",
+                      "order-2 inline-flex touch-manipulation items-center justify-center rounded-[4px] text-hypertasks-ai-purple",
                     )}
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleAiTaskWriter();
                     }}
                   >
-                    ai
+                    <PencilSparkles size={20} strokeWidth={1.75} aria-hidden />
                   </button>
                 )}
                 {audioTiptapCallback && !hideComposerDictation && (
@@ -295,7 +415,7 @@ const AttachmentsUpload = (props: IProps) => {
                   />
                 )}
                 {!isRecording && !audioProcessing && hasText ? (
-                  <span className="order-6 ml-auto flex items-center">
+                  <span className="order-6 flex items-center">
                     <SaveButtonMobile
                       sendOnClick={props.sendOnClick}
                       mode={mode}
@@ -331,7 +451,7 @@ const AttachmentsUpload = (props: IProps) => {
           <MobileBottomBar
             hasText={hasSavableContent}
             sendOnClick={props.sendOnClick}
-            handleAttachmentClick={handleAttachmentClick}
+            handleAttachmentClick={handleAnyAttachmentClick}
             audioTiptapCallback={audioTiptapCallback}
             toggleRecording={toggleRecording}
             editor={editor}
@@ -347,7 +467,7 @@ const AttachmentsUpload = (props: IProps) => {
           <DesktopAttachment
             mode={mode}
             sendOnClick={sendOnClick}
-            handleAttachmentClick={handleAttachmentClick}
+            handleAttachmentClick={handleAnyAttachmentClick}
             presentInInbox={inInbox}
             handleCallback={handleCallback}
             status={status}
@@ -673,10 +793,7 @@ const SaveButtonMobile: React.FC<IPropsSaveButtonMobile> = ({
       {mode === "create-comment" ? (
         <button
           aria-label="Send comment"
-          // Primary = far-right slot once there is text (HTPR-5684 / HTPR-5659).
-          // Colour stays with the demoted mic: same neutral glyph treatment,
-          // not a second filled purple (Valentin: send matches microphone colour).
-          className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-sm text-icon-dark-gray hover:text-white-black"
+          className="flex h-11 w-12 touch-manipulation items-center justify-center rounded-[4px] bg-white-black text-white-black-inverted hover:opacity-90"
           onClick={(e) => {
             e.stopPropagation();
             sendOnClick && sendOnClick();

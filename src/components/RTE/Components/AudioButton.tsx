@@ -700,8 +700,7 @@ export const AudioButton = ({
               >
                 {isProcessing ? (
                   // Transcribing: replace the mic with a spinner everywhere so the
-                  // few-second wait reads as "working", not frozen (HTPR-4677). The
-                  // mobile create-comment mic also spells it out with a label.
+                  // few-second wait reads as "working", not frozen (HTPR-4677).
                   <>
                     <Loader2
                       size={18}
@@ -709,13 +708,13 @@ export const AudioButton = ({
                       className={cn(
                         "animate-spin",
                         "keep-stroke",
-                        isDesktopAiMic || prominent
+                        isDesktopAiMic
                           ? "text-hypertasks-ai-purple"
                           : "text-icon-dark-gray",
                       )}
                       aria-label="Transcribing"
                     />
-                    {prominent && (
+                    {prominent && !isMobileView && (
                       <span className="text-meta text-hypertasks-ai-purple">
                         Transcribing...
                       </span>
@@ -744,9 +743,7 @@ export const AudioButton = ({
                       prominent
                         ? hasText
                           ? "text-icon-dark-gray"
-                          : isMobileCreateComment
-                            ? "text-white"
-                            : "text-primary-foreground"
+                          : "text-white-black-inverted"
                         : "text-icon-dark-gray hover:text-white-black",
                     )}
                     style={{ fontSize: aiTaskWriterConfig.fontSizes.moderateIcon }}
@@ -833,7 +830,9 @@ export const AudioButton = ({
       ) : (
         <div
           className={cn(
-            "flex items-center gap-2 rounded-[4px] bg-newComment-container px-2 py-[6px] z-[9999] mb-3 md:!mb-0",
+            isMobileView
+              ? "flex w-full items-center gap-2 rounded-[4px] z-[9999]"
+              : "flex items-center gap-2 rounded-[4px] bg-newComment-container px-2 py-[6px] z-[9999] mb-3 md:!mb-0",
             visualizerClassName,
           )}
         >
@@ -848,7 +847,10 @@ export const AudioButton = ({
             type="button"
             onClick={closeHandler}
             aria-label="Cancel"
-            className="flex h-[28px] w-[28px] items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black hover:bg-hover-active"
+            className={cn(
+              "flex items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black hover:bg-hover-active",
+              isMobileView ? "h-11 w-11" : "h-[28px] w-[28px]",
+            )}
           >
             <X size={18} strokeWidth={1.75} />
           </button>
@@ -856,7 +858,12 @@ export const AudioButton = ({
             type="button"
             onClick={() => stopRecording(true)}
             aria-label="Send"
-            className="group relative flex h-[28px] w-[28px] items-center justify-center rounded-[4px] bg-hypertasks-ai-purple text-white"
+            className={cn(
+              "group relative flex items-center justify-center rounded-[4px]",
+              isMobileView
+                ? "h-11 w-12 bg-white-black text-white-black-inverted"
+                : "h-[28px] w-[28px] bg-hypertasks-ai-purple text-white",
+            )}
           >
             <Check size={18} strokeWidth={2.2} className="keep-stroke" />
             <Tooltip

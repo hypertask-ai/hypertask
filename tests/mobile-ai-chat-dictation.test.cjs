@@ -178,7 +178,7 @@ const renderComposer = (
     ),
   );
 
-test("mobile AI chat uses the filled 44px mic and demotes it once text exists", () => {
+test("mobile AI chat uses the 48 by 44 inverted mic and demotes it once text exists", () => {
   const base = {
     isMobileCreateComment: false,
     isMobileTaskWriter: false,
@@ -188,16 +188,16 @@ test("mobile AI chat uses the filled 44px mic and demotes it once text exists", 
   };
   const empty = mobileMicPresentation(base);
   assert.equal(empty.prominent, true);
-  assert.match(empty.className, /h-11 w-11/);
-  assert.match(empty.className, /rounded-sm/);
-  assert.doesNotMatch(empty.className, /rounded-full/);
-  assert.match(empty.className, /bg-shadcn-primary/);
+  assert.match(empty.className, /h-11 w-12/);
+  assert.match(empty.className, /rounded-\[4px\]/);
+  assert.match(empty.className, /bg-white-black/);
+  assert.match(empty.className, /text-white-black-inverted/);
 
   const typed = mobileMicPresentation({ ...base, hasText: true });
   assert.equal(typed.prominent, true);
   assert.match(typed.className, /h-11 w-11/);
   assert.match(typed.className, /text-icon-dark-gray/);
-  assert.doesNotMatch(typed.className, /bg-shadcn-primary/);
+  assert.doesNotMatch(typed.className, /bg-white-black/);
 
   const recording = mobileMicPresentation({
     ...base,
@@ -209,7 +209,7 @@ test("mobile AI chat uses the filled 44px mic and demotes it once text exists", 
     ...base,
     isProcessing: true,
   });
-  assert.equal(processing.className, "h-[34px] gap-2");
+  assert.equal(processing.className, "h-11 w-12 justify-center rounded-[4px]");
 });
 
 test("real mobile microphones apply each composer presentation state", async () => {
@@ -241,40 +241,24 @@ test("real mobile microphones apply each composer presentation state", async () 
       }),
     );
   const modes = [
-    {
-      id: "create-comment-audio-button",
-      shape: /rounded-sm/,
-      fill: /bg-hypertasks-ai-purple/,
-    },
-    {
-      id: "ai-writer-audio-button",
-      shape: /rounded-sm/,
-      fill: /bg-shadcn-primary/,
-    },
-    {
-      id: "create-task-modal-audio-button",
-      shape: /rounded-sm/,
-      fill: /bg-shadcn-primary/,
-    },
-    {
-      id: "ai-chat-audio-button",
-      shape: /rounded-sm/,
-      fill: /bg-shadcn-primary/,
-    },
+    "create-comment-audio-button",
+    "ai-writer-audio-button",
+    "create-task-modal-audio-button",
+    "ai-chat-audio-button",
   ];
 
   try {
-    for (const { id, shape, fill } of modes) {
+    for (const id of modes) {
       await act(async () => reactRoot.render(renderMic(id, false)));
       const mic = container.querySelector(`#${id}`);
       assert.ok(mic);
-      assert.match(mic.className, /h-11 w-11/);
-      assert.match(mic.className, shape);
-      assert.match(mic.className, fill);
+      assert.match(mic.className, /h-11 w-12/);
+      assert.match(mic.className, /rounded-\[4px\]/);
+      assert.match(mic.className, /bg-white-black/);
 
       await act(async () => reactRoot.render(renderMic(id, true)));
       assert.match(mic.className, /text-icon-dark-gray/);
-      assert.doesNotMatch(mic.className, fill);
+      assert.doesNotMatch(mic.className, /bg-white-black/);
     }
 
     await act(async () =>
