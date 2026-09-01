@@ -1099,7 +1099,11 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     /catch \(error\) \{\s*if \(isInboxAuthorizationError\(error\)\)[\s\S]*?fenceConnectionPromise\.then\(async \(database\) => \{\s*if \(!database\) return;[\s\S]*?closeInboxReadModelConnection\(database\)/,
     "the fetch-throw path must close the pre-opened fence connection so it does not leak",
   );
-  assert.match(hook, /!inboxRevisionStorageAvailable\(userId\)/);
+  // The negation lives inside the requiresPersistentInboxFence helper since
+  // HTPR-5741 (#42) extracted it; the call site passes
+  // inboxRevisionStorageAvailable(userId) and the pure-function test above
+  // pins the enabled && !revisionStorageAvailable semantics.
+  assert.match(hook, /=> enabled && !revisionStorageAvailable/);
   assert.match(hook, /const finalRevision = currentInboxReadModelRevision/);
   assert.match(hook, /Ignored Inbox response after final revision check/);
   assert.ok(
