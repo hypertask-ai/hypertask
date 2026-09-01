@@ -72,6 +72,7 @@ import {
   resolveTaskDetailWriterOpening,
   resolveTaskWriterDescription,
 } from "@/lib/ai/taskWriterAutoDraft";
+import { shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
 const SetLinkModal = dynamic(
   () => import("../Modals/LinksModal/SetLinkModal"),
   {
@@ -179,12 +180,10 @@ const Tiptap = ({
   const inboxFlow = searchParams?.get("inboxFlow");
   const currentTask = JSON.parse(taskFromServer);
   const inInbox = currentTask?._count?.notifications > 0;
+  const isInboxFlow = shouldAdvanceAfterNotificationArchive(inboxFlow);
   const isReadEditMode =
     mode === "read-edit-description" || mode === "read-edit-comments";
   const isReadOnlyContent = isReadEditMode && !allowEdit;
-  // Sending on an inbox task archives the notification and moves on. Used to
-  // be gated on ?inboxFlow=true, so it only advanced when the task was opened
-  // from the inbox list; it is a user setting now (default on).
   const advanceOnSend = useGetUserPreferences().data.inboxAdvanceOnSend ?? true;
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
   
@@ -416,10 +415,8 @@ const Tiptap = ({
     }
   };
 
-  // The default "send this comment" action, shared by ctrl+enter, the desktop
-  // send button and the mobile send button so all three agree: on a task that
-  // carries an inbox notification, sending archives it and (per the user's
-  // inbox setting) moves on to the next task.
+  // A task can still carry an inbox notification when opened from another
+  // surface. Only the inbox route may advance after sending.
   const sendComment = () => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
@@ -433,7 +430,7 @@ const Tiptap = ({
       currentTask?.id,
     );
     return handleCallback(
-      !preserveTutorialInbox && inInbox && advanceOnSend
+      !preserveTutorialInbox && isInboxFlow && inInbox && advanceOnSend
         ? "moveToNext"
         : undefined,
       !preserveTutorialInbox && inInbox,
@@ -569,11 +566,11 @@ const Tiptap = ({
       }
       // Enter key combinations
       if (e.key === "Enter") {
+        if (e.shiftKey && !e.altKey && !isInboxFlow) return;
         e.preventDefault();
         if (e.shiftKey && !e.altKey && mode === "create-comment") {
-          // ctrl+shift+enter: on an inbox task this is the escape hatch, send
-          // and stay put. Elsewhere it is send + next task.
-          inInbox ? handleCallback() : handleCallback("moveToNext", false);
+          // In the inbox this is the escape hatch: send and stay put.
+          handleCallback();
         } else if (e.shiftKey && e.altKey && mode === "create-comment") {
           // ctrl+alt+shift+enter
           inInbox && handleCallback(undefined, inInbox, true);

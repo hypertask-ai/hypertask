@@ -130,8 +130,30 @@ test("the tutorial comment does not consume its seeded inbox notification", () =
   assert.match(tiptap, /!preserveTutorialInbox && inInbox/);
   assert.match(
     tiptap,
-    /!preserveTutorialInbox && inInbox && advanceOnSend/,
+    /!preserveTutorialInbox && isInboxFlow && inInbox && advanceOnSend/,
   );
+});
+
+test("comment shortcuts advance only from the inbox route", () => {
+  assert.match(
+    tiptap,
+    /const isInboxFlow = shouldAdvanceAfterNotificationArchive\(inboxFlow\)/,
+  );
+
+  const shortcutStart = tiptap.indexOf("// Enter key combinations");
+  const shortcutEnd = tiptap.indexOf(
+    "if (e.altKey && e.keyCode === 86",
+    shortcutStart,
+  );
+  const shortcut = tiptap.slice(shortcutStart, shortcutEnd);
+
+  assert.ok(shortcutStart >= 0 && shortcutEnd > shortcutStart);
+  assert.match(
+    shortcut,
+    /if \(e\.shiftKey && !e\.altKey && !isInboxFlow\) return;[\s\S]*?e\.preventDefault\(\)/,
+  );
+  assert.match(shortcut, /handleCallback\(\);/);
+  assert.doesNotMatch(shortcut, /handleCallback\("moveToNext"/);
 });
 
 test("due-date completion is published only after the save resolves", () => {
