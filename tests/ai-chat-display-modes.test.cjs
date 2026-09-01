@@ -73,6 +73,10 @@ test("mobile chat uses the approved header controls and guarded new-chat action"
   assert.match(mobileBranch[0], /aria-label="New chat"[\s\S]*?h-11 w-11/);
   assert.match(mobileBranch[0], /disabled=\{isStartingNewSession\}/);
   assert.match(newSessionHandler[0], /if \(isStartingNewSession\) return;/);
+  assert.match(
+    newSessionHandler[0],
+    /setIsStartingNewSession\(true\);[\s\S]*?await startNewSession\(\);/
+  );
   assert.match(newSessionHandler[0], /catch \{[\s\S]*?toast\.error\(/);
   assert.match(newSessionHandler[0], /finally \{[\s\S]*?setIsStartingNewSession\(false\)/);
 });
