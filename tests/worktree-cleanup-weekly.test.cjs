@@ -31,6 +31,8 @@ function createFixture(tempRoot = os.tmpdir()) {
   const openResponse = path.join(root, 'open-prs.json');
   const fakeGh = path.join(root, 'fake-gh');
   const fakeGit = path.join(root, 'fake-git');
+  const fakeFindmnt = path.join(root, 'fake-findmnt');
+  const findmntResponse = path.join(root, 'findmnt.json');
   const fakeFlock = path.join(root, 'flock');
   const mutationMarker = path.join(root, 'mutation-once');
   const flockCount = path.join(root, 'flock-count');
@@ -63,6 +65,9 @@ function createFixture(tempRoot = os.tmpdir()) {
   fs.writeFileSync(openResponse, '[]');
   fs.writeFileSync(fakeGh, '#!/bin/sh\nif [ "${GH_FAIL:-0}" = "1" ]; then exit 17; fi\nif [ -n "${GH_FAIL_AFTER_FILE:-}" ] && [ -e "$GH_FAIL_AFTER_FILE" ]; then exit 17; fi\nif [ -n "${GH_READY_FILE:-}" ]; then : > "$GH_READY_FILE"; fi\nif [ -n "${GH_SLEEP:-}" ]; then sleep "$GH_SLEEP"; fi\ncase " $* " in *" --state open "*) cat "$GH_OPEN_RESPONSE" ;; *) cat "$GH_RESPONSE" ;; esac\n');
   fs.chmodSync(fakeGh, 0o755);
+  fs.writeFileSync(findmntResponse, '{"filesystems":[]}');
+  fs.writeFileSync(fakeFindmnt, '#!/bin/sh\ncat "$FINDMNT_RESPONSE"\n');
+  fs.chmodSync(fakeFindmnt, 0o755);
   fs.writeFileSync(fakeGit, `#!/bin/sh
 REAL_GIT=$(command -v git) || exit 127
 if [ "${'$'}{GIT_MUTATE_MODE:-}" = "remote-query-fail" ] && [ "${'$'}3" = "ls-remote" ] && [ -n "${'$'}{6:-}" ]; then
@@ -143,6 +148,8 @@ exit "${'$'}status"
     LOG_FILE: log,
     PROC_ROOT: procRoot,
     GH_BIN: fakeGh,
+    FINDMNT_BIN: fakeFindmnt,
+    FINDMNT_RESPONSE: findmntResponse,
     GH_RESPONSE: response,
     GH_OPEN_RESPONSE: openResponse,
     GH_READY_FILE: path.join(root, 'gh-ready'),
@@ -162,6 +169,8 @@ exit "${'$'}status"
     openResponse,
     fakeGh,
     fakeGit,
+    fakeFindmnt,
+    findmntResponse,
     fakeFlock,
     mutationMarker,
     flockCount,
@@ -200,6 +209,24 @@ test('a no-op cleanup does not require GitHub', (t) => {
   runScript(fixture, [], { GH_BIN: path.join(fixture.root, 'missing-gh') });
 
   assert.equal(fs.existsSync(fixture.worktree), true);
+});
+
+test('nested registered worktrees still load remote cleanup proof', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  const nestedWorktree = path.join(fixture.root, 'nested', 'worktree');
+  fs.mkdirSync(path.dirname(nestedWorktree));
+  git(fixture.repo, ['worktree', 'move', fixture.worktree, nestedWorktree]);
+  fixture.worktree = nestedWorktree;
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+
+  assert.throws(() => runScript(fixture, [], {
+    GH_BIN: path.join(fixture.root, 'missing-gh'),
+  }));
+  runScript(fixture);
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), false);
 });
 
 test('lease cleanup still runs when cache cleanup has no worktree root', (t) => {
@@ -413,6 +440,24 @@ test('removes only reproducible caches after an exact merged PR', (t) => {
   assert.equal(fs.existsSync(path.join(fixture.worktree, 'tsconfig.tsbuildinfo')), false);
   assert.equal(tip(fixture), originalTip);
   assert.notEqual(remoteBranchTip(fixture), '');
+});
+
+test('cache cleanup preserves a target with a nested bind mount', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  createReproducibleCaches(fixture);
+  writePrResponse(fixture, [mergedPrForFixture(fixture)]);
+  const mounted = path.join(fixture.worktree, 'node_modules', 'mounted');
+  fs.mkdirSync(mounted);
+  fs.writeFileSync(
+    fixture.findmntResponse,
+    JSON.stringify({ filesystems: [{ target: '/', children: [{ target: mounted }] }] }),
+  );
+
+  runScript(fixture);
+
+  assert.equal(fs.existsSync(path.join(fixture.worktree, 'node_modules')), true);
+  assert.equal(fs.existsSync(path.join(fixture.worktree, '.next')), false);
 });
 
 test('cache cleanup dry-run leaves every target intact', (t) => {
