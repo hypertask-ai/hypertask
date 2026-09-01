@@ -220,6 +220,31 @@ test('a no-op cleanup does not require GitHub', (t) => {
   assert.equal(fs.existsSync(fixture.worktree), true);
 });
 
+test('a cache created after the no-op probe waits for the next run', (t) => {
+  const fixture = createFixture();
+  t.after(() => cleanupFixture(fixture));
+  const fakeFind = path.join(fixture.root, 'find');
+  const realFind = command('sh', ['-c', 'command -v find']);
+  const target = path.join(fixture.worktree, 'node_modules');
+  fs.writeFileSync(fakeFind, `#!/bin/sh
+if [ "${'$'}1" = "${'$'}FIND_QUARANTINE_DIR" ]; then
+  mkdir -p "${'$'}FIND_CREATE_CACHE"
+fi
+exec "${'$'}REAL_FIND" "${'$'}@"
+`);
+  fs.chmodSync(fakeFind, 0o755);
+
+  runScript(fixture, [], {
+    GH_BIN: path.join(fixture.root, 'missing-gh'),
+    PATH: `${fixture.root}:${process.env.PATH}`,
+    REAL_FIND: realFind,
+    FIND_QUARANTINE_DIR: path.join(fixture.state, 'cache-quarantine'),
+    FIND_CREATE_CACHE: target,
+  });
+
+  assert.equal(fs.existsSync(target), true);
+});
+
 test('cache limits use bounded decimal parsing', (t) => {
   const fixture = createFixture();
   t.after(() => cleanupFixture(fixture));

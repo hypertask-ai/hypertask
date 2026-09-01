@@ -1077,6 +1077,7 @@ refresh_live_cwds
 LEASE_LIST=$(find "$LEASE_DIR" -maxdepth 1 -type f -name '*.lease' -print | sort) \
   || fatal "cannot enumerate cleanup leases"
 CACHE_INPUT=""
+declare -A CACHE_PROBED_PATHS=()
 if (( CACHE_CLEANUP_ENABLED )); then
   while IFS= read -r line || [[ -n "$line" ]]; do
     [[ "$line" == "worktree "* ]] || continue
@@ -1089,7 +1090,7 @@ if (( CACHE_CLEANUP_ENABLED )); then
         || ( -d "$cache_probe_path/.next" && ! -L "$cache_probe_path/.next" ) \
         || ( -f "$cache_probe_path/tsconfig.tsbuildinfo" && ! -L "$cache_probe_path/tsconfig.tsbuildinfo" ) ]]; then
       CACHE_INPUT=$cache_probe_path
-      break
+      CACHE_PROBED_PATHS[$cache_probe_path]=1
     fi
   done <<<"$WORKTREE_LIST"
 fi
@@ -1116,6 +1117,7 @@ consider_cache_candidate() {
   (( CACHE_CLEANUP_ENABLED )) || return 0
   (( ${#CACHE_CANDIDATE_PATHS[@]} < CACHE_CLEANUP_LIMIT )) || return 0
   [[ -n "$path" && -n "$branch" && "$tip" =~ ^[0-9a-f]{40}$ ]] || return 0
+  [[ -n "${CACHE_PROBED_PATHS[$path]:-}" ]] || return 0
   [[ "$branch" != "$BASE_BRANCH" && "$branch" != "main" ]] || return 0
   [[ -d "$path" && ! -L "$path" ]] || return 0
   canonical=$(realpath -e -- "$path") || return 0
