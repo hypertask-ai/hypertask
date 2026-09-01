@@ -384,6 +384,9 @@ const CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES = [
   "claude-sonnet-5",
 ] as const;
 
+const COMMENT_TASK_LINK_RULE =
+  'Before adding, drafting, updating, or publishing a comment, validate its final text before the write: every task reference already resolved by a task tool must be an anchor whose href copies that result\'s relative "url" field exactly. Use the task title as the link text when available, and the ticket number only when no title is available. Never leave a resolved ticket number as plain text, and never rebuild its URL. This applies on task detail, Inbox, and every other task-related surface.';
+
 const AGENT_SYSTEM_PROMPT = `
                 You are an intelligent and helpful agentic assistant with access to tools and a knowledge base.
                 Your goal is to provide helpful, accurate, and relevant responses to user queries.
@@ -406,7 +409,7 @@ const AGENT_SYSTEM_PROMPT = `
                 - **Body Content Only**: Do NOT include <!DOCTYPE html>, <html>, <head>, or <body> tags.
                 - **No Styling**: Use basic elements (<p>, <h1>, <h2>, <ul>, <li>). Never apply CSS or inline 'style' attributes.
                 - **Task Linking**: Reference tasks by Title. Every task returned by the tools includes a ready-made "url" field (e.g. "/detail/project-339/1365"). Wrap the Title in a link using that url EXACTLY as given: <a href="{{task.url}}">Title</a>. NEVER build the path yourself and NEVER use the task "id" field in a link (that is the global database id, not the ticket number). Relative hrefs only — never include the origin (https://app.hypertask.ai).
-                - **Ticket Number Linking**: If you mention a ticket by its ticket number (e.g. HTPR-1234) that you already resolved via a tool call, wrap it the same way: <a href="/detail/project-{{projectId}}/{{uniqueIndex}}">HTPR-1234</a>.
+                - **Comment Task Links**: ${COMMENT_TASK_LINK_RULE}
                 - **Validation**: Never add an anchor tag if you lack a valid link. Do not prefix titles with "Task - ".
 
                 ### 2.1. PERSPECTIVE & VOICE (drafting replies, comments, messages)
@@ -503,7 +506,7 @@ const AGENT_SYSTEM_PROMPT = `
                     - Create/rename/delete section → hypertask_section
                     - Create/list/update/publish/delete draft → hypertask_draft
                     - After a successful create/update/comment/assign/unassign/move/archive/unarchive/attach/label/board/section/draft action, confirm it to the user and link the
-                      ticket: <a href="/detail/project-{{projectId}}/{{taskId}}">Title</a>
+                      ticket with the exact url returned by the tool: <a href="{{task.url}}">{{task.title}}</a>
                     - **Wide or destructive writes are confirmed BEFORE they run.** If any write tool
                       returns confirmation_required, nothing was changed. Stop there: end your turn, list the
                       affected tasks for the user, and ask them to confirm. Only when they say yes in a NEW
@@ -6912,7 +6915,7 @@ function buildTools(
 
     hypertask_add_comment: tool({
       description:
-        "Add the same comment to one or many tasks. For multiple tasks, pass up to 50 combined task_ids or ticket_numbers in one call instead of looping. Supports plain-text @mentions and image attachment URLs.",
+        `Add the same comment to one or many tasks. For multiple tasks, pass up to 50 combined task_ids or ticket_numbers in one call instead of looping. Supports plain-text @mentions and image attachment URLs. ${COMMENT_TASK_LINK_RULE}`,
       inputSchema: z
         .object({
         task_id: z.coerce
@@ -7054,6 +7057,11 @@ function buildTools(
         }
         sanitizedText = await resolveTextMentions(sanitizedText, taskWithOwner.projectId);
         sanitizedText = toStoredHtml(sanitizedText);
+        sanitizedText = await linkifyTicketRefs(
+          sanitizedText,
+          user.id,
+          actingAgentId
+        );
 
         const comment = await createCommentService({
           text: sanitizedText,
@@ -7512,7 +7520,7 @@ function buildTools(
 
     hypertask_update_comment: tool({
       description:
-        "Update one of your comments. Supports plain-text @mentions; mentioned users must belong to the task project.",
+        `Update one of your comments. Supports plain-text @mentions; mentioned users must belong to the task project. ${COMMENT_TASK_LINK_RULE}`,
       inputSchema: z.object({
         comment_id: z.coerce.number().int().positive(),
         text: z.string().min(1).max(5000),
@@ -7583,6 +7591,11 @@ function buildTools(
           );
         }
         sanitizedText = toStoredHtml(sanitizedText);
+        sanitizedText = await linkifyTicketRefs(
+          sanitizedText,
+          user.id,
+          actingAgentId
+        );
 
         await updateCommentService({
           commentId: input.comment_id,
@@ -7989,7 +8002,7 @@ function buildTools(
 
     hypertask_draft: tool({
       description:
-        "Create, list, update, publish, or delete task drafts. Draft types are description or comment. Provide whichever task identifier you know; extra identifiers are tolerated.",
+        `Create, list, update, publish, or delete task drafts. Draft types are description or comment. Provide whichever task identifier you know; extra identifiers are tolerated. For comment drafts: ${COMMENT_TASK_LINK_RULE}`,
       inputSchema: z.object({
         action: z.enum(["create", "list", "update", "publish", "delete"]),
         task_id: z.coerce
@@ -8043,7 +8056,7 @@ function buildTools(
           if (!input.draft_type) {
             return { success: false, error: "draft_type is required to create a draft" };
           }
-          const text = input.text?.trim() ? toStoredHtml(input.text) : undefined;
+          let text = input.text?.trim() ? toStoredHtml(input.text) : undefined;
           if (!text) {
             return { success: false, error: "text is required to create a draft" };
           }
@@ -8051,6 +8064,7 @@ function buildTools(
           const draftTypeEnum =
             input.draft_type === "comment" ? "Comment" : "Description";
           if (draftTypeEnum === "Comment") {
+            text = await linkifyTicketRefs(text, user.id, actingAgentId);
             const mentionUserIds = extractTipTapContent(text).mentions
               .map((id) => parseInt(id, 10))
               .filter(Number.isInteger);
@@ -8134,11 +8148,12 @@ function buildTools(
         }
 
         if (input.action === "update") {
-          const text = input.text?.trim() ? toStoredHtml(input.text) : undefined;
+          let text = input.text?.trim() ? toStoredHtml(input.text) : undefined;
           if (!text) {
             return { success: false, error: "text is required to update a draft" };
           }
           if (draft.type === "Comment") {
+            text = await linkifyTicketRefs(text, user.id, actingAgentId);
             const mentionUserIds = extractTipTapContent(text).mentions
               .map((id) => parseInt(id, 10))
               .filter(Number.isInteger);
@@ -8181,7 +8196,12 @@ function buildTools(
         const taskTicketNumber = draft.task.ticketNumber || `Task #${taskId}`;
 
         if (draft.type === "Comment") {
-          const mentionUserIds = extractTipTapContent(draft.content || "").mentions
+          const commentText = await linkifyTicketRefs(
+            draft.content || "",
+            user.id,
+            actingAgentId
+          );
+          const mentionUserIds = extractTipTapContent(commentText).mentions
             .map((id) => parseInt(id, 10))
             .filter(Number.isInteger);
           const mentionError = await validateMentionUserIds(
@@ -8209,7 +8229,7 @@ function buildTools(
           }
 
           const comment = await createCommentService({
-            text: draft.content,
+            text: commentText,
             creatorId: user.id,
             taskId,
             ownerId: taskWithOwner.userId,
@@ -8217,7 +8237,7 @@ function buildTools(
             agentId: actingAgentId,
           });
 
-          await persistUrlsForComment(draft.content, taskId, comment.id, "POST");
+          await persistUrlsForComment(commentText, taskId, comment.id, "POST");
           void broadcastTaskComment(taskId, { originUserId: user.id });
 
           return sanitizeForJson({
