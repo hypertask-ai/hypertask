@@ -716,6 +716,20 @@ body {
     // chrome either; it scrolls internally instead.
     max-height: calc(100svh - max(env(safe-area-inset-top), 28px) - env(safe-area-inset-bottom) - 2rem) !important;
   }
+  // The attachment gallery (yet-another-react-lightbox) pins its toolbar to
+  // top: 0, so on the Android shell the fullscreen / download / zoom / close
+  // icons render under the status-bar clock and battery (HTPR-5871). Same
+  // 28px floor as .paletteModalSizing above: the WebView reports the inset
+  // as 0, max() keeps the real inset where one is reported.
+  .yarl__portal .yarl__toolbar {
+    top: max(env(safe-area-inset-top), 28px);
+    // Even spacing between the plugin buttons (download, fullscreen, zoom,
+    // close) so the row reads as one control group instead of uneven gaps.
+    gap: 4px;
+  }
+  [dir="rtl"] .yarl__portal .yarl__toolbar {
+    top: max(env(safe-area-inset-top), 28px);
+  }
   // The task-detail title pins BELOW the status-bar inset
   // (top: env(safe-area-inset-top)), so once the top bar collapses on scroll the
   // inset-height strip directly above the title is uncovered and the comment /
