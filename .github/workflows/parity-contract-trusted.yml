@@ -18,6 +18,10 @@ jobs:
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
       TRUSTED_CLI_VERSION: "1.13.29"
+      TRUSTED_CLI_NEXT_VERSION: "2.0.0"
+      TRUSTED_CLI_NEXT_BINARY_VERSION: "0.2.0"
+      TRUSTED_CLI_NEXT_BINARY_SHA256: "6b49a58d2c9ba383957e9274be5b66d28a585eb8b189eda8c35f9f9ee266ccb0"
+      TRUSTED_CLI_NEXT_NPM_INTEGRITY: "sha512-6KCkh64y3Vqhme2tJrRFX+i2YfXgqJ70WouXjlbx3qVIKJZwEpjCqt3y9ZYQNKbS7n4Y5SZKOkCfmkIfPk3ZrA=="
     steps:
       - name: Check out trusted verifier from the base branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -42,15 +46,68 @@ jobs:
         run: |
           CONTRACT_PACKAGE=$(node -p "require('./candidate/config/parity/contract.json').cliPackage.name")
           CONTRACT_VERSION=$(node -p "require('./candidate/config/parity/contract.json').cliPackage.version")
-          if [ "$CONTRACT_PACKAGE" != "$TRUSTED_CLI_PACKAGE" ] || [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
-            echo "Candidate parity contract does not select the trusted production CLI"
+          if [ "$CONTRACT_PACKAGE" != "$TRUSTED_CLI_PACKAGE" ]; then
+            echo "Candidate parity contract does not select the trusted CLI package"
             exit 1
           fi
+          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ] && [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_NEXT_VERSION" ]; then
+            echo "Candidate parity contract does not select a trusted CLI version"
+            exit 1
+          fi
+          node <<'NODE'
+          const fs = require("node:fs");
+          const candidatePackage = JSON.parse(fs.readFileSync("candidate/config/parity/runner/package.json", "utf8"));
+          const candidateLock = JSON.parse(fs.readFileSync("candidate/config/parity/runner/package-lock.json", "utf8"));
+          const trustedPackage = JSON.parse(fs.readFileSync("trusted/config/parity/runner/package.json", "utf8"));
+          const trustedLock = JSON.parse(fs.readFileSync("trusted/config/parity/runner/package-lock.json", "utf8"));
+          const contract = JSON.parse(fs.readFileSync("candidate/config/parity/contract.json", "utf8"));
+          const packageName = process.env.TRUSTED_CLI_PACKAGE;
+          const fail = () => {
+            throw new Error("Candidate parity runner is not the reviewed lock for the contract CLI version");
+          };
+          if (contract.cliPackage.version === process.env.TRUSTED_CLI_VERSION) {
+            if (JSON.stringify(candidatePackage) !== JSON.stringify(trustedPackage) ||
+                JSON.stringify(candidateLock) !== JSON.stringify(trustedLock)) fail();
+          } else {
+            const expectedPackage = structuredClone(trustedPackage);
+            expectedPackage.dependencies[packageName] = process.env.TRUSTED_CLI_NEXT_VERSION;
+            const expectedRootLock = structuredClone(trustedLock.packages[""]);
+            expectedRootLock.dependencies[packageName] = process.env.TRUSTED_CLI_NEXT_VERSION;
+            const expectedCliLock = {
+              version: process.env.TRUSTED_CLI_NEXT_VERSION,
+              resolved: `https://registry.npmjs.org/${packageName}/-/hypertask_cli-${process.env.TRUSTED_CLI_NEXT_VERSION}.tgz`,
+              integrity: process.env.TRUSTED_CLI_NEXT_NPM_INTEGRITY,
+              hasInstallScript: true,
+              license: "MIT",
+              bin: { hypertask: "bin/hypertask.exe" },
+              engines: { node: ">=18" },
+            };
+            const expectedLock = structuredClone(trustedLock);
+            expectedLock.packages = {
+              "": expectedRootLock,
+              [`node_modules/${packageName}`]: expectedCliLock,
+              "node_modules/typescript": trustedLock.packages["node_modules/typescript"],
+            };
+            if (JSON.stringify(candidatePackage) !== JSON.stringify(expectedPackage) ||
+                JSON.stringify(candidateLock) !== JSON.stringify(expectedLock)) fail();
+          }
+          NODE
 
           PARITY_TMP=$(mktemp -d "$RUNNER_TEMP/hypertask-parity.XXXXXX")
           cp trusted/config/parity/runner/package.json trusted/config/parity/runner/package-lock.json "$PARITY_TMP/"
           npm ci --prefix "$PARITY_TMP" --ignore-scripts --no-audit --no-fund
-          env -u GITHUB_TOKEN -u GH_TOKEN "$PARITY_TMP/node_modules/.bin/hypertask" capabilities --json > "$PARITY_TMP/capabilities.json"
+          CLI_BINARY="$PARITY_TMP/node_modules/.bin/hypertask"
+          if [ "$CONTRACT_VERSION" = "$TRUSTED_CLI_NEXT_VERSION" ]; then
+            CLI_BINARY="$PARITY_TMP/hypertask-next"
+            curl --fail --location --silent --show-error \
+              "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_NEXT_BINARY_VERSION}/hypertask-linux-x86_64" \
+              --output "$CLI_BINARY"
+            if ! echo "$TRUSTED_CLI_NEXT_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then
+              exit 1
+            fi
+            chmod 755 "$CLI_BINARY"
+          fi
+          env -u GITHUB_TOKEN -u GH_TOKEN "$CLI_BINARY" capabilities --json > "$PARITY_TMP/capabilities.json"
           env -u GITHUB_TOKEN -u GH_TOKEN node trusted/scripts/parity-contract.mjs \
             --root candidate \
             --validate-only \
@@ -60,6 +117,6 @@ jobs:
             --candidate-inventory candidate/config/parity/generated-inventory.json \
             --candidate-report candidate/docs/parity.md \
             --trusted-cli-package "$TRUSTED_CLI_PACKAGE" \
-            --trusted-cli-version "$TRUSTED_CLI_VERSION" \
+            --trusted-cli-version "$CONTRACT_VERSION" \
             --cli-capabilities "$PARITY_TMP/capabilities.json" \
             --typescript "$PARITY_TMP/node_modules/typescript/lib/typescript.js"

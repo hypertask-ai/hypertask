@@ -459,6 +459,7 @@ jobs:
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
       TRUSTED_CLI_VERSION: "1.13.29"
+      TRUSTED_CLI_NEXT_VERSION: "2.0.0"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -476,13 +477,15 @@ jobs:
             echo "Parity contract selected untrusted package $CONTRACT_PACKAGE"
             exit 1
           fi
-          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
+          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ] && [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_NEXT_VERSION" ]; then
             echo "Parity contract selected untrusted version $CONTRACT_VERSION"
             exit 1
           fi
           LATEST_VERSION=$(npm view "$TRUSTED_CLI_PACKAGE" version)
-          if [ "$LATEST_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
-            echo "Parity contract pins $CONTRACT_VERSION but production is $LATEST_VERSION"
+          if [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_VERSION:$TRUSTED_CLI_VERSION" ] && \
+             [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_VERSION:$TRUSTED_CLI_NEXT_VERSION" ] && \
+             [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_NEXT_VERSION:$TRUSTED_CLI_NEXT_VERSION" ]; then
+            echo "Parity transition does not permit contract $CONTRACT_VERSION with npm latest $LATEST_VERSION"
             exit 1
           fi
           PARITY_TMP=$(mktemp -d "$RUNNER_TEMP/hypertask-parity.XXXXXX")
