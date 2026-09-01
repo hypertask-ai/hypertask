@@ -163,15 +163,15 @@ test("mobile recording confirmation uses the same 48 by 44 action", () => {
   );
 });
 
-test("mobile composer uses the 8px card well and quiet theme border", () => {
+test("mobile composer uses the card sheet and borderless recessed well", () => {
   const mobileBranch = newComment.slice(
     newComment.indexOf("// {/* ====================== MOBILE"),
     newComment.indexOf("const NewCommentPlaceholder"),
   );
-  assert.match(mobileBranch, /bg-transparent/);
   assert.match(
     mobileBranch,
-    /rounded-\[8px\] border border-comment-description-border bg-cardBackground/,
+    /rounded-\[5px\] bg-cardBackground shadow-md/,
   );
-  assert.doesNotMatch(mobileBranch, /bg-newcomment-well/);
+  assert.match(mobileBranch, /rounded-lg bg-newcomment-well/);
+  assert.doesNotMatch(mobileBranch, /border-comment-description-border/);
 });

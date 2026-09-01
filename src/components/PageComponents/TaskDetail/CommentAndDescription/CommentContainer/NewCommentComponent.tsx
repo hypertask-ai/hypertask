@@ -482,7 +482,6 @@ const NewCommentComponent = (
               // {/* ------------------------- New Comment ------------------------- */}
               // {/* ====================== MOBILE ===================== */}
               : (
-                  // HTPR-5919's owner-approved prototype intentionally replaces the prior sheet and recessed well.
                   <div
                     tabIndex={-1}
                     onClick={handleOpenCommentEditor}
@@ -505,7 +504,7 @@ const NewCommentComponent = (
                     } as CSSProperties}
                     ref={tiptapContainerRef}
                     id="comment"
-                    className="fixed left-0 flex w-full flex-col bg-transparent outline-none pb-[env(safe-area-inset-bottom)]"
+                    className="fixed left-0 flex w-full flex-col rounded-[5px] bg-cardBackground shadow-md outline-none pb-[env(safe-area-inset-bottom)]"
                   >
                     <div
                       aria-label="Resize comment field"
@@ -522,7 +521,7 @@ const NewCommentComponent = (
                     </div>
                     <div className="relative w-full px-[12px] pb-[6px]">
                       <TaskOptions show={showTaskOptions}/>
-                      <div className="rounded-[8px] border border-comment-description-border bg-cardBackground px-[12px] py-[4px]">
+                      <div className="rounded-lg bg-newcomment-well px-[12px] py-[4px]">
                       {shouldRenderCommentEditor ? (
                       <Tiptap
                         key={`comment-input-${_parsedTask.id}`}

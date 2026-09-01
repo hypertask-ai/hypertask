@@ -120,10 +120,10 @@ Destructive actions use the semantic destructive token or an existing destructiv
 
 The mobile comment composer is the reference for combining shape, spacing, tokens, icons, and action hierarchy. Its production composition is:
 
-1. A fixed transparent composer over the page.
+1. A bottom sheet with `bg-cardBackground`, a 5px outer radius, and `shadow-md`.
 2. A drag handle above the field.
-3. Twelve pixels of horizontal composer padding and 6px below the field.
-4. A `bg-cardBackground` well with 8px corners, a quiet theme border, 12px horizontal padding, and 4px vertical padding.
+3. Twelve pixels of horizontal sheet padding and 6px below the field.
+4. A borderless recessed input well using `bg-newcomment-well`, 8px corners, 12px horizontal padding, and 4px vertical padding.
 5. A 14px editor with 8px vertical padding and the “Add a comment…” placeholder.
 6. One flat action row with an 8px gap: Plus, purple `PencilSparkles`, spacer, mic, then Send. The Plus menu contains attachments, mention, commands, and discard.
 7. Empty dictation, recording confirmation, and Send use a 48×44 inverted-theme action with 4px corners. With text, the ghost mic sits immediately left of Send.

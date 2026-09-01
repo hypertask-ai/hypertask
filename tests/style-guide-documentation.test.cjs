@@ -103,23 +103,18 @@ test("the reference composer still implements the documented geometry", () => {
     return new Set(match[1].split(/\s+/));
   };
 
-  const shellClasses = classesContaining(composer, "fixed");
-  assert.ok(shellClasses.has("bg-transparent"));
-  assert.equal(shellClasses.has("bg-cardBackground"), false);
+  const sheetClasses = classesContaining(composer, "rounded-[5px]");
+  assert.ok(sheetClasses.has("bg-cardBackground"));
+  assert.ok(sheetClasses.has("shadow-md"));
 
   const paddingClasses = classesContaining(composer, "pb-[6px]");
   assert.ok(paddingClasses.has("px-[12px]"));
 
-  const wellClasses = classesContaining(composer, "rounded-[8px]");
-  for (const token of [
-    "border",
-    "border-comment-description-border",
-    "bg-cardBackground",
-    "px-[12px]",
-    "py-[4px]",
-  ]) {
+  const wellClasses = classesContaining(composer, "bg-newcomment-well");
+  for (const token of ["rounded-lg", "px-[12px]", "py-[4px]"]) {
     assert.ok(wellClasses.has(token), `comment well missing ${token}`);
   }
+  assert.equal(wellClasses.has("border"), false);
 
   const commentActions = attachments.slice(
     attachments.indexOf('aria-label="More comment actions"'),
