@@ -16,7 +16,7 @@ const TaskTitleModal = () => {
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const isApple = useDeviceContext()
     const { endTour } = useTourContext();
-    const { currentFocusedElement, editMode, setEditMode, formValues, handleChange, appendDictationToTitle, dictationCoordinator, setCurrentFocusedElement, focusOn, isRecording, toggleRecording, closeHandler, isGeneratingTitle, titleGenerationError } = useContextCreateTaskModal()
+    const { currentFocusedElement, editMode, setEditMode, formValues, handleTitleChange, appendDictationToTitle, dictationCoordinator, setCurrentFocusedElement, focusOn, isRecording, toggleRecording, closeHandler, isGeneratingTitle, titleGenerationError } = useContextCreateTaskModal()
     useAutosizeTextArea(textAreaRef.current, formValues.title);
     const outsideClickHandler = () => {
         if (editMode!=="title") return
@@ -155,7 +155,7 @@ const TaskTitleModal = () => {
 
                                     }}
                                     onChange={(e) => {
-                                        handleChange("title", e.target.value);
+                                        handleTitleChange(e.target.value);
                                     }}
 
                                     style={{

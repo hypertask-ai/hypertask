@@ -22,12 +22,12 @@ test("every global create save mode snapshots the current TipTap description", (
   );
 });
 
-test("a missing title is generated from the save-time description before every save mode", () => {
+test("a missing or stale generated title is refreshed from the save-time description", () => {
   const source = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   const stateSource = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
   const titleSource = read("src/components/Modals/CreateTaskGloballyModal/TaskTitleModal.tsx");
 
-  assert.match(source, /if \(!titleAtSave\) \{[\s\S]*?await generateTitleFromDescription\(descriptionAtSave\);[\s\S]*?titleAtSave = generatedTitle;/);
+  assert.match(source, /if \(shouldGenerateTitleForSave\(titleAtSave, descriptionAtSave\)\) \{[\s\S]*?while \(shouldGenerateTitleForSave\(titleAtSave, descriptionAtSave\)\) \{[\s\S]*?await generateTitleFromDescription\(descriptionAtSave\);[\s\S]*?titleAtSave = generatedTitle;/);
   assert.match(stateSource, /taskDescription: description,[\s\S]*?extractTitleAndDescription\(generatedHtml\)\.title/);
   assert.match(
     stateSource,
@@ -70,7 +70,7 @@ test("discard during title generation cancels the pending save", () => {
   assert.match(modal, /const epochAtSave = saveEpochRef\.current;/);
   assert.match(
     modal,
-    /if \(generatedTitle === null \|\| saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*return;/,
+    /if \(saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*return;/,
   );
   const hook = fs.readFileSync(
     path.join(root, "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts"),
@@ -118,7 +118,11 @@ test("accepted Task Writer titles are tracked for later edit learning", () => {
 
   assert.match(
     modal,
-    /returnTitleAndDescription=\{\(title, description, props\) => \{[\s\S]*?if \(title\) \{\s*handleChange\("title", title\);\s*recordGeneratedTitle\(title\);/,
+    /returnTitleAndDescription=\{\(title, description, props\) => \{[\s\S]*?if \(title\) applyTaskWriterTitle\(title\);/,
+  );
+  assert.match(
+    hook,
+    /const applyTaskWriterTitle = useCallback\([\s\S]*?taskWriterTitleApplied\(\);[\s\S]*?applyGeneratedTitle\(title\);/,
   );
   assert.match(
     hook,
@@ -126,47 +130,28 @@ test("accepted Task Writer titles are tracked for later edit learning", () => {
   );
 });
 
-test("a title generated for a discarded or switched-away draft is thrown away", () => {
+test("discard, board switch, and newer writing invalidate generated titles", () => {
   const stateSource = read(
     "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts",
   );
   const modalSource = read("src/components/RTE/TiptapCreateTaskModal.tsx");
+  const coordinatorSource = read("src/lib/ai/autoTitleGeneration.ts");
 
-  // The epoch must be captured before the request, not read after it, or the
-  // comparison is always true.
   assert.match(
     stateSource,
-    /const epochAtRequest = saveEpochRef\.current;[\s\S]*?const response = await fetch\(taskWriterRoute/,
-  );
-  // The guard has to sit before handleChange, otherwise the stale title is
-  // already in the new draft by the time the caller notices.
-  assert.match(
-    stateSource,
-    /if \(saveEpochRef\.current !== epochAtRequest\) return null;\s*handleChange\("title", title\);/,
-  );
-  // Both a discard/reset and a board switch bump the epoch.
-  // Invalidating a request also owns clearing the spinner, or it stays stuck.
-  assert.match(
-    stateSource,
-    /resetFormValues = \(\) => \{\s*saveEpochRef\.current \+= 1;[\s\S]{0,200}?setIsGeneratingTitle\(false\);/,
+    /resetFormValues = \(\) => \{\s*saveEpochRef\.current \+= 1;[\s\S]*?autoTitleCoordinator\.reset\(/,
   );
   assert.match(
     stateSource,
-    /if \(saveEpochRef\.current === epochAtRequest\) setIsGeneratingTitle\(false\);/,
-    "a stale request must not clear the spinner a newer request owns",
+    /const clearGeneratedTitle = autoTitleCoordinator\.boardChanged\(\);[\s\S]*?title: clearGeneratedTitle \? "" : prev\.title/,
   );
+  assert.match(stateSource, /signal,\s*body: JSON\.stringify/);
   assert.match(
-    stateSource,
-    /handleProjectChange = \(project: IProject\) => \{[\s\S]*?saveEpochRef\.current \+= 1;\s*setIsGeneratingTitle\(false\);/,
+    coordinatorSource,
+    /request\?\.abort\(\);[\s\S]*?generationRevision !== revision/,
   );
   assert.match(
     modalSource,
-    /if \(saveEpochRef\.current !== epochAtSave\) return;/,
-    "a stale failure must not switch the current draft into title editing",
-  );
-  // The caller treats null as "cancelled" and never creates a task from it.
-  assert.match(
-    modalSource,
-    /if \(generatedTitle === null \|\| saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*return;/,
+    /if \(saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*return;/,
   );
 });

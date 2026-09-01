@@ -77,8 +77,12 @@ const TiptapCreateTaskModal = () => {
     setShowConfirmationModal,
     toggleRecording,
     isRecording,
-    recordGeneratedTitle,
+    applyTaskWriterTitle,
+    enableAutoTitleGeneration,
+    scheduleTitleGeneration,
     generateTitleFromDescription,
+    shouldGenerateTitleForSave,
+    getCurrentTitle,
     saveEpochRef,
     dictationCoordinator,
   } = useContextCreateTaskModal();
@@ -144,6 +148,7 @@ const TiptapCreateTaskModal = () => {
   );
   useEffect(() => {
     if (!shouldShowAiTaskWriter) return;
+    enableAutoTitleGeneration();
     if (isGuestCookieUser()) {
       try {
         window.localStorage.setItem(GUEST_WRITER_SEEN_KEY, "true");
@@ -151,7 +156,7 @@ const TiptapCreateTaskModal = () => {
         // Storage blocked: the intro may repeat, nothing else breaks.
       }
     }
-  }, [shouldShowAiTaskWriter]);
+  }, [enableAutoTitleGeneration, shouldShowAiTaskWriter]);
   const pathname = usePathname();
   const projectForContext =
     formValues.currentProject ?? _currentProject ?? undefined;
@@ -208,7 +213,9 @@ const TiptapCreateTaskModal = () => {
   };
 
   const onChangeHandler = () => {
-    handleChange("description", editor?.getHTML());
+    const description = editor?.getHTML() ?? "";
+    handleChange("description", description);
+    scheduleTitleGeneration(description);
     editor?.commands.setMeta("projectId", 2);
   };
   // ==================== get attachments from the componetn =============
@@ -250,7 +257,7 @@ const TiptapCreateTaskModal = () => {
   useEffect(() => {
     editor?.off("update");
     editor?.on("update", onChangeHandler);
-  }, [editor]);
+  }, [editor, scheduleTitleGeneration]);
 
   const resetComposerAfterCreate = () => {
     resetFormValues();
@@ -301,35 +308,43 @@ const TiptapCreateTaskModal = () => {
     // the previous render when someone types and immediately saves, so every
     // save mode snapshots the editor instead of risking an empty description.
     let descriptionAtSave = editor?.getHTML() ?? formValues.description;
-    let titleAtSave = formValues.title.trim();
-    if (!titleAtSave) {
-      // If the user discards the composer while generation is in flight, the
-      // epoch bumps and this save must not create a task from the dead draft.
-      const epochAtSave = saveEpochRef.current;
+    let titleAtSave = getCurrentTitle();
+    const epochAtSave = saveEpochRef.current;
+    if (shouldGenerateTitleForSave(titleAtSave, descriptionAtSave)) {
       setUploadInProgress(true);
       try {
-        const generatedTitle =
-          await generateTitleFromDescription(descriptionAtSave);
-        // null means the hook already recognised the response as stale.
-        if (generatedTitle === null || saveEpochRef.current !== epochAtSave) {
-          setUploadInProgress(false);
-          return;
+        // More writing invalidates the current request. Keep taking the latest
+        // editor snapshot until one title matches what will actually be saved.
+        while (shouldGenerateTitleForSave(titleAtSave, descriptionAtSave)) {
+          const generatedTitle =
+            await generateTitleFromDescription(descriptionAtSave);
+          if (saveEpochRef.current !== epochAtSave) {
+            setUploadInProgress(false);
+            return;
+          }
+          descriptionAtSave = editor?.getHTML() ?? descriptionAtSave;
+          if (generatedTitle === null) {
+            titleAtSave = getCurrentTitle();
+            continue;
+          }
+          titleAtSave = generatedTitle;
         }
-        titleAtSave = generatedTitle;
-        // Generation is async and the description stays editable, so re-read
-        // the editor to save what the user actually has in front of them.
-        descriptionAtSave = editor?.getHTML() ?? descriptionAtSave;
       } catch (error) {
         console.log("Could not generate a title", error);
         setUploadInProgress(false);
-        // A failure that belongs to a discarded draft or the previous board
-        // must not pull the current draft into title-editing or show an error.
         if (saveEpochRef.current !== epochAtSave) return;
         setEditMode("title");
         setCurrentFocusedElement("Title");
         toast.error("Couldn’t generate a title. Add one to save.");
         return;
       }
+    }
+    if (!titleAtSave) {
+      setUploadInProgress(false);
+      setEditMode("title");
+      setCurrentFocusedElement("Title");
+      toast.error("Add a title to save.");
+      return;
     }
     if (param === "Save") {
       setUploadInProgress(true);
@@ -674,10 +689,7 @@ const TiptapCreateTaskModal = () => {
                   handleFocus(true);
                 }}
                 returnTitleAndDescription={(title, description, props) => {
-                  if (title) {
-                    handleChange("title", title);
-                    recordGeneratedTitle(title);
-                  }
+                  if (title) applyTaskWriterTitle(title);
                   if (props?.priority) handleChange("priority", props.priority);
                   if (props?.estimate) handleChange("estimate", props.estimate);
                   if (props?.tags) handleChange("tags", props.tags);
