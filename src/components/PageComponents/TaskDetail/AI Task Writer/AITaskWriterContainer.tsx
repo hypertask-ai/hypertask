@@ -217,9 +217,12 @@ const AITaskWriterContainer: React.FC<
       void sendAIRequest(
         buildTaskWriterPrompt(initialPrompt, taskTitle),
         loadingMessage,
+        presentation === "description-suggestion"
+          ? "auto-description"
+          : "manual",
       );
     },
-    [initialPrompt, sendAIRequest],
+    [initialPrompt, presentation, sendAIRequest],
   );
 
   const onClickHandler = useCallback(() => {

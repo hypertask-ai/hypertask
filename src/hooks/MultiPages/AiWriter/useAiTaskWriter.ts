@@ -47,6 +47,7 @@ const useAITaskWriter = (
   const lastRequestRef = useRef<{
     prompt: string;
     loadingText: string;
+    requestKind: "manual" | "auto-description";
   } | null>(null);
   const taskWriterMediaRef = useRef<TaskWriterMedia[] | null>(null);
   const requestGenerationRef = useRef(0);
@@ -137,7 +138,11 @@ const useAITaskWriter = (
   }, [description, attachments]);
 
   const sendAIRequest = useCallback(
-    async (prompt: string, requestLoadingText = "Thinking...") => {
+    async (
+      prompt: string,
+      requestLoadingText = "Thinking...",
+      requestKindOverride = requestKind,
+    ) => {
       const requestGeneration = requestGenerationRef.current + 1;
       requestGenerationRef.current = requestGeneration;
       abortControllerRef.current?.abort();
@@ -147,7 +152,11 @@ const useAITaskWriter = (
       try {
         if (shouldBlockAiDueToByokProvider(billing, currentAiOption.source)) return;
 
-        lastRequestRef.current = { prompt, loadingText: requestLoadingText };
+        lastRequestRef.current = {
+          prompt,
+          loadingText: requestLoadingText,
+          requestKind: requestKindOverride,
+        };
         setLoadingText(requestLoadingText);
         setAIResponse("");
         setHasError(false);
@@ -227,7 +236,7 @@ const useAITaskWriter = (
           taskIds,
           taskTitle: currentTask?.title ?? "",
           taskDescription: mediaExtraction.html,
-          requestKind,
+          requestKind: requestKindOverride,
         }
         console.log("🚀 ~ sendAIRequest ~ payload:", payload)
         const response = await fetch(taskWriterRoute, {
@@ -292,7 +301,11 @@ const useAITaskWriter = (
     const lastRequest = lastRequestRef.current;
     if (!lastRequest) return;
 
-    await sendAIRequest(lastRequest.prompt, lastRequest.loadingText);
+    await sendAIRequest(
+      lastRequest.prompt,
+      lastRequest.loadingText,
+      lastRequest.requestKind,
+    );
   }, [sendAIRequest]);
 
   const restoreMedia = useCallback(

@@ -103,7 +103,11 @@ interface AITaskWriterContextType {
   hasError: boolean;
 
   // Core actions
-  sendAIRequest: (prompt: string, loadingText?: string) => Promise<void>;
+  sendAIRequest: (
+    prompt: string,
+    loadingText?: string,
+    requestKind?: "manual" | "auto-description",
+  ) => Promise<void>;
   retryLastRequest: () => Promise<void>;
   navigateResponse: (index: number) => void;
   clearHistory: () => void;
@@ -728,7 +732,11 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
    * @param prompt - The user's input prompt
    * @param loadingTextParam - Optional loading text to display
    */
-  const sendAIRequest = useCallback(async (prompt: string, loadingTextParam = "Thinking...") => {
+  const sendAIRequest = useCallback(async (
+    prompt: string,
+    loadingTextParam = "Thinking...",
+    requestKindOverride?: "manual" | "auto-description",
+  ) => {
     // Capture current state for history and error recovery
     const requestAttachments = currentAttachments;
     
@@ -815,7 +823,11 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
         ${prompt}${currentAttachmentInfo}`;
     }
 
-    await originalSendAIRequest(finalPrompt, loadingTextParam);
+    await originalSendAIRequest(
+      finalPrompt,
+      loadingTextParam,
+      requestKindOverride,
+    );
   }, [originalSendAIRequest, responseHistory, currentResponseIndex, aiResponse, setLoadingText, currentAttachments, isByokBlocked]);
 
   const retryLastRequest = useCallback(async () => {
