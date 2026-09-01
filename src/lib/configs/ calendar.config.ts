@@ -4,6 +4,7 @@ export const calendarConfig = {
     projects_section: "projects-section",
     month_view: "calendar-month-view",
     week_view: "calendar-week-view",
+    week_timeframes: "calendar-week-timeframes",
     week_row: (weekIndex: number) => `week-${weekIndex}`,
     day_section: (day: Date) => `day-${day.toISOString()}`,
     task_card: (taskId: number) => `task-${taskId}`,
