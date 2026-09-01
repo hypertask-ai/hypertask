@@ -12,10 +12,13 @@ import CreateSummaryButton from "../../../TopRow/CreateSummaryButton";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useTaskPages } from "./TaskPagesContext";
+import { useSearchParams } from "next/navigation";
+import { preserveInboxFlowOnTaskHref } from "@/lib/taskDetailInboxFlow";
 
 const DescriptionSubTask = () => {
   const { currentTask, editMode, toggleSubtaskLinkingModal } = useTaskContext();
   const { loading, hasPages, createAndOpenPage } = useTaskPages();
+  const inboxFlow = useSearchParams()?.get("inboxFlow");
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const isApple = useDeviceContext();
   var cmdControl = useMemo(
@@ -59,7 +62,10 @@ const DescriptionSubTask = () => {
                   color={task?.status === "Archive" ? "green" : "#696b6e"}
                  strokeWidth={1.75}/>
                 <Link
-                  href={`/detail/project-${currentTask?.projectId}/${task.uniqueIndex}`}
+                  href={preserveInboxFlowOnTaskHref(
+                    `/detail/project-${currentTask?.projectId}/${task.uniqueIndex}`,
+                    inboxFlow,
+                  )}
                   onClick={() => {
                     setTasksPlayList(subTaskPlaylist);
                   }}

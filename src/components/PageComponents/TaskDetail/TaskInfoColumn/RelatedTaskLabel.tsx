@@ -1,8 +1,9 @@
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useRef, useState } from "react";
 import { X } from "lucide-react";
+import { preserveInboxFlowOnTaskHref } from "@/lib/taskDetailInboxFlow";
 
 const RelatedTaskLabel = ({
   onClick,
@@ -21,6 +22,8 @@ const RelatedTaskLabel = ({
   const labelRef = useRef<HTMLDivElement>(null);
   const isMbl = useDeviceContext();
   const router = useRouter();
+  const inboxFlow = useSearchParams()?.get("inboxFlow");
+  const taskRoute = preserveInboxFlowOnTaskHref(route, inboxFlow);
   const handleOnClick = (e: any) => {
     e.preventDefault();
     // stopPropogation && e.stopPropagation();
@@ -32,7 +35,7 @@ const RelatedTaskLabel = ({
     // open a new browser tab; only intercept a plain left-click for SPA nav.
     if (e.metaKey || e.ctrlKey || e.shiftKey) return;
     e.preventDefault();
-    router.push(route);
+    router.push(taskRoute);
   };
 
   return (
@@ -43,7 +46,7 @@ const RelatedTaskLabel = ({
       onMouseLeave={() => setHover(false)}
     >
       <a
-        href={route}
+        href={taskRoute}
         onClick={goToTask}
         className={`block min-w-0 flex-1 overflow-hidden whitespace-nowrap text-ellipsis cursor-pointer no-underline text-inherit`}
       >

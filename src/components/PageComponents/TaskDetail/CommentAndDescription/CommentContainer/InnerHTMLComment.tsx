@@ -10,7 +10,7 @@ import { useContext } from "react";
 import { IAttachment } from "@/models/model";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { HighlightMenu } from "../ContextMenu";
 
 import QuoteButton from "../ContextMenu/QuoteButton";
@@ -18,6 +18,10 @@ import { useGifPlayback } from "@/hooks/General/useGifPlayback";
 import CommentTldr from "./CommentTldr";
 import { normalizeRichHtmlForRender } from "@/utils/helperFunctions/normalizeRichHtmlForRender";
 import { normalizeImageSourcesInHtml } from "@/utils/helperFunctions/normalizeImageSource";
+import {
+  isInternalTaskDetailHref,
+  preserveInboxFlowOnTaskHref,
+} from "@/lib/taskDetailInboxFlow";
 
 export const generateAttachmentFromImgEl = (
   img: HTMLImageElement,
@@ -49,6 +53,7 @@ const InnerHTMLComment = memo(
     const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
     const mbl = useContext(MobileViewContext);
     const router = useRouter();
+    const inboxFlow = useSearchParams()?.get("inboxFlow");
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [attachments, setAttachments] = useState<IAttachment[]>([]);
@@ -100,14 +105,10 @@ const InnerHTMLComment = memo(
       } else if (target && target.tagName === "A") {
         var href = target.getAttribute("href");
 
-        // Check if the href contains the domain 'app.hypertask'
-        if (
-          (href && href.includes("app.hypertask")) ||
-          href.startsWith("/detail")
-        ) {
+        if (href && isInternalTaskDetailHref(href)) {
           event.preventDefault();
           // Call your custom function here
-          router.push(href);
+          router.push(preserveInboxFlowOnTaskHref(href, inboxFlow));
         } else target.setAttribute("target", "_blank");
       }
     };
