@@ -27,9 +27,10 @@ const { resolveDueDateForModal } = jiti(
 
 test("the due-date modal uses the task detail date before its query catches up", () => {
   const detailDueDate = new Date("2026-09-01T09:00:00.000Z");
+  const staleQueriedDueDate = new Date("2026-08-28T09:00:00.000Z");
 
   assert.equal(
-    resolveDueDateForModal("Update", detailDueDate, undefined),
+    resolveDueDateForModal("Update", detailDueDate, staleQueriedDueDate),
     detailDueDate,
   );
 });
