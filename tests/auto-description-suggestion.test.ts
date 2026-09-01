@@ -87,9 +87,15 @@ test("task dismissals are user-scoped, deduplicated, and bounded", () => {
   assert.equal(isDescriptionSuggestionDismissed(storage, 6, 110), true);
 });
 
-test("corrupt or unavailable storage fails closed", () => {
+test("corrupt storage self-heals while unavailable storage fails closed", () => {
   const storage = new MemoryStorage();
-  storage.setItem("hypertask:auto-description-dismissed:6", "not json");
+  const key = "hypertask:auto-description-dismissed:6";
+  storage.setItem(key, "not json");
+  assert.equal(isDescriptionSuggestionDismissed(storage, 6, 42), false);
+  assert.equal(storage.getItem(key), null);
+
+  storage.setItem(key, JSON.stringify({ taskId: 42 }));
+  assert.equal(dismissDescriptionSuggestion(storage, 6, 42), true);
   assert.equal(isDescriptionSuggestionDismissed(storage, 6, 42), true);
 
   const unavailable = new MemoryStorage();

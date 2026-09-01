@@ -63,8 +63,19 @@ function storageKey(userId: number) {
 }
 
 function readDismissed(storage: Storage, userId: number) {
-  const value = JSON.parse(storage.getItem(storageKey(userId)) ?? "[]");
-  if (!Array.isArray(value)) throw new Error("invalid dismissal list");
+  const key = storageKey(userId);
+  const stored = storage.getItem(key);
+  let value: unknown;
+  try {
+    value = JSON.parse(stored ?? "[]");
+  } catch {
+    storage.removeItem(key);
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    storage.removeItem(key);
+    return [];
+  }
   return value.filter(
     (taskId): taskId is number => Number.isInteger(taskId) && taskId > 0,
   ).slice(-MAX_DISMISSED_TASKS);

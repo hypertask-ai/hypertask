@@ -1343,44 +1343,49 @@ const Tiptap = ({
       : null;
   const autoDescriptionStateMatchesTask =
     autoDescriptionVisitRef.current.taskId === currentTask?.id;
+  let autoDescriptionContent: React.ReactNode = null;
+  if (
+    autoDescriptionStateMatchesTask &&
+    autoDescriptionVisible &&
+    autoDraftPrompt
+  ) {
+    autoDescriptionContent = (
+      <AITaskWriterContainer
+        key={`auto-description-${currentTask.id}-${autoDraftPrompt}`}
+        id={`auto-description-writer-${currentTask.id}`}
+        backgroundContent=""
+        EscapeHandler={() => setAutoDescriptionVisible(false)}
+        AISaveHandler={handleAutoDescriptionTakeover}
+        returnTitleAndDescription={() => undefined}
+        defaultMode="AiTaskWriter"
+        autoTrigger
+        initialPrompt={autoDraftPrompt}
+        currentTask={currentTask}
+        editMode={editMode}
+        presentation="description-suggestion"
+        requestKind="auto-description"
+        onTurnOffTask={turnOffAutoDescriptionForTask}
+        onTurnOffPermanently={turnOffAutoDescriptionsPermanently}
+        toggleRecording={toggleRecording}
+        isRecording={isRecording}
+      />
+    );
+  } else if (autoDescriptionStateMatchesTask && autoDescriptionTakeover) {
+    autoDescriptionContent = (
+      <div className="mt-3 flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense text-text-light-gray">
+        <span>Draft moved into the description.</span>
+        <button
+          type="button"
+          className="font-semibold text-hypertasks-ai-purple"
+          onClick={undoAutoDescriptionTakeover}
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
   const autoDescriptionPortal = autoDescriptionSlot
-    ? createPortal(
-        autoDescriptionStateMatchesTask &&
-        autoDescriptionVisible &&
-        autoDraftPrompt ? (
-          <AITaskWriterContainer
-            key={`auto-description-${currentTask.id}-${autoDraftPrompt}`}
-            id={`auto-description-writer-${currentTask.id}`}
-            backgroundContent=""
-            EscapeHandler={() => setAutoDescriptionVisible(false)}
-            AISaveHandler={handleAutoDescriptionTakeover}
-            returnTitleAndDescription={() => undefined}
-            defaultMode="AiTaskWriter"
-            autoTrigger
-            initialPrompt={autoDraftPrompt}
-            currentTask={currentTask}
-            editMode={editMode}
-            presentation="description-suggestion"
-            requestKind="auto-description"
-            onTurnOffTask={turnOffAutoDescriptionForTask}
-            onTurnOffPermanently={turnOffAutoDescriptionsPermanently}
-            toggleRecording={toggleRecording}
-            isRecording={isRecording}
-          />
-        ) : autoDescriptionStateMatchesTask && autoDescriptionTakeover ? (
-          <div className="mt-3 flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense text-text-light-gray">
-            <span>Draft moved into the description.</span>
-            <button
-              type="button"
-              className="font-semibold text-hypertasks-ai-purple"
-              onClick={undoAutoDescriptionTakeover}
-            >
-              Undo
-            </button>
-          </div>
-        ) : null,
-        autoDescriptionSlot,
-      )
+    ? createPortal(autoDescriptionContent, autoDescriptionSlot)
     : null;
 
   return (
