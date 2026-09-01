@@ -157,7 +157,11 @@ test("readModelMarker: absent by default, set/read/clear round-trips", () => {
   }
 });
 
-test("readModelMarker: a denied localStorage (private browsing) fails safe, never throws", () => {
+test("readModelMarker: a denied localStorage (private browsing) falls through to the local read, never throws", () => {
+  // localStorage and IndexedDB are separately gated permissions. A browser
+  // that denies localStorage but still allows IndexedDB (private mode is not
+  // all-or-nothing) must keep running the keyed open -- "unknown" reads as
+  // "may exist", matching today's behavior when databases() itself is denied.
   const originalLocalStorage = globalThis.localStorage;
   globalThis.localStorage = {
     getItem: () => {
@@ -174,7 +178,11 @@ test("readModelMarker: a denied localStorage (private browsing) fails safe, neve
     const { hasBoardReadModelMarker, setBoardReadModelMarker, clearBoardReadModelMarker } =
       jiti(path.join(root, "src/lib/boardSync/readModelMarker.ts"));
 
-    assert.equal(hasBoardReadModelMarker(), false);
+    assert.equal(
+      hasBoardReadModelMarker(),
+      true,
+      "a denied localStorage must not disable the local read path -- fall through to the keyed open",
+    );
     assert.doesNotThrow(() => setBoardReadModelMarker());
     assert.doesNotThrow(() => clearBoardReadModelMarker());
   } finally {

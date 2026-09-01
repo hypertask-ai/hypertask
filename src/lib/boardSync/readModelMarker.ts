@@ -10,7 +10,11 @@ export const hasBoardReadModelMarker = (): boolean => {
   try {
     return globalThis.localStorage?.getItem(MARKER_KEY) === "1";
   } catch {
-    return false;
+    // localStorage denied (private mode) says nothing about IndexedDB, which
+    // has its own, separate permission. Treat "unknown" as "may exist" so the
+    // keyed open still runs -- same cost as today's databases()-denied path,
+    // never a silent downgrade for browsers where IndexedDB still works.
+    return true;
   }
 };
 
