@@ -25,6 +25,9 @@ const notificationRow = fs.readFileSync(
 const openButton = source.match(
   /<button[\s\S]*?data-inbox-draft-control="true"[\s\S]*?className="([^"]*)"/,
 );
+const notificationContent = notificationRow.match(
+  /<TaskRowContainer[\s\S]*?className={`([^`]*)`}/,
+);
 const container = source.match(/<div\s+className="(group\/draft-row[^"]*)"/);
 
 const expectedButtonClasses = [
@@ -68,7 +71,10 @@ const expectedContainerClasses = [
 ];
 
 test("the draft row keeps the same mobile content inset as notification rows", () => {
-  assert.match(notificationRow, /px-\[20px\][\s\S]*?md:px-0/);
+  assert.ok(notificationContent, "notification content className not found");
+  const notificationClasses = notificationContent[1].trim().split(/\s+/);
+  assert.ok(notificationClasses.includes("px-[20px]"));
+  assert.ok(notificationClasses.includes("md:px-0"));
   assert.ok(openButton, "open-draft button className not found");
   assert.deepEqual(openButton[1].trim().split(/\s+/), expectedButtonClasses);
 });
