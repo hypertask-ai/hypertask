@@ -32,6 +32,12 @@ const publishDueDateSaved = (taskId:number, result:unknown) => {
 type TScreens = "Custom" | "Sugar"
 type TMode= "Create" | "Update"
 
+export const resolveDueDateForModal = (
+  mode: TMode,
+  dueDate: Date | undefined,
+  queriedDueDate: Date | null | undefined,
+): Date | null => mode === "Create" ? dueDate ?? null : dueDate ?? queriedDueDate ?? null
+
 interface Props {
   closeHandler: (callback: Date|null, reset?:boolean) => void;
   dueDate?: Date ;
@@ -48,7 +54,7 @@ interface IScreenProps {
 const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
   const [inViewObject,__] = useRecoilState(inViewObjectAtom);
   const {data:task}=useGetSingleTask(inViewObject.taskId)
-  const currentDate=mode==="Create"?dueDate:(task.dueDate??null)
+  const currentDate = resolveDueDateForModal(mode, dueDate, task.dueDate)
   
   const [selectedScreen, setSelectedScreen] = useState<TScreens>("Sugar");
 
@@ -113,9 +119,9 @@ const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
           {
             selectedScreen === "Custom"
               ?
-              <CustomCalendarScreen isActive={currentDate}  closebackHandler={closebackHandler} mode={mode}/>
+              <CustomCalendarScreen isActive={currentDate ?? undefined}  closebackHandler={closebackHandler} mode={mode}/>
               :
-              <SugarDateScreen key={currentDate} isActive={currentDate}  closebackHandler={closebackHandler} mode={mode}/>
+              <SugarDateScreen key={currentDate?.toISOString() ?? "empty"} isActive={currentDate ?? undefined}  closebackHandler={closebackHandler} mode={mode}/>
           }
         </ModalBody>
       </ModalContainerCustom>
