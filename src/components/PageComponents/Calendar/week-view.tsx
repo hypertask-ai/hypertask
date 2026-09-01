@@ -12,12 +12,11 @@ const dateLabel = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
 });
 
-const gridColumnsClass = (dayCount: number) =>
-  dayCount === 1
-    ? "grid-cols-1"
-    : dayCount === 5
-      ? "grid-cols-5"
-      : "grid-cols-7";
+const gridColumnsClass = (dayCount: number) => {
+  if (dayCount === 1) return "grid-cols-1";
+  if (dayCount === 5) return "grid-cols-5";
+  return "grid-cols-7";
+};
 
 export function WeekView() {
   const {
