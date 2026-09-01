@@ -132,7 +132,9 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     -1,
     "the unread effect dependency array must be found"
   );
-  assert.doesNotMatch(unreadPositioning.slice(unreadDependencyStart), /_mbl/);
+  const unreadDependencyList = unreadPositioning.slice(unreadDependencyStart);
+  assert.match(unreadDependencyList, /_parsedTask\.id/);
+  assert.doesNotMatch(unreadDependencyList, /_mbl/);
   assert.match(
     unreadPositioning,
     /requestAnimationFrame\(\(\) => \{\s*runInitialPositioning\(\(\) => \{/

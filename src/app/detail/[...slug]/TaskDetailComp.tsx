@@ -2126,6 +2126,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
     return () => clearTimeout(timeout);
   }, [
+    _parsedTask.id,
     comments,
     focusOn,
     initialScrollGuard,
