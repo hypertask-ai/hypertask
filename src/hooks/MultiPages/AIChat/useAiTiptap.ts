@@ -13,6 +13,7 @@ import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionDa
 import SlashCommands from "@/components/RTE/Extensions/SlashCommands/SlashCommands";
 import { useContext, useRef } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { writingAssistanceEditorProps } from "@/components/RTE/writingAssistance";
 
 const DisableEnter = Extension.create({
   addKeyboardShortcuts() {
@@ -123,6 +124,7 @@ const useTiptapForAI = ({
       DisableEnter,
     ],
     // content: defaultContent,
+    editorProps: writingAssistanceEditorProps,
     immediatelyRender: false,
   });
   return {
