@@ -923,6 +923,7 @@ const InlineDraftAiFloat = ({
       aria-label="Write with AI"
       aria-modal="false"
       className="my-2 flex w-full min-w-0 flex-col gap-2 rounded-[4px] border-thin border-hypertasks-ai-purple/70 bg-comment-description px-2 py-1.5 text-content shadow-md"
+      onClick={(event) => event.stopPropagation()}
       onKeyDown={handlePanelKeyDown}
     >
       {promptRow}

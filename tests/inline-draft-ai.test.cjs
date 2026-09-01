@@ -1,10 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const React = require("react");
+const { act } = React;
+const { createRoot } = require("react-dom/client");
+const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
+  jsx: true,
   alias: { "@": path.join(root, "src") },
 });
 
@@ -27,6 +32,159 @@ const {
   inlineDraftAiWritePlaceholder,
   mergeInlineDraftAiDictation,
 } = jiti(path.join(root, "src/components/RTE/Components/inlineDraftAi.ts"));
+
+const originalCache = new Map(Object.entries(require.cache));
+const stubModule = (filename, exports) => {
+  require.cache[filename] = {
+    id: filename,
+    filename,
+    loaded: true,
+    exports,
+  };
+};
+const stubSourceModule = (relativePath, exports) =>
+  stubModule(path.join(root, relativePath), exports);
+
+stubModule(require.resolve("@tiptap/react"), {
+  EditorContent: () => React.createElement("div"),
+  useEditorState: ({ editor, selector }) => selector({ editor }),
+});
+stubModule(require.resolve("react-hot-toast"), {
+  default: {
+    dismiss: () => {},
+    promise: async (promise) => promise,
+  },
+});
+stubSourceModule("src/components/Common/SendArrow.tsx", {
+  SendArrow: () => React.createElement("span"),
+});
+stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
+  AudioButton: () => React.createElement("button"),
+});
+stubSourceModule("src/components/Modals/Sheets/AppSheet.tsx", {
+  AppSheet: ({ children }) => React.createElement("div", null, children),
+});
+stubSourceModule(
+  "src/components/Modals/Sheets/mobileOverlayAppSheetStyles.ts",
+  {
+    MOBILE_OVERLAY_SHEET_Z: 280,
+    mobileOverlayAppSheetBodyClass: "",
+    mobileOverlayAppSheetEditorWellClass: "",
+    mobileOverlayAppSheetHandleBarClass: "",
+    mobileOverlayAppSheetHandleHeaderClass: "",
+    mobileOverlayAppSheetHandleRowClass: "",
+    mobileOverlayAppSheetPanelClass: "",
+  },
+);
+stubSourceModule("src/hooks/General/useMobileVisualViewport.ts", {
+  useMobileVisualViewport: () => null,
+});
+stubSourceModule("src/styles/tiptap.module.scss", {
+  editorContainer: "editor-container",
+});
+stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
+  cn: (...values) => values.filter(Boolean).join(" "),
+});
+
+const previousGlobalReact = global.React;
+global.React = React;
+const InlineDraftAiFloat = jiti(
+  path.join(root, "src/components/RTE/Components/InlineDraftAiFloat.tsx"),
+).default;
+test.after(() => {
+  if (previousGlobalReact === undefined) delete global.React;
+  else global.React = previousGlobalReact;
+});
+
+for (const filename of Object.keys(require.cache)) {
+  if (!originalCache.has(filename)) delete require.cache[filename];
+}
+for (const [filename, cachedModule] of originalCache) {
+  require.cache[filename] = cachedModule;
+}
+
+test("inline draft AI prompt clicks do not bubble back to the comment editor", async (t) => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>");
+  const previousGlobals = {
+    window: global.window,
+    document: global.document,
+    HTMLElement: global.HTMLElement,
+    Node: global.Node,
+    Event: global.Event,
+    MouseEvent: global.MouseEvent,
+    CustomEvent: global.CustomEvent,
+    IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT,
+  };
+  const existingGlobals = new Set(
+    Object.keys(previousGlobals).filter((key) =>
+      Object.prototype.hasOwnProperty.call(global, key),
+    ),
+  );
+  dom.window.HTMLElement.prototype.attachEvent = () => {};
+  dom.window.HTMLElement.prototype.detachEvent = () => {};
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    HTMLElement: dom.window.HTMLElement,
+    Node: dom.window.Node,
+    Event: dom.window.Event,
+    MouseEvent: dom.window.MouseEvent,
+    CustomEvent: dom.window.CustomEvent,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+
+  const editorDom = document.createElement("div");
+  const editor = {
+    state: {
+      selection: { from: 1, to: 1 },
+      doc: { content: { size: 2 } },
+    },
+    isEmpty: true,
+    isEditable: true,
+    view: { dom: editorDom },
+    commands: {
+      setTextSelection: () => {},
+      unsetHighlight: () => {},
+      focus: () => {},
+    },
+    on: () => {},
+    off: () => {},
+    setEditable: () => {},
+  };
+  let parentClicks = 0;
+  const container = document.getElementById("root");
+  const reactRoot = createRoot(container);
+
+  t.after(async () => {
+    await act(async () => reactRoot.unmount());
+    for (const [key, value] of Object.entries(previousGlobals)) {
+      if (existingGlobals.has(key)) global[key] = value;
+      else delete global[key];
+    }
+    dom.window.close();
+  });
+
+  await act(async () => {
+    reactRoot.render(
+      React.createElement(
+        "div",
+        { onClick: () => parentClicks += 1 },
+        React.createElement(InlineDraftAiFloat, {
+          editor,
+          onClose: () => {},
+        }),
+      ),
+    );
+  });
+
+  const prompt = container.querySelector('input[placeholder="Describe what to write…"]');
+  assert.ok(prompt);
+  prompt.focus();
+  prompt.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+  assert.equal(parentClicks, 0);
+  assert.equal(document.activeElement, prompt);
+});
 
 test("inline draft AI preserves a range and expands a collapsed caret over existing content", () => {
   assert.deepEqual(
