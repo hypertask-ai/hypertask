@@ -76,8 +76,11 @@ test("mobile chat uses the approved header controls and guarded new-chat action"
     );
     assert.ok(button, `${label} button must exist`);
     assert.match(button[0], /className="[^"]*h-11 w-11[^"]*"/);
+    if (label === "New chat") {
+      assert.match(button[0], /onClick=\{handleStartNewSession\}/);
+      assert.match(button[0], /disabled=\{isStartingNewSession\}/);
+    }
   }
-  assert.match(mobileBranch[0], /disabled=\{isStartingNewSession\}/);
   assert.match(newSessionHandler[0], /if \(isStartingNewSession\) return;/);
   assert.match(
     newSessionHandler[0],
