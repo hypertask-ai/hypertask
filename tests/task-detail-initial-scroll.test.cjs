@@ -76,6 +76,8 @@ test("task changes reject stale callbacks and allow the next untouched task", ()
 
   assert.equal(cancellations, 1);
   assert.deepEqual(runFlag(guard, firstGeneration), { allowed: false, ran: false });
+  assert.equal(guard.invalidate(firstGeneration), false);
+  assert.equal(cancellations, 1);
   assert.deepEqual(runFlag(guard, secondGeneration), { allowed: true, ran: true });
 });
 
@@ -153,7 +155,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   );
   assert.match(
     viewportLifecycle,
-    /initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\)/
+    /return initialScrollGuard\.listen\(scrollElementRef\?\.current \?\? window\)/
   );
   assert.doesNotMatch(viewportLifecycle, /if \(!_mbl\) return/);
   assert.match(
