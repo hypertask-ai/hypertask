@@ -112,6 +112,7 @@ export function WeekView() {
                     key={bar.task.id}
                     draggableId={calendarConfig.element_ids.task_card(bar.task.id)}
                     index={index}
+                    disableInteractiveElementBlocking
                   >
                     {(dragProvided) => (
                       <button

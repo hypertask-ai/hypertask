@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const jitiModule = require("jiti");
@@ -32,6 +33,15 @@ const task = (id, startDate, dueDate) => ({
 });
 
 const localDay = (year, month, day) => new Date(year, month - 1, day, 12);
+
+test("timeframe buttons remain draggable interactive elements", () => {
+  const weekView = fs.readFileSync(
+    path.join(root, "src/components/PageComponents/Calendar/week-view.tsx"),
+    "utf8",
+  );
+
+  assert.match(weekView, /<Draggable[\s\S]*?disableInteractiveElementBlocking/);
+});
 
 test("calendar interval membership uses half-open visible boundaries", () => {
   // New York's 2026 spring DST week has a 167-hour UTC range. The server still
