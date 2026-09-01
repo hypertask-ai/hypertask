@@ -62,11 +62,18 @@ test("mobile commands select no row until the user searches", async () => {
   const dom = new JSDOM('<div id="root"></div>', {
     url: "https://app.hypertask.ai/board",
   });
-  global.window = dom.window;
-  global.document = dom.window.document;
-  global.HTMLElement = dom.window.HTMLElement;
-  global.IS_REACT_ACT_ENVIRONMENT = true;
-
+  const globalNames = [
+    "window",
+    "document",
+    "HTMLElement",
+    "IS_REACT_ACT_ENVIRONMENT",
+  ];
+  const previousGlobals = new Map(
+    globalNames.map((name) => [
+      name,
+      Object.getOwnPropertyDescriptor(global, name),
+    ]),
+  );
   const statePath = path.join(root, "src/lib/state.tsx");
   const storePath = path.join(root, "src/store/index.ts");
   const userPath = path.join(root, "src/utils/getCurrentUser.ts");
@@ -77,57 +84,63 @@ test("mobile commands select no row until the user searches", async () => {
       require.cache[filename],
     ]),
   );
-  delete require.cache[hookPath];
-  require.cache[statePath] = {
-    id: statePath,
-    filename: statePath,
-    loaded: true,
-    exports: {
-      useRecoilState: (state) => React.useState(state.default),
-    },
-  };
-  require.cache[storePath] = {
-    id: storePath,
-    filename: storePath,
-    loaded: true,
-    exports: {
-      currentProjectAtom: { default: null },
-      frequentlyUsedHTCAton: { default: {} },
-    },
-  };
-  require.cache[userPath] = {
-    id: userPath,
-    filename: userPath,
-    loaded: true,
-    exports: { getCurrentUserFromCookies: () => null },
-  };
+  let reactRoot;
 
-  const jiti = createJiti(__filename, {
-    alias: { "@": path.join(root, "src") },
-  });
-  const useHTC = jiti(hookPath).default;
-  const commandGroups = [{
-    group: "Board",
-    commandLists: [{
-      key: "toggleBoardZoom",
-      name: "Zoom board out",
-      commandMode: 1,
-      keywords: "zoom board",
-    }],
-  }];
-
-  let onKeyChange;
-  const Harness = () => {
-    const commands = useHTC(commandGroups, commandGroups, false);
-    onKeyChange = commands.onKeyChange;
-    return React.createElement("output", {
-      "data-selected": commands.selectedCommand?.key ?? "none",
-    });
-  };
-
-  const container = document.getElementById("root");
-  const reactRoot = createRoot(container);
   try {
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.HTMLElement = dom.window.HTMLElement;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    delete require.cache[hookPath];
+    require.cache[statePath] = {
+      id: statePath,
+      filename: statePath,
+      loaded: true,
+      exports: {
+        useRecoilState: (state) => React.useState(state.default),
+      },
+    };
+    require.cache[storePath] = {
+      id: storePath,
+      filename: storePath,
+      loaded: true,
+      exports: {
+        currentProjectAtom: { default: null },
+        frequentlyUsedHTCAton: { default: {} },
+      },
+    };
+    require.cache[userPath] = {
+      id: userPath,
+      filename: userPath,
+      loaded: true,
+      exports: { getCurrentUserFromCookies: () => null },
+    };
+
+    const jiti = createJiti(__filename, {
+      alias: { "@": path.join(root, "src") },
+    });
+    const useHTC = jiti(hookPath).default;
+    const commandGroups = [{
+      group: "Board",
+      commandLists: [{
+        key: "toggleBoardZoom",
+        name: "Zoom board out",
+        commandMode: 1,
+        keywords: "zoom board",
+      }],
+    }];
+
+    let onKeyChange;
+    const Harness = () => {
+      const commands = useHTC(commandGroups, commandGroups, false);
+      onKeyChange = commands.onKeyChange;
+      return React.createElement("output", {
+        "data-selected": commands.selectedCommand?.key ?? "none",
+      });
+    };
+
+    const container = document.getElementById("root");
+    reactRoot = createRoot(container);
     await React.act(async () => {
       reactRoot.render(React.createElement(Harness));
     });
@@ -147,17 +160,17 @@ test("mobile commands select no row until the user searches", async () => {
     assert.equal(container.querySelector("output").dataset.selected, "none");
   } finally {
     try {
-      await React.act(async () => reactRoot.unmount());
+      if (reactRoot) await React.act(async () => reactRoot.unmount());
     } finally {
       for (const [filename, previous] of previousModules) {
         if (previous === undefined) delete require.cache[filename];
         else require.cache[filename] = previous;
       }
       dom.window.close();
-      delete global.window;
-      delete global.document;
-      delete global.HTMLElement;
-      delete global.IS_REACT_ACT_ENVIRONMENT;
+      for (const [name, descriptor] of previousGlobals) {
+        if (descriptor === undefined) delete global[name];
+        else Object.defineProperty(global, name, descriptor);
+      }
     }
   }
 });
