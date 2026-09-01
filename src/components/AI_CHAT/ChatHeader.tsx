@@ -230,9 +230,9 @@ export const ChatHeader = () => {
         <div className="min-w-0 flex-1">
           <div
             className="truncate px-2 text-modalSmall font-semibold leading-5"
-            title={sessions[0]?.title ?? undefined}
+            title={currentSession?.title ?? undefined}
           >
-            {sessions[0]?.title ?? "AI Chat"}
+            {currentSession?.title ?? "AI Chat"}
           </div>
           <AIModelDropDownButton
             optionCallback={dropDownButtonAICallback}

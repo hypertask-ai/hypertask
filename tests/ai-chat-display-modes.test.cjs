@@ -67,10 +67,16 @@ test("mobile chat uses the approved header controls and guarded new-chat action"
   assert.ok(mobileBranch, "mobile header must be a separate rendered branch");
   assert.ok(newSessionHandler, "new-chat handler must exist");
   assert.match(mobileBranch[0], /data-ai-chat-mobile-header/);
-  assert.match(mobileBranch[0], /aria-label="Close AI chat"[\s\S]*?h-11 w-11/);
+  assert.match(mobileBranch[0], /currentSession\?\.title/);
+  assert.doesNotMatch(mobileBranch[0], /sessions\[0\]\?\.title/);
   assert.match(mobileBranch[0], /<AIModelDropDownButton/);
-  assert.match(mobileBranch[0], /aria-label="Chat history"[\s\S]*?h-11 w-11/);
-  assert.match(mobileBranch[0], /aria-label="New chat"[\s\S]*?h-11 w-11/);
+  for (const label of ["Close AI chat", "Chat history", "New chat"]) {
+    const button = mobileBranch[0].match(
+      new RegExp(`<button(?:(?!</button>)[\\s\\S])*?aria-label="${label}"(?:(?!</button>)[\\s\\S])*?</button>`)
+    );
+    assert.ok(button, `${label} button must exist`);
+    assert.match(button[0], /className="[^"]*h-11 w-11[^"]*"/);
+  }
   assert.match(mobileBranch[0], /disabled=\{isStartingNewSession\}/);
   assert.match(newSessionHandler[0], /if \(isStartingNewSession\) return;/);
   assert.match(
