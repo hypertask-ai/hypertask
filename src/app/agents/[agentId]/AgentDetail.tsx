@@ -236,9 +236,11 @@ function InfoRow({
 function RecentActionsCard({
   activity,
   error,
+  showTokenUsage,
 }: {
   activity: TActivityItem[] | null;
   error: string | null;
+  showTokenUsage: boolean;
 }) {
   return (
     <div className="mt-3 bg-cardBackground rounded-[4px] p-4 shadow-md overflow-x-auto">
@@ -254,7 +256,7 @@ function RecentActionsCard({
         <table className="w-full min-w-[560px] text-left">
           <thead>
             <tr>
-              {['When', 'Did', 'Where', 'Tokens'].map((heading) => (
+              {["When", "Did", "Where"].map((heading) => (
                 <th
                   key={heading}
                   className="text-[12px] uppercase text-text-light-gray font-medium pb-2 pr-3"
@@ -262,6 +264,11 @@ function RecentActionsCard({
                   {heading}
                 </th>
               ))}
+              {showTokenUsage && (
+                <th className="text-[12px] uppercase text-text-light-gray font-medium pb-2">
+                  Tokens
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -293,13 +300,15 @@ function RecentActionsCard({
                     <span className="text-text-light-gray">—</span>
                   )}
                 </td>
-                <td className="text-[13px] py-2">
-                  {item.tokens != null ? (
-                    formatTokens(item.tokens)
-                  ) : (
-                    <span className="text-text-light-gray">—</span>
-                  )}
-                </td>
+                {showTokenUsage && (
+                  <td className="text-[13px] py-2">
+                    {item.tokens != null ? (
+                      formatTokens(item.tokens)
+                    ) : (
+                      <span className="text-text-light-gray">—</span>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -1713,7 +1722,11 @@ const AgentDetail = (props: IProp) => {
               </div>
             </div>
 
-            <RecentActionsCard activity={activity} error={activityError} />
+            <RecentActionsCard
+              activity={activity}
+              error={activityError}
+              showTokenUsage={agent.runtimeType === "NATIVE"}
+            />
 
             <div className="mt-6 bg-cardBackground rounded-[4px] shadow-md">
               <button
