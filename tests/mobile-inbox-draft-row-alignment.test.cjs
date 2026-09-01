@@ -10,15 +10,17 @@ const source = fs.readFileSync(
   ),
   "utf8",
 );
+const notificationRow = fs.readFileSync(
+  path.resolve(
+    __dirname,
+    "../src/components/notifications/NotificationRow.tsx",
+  ),
+  "utf8",
+);
 
-// HTPR-5866: the open-draft button carried a mobile-only `px-5` on top of the
-// row container's shared `sm:p-inbox-horizontal`, double-padding the DRAFT row
-// (~32px vs the 12px notification rows use). The container's shared inbox
-// padding is the single horizontal source on mobile; the button only keeps
-// vertical rhythm (`py-2`), right-side clearance for the archive control
-// (`pr-14`), and the desktop declarations (`md:px-0`, `md:pr-10`). Both class
-// lists are asserted exactly so any padding change, in any Tailwind syntax,
-// fails here and forces a conscious update.
+// Inbox rows share the outer `sm:p-inbox-horizontal` inset. Their clickable
+// content then adds 20px on mobile and clears it at the desktop breakpoint.
+// Keep the draft's Tailwind equivalent (`px-5`) aligned with notification rows.
 
 const openButton = source.match(
   /<button[\s\S]*?data-inbox-draft-control="true"[\s\S]*?className="([^"]*)"/,
@@ -34,6 +36,7 @@ const expectedButtonClasses = [
   "flex-col",
   "justify-between",
   "rounded-md",
+  "px-5",
   "py-2",
   "pr-14",
   "text-left",
@@ -64,7 +67,8 @@ const expectedContainerClasses = [
   "md:p-0",
 ];
 
-test("the draft row button adds no horizontal padding beyond the shared row padding", () => {
+test("the draft row keeps the same mobile content inset as notification rows", () => {
+  assert.match(notificationRow, /px-\[20px\][\s\S]*?md:px-0/);
   assert.ok(openButton, "open-draft button className not found");
   assert.deepEqual(openButton[1].trim().split(/\s+/), expectedButtonClasses);
 });
