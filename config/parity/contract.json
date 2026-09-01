@@ -71,7 +71,10 @@
           "^admin agents rotate-token$",
           "^admin tokens mint$",
           "^admin tokens revoke$",
-          "^admin connections list$"
+          "^admin connections list$",
+          "^admin agents delete$",
+          "^agents delete$",
+          "^agents update$"
         ],
         "ai_chat": [
           "^hypertask_create_agent$",
@@ -87,6 +90,13 @@
           "^hypertask_revoke_token$",
           "^hypertask_list_connections$"
         ]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/5896",
+          "expires": "2026-09-15",
+          "entries": ["admin agents delete", "agents delete", "agents update"]
+        }
       }
     },
     {
@@ -251,9 +261,16 @@
       "matches": {
         "api": ["^(GET|POST) /api/mcp/inbox/(list|composition|archive|unarchive|seen|move)$"],
         "mcp": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"],
-        "cli": ["^(inbox (list|composition|archive|unarchive)|task move-to-inbox)$"],
+        "cli": ["^(inbox (list|composition|archive|unarchive)|task move-to-inbox)$", "^messages poll$"],
         "ai_chat": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"],
         "hyperai": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/5896",
+          "expires": "2026-09-15",
+          "entries": ["messages poll"]
+        }
       }
     },
     {
@@ -328,9 +345,16 @@
       "matches": {
         "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/time/(start|stop|pause|resume|log|status|running|report|update|delete)$"],
         "mcp": ["^hypertask_(time|pause_timer|resume_timer)$"],
-        "cli": ["^time (start|stop|pause|resume|log|status|running|report)$"],
+        "cli": ["^time (start|stop|pause|resume|log|status|running|report)$", "^time delete$", "^time update$"],
         "ai_chat": ["^hypertask_(start_timer|stop_timer|pause_timer|resume_timer|log_time|time_status|running_timers|time_report)$"],
         "hyperai": ["^hypertask_(time|pause_timer|resume_timer)$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/5896",
+          "expires": "2026-09-15",
+          "entries": ["time delete", "time update"]
+        }
       }
     },
     {

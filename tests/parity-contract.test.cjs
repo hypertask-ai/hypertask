@@ -4,6 +4,7 @@ const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const yaml = require("js-yaml");
 
 test("AI Chat inventory is formatting-independent and wrapper-independent", async () => {
   const root = path.resolve(__dirname, "..");
@@ -418,6 +419,232 @@ test("trusted validation rejects candidate replacement of the canonical policy",
   );
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Trusted parity policy evolution failed/);
+});
+
+test("trusted parity workflows pin a bounded native CLI transition", () => {
+  const root = path.resolve(__dirname, "..");
+  const runnerPackage = JSON.parse(
+    fs.readFileSync(path.join(root, "config/parity/runner/package.json"), "utf8"),
+  );
+  const runnerLock = JSON.parse(
+    fs.readFileSync(path.join(root, "config/parity/runner/package-lock.json"), "utf8"),
+  );
+  const contract = JSON.parse(
+    fs.readFileSync(path.join(root, "config/parity/contract.json"), "utf8"),
+  );
+  const packageName = "@hypertask/hypertask_cli";
+  const lockedPackage = runnerLock.packages[`node_modules/${packageName}`];
+  const workflowJobs = [
+    [".github/workflows/ci-tests.yml", "production-cli-parity"],
+    [".github/workflows/parity-contract-trusted.yml", "parity-contract-trusted"],
+  ].map(([relative, jobName]) => {
+    const workflow = yaml.load(
+      fs.readFileSync(path.join(root, relative), "utf8"),
+    );
+    return [jobName, workflow.jobs?.[jobName]];
+  });
+
+  for (const [, job] of workflowJobs) {
+    assert.ok(job);
+    assert.ok(
+      job["continue-on-error"] === undefined ||
+        job["continue-on-error"] === false,
+    );
+    for (const step of job.steps ?? []) {
+      assert.ok(
+        step["continue-on-error"] === undefined ||
+          step["continue-on-error"] === false,
+      );
+      assert.deepEqual(
+        Object.keys(step.env ?? {}).filter((key) =>
+          key.startsWith("TRUSTED_CLI_"),
+        ),
+        [],
+      );
+    }
+    const allRunSource = (job.steps ?? [])
+      .map((step) => step.run)
+      .filter((run) => typeof run === "string")
+      .join("\n");
+    assert.doesNotMatch(allRunSource, /\bGITHUB_ENV\b/);
+    assert.doesNotMatch(allRunSource, /\bTRUSTED_CLI_[A-Z_]+\s*=/);
+  }
+
+  const productionJob = workflowJobs[0][1];
+  const verifierJob = workflowJobs[1][1];
+  assert.equal(productionJob.env.TRUSTED_CLI_PACKAGE, packageName);
+  assert.equal(verifierJob.env.TRUSTED_CLI_PACKAGE, packageName);
+  assert.equal(productionJob.env.TRUSTED_CLI_VERSION, contract.cliPackage.version);
+  assert.equal(verifierJob.env.TRUSTED_CLI_VERSION, contract.cliPackage.version);
+  assert.equal(
+    productionJob.env.TRUSTED_CLI_NEXT_VERSION,
+    verifierJob.env.TRUSTED_CLI_NEXT_VERSION,
+  );
+  assert.notEqual(
+    productionJob.env.TRUSTED_CLI_NEXT_VERSION,
+    productionJob.env.TRUSTED_CLI_VERSION,
+  );
+  assert.match(verifierJob.env.TRUSTED_CLI_NEXT_VERSION, /^\d+\.\d+\.\d+$/);
+  assert.match(
+    verifierJob.env.TRUSTED_CLI_NEXT_BINARY_VERSION,
+    /^\d+\.\d+\.\d+$/,
+  );
+  assert.match(
+    verifierJob.env.TRUSTED_CLI_NEXT_BINARY_SHA256,
+    /^[a-f0-9]{64}$/,
+  );
+  assert.match(
+    verifierJob.env.TRUSTED_CLI_NEXT_NPM_INTEGRITY,
+    /^sha512-[A-Za-z0-9+/]+={0,2}$/,
+  );
+  assert.equal(runnerPackage.dependencies[packageName], contract.cliPackage.version);
+  assert.equal(lockedPackage.version, contract.cliPackage.version);
+  assert.equal(
+    runnerLock.packages[""].dependencies[packageName],
+    contract.cliPackage.version,
+  );
+
+  const productionSteps = productionJob.steps
+    .map((step) => [
+      step,
+      (step.run ?? "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#")),
+    ])
+    .filter(([, commands]) =>
+      commands.includes('LATEST_VERSION=$(npm view "$TRUSTED_CLI_PACKAGE" version)'),
+    );
+  assert.equal(productionSteps.length, 1);
+  const productionCommands = productionSteps[0][1];
+  const productionSource = productionCommands.join("\n");
+  const productionLogicalCommands = productionSource
+    .replace(/\\\n/g, "")
+    .split("\n");
+  assert.match(
+    productionSource,
+    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+  );
+  assert.match(
+    productionLogicalCommands.join("\n"),
+    /if \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION:\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION:\$TRUSTED_CLI_NEXT_VERSION" \] && \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION:\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+  );
+  const productionGuards = productionLogicalCommands
+    .map((line, index) => (/^if\b.*; then$/.test(line) ? index : -1))
+    .filter((index) => index >= 0);
+  assert.equal(productionGuards.length, 3);
+  for (const guard of productionGuards) {
+    let depth = 0;
+    let guardEnd = -1;
+    let exitsDirectly = false;
+    let alternateBranch = false;
+    for (let index = guard; index < productionLogicalCommands.length; index += 1) {
+      const command = productionLogicalCommands[index];
+      if (/^if\b.*; then$/.test(command)) depth += 1;
+      if (/^(else|elif\b)/.test(command) && depth === 1) alternateBranch = true;
+      if (command === "exit 1" && depth === 1 && !alternateBranch) {
+        exitsDirectly = true;
+      }
+      if (command === "fi") {
+        depth -= 1;
+        if (depth === 0) {
+          guardEnd = index;
+          break;
+        }
+      }
+    }
+    assert.ok(guardEnd > guard);
+    assert.ok(exitsDirectly);
+  }
+  assert.match(
+    productionSource,
+    /"\$PARITY_TMP\/node_modules\/\.bin\/hypertask" capabilities/,
+  );
+  assert.doesNotMatch(productionSource, /releases\/download/);
+
+  const verifierSteps = verifierJob.steps
+    .map((step) => [
+      step,
+      (step.run ?? "")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#")),
+    ])
+    .filter(([, commands]) =>
+      commands.some((line) =>
+        line.includes(
+          "releases/download/v${TRUSTED_CLI_NEXT_BINARY_VERSION}/hypertask-linux-x86_64",
+        ),
+      ),
+    );
+  assert.equal(verifierSteps.length, 1);
+  const [verifierStep, commands] = verifierSteps[0];
+  assert.equal(verifierStep.shell, "bash");
+  const verifierSource = commands.join("\n");
+  const verifierLogicalCommands = verifierSource
+    .replace(/\\\n/g, "")
+    .split("\n");
+  assert.deepEqual(
+    commands.filter((line) => /\b(npm|npx|pnpm|yarn|bun|bunx)\b/.test(line)),
+    ['npm ci --prefix "$PARITY_TMP" --ignore-scripts --no-audit --no-fund'],
+  );
+  assert.match(
+    verifierSource,
+    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+  );
+  assert.match(
+    verifierSource,
+    /integrity: process\.env\.TRUSTED_CLI_NEXT_NPM_INTEGRITY/,
+  );
+  assert.match(
+    verifierSource,
+    /JSON\.stringify\(candidateLock\) !== JSON\.stringify\(expectedLock\)/,
+  );
+  assert.match(
+    verifierSource,
+    /--trusted-cli-version "\$CONTRACT_VERSION"/,
+  );
+
+  const transition = verifierLogicalCommands.indexOf(
+    'if [ "$CONTRACT_VERSION" = "$TRUSTED_CLI_NEXT_VERSION" ]; then',
+  );
+  const download = verifierLogicalCommands.findIndex((line) =>
+    line.includes("releases/download/"),
+  );
+  const verify = verifierLogicalCommands.findIndex((line) =>
+    line.includes(
+      '"$TRUSTED_CLI_NEXT_BINARY_SHA256  $CLI_BINARY" | sha256sum --check',
+    ),
+  );
+  let transitionDepth = 0;
+  let transitionEnd = -1;
+  for (let index = transition; index < verifierLogicalCommands.length; index += 1) {
+    if (/^if\b.*; then$/.test(verifierLogicalCommands[index])) {
+      transitionDepth += 1;
+    }
+    if (verifierLogicalCommands[index] === "fi") {
+      transitionDepth -= 1;
+      if (transitionDepth === 0) {
+        transitionEnd = index;
+        break;
+      }
+    }
+  }
+  const execution = verifierLogicalCommands.findIndex((line) =>
+    line.includes('"$CLI_BINARY" capabilities'),
+  );
+  assert.ok(transition >= 0 && transition < download && download < verify);
+  assert.equal(
+    verifierLogicalCommands[download],
+    'curl --fail --location --silent --show-error "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_NEXT_BINARY_VERSION}/hypertask-linux-x86_64" --output "$CLI_BINARY"',
+  );
+  assert.equal(
+    verifierLogicalCommands[verify],
+    'if ! echo "$TRUSTED_CLI_NEXT_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then',
+  );
+  assert.equal(verifierLogicalCommands[verify + 1], "exit 1");
+  assert.equal(verifierLogicalCommands[verify + 2], "fi");
+  assert.ok(transitionEnd > verify && transitionEnd < execution);
 });
 
 test("trusted validation permits only the CLI package selected by the trusted runner", () => {
