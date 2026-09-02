@@ -50,7 +50,11 @@ function transactionClient() {
     },
     oAuthClient: {
       updateMany: async ({ where, data }) => {
-        if (where.client_id !== clientId || where.owner_id !== null) {
+        if (
+          where.client_id !== clientId ||
+          where.owner_id !== null ||
+          claimedOwnerId !== null
+        ) {
           return { count: 0 }
         }
         claimedOwnerId = data.owner_id

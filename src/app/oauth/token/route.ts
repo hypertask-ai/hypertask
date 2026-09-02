@@ -423,6 +423,8 @@ export async function POST(request: NextRequest) {
     // transaction can consume the code and return a token.
     try {
       session = await prisma.$transaction(async (tx) => {
+        // Match deletion's parent-before-children lock order so ownership claims
+        // and one-time code consumption cannot deadlock with client removal.
         await tx.$queryRaw<Array<{ client_id: string }>>`
           SELECT "client_id"
           FROM "OAuthClient"
