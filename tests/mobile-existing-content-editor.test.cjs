@@ -102,7 +102,10 @@ test("the shared bottom row exposes one plus menu and the approved actions", () 
 test("mentions and commands insert into the existing editor", () => {
   assert.match(actions, /insertEditorTrigger\("@"\)/);
   assert.match(actions, /insertEditorTrigger\("\/"\)/);
-  assert.match(actions, /mobileEditorTriggerText\(trigger, textBeforeCaret\)/);
+  assert.match(
+    actions,
+    /insertContent\(mobileEditorTriggerText\(trigger, textBeforeCaret\)\)[\s\S]*?\.run\(\)/,
+  );
 });
 
 test("the pen reveals inline edit AI inside the same well", () => {

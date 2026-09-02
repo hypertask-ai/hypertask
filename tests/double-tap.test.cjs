@@ -1,31 +1,17 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 
-const source = fs.readFileSync(
+const jiti = require("jiti")(__filename, {
+  interopDefault: true,
+  alias: { "@": path.join(__dirname, "../src") },
+});
+const { useDoubleTap } = jiti(
   path.join(__dirname, "../src/hooks/MultiPages/useDoubleTap.ts"),
-  "utf8",
 );
-const javascript = ts.transpileModule(source, {
-  compilerOptions: {
-    esModuleInterop: true,
-    jsx: ts.JsxEmit.ReactJSX,
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText;
-const loaded = { exports: {} };
-new Function("module", "exports", "require", javascript)(
-  loaded,
-  loaded.exports,
-  require,
-);
-const { useDoubleTap } = loaded.exports;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

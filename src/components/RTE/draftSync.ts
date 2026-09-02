@@ -1,4 +1,4 @@
-import type { IDraft } from "@/models/model";
+import type { IDraft, RedirectMode } from "@/models/model";
 
 // Keeping an editor in step with a draft that can be written outside this browser
 // (hypertask CLI/MCP `draft create`, or another tab).
@@ -57,7 +57,7 @@ export function shouldSkipUnchangedMobileDescriptionSave({
   attachmentsChanged,
 }: {
   isMobileExistingSave: boolean;
-  mode: string;
+  mode: RedirectMode;
   hasDraft: boolean;
   openingHtml?: string;
   currentHtml?: string;
