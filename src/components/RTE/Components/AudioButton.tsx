@@ -693,12 +693,12 @@ export const AudioButton = ({
             if (prominent) {
               micColorClassName = "text-icon-dark-gray";
               if (!hasText) {
-                micColorClassName =
-                  mobilePrimaryTone === "ai"
-                    ? "text-white"
-                    : mobilePrimaryTone === "primary"
-                      ? "text-primary-foreground"
-                      : "text-white-black-inverted";
+                micColorClassName = "text-white-black-inverted";
+                if (mobilePrimaryTone === "ai") {
+                  micColorClassName = "text-white";
+                } else if (mobilePrimaryTone === "primary") {
+                  micColorClassName = "text-primary-foreground";
+                }
               }
             }
             return (
