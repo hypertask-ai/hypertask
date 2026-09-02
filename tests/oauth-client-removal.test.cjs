@@ -152,6 +152,16 @@ test("OAuth client removal rejects a cross-site request before database access",
   assert.equal(calls.transactions, 0);
 });
 
+test("OAuth client removal rejects an HTTP origin for the HTTPS host", async () => {
+  const { DELETE, calls } = loadRoute();
+  const response = await remove(DELETE, "owned-client", {
+    origin: "http://app.hypertask.ai",
+  });
+
+  assert.equal(response.status, 403);
+  assert.equal(calls.transactions, 0);
+});
+
 test("a different user cannot remove an OAuth client or learn whether it exists", async () => {
   const { DELETE, calls } = loadRoute({
     sessionUserId: 7,

@@ -9,12 +9,21 @@ class ClientNotOwnedError extends Error {}
 
 function hasTrustedMutationOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin");
-  const host =
-    request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-  if (!origin || !host) return false;
+  const host = (
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host")
+  )
+    ?.split(",")[0]
+    .trim();
+  const protocol = (
+    request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol
+  )
+    .split(",")[0]
+    .trim()
+    .replace(/:$/, "");
+  if (!origin || !host || !protocol) return false;
 
   try {
-    return new URL(origin).host === host;
+    return new URL(origin).origin === new URL(`${protocol}://${host}`).origin;
   } catch {
     return false;
   }
