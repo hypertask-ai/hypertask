@@ -10,6 +10,9 @@ const tiptap = read("src/components/RTE/TipTapTaskDetail.tsx");
 const shell = read("src/components/RTE/Components/TiptapMainContainer.tsx");
 const actions = read("src/components/Common/AttachmentsUpload/index.tsx");
 const imageGallery = read("src/components/Common/AttachmentsUpload/ImageGalleryView.tsx");
+const singleFilePreview = read(
+  "src/components/Common/AttachmentsUpload/SingleFileInputPreview.tsx",
+);
 const ai = read("src/components/RTE/Components/InlineDraftAiFloat.tsx");
 const save = read(
   "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts",
@@ -175,6 +178,10 @@ test("late dictation, AI, and upload completion cannot mutate a closed edit", ()
   assert.match(actions, /setMobileAttachmentBridgePending\(\(pending\) => pending \+ 1\)/);
   assert.match(actions, /mobileUploadPending[\s\S]*?mobileAttachmentBridgePending > 0[\s\S]*?!sendOnClick/);
   assert.match(imageGallery, /return \(\) => onUploadPendingChange\(false\)/);
+  assert.match(
+    singleFilePreview,
+    /allowDelete && handleRemove && \(!shouldUpload \|\| progressPercentage === 100\)/,
+  );
   assert.match(actions, /onClick=\{async \(event\)[\s\S]*?Could not save editor content/);
   assert.match(descriptionBody, /allowEdit=\{isEditing && !uploadingDescription\}/);
   assert.match(upload, /const hasCompleted = useRef\(false\)/);
