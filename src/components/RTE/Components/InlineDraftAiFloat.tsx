@@ -727,6 +727,7 @@ const InlineDraftAiFloat = ({
     wasEditableRef.current = editor.isEditable;
     editor.setEditable(false);
 
+    const requestPrompt = prompt;
     const request = (async () => {
       const response = await fetch(tiptapForwardSlashRoute, {
         method: "POST",
@@ -790,7 +791,7 @@ const InlineDraftAiFloat = ({
         toast.dismiss(toastId);
         return;
       }
-      setPrompt("");
+      setPrompt((current) => (current === requestPrompt ? "" : current));
       if (isMobileAiSheet) {
         const applied =
           mobileSourceSnapshot !== null &&
@@ -1053,7 +1054,7 @@ const InlineDraftAiFloat = ({
           autoFocus
           maxLength={INLINE_DRAFT_AI_PROMPT_MAX_LENGTH}
           value={prompt}
-          disabled={isLoading || audioProcessing}
+          disabled={audioProcessing}
           onChange={(event) => setPrompt(event.target.value)}
           placeholder={mobilePromptPlaceholder}
           className="min-h-11 w-full border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
@@ -1231,23 +1232,41 @@ const InlineDraftAiFloat = ({
               </>
             ) : (
               <>
-                {!hasMobileDraft && mobileReview.phase !== "loading" ? (
-                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-content leading-relaxed text-text-light-gray">
-                    <Sparkles
-                      size={28}
-                      strokeWidth={1.5}
-                      className="text-hypertasks-ai-purple"
-                      aria-hidden
-                    />
-                    <p>
-                      Nothing written yet.
-                      <br />
-                      Tell the AI what the comment should say, by voice or keyboard.
-                    </p>
+                {!hasMobileDraft && !mobileReview.isRefining ? (
+                  <div
+                    className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-content leading-relaxed text-text-light-gray"
+                    role={mobileReview.phase === "loading" ? "status" : undefined}
+                  >
+                    {mobileReview.phase === "loading" ? (
+                      <>
+                        <LoaderCircle
+                          size={18}
+                          className="animate-spin text-hypertasks-ai-purple"
+                          aria-hidden
+                        />
+                        {mobileReview.lastRequest?.command === "WriteContent"
+                          ? "Writing draft…"
+                          : "Rewriting draft…"}
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles
+                          size={28}
+                          strokeWidth={1.5}
+                          className="text-hypertasks-ai-purple"
+                          aria-hidden
+                        />
+                        <p>
+                          Nothing written yet.
+                          <br />
+                          Tell the AI what the comment should say, by voice or keyboard.
+                        </p>
+                      </>
+                    )}
                   </div>
                 ) : null}
                 {hasMobileDraft || mobileReview.isRefining ? (
-                  <div className="flex min-h-0 flex-1 flex-col rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
+                  <div className="relative flex min-h-0 flex-1 flex-col rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
                     <p className="mb-2 text-micro font-medium uppercase tracking-wide text-text-light-gray">
                       {mobileInputLabel}
                     </p>
@@ -1257,7 +1276,7 @@ const InlineDraftAiFloat = ({
                         styles.editorContainer,
                         "min-h-0 flex-1 overflow-y-auto outline-none scrollbar-none",
                       )}
-                      contentEditable={!isLoading}
+                      contentEditable
                       suppressContentEditableWarning
                       onBlur={handleMobileEditableBlur}
                       onKeyDown={handleMobileEditableKeyDown}
@@ -1271,63 +1290,62 @@ const InlineDraftAiFloat = ({
                           : handleMobileSourceInput
                       }
                     />
+                    {mobileReview.phase === "loading" ? (
+                      <div
+                        className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-[4px] bg-cardBackground text-content text-text-light-gray"
+                        role="status"
+                      >
+                        <LoaderCircle
+                          size={18}
+                          className="animate-spin text-hypertasks-ai-purple"
+                          aria-hidden
+                        />
+                        {mobileReview.lastRequest?.command === "WriteContent"
+                          ? "Writing draft…"
+                          : "Rewriting draft…"}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
                 {hasMobileGeneratedDraft &&
                 Boolean(mobileSourceDraft) &&
-                mobileReview.phase !== "loading" &&
                 !mobileReview.isRefining ? (
                   <button
                     type="button"
+                    disabled={isLoading}
                     onClick={close}
-                    className="mt-3 min-h-11 w-full shrink-0 rounded-sm bg-shadcn-primary px-3 text-content font-semibold text-primary-foreground"
+                    className="mt-3 min-h-11 w-full shrink-0 rounded-sm bg-shadcn-primary px-3 text-content font-semibold text-primary-foreground disabled:opacity-50"
                   >
                     Use this text
                   </button>
                 ) : null}
 
-                {mobileReview.phase === "loading" ? (
-                  <div
-                    className="flex min-h-[88px] items-center justify-center gap-2 text-content text-text-light-gray"
-                    role="status"
-                  >
-                    <LoaderCircle
-                      size={18}
-                      className="animate-spin text-hypertasks-ai-purple"
-                      aria-hidden
-                    />
-                    {mobileReview.lastRequest?.command === "WriteContent"
-                      ? "Writing draft…"
-                      : "Rewriting draft…"}
+                {Boolean(mobileSourceDraft) && !mobileReview.isRefining ? (
+                  <div className="scrollbar-none mt-2 flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
+                    {MOBILE_EDIT_ACTIONS.map(
+                      ([label, command, instruction]) => (
+                        <button
+                          key={label}
+                          type="button"
+                          disabled={isLoading}
+                          className={MOBILE_CHIP_CLASS}
+                          onPointerDown={(event) => event.preventDefault()}
+                          onClick={() =>
+                            void runAction({
+                              command,
+                              instruction,
+                              label,
+                            })
+                          }
+                        >
+                          {label}
+                        </button>
+                      ),
+                    )}
                   </div>
-                ) : (
-                  <>
-                    {Boolean(mobileSourceDraft) && !mobileReview.isRefining ? (
-                      <div className="scrollbar-none mt-2 flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
-                        {MOBILE_EDIT_ACTIONS.map(
-                          ([label, command, instruction]) => (
-                            <button
-                              key={label}
-                              type="button"
-                              className={MOBILE_CHIP_CLASS}
-                              onClick={() =>
-                                void runAction({
-                                  command,
-                                  instruction,
-                                  label,
-                                })
-                              }
-                            >
-                              {label}
-                            </button>
-                          ),
-                        )}
-                      </div>
-                    ) : null}
-                    {mobilePromptComposer}
-                  </>
-                )}
+                ) : null}
+                {mobilePromptComposer}
               </>
             )}
           </div>
