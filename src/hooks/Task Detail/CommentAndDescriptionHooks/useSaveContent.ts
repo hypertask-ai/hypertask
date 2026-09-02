@@ -578,6 +578,8 @@ export default function useSaveContent() {
           );
           if (hasDraftInit) setHasDraftInit(false);
           saved = true;
+        } else {
+          toast.error("Could not save description. Your changes are still here.");
         }
       } catch (error) {
         console.log("🚀 ~ handleSubmit ~ error:", error)

@@ -263,6 +263,7 @@ const Tiptap = ({
     : "100dvh";
   const [mobileEditSaving, setMobileEditSaving] = useState(false);
   const mobileEditSavingRef = useRef(false);
+  const saveInFlightRef = useRef(false);
   const mobileEditSessionActiveRef = useRef(false);
   const cancelMobileExistingEditRef = useRef<() => void>(() => {});
   type EditorAttachmentStateItem =
@@ -526,7 +527,8 @@ const Tiptap = ({
   const toggleHighlightHandler = (state: boolean) => setToggleHighlight(state);
 
   const handleCallback = async (mode_?: "moveToNext", inbox?: boolean, markAsDone?: boolean) => {
-    if (!handleSave || mobileEditSavingRef.current) return;
+    if (!handleSave || saveInFlightRef.current) return;
+    if (mobileEditSavingRef.current) return;
 
     if (mode === "read-edit-description" && uploadingDescription) return false;
 
@@ -534,6 +536,8 @@ const Tiptap = ({
       toast("Cannot post a blank comment");
       return false;
     }
+
+    saveInFlightRef.current = true;
 
     const isMobileExistingSave = mobileExistingEditOpen;
     if (isMobileExistingSave) {
@@ -605,6 +609,7 @@ const Tiptap = ({
       toast.error("Could not save. Your changes are still here.");
       return false;
     } finally {
+      saveInFlightRef.current = false;
       if (isMobileExistingSave) {
         mobileEditSavingRef.current = false;
         setMobileEditSaving(false);

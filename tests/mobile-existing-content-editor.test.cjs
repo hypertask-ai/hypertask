@@ -135,6 +135,8 @@ test("DONE is single-flight and only clears local state after a successful save"
     "const sendComment = () =>",
   );
   assert.match(callback, /mobileEditSavingRef\.current\) return/);
+  assert.match(callback, /saveInFlightRef\.current\) return/);
+  assert.match(callback, /saveInFlightRef\.current = true/);
   assert.match(callback, /mobileEditSavingRef\.current = true/);
   assert.match(callback, /const result = await handleSave/);
   assert.match(callback, /const saved = result !== false;[\s\S]*?if \(!saved\) return false/);
@@ -176,6 +178,8 @@ test("late dictation, AI, and upload completion cannot mutate a closed edit", ()
 });
 
 test("description and comment failures leave edit mode open", () => {
+  assert.match(commentsContainer, /!isStacked && editState !== i && comment\.attachments/);
+  assert.match(save, /response\.status === 200[\s\S]*?Could not save description\. Your changes are still here/);
   assert.match(save, /Could not prepare description\. Your changes are still here/);
   assert.match(save, /if \(!comment\)[\s\S]*?This comment no longer exists/);
   assert.match(save, /response\.status === 200[\s\S]*?Could not update comment\. Your changes are still here/);
