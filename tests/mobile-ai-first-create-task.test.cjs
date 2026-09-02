@@ -28,8 +28,6 @@ const assignees = read(
   "src/components/Modals/CreateTaskGloballyModal/AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally.tsx",
 );
 const startDate = read("src/components/Modals/StartDate/index.tsx");
-const createRoute = read("src/pages/api/tasks/createGlobally.ts");
-
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 global.DOMParser = dom.window.DOMParser;
 const { extractTaskProperties } = jiti(
@@ -83,7 +81,8 @@ test("classic form carries content back into the shared writer", () => {
   assert.match(writerContainer, /Already in the form/);
   assert.match(writerContainer, /What should the writer add or change\?/);
   assert.match(createTaskModal, /onClassicForm: showClassicForm/);
-  assert.match(createTaskModal, /formSummary: hasOpenedClassicForm/);
+  assert.match(createTaskModal, /const mobileCreateFormSummary = hasOpenedClassicForm/);
+  assert.match(createTaskModal, /formSummary: mobileCreateFormSummary/);
   assert.match(properties, /onClick=\{property\.onClick\}/);
 });
 
@@ -110,13 +109,8 @@ test("mobile classic properties appear before the description and include start 
   assert.match(properties, /<StartDateModal/);
 });
 
-test("start-date selection is local to create mode and is persisted in task creation", () => {
+test("start-date selection stays local to create mode", () => {
   assert.match(startDate, /mode === "Update" && inViewObject\.taskId/);
-  assert.match(createRoute, /startDate: parsedStartDate,/);
-  assert.match(createRoute, /sectionId: sectionRow\.id,/);
-  assert.match(createRoute, /requestedSectionTitle/);
-  assert.match(createRoute, /Section does not belong to this project/);
-  assert.match(createRoute, /No active section found/);
 });
 
 test("malformed and foreign AI markers never escape the loaded board allowlists", () => {

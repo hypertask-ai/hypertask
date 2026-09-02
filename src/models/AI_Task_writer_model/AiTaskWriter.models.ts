@@ -27,6 +27,16 @@ export interface ITaskWriterResult extends ITaskWriterProperties {
   description: string;
 }
 
+export interface ITaskWriterAttachment {
+  id: string;
+  file: {
+    name: string;
+    size: number;
+    type: string;
+  };
+  preview: string;
+}
+
 export interface IMobileCreateTaskWriter {
   boardLabel: string;
   priorityLabel: string;
@@ -58,7 +68,7 @@ export interface IAITaskWriterContainerProps {
   ) => void;
   applyCreateTaskResult?: (
     result: ITaskWriterResult,
-    attachments: any[] | undefined,
+    attachments: ITaskWriterAttachment[] | undefined,
     projectId: number | undefined,
   ) => boolean;
   mobileCreateTask?: IMobileCreateTaskWriter;

@@ -44,7 +44,10 @@ import { usePathname } from "next/navigation";
 import { closeBackDismissBeforeNavigation } from "@/lib/mobile/backDismiss";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { useGetAllMembersForAssign } from "@/hooks/MultiPages/useGetMembersForAssignees";
-import type { ITaskWriterResult } from "@/models/AI_Task_writer_model";
+import type {
+  ITaskWriterAttachment,
+  ITaskWriterResult,
+} from "@/models/AI_Task_writer_model";
 import type { IAgent, IUser } from "@/models/model";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
@@ -529,7 +532,7 @@ const TiptapCreateTaskModal = () => {
   const applyCreateTaskResult = useCallback(
     (
       result: ITaskWriterResult,
-      attachments: any[] | undefined,
+      attachments: ITaskWriterAttachment[] | undefined,
       responseProjectId: number | undefined,
     ) => {
       const currentProjectId = projectForContext?.id;
@@ -652,22 +655,24 @@ const TiptapCreateTaskModal = () => {
       ? `Start: ${formValues.startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
       : undefined,
   ].filter((value): value is string => Boolean(value));
+  const mobileCreateAssigneeLabel = formValues.assignees.length
+    ? formValues.assignees
+        .map((assignee) => assignee.displayName)
+        .join(", ")
+    : "Assign";
+  const mobileCreateFormSummary = hasOpenedClassicForm
+    ? {
+        title: formValues.title.trim() || undefined,
+        description: mobileCreateFormDescription || undefined,
+        properties: mobileCreateFormProperties,
+      }
+    : undefined;
   const mobileCreateTask = isMbl
     ? {
         boardLabel: formValues.currentProject?.title ?? "Choose board",
         priorityLabel: formValues.priority?.Priority_Value ?? "None",
-        assigneeLabel: formValues.assignees.length
-          ? formValues.assignees
-              .map((assignee) => assignee.displayName)
-              .join(", ")
-          : "Assign",
-        formSummary: hasOpenedClassicForm
-          ? {
-              title: formValues.title.trim() || undefined,
-              description: mobileCreateFormDescription || undefined,
-              properties: mobileCreateFormProperties,
-            }
-          : undefined,
+        assigneeLabel: mobileCreateAssigneeLabel,
+        formSummary: mobileCreateFormSummary,
         onBoardClick: toggleProjectsModal,
         onPriorityClick: togglePriorityModal,
         onAssigneeClick: () => setShowAssignModal(true),
