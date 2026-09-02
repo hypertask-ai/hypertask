@@ -273,6 +273,7 @@ export class CommentService {
           method: 'PATCH',
           body: JSON.stringify({
             text: validatedInput.text,
+            content_type: validatedInput.content_type,
             mentions: validatedInput.mentions,
           }),
         },

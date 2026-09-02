@@ -28,6 +28,7 @@ import {
   labelsAssignSchema,
 } from './common/filters';
 import { inlineAttachmentsSchema } from './attachment.validation';
+import { hasMarkdownStructure } from '../../../utils/helperFunctions/markdownToHtml';
 
 const config = getConfig();
 
@@ -417,7 +418,7 @@ export function getUpdateTaskBaseSchema() {
         .string()
         .min(1)
         .optional()
-        .describe('Task description. HTML by default; set content_type to "markdown" for markdown.'),
+        .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: taskContentTypeSchema,
       priority: priorityIndexSchema, // Use index (0-4) instead of string
       estimate: estimateIndexOptionalSchema,
@@ -449,10 +450,9 @@ export function getUpdateTaskInputSchema() {
     .refine(
       (data) =>
         data.description === undefined ||
-        data.content_type === 'markdown' ||
-        isHtmlFormat(data.description),
+        isAcceptedRichText(data.description, data.content_type),
       {
-        message: 'Description must be in HTML format. Use HTML tags like <p>Text</p> for paragraphs or <br> for line breaks. Plain text is not accepted.',
+        message: 'Description must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
         path: ['description'],
       }
     )
@@ -648,6 +648,17 @@ function isHtmlFormat(text: string): boolean {
   return htmlTagPattern.test(text.trim());
 }
 
+function isAcceptedRichText(
+  text: string,
+  contentType?: 'html' | 'markdown'
+): boolean {
+  return (
+    contentType === 'markdown' ||
+    isHtmlFormat(text) ||
+    (contentType === undefined && hasMarkdownStructure(text))
+  );
+}
+
 /**
  * Schema for create_task tool input
  * Requires project_id and title, optional description, section, priority, estimate
@@ -664,7 +675,7 @@ export function getCreateTaskInputSchema() {
       description: z
         .string()
         .optional()
-        .describe('Task description. HTML by default; set content_type to "markdown" for markdown.'),
+        .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: taskContentTypeSchema,
       section_id: z.coerce
         .number()
@@ -692,10 +703,9 @@ export function getCreateTaskInputSchema() {
     .refine(
       (data) =>
         data.description === undefined ||
-        data.content_type === 'markdown' ||
-        isHtmlFormat(data.description),
+        isAcceptedRichText(data.description, data.content_type),
       {
-        message: 'Description must be in HTML format. Use HTML tags like <p>Text</p> for paragraphs or <br> for line breaks. Plain text is not accepted.',
+        message: 'Description must be HTML or structural markdown such as a list, emphasis, code, or link. Plain text is not accepted.',
         path: ['description'],
       }
     );
