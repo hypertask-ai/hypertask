@@ -310,6 +310,10 @@ test("mobile Write with AI renders submit, retry, refine, and discard without re
     assert.equal(requests[2].instruction, "Make it warmer");
     assert.equal(editor.setContentCalls.length, 0);
 
+    await click(dom, buttonWithText(container, "Try again"));
+    assert.deepEqual(requests[3], requests[2]);
+    assert.match(container.textContent, /Proposal 4/);
+
     await click(dom, buttonWithText(container, "Discard"));
     assert.equal(getCloseCalls(), 1);
     assert.equal(editor.setContentCalls.length, 0);

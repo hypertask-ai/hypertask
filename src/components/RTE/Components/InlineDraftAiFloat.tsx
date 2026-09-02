@@ -739,7 +739,11 @@ const InlineDraftAiFloat = ({
   const retry = () => {
     if (isMobileAiSheet) {
       if (!mobileReview.lastRequest) return;
-      void runAction(mobileReview.lastRequest);
+      const sourceRevision =
+        mobileReview.lastRequest.sourceKind === "proposal"
+          ? mobileProposalRevisionRef.current
+          : mobileSourceRevisionRef.current;
+      void runAction({ ...mobileReview.lastRequest, sourceRevision });
       return;
     }
     if (!lastAction) return;
