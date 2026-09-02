@@ -670,6 +670,7 @@ export default function useSaveContent() {
                 }),
               )
             : undefined,
+          replaceAttachments: shouldSyncAttachments,
         };
 
         const response = await updateComment(updatedComment, urlsToSave, id);

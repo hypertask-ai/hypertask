@@ -132,6 +132,13 @@ export interface commentBody {
     creatorId: number;
     commentId: string | undefined;
     taskId: number;
+  attachments?: Array<{
+    fileType: string;
+    fileSource: string;
+    fileName: string;
+    fileSize?: string | null;
+  }>;
+  replaceAttachments?: boolean;
 }
 
 export const fetchAssignedUsers = async (taskId: number) => {

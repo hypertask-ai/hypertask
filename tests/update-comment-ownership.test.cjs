@@ -123,6 +123,7 @@ test("an owner updates text and attachments in one transaction", async () => {
     commentId: 44,
     text: "<p>line one</p><ul><li>line two</li></ul>",
     userId: 6,
+    replaceAttachments: true,
     attachments: [
       {
         fileType: "image/png",
@@ -158,4 +159,29 @@ test("an owner updates text and attachments in one transaction", async () => {
   assert.equal(calls.attachmentCreates[0].data[0].id, undefined);
   assert.equal(calls.commentUpdates[0].data.text, "<p>line one</p><ul><li>line two</li></ul>");
   assert.equal("seen" in updated, false);
+});
+
+test("an incomplete attachment list does not delete stored files", async () => {
+  const { updateCommentService, calls } = loadService({
+    id: 44,
+    taskId: 91,
+    task: { projectId: 15 },
+  });
+
+  await updateCommentService({
+    commentId: 44,
+    text: "changed text",
+    userId: 6,
+    attachments: [
+      {
+        fileType: "image/png",
+        fileSource: "https://files.test/keep.png",
+        fileName: "keep.png",
+      },
+    ],
+  });
+
+  assert.deepEqual(calls.attachmentDeletes, []);
+  assert.deepEqual(calls.attachmentCreates, []);
+  assert.equal(calls.commentUpdates.length, 1);
 });

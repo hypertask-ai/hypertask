@@ -177,6 +177,7 @@ const CommentText = () => {
     return (
       <Tiptap
         allowPerks={allowPerks}
+        carouselAttachments={comment.attachments}
         attachments={isMobile && isEditing ? comment.attachments : undefined}
         handleSave={redirectAPI}
         mode="read-edit-comments"

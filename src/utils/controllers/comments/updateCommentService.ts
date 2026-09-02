@@ -21,6 +21,8 @@ export interface UpdateCommentParams {
     fileName: string
     fileSize?: string | null
   }>
+  /** Set only when attachments is a complete snapshot and removals are intentional. */
+  replaceAttachments?: boolean
 }
 
 /**
@@ -28,7 +30,7 @@ export interface UpdateCommentParams {
  * The authenticated user must own the stored comment.
  */
 export async function updateCommentService(params: UpdateCommentParams) {
-  const { commentId, text, userId, agentId, attachments } = params
+  const { commentId, text, userId, agentId, attachments, replaceAttachments } = params
 
   const comment = await prisma.comment.findFirst({
     where: { id: commentId, creatorId: userId },
@@ -41,7 +43,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
 
   await invalidateHyperAiCommentOrigin(commentId)
   const updatedComment = await prisma.$transaction(async (transaction) => {
-    if (attachments) {
+    if (attachments && replaceAttachments) {
       const existingAttachments = await transaction.attachment.findMany({
         where: { commentId },
         select: { id: true, fileSource: true }

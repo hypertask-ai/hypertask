@@ -47,7 +47,7 @@ test("description and owned-comment double taps retain their existing entry poin
   assert.match(commentsContainer, /useDoubleTap\(handleDoubleTap, 200/);
   assert.match(commentsContainer, /editCommentHandler\(i\)/);
   assert.match(commentsContainer, /comment\.attachments && editState !== i/);
-  assert.match(commentText, /attachments=\{isMobile && isEditing \? comment\.attachments : undefined\}/);
+  assert.match(commentText, /carouselAttachments=\{comment\.attachments\}[\s\S]*?attachments=\{isMobile && isEditing \? comment\.attachments : undefined\}/);
   assert.match(
     taskDetailState,
     /comments\[currentIndex\]\?\.creatorId === currentUser\.id[\s\S]*?setEditState\(currentIndex\)/,
@@ -70,7 +70,7 @@ test("the shared bottom row exposes one plus menu and the approved actions", () 
     "return (\n    <div",
   );
   assert.match(mobileEdit, /shouldUpload=\{true\}/);
-  assert.match(mobileEdit, /callbackAttachments=\{async \(uploadedAttachments\)/);
+  assert.match(mobileEdit, /callbackAttachments=\{async \([\s\S]*?uploadedAttachments/);
   for (const label of [
     "Attach image",
     "Attach file",
@@ -177,6 +177,8 @@ test("comment updates authorize against stored ownership and sync attachments at
   assert.match(tiptap, /attachments_: attachmentFilesForSave/);
   assert.match(save, /updateCommentHandler\(content, id, attachments_\)/);
   assert.match(save, /const shouldSyncAttachments = attachments !== undefined/);
+  assert.match(save, /replaceAttachments: shouldSyncAttachments/);
+  assert.match(commentService, /if \(attachments && replaceAttachments\)/);
   assert.match(commentService, /findFirst\(\{[\s\S]*?where: \{ id: commentId, creatorId: userId \}/);
   assert.match(commentService, /if \(!comment\)[\s\S]*?Comment not found or not owned by user/);
   assert.match(commentService, /prisma\.\$transaction\(async \(transaction\)/);

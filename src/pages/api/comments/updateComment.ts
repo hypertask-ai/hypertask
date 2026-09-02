@@ -11,10 +11,23 @@ const handler: NextApiHandler = async (
       return res.status(400).json({ message: "Invalid request body" });
     }
     const updatedComment = req.body;
-    const { text, creatorId, taskId, commentId, attachments } = updatedComment;
+    const {
+      text,
+      creatorId,
+      taskId,
+      commentId,
+      attachments,
+      replaceAttachments,
+    } = updatedComment;
 
     if (!text || !creatorId || !taskId || !commentId) {
       return res.status(400).json({ message: "Missing Required Data" });
+    }
+    if (
+      replaceAttachments !== undefined &&
+      typeof replaceAttachments !== "boolean"
+    ) {
+      return res.status(400).json({ message: "Invalid attachment replacement flag" });
     }
     if (
       attachments !== undefined &&
@@ -43,6 +56,7 @@ const handler: NextApiHandler = async (
         text,
         userId: userObj.id,
         attachments,
+        replaceAttachments,
       });
 
       void broadcastTaskComment(toUpdate.taskId, { originUserId: userObj.id }).catch(
