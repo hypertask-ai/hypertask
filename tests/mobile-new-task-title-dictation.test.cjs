@@ -148,7 +148,7 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
       currentFocusedElement: null,
       editMode: "title",
       setEditMode: noop,
-      formValues: { title: "Typed title" },
+      formValues: { title: "", description: "<p></p>" },
       handleChange: noop,
       appendDictationToTitle: noop,
       dictationCoordinator: coordinator,
@@ -180,6 +180,28 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
     assert.match(
       titleMics[0].querySelector("svg").className.baseVal,
       /text-white-black-inverted/,
+    );
+
+    createTaskModalValue = {
+      ...createTaskModalValue,
+      formValues: { title: "Typed title", description: "<p></p>" },
+    };
+    await act(async () => reactRoot.render(renderTitle(true)));
+    const populatedMic = container.querySelector("#create-task-title-audio-button");
+    assert.doesNotMatch(populatedMic.className, /bg-white-black/);
+    assert.match(
+      populatedMic.querySelector("svg").className.baseVal,
+      /text-icon-dark-gray/,
+    );
+
+    createTaskModalValue = {
+      ...createTaskModalValue,
+      formValues: { title: "", description: "<p>Dictated details</p>" },
+    };
+    await act(async () => reactRoot.render(renderTitle(true)));
+    assert.doesNotMatch(
+      container.querySelector("#create-task-title-audio-button").className,
+      /bg-white-black/,
     );
 
     createTaskModalValue = {
