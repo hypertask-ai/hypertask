@@ -99,6 +99,7 @@ export async function syncPullRequestFromWebhook(
     });
 
     let taskIds = [...new Set(existingLinks.map((link) => link.taskId))];
+    const affectedTaskIds: number[] = [];
     if (taskIds.length === 0) {
       const globallyLinked = await transaction.taskPullRequest.findUnique({
         where: {
@@ -194,7 +195,14 @@ export async function syncPullRequestFromWebhook(
           ? "merged"
           : input.lifecycle;
       const checkState =
-        current.headSha !== input.headSha ? "pending" : current.checkState;
+        current.headSha !== input.headSha
+          ? checkStateFromSuites(
+              await transaction.taskPullRequestCheckSuite.findMany({
+                where: { pullRequestId: current.id, headSha: input.headSha },
+                select: { status: true, conclusion: true },
+              }),
+            )
+          : current.checkState;
       const pullRequest = wasCreated
         ? current
         : await transaction.taskPullRequest.update({
@@ -215,6 +223,7 @@ export async function syncPullRequestFromWebhook(
         pullRequest.checkState as PullRequestCheckState,
       );
 
+      affectedTaskIds.push(taskId);
       if (wasCreated || displayState !== previousDisplayState) {
         let activityAction: "linked" | "state_changed" | "closed" = "closed";
         if (wasCreated) activityAction = "linked";
@@ -238,7 +247,7 @@ export async function syncPullRequestFromWebhook(
       else updated += 1;
     }
 
-    return { linked, updated, taskIds };
+    return { linked, updated, taskIds: [...new Set(affectedTaskIds)] };
   });
 }
 
@@ -252,7 +261,6 @@ export async function syncCheckSuiteFromWebhook(
         repositoryName: input.repositoryName,
         number: input.number,
         lifecycle: "open",
-        headSha: input.headSha,
         task: { status: { not: "Deleted" } },
       },
     });
@@ -316,6 +324,7 @@ export async function syncCheckSuiteFromWebhook(
         select: { status: true, conclusion: true },
       });
       const checkState = checkStateFromSuites(suites);
+      if (currentPullRequest.headSha !== input.headSha) continue;
       if (checkState === currentPullRequest.checkState) continue;
 
       const updated = await transaction.taskPullRequest.update({
