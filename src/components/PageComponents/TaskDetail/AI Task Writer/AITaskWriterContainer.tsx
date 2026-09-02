@@ -270,9 +270,13 @@ const AITaskWriterContainer: React.FC<
     void sendAIRequest(
       buildTaskWriterPrompt(promptToUse, taskTitle),
       "Thinking...",
-    ).finally(() => {
-      mobileCreateRequestPendingRef.current = false;
-    });
+    )
+      .catch((error) => {
+        console.error("AI task writer request failed:", error);
+      })
+      .finally(() => {
+        mobileCreateRequestPendingRef.current = false;
+      });
   }, [
     autoTrigger,
     initialPrompt,
@@ -568,6 +572,13 @@ const AITaskWriterContainer: React.FC<
       : "Tap to type, or hit the mic and just talk…";
   }
 
+  let sendButtonColorClassName: string | undefined;
+  if (isMobileCreateFlow) {
+    sendButtonColorClassName = "bg-hypertasks-ai-purple text-white";
+  } else if (isMobile) {
+    sendButtonColorClassName = "bg-white-black text-white-black-inverted";
+  }
+
   const inputAreaEl = (
     <AITaskWriterInputArea
         isLoading={isLoading}
@@ -684,11 +695,7 @@ const AITaskWriterContainer: React.FC<
                 "relative group",
                 isMobile &&
                   "ml-auto flex h-11 w-12 cursor-pointer items-center justify-center rounded-[4px]",
-                isMobileCreateFlow
-                  ? "bg-hypertasks-ai-purple text-white"
-                  : isMobile
-                    ? "bg-white-black text-white-black-inverted"
-                    : undefined,
+                sendButtonColorClassName,
               )}
             >
               <span
@@ -1013,16 +1020,17 @@ const AITaskWriterContainer: React.FC<
           <div className="flex-shrink-0 pb-1 pt-2">
             {isMobileCreateFlow ? mobileCreateIntroEl : headlineEl}
           </div>
-          {!isMobileCreateFlow && currentDisplayResponse ? (
+          {!isMobileCreateFlow && currentDisplayResponse && (
             <SheetScroller
               draggableAt="top"
               className="flex-1 min-h-0 scrollbar-thin scrollbar-track-white-black-inverted scrollbar-thumb-white-black"
             >
               <div className="animate-fadeIn pr-1">{responseBodyEl}</div>
             </SheetScroller>
-          ) : !isMobileCreateFlow ? (
+          )}
+          {!isMobileCreateFlow && !currentDisplayResponse && (
             <div className="flex-1 min-h-0" />
-          ) : null}
+          )}
           {isMobileCreateFlow ? (
             <div
               data-mobile-task-writer-composer

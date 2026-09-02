@@ -639,6 +639,16 @@ export const AudioButton = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuOpen]);
 
+  let recordingSubmitClassName =
+    "h-[28px] w-[28px] bg-hypertasks-ai-purple text-white";
+  if (isMobileView) {
+    recordingSubmitClassName =
+      "h-11 w-12 bg-white-black text-white-black-inverted";
+    if (mobilePrimaryTone === "ai") {
+      recordingSubmitClassName = "h-11 w-12 bg-hypertasks-ai-purple text-white";
+    }
+  }
+
   return (
     <div className={cn("audio-recorder", recording && "w-full", wrapperClassName)}>
       {!recording ? (
@@ -678,11 +688,13 @@ export const AudioButton = ({
               });
             let micColorClassName = "text-icon-dark-gray hover:text-white-black";
             if (prominent) {
-              micColorClassName = hasText
-                ? "text-icon-dark-gray"
-                : mobilePrimaryTone === "ai"
-                  ? "text-white"
-                  : "text-white-black-inverted";
+              micColorClassName = "text-icon-dark-gray";
+              if (!hasText) {
+                micColorClassName =
+                  mobilePrimaryTone === "ai"
+                    ? "text-white"
+                    : "text-white-black-inverted";
+              }
             }
             return (
               <div
@@ -868,11 +880,7 @@ export const AudioButton = ({
             aria-label="Send"
             className={cn(
               "group relative flex items-center justify-center rounded-[4px]",
-              isMobileView
-                ? mobilePrimaryTone === "ai"
-                  ? "h-11 w-12 bg-hypertasks-ai-purple text-white"
-                  : "h-11 w-12 bg-white-black text-white-black-inverted"
-                : "h-[28px] w-[28px] bg-hypertasks-ai-purple text-white",
+              recordingSubmitClassName,
             )}
           >
             <Check size={18} strokeWidth={2.2} className="keep-stroke" />
