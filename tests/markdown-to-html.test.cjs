@@ -72,6 +72,8 @@ test("auto-detects structural markdown without changing HTML or plain prose", ()
     ["`inline`", "<code>inline</code>"],
     ["```js\nrun()\n```", "<pre><code"],
     ["# Heading", "<h1>Heading</h1>"],
+    ["***", "<hr>"],
+    ["line  \nnext", "<br>"],
     ["> quoted", "<blockquote>"],
     ["1. first\n2. second", "<ol>"],
     ["- first\n- second", "<ul>"],

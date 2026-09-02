@@ -23,10 +23,12 @@ marked.use({
 
 const STRUCTURAL_MARKDOWN_TOKEN_TYPES = new Set([
   'blockquote',
+  'br',
   'codespan',
   'del',
   'em',
   'heading',
+  'hr',
   'image',
   'list',
   'strong',
