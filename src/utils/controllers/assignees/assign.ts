@@ -38,10 +38,13 @@ const assigneesAssign = async (
     intent?: AssigneeIntent;
     expectedProjectId?: number;
     expectedSectionId?: number | null;
+    allowHumanOverride?: boolean;
   }
 ) => {
   try {
     const intent: AssigneeIntent = options?.intent ?? "toggle";
+    const allowHumanOverride =
+      options?.allowHumanOverride ?? !agentAssignerId;
     let assignStatus: "Assigned" | "Unassigned" | "Conflict" = "Assigned";
     let assignmentOutcome:
       | "created"
@@ -170,6 +173,9 @@ const assigneesAssign = async (
       currentUser,
       agentId,
       agentAssignerId,
+      expectedProjectId: options?.expectedProjectId,
+      expectedSectionId: options?.expectedSectionId,
+      allowHumanOverride,
     };
 
     if (intent === "assign") {
@@ -190,7 +196,15 @@ const assigneesAssign = async (
     } else if (intent === "unassign") {
       if (assign) {
         assignStatus = "Unassigned";
-        await removeAssignee({ ...props, assign, assigneeIntent: "Unassigned" });
+        const removalOutcome = await removeAssignee({
+          ...props,
+          assign,
+          assigneeIntent: "Unassigned",
+        });
+        if (removalOutcome === "stale-task") {
+          assignmentOutcome = "stale-task";
+          assignStatus = "Conflict";
+        }
       } else {
         // Not assigned — idempotent no-op
         assignStatus = "Unassigned";
@@ -268,6 +282,7 @@ interface ICreateAssigneeProps {
   assigneeIntent: "Assigned" | "Unassigned";
   expectedProjectId?: number;
   expectedSectionId?: number | null;
+  allowHumanOverride?: boolean;
 }
 const createAssignee = async ({
   afterAppDomain,
@@ -281,6 +296,7 @@ const createAssignee = async ({
   assigneeIntent,
   expectedProjectId,
   expectedSectionId,
+  allowHumanOverride,
 }: ICreateAssigneeProps) => {
   const result = await prisma.$transaction(async (tx) => {
     // Human and agent assignments share the discovery/take fence. Otherwise a
@@ -291,7 +307,7 @@ const createAssignee = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride: !agentAssignerId }
+      { allowHumanOverride }
     );
 
     // assigneesAssign reads before entering this transaction. Recheck after
@@ -337,7 +353,7 @@ const createAssignee = async ({
       }
     }
 
-    if (!agentAssignerId) {
+    if (allowHumanOverride) {
       await cancelAgentMutationLeaseForHumanOverride(tx, taskId, currentUser.id);
     }
     const assign = await tx.assignees.create({
@@ -552,6 +568,9 @@ const removeAssignee = async ({
   assign,
   assigneeIntent,
   skipNotificationCleanup,
+  expectedProjectId,
+  expectedSectionId,
+  allowHumanOverride,
 }: IRemoveAssigneeProps) => {
   const removal = await prisma.$transaction(async (tx) => {
     await assertAgentAssignmentChangeAllowed(
@@ -559,8 +578,27 @@ const removeAssignee = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride: !agentAssignerId }
+      { allowHumanOverride }
     );
+    if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
+      const currentTask = await tx.task.findUnique({
+        where: { id: taskId },
+        select: { projectId: true, sectionId: true, status: true },
+      });
+      if (
+        !currentTask ||
+        currentTask.status !== "Normal" ||
+        currentTask.projectId !== expectedProjectId ||
+        currentTask.sectionId !== expectedSectionId
+      ) {
+        return {
+          removed: false,
+          staleTask: true,
+          webhookDeliveryId: null,
+          boardWebhookDeliveryIds: [] as string[],
+        };
+      }
+    }
     // Re-read after taking the shared fence. If the row observed by the caller
     // was removed and recreated while this request waited, it is a different
     // assignment and this stale removal must not delete it. When the original
@@ -580,7 +618,7 @@ const removeAssignee = async ({
         boardWebhookDeliveryIds: [] as string[],
       };
     }
-    if (!agentAssignerId) {
+    if (allowHumanOverride) {
       await cancelAgentMutationLeaseForHumanOverride(tx, taskId, currentUser.id);
     }
     await tx.assignees.deleteMany({
@@ -625,7 +663,8 @@ const removeAssignee = async ({
     );
     return { removed: true, webhookDeliveryId, boardWebhookDeliveryIds };
   });
-  if (!removal.removed) return;
+  if (removal.staleTask) return "stale-task" as const;
+  if (!removal.removed) return "already-unassigned" as const;
   await publishAgentWebhookDeliveries([removal.webhookDeliveryId]);
   await publishBoardWebhookDeliveries(removal.boardWebhookDeliveryIds);
 
@@ -640,7 +679,11 @@ const removeAssignee = async ({
     assign,
     assigneeIntent,
     skipNotificationCleanup,
+    expectedProjectId,
+    expectedSectionId,
+    allowHumanOverride,
   });
+  return "removed" as const;
 };
 
 const finishRemovingAssignee = async ({

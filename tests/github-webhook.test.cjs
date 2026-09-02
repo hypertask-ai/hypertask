@@ -134,6 +134,9 @@ test("the GitHub webhook rejects a configured pull request event without its pay
     "src/utils/controllers/tasks/single.ts": {
       updateTaskSingle: async () => ({ status: 200 }),
     },
+    "src/utils/controllers/assignees/assign.ts": {
+      default: async () => ({ status: 200, json: {} }),
+    },
   };
   const paths = Object.keys(stubbedModules).map((relativePath) =>
     path.join(root, relativePath),
@@ -204,8 +207,15 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
   const secret = "webhook-test-secret";
   process.env.GITHUB_WEBHOOK_SECRET = secret;
 
-  async function runScenario(prisma, syncResult, moveStatus = 200) {
+  async function runScenario(
+    prisma,
+    syncResult,
+    moveStatus = 200,
+    assignmentResponse = () => ({ status: 200, json: {} }),
+    webhookPayload = mergedPullRequestPayload(),
+  ) {
     const moves = [];
+    const assignmentChanges = [];
     const stubbedModules = {
       "src/lib/prisma.ts": { default: prisma },
       "src/lib/realtime/server.ts": {
@@ -229,13 +239,33 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
           return { status: moveStatus };
         },
       },
+      "src/utils/controllers/assignees/assign.ts": {
+        default: async (currentUser, userId, taskId, agentId, agentAssignerId, options) => {
+          assignmentChanges.push({
+            currentUser,
+            userId,
+            taskId,
+            agentId,
+            agentAssignerId,
+            options,
+          });
+          return assignmentResponse({
+            currentUser,
+            userId,
+            taskId,
+            agentId,
+            agentAssignerId,
+            options,
+          });
+        },
+      },
     };
 
     return withStubbedGithubRoute(stubbedModules, async ({ POST }) => {
       const response = await POST(
-        signedGithubRequest(mergedPullRequestPayload(), secret)
+        signedGithubRequest(webhookPayload, secret)
       );
-      return { response, body: await response.json(), moves };
+      return { response, body: await response.json(), moves, assignmentChanges };
     });
   }
 
@@ -249,8 +279,18 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
         section: {
           findFirst: async ({ where }) => {
             sectionNames.push(where.section_title.equals);
-            return { id: 5511, section_title: "QA" };
+            return {
+              id: 5511,
+              section_title: "QA",
+              autoAssignAgentId: "qa-agent",
+            };
           },
+          findUnique: async () => ({
+            projectId: 15,
+            deleted: false,
+            section_title: "QA",
+            autoAssignAgentId: "qa-agent",
+          }),
         },
         task: {
           findMany: async () => [
@@ -263,6 +303,19 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
             },
           ],
           findFirst: async () => null,
+          findUnique: async () => ({
+            id: 36637,
+            projectId: 15,
+            sectionId: 5511,
+            status: "Normal",
+          }),
+        },
+        assignees: {
+          findMany: async () => [
+            { userId: 6, agentId: null },
+            { userId: 8, agentId: "qa-agent" },
+            { userId: 7, agentId: "dev-agent" },
+          ],
         },
         user: {
           findUnique: async () => ({
@@ -286,6 +339,130 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(result.moves.length, 1);
       assert.equal(result.moves[0].section, "QA");
       assert.equal(result.moves[0].sectionId, 5511);
+      assert.deepEqual(
+        result.assignmentChanges.map(({ userId, taskId, agentId, options }) => ({
+          userId,
+          taskId,
+          agentId,
+          options,
+        })),
+        [
+          {
+            userId: null,
+            taskId: 36637,
+            agentId: "qa-agent",
+            options: {
+              intent: "assign",
+              expectedProjectId: 15,
+              expectedSectionId: 5511,
+              allowHumanOverride: false,
+            },
+          },
+          {
+            userId: 7,
+            taskId: 36637,
+            agentId: "dev-agent",
+            options: {
+              intent: "unassign",
+              expectedProjectId: 15,
+              expectedSectionId: 5511,
+              allowHumanOverride: false,
+            },
+          },
+        ],
+      );
+
+      const openedPayload = mergedPullRequestPayload();
+      openedPayload.action = "opened";
+      openedPayload.pull_request.merged = false;
+      openedPayload.pull_request.state = "open";
+      const opened = await runScenario(
+        prisma,
+        { linked: 1, updated: 1, taskIds: [36637] },
+        200,
+        undefined,
+        openedPayload,
+      );
+      assert.equal(opened.response.status, 200);
+      assert.equal(opened.assignmentChanges.length, 0);
+
+      const alreadyQaPrisma = {
+        ...prisma,
+        task: {
+          ...prisma.task,
+          findMany: async () => [
+            {
+              id: 36637,
+              projectId: 15,
+              userId: 6,
+              sectionId: 5511,
+              riskLevel: "Low",
+            },
+          ],
+        },
+      };
+      const repaired = await runScenario(alreadyQaPrisma, {
+        linked: 0,
+        updated: 0,
+        taskIds: [36637],
+      });
+      assert.equal(repaired.response.status, 200);
+      assert.equal(repaired.body.moved, 0);
+      assert.equal(repaired.moves.length, 0);
+      assert.deepEqual(
+        repaired.assignmentChanges.map(({ agentId, options }) => ({
+          agentId,
+          intent: options.intent,
+        })),
+        [
+          { agentId: "qa-agent", intent: "assign" },
+          { agentId: "dev-agent", intent: "unassign" },
+        ],
+      );
+
+      const noQaAgentPrisma = {
+        ...alreadyQaPrisma,
+        section: {
+          ...alreadyQaPrisma.section,
+          findUnique: async () => ({
+            projectId: 15,
+            deleted: false,
+            section_title: "QA",
+            autoAssignAgentId: null,
+          }),
+        },
+      };
+      const missingQaConfiguration = await runScenario(noQaAgentPrisma, {
+        linked: 0,
+        updated: 0,
+        taskIds: [36637],
+      });
+      assert.equal(missingQaConfiguration.response.status, 200);
+      assert.equal(missingQaConfiguration.assignmentChanges.length, 0);
+
+      const assignmentConflict = await runScenario(
+        alreadyQaPrisma,
+        { linked: 0, updated: 0, taskIds: [36637] },
+        200,
+        () => ({ status: 409, json: { message: "Active lease" } }),
+      );
+      assert.equal(assignmentConflict.response.status, 200);
+      assert.deepEqual(
+        assignmentConflict.assignmentChanges.map(({ agentId }) => agentId),
+        ["qa-agent"],
+      );
+
+      const assignmentFailure = await runScenario(
+        alreadyQaPrisma,
+        { linked: 0, updated: 0, taskIds: [36637] },
+        200,
+        () => ({ status: 500, json: { message: "Failed" } }),
+      );
+      assert.equal(assignmentFailure.response.status, 500);
+      assert.deepEqual(
+        assignmentFailure.assignmentChanges.map(({ agentId }) => agentId),
+        ["qa-agent"],
+      );
 
       const deferred = await runScenario(
         prisma,
@@ -295,6 +472,7 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(deferred.response.status, 200);
       assert.equal(deferred.body.linked, 1);
       assert.equal(deferred.body.moved, 0);
+      assert.equal(deferred.assignmentChanges.length, 0);
     });
 
     await t.test("the legacy fallback path", async () => {
@@ -307,8 +485,18 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
         section: {
           findFirst: async ({ where }) => {
             sectionNames.push(where.section_title.equals);
-            return { id: 5511, section_title: "QA" };
+            return {
+              id: 5511,
+              section_title: "QA",
+              autoAssignAgentId: "qa-agent",
+            };
           },
+          findUnique: async () => ({
+            projectId: 15,
+            deleted: false,
+            section_title: "QA",
+            autoAssignAgentId: "qa-agent",
+          }),
         },
         task: {
           findMany: async () => [],
@@ -324,6 +512,19 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
                   riskLevel: "Low",
                 }
               : null,
+          findUnique: async () => ({
+            id: 36637,
+            projectId: 15,
+            sectionId: 5511,
+            status: "Normal",
+          }),
+        },
+        assignees: {
+          findMany: async () => [
+            { userId: 6, agentId: null },
+            { userId: 8, agentId: "qa-agent" },
+            { userId: 7, agentId: "dev-agent" },
+          ],
         },
         user: {
           findUnique: async () => ({
@@ -359,6 +560,16 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(result.moves.length, 1);
       assert.equal(result.moves[0].section, "QA");
       assert.equal(result.moves[0].sectionId, 5511);
+      assert.deepEqual(
+        result.assignmentChanges.map(({ agentId, options }) => ({
+          agentId,
+          intent: options.intent,
+        })),
+        [
+          { agentId: "qa-agent", intent: "assign" },
+          { agentId: "dev-agent", intent: "unassign" },
+        ],
+      );
 
       const deferred = await runScenario(
         prisma,
@@ -368,6 +579,7 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(deferred.response.status, 200);
       assert.equal(deferred.body.commented, true);
       assert.equal(deferred.body.moved, false);
+      assert.equal(deferred.assignmentChanges.length, 0);
     });
   } finally {
     if (previousSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
