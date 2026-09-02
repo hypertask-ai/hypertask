@@ -139,6 +139,8 @@ const AttachmentsUpload = (props: IProps) => {
   const mobileCommentActionsTriggerRef = useRef<HTMLElement>(null);
   const mobileEditWasOpenRef = useRef(false);
   const mobileEditPersistedSourcesRef = useRef<Set<string>>(new Set());
+  const mobileEditBridgeAttachmentCountsRef = useRef<Map<number, number>>(new Map());
+  const mobileEditBridgeSourceCountsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (mobileExistingEdit && !mobileEditWasOpenRef.current) {
@@ -185,9 +187,16 @@ const AttachmentsUpload = (props: IProps) => {
 
     const rejectedIds = new Set(
       uploadedAttachments
-        .filter(({ file }) => {
+        .filter(({ id, file }) => {
           const source = (file as File & { source?: string }).source;
-          return !source || !mobileEditPersistedSourcesRef.current.has(source);
+          const sourceIsPersisted =
+            source && mobileEditPersistedSourcesRef.current.has(source);
+          const attachmentIsShared =
+            (mobileEditBridgeAttachmentCountsRef.current.get(id) ?? 0) > 1;
+          const sourceIsShared =
+            source !== undefined &&
+            (mobileEditBridgeSourceCountsRef.current.get(source) ?? 0) > 1;
+          return !sourceIsPersisted && !attachmentIsShared && !sourceIsShared;
         })
         .map(({ id }) => id),
     );
@@ -300,6 +309,20 @@ const AttachmentsUpload = (props: IProps) => {
                   uploadedAttachments: Array<{ id: number; file: File }>,
                 ) => {
                   setMobileAttachmentBridgePending((pending) => pending + 1);
+                  const attachmentIds = new Set(uploadedAttachments.map(({ id }) => id));
+                  const sources = new Set(
+                    uploadedAttachments
+                      .map(({ file }) => (file as File & { source?: string }).source)
+                      .filter((source): source is string => Boolean(source)),
+                  );
+                  attachmentIds.forEach((id) => {
+                    const count = mobileEditBridgeAttachmentCountsRef.current.get(id) ?? 0;
+                    mobileEditBridgeAttachmentCountsRef.current.set(id, count + 1);
+                  });
+                  sources.forEach((source) => {
+                    const count = mobileEditBridgeSourceCountsRef.current.get(source) ?? 0;
+                    mobileEditBridgeSourceCountsRef.current.set(source, count + 1);
+                  });
                   try {
                     const result = await callback(
                       uploadedAttachments.map((attachment) => attachment.file),
@@ -315,6 +338,16 @@ const AttachmentsUpload = (props: IProps) => {
                   } catch (error) {
                     handleMobileAttachmentBridgeFailure(uploadedAttachments, error);
                   } finally {
+                    attachmentIds.forEach((id) => {
+                      const count = mobileEditBridgeAttachmentCountsRef.current.get(id) ?? 0;
+                      if (count <= 1) mobileEditBridgeAttachmentCountsRef.current.delete(id);
+                      else mobileEditBridgeAttachmentCountsRef.current.set(id, count - 1);
+                    });
+                    sources.forEach((source) => {
+                      const count = mobileEditBridgeSourceCountsRef.current.get(source) ?? 0;
+                      if (count <= 1) mobileEditBridgeSourceCountsRef.current.delete(source);
+                      else mobileEditBridgeSourceCountsRef.current.set(source, count - 1);
+                    });
                     setMobileAttachmentBridgePending((pending) => Math.max(0, pending - 1));
                   }
                 }}
