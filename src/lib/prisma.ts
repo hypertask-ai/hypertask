@@ -32,7 +32,19 @@ const RELATION_OPS = new Set([
 ])
 
 const prismaClientSingleton = () => {
-  const adapter = new PrismaPg(process.env.DATABASE_URL as string)
+  // HTPR-5954: node-postgres's default idleTimeoutMillis (10s) closes the
+  // client's TCP/TLS connection to the Neon pooler between requests on a
+  // low-traffic instance, forcing a fresh handshake on the next query.
+  // Confirmed the pooler itself keeps backend Postgres connections warm
+  // regardless (pg_stat_activity showed idle backends minutes old surviving
+  // fresh client reconnects) -- the repeated cost is client-to-pooler TLS/auth
+  // only. Keeping the client-side connection open longer removes that
+  // re-handshake on the common case where the next request lands within 5min.
+  const adapter = new PrismaPg({
+    connectionString: process.env.DATABASE_URL as string,
+    idleTimeoutMillis: 5 * 60_000,
+    keepAlive: true,
+  })
   const client = new PrismaClient({ adapter }).$extends({
     query: {
       $allModels: {
