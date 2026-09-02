@@ -204,7 +204,7 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
   const secret = "webhook-test-secret";
   process.env.GITHUB_WEBHOOK_SECRET = secret;
 
-  async function runScenario(prisma, syncResult) {
+  async function runScenario(prisma, syncResult, moveStatus = 200) {
     const moves = [];
     const stubbedModules = {
       "src/lib/prisma.ts": { default: prisma },
@@ -226,7 +226,7 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       "src/utils/controllers/tasks/single.ts": {
         updateTaskSingle: async (update) => {
           moves.push(update);
-          return { status: 200 };
+          return { status: moveStatus };
         },
       },
     };
@@ -286,6 +286,15 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(result.moves.length, 1);
       assert.equal(result.moves[0].section, "QA");
       assert.equal(result.moves[0].sectionId, 5511);
+
+      const deferred = await runScenario(
+        prisma,
+        { linked: 1, updated: 0, taskIds: [36637] },
+        409,
+      );
+      assert.equal(deferred.response.status, 200);
+      assert.equal(deferred.body.linked, 1);
+      assert.equal(deferred.body.moved, 0);
     });
 
     await t.test("the legacy fallback path", async () => {
@@ -350,6 +359,15 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(result.moves.length, 1);
       assert.equal(result.moves[0].section, "QA");
       assert.equal(result.moves[0].sectionId, 5511);
+
+      const deferred = await runScenario(
+        prisma,
+        { linked: 0, updated: 0, taskIds: [] },
+        409,
+      );
+      assert.equal(deferred.response.status, 200);
+      assert.equal(deferred.body.commented, true);
+      assert.equal(deferred.body.moved, false);
     });
   } finally {
     if (previousSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;

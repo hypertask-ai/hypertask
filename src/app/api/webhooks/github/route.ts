@@ -173,6 +173,14 @@ async function moveTaskForPullRequest(
       },
     },
   );
+  if (moveResult.status === 409) {
+    // The PR link is already durable. The active writer owns the task's next
+    // section; failing here only produces manual redeliveries and duplicate comments.
+    console.warn(
+      `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
+    );
+    return false;
+  }
   if (moveResult.status !== 200) throw new Error("Task move failed");
   return true;
 }
@@ -665,11 +673,17 @@ export async function POST(request: NextRequest) {
           },
         );
 
-        if (moveResult.status !== 200) {
+        if (moveResult.status === 409) {
+          // The linked PR remains authoritative while the active writer chooses
+          // the task's next section. A failed delivery invites duplicate comments.
+          console.warn(
+            `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
+          );
+        } else if (moveResult.status !== 200) {
           throw new Error("Task move failed");
+        } else {
+          moved = true;
         }
-
-        moved = true;
 
         try {
           await broadcastBoardChange(task.projectId, {
