@@ -73,6 +73,7 @@ interface LastAction {
   instruction?: string;
   label?: string;
   sourceContent?: string;
+  sourceRevision?: number;
 }
 
 interface MobileOpeningSource {
@@ -454,9 +455,11 @@ const InlineDraftAiFloat = ({
         : selectionPresent
           ? selectedHtml(editor, range)
           : "");
-    const sourceRevision = refiningProposal
-      ? mobileProposalRevisionRef.current
-      : mobileSourceRevisionRef.current;
+    const sourceRevision =
+      action.sourceRevision ??
+      (refiningProposal
+        ? mobileProposalRevisionRef.current
+        : mobileSourceRevisionRef.current);
     // Media-only / text drafts require content for edits. True empty docs may
     // WriteContent. The mobile refine path intentionally edits its proposal,
     // while the opening editor remains untouched.
