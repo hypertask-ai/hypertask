@@ -5,7 +5,7 @@ import LabelWrapper from './LabelWrapper';
 import Tooltip from '@/components/Common/Tooltip';
 
 interface DueDateLabelProps {
-  dueDate: Date;
+  dueDate: Date | string;
   flexBasis?: boolean,
   fontSize?: number,
   py?: number,
