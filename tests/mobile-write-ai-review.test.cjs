@@ -322,7 +322,10 @@ test("mobile Write with AI renders submit, retry, refine, and discard without re
       container.querySelector('[contenteditable="true"]'),
       "<p>Edited after refinement</p>",
     );
-    await click(dom, buttonWithText(container, "Try again"));
+    const staleRetry = buttonWithText(container, "Try again");
+    assert.equal(staleRetry.disabled, true);
+    assert.match(staleRetry.title, /proposal changed/i);
+    await click(dom, staleRetry);
     assert.equal(requests.length, 4);
     assert.match(container.textContent, /Edited after refinement/);
 

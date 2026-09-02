@@ -757,19 +757,19 @@ const InlineDraftAiFloat = ({
     });
   };
 
+  const mobileRetrySourceRevision =
+    mobileReview.lastRequest?.sourceKind === "proposal"
+      ? mobileProposalRevisionRef.current
+      : mobileSourceRevisionRef.current;
+  const canRetryMobile = Boolean(
+    mobileReview.lastRequest &&
+      (mobileReview.lastRequest.sourceRevision === undefined ||
+        mobileReview.lastRequest.sourceRevision === mobileRetrySourceRevision),
+  );
+
   const retry = () => {
     if (isMobileAiSheet) {
-      if (!mobileReview.lastRequest) return;
-      const currentSourceRevision =
-        mobileReview.lastRequest.sourceKind === "proposal"
-          ? mobileProposalRevisionRef.current
-          : mobileSourceRevisionRef.current;
-      if (
-        mobileReview.lastRequest.sourceRevision !== undefined &&
-        mobileReview.lastRequest.sourceRevision !== currentSourceRevision
-      ) {
-        return;
-      }
+      if (!mobileReview.lastRequest || !canRetryMobile) return;
       void runAction(mobileReview.lastRequest);
       return;
     }
@@ -1047,6 +1047,12 @@ const InlineDraftAiFloat = ({
                   <button
                     type="button"
                     onClick={retry}
+                    disabled={!canRetryMobile}
+                    title={
+                      canRetryMobile
+                        ? undefined
+                        : "The proposal changed. Refine the edited text instead."
+                    }
                     className={CHIP_SHEET_ROW_CLASS}
                   >
                     Try again
