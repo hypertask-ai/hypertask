@@ -13,7 +13,6 @@ import {
   AtSign,
   Check,
   CodeXml,
-  Ellipsis,
   Image as ImageIcon,
   Paperclip,
   PencilSparkles,
@@ -937,9 +936,6 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
   if (isDictating) recorderWrapperClassName = "flex min-h-[62px] w-full items-center";
   const barRef = useRef<HTMLDivElement>(null);
   const wasAiTaskWriterOpen = useRef(false);
-  const moreActionsRef = useRef<HTMLDetailsElement>(null);
-  const moreActionsTriggerRef = useRef<HTMLElement>(null);
-
   // Dictation is the likeliest way a task gets written on a phone, and Save is
   // what you want next. The row scrolls, so Save can be sitting past the right
   // edge exactly when dictation finishes (HTPR-5147). Bring it back into view.
@@ -959,29 +955,6 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
     }
     wasAiTaskWriterOpen.current = Boolean(isAiTaskWriterOpen);
   }, [isAiTaskWriterOpen]);
-
-  useEffect(() => {
-    const closeMoreActions = (event: PointerEvent) => {
-      if (
-        moreActionsRef.current?.open &&
-        !moreActionsRef.current.contains(event.target as Node)
-      ) {
-        moreActionsRef.current.open = false;
-      }
-    };
-    const closeMoreActionsOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !moreActionsRef.current?.open) return;
-      moreActionsRef.current.open = false;
-      moreActionsTriggerRef.current?.focus();
-    };
-
-    document.addEventListener("pointerdown", closeMoreActions);
-    document.addEventListener("keydown", closeMoreActionsOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeMoreActions);
-      document.removeEventListener("keydown", closeMoreActionsOnEscape);
-    };
-  }, []);
 
   return (
     // HTPR-5332 supersedes only the scroll dependency: AI, dictation, the
@@ -1055,36 +1028,6 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
       {/* Dictation is how tasks get created on a phone: it went missing when this
           bar stopped reusing the desktop row. Keep this instance mounted while
           recording so the first tap's MediaRecorder is not discarded. */}
-      {!isDictating && hasText && <details ref={moreActionsRef} className="order-5 relative shrink-0">
-        <summary
-          ref={moreActionsTriggerRef}
-          aria-label="More task actions"
-          className={cn(
-            MOBILE_TARGET,
-            "list-none rounded-sm text-icon-dark-gray hover:text-white-black cursor-pointer [&::-webkit-details-marker]:hidden",
-          )}
-        >
-          <Ellipsis size={20} strokeWidth={1.75} />
-        </summary>
-        <div
-          role="group"
-          aria-label="More task actions"
-          className="absolute bottom-[calc(100%_+_0.5rem)] right-0 z-[1100] w-[220px] overflow-hidden rounded-[4px] bg-modalBackground p-1.5 text-content text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>span]:!flex [&>span]:!min-h-[44px] [&>span]:!w-full [&>span]:!justify-start [&>span]:!border-0 [&>span]:!px-3"
-          onClickCapture={() => {
-            if (moreActionsRef.current) moreActionsRef.current.open = false;
-          }}
-        >
-          <ActionButton
-            label="Save and close"
-            onClick={() => sendOnClick && sendOnClick("SaveAndClose")}
-          />
-
-          <ActionButton
-            label="Save and create new task"
-            onClick={() => sendOnClick && sendOnClick("SaveAndNew")}
-          />
-        </div>
-      </details>}
       {!isDictating && hasText && (
         <div
           data-mobile-primary-save

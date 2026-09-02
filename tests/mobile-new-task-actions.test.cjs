@@ -39,31 +39,27 @@ const mobileBottomBarUsage =
     ? attachmentSource.slice(mobileBottomBarStart, mobileBottomBarEnd + 2)
     : undefined;
 
-test("Task Writer and Save stay fixed ahead of secondary actions", () => {
+test("Task Writer and Save stay fixed after attachment actions", () => {
   assert.ok(mobileBar, "MobileBottomBar source should be present");
   assert.match(mobileBar, /data-mobile-new-task-actions/);
   assert.doesNotMatch(mobileBar, /overflow-x-auto/);
 
   const attachIndex = mobileBar.indexOf('aria-label="Attach files"');
   const aiIndex = mobileBar.indexOf('id="create-task-modal-ai-writer-button"');
-  const moreIndex = mobileBar.indexOf("<details");
   const saveIndex = mobileBar.indexOf('label="Save"');
 
-  // Order supersedes the earlier ai < save < more (HTPR-5517): the one filled
-  // control ends the row, under the thumb, and attach opens it. A primary
-  // sitting before the overflow menu is the layout that made Save hard to find.
   assert.ok(attachIndex >= 0 && attachIndex < aiIndex, "attach opens the row");
-  assert.ok(aiIndex >= 0 && aiIndex < moreIndex, "named action before overflow");
-  assert.ok(moreIndex >= 0 && moreIndex < saveIndex, "Save is last, under the thumb");
+  assert.ok(aiIndex >= 0 && aiIndex < saveIndex, "Save stays last, under the thumb");
 });
 
-test("secondary save and attachment actions remain accessible", () => {
-  assert.match(mobileBar, /aria-label="More task actions"/);
-  assert.match(mobileBar, /role="group"/);
-  assert.match(mobileBar, /Save and close/);
-  assert.match(mobileBar, /Save and create new task/);
+test("mobile exposes one Save action and no overflow menu", () => {
+  assert.doesNotMatch(mobileBar, /aria-label="More task actions"/);
+  assert.doesNotMatch(mobileBar, /<details/);
+  assert.doesNotMatch(mobileBar, /Save and close/);
+  assert.doesNotMatch(mobileBar, /Save and create new task/);
+  assert.equal((mobileBar.match(/label="Save"/g) || []).length, 1);
   assert.match(mobileBar, /Attach files/);
-  assert.match(mobileBar, /min-h-\[44px\]/);
+  assert.match(mobileBar, /MOBILE_TARGET/);
 });
 
 test("recent mobile waveform, dictation, and touch-target fixes remain", () => {
@@ -147,8 +143,8 @@ test("transcription keeps the mobile action row in its recording layout", () => 
   );
   assert.equal(
     (mobileBar.match(/!isDictating &&/g) || []).length,
-    4,
-    "attach, AI, overflow, and Save stay hidden through transcription",
+    3,
+    "attach, AI, and Save stay hidden through transcription",
   );
   assert.doesNotMatch(mobileBar, /!isRecording &&/);
 });
@@ -167,7 +163,6 @@ test("Task Writer return restores the safe-area-aware action bar", () => {
     mobileBar,
     /scroll-mb-\[calc\(env\(safe-area-inset-bottom\)_\+_0\.5rem\)\]/,
   );
-  assert.match(mobileBar, /bottom-\[calc\(100%_\+_0\.5rem\)\]/);
   assert.match(mobileBar, /pb-\[env\(safe-area-inset-bottom\)\]/);
   assert.doesNotMatch(mobileBar, /calc\([^\]]*[^_]\+[^_][^\]]*\)/);
 });
