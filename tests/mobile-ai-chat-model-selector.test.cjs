@@ -168,6 +168,7 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
       ),
     );
     assert.ok(rows.every((row) => /min-h-11/.test(row.className)));
+    assert.ok(rows.every((row) => /rounded-\[4px\]/.test(row.className)));
     assert.equal(rows.filter((row) => row.getAttribute("aria-checked") === "true").length, 1);
     assert.equal(rows[0].getAttribute("aria-checked"), "true");
 

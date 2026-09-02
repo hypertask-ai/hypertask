@@ -421,7 +421,7 @@ const AIModelDropDownButton = ({
                   aria-checked={selected}
                   disabled={disabled}
                   className={cn(
-                    "flex min-h-11 w-full items-center justify-between gap-3 rounded-[3px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-45",
+                    "flex min-h-11 w-full items-center justify-between gap-3 rounded-[4px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-45",
                     locked && "opacity-45",
                     selected && "font-semibold text-white-black",
                   )}
