@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { EstimateConstants, PriorityConstants } from '@/lib/constants/constants';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml';
-import { markdownToHtml } from '@/utils/helperFunctions/markdownToHtml';
+import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml';
 import { CreateTaskBody } from './types';
 
 export const PRIORITY_ALLOWED_VALUES = PriorityConstants.map(
@@ -413,9 +413,7 @@ export function validateCreateTaskBody(
             project_id: body.project_id,
             title: body.title.trim(),
             description: normalizeBlockHtml(
-                body.content_type === 'markdown'
-                    ? markdownToHtml(body.description || '')
-                    : body.description || ''
+                formatRichTextInput(body.description || '', body.content_type)
             ),
             section_id: body.section_id,
             priority,

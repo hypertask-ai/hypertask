@@ -255,13 +255,13 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   ADD_COMMENT: {
     name: buildToolName('add_comment_to_task'),
     description:
-      'Add, update, or delete a comment. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only). For update/delete, call get_comments_for_task first to obtain comment_id. For add, text may be HTML or markdown; set content_type to "markdown" for markdown. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. Update text MUST be HTML (e.g., "<p>Text</p>" for paragraphs, "<br>" for line breaks). For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
+      'Add, update, or delete a comment. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
   },
 
   UPDATE_COMMENT: {
     name: buildToolName('update_comment'),
     description:
-      'Updates one of your comments. Supports plain-text @mentions; mentioned users must belong to the task project. Requires comment_id and non-empty text; mentions are optional.',
+      'Updates one of your comments. Supports plain-text @mentions; mentioned users must belong to the task project. Requires comment_id and non-empty HTML or structural markdown text; content_type and mentions are optional.',
   },
 
   DELETE_COMMENT: {

@@ -52,15 +52,20 @@ function demo() {
     }).reply_to_comment_id,
     42
   )
+  assert.equal(
+    AddCommentCrudInputSchema.parse({ action: 'add', task_id: 1, text: markdown }).text,
+    markdown
+  )
+  assert.equal(AddCommentInputSchema.parse({ task_id: 1, text: markdown }).text, markdown)
   rejects(
-    AddCommentCrudInputSchema,
-    { action: 'add', task_id: 1, text: markdown },
-    'add_comment keeps HTML validation when content_type is absent'
+    AddCommentInputSchema,
+    { task_id: 1, text: 'Cost is 2 * 3 and the range is one - two' },
+    'incidental asterisks and dashes are plain prose, not structural markdown'
   )
   rejects(
     AddCommentInputSchema,
-    { task_id: 1, text: markdown },
-    'add_comment service validation keeps HTML validation when content_type is absent'
+    { task_id: 1, text: markdown, content_type: 'html' },
+    'explicit HTML must not be reinterpreted as markdown'
   )
   assert.equal(
     AddCommentCrudInputSchema.parse({
@@ -70,15 +75,14 @@ function demo() {
     }).text,
     '<p>Updated comment</p>'
   )
-  rejects(
-    AddCommentCrudInputSchema,
-    {
+  assert.equal(
+    AddCommentCrudInputSchema.parse({
       action: 'update',
       comment_id: 1,
-      text: '<p>Updated comment</p>',
+      text: markdown,
       content_type: 'markdown',
-    },
-    'content_type is only available for add_comment action add'
+    }).content_type,
+    'markdown'
   )
   rejects(
     AddCommentCrudInputSchema,
@@ -100,10 +104,13 @@ function demo() {
     }).description,
     markdown
   )
-  rejects(
-    CreateTaskInputSchema,
-    { project_id: 1, title: 'HTML task', description: markdown },
-    'create_task keeps HTML validation when content_type is absent'
+  assert.equal(
+    CreateTaskInputSchema.parse({
+      project_id: 1,
+      title: 'Markdown task',
+      description: markdown,
+    }).description,
+    markdown
   )
 
   assert.equal(
@@ -114,10 +121,9 @@ function demo() {
     }).description,
     markdown
   )
-  rejects(
-    UpdateTaskInputSchema,
-    { task_id: 1, description: markdown },
-    'update_task keeps HTML validation when content_type is absent'
+  assert.equal(
+    UpdateTaskInputSchema.parse({ task_id: 1, description: markdown }).description,
+    markdown
   )
 
   // page_history: restoring without naming a version would archive-or-restore

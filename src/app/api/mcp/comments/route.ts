@@ -17,7 +17,7 @@ import { broadcastTaskComment } from '@/lib/realtime/server'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
 import { extractTipTapContent } from '@/utils/helperFunctions/multiPages'
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
-import { markdownToHtml } from '@/utils/helperFunctions/markdownToHtml'
+import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
 import { withActivityMetadata } from '@/lib/mcp/comments/activityMetadata'
@@ -651,10 +651,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Sanitize text (trim and normalize line endings)
-    let sanitizedText = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-    if (content_type === 'markdown') {
-      sanitizedText = markdownToHtml(sanitizedText)
-    }
+    let sanitizedText = formatRichTextInput(
+      text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
+      content_type
+    )
 
     // Convert plain text @mentions to HTML when mentions array is provided (MCP format)
     if (mentions && mentions.length > 0) {

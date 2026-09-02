@@ -20,7 +20,7 @@ import { broadcastTaskUpdates } from "@/lib/mcp/tasks/broadcastTaskUpdates";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
 import { signSession, SESSION_COOKIE } from "@/lib/auth/session";
-import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
+import { formatRichTextInput } from "@/utils/helperFunctions/markdownToHtml";
 import { buildFieldError } from "@/lib/mcp/fieldError";
 import { requireRole } from "@/lib/mcp/agents/scopes";
 import { assertAgentAssignmentChangeAllowed } from "@/lib/mcp/tasks/agentMutationFence";
@@ -366,9 +366,7 @@ export async function executeTaskUpdate({
 
     if (requestBody.description) {
         requestBody.description = normalizeBlockHtml(
-            requestBody.content_type === 'markdown'
-                ? markdownToHtml(requestBody.description)
-                : requestBody.description
+            formatRichTextInput(requestBody.description, requestBody.content_type)
         )
     }
 

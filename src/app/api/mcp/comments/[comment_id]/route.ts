@@ -13,6 +13,8 @@ import { validateProjectMemberIds } from '@/lib/mcp/tasks/services'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
 import { extractTipTapContent } from '@/utils/helperFunctions/multiPages'
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
+import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
+import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
 
 export interface McpMentionInput {
   user_id: number
@@ -21,6 +23,7 @@ export interface McpMentionInput {
 
 export interface UpdateCommentRequest {
   text: string
+  content_type?: 'html' | 'markdown'
   mentions?: McpMentionInput[]
 }
 
@@ -83,7 +86,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       )
     }
 
-    const { text, mentions } = body
+    const { text, content_type, mentions } = body
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
@@ -101,6 +104,17 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         {
           success: false,
           error: 'Comment text must be 5000 characters or less'
+        },
+        { status: 400 }
+      )
+    }
+
+    if (content_type !== undefined && content_type !== 'html' && content_type !== 'markdown') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid content_type. Must be one of: html, markdown',
+          allowedValues: CONTENT_TYPE_ALLOWED_VALUES
         },
         { status: 400 }
       )
@@ -224,7 +238,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     }
 
     // Sanitize and process mentions (MCP-specific: plain text @mentions to HTML)
-    let sanitizedText = text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    let sanitizedText = formatRichTextInput(
+      text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
+      content_type
+    )
     if (mentions && mentions.length > 0) {
       sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, mentions)
     }

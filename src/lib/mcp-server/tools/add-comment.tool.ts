@@ -58,6 +58,7 @@ export const addCommentTool = {
           const result = await service.updateComment({
             comment_id: validatedInput.comment_id!,
             text: validatedInput.text!,
+            content_type: validatedInput.content_type,
             mentions: validatedInput.mentions,
           });
           return { success: true, comment: result.comment };
