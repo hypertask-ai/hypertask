@@ -100,6 +100,11 @@ test("overview styling and drag blocking stay mobile-only", () => {
   assert.match(source, /dragDisabled=\{mobileBoardZoomedOut\}/);
   assert.match(source, /style=\{mobileBoardZoomedOut \? \{/);
   assert.match(source, /alignSelf: "flex-start"/);
-  assert.match(source, /width: "max-content"/);
+  assert.match(source, /width: mobileBoardOverviewWidth/);
+  assert.match(
+    source,
+    /visibleSectionCount \* 300 \+ Math\.max\(0, visibleSectionCount - 1\) \* 12/,
+  );
+  assert.doesNotMatch(source, /width: "max-content"/);
   assert.match(source, /maxWidth: "none"/);
 });

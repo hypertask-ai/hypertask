@@ -178,6 +178,9 @@ const HomePage = ({
     runningOnly,
     timerDataReady,
   ]);
+  const visibleSectionCount = displaySections.length - hiddenSectionIndexes.size;
+  const mobileBoardOverviewWidth =
+    visibleSectionCount * 300 + Math.max(0, visibleSectionCount - 1) * 12;
   const bulkSelectionItems = useMemo(
     () =>
       displaySections.flatMap((section) => {
@@ -922,7 +925,7 @@ const HomePage = ({
             style={mobileBoardZoomedOut ? {
               zoom: BOARD_OVERVIEW_SCALE,
               alignSelf: "flex-start",
-              width: "max-content",
+              width: mobileBoardOverviewWidth,
               maxWidth: "none",
               height: `${100 / BOARD_OVERVIEW_SCALE}%`,
               maxHeight: `${100 / BOARD_OVERVIEW_SCALE}%`,
