@@ -57,6 +57,7 @@ const ImageGallery = (props: IProps) => {
         !file?.source && !uploadedFiles.some((uploaded) => uploaded.id === id),
     );
     onUploadPendingChange(pending);
+    return () => onUploadPendingChange(false);
   }, [files_, onUploadPendingChange, shouldUpload, uploadedFiles]);
 
   

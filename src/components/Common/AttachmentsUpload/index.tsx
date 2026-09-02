@@ -122,7 +122,7 @@ const AttachmentsUpload = (props: IProps) => {
   const hasSavableContent = hasText || Boolean(props.hasTitle);
   const [audioProcessing, setAudioProcessing] = useState(false);
   const [mobileUploadPending, setMobileUploadPending] = useState(false);
-  const [mobileAttachmentBridgePending, setMobileAttachmentBridgePending] = useState(false);
+  const [mobileAttachmentBridgePending, setMobileAttachmentBridgePending] = useState(0);
   const {
     fileItems,
     files,
@@ -299,7 +299,7 @@ const AttachmentsUpload = (props: IProps) => {
                 callbackAttachments={async (
                   uploadedAttachments: Array<{ id: number; file: File }>,
                 ) => {
-                  setMobileAttachmentBridgePending(true);
+                  setMobileAttachmentBridgePending((pending) => pending + 1);
                   try {
                     const result = await callback(
                       uploadedAttachments.map((attachment) => attachment.file),
@@ -315,7 +315,7 @@ const AttachmentsUpload = (props: IProps) => {
                   } catch (error) {
                     handleMobileAttachmentBridgeFailure(uploadedAttachments, error);
                   } finally {
-                    setMobileAttachmentBridgePending(false);
+                    setMobileAttachmentBridgePending((pending) => Math.max(0, pending - 1));
                   }
                 }}
                 handleRemove={mobileEditSaving ? undefined : removeFile}
@@ -463,7 +463,7 @@ const AttachmentsUpload = (props: IProps) => {
               disabled={
                 mobileEditSaving ||
                 mobileUploadPending ||
-                mobileAttachmentBridgePending ||
+                mobileAttachmentBridgePending > 0 ||
                 !sendOnClick
               }
               onClick={async (event) => {
