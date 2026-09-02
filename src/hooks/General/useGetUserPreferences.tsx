@@ -20,6 +20,7 @@ export interface IUserPreferences {
   snippets: ISnippet[];
   muteAnnouncements: boolean;
   playGifs: boolean;
+  autoDescriptionSuggestions: boolean;
   dictationLanguage: string;
   inboxAdvanceOnSend: boolean;
   emojiFrequency?: Record<string, number> | null;
@@ -37,6 +38,7 @@ export const DEFAULT_USER_PREFERENCES: IUserPreferences = {
   snippets: [],
   muteAnnouncements: false,
   playGifs: true,
+  autoDescriptionSuggestions: true,
   dictationLanguage: "en",
   inboxAdvanceOnSend: true,
   emojiFrequency: null,
@@ -52,7 +54,7 @@ export const useGetUserPreferences = (
 ) => {
   return useQuery({
     queryKey,
-    queryFn: () => fetchUserPreference(),
+    queryFn: () => fetchUserPreference(false),
     enabled: options?.enabled ?? true,
     initialData: initialData ?? DEFAULT_USER_PREFERENCES,
     initialDataUpdatedAt: initialData ? undefined : 0,

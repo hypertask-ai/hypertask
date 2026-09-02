@@ -68,6 +68,7 @@ export const taskWriterRequestSchema = z.object({
   taskDescription: z.string().optional().default(""),
   taskTitle: z.string().optional().default(""),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
+  requestKind: z.enum(["manual", "auto-description"]).optional().default("manual"),
 });
 
 export type TaskWriterRequest = z.infer<typeof taskWriterRequestSchema>;
@@ -77,6 +78,14 @@ export class AiFeatureDisabledError extends Error {
   constructor() {
     super("This AI feature is turned off for your team");
     this.name = "AiFeatureDisabledError";
+  }
+}
+
+/** Thrown when automatic drafting was disabled in the caller's preferences. */
+export class AutoDescriptionSuggestionsDisabledError extends Error {
+  constructor() {
+    super("Automatic description suggestions are turned off");
+    this.name = "AutoDescriptionSuggestionsDisabledError";
   }
 }
 
@@ -125,6 +134,16 @@ export async function prepareTaskWriterRun(
     select: { id: true },
   });
   if (!project) throw new ProjectAccessError();
+
+  if (body.requestKind === "auto-description") {
+    const preference = await prisma.userSetting.findUnique({
+      where: { userId },
+      select: { autoDescriptionSuggestions: true },
+    });
+    if (preference?.autoDescriptionSuggestions === false) {
+      throw new AutoDescriptionSuggestionsDisabledError();
+    }
+  }
 
   const aiFeature =
     body.aiMode === "AiTaskWriter" ? "taskWriter" : "writeWithAi";

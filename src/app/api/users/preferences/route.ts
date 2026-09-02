@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
           snippets: [],
           muteAnnouncements: false,
           playGifs: true,
+          autoDescriptionSuggestions: true,
           dictationLanguage: "en",
           inboxAdvanceOnSend: true,
           emojiFrequency: null,
@@ -152,6 +153,7 @@ export async function POST(request: NextRequest) {
       snippets?: ISnippet[];
       muteAnnouncements?: boolean;
       playGifs?: boolean;
+      autoDescriptionSuggestions?: boolean;
       dictationLanguage?: string;
       inboxAdvanceOnSend?: boolean;
       emojiFrequency?: Prisma.InputJsonValue;
@@ -184,6 +186,15 @@ export async function POST(request: NextRequest) {
     }
     if (body.playGifs !== undefined) {
       data.playGifs = body.playGifs as boolean;
+    }
+    if (body.autoDescriptionSuggestions !== undefined) {
+      if (typeof body.autoDescriptionSuggestions !== "boolean") {
+        return NextResponse.json(
+          { success: false, error: "Invalid description suggestion preference" },
+          { status: 400 },
+        );
+      }
+      data.autoDescriptionSuggestions = body.autoDescriptionSuggestions;
     }
     if (body.inboxAdvanceOnSend !== undefined) {
       data.inboxAdvanceOnSend = body.inboxAdvanceOnSend as boolean;
@@ -407,6 +418,7 @@ export async function POST(request: NextRequest) {
       snippets: true,
       muteAnnouncements: true,
       playGifs: true,
+      autoDescriptionSuggestions: true,
       dictationLanguage: true,
       inboxAdvanceOnSend: true,
       emojiFrequency: true,

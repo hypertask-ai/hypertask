@@ -17,7 +17,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 // Components
 import AILogo from "@/assets/AILogo.png";
-import { Paperclip, RotateCw } from "lucide-react";
+import { ArrowUp, ChevronDown, Paperclip, RotateCw } from "lucide-react";
 import { SendArrow } from "@/components/Common/SendArrow";
 import ConfirmModal from "@/components/Modals/Common Modals/ConfirmActionModal";
 import AudioButton from "@/components/RTE/Components/AudioButton";
@@ -42,6 +42,10 @@ import Tooltip from "@/components/Common/Tooltip";
 import { DIV_ID_CONSTANTS, MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
+import {
+  buildTaskWriterPrompt,
+  resolveTaskWriterSubmitPrompt,
+} from "@/lib/ai/autoDescriptionSuggestion";
 import {
   recordBoardMemorySignal,
   shouldLearnBoardMemoryFromAiMode,
@@ -70,7 +74,10 @@ const AITaskWriterContainer: React.FC<
   dictationCoordinator,
   autoTrigger = false,
   initialPrompt = "",
-  editMode
+  editMode,
+  presentation = "overlay",
+  onTurnOffTask,
+  onTurnOffPermanently,
 }) => {
   // Context
   const {
@@ -103,6 +110,7 @@ const AITaskWriterContainer: React.FC<
   // Local state for modal and initialization
   const [showConfirmationModal, setShowConfirmationModal] = useState(triggerConfirmModal ?? false);
   const [isInitializing, setIsInitializing] = useState(autoTrigger);
+  const [showTurnOffMenu, setShowTurnOffMenu] = useState(false);
 
   // Refs
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -203,10 +211,32 @@ const AITaskWriterContainer: React.FC<
   );
 
   // Core Functions
+  const sendInitialPrompt = useCallback(
+    (loadingMessage: string) => {
+      if (!initialPrompt) return;
+      const taskTitle = document.getElementById(
+        DIV_ID_CONSTANTS.titleInputModal,
+      )?.innerHTML;
+      void sendAIRequest(
+        buildTaskWriterPrompt(initialPrompt, taskTitle),
+        loadingMessage,
+        presentation === "description-suggestion"
+          ? "auto-description"
+          : "manual",
+      );
+    },
+    [initialPrompt, presentation, sendAIRequest],
+  );
+
   const onClickHandler = useCallback(() => {
     if (isByokBlocked) return;
-    // Don't send if no prompt and not auto-trigger
-    if (!userPrompt.trim() && !autoTrigger) return;
+    const promptToUse = resolveTaskWriterSubmitPrompt(
+      autoTrigger,
+      presentation,
+      initialPrompt,
+      userPrompt,
+    );
+    if (!promptToUse.trim()) return;
 
     // Don't send if attachments are still uploading
     if (isUploadingAttachments) {
@@ -214,15 +244,30 @@ const AITaskWriterContainer: React.FC<
       return;
     }
 
-    const promptToUse = autoTrigger ? initialPrompt : userPrompt;
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
-    let finalPrompt = taskTitle
-      ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${promptToUse}`
-      : promptToUse;
+    sendAIRequest(
+      buildTaskWriterPrompt(promptToUse, taskTitle),
+      "Thinking...",
+    );
+  }, [
+    autoTrigger,
+    initialPrompt,
+    isByokBlocked,
+    presentation,
+    userPrompt,
+    sendAIRequest,
+    isUploadingAttachments,
+    uploadProgress,
+  ]);
 
-    sendAIRequest(finalPrompt, "Thinking...");
-  }, [isByokBlocked, userPrompt, autoTrigger, initialPrompt, sendAIRequest, isUploadingAttachments, uploadProgress]);
+  const regenerateDescriptionSuggestion = useCallback(() => {
+    if (isUploadingAttachments) {
+      console.log("Cannot send while attachments are uploading...", { uploadProgress });
+      return;
+    }
+    sendInitialPrompt("Drafting a description from your title...");
+  }, [isUploadingAttachments, sendInitialPrompt, uploadProgress]);
 
   // A completed mobile response leaves the composer open for a new request.
   // Unlike auto-trigger's first request, this always sends exactly what the
@@ -231,11 +276,10 @@ const AITaskWriterContainer: React.FC<
     if (isLoading || isByokBlocked || isUploadingAttachments || !userPrompt.trim()) return;
 
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
-    const finalPrompt = taskTitle
-      ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${userPrompt}`
-      : userPrompt;
-
-    sendAIRequest(finalPrompt, "Thinking...");
+    sendAIRequest(
+      buildTaskWriterPrompt(userPrompt, taskTitle),
+      "Thinking...",
+    );
   }, [isLoading, isByokBlocked, isUploadingAttachments, userPrompt, sendAIRequest]);
 
   // Without autoTrigger an initialPrompt is a suggestion: type it into the box
@@ -251,15 +295,9 @@ const AITaskWriterContainer: React.FC<
     if (autoTrigger && !hasAutoTriggered.current && initialPrompt) {
       hasAutoTriggered.current = true;
       setIsInitializing(false);
-
-      const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
-      let finalPrompt = taskTitle
-        ? `This task has title: ${taskTitle}. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\n${initialPrompt}`
-        : initialPrompt;
-
-      sendAIRequest(finalPrompt, "Thinking...");
+      sendInitialPrompt("Thinking...");
     }
-  }, [autoTrigger, initialPrompt, sendAIRequest]);
+  }, [autoTrigger, initialPrompt, sendInitialPrompt]);
 
   // Callback Handlers
   const handleAIOptionCallback = useCallback(
@@ -366,12 +404,15 @@ const AITaskWriterContainer: React.FC<
   );
 
   const handleEscape = useCallback(() => {
-    if (currentDisplayResponse.length > 0) {
+    if (
+      presentation !== "description-suggestion" &&
+      currentDisplayResponse.length > 0
+    ) {
       setShowConfirmationModal(true);
     } else {
       setTimeout(EscapeHandler, 0);
     }
-  }, [currentDisplayResponse, EscapeHandler]);
+  }, [currentDisplayResponse, EscapeHandler, presentation]);
 
   // Modal Handlers
   const onConfirmDiscard = useCallback(() => {
@@ -386,10 +427,26 @@ const AITaskWriterContainer: React.FC<
   // Handle Accept from Navigator
   const handleAccept = useCallback(() => {
     const currentItem = getCurrentResponseItem();
-    AISaveHandler(currentDisplayResponse, currentItem?.attachments);
+    const acceptedContent =
+      presentation === "description-suggestion"
+        ? extractTitleAndDescription(currentDisplayResponse).description
+        : currentDisplayResponse;
+    AISaveHandler(
+      presentation === "description-suggestion"
+        ? sanitizeAiHtml(acceptedContent)
+        : acceptedContent,
+      currentItem?.attachments,
+    );
     clearHistory();
     setTimeout(EscapeHandler, 0);
-  }, [AISaveHandler, currentDisplayResponse, getCurrentResponseItem, clearHistory, EscapeHandler]);
+  }, [
+    AISaveHandler,
+    currentDisplayResponse,
+    getCurrentResponseItem,
+    clearHistory,
+    EscapeHandler,
+    presentation,
+  ]);
 
   const headlineEl = (
     <AITaskWriterHeadline
@@ -600,6 +657,87 @@ const AITaskWriterContainer: React.FC<
   // Don't render if still initializing
   if (isInitializing) {
     return null;
+  }
+
+  // Visible controls are the owner-approved HTPR-5890 flow:
+  // https://app.hypertask.ai/page/cmtiiril300000aht4ztpr236
+  if (presentation === "description-suggestion" && !isMobile) {
+    return (
+      <div
+        id={id}
+        className="mt-3 flex w-full flex-col gap-2 text-white-black"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">{headlineEl}</div>
+          <span className="text-micro text-text-light-gray">
+            Draft from your title
+          </span>
+        </div>
+        <div className="rounded-[5px] border-l border-l-hypertasks-ai-purple bg-comment-description px-4 py-3 shadow-md">
+          {currentDisplayResponse ? responseBodyEl : inputAndToolbarEl}
+        </div>
+        {currentDisplayResponse && !isLoading && !hasError ? (
+          <div className="relative flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAccept}
+              className="flex items-center gap-2 rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense font-semibold text-primary-foreground"
+            >
+              <ArrowUp size={16} strokeWidth={1.75} />
+              Take over description
+            </button>
+            <button
+              type="button"
+              onClick={regenerateDescriptionSuggestion}
+              className="flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense font-semibold"
+            >
+              <RotateCw size={16} strokeWidth={1.75} />
+              Regenerate
+            </button>
+            <div className="ml-auto">
+              <button
+                type="button"
+                aria-expanded={showTurnOffMenu}
+                onClick={() => setShowTurnOffMenu((current) => !current)}
+                className="flex items-center gap-1 px-2 py-2 text-dense text-text-light-gray"
+              >
+                Turn off <ChevronDown size={15} strokeWidth={1.75} />
+              </button>
+              {showTurnOffMenu ? (
+                <div className="absolute right-0 top-full z-[6000] mt-1 w-60 rounded-[4px] bg-modalBackground p-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={onTurnOffTask}
+                    className="w-full rounded-[4px] px-3 py-2 text-left hover:bg-active-modal-element"
+                  >
+                    <span className="block text-dense">Not for this task</span>
+                    <span className="block text-micro text-text-light-gray">
+                      Hide this draft on this task
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onTurnOffPermanently}
+                    className="w-full rounded-[4px] px-3 py-2 text-left hover:bg-active-modal-element"
+                  >
+                    <span className="block text-dense">Never suggest descriptions</span>
+                    <span className="block text-micro text-text-light-gray">
+                      Re-enable in Task page settings
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {currentDisplayResponse && !isLoading ? (
+          <div className="rounded-[4px] bg-comment-description px-3 py-1">
+            {inputAndToolbarEl}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   // Mobile: full bottom sheet (like task Summary) — response scrolls; Accept / actions stay in view

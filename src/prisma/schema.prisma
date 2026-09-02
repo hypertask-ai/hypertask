@@ -477,6 +477,7 @@ model UserSetting {
   // then opens on the Last 7 days default. Chosen value syncs across devices.
   allTasksDateRange        String?
   playGifs                 Boolean       @default(true)
+  autoDescriptionSuggestions Boolean      @default(true)
   notificationMatrix       Json          @default("{}")
   // Per-user voice-dictation language (Deepgram Nova-3 code, or "multi" for
   // auto code-switching). Defaults to English. See @/lib/dictationProvider.

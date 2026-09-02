@@ -135,10 +135,8 @@ const useTaskDetailGlobalStates = (
   // const {data:commentsFromQueryTQ, isRefetching:commentFromTQRefetching} = useGetAllComments([globalConstants.CommentsTQPrefixKey,_parsedTask.id], _parsedTask.id, currentUser.id)
   // ================= ON SCREEN DATA STATES
   const [currentTask, setCurrentTask] = useState<ITask | null>(_parsedTask);
-  const { hasDraft, hasCommentDraft, draftsFromTQ } = useHasDrafts(
-    _parsedTask.id,
-    currentUser?.id
-  );
+  const { hasDraft, hasCommentDraft, draftsFromTQ, draftsHydrated } =
+    useHasDrafts(_parsedTask.id, currentUser?.id);
 
   const { data: userPreferences } = useGetUserPreferences();
 
@@ -834,6 +832,7 @@ const useTaskDetailGlobalStates = (
     setShowScrollToTop,
     defaultCommentFocus,
     draftsFromTQ,
+    draftsHydrated,
   };
 };
 

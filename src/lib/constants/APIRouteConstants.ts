@@ -57,7 +57,8 @@ export const getSharedTaskRoute = "/api/share/getSharedTask";
 export const toggleStarPin = "/api/savedContent/toggleSaved";
 export const getAllStarsAndPinsRoute = "/api/savedContent/getAll";
 
-//------------------------ Update Profile Profile Picture
+//------------------------ User Preferences/Profile
+export const userPreferencesRoute = "/api/users/preferences";
 export const updateProfilePictureRoute = "/api/users/updateProfilePicture";
 
 export const sendAiChatMessageRoute = "/api/ai/chat/stream";

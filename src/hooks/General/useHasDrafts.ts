@@ -19,7 +19,12 @@ export const isMeaningfulDescriptionDraft = (draft: IDraft) => {
 };
 
 const useHasDrafts = (taskId: number | undefined, userId: number | undefined) => {
-  const { data: draftsFromTQ = [], isFetching } = useGetDrafts(taskId!, userId);
+  const {
+    data: draftsFromTQ = [],
+    isFetched,
+    isFetching,
+    isSuccess,
+  } = useGetDrafts(taskId!, userId);
   const hasDraft = useMemo(() => {
     return (
       draftsFromTQ?.some((draft: IDraft) => isMeaningfulDescriptionDraft(draft)) ??
@@ -41,7 +46,12 @@ const useHasDrafts = (taskId: number | undefined, userId: number | undefined) =>
 
   
 
-  return { hasDraft, hasCommentDraft, draftsFromTQ};
+  return {
+    hasDraft,
+    hasCommentDraft,
+    draftsFromTQ,
+    draftsHydrated: isFetched && isSuccess,
+  };
 };
 
 export default useHasDrafts;

@@ -40,7 +40,10 @@ export interface IAITaskWriterContainerProps {
   isRecording?: boolean;
   dictationCoordinator?: DictationCoordinator;
   currentTask?: ITask;
-  editMode?: ITaskDetailEditMode
+  editMode?: ITaskDetailEditMode;
+  presentation?: "overlay" | "description-suggestion";
+  onTurnOffTask?: () => void;
+  onTurnOffPermanently?: () => void;
 }
 
 export type TAiMode = "AiTaskWriter" | "WriteWithAI";

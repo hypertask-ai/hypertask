@@ -1,5 +1,6 @@
 import axios from "axios";
-import { ComponentType, useState } from "react";
+import toast from "react-hot-toast";
+import { ComponentType, useEffect, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import { useQueryClient } from "@tanstack/react-query";
 import { ToggleSwitch, ToggleSwitchProps } from "./Single section items";
@@ -17,6 +18,7 @@ import {
   MentionPreference,
   ScrollSetting,
 } from "@prisma/client";
+import { userPreferencesRoute } from "@/lib/constants/APIRouteConstants";
 
 interface IUserPreferences {
   displayAvatar: DisplayAvatar;
@@ -26,6 +28,7 @@ interface IUserPreferences {
   notification: boolean;
   notificationPreference: MentionPreference;
   playGifs: boolean;
+  autoDescriptionSuggestions: boolean;
   dictationLanguage: string;
   inboxAdvanceOnSend: boolean;
 }
@@ -40,7 +43,20 @@ const UserPreferenceSidebar = ({
   variant?: "task-page" | "inbox";
 } = {}) => {
   const queryClient = useQueryClient();
-  const { data } = useGetUserPreferences();
+  const { data, isFetching } = useGetUserPreferences();
+  const autoDescriptionUpdateQueue = useRef(Promise.resolve());
+  const autoDescriptionUpdateVersion = useRef(0);
+  const autoDescriptionUpdatesPending = useRef(0);
+  const autoDescriptionConfirmedValue = useRef(
+    data.autoDescriptionSuggestions ?? true,
+  );
+
+  useEffect(() => {
+    if (!isFetching && autoDescriptionUpdatesPending.current === 0) {
+      autoDescriptionConfirmedValue.current =
+        data.autoDescriptionSuggestions ?? true;
+    }
+  }, [data.autoDescriptionSuggestions, isFetching]);
 
   const [isStacked, setIsStacked] = useState<boolean>(data.commentsStacked);
   const [displayAvatar, setDisplayAvatar] = useState<boolean>(
@@ -50,6 +66,7 @@ const UserPreferenceSidebar = ({
     useRecoilState(showTaskHistoryAtom);
   const shareReadReceipts = data.shareReadReceipts ?? false;
   const playGifs = data.playGifs ?? true;
+  const autoDescriptionSuggestions = data.autoDescriptionSuggestions ?? true;
   const advanceOnSend = data.inboxAdvanceOnSend ?? true;
   const dictationLanguage = data.dictationLanguage ?? DEFAULT_DICTATION_LANGUAGE;
 
@@ -111,6 +128,67 @@ const UserPreferenceSidebar = ({
     updateUserPreferences({ playGifs: nextPlayGifs });
   };
 
+  const handleAutoDescriptionSuggestionsSetting = () => {
+    const updateVersion = ++autoDescriptionUpdateVersion.current;
+    autoDescriptionUpdatesPending.current += 1;
+    void queryClient.cancelQueries({ queryKey: USER_PREFERENCES_QUERY_KEY });
+    let nextValue = true;
+    queryClient.setQueryData<IUserPreferences>(
+      USER_PREFERENCES_QUERY_KEY,
+      (previous) => {
+        nextValue = !(
+          previous?.autoDescriptionSuggestions ??
+          data.autoDescriptionSuggestions ??
+          true
+        );
+        return {
+          ...(previous ?? data),
+          autoDescriptionSuggestions: nextValue,
+        };
+      },
+    );
+    autoDescriptionUpdateQueue.current = autoDescriptionUpdateQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          const updated = await saveAutoDescriptionPreference(nextValue);
+          if (updated) {
+            autoDescriptionConfirmedValue.current = nextValue;
+            if (updateVersion === autoDescriptionUpdateVersion.current) {
+              queryClient.setQueryData<IUserPreferences>(
+                USER_PREFERENCES_QUERY_KEY,
+                (previous) => ({
+                  ...(previous ?? data),
+                  autoDescriptionSuggestions: nextValue,
+                }),
+              );
+            }
+            return;
+          }
+          if (updateVersion !== autoDescriptionUpdateVersion.current) return;
+
+          toast.error("Could not update description suggestions");
+          try {
+            await queryClient.invalidateQueries(
+              { queryKey: USER_PREFERENCES_QUERY_KEY },
+              { throwOnError: true },
+            );
+          } catch {
+            queryClient.setQueryData<IUserPreferences>(
+              USER_PREFERENCES_QUERY_KEY,
+              (previous) => ({
+                ...(previous ?? data),
+                autoDescriptionSuggestions:
+                  autoDescriptionConfirmedValue.current,
+              }),
+            );
+          }
+        } finally {
+          autoDescriptionUpdatesPending.current -= 1;
+        }
+      });
+  };
+
   const handleReadReceiptsSetting = () => {
     const nextShareReadReceipts = !shareReadReceipts;
     queryClient.setQueryData<IUserPreferences>(
@@ -123,11 +201,23 @@ const UserPreferenceSidebar = ({
     updateUserPreferences({ shareReadReceipts: nextShareReadReceipts });
   };
 
+  const saveAutoDescriptionPreference = async (value: boolean) => {
+    try {
+      const response = await axios.post(userPreferencesRoute, {
+        autoDescriptionSuggestions: value,
+      });
+      return response.status === 200 && Boolean(response.data.settings);
+    } catch (error) {
+      console.log("🚀 ~ saveAutoDescriptionPreference ~ error:", error);
+      return false;
+    }
+  };
+
   const updateUserPreferences = async (
     toUpdate: Partial<IUserPreferences>,
   ) => {
     try {
-      const response = await axios.post("/api/users/preferences", toUpdate);
+      const response = await axios.post(userPreferencesRoute, toUpdate);
       if (response.status === 200 && response.data.settings) {
         queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, (prev) => ({
           ...(prev ?? data),
@@ -175,6 +265,14 @@ const UserPreferenceSidebar = ({
         value={playGifs}
         checked={playGifs}
         onChange={handlePlayGifsSetting}
+      />
+      <ToggleComponent
+        label="Suggest descriptions from task titles"
+        description="Show an AI draft below empty task descriptions"
+        inputId="auto-description-suggestions-toggle"
+        value={autoDescriptionSuggestions}
+        checked={autoDescriptionSuggestions}
+        onChange={handleAutoDescriptionSuggestionsSetting}
       />
       <ToggleComponent
         label="Show task history"
