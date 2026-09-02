@@ -105,6 +105,13 @@ export function createAutoTitleGenerationCoordinator(
       descriptionDirty = false;
     },
 
+    emptyTitleChanged() {
+      invalidate();
+      enabled = true;
+      ownership = "empty";
+      descriptionDirty = false;
+    },
+
     taskWriterTitleApplied() {
       invalidate();
       enabled = true;

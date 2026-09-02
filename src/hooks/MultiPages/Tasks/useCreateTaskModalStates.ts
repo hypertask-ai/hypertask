@@ -255,6 +255,7 @@ const useCreateTaskModalGlobalStates = () => {
   const handleChange = (key: TFormKey, value: any) => {
     if (key === "title") {
       autoTitleCoordinator.manualTitleChanged();
+      if (!String(value).trim()) autoTitleCoordinator.emptyTitleChanged();
       if (String(value).trim()) setTitleGenerationError(null);
     }
     let nextValue = value;

@@ -129,6 +129,29 @@ test("manual title input cancels an in-flight response until Task Writer re-enab
   assert.deepEqual(applied, ["Fresh title"]);
 });
 
+test("clearing a manual title restores description title generation", async () => {
+  const timers = fakeTimers();
+  const applied: string[] = [];
+  const coordinator = createAutoTitleGenerationCoordinator({
+    initialTitle: "Template title",
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+  });
+
+  coordinator.manualTitleChanged();
+  coordinator.emptyTitleChanged();
+  coordinator.schedule("updated description", {
+    generate: async () => "Updated title",
+    apply: (title) => applied.push(title),
+  });
+
+  assert.equal(coordinator.isEnabled(), true);
+  assert.equal(timers.size, 1);
+  timers.runNext();
+  await flushPromises();
+  assert.deepEqual(applied, ["Updated title"]);
+});
+
 test("save cancels background work and returns the newest generated title directly", async () => {
   const timers = fakeTimers();
   const stale = deferred<string>();
