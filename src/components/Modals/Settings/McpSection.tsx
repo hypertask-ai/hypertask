@@ -154,7 +154,7 @@ const McpSection = () => {
                   </button>
                   {connection.is_owner && (
                     <button
-                      className="rounded-[5px] px-2 py-1 text-dense font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:text-text-light-gray"
+                      className="rounded-sm px-2 py-1 text-dense font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:text-text-light-gray"
                       disabled={
                         tokenState.removingClientId === connection.client_id
                       }
