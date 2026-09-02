@@ -28,7 +28,9 @@ export function extractTitleAndDescription(htmlString: string) {
   const doc = parser.parseFromString(htmlString, "text/html");
   const h1Element = doc.getElementById("ai-generated-task-title");
   const title = h1Element?.textContent?.trim() || null;
-  h1Element?.remove();
+  doc.querySelectorAll('[id^="ai-generated-task-"]').forEach((element) => {
+    element.remove();
+  });
   const description = doc.body.innerHTML;
   return { title, description };
 }

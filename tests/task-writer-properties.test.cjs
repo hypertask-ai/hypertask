@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(
@@ -9,6 +10,9 @@ const jiti = require("jiti")(
 );
 const { extractTaskWriterProperties } = jiti(
   path.join(root, "src/app/api/ai/_lib/taskWriterProperties.ts")
+);
+const { extractTitleAndDescription } = jiti(
+  path.join(root, "src/utils/aiWriterUtils.ts")
 );
 
 // The CLI writes these fields onto the task itself. If the markers leaked into
@@ -32,6 +36,28 @@ test("splits title, priority and size out of the description", () => {
   assert.doesNotMatch(result.description, /ai-generated-task/);
   assert.doesNotMatch(result.description, /Priority:/);
   assert.doesNotMatch(result.description, /Size:/);
+});
+
+test("description-only takeover removes hidden task property markers", () => {
+  const previousDOMParser = global.DOMParser;
+  global.DOMParser = new JSDOM("").window.DOMParser;
+  try {
+    const html = [
+      '<h1 id="ai-generated-task-title">Verify automatic planning draft</h1>',
+      "<p>Verify the automatic planning draft generated for this task.</p>",
+      '<p>Proposed properties: Priority <strong>Urgent</strong>, Size <strong>S</strong>' +
+        '<span id="ai-generated-task-priority" style="display:none">1</span>' +
+        '<span id="ai-generated-task-estimate" style="display:none">3</span></p>',
+    ].join("");
+
+    const result = extractTitleAndDescription(html);
+
+    assert.equal(result.title, "Verify automatic planning draft");
+    assert.match(result.description, /Priority <strong>Urgent<\/strong>, Size <strong>S<\/strong>/);
+    assert.doesNotMatch(result.description, /ai-generated-task|>1<|>3</);
+  } finally {
+    global.DOMParser = previousDOMParser;
+  }
 });
 
 test("leaves plain output untouched and reports no properties", () => {
