@@ -181,6 +181,7 @@ const TaskTitleModal = () => {
                                         disabled={isGeneratingTitle}
                                         ariaLabel="Dictate task title"
                                         mobilePresentation="prominent"
+                                        mobilePrimaryTone="primary"
                                         className="h-11 w-11 shrink-0 justify-center"
                                         wrapperClassName="shrink-0"
                                     />
