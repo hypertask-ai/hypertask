@@ -72,7 +72,7 @@ const inlineDraftAiModule = jiti(
   path.join(root, "src/components/RTE/Components/InlineDraftAiFloat.tsx"),
 );
 const InlineDraftAiFloat = inlineDraftAiModule.default ?? inlineDraftAiModule;
-const { syncMobileEditableSurface } = inlineDraftAiModule;
+const { hasPendingNewerMobileInput } = inlineDraftAiModule;
 
 for (const filename of Object.keys(require.cache)) {
   if (!originalCache.has(filename)) delete require.cache[filename];
@@ -330,34 +330,18 @@ test("mobile Write with AI renders the complete existing-draft chip strip", asyn
 });
 
 test("mobile Write with AI does not replace newer typing with an older render", () => {
-  const surface = { innerHTML: "<p>Starting draft. Keyboard works.</p>" };
-  const pendingInput = { current: surface.innerHTML };
+  const completeInput = "<p>Starting draft. Keyboard works.</p>";
+  const staleRender = "<p>Starting draft. Keybod woks.</p>";
 
-  syncMobileEditableSurface(
-    surface,
-    "<p>Starting draft. Keybod woks.</p>",
-    "<p>Starting draft. Keybod woks.</p>",
-    pendingInput,
+  assert.equal(
+    hasPendingNewerMobileInput(completeInput, staleRender),
+    true,
   );
-
-  assert.equal(surface.innerHTML, "<p>Starting draft. Keyboard works.</p>");
-  assert.equal(pendingInput.current, "<p>Starting draft. Keyboard works.</p>");
-
-  syncMobileEditableSurface(
-    surface,
-    pendingInput.current,
-    pendingInput.current,
-    pendingInput,
+  assert.equal(
+    hasPendingNewerMobileInput(completeInput, completeInput),
+    false,
   );
-  assert.equal(pendingInput.current, null);
-
-  syncMobileEditableSurface(
-    surface,
-    "<p>AI replacement</p>",
-    "<p>AI replacement</p>",
-    pendingInput,
-  );
-  assert.equal(surface.innerHTML, "<p>AI replacement</p>");
+  assert.equal(hasPendingNewerMobileInput(null, completeInput), false);
 });
 
 test("mobile Write with AI keeps an edited existing draft as the rewrite source", async () => {
