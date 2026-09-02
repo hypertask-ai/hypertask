@@ -31,6 +31,20 @@ test("the mobile pill gains the desktop Dismiss action next to its label", () =>
     "Undo is still a real button");
 });
 
+test("the mobile pill uses a compact visual footprint", () => {
+  const start = undoToastSource.indexOf("if (isMbl)");
+  const end = undoToastSource.indexOf("\n  }\n\n  return (", start);
+  const mobileBranch = undoToastSource.slice(start, end);
+
+  assert.match(mobileBranch, /max-w-\[110px\]/);
+  assert.match(mobileBranch, /\bgap-1\b/);
+  assert.match(mobileBranch, /\bpx-2\b/);
+  assert.match(mobileBranch, /\bpy-1\b/);
+  assert.match(mobileBranch, /absolute -right-3 -top-3/,
+    "the 44px Dismiss target stays out of the pill layout");
+  assert.doesNotMatch(mobileBranch, /max-w-\[150px\]|px-3\.5|py-2\.5/);
+});
+
 test("the mobile pill anchors left of the task actions", () => {
   // Exit animation slides toward the new left anchor.
   assert.match(undoToastSource, /translateX\(-16px\)/);
