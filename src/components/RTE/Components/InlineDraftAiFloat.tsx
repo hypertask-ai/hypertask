@@ -751,7 +751,10 @@ const InlineDraftAiFloat = ({
             },
             { id: toastId },
           );
-      if (requestId !== requestIdRef.current) return;
+      if (requestId !== requestIdRef.current) {
+        if (isMobileAiSheet) toast.dismiss(toastId);
+        return;
+      }
       if (
         isMobileAiSheet &&
         mobileDescriptor?.sourceRevision !== undefined &&
