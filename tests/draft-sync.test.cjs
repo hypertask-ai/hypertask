@@ -22,6 +22,7 @@ new Function("module", "exports", javascript)(loaded, loaded.exports);
 const {
   getTaskDraftContent,
   normalizeEditorHtml,
+  shouldSkipUnchangedMobileDescriptionSave,
   shouldSyncDraft,
 } = loaded.exports;
 
@@ -62,6 +63,57 @@ test("a comment already posted cannot reappear in the composer", () => {
 
 test("no work when the editor already shows the stored draft", () => {
   assert.equal(shouldSyncDraft("<p>same</p>", "<p>same</p>", false), false);
+});
+
+test("Done closes an unchanged mobile description without saving it again", () => {
+  assert.equal(
+    shouldSkipUnchangedMobileDescriptionSave({
+      isMobileExistingSave: true,
+      mode: "read-edit-description",
+      hasDraft: false,
+      openingHtml: "<p>same</p>",
+      currentHtml: "<p>same</p>",
+      attachmentsChanged: false,
+    }),
+    true,
+  );
+});
+
+test("Done still saves real description, attachment, and draft changes", () => {
+  const base = {
+    isMobileExistingSave: true,
+    mode: "read-edit-description",
+    hasDraft: false,
+    openingHtml: "<p>before</p>",
+    currentHtml: "<p>before</p>",
+    attachmentsChanged: false,
+  };
+
+  assert.equal(
+    shouldSkipUnchangedMobileDescriptionSave({
+      ...base,
+      currentHtml: "<p>after</p>",
+    }),
+    false,
+  );
+  assert.equal(
+    shouldSkipUnchangedMobileDescriptionSave({
+      ...base,
+      attachmentsChanged: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldSkipUnchangedMobileDescriptionSave({ ...base, hasDraft: true }),
+    false,
+  );
+  assert.equal(
+    shouldSkipUnchangedMobileDescriptionSave({
+      ...base,
+      mode: "read-edit-comments",
+    }),
+    false,
+  );
 });
 
 test("comment hydration accepts only the open task's comment draft", () => {

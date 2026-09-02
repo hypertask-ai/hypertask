@@ -117,7 +117,7 @@ const DescriptionContainer = (
       tabIndex={0}
       id={descriptionContainerId}
       {...(_mbl
-        ? { ...bind, onDoubleClick: editDescriptionHandler }
+        ? { ...bind }
         : {
             onMouseDownCapture: rememberPressStart,
             onClick: handleDesktopClick,

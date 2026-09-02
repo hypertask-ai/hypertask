@@ -41,6 +41,7 @@ import TiptapMainContainer from "./Components/TiptapMainContainer";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import useTiptap from "./Tiptap";
+import { shouldSkipUnchangedMobileDescriptionSave } from "./draftSync";
 import { setInLocalStorage } from "@/utils/helperFunctions/helperFunctions";
 import { AITaskWriterWithProvider as AITaskWriterContainer } from "../PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -190,6 +191,7 @@ const Tiptap = ({
     focusOn,
     setEditMode,
     setEditState,
+    hasDraft,
     hasDraftInit,
     setHasDraftInit,
     editMode,
@@ -537,10 +539,29 @@ const Tiptap = ({
       return false;
     }
 
+    const isMobileExistingSave = mobileExistingEditOpen;
+    const openingSnapshot = mobileEditSnapshotRef.current;
+    if (
+      openingSnapshot &&
+      editor &&
+      shouldSkipUnchangedMobileDescriptionSave({
+        isMobileExistingSave,
+        mode,
+        hasDraft: hasDraft || hasDraftInit,
+        openingHtml: openingSnapshot.html,
+        currentHtml: editor.getHTML(),
+        attachmentsChanged:
+          snapshotDescriptionAttachments(openingSnapshot.attachments) !==
+          snapshotDescriptionAttachments(newCommentAttachments),
+      })
+    ) {
+      cancelMobileExistingEditRef.current();
+      return true;
+    }
+
     saveInFlightRef.current = true;
     setSaveInFlight(true);
 
-    const isMobileExistingSave = mobileExistingEditOpen;
     if (isMobileExistingSave) {
       mobileEditSavingRef.current = true;
       setMobileEditSaving(true);

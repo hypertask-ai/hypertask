@@ -3,6 +3,16 @@
 // Split out of index.tsx so the rule can be tested directly instead of being
 // inferred from rendered markup, the same way taskTemplatePrefill.ts is.
 
+export function mobileEditorTriggerText(
+  trigger: "@" | "/",
+  textBeforeCaret: string,
+) {
+  if (trigger === "@" && textBeforeCaret && !/\s$/.test(textBeforeCaret)) {
+    return " @";
+  }
+  return trigger;
+}
+
 /**
  * Where the dictation mic sits in the mobile comment composer.
  *

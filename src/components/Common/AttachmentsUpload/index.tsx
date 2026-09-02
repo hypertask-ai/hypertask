@@ -38,7 +38,10 @@ import {
   TSendBackButtonParam,
 } from "@/models/CreateTaskModalModels/model";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
-import { mobileCommentMicWrapperClass } from "./mobileCommentComposer";
+import {
+  mobileCommentMicWrapperClass,
+  mobileEditorTriggerText,
+} from "./mobileCommentComposer";
 import { useFileUpload } from "./FileUploadHandler";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -177,7 +180,22 @@ const AttachmentsUpload = (props: IProps) => {
   };
 
   const insertEditorTrigger = (trigger: "@" | "/") => {
-    editor?.chain().focus().insertContent(trigger).run();
+    if (!editor) return;
+    const { $from } = editor.state.selection;
+    const nodeBefore = $from.nodeBefore;
+    let textBeforeCaret = "";
+    if (nodeBefore?.isText) {
+      textBeforeCaret = nodeBefore.text?.slice(-1) ?? "";
+    } else if (nodeBefore?.type.name === "hardBreak") {
+      textBeforeCaret = "\n";
+    } else if (nodeBefore) {
+      textBeforeCaret = "\uFFFC";
+    }
+    editor
+      .chain()
+      .focus()
+      .insertContent(mobileEditorTriggerText(trigger, textBeforeCaret))
+      .run();
   };
 
   const handleMobileAttachmentBridgeFailure = (

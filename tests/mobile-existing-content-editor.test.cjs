@@ -102,7 +102,10 @@ test("the shared bottom row exposes one plus menu and the approved actions", () 
 test("mentions and commands insert into the existing editor", () => {
   assert.match(actions, /insertEditorTrigger\("@"\)/);
   assert.match(actions, /insertEditorTrigger\("\/"\)/);
-  assert.match(actions, /editor\?\.chain\(\)\.focus\(\)\.insertContent\(trigger\)\.run\(\)/);
+  assert.match(
+    actions,
+    /insertContent\(mobileEditorTriggerText\(trigger, textBeforeCaret\)\)[\s\S]*?\.run\(\)/,
+  );
 });
 
 test("the pen reveals inline edit AI inside the same well", () => {
@@ -140,6 +143,13 @@ test("DONE is single-flight and only clears local state after a successful save"
   );
   assert.match(callback, /mobileEditSavingRef\.current\) return/);
   assert.match(callback, /saveInFlightRef\.current\) return/);
+  assert.match(callback, /shouldSkipUnchangedMobileDescriptionSave\(\{/);
+  assert.match(callback, /cancelMobileExistingEditRef\.current\(\);[\s\S]*?return true/);
+  assert.ok(
+    callback.indexOf("shouldSkipUnchangedMobileDescriptionSave") <
+      callback.indexOf("saveInFlightRef.current = true"),
+    "an unchanged description must close before starting a save",
+  );
   assert.match(callback, /saveInFlightRef\.current = true/);
   assert.match(callback, /mobileEditSavingRef\.current = true/);
   assert.match(callback, /const result = await handleSave/);
