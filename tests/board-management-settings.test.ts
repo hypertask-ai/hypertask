@@ -90,6 +90,27 @@ test("Manage boards opens current-board Settings and the old modal is retired", 
   );
 });
 
+test("archiving the active board confirms success and replaces its route", () => {
+  const archive = read(
+    "src/components/Modals/commands/confirmArchiveBoard.tsx",
+  );
+  assert.match(archive, /import toast from "react-hot-toast"/);
+  assert.match(
+    archive,
+    /if \(currentProject\?\.id === targetProject\.id\)[\s\S]*?router\.replace\(firstProject\?\.id \? `\/project\?id=\$\{firstProject\.id\}` : "\/project"\)/,
+  );
+  assert.match(
+    archive,
+    /toast\.success\(`Archived \$\{targetProject\.title \?\? targetProject\.name \?\? "board"\}`\)/,
+  );
+  assert.ok(
+    archive.indexOf("toast.success") <
+      archive.indexOf('queryClient.refetchQueries({queryKey:["getAllTeamsMinimal"]})'),
+    "success feedback must not wait for cache refreshes",
+  );
+  assert.match(archive, /try \{[\s\S]*?await Promise\.all\([\s\S]*?queryClient\.refetchQueries/);
+});
+
 test("canceling a lifecycle dialog preserves the board and restore refreshes every board cache", () => {
   const lifecycle = read(
     "src/components/Modals/Settings/BoardLifecycleSettings.tsx",
