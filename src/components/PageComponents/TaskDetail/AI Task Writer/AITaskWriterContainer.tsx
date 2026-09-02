@@ -739,7 +739,7 @@ const AITaskWriterContainer: React.FC<
           <button
             type="button"
             onClick={mobileCreateTask.onClassicForm}
-            className="min-h-11 rounded-sm border-thin border-border-light-gray-thin bg-cardBackground px-3 text-content font-semibold text-white-black"
+            className="min-h-11 rounded-sm px-3 text-content font-semibold text-text-light-gray hover:bg-hover-active hover:text-white-black"
           >
             Classic form
           </button>
@@ -802,12 +802,9 @@ const AITaskWriterContainer: React.FC<
             </p>
           )}
           {mobileCreateTask.formSummary.properties.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
               {mobileCreateTask.formSummary.properties.map((property) => (
-                <span
-                  key={property}
-                  className="rounded-sm bg-modalBackground px-2 py-1 text-meta text-white-black"
-                >
+                <span key={property} className="text-meta text-text-light-gray">
                   {property}
                 </span>
               ))}

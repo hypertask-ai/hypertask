@@ -84,6 +84,14 @@ test("classic form carries content back into the shared writer", () => {
   assert.match(createTaskModal, /const mobileCreateFormSummary = hasOpenedClassicForm/);
   assert.match(createTaskModal, /formSummary: mobileCreateFormSummary/);
   assert.match(properties, /onClick=\{property\.onClick\}/);
+  assert.doesNotMatch(
+    writerContainer,
+    /onClick=\{mobileCreateTask\.onClassicForm\}\s*className="[^"]*(?:border-thin|bg-cardBackground)/,
+  );
+  assert.doesNotMatch(
+    writerContainer,
+    /rounded-sm bg-modalBackground px-2 py-1 text-meta text-white-black/,
+  );
 });
 
 test("mobile classic properties appear before the description and include start date", () => {
