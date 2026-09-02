@@ -82,6 +82,12 @@ type WebhookTask = {
   riskLevel: "Low" | "Medium" | "High" | null;
 };
 
+const MERGED_PULL_REQUEST_SECTION = "QA" as const;
+type PullRequestTargetSection =
+  | ReturnType<typeof chooseReviewSectionName>
+  | typeof MERGED_PULL_REQUEST_SECTION
+  | null;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -96,7 +102,7 @@ function repositoryParts(fullName: unknown) {
 
 async function moveTaskForPullRequest(
   task: WebhookTask,
-  targetSectionName: "AI Review" | "Valentin Review" | "Done" | null,
+  targetSectionName: PullRequestTargetSection,
 ): Promise<boolean> {
   if (!targetSectionName) return false;
   const section = await prisma.section.findFirst({
@@ -446,18 +452,14 @@ export async function POST(request: NextRequest) {
       });
       let moved = 0;
       for (const task of tasks) {
-        let targetSectionName:
-          | "AI Review"
-          | "Valentin Review"
-          | "Done"
-          | null = null;
+        let targetSectionName: PullRequestTargetSection = null;
         if (
           pullRequestPayload.action === "opened" ||
           pullRequestPayload.action === "reopened"
         ) {
           targetSectionName = chooseReviewSectionName(task.riskLevel);
         } else if (pullRequest.merged) {
-          targetSectionName = "Done";
+          targetSectionName = MERGED_PULL_REQUEST_SECTION;
         }
         if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
       }
@@ -522,11 +524,7 @@ export async function POST(request: NextRequest) {
     const ticketUrl = `https://app.hypertask.ai/detail/project-${task.projectId}/${task.uniqueIndex}`;
     const escapedTitle = escapeHtml(pullRequest.title);
 
-    let targetSectionName:
-      | "AI Review"
-      | "Valentin Review"
-      | "Done"
-      | null = null;
+    let targetSectionName: PullRequestTargetSection = null;
     let commentLead: string;
     let commentText: string;
 
@@ -535,7 +533,7 @@ export async function POST(request: NextRequest) {
       commentLead = "Pull request opened:";
       commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p><p>Linked to <a href="${ticketUrl}">${ticketId}</a>.</p>`;
     } else if (pullRequest.merged) {
-      targetSectionName = "Done";
+      targetSectionName = MERGED_PULL_REQUEST_SECTION;
       commentLead = "Pull request merged:";
       commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
     } else {
