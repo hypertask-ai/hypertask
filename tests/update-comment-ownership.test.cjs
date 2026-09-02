@@ -16,6 +16,7 @@ function loadService(storedComment) {
     commentUpdates: [],
     attachmentDeletes: [],
     attachmentCreates: [],
+    attachmentLookups: [],
     invalidations: [],
   };
   const existingAttachments = [
@@ -24,7 +25,10 @@ function loadService(storedComment) {
   ];
   const tx = {
     attachment: {
-      findMany: async () => existingAttachments,
+      findMany: async (args) => {
+        calls.attachmentLookups.push(args);
+        return args.where?.commentId === 44 ? existingAttachments : [];
+      },
       deleteMany: async (args) => calls.attachmentDeletes.push(args),
       createMany: async (args) => calls.attachmentCreates.push(args),
     },
@@ -150,6 +154,7 @@ test("an owner updates text and attachments in one transaction", async () => {
   });
 
   assert.equal(calls.transactions, 1);
+  assert.deepEqual(calls.attachmentLookups[0].where, { commentId: 44 });
   assert.deepEqual(calls.invalidations, [44]);
   assert.deepEqual(calls.attachmentDeletes[0], { where: { id: { in: [11] } } });
   assert.equal(calls.attachmentCreates[0].data.length, 1);

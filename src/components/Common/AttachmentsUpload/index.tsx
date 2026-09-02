@@ -106,7 +106,7 @@ const AttachmentsUpload = (props: IProps) => {
     hideComposerDictation,
     dictationCoordinator,
     mobileExistingEdit = false,
-    mobileEditSaving = false,
+    mobileEditSaving: mobileEditSavingProp = false,
     onCancelMobileEdit,
   } = props;
   const _mbl = useContext(MobileViewContext);
@@ -123,6 +123,10 @@ const AttachmentsUpload = (props: IProps) => {
   const [audioProcessing, setAudioProcessing] = useState(false);
   const [mobileUploadPending, setMobileUploadPending] = useState(false);
   const [mobileAttachmentBridgePending, setMobileAttachmentBridgePending] = useState(0);
+  const mobileEditSaving =
+    mobileEditSavingProp ||
+    mobileUploadPending ||
+    mobileAttachmentBridgePending > 0;
   const {
     fileItems,
     files,

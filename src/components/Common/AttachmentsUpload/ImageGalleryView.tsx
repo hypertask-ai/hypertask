@@ -7,6 +7,12 @@ import dynamic from "next/dynamic";
 import { useRecoilState } from "@/lib/state";
 import { uploadingStateCreateTaskModalAtom } from "@/store";
 import { createRemoveHandler } from "./createRemoveHandler";
+import type { IEditorAttachmentFile } from "@/models/model";
+
+type GalleryAttachment = {
+  id: number;
+  file: File & IEditorAttachmentFile;
+};
 
 const SingleFileInputPreview = dynamic(()=>import("./SingleFileInputPreview"))
 // import SingleFileInputPreview from "./SingleFileInputPreview";
@@ -20,7 +26,9 @@ interface IProps {
   shouldUpload: boolean;
   mode:"others"|"Creating task"
   allowDelete?: boolean;
-  callbackAttachments?: any;
+  callbackAttachments?: (
+    attachments: GalleryAttachment[],
+  ) => void | Promise<void>;
   onUploadFailed?: () => void;
   onUploadPendingChange?: (pending: boolean) => void;
   variant?: "default" | "chat";
