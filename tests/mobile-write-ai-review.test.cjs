@@ -72,6 +72,7 @@ const inlineDraftAiModule = jiti(
   path.join(root, "src/components/RTE/Components/InlineDraftAiFloat.tsx"),
 );
 const InlineDraftAiFloat = inlineDraftAiModule.default ?? inlineDraftAiModule;
+const { syncMobileEditableSurface } = inlineDraftAiModule;
 
 for (const filename of Object.keys(require.cache)) {
   if (!originalCache.has(filename)) delete require.cache[filename];
@@ -326,6 +327,37 @@ test("mobile Write with AI renders the complete existing-draft chip strip", asyn
     assert.equal(requests[0].command, "CustomEdit");
     assert.equal(requests[0].instruction, "Make the tone friendlier.");
   });
+});
+
+test("mobile Write with AI does not replace newer typing with an older render", () => {
+  const surface = { innerHTML: "<p>Starting draft. Keyboard works.</p>" };
+  const pendingInput = { current: surface.innerHTML };
+
+  syncMobileEditableSurface(
+    surface,
+    "<p>Starting draft. Keybod woks.</p>",
+    "<p>Starting draft. Keybod woks.</p>",
+    pendingInput,
+  );
+
+  assert.equal(surface.innerHTML, "<p>Starting draft. Keyboard works.</p>");
+  assert.equal(pendingInput.current, "<p>Starting draft. Keyboard works.</p>");
+
+  syncMobileEditableSurface(
+    surface,
+    pendingInput.current,
+    pendingInput.current,
+    pendingInput,
+  );
+  assert.equal(pendingInput.current, null);
+
+  syncMobileEditableSurface(
+    surface,
+    "<p>AI replacement</p>",
+    "<p>AI replacement</p>",
+    pendingInput,
+  );
+  assert.equal(surface.innerHTML, "<p>AI replacement</p>");
 });
 
 test("mobile Write with AI keeps an edited existing draft as the rewrite source", async () => {

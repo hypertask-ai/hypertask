@@ -114,6 +114,22 @@ function focusablesIn(root: HTMLElement) {
   ).filter((el) => el.offsetParent !== null || el === document.activeElement);
 }
 
+export function syncMobileEditableSurface(
+  surface: Pick<HTMLDivElement, "innerHTML">,
+  renderedInputHtml: string,
+  renderedSurfaceHtml: string,
+  pendingInput: { current: string | null },
+) {
+  if (pendingInput.current !== null) {
+    // A newer DOM keystroke can exist while React commits an older render.
+    if (pendingInput.current === renderedInputHtml) pendingInput.current = null;
+    return;
+  }
+  if (surface.innerHTML !== renderedSurfaceHtml) {
+    surface.innerHTML = renderedSurfaceHtml;
+  }
+}
+
 function stripEditablePlaceholderMetadata(root: ParentNode) {
   root.querySelectorAll<HTMLElement>("[data-placeholder]").forEach((node) => {
     node.classList.remove(styles.is_editor_empty);
@@ -530,13 +546,12 @@ const InlineDraftAiFloat = ({
     if (!isMobileAiSheet) return;
     const surface = mobileEditableSurfaceRef.current;
     if (!surface) return;
-    const isUserInputRender =
-      mobileEditableInputHtmlRef.current === mobileEditableHtml;
-    mobileEditableInputHtmlRef.current = null;
-    if (isUserInputRender || surface.innerHTML === mobileEditableSurfaceHtml) {
-      return;
-    }
-    surface.innerHTML = mobileEditableSurfaceHtml;
+    syncMobileEditableSurface(
+      surface,
+      mobileEditableHtml,
+      mobileEditableSurfaceHtml,
+      mobileEditableInputHtmlRef,
+    );
   }, [
     isMobileAiSheet,
     mobileEditableHtml,
