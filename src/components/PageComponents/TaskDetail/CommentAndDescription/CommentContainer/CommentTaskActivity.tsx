@@ -22,6 +22,11 @@ import CreatedBy from "../Common/CreatedBy";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { activityAgentId } from "@/lib/agents/activityAttribution";
 import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
+import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
+import { useSetRecoilState } from "@/lib/state";
+import { showCommandsAtom } from "@/store";
+import { CommandMode } from "@/models/enums";
+import TaskDueDateActivityLabel from "./TaskDueDateActivityLabel";
 
 const CommentTaskActivity = () => {
   const { comment } = useCommentsContext();
@@ -99,6 +104,11 @@ const TaskDueDateActivity = ({
 }: {
   activity: ITaskDueDateActivity;
 }) => {
+  const _mbl = useContext(MobileViewContext);
+  const { currentTask } = useTaskContext();
+  const setShowCommands = useSetRecoilState(showCommandsAtom);
+  const openDueDate = () =>
+    setShowCommands({ show: true, mode: CommandMode.SetDueDate });
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
     photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
@@ -111,10 +121,11 @@ const TaskDueDateActivity = ({
           <CreatedByLocal name={fromObj.displayName} pfp={fromObj.photoURL} />
         </BoldElement>{" "}
         set a new due date:{" "}
-        <DueDateLabel
-          flexBasis={false}
-          fontWeight={500}
+        <TaskDueDateActivityLabel
           dueDate={activity.data.toDueDate}
+          currentDueDate={currentTask?.dueDate}
+          isMobile={_mbl}
+          onClick={openDueDate}
         />
       </>
     );
@@ -140,10 +151,11 @@ const TaskDueDateActivity = ({
           dueDate={activity.data.fromDueDate}
         />{" "}
         to{" "}
-        <DueDateLabel
-          flexBasis={false}
-          fontWeight={500}
+        <TaskDueDateActivityLabel
           dueDate={activity.data.toDueDate}
+          currentDueDate={currentTask?.dueDate}
+          isMobile={_mbl}
+          onClick={openDueDate}
         />
       </>
     );

@@ -2307,10 +2307,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
               }
             >
               <TaskDetailMainContainer>
-                <TaskDetailTitleContainer
-                  containerRef={dynamicElementRef}
-                  toggleDueDate={toggleDueDate}
-                />
+                <TaskDetailTitleContainer containerRef={dynamicElementRef} />
 
               {/* --------------------------- COMMENTS + DESCRIPTION CONTAINER ------------------------------ */}
               <div
