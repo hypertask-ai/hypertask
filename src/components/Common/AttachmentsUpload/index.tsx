@@ -183,13 +183,14 @@ const AttachmentsUpload = (props: IProps) => {
     if (!editor) return;
     const { $from } = editor.state.selection;
     const nodeBefore = $from.nodeBefore;
-    const textBeforeCaret = nodeBefore?.isText
-      ? nodeBefore.text?.slice(-1) ?? ""
-      : nodeBefore?.type.name === "hardBreak"
-        ? "\n"
-        : nodeBefore
-          ? "\uFFFC"
-          : "";
+    let textBeforeCaret = "";
+    if (nodeBefore?.isText) {
+      textBeforeCaret = nodeBefore.text?.slice(-1) ?? "";
+    } else if (nodeBefore?.type.name === "hardBreak") {
+      textBeforeCaret = "\n";
+    } else if (nodeBefore) {
+      textBeforeCaret = "\uFFFC";
+    }
     editor
       .chain()
       .focus()
