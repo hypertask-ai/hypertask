@@ -40,12 +40,14 @@ const baseAuthCode = {
 const calls = {
   readSnapshots: [],
   consumeAttempts: [],
+  ownerClaims: [],
   mintAttempts: [],
   mintedTokens: [],
 }
 let authCode = baseAuthCode
 let client = { client_id: baseAuthCode.client_id }
 let consumed = false
+let ownerId = null
 let consumeError = null
 let mintError = null
 let readBarrier = null
@@ -61,12 +63,14 @@ function resetState(overrides = {}) {
     ? { client_id: authCode.client_id }
     : overrides.client
   consumed = Boolean(overrides.used)
+  ownerId = overrides.ownerId ?? null
   consumeError = null
   mintError = null
   readBarrier = null
   transactionTail = Promise.resolve()
   calls.readSnapshots.length = 0
   calls.consumeAttempts.length = 0
+  calls.ownerClaims.length = 0
   calls.mintAttempts.length = 0
   calls.mintedTokens.length = 0
 }
@@ -95,7 +99,22 @@ stubModule('src/lib/prisma.ts', {
       await precedingTransaction
 
       let transactionConsumed = consumed
+      let transactionOwnerId = ownerId
       const tx = {
+        oAuthClient: {
+          updateMany: async (args) => {
+            calls.ownerClaims.push(args)
+            if (
+              args.where.client_id === authCode.client_id &&
+              args.where.owner_id === null &&
+              transactionOwnerId === null
+            ) {
+              transactionOwnerId = args.data.owner_id
+              return { count: 1 }
+            }
+            return { count: 0 }
+          },
+        },
         oAuthAuthorizationCode: {
           updateMany: async (args) => {
             calls.consumeAttempts.push(args)
@@ -116,6 +135,7 @@ stubModule('src/lib/prisma.ts', {
       try {
         const result = await callback(tx)
         consumed = transactionConsumed
+        ownerId = transactionOwnerId
         return result
       } finally {
         releaseTransaction()
@@ -201,6 +221,11 @@ test('two requests that read the same unused code can mint only one token', asyn
   })
   assert.equal(calls.mintedTokens.length, 1)
   assert.equal(calls.consumeAttempts.length, 2)
+  assert.deepEqual(calls.ownerClaims, [{
+    where: { client_id: baseAuthCode.client_id, owner_id: null },
+    data: { owner_id: owner.id },
+  }])
+  assert.equal(ownerId, owner.id)
   for (const attempt of calls.consumeAttempts) {
     assert.deepEqual(attempt, {
       where: { code: baseAuthCode.code, used: false },
@@ -254,6 +279,7 @@ test('PKCE, expiry, client, and redirect failures do not consume the code', asyn
         error_description: scenario.description,
       })
       assert.equal(calls.consumeAttempts.length, 0)
+      assert.equal(calls.ownerClaims.length, 0)
       assert.equal(calls.mintedTokens.length, 0)
       assert.equal(consumed, false)
     })
@@ -270,6 +296,7 @@ test('incomplete user data is rejected before the consume gate', async () => {
     error_description: 'User data incomplete',
   })
   assert.equal(calls.consumeAttempts.length, 0)
+  assert.equal(calls.ownerClaims.length, 0)
   assert.equal(calls.mintedTokens.length, 0)
   assert.equal(consumed, false)
 })
@@ -291,6 +318,7 @@ test('a consume write failure preserves the existing server error semantics', as
     error: 'server_error',
     error_description: 'Failed to process authorization code',
   })
+  assert.equal(calls.ownerClaims.length, 0)
   assert.equal(calls.mintedTokens.length, 0)
 })
 
@@ -313,7 +341,9 @@ test('a signing failure rolls back consumption and the code can be redeemed', as
   })
   assert.equal(calls.mintAttempts.length, 1)
   assert.equal(calls.mintedTokens.length, 0)
+  assert.equal(calls.ownerClaims.length, 1)
   assert.equal(consumed, false)
+  assert.equal(ownerId, null)
 
   mintError = null
   const retryResponse = await POST(tokenRequest())
@@ -325,5 +355,7 @@ test('a signing failure rolls back consumption and the code can be redeemed', as
   })
   assert.equal(calls.mintAttempts.length, 2)
   assert.equal(calls.mintedTokens.length, 1)
+  assert.equal(calls.ownerClaims.length, 2)
   assert.equal(consumed, true)
+  assert.equal(ownerId, owner.id)
 })

@@ -281,6 +281,7 @@ model User {
   savedContent              SavedContent[]
   webhookEvents             WebhookEvent[]
   oauthAuthorizationCodes  OAuthAuthorizationCode[]
+  oauthClients             OAuthClient[]
   oauthRefreshTokens       OAuthRefreshToken[]
   revokedTokens             RevokedToken[]
   apiKeys                   ApiKey[]
@@ -1937,12 +1938,15 @@ model OAuthClient {
   redirect_uris Json     // Array of redirect URIs
   grant_types   Json     @default("[\"authorization_code\"]")
   token_endpoint_auth_method String @default("none")
+  owner_id      Int?
+  owner         User?    @relation(fields: [owner_id], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
 
   authorizationCodes OAuthAuthorizationCode[]
   refreshTokens      OAuthRefreshToken[]
 
   @@index([client_id])
+  @@index([owner_id])
 }
 
 model OAuthAuthorizationCode {

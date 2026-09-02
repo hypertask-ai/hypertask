@@ -27,7 +27,7 @@ const owner = {
 }
 const verifier = 'oauth-route-code-verifier-with-sufficient-length'
 const challenge = crypto.createHash('sha256').update(verifier).digest('base64url')
-const calls = { agentLookups: [], usedUpdates: [] }
+const calls = { agentLookups: [], ownerUpdates: [], usedUpdates: [] }
 let currentAgent = null
 
 const authCode = {
@@ -45,6 +45,12 @@ const authCode = {
 stubModule('src/lib/prisma.ts', {
   default: {
     $transaction: async (callback) => callback({
+      oAuthClient: {
+        updateMany: async (args) => {
+          calls.ownerUpdates.push(args)
+          return { count: 1 }
+        },
+      },
       oAuthAuthorizationCode: {
         updateMany: async (args) => {
           calls.usedUpdates.push(args)
@@ -141,6 +147,7 @@ async function expectInvalidAgentGrant(agent) {
   currentAgent = agent
   const tokenMaterial = agent?.mcpTokenJti
   calls.agentLookups.length = 0
+  calls.ownerUpdates.length = 0
   calls.usedUpdates.length = 0
 
   const response = await POST(tokenRequest())
@@ -151,6 +158,7 @@ async function expectInvalidAgentGrant(agent) {
     error: 'invalid_grant',
     error_description: 'The selected agent does not have an active token.',
   })
+  assert.equal(calls.ownerUpdates.length, 0)
   assert.equal(calls.usedUpdates.length, 0)
   assert.equal(JSON.stringify(body).includes('managed-generation'), false)
   if (tokenMaterial) {
@@ -162,6 +170,7 @@ async function expectInvalidAgentGrant(agent) {
 test('OAuth exchange binds a unique credential to the stored managed generation', async () => {
   currentAgent = storedCredential(managedToken())
   calls.agentLookups.length = 0
+  calls.ownerUpdates.length = 0
   calls.usedUpdates.length = 0
 
   const response = await POST(tokenRequest())
@@ -180,6 +189,10 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
     where: { id: agentId, userId: owner.id, revokedAt: null },
     select: { mcpTokenJti: true },
   })
+  assert.deepEqual(calls.ownerUpdates, [{
+    where: { client_id: authCode.client_id, owner_id: null },
+    data: { owner_id: owner.id },
+  }])
   assert.equal(calls.usedUpdates.length, 1)
 })
 

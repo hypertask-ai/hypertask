@@ -429,6 +429,11 @@ export async function POST(request: NextRequest) {
         })
         if (consumed.count !== 1) return null
 
+        await tx.oAuthClient.updateMany({
+          where: { client_id: authCode.client_id, owner_id: null },
+          data: { owner_id: authCode.user.id },
+        })
+
         try {
           const accessToken = createOAuthToken(
             authCode.firebase_uid,

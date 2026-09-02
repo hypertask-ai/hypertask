@@ -62,13 +62,20 @@ export async function DELETE(
     for (let attempt = 0; attempt < DELETE_ATTEMPTS; attempt += 1) {
       try {
         await prisma.$transaction(async (tx) => {
-          const clients = await tx.$queryRaw<Array<{ client_id: string }>>`
-            SELECT "client_id"
+          const clients = await tx.$queryRaw<
+            Array<{ client_id: string; owner_id: number | null }>
+          >`
+            SELECT "client_id", "owner_id"
             FROM "OAuthClient"
             WHERE "client_id" = ${clientId}
             FOR UPDATE
           `;
-          if (clients.length !== 1) throw new ClientNotOwnedError();
+          if (
+            clients.length !== 1 ||
+            clients[0].owner_id !== session.userId
+          ) {
+            throw new ClientNotOwnedError();
+          }
 
           const authorizationCodes = await tx.$queryRaw<
             Array<{ user_id: number; used: boolean }>
@@ -91,17 +98,12 @@ export async function DELETE(
             FOR UPDATE
           `;
 
-          const ownsClient =
-            authorizationCodes.some(
-              (code) => code.user_id === session.userId && code.used,
-            ) ||
-            refreshTokens.some((token) => token.userId === session.userId);
           const hasOtherOwner =
             authorizationCodes.some(
               (code) => code.user_id !== session.userId,
             ) ||
             refreshTokens.some((token) => token.userId !== session.userId);
-          if (!ownsClient || hasOtherOwner) throw new ClientNotOwnedError();
+          if (hasOtherOwner) throw new ClientNotOwnedError();
 
           const now = new Date();
           for (const token of refreshTokens) {

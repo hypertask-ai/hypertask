@@ -152,18 +152,20 @@ const McpSection = () => {
                       ? "Disconnecting"
                       : "Disconnect"}
                   </button>
-                  <button
-                    className="rounded-[5px] px-2 py-1 text-dense font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:text-text-light-gray"
-                    disabled={
-                      tokenState.removingClientId === connection.client_id
-                    }
-                    onClick={() => setClientToRemove(connection)}
-                    type="button"
-                  >
-                    {tokenState.removingClientId === connection.client_id
-                      ? "Removing"
-                      : "Remove"}
-                  </button>
+                  {connection.is_owner && (
+                    <button
+                      className="rounded-[5px] px-2 py-1 text-dense font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:text-text-light-gray"
+                      disabled={
+                        tokenState.removingClientId === connection.client_id
+                      }
+                      onClick={() => setClientToRemove(connection)}
+                      type="button"
+                    >
+                      {tokenState.removingClientId === connection.client_id
+                        ? "Removing"
+                        : "Remove"}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

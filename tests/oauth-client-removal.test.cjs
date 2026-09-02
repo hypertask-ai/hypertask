@@ -35,6 +35,7 @@ const sessionProxy = {
 function loadRoute({
   sessionUserId = 6,
   clientExists = true,
+  ownerUserId = 6,
   authorizationCodes = [{ user_id: 6, used: true }],
   refreshTokens = [
     {
@@ -68,7 +69,9 @@ function loadRoute({
           calls.queries.push({ sql: strings.join("?"), values });
           queryIndex += 1;
           if (queryIndex === 1) {
-            return clientExists ? [{ client_id: values[0] }] : [];
+            return clientExists
+              ? [{ client_id: values[0], owner_id: ownerUserId }]
+              : [];
           }
           if (queryIndex === 2) return authorizationCodes;
           if (queryIndex === 3) return refreshTokens;
@@ -171,7 +174,8 @@ test("OAuth client removal rejects an HTTP origin for the HTTPS host", async () 
 test("a different user cannot remove an OAuth client or learn whether it exists", async () => {
   const { DELETE, calls } = loadRoute({
     sessionUserId: 7,
-    authorizationCodes: [{ user_id: 6, used: true }],
+    authorizationCodes: [{ user_id: 7, used: true }],
+    refreshTokens: [],
   });
   const response = await remove(DELETE);
 
@@ -183,6 +187,15 @@ test("a different user cannot remove an OAuth client or learn whether it exists"
   assert.deepEqual(calls.revokedTokenUpserts, []);
   assert.deepEqual(calls.clientDeletes, []);
   assert.deepEqual(calls.committed, []);
+});
+
+test("authorization history cannot remove an unowned registration", async () => {
+  const { DELETE, calls } = loadRoute({ ownerUserId: null });
+  const response = await remove(DELETE);
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(calls.revokedTokenUpserts, []);
+  assert.deepEqual(calls.clientDeletes, []);
 });
 
 test("a shared registration is not cascade-deleted by either user", async () => {
@@ -199,7 +212,7 @@ test("a shared registration is not cascade-deleted by either user", async () => 
   assert.deepEqual(calls.clientDeletes, []);
 });
 
-test("a surviving refresh token proves ownership after authorization-code cleanup", async () => {
+test("the persisted owner can remove a client after authorization-code cleanup", async () => {
   const { DELETE, calls } = loadRoute({ authorizationCodes: [] });
   const response = await remove(DELETE);
 
@@ -273,12 +286,18 @@ test("Settings uses the approved Remove dialog and updates the list locally", ()
     ),
     "utf8",
   );
+  const listRoute = fs.readFileSync(
+    path.join(root, "src/app/api/connections/list/route.ts"),
+    "utf8",
+  );
   const removeHandler = hook.slice(
     hook.indexOf("const handleRemove"),
     hook.indexOf("const handleRevokeAll"),
   );
 
   assert.match(section, /<ConfirmDialog/);
+  assert.match(section, /connection\.is_owner/);
+  assert.match(listRoute, /is_owner: client\.owner_id === user\.id/);
   assert.match(section, /icon=\{Trash2\}/);
   assert.match(section, /confirmLabel="Remove client"/);
   assert.match(
