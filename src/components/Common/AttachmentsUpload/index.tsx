@@ -159,6 +159,37 @@ const AttachmentsUpload = (props: IProps) => {
     editor?.chain().focus().insertContent(trigger).run();
   };
 
+  const handleMobileAttachmentBridgeFailure = (
+    uploadedAttachments: Array<{ file: File & { source?: string } }>,
+    error?: unknown,
+  ) => {
+    if (error) console.error("Could not add attachment", error);
+
+    const persistedSources = new Set(
+      fileItems
+        .map(({ file }) => (file as File & { source?: string }).source)
+        .filter(Boolean),
+    );
+    const rejectedKeys = new Set(
+      uploadedAttachments
+        .filter(
+          ({ file }) =>
+            !persistedSources.has(
+              (file as File & { source?: string }).source,
+            ),
+        )
+        .map(({ file }) => `${file.name}:${file.size}`),
+    );
+    if (rejectedKeys.size > 0) {
+      setFileItems((prevItems) =>
+        prevItems.filter(
+          ({ file }) => !rejectedKeys.has(`${file.name}:${file.size}`),
+        ),
+      );
+    }
+    toast.error("Could not add attachment. Your changes are still here.");
+  };
+
   useEffect(() => {
     if (!_mbl || (mode !== "create-comment" && !mobileExistingEdit)) return;
 
@@ -263,15 +294,10 @@ const AttachmentsUpload = (props: IProps) => {
                       uploadedAttachments.map((attachment) => attachment.file),
                     );
                     if (result === false) {
-                      toast.error(
-                        "Could not add attachment. Your changes are still here.",
-                      );
+                      handleMobileAttachmentBridgeFailure(uploadedAttachments);
                     }
                   } catch (error) {
-                    console.error("Could not add attachment", error);
-                    toast.error(
-                      "Could not add attachment. Your changes are still here.",
-                    );
+                    handleMobileAttachmentBridgeFailure(uploadedAttachments, error);
                   }
                 }}
                 handleRemove={mobileEditSaving ? undefined : removeFile}
