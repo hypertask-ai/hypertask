@@ -868,8 +868,22 @@ const InlineDraftAiFloat = ({
     dispatchMobileReview({ type: "refine" });
   };
 
+  const syncMobileEditablePlaceholder = (
+    element: HTMLDivElement,
+    html: string,
+  ) => {
+    element.querySelectorAll<HTMLElement>("[data-placeholder]").forEach((node) => {
+      node.classList.remove(styles.is_editor_empty);
+      node.removeAttribute("data-placeholder");
+    });
+    if (!html) {
+      element.innerHTML = `<p class="${styles.is_editor_empty}" data-placeholder="${mobileEditableEmptyPlaceholder}"></p>`;
+    }
+  };
+
   const handleMobileSourceInput = (event: FormEvent<HTMLDivElement>) => {
     const sourceDraft = sanitizedEditableHtml(event);
+    syncMobileEditablePlaceholder(event.currentTarget, sourceDraft);
     mobileEditableInputHtmlRef.current = sourceDraft;
     mobileSourceDraftRef.current = sourceDraft;
     setMobileSourceDraft(sourceDraft);
@@ -878,6 +892,7 @@ const InlineDraftAiFloat = ({
 
   const handleMobileProposalInput = (event: FormEvent<HTMLDivElement>) => {
     const proposal = sanitizedEditableHtml(event);
+    syncMobileEditablePlaceholder(event.currentTarget, proposal);
     mobileEditableInputHtmlRef.current = proposal;
     mobileProposalDraftRef.current = proposal;
     mobileProposalRevisionRef.current += 1;
@@ -889,8 +904,7 @@ const InlineDraftAiFloat = ({
 
   const handleMobileEditableBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
     const html = sanitizedEditableHtml(event);
-    if (html) return;
-    event.currentTarget.innerHTML = `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet."></p>`;
+    syncMobileEditablePlaceholder(event.currentTarget, html);
   };
 
   let mobilePromptPlaceholder = "Describe the comment you want to write…";

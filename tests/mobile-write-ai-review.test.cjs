@@ -267,11 +267,9 @@ test("mobile Write with AI accepts edits made directly to the isolated proposal"
     await click(dom, buttonWithText(container, "Improve readability"));
     const proposal = container.querySelector('[contenteditable="true"]');
     await setEditableHtml(proposal, "");
-    assert.ok(container.querySelector('[contenteditable="true"]'));
-    await setEditableHtml(
-      container.querySelector('[contenteditable="true"]'),
-      "<p>Edited proposal</p>",
-    );
+    assert.ok(proposal.querySelector('[data-placeholder="Nothing written yet."]'));
+    await setEditableHtml(proposal, "<p>Edited proposal</p>");
+    assert.equal(proposal.querySelector("[data-placeholder]"), null);
     await click(dom, buttonWithText(container, "Use this text"));
 
     assert.deepEqual(editor.setContentCalls, ["<p>Edited proposal</p>"]);
