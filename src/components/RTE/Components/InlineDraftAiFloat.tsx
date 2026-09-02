@@ -3,10 +3,12 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useReducer,
   useRef,
   useState,
   type FormEvent,
+  type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { DOMSerializer } from "@tiptap/pm/model";
@@ -156,6 +158,9 @@ const InlineDraftAiFloat = ({
   const allowSuggestReplyRef = useRef(allowSuggestReply);
   const promptRef = useRef(prompt);
   const mobilePromptInputRef = useRef<HTMLInputElement>(null);
+  const mobileEditableSurfaceRef = useRef<HTMLDivElement>(null);
+  const mobileSourceDraftRef = useRef("");
+  const mobileProposalDraftRef = useRef("");
   const mobileSourceRevisionRef = useRef(0);
   const mobileProposalRevisionRef = useRef(0);
 
@@ -254,11 +259,15 @@ const InlineDraftAiFloat = ({
         snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, initial),
       });
       setMobileSourceDraft(openingHtml);
+      mobileSourceDraftRef.current = openingHtml;
+      mobileProposalDraftRef.current = "";
       mobileSourceRevisionRef.current = 0;
       mobileProposalRevisionRef.current = 0;
     } else {
       setMobileOpeningSource(null);
       setMobileSourceDraft("");
+      mobileSourceDraftRef.current = "";
+      mobileProposalDraftRef.current = "";
     }
 
     // Only adopt non-collapsed selections. Focusing the prompt blurs the
@@ -383,6 +392,33 @@ const InlineDraftAiFloat = ({
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [editor, isMobileAiSheet]);
 
+  const mobileEditableHtml =
+    mobileReview.phase === "review"
+      ? mobileReview.showOriginal
+        ? mobileOpeningSource?.html ?? ""
+        : mobileReview.proposal
+      : mobileReview.isRefining
+        ? mobileReview.proposal
+        : mobileSourceDraft;
+  const mobileEditableSurfaceHtml =
+    sanitizeAiHtml(mobileEditableHtml) ||
+    `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet."></p>`;
+
+  useLayoutEffect(() => {
+    if (!isMobileAiSheet) return;
+    const surface = mobileEditableSurfaceRef.current;
+    if (!surface || surface.innerHTML === mobileEditableSurfaceHtml) return;
+    // Keep typing uncontrolled; only sync when the displayed draft changes externally.
+    if (document.activeElement === surface) return;
+    surface.innerHTML = mobileEditableSurfaceHtml;
+  }, [
+    isMobileAiSheet,
+    mobileEditableSurfaceHtml,
+    mobileReview.isRefining,
+    mobileReview.phase,
+    mobileReview.showOriginal,
+  ]);
+
   if (!editor || !scope) return null;
 
   const hasOpeningDraft = Boolean(mobileOpeningSource?.html);
@@ -463,7 +499,9 @@ const InlineDraftAiFloat = ({
     if (action.sourceContent !== undefined) {
       content = action.sourceContent;
     } else if (isMobileAiSheet) {
-      content = refiningProposal ? mobileReview.proposal : mobileSourceDraft;
+      content = refiningProposal
+        ? mobileProposalDraftRef.current
+        : mobileSourceDraftRef.current;
     } else if (selectionPresent) {
       content = selectedHtml(editor, range);
     }
@@ -578,6 +616,7 @@ const InlineDraftAiFloat = ({
       }
       setPrompt("");
       if (isMobileAiSheet) {
+        mobileProposalDraftRef.current = html;
         mobileProposalRevisionRef.current += 1;
         dispatchMobileReview({ type: "resolve", requestId, proposal: html });
         return;
@@ -603,8 +642,8 @@ const InlineDraftAiFloat = ({
     if (!instruction) return;
     if (isMobileAiSheet) {
       const sourceContent = mobileReview.isRefining
-        ? mobileReview.proposal
-        : mobileSourceDraft;
+        ? mobileProposalDraftRef.current
+        : mobileSourceDraftRef.current;
       let label = "Write comment";
       if (mobileReview.isRefining) label = "Refine";
       else if (hasOpeningDraft) label = "Custom instruction";
@@ -728,7 +767,7 @@ const InlineDraftAiFloat = ({
     const applied = applyInlineDraftAiProposalIfFresh({
       document: editor.state.doc,
       snapshot: mobileOpeningSource.snapshot,
-      proposal: mobileReview.proposal,
+      proposal: mobileProposalDraftRef.current,
       apply: replaceScope,
     });
     if (!applied) {
@@ -746,16 +785,26 @@ const InlineDraftAiFloat = ({
   };
 
   const handleMobileSourceInput = (event: FormEvent<HTMLDivElement>) => {
-    setMobileSourceDraft(sanitizedEditableHtml(event));
+    const sourceDraft = sanitizedEditableHtml(event);
+    mobileSourceDraftRef.current = sourceDraft;
+    setMobileSourceDraft(sourceDraft);
     mobileSourceRevisionRef.current += 1;
   };
 
   const handleMobileProposalInput = (event: FormEvent<HTMLDivElement>) => {
+    const proposal = sanitizedEditableHtml(event);
+    mobileProposalDraftRef.current = proposal;
     mobileProposalRevisionRef.current += 1;
     dispatchMobileReview({
       type: "edit-proposal",
-      proposal: sanitizedEditableHtml(event),
+      proposal,
     });
+  };
+
+  const handleMobileEditableBlur = (event: ReactFocusEvent<HTMLDivElement>) => {
+    const html = sanitizedEditableHtml(event);
+    if (html) return;
+    event.currentTarget.innerHTML = `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet."></p>`;
   };
 
   let mobilePromptPlaceholder = "Describe the comment you want to write…";
@@ -805,15 +854,6 @@ const InlineDraftAiFloat = ({
   );
 
   if (isRefineFullscreen || isComposer) {
-    const inputSource = mobileReview.isRefining
-      ? mobileReview.proposal
-      : mobileOpeningSource?.html ?? "";
-    const reviewContent = sanitizeAiHtml(
-      mobileReview.showOriginal
-        ? mobileOpeningSource?.html ?? ""
-        : mobileReview.proposal,
-    );
-
     return (
       <AppSheet
         isOpen
@@ -864,22 +904,19 @@ const InlineDraftAiFloat = ({
                       : `AI proposal · ${mobileReview.lastRequest?.label ?? "Rewrite"}`}
                   </p>
                   <div
+                    ref={mobileEditableSurfaceRef}
                     className={cn(
                       styles.editorContainer,
                       !mobileReview.showOriginal && "min-h-11 outline-none",
                     )}
                     contentEditable={!mobileReview.showOriginal}
                     suppressContentEditableWarning
+                    onBlur={handleMobileEditableBlur}
                     onInput={
                       mobileReview.showOriginal
                         ? undefined
                         : handleMobileProposalInput
                     }
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        reviewContent ||
-                        `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet."></p>`,
-                    }}
                   />
                 </div>
 
@@ -935,20 +972,16 @@ const InlineDraftAiFloat = ({
                     {mobileInputLabel}
                   </p>
                   <div
+                    ref={mobileEditableSurfaceRef}
                     className={cn(styles.editorContainer, "min-h-11 outline-none")}
                     contentEditable={!isLoading}
                     suppressContentEditableWarning
+                    onBlur={handleMobileEditableBlur}
                     onInput={
                       mobileReview.isRefining
                         ? handleMobileProposalInput
                         : handleMobileSourceInput
                     }
-                    dangerouslySetInnerHTML={{
-                      __html:
-                        inputSource
-                          ? sanitizeAiHtml(inputSource)
-                          : `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet. Describe it and AI will draft the comment."></p>`,
-                    }}
                   />
                 </div>
 
