@@ -234,6 +234,67 @@ async function withRenderedSheet(text, callback) {
   }
 }
 
+test("mobile Write with AI matches the empty mobile composer state", async () => {
+  await withRenderedSheet("", async ({ container }) => {
+    const heading = [...container.querySelectorAll("h2")].find(
+      (element) => element.textContent.trim() === "Write with AI",
+    );
+    const icon = heading?.parentElement.querySelector(".lucide-pencil-sparkles");
+    assert.equal(icon?.getAttribute("stroke-width"), "1.5");
+    assert.equal(container.querySelector('[contenteditable="true"]'), null);
+
+    const prompt = container.querySelector("input");
+    assert.equal(prompt.placeholder, "Describe the text you want written…");
+    assert.match(
+      container.querySelector("[data-mobile-write-ai-prompt]").className,
+      /h-full/,
+    );
+
+    await setInput(null, prompt, "Draft a reply");
+    const send = container.querySelector('[aria-label="Send AI instruction"]');
+    assert.match(send.className, /bg-shadcn-primary/);
+    assert.match(send.className, /text-primary-foreground/);
+    assert.match(send.className, /rounded-\[4px\]/);
+  });
+});
+
+test("mobile Write with AI renders the complete existing-draft chip strip", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom }) => {
+    const requests = [];
+    global.fetch = async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Friendlier draft</p>" }),
+      };
+    };
+
+    assert.equal(
+      container.querySelector("input").placeholder,
+      "Describe how to edit the text",
+    );
+    const strip = container.querySelector(".overflow-x-auto");
+    assert.deepEqual(
+      [...strip.querySelectorAll("button")].map((button) =>
+        button.textContent.trim(),
+      ),
+      [
+        "Improve readability",
+        "Fix spelling",
+        "Simplify",
+        "Unslop",
+        "Structured",
+        "Shorter",
+        "Friendlier",
+      ],
+    );
+
+    await click(dom, buttonWithText(container, "Friendlier"));
+    assert.equal(requests[0].command, "CustomEdit");
+    assert.equal(requests[0].instruction, "Make the tone friendlier.");
+  });
+});
+
 test("mobile Write with AI keeps an edited existing draft as the rewrite source", async () => {
   await withRenderedSheet("Original draft", async ({ container, dom, editor }) => {
     const requests = [];
