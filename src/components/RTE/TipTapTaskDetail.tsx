@@ -258,6 +258,9 @@ const Tiptap = ({
   >(null);
   const mobileExistingEditOpen = Boolean(isMbl && isReadEditMode && allowEdit);
   const mobileEditViewport = useMobileVisualViewport(mobileExistingEditOpen);
+  const mobileEditHeight = mobileEditViewport
+    ? `${mobileEditViewport.visibleHeight}px`
+    : "100dvh";
   const [mobileEditSaving, setMobileEditSaving] = useState(false);
   const mobileEditSavingRef = useRef(false);
   const mobileEditSessionActiveRef = useRef(false);
@@ -1693,9 +1696,7 @@ const Tiptap = ({
                 className="fixed inset-x-0 z-[1200] bg-modalBackground"
                 style={{
                   bottom: mobileEditViewport?.bottomInset ?? 0,
-                  height: mobileEditViewport
-                    ? `${mobileEditViewport.visibleHeight}px`
-                    : "100dvh",
+                  height: mobileEditHeight,
                 }}
               >
                 <TiptapMainContainer
