@@ -5,11 +5,12 @@ const React = require("react");
 const { act } = React;
 const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
-const { Schema } = require("@tiptap/pm/model");
+const { DOMParser: ProseMirrorDOMParser, Schema } = require("@tiptap/pm/model");
 
 const root = path.resolve(__dirname, "..");
 const originalCache = new Map(Object.entries(require.cache));
 const toastErrors = [];
+const toastSuccesses = [];
 
 const stubModule = (filename, exports) => {
   require.cache[filename] = {
@@ -26,7 +27,9 @@ stubModule(require.resolve("react-hot-toast"), {
   default: {
     dismiss: () => {},
     error: (message) => toastErrors.push(message),
+    loading: () => {},
     promise: (request) => request,
+    success: (message) => toastSuccesses.push(message),
   },
 });
 stubSourceModule("src/components/Common/SendArrow.tsx", {
@@ -81,9 +84,22 @@ const schema = new Schema({
   nodes: {
     doc: { content: "block+" },
     paragraph: {
-      content: "text*",
+      content: "inline*",
       group: "block",
+      parseDOM: [{ tag: "p" }],
       toDOM: () => ["p", 0],
+    },
+    horizontal_rule: {
+      atom: true,
+      group: "block",
+      parseDOM: [{ tag: "hr" }],
+      toDOM: () => ["hr"],
+    },
+    hard_break: {
+      group: "inline",
+      inline: true,
+      parseDOM: [{ tag: "br" }],
+      toDOM: () => ["br"],
     },
     text: { group: "inline" },
   },
@@ -114,7 +130,10 @@ function createEditor(text = "") {
       },
       setContent: (html) => {
         editor.setContentCalls.push(html);
-        editor.isEmpty = false;
+        const element = global.document.createElement("div");
+        element.innerHTML = html;
+        editor.state.doc = ProseMirrorDOMParser.fromSchema(schema).parse(element);
+        editor.isEmpty = !element.textContent.trim() && !element.querySelector("hr");
         return true;
       },
       setTextSelection: (range) => {
@@ -245,7 +264,12 @@ test("mobile Write with AI matches the empty mobile composer state", async () =>
 
     const prompt = container.querySelector("input");
     assert.equal(prompt.placeholder, "Describe the text you want written…");
+    assert.match(container.textContent, /Nothing written yet/);
     assert.match(
+      container.textContent,
+      /Tell the AI what the comment should say, by voice or keyboard/,
+    );
+    assert.doesNotMatch(
       container.querySelector("[data-mobile-write-ai-prompt]").className,
       /h-full/,
     );
@@ -274,6 +298,7 @@ test("mobile Write with AI renders the complete existing-draft chip strip", asyn
       "Describe how to edit the text",
     );
     const strip = container.querySelector(".overflow-x-auto");
+    assert.match(strip.className, /shrink-0/);
     assert.deepEqual(
       [...strip.querySelectorAll("button")].map((button) =>
         button.textContent.trim(),
@@ -287,6 +312,14 @@ test("mobile Write with AI renders the complete existing-draft chip strip", asyn
         "Shorter",
         "Friendlier",
       ],
+    );
+    for (const button of strip.querySelectorAll("button")) {
+      assert.match(button.className, /rounded-\[4px\]/);
+      assert.match(button.className, /bg-hover-active/);
+    }
+    assert.match(
+      container.querySelector('[contenteditable="true"]').parentElement.className,
+      /flex-1/,
     );
 
     await click(dom, buttonWithText(container, "Friendlier"));
@@ -318,7 +351,20 @@ test("mobile Write with AI keeps an edited existing draft as the rewrite source"
     assert.equal(requests[0].content, "<p>Edited draft</p>");
     assert.match(container.textContent, /Proposal/);
     assert.doesNotMatch(container.textContent, /Edited draft/);
-    assert.equal(editor.setContentCalls.length, 0);
+    assert.deepEqual(editor.setContentCalls, [
+      "<p>Edited draft</p>",
+      "<p>Proposal</p>",
+    ]);
+  });
+});
+
+test("mobile Write with AI keeps an empty edited draft open without inert chips", async () => {
+  await withRenderedSheet("Original draft", async ({ container }) => {
+    await setEditableHtml(container.querySelector('[contenteditable="true"]'), "");
+
+    assert.ok(container.querySelector('[contenteditable="true"]'));
+    assert.match(container.textContent, /Your draft · tap to edit/i);
+    assert.equal(container.querySelector(".overflow-x-auto"), null);
   });
 });
 
@@ -343,106 +389,84 @@ test("mobile Write with AI preserves atomic rich-text draft content", async () =
   });
 });
 
-test("mobile Write with AI accepts edits made directly to the isolated proposal", async () => {
-  await withRenderedSheet("Original draft", async ({ container, dom, editor, getCloseCalls }) => {
-    global.fetch = async () => ({
-      ok: true,
-      json: async () => ({ corrected_html: "<p>AI proposal</p>" }),
-    });
-
-    await click(dom, buttonWithText(container, "Improve readability"));
-    const proposal = container.querySelector('[contenteditable="true"]');
-    await setEditableHtml(proposal, "");
-    assert.ok(proposal.querySelector('[data-placeholder="Nothing written yet."]'));
-    await setEditableHtml(proposal, "<p>Edited proposal</p>");
-    assert.equal(proposal.querySelector("[data-placeholder]"), null);
-    await click(dom, buttonWithText(container, "Use this text"));
-
-    assert.deepEqual(editor.setContentCalls, ["<p>Edited proposal</p>"]);
-    assert.equal(getCloseCalls(), 1);
-  });
-});
-
-test("mobile Write with AI renders submit, retry, refine, and discard without replacing the composer", async () => {
-  await withRenderedSheet("", async ({ container, dom, editor, getCloseCalls }) => {
+test("first mobile AI generation becomes the editable draft with edit controls", async () => {
+  await withRenderedSheet("", async ({ container, dom, editor }) => {
     const requests = [];
+    const responses = ["<p>Generated draft</p>", "<p>Short draft</p>"];
     global.fetch = async (_url, options) => {
       requests.push(JSON.parse(options.body));
       return {
         ok: true,
-        json: async () => ({ corrected_html: `<p>Proposal ${requests.length}</p>` }),
+        json: async () => ({ corrected_html: responses.shift() }),
       };
     };
 
-    let input = container.querySelector("input");
-    await setInput(dom, input, "Draft a concise reply");
+    await setInput(dom, container.querySelector("input"), "Draft a reply");
     await click(dom, container.querySelector('[aria-label="Send AI instruction"]'));
 
     assert.equal(requests[0].command, "WriteContent");
     assert.equal(requests[0].content, "");
-    assert.equal(editor.setContentCalls.length, 0);
-    assert.match(container.textContent, /Proposal 1/);
-
-    await click(dom, buttonWithText(container, "Try again"));
-    assert.deepEqual(requests[1], requests[0]);
-    assert.match(container.textContent, /Proposal 2/);
-
-    await click(dom, buttonWithText(container, "Refine…"));
-    input = container.querySelector("input");
-    await setInput(dom, input, "Make it warmer");
-    await click(dom, container.querySelector('[aria-label="Send AI instruction"]'));
-    assert.equal(requests[2].command, "CustomEdit");
-    assert.equal(requests[2].content, "<p>Proposal 2</p>");
-    assert.equal(requests[2].instruction, "Make it warmer");
-    assert.equal(editor.setContentCalls.length, 0);
-
-    await click(dom, buttonWithText(container, "Try again"));
-    assert.deepEqual(requests[3], requests[2]);
-    assert.match(container.textContent, /Proposal 4/);
-
-    await setEditableHtml(
-      container.querySelector('[contenteditable="true"]'),
-      "<p>Edited after refinement</p>",
+    assert.equal(
+      container.querySelector('[contenteditable="true"]').innerHTML,
+      "<p>Generated draft</p>",
     );
-    const staleRetry = buttonWithText(container, "Try again");
-    assert.equal(staleRetry.disabled, true);
-    assert.match(staleRetry.title, /proposal changed/i);
-    await click(dom, staleRetry);
-    assert.equal(requests.length, 4);
-    assert.match(container.textContent, /Edited after refinement/);
+    assert.match(container.textContent, /Your draft · tap to edit/i);
+    assert.equal(
+      container.querySelector("input").placeholder,
+      "Describe how to edit the text",
+    );
+    assert.deepEqual(
+      [...container.querySelector(".overflow-x-auto").querySelectorAll("button")].map(
+        (button) => button.textContent.trim(),
+      ),
+      [
+        "Improve readability",
+        "Fix spelling",
+        "Simplify",
+        "Unslop",
+        "Structured",
+        "Shorter",
+        "Friendlier",
+      ],
+    );
+    assert.doesNotMatch(container.textContent, /AI proposal|Try again|Use this text/i);
+    assert.deepEqual(editor.setContentCalls, ["<p>Generated draft</p>"]);
 
-    await click(dom, buttonWithText(container, "Discard"));
-    assert.equal(getCloseCalls(), 1);
-    assert.equal(editor.setContentCalls.length, 0);
+    await click(dom, buttonWithText(container, "Shorter"));
+    assert.equal(requests[1].content, "<p>Generated draft</p>");
+    assert.equal(
+      container.querySelector('[contenteditable="true"]').innerHTML,
+      "<p>Short draft</p>",
+    );
+    assert.deepEqual(editor.setContentCalls, [
+      "<p>Generated draft</p>",
+      "<p>Short draft</p>",
+    ]);
   });
 });
 
-test("mobile Write with AI accepts only against the unchanged opening draft", async () => {
-  await withRenderedSheet("Original draft", async ({ container, dom, editor, getCloseCalls }) => {
-    global.fetch = async () => ({
-      ok: true,
-      json: async () => ({ corrected_html: "<p>Accepted proposal</p>" }),
-    });
-
-    await click(dom, buttonWithText(container, "Improve readability"));
-    assert.equal(editor.setContentCalls.length, 0);
-    await click(dom, buttonWithText(container, "Use this text"));
-    assert.deepEqual(editor.setContentCalls, ["<p>Accepted proposal</p>"]);
-    assert.equal(getCloseCalls(), 1);
-  });
-
+test("mobile Write with AI keeps a newer draft when an AI response becomes stale", async () => {
   toastErrors.length = 0;
-  await withRenderedSheet("Original draft", async ({ container, dom, editor, getCloseCalls }) => {
-    global.fetch = async () => ({
-      ok: true,
-      json: async () => ({ corrected_html: "<p>Stale proposal</p>" }),
-    });
+  toastSuccesses.length = 0;
+  await withRenderedSheet("Original draft", async ({ container, dom, editor }) => {
+    let resolveResponse;
+    global.fetch = () =>
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
 
     await click(dom, buttonWithText(container, "Improve readability"));
     editor.state.doc = schema.node("doc", null, [paragraph("Changed externally")]);
-    await click(dom, buttonWithText(container, "Use this text"));
+    await act(async () => {
+      resolveResponse({
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Stale draft</p>" }),
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
     assert.equal(editor.setContentCalls.length, 0);
-    assert.equal(getCloseCalls(), 0);
-    assert.match(toastErrors.at(-1), /changed while AI was working/);
+    assert.match(toastErrors.at(-1), /newer draft was preserved/);
+    assert.deepEqual(toastSuccesses, []);
   });
 });

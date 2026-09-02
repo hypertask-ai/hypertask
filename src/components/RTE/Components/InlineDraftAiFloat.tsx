@@ -16,7 +16,7 @@ import {
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 
-import { LoaderCircle, PencilSparkles, X } from "lucide-react";
+import { LoaderCircle, PencilSparkles, Sparkles, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { SendArrow } from "@/components/Common/SendArrow";
@@ -63,6 +63,8 @@ const CHIP_PRIMARY_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 font-semibold bg-hypertasks-ai-purple text-white hover:opacity-90 focus-visible:outline-none disabled:opacity-50";
 const CHIP_SHEET_ROW_CLASS =
   "flex min-h-11 items-center rounded-full bg-hover-active px-3 text-left text-dense text-white-black active:opacity-80 disabled:opacity-50";
+const MOBILE_CHIP_CLASS =
+  "shrink-0 whitespace-nowrap rounded-[4px] bg-hover-active px-3 py-1.5 text-meta text-white-black active:opacity-80 disabled:opacity-50";
 
 const EDIT_ACTIONS = [
   ["Improve readability", "ImproveReadability"],
@@ -250,6 +252,7 @@ const InlineDraftAiFloat = ({
   const [mobileOpeningSource, setMobileOpeningSource] =
     useState<MobileOpeningSource | null>(null);
   const [mobileSourceDraft, setMobileSourceDraft] = useState("");
+  const [hasMobileDraft, setHasMobileDraft] = useState(false);
   const [mobileReview, dispatchMobileReview] = useReducer(
     inlineDraftAiReviewReducer,
     initialInlineDraftAiReviewState,
@@ -368,6 +371,7 @@ const InlineDraftAiFloat = ({
         snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, initial),
       });
       setMobileSourceDraft(openingHtml);
+      setHasMobileDraft(Boolean(openingHtml));
       mobileSourceDraftRef.current = openingHtml;
       mobileProposalDraftRef.current = "";
       mobileSourceRevisionRef.current = 0;
@@ -375,6 +379,7 @@ const InlineDraftAiFloat = ({
     } else {
       setMobileOpeningSource(null);
       setMobileSourceDraft("");
+      setHasMobileDraft(false);
       mobileSourceDraftRef.current = "";
       mobileProposalDraftRef.current = "";
     }
@@ -559,10 +564,9 @@ const InlineDraftAiFloat = ({
     insertSanitizedEditableTransfer(event);
   };
 
-  const hasOpeningDraft = Boolean(mobileSourceDraft);
   const hasSelection = scope.to > scope.from;
   const showEditChips =
-    (isMobileAiSheet && hasOpeningDraft) ||
+    (isMobileAiSheet && Boolean(mobileSourceDraft)) ||
     shouldShowInlineDraftAiChips(hasSelection, prompt);
   const dictationActive = isRecording || audioProcessing;
   let mobileDictationPresentation: "prominent" | "compact" | undefined;
@@ -656,6 +660,9 @@ const InlineDraftAiFloat = ({
       (sourceKind === "proposal"
         ? mobileProposalRevisionRef.current
         : mobileSourceRevisionRef.current);
+    const mobileSourceSnapshot = isMobileAiSheet
+      ? createInlineDraftAiSourceSnapshot(editor.state.doc, range)
+      : null;
     // Media-only / text drafts require content for edits. True empty docs may
     // WriteContent. The mobile refine path intentionally edits its proposal,
     // while the opening editor remains untouched.
@@ -729,20 +736,25 @@ const InlineDraftAiFloat = ({
     })();
 
     try {
-      const html = await toast.promise(
-        request,
-        {
-          loading:
-            action.command === "WriteContent"
-              ? "Writing draft"
-              : "Rewriting draft",
-          success: isMobileAiSheet ? "Draft ready to review" : "Draft updated",
-          error: (error) =>
-            error instanceof Error ? error.message : "AI edit failed",
-        },
-        { id: toastId },
-      );
-      if (requestId !== requestIdRef.current) return;
+      const loadingMessage =
+        action.command === "WriteContent" ? "Writing draft" : "Rewriting draft";
+      if (isMobileAiSheet) toast.loading(loadingMessage, { id: toastId });
+      const html = isMobileAiSheet
+        ? await request
+        : await toast.promise(
+            request,
+            {
+              loading: loadingMessage,
+              success: "Draft updated",
+              error: (error) =>
+                error instanceof Error ? error.message : "AI edit failed",
+            },
+            { id: toastId },
+          );
+      if (requestId !== requestIdRef.current) {
+        if (isMobileAiSheet) toast.dismiss(toastId);
+        return;
+      }
       if (
         isMobileAiSheet &&
         mobileDescriptor?.sourceRevision !== undefined &&
@@ -752,21 +764,45 @@ const InlineDraftAiFloat = ({
             : mobileSourceRevisionRef.current)
       ) {
         dispatchMobileReview({ type: "reject", requestId });
+        toast.dismiss(toastId);
         return;
       }
       setPrompt("");
       if (isMobileAiSheet) {
-        mobileProposalDraftRef.current = html;
-        dispatchMobileReview({ type: "resolve", requestId, proposal: html });
+        const applied =
+          mobileSourceSnapshot !== null &&
+          applyInlineDraftAiProposalIfFresh({
+            document: editor.state.doc,
+            snapshot: mobileSourceSnapshot,
+            proposal: html,
+            apply: replaceScope,
+          });
+        if (!applied) {
+          dispatchMobileReview({ type: "reject", requestId });
+          toast.error(
+            "This comment changed while AI was working. The newer draft was preserved.",
+            { id: toastId },
+          );
+          return;
+        }
+        mobileSourceDraftRef.current = html;
+        setMobileSourceDraft(html);
+        setHasMobileDraft(true);
+        mobileSourceRevisionRef.current += 1;
+        dispatchMobileReview({ type: "reset" });
+        toast.success("Draft updated", { id: toastId });
         return;
       }
       replaceScope(html, range);
       setHasResult(true);
-    } catch {
+    } catch (error) {
       if (isMobileAiSheet) {
         dispatchMobileReview({ type: "reject", requestId });
+        toast.error(error instanceof Error ? error.message : "AI edit failed", {
+          id: toastId,
+        });
       }
-      // toast.promise already reports the request error.
+      // Desktop request errors are reported by toast.promise.
     } finally {
       if (requestId === requestIdRef.current) {
         loadingRef.current = false;
@@ -785,7 +821,7 @@ const InlineDraftAiFloat = ({
         : mobileSourceDraftRef.current;
       let label = "Write comment";
       if (mobileReview.isRefining) label = "Refine";
-      else if (hasOpeningDraft) label = "Custom instruction";
+      else if (hasMobileDraft) label = "Custom instruction";
       void runAction({
         command: sourceContent ? "CustomEdit" : "WriteContent",
         instruction,
@@ -950,6 +986,7 @@ const InlineDraftAiFloat = ({
     mobileSourceDraftRef.current = sourceDraft;
     setMobileSourceDraft(sourceDraft);
     mobileSourceRevisionRef.current += 1;
+    if (scope) replaceScope(sourceDraft, scope);
   };
 
   const handleMobileProposalInput = (event: FormEvent<HTMLDivElement>) => {
@@ -972,23 +1009,18 @@ const InlineDraftAiFloat = ({
   let mobilePromptPlaceholder = "Describe the text you want written…";
   if (mobileReview.isRefining) {
     mobilePromptPlaceholder = "Tell AI how to refine this proposal…";
-  } else if (hasOpeningDraft) {
+  } else if (hasMobileDraft) {
     mobilePromptPlaceholder = "Describe how to edit the text";
   }
 
   let mobileInputLabel = "Comment";
   if (mobileReview.isRefining) mobileInputLabel = "AI proposal";
-  else if (hasOpeningDraft) mobileInputLabel = "Your draft";
+  else if (hasMobileDraft) mobileInputLabel = "Your draft · tap to edit";
 
   const mobilePromptComposer = (
     <div
       data-mobile-write-ai-prompt
-      className={cn(
-        "rounded-lg bg-newcomment-well px-3 pb-2 pt-3",
-        hasOpeningDraft || mobileReview.isRefining
-          ? "mt-3"
-          : "flex h-full flex-col",
-      )}
+      className="mt-3 shrink-0 rounded-lg bg-newcomment-well px-3 pb-2 pt-3"
       onKeyDown={handlePanelKeyDown}
     >
       {!dictationActive && (
@@ -1006,7 +1038,7 @@ const InlineDraftAiFloat = ({
       <div
         className={cn(
           "flex min-h-11 w-full items-center gap-2",
-          !hasOpeningDraft && !mobileReview.isRefining && "mt-auto",
+          !hasMobileDraft && !mobileReview.isRefining && "mt-auto",
         )}
       >
         {dictationButton}
@@ -1091,7 +1123,7 @@ const InlineDraftAiFloat = ({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-icon-dark-gray">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-3">
             {mobileReview.phase === "review" ? (
               <>
                 <div className="rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
@@ -1174,8 +1206,23 @@ const InlineDraftAiFloat = ({
               </>
             ) : (
               <>
-                {hasOpeningDraft || mobileReview.isRefining ? (
-                  <div className="rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
+                {!hasMobileDraft && mobileReview.phase !== "loading" ? (
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-content leading-relaxed text-text-light-gray">
+                    <Sparkles
+                      size={28}
+                      strokeWidth={1.5}
+                      className="text-hypertasks-ai-purple"
+                      aria-hidden
+                    />
+                    <p>
+                      Nothing written yet.
+                      <br />
+                      Tell the AI what the comment should say, by voice or keyboard.
+                    </p>
+                  </div>
+                ) : null}
+                {hasMobileDraft || mobileReview.isRefining ? (
+                  <div className="flex min-h-0 flex-1 flex-col rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
                     <p className="mb-2 text-micro font-medium uppercase tracking-wide text-text-light-gray">
                       {mobileInputLabel}
                     </p>
@@ -1183,7 +1230,7 @@ const InlineDraftAiFloat = ({
                       ref={mobileEditableSurfaceRef}
                       className={cn(
                         styles.editorContainer,
-                        "min-h-11 outline-none",
+                        "min-h-0 flex-1 overflow-y-auto outline-none scrollbar-none",
                       )}
                       contentEditable={!isLoading}
                       suppressContentEditableWarning
@@ -1217,14 +1264,14 @@ const InlineDraftAiFloat = ({
                   </div>
                 ) : (
                   <>
-                    {hasOpeningDraft && !mobileReview.isRefining ? (
-                      <div className="scrollbar-none mt-3 flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto pb-1">
+                    {Boolean(mobileSourceDraft) && !mobileReview.isRefining ? (
+                      <div className="scrollbar-none mt-2 flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
                         {MOBILE_EDIT_ACTIONS.map(
                           ([label, command, instruction]) => (
                             <button
                               key={label}
                               type="button"
-                              className={CHIP_LINK_CLASS}
+                              className={MOBILE_CHIP_CLASS}
                               onClick={() =>
                                 void runAction({
                                   command,
