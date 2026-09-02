@@ -121,6 +121,8 @@ const AttachmentsUpload = (props: IProps) => {
   // content includes the title: a title-only task is savable (HTPR-5517).
   const hasSavableContent = hasText || Boolean(props.hasTitle);
   const [audioProcessing, setAudioProcessing] = useState(false);
+  const [mobileUploadPending, setMobileUploadPending] = useState(false);
+  const [mobileAttachmentBridgePending, setMobileAttachmentBridgePending] = useState(false);
   const {
     fileItems,
     files,
@@ -293,9 +295,11 @@ const AttachmentsUpload = (props: IProps) => {
                 allowDelete={!mobileEditSaving}
                 shouldUpload={true}
                 mode="others"
+                onUploadPendingChange={setMobileUploadPending}
                 callbackAttachments={async (
                   uploadedAttachments: Array<{ id: number; file: File }>,
                 ) => {
+                  setMobileAttachmentBridgePending(true);
                   try {
                     const result = await callback(
                       uploadedAttachments.map((attachment) => attachment.file),
@@ -310,6 +314,8 @@ const AttachmentsUpload = (props: IProps) => {
                     }
                   } catch (error) {
                     handleMobileAttachmentBridgeFailure(uploadedAttachments, error);
+                  } finally {
+                    setMobileAttachmentBridgePending(false);
                   }
                 }}
                 handleRemove={mobileEditSaving ? undefined : removeFile}
@@ -454,7 +460,12 @@ const AttachmentsUpload = (props: IProps) => {
             <button
               type="button"
               aria-label="Done editing"
-              disabled={mobileEditSaving || !sendOnClick}
+              disabled={
+                mobileEditSaving ||
+                mobileUploadPending ||
+                mobileAttachmentBridgePending ||
+                !sendOnClick
+              }
               onClick={async (event) => {
                 event.stopPropagation();
                 try {
