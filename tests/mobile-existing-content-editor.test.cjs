@@ -23,6 +23,9 @@ const commentRoute = read("src/pages/api/comments/updateComment.ts");
 const descriptionContainer = read(
   "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/index.tsx",
 );
+const descriptionBody = read(
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
+);
 const commentsContainer = read(
   "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentsContainer.tsx",
 );
@@ -165,6 +168,7 @@ test("late dictation, AI, and upload completion cannot mutate a closed edit", ()
   assert.match(actions, /uploadedAttachments\.forEach[\s\S]*?mobileEditPersistedSourcesRef\.current\.add/);
   assert.match(actions, /handleMobileAttachmentBridgeFailure[\s\S]*?setFileItems/);
   assert.match(actions, /onClick=\{async \(event\)[\s\S]*?Could not save editor content/);
+  assert.match(descriptionBody, /allowEdit=\{isEditing && !uploadingDescription\}/);
   assert.match(upload, /const hasCompleted = useRef\(false\)/);
   assert.match(upload, /if \(hasCompleted\.current\) return/);
   assert.match(upload, /catch \(error\) \{[\s\S]*?complete\(false\)/);
