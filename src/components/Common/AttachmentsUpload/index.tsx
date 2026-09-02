@@ -302,6 +302,11 @@ const AttachmentsUpload = (props: IProps) => {
                     );
                     if (result === false) {
                       handleMobileAttachmentBridgeFailure(uploadedAttachments);
+                    } else {
+                      uploadedAttachments.forEach(({ file }) => {
+                        const source = (file as File & { source?: string }).source;
+                        if (source) mobileEditPersistedSourcesRef.current.add(source);
+                      });
                     }
                   } catch (error) {
                     handleMobileAttachmentBridgeFailure(uploadedAttachments, error);
