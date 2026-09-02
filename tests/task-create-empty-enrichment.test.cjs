@@ -332,14 +332,12 @@ test("malformed start dates are rejected before task creation", async () => {
   const { handler, createdTaskData, sectionLookupCalls } = loadCreateRoute();
   const response = responseHarness();
 
-  await createTask(
-    handler,
-    taskCreateBody({ startDate: "not-a-date" }),
-    response,
-  );
+  for (const startDate of ["not-a-date", "2026-02-30"]) {
+    await createTask(handler, taskCreateBody({ startDate }), response);
 
-  assert.equal(response.result().status, 400);
-  assert.match(response.result().body.message, /Invalid start date/);
+    assert.equal(response.result().status, 400);
+    assert.match(response.result().body.message, /Invalid start date/);
+  }
   assert.equal(sectionLookupCalls.length, 0);
   assert.equal(createdTaskData.length, 0);
 });

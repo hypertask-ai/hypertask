@@ -334,8 +334,23 @@ const handler: NextApiHandler = async (
         }
         parsedStartDate = startDate;
       } else if (typeof startDate === "string") {
-        const parsed = new Date(startDate);
-        if (Number.isNaN(parsed.getTime())) {
+        const normalizedStartDate = startDate.trim();
+        const dateParts = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(
+          normalizedStartDate,
+        );
+        const calendarDate = dateParts
+          ? new Date(
+              `${dateParts[1]}-${dateParts[2]}-${dateParts[3]}T00:00:00.000Z`,
+            )
+          : null;
+        const hasValidCalendarDate =
+          calendarDate !== null &&
+          !Number.isNaN(calendarDate.getTime()) &&
+          calendarDate.getUTCFullYear() === Number(dateParts?.[1]) &&
+          calendarDate.getUTCMonth() + 1 === Number(dateParts?.[2]) &&
+          calendarDate.getUTCDate() === Number(dateParts?.[3]);
+        const parsed = new Date(normalizedStartDate);
+        if (!hasValidCalendarDate || Number.isNaN(parsed.getTime())) {
           return res.status(400).json({ message: "Invalid start date" });
         }
         parsedStartDate = parsed;
