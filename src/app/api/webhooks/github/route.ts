@@ -408,7 +408,22 @@ export async function POST(request: NextRequest) {
       return invalidPayload("Invalid pull request payload");
     }
 
+    const board = await prisma.project.findUnique({
+      where: { id: boardId },
+      select: { uniqueIdentifier: true },
+    });
+    if (!board?.uniqueIdentifier) {
+      console.error(
+        `[GitHub webhook] Board ${boardId} has no ticket identifier; event was ignored.`,
+      );
+      return NextResponse.json({
+        success: true,
+        ignored: "Repository board has no ticket identifier",
+      });
+    }
+
     const ticketId = extractTicketId({
+      boardPrefix: board.uniqueIdentifier,
       title: pullRequest.title,
       headRef: pullRequest.head?.ref,
       body: pullRequest.body,
@@ -500,6 +515,7 @@ export async function POST(request: NextRequest) {
 
     const task = await prisma.task.findFirst({
       where: {
+        projectId: boardId,
         ticketNumber: ticketId,
         status: { not: "Deleted" },
       },

@@ -243,6 +243,9 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
     await t.test("the first-class synchronization path", async () => {
       const sectionNames = [];
       const prisma = {
+        project: {
+          findUnique: async () => ({ uniqueIdentifier: "HTPR" }),
+        },
         section: {
           findFirst: async ({ where }) => {
             sectionNames.push(where.section_title.equals);
@@ -287,7 +290,11 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
 
     await t.test("the legacy fallback path", async () => {
       const sectionNames = [];
+      let ticketLookup;
       const prisma = {
+        project: {
+          findUnique: async () => ({ uniqueIdentifier: "HTPR" }),
+        },
         section: {
           findFirst: async ({ where }) => {
             sectionNames.push(where.section_title.equals);
@@ -296,18 +303,19 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
         },
         task: {
           findMany: async () => [],
-          findFirst: async ({ where }) =>
-            where.ticketNumber
-              ? {
-                  id: 36637,
-                  projectId: 15,
-                  userId: 6,
-                  sectionId: 4309,
-                  uniqueIndex: 5952,
-                  ticketNumber: "HTPR-5952",
-                  riskLevel: "Low",
-                }
-              : null,
+          findFirst: async ({ where }) => {
+            if (!where.ticketNumber) return null;
+            ticketLookup = where;
+            return {
+              id: 36637,
+              projectId: 15,
+              userId: 6,
+              sectionId: 4309,
+              uniqueIndex: 5952,
+              ticketNumber: "HTPR-5952",
+              riskLevel: "Low",
+            };
+          },
         },
         user: {
           findUnique: async () => ({
@@ -329,6 +337,11 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(result.response.status, 200);
       assert.equal(result.body.moved, true);
       assert.equal(result.body.targetSection, "QA");
+      assert.deepEqual(ticketLookup, {
+        projectId: 15,
+        ticketNumber: "HTPR-5952",
+        status: { not: "Deleted" },
+      });
       assert.deepEqual(sectionNames, ["QA"]);
       assert.equal(result.moves.length, 1);
       assert.equal(result.moves[0].section, "QA");
@@ -347,6 +360,7 @@ test("extractTicketId checks branch, then title, then body, in that order", () =
 
   assert.equal(
     extractTicketId({
+      boardPrefix: "INNE",
       title: "Improve GitHub integration",
       headRef: "feat/INNE-22-webhook",
       body: "Resolves PROD-8",
@@ -355,6 +369,7 @@ test("extractTicketId checks branch, then title, then body, in that order", () =
   );
   assert.equal(
     extractTicketId({
+      boardPrefix: "HTPR",
       title: "Ship HTPR-4437",
       headRef: "feat/github-webhook",
       body: "Resolves PROD-8",
@@ -363,6 +378,7 @@ test("extractTicketId checks branch, then title, then body, in that order", () =
   );
   assert.equal(
     extractTicketId({
+      boardPrefix: "PROD",
       title: "Improve GitHub integration",
       headRef: "feat/github-webhook",
       body: "Resolves PROD-8",
@@ -370,16 +386,41 @@ test("extractTicketId checks branch, then title, then body, in that order", () =
     "PROD-8"
   );
   assert.equal(
-    extractTicketId({ headRef: "htpr-4437-github-pr-link" }),
+    extractTicketId({
+      boardPrefix: "HTPR",
+      headRef: "htpr-4437-github-pr-link",
+    }),
     "HTPR-4437"
   );
   assert.equal(
     extractTicketId({
+      boardPrefix: "HTPR",
       title: "Improve GitHub integration",
       headRef: "feat/github-webhook",
       body: "No ticket reference here",
     }),
     null
+  );
+});
+
+test("extractTicketId skips agent slugs and finds the linked board ticket", () => {
+  const { extractTicketId } = loadTs(
+    "src/app/api/webhooks/github/github-webhook-helpers.ts"
+  );
+
+  assert.equal(
+    extractTicketId({
+      boardPrefix: "HTPR",
+      headRef: "agent/dev-3-htpr-5923-qa-regressions",
+    }),
+    "HTPR-5923"
+  );
+  assert.equal(
+    extractTicketId({
+      boardPrefix: "HTPR",
+      headRef: "agent/ht-bug-fixer-htpr-5952",
+    }),
+    "HTPR-5952"
   );
 });
 
@@ -393,6 +434,7 @@ test("extractTicketId prefers the branch's ticket over a different ticket mentio
   // cross-board) ticket.
   assert.equal(
     extractTicketId({
+      boardPrefix: "INNE",
       title: "Revert HTPR-1234, follow-up to INNE-99",
       headRef: "inne-22-branch",
       body: "supersedes HTPR-4400",
@@ -411,6 +453,7 @@ test("extractTicketId is not hijacked by ticket-shaped technical prose in the ti
   // even inspected.
   assert.equal(
     extractTicketId({
+      boardPrefix: "HTPR",
       title: "Use UTF-8 encoding consistently, hash with SHA-256",
       headRef: "htpr-4437-github-pr-link",
       body: "",
