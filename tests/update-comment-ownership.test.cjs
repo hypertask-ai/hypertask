@@ -17,11 +17,24 @@ function loadService(storedComment) {
     attachmentDeletes: [],
     attachmentCreates: [],
     attachmentLookups: [],
+    attachmentUpdates: [],
     invalidations: [],
   };
   const existingAttachments = [
-    { id: 10, fileSource: "https://files.test/keep.png" },
-    { id: 11, fileSource: "https://files.test/remove.png" },
+    {
+      id: 10,
+      fileSource: "https://files.test/keep.png",
+      fileType: "image/png",
+      fileName: "old-keep.png",
+      fileSize: "10",
+    },
+    {
+      id: 11,
+      fileSource: "https://files.test/remove.png",
+      fileType: "image/png",
+      fileName: "remove.png",
+      fileSize: "20",
+    },
   ];
   const tx = {
     attachment: {
@@ -31,6 +44,7 @@ function loadService(storedComment) {
       },
       deleteMany: async (args) => calls.attachmentDeletes.push(args),
       createMany: async (args) => calls.attachmentCreates.push(args),
+      update: async (args) => calls.attachmentUpdates.push(args),
     },
     comment: {
       update: async (args) => {
@@ -157,6 +171,16 @@ test("an owner updates text and attachments in one transaction", async () => {
   assert.deepEqual(calls.attachmentLookups[0].where, { commentId: 44 });
   assert.deepEqual(calls.invalidations, [44]);
   assert.deepEqual(calls.attachmentDeletes[0], { where: { id: { in: [11] } } });
+  assert.deepEqual(calls.attachmentUpdates, [
+    {
+      where: { id: 10 },
+      data: {
+        fileType: "image/png",
+        fileName: "keep.png",
+        fileSize: "12",
+      },
+    },
+  ]);
   assert.equal(calls.attachmentCreates[0].data.length, 1);
   assert.equal(calls.attachmentCreates[0].data[0].fileSource, "https://files.test/new.pdf");
   assert.equal(calls.attachmentCreates[0].data[0].taskId, 91);

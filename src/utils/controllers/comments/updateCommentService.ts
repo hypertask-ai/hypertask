@@ -46,7 +46,13 @@ export async function updateCommentService(params: UpdateCommentParams) {
     if (attachments && replaceAttachments) {
       const existingAttachments = await transaction.attachment.findMany({
         where: { commentId },
-        select: { id: true, fileSource: true }
+        select: {
+          id: true,
+          fileSource: true,
+          fileType: true,
+          fileName: true,
+          fileSize: true
+        }
       })
       const desiredAttachments = Array.from(
         new Map(
@@ -65,9 +71,32 @@ export async function updateCommentService(params: UpdateCommentParams) {
         })
       }
 
-      const existingSources = new Set(
-        existingAttachments.map((attachment) => attachment.fileSource)
+      const desiredBySource = new Map(
+        desiredAttachments.map((attachment) => [attachment.fileSource, attachment])
       )
+      await Promise.all(
+        existingAttachments.map((existingAttachment) => {
+          const desiredAttachment = desiredBySource.get(existingAttachment.fileSource)
+          if (
+            !desiredAttachment ||
+            (existingAttachment.fileType === desiredAttachment.fileType &&
+              existingAttachment.fileName === desiredAttachment.fileName &&
+              existingAttachment.fileSize === desiredAttachment.fileSize)
+          ) {
+            return Promise.resolve()
+          }
+          return transaction.attachment.update({
+            where: { id: existingAttachment.id },
+            data: {
+              fileType: desiredAttachment.fileType,
+              fileName: desiredAttachment.fileName,
+              fileSize: desiredAttachment.fileSize
+            }
+          })
+        })
+      )
+
+      const existingSources = new Set(existingAttachments.map((attachment) => attachment.fileSource))
       const attachmentsToCreate = desiredAttachments.filter(
         (attachment) => !existingSources.has(attachment.fileSource)
       )
