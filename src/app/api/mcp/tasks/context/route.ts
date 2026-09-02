@@ -292,6 +292,7 @@ export async function GET(request: NextRequest) {
       comments,
       pullRequests,
       linkedPRs,
+      linkedPRsTruncated: commentCount > PR_LINK_SCAN_LIMIT,
       commentCount,
       truncated: commentCount > commentLimit,
     });

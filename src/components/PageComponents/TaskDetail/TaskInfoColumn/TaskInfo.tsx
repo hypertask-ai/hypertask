@@ -453,6 +453,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         })()}
       </TaskInfoRow>
 
+      {/* HTPR-5899: this visible linking affordance is the owner-approved wireframe exception. */}
       <TaskInfoRow alignTop>
         <LocalRightSideInfo
           onClick={() => setShowPullRequestInput(true)}

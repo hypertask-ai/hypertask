@@ -71,10 +71,12 @@ async function main() {
     })
   ).toString('base64')
 
-  const [{ default: prisma }, { executeTaskUpdate }] = await Promise.all([
-    import('@/lib/prisma'),
-    import('@/lib/mcp/tasks/updateTask'),
-  ])
+  const [{ default: prisma }, { executeTaskUpdate }, { PullRequestLinkError }] =
+    await Promise.all([
+      import('@/lib/prisma'),
+      import('@/lib/mcp/tasks/updateTask'),
+      import('@/lib/pullRequests/taskPullRequests'),
+    ])
   const prismaMock = prisma as any
   const originalTaskFindMany = prismaMock.task.findMany
   const originalUserFindUnique = prismaMock.user.findUnique
@@ -176,6 +178,21 @@ async function main() {
     const linkedBody = await linked.response.json()
     assert.equal(linkedBody.task.pullRequests[0].displayState, 'green')
     assert.equal(linkedBody.task.pullRequests[0].updatedAt, '2026-09-01T12:00:00.000Z')
+
+    const conflict = await executeTaskUpdate({
+      request,
+      ctx,
+      requestBody: { task_id: 1, pull_request_url: canonicalUrl },
+      linkPullRequest: async () => {
+        throw new PullRequestLinkError(
+          'Pull request is already linked to a task',
+          409,
+          'pr_already_linked',
+        )
+      },
+    })
+    assert.equal(conflict.response.status, 409)
+    assert.equal((await conflict.response.json()).code, 'pr_already_linked')
   } finally {
     prismaMock.task.findMany = originalTaskFindMany
     prismaMock.user.findUnique = originalUserFindUnique

@@ -37,7 +37,10 @@ import {
 } from "@/lib/mcp/tasks/activeTaskMutation";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests";
-import { linkTaskPullRequest } from "@/lib/pullRequests/taskPullRequests";
+import {
+    linkTaskPullRequest,
+    PullRequestLinkError,
+} from "@/lib/pullRequests/taskPullRequests";
 
 export interface UpdateTaskResponse {
     success: boolean;
@@ -53,14 +56,28 @@ interface UpdateTaskErrorResponse {
     success: false;
     tasks: TaskDetail[];
     error: string;
+    code?: string;
 }
 
 class UpdateTaskPersistenceError extends Error {
-    constructor(readonly response: UpdateTaskErrorResponse) {
+    constructor(
+        readonly response: UpdateTaskErrorResponse,
+        readonly status: number = 500,
+    ) {
         super(response.error)
         this.name = 'UpdateTaskPersistenceError'
     }
 }
+
+type TaskUpdateResult =
+    | { success: true; taskId: number }
+    | {
+          success: false
+          taskId: number
+          error: string
+          status?: number
+          code?: string
+      }
 
 const VALID_STATUSES = ['Normal', 'Archive', 'Deleted'] as const;
 
@@ -693,7 +710,8 @@ export async function executeTaskUpdate({
 
     const persistTaskUpdates = async (): Promise<UpdateTaskResponse> => {
     // Update all tasks in parallel
-    const updatePromises = tasks.map(async (task) => {
+    const updatePromises: Promise<TaskUpdateResult>[] = tasks.map(
+        async (task): Promise<TaskUpdateResult> => {
         try {
             // The writes below are internal HTTP requests, and the one-shot
             // lease adoption this request was granted lives in AsyncLocalStorage,
@@ -1060,10 +1078,14 @@ export async function executeTaskUpdate({
             return { success: true, taskId: task.id }
         } catch (error) {
             console.error(`[MCP Update Task] Error updating task ${task.id}:`, error)
+            const linkError = error instanceof PullRequestLinkError ? error : null
             return {
                 success: false,
                 taskId: task.id,
                 error: toErrorMessage(error, 'Unknown error'),
+                ...(linkError
+                    ? { status: linkError.status, code: linkError.code }
+                    : {}),
             }
         }
     })
@@ -1082,11 +1104,18 @@ export async function executeTaskUpdate({
     // If all tasks failed, return an error
     if (updatedTaskIds.length === 0) {
         const errorMessages = failedTasks.map(ft => ft.error).filter(Boolean)
-        throw new UpdateTaskPersistenceError({
-            success: false,
-            tasks: [],
-            error: `Failed to update ${failedTasks.length} task(s). ${errorMessages.length > 0 ? errorMessages[0] : 'Unknown error'}`
-        })
+        const linkFailure = failedTasks.find(
+            (failure) => failure.status !== undefined && failure.code !== undefined,
+        )
+        throw new UpdateTaskPersistenceError(
+            {
+                success: false,
+                tasks: [],
+                error: `Failed to update ${failedTasks.length} task(s). ${errorMessages.length > 0 ? errorMessages[0] : 'Unknown error'}`,
+                ...(linkFailure?.code ? { code: linkFailure.code } : {}),
+            },
+            linkFailure?.status ?? 500,
+        )
     }
 
     // Fetch complete tasks with all relations for MCP response format
@@ -1138,7 +1167,7 @@ export async function executeTaskUpdate({
         return NextResponse.json(mcpResponse, { status: 200 })
     } catch (error) {
         if (error instanceof UpdateTaskPersistenceError) {
-            return NextResponse.json(error.response, { status: 500 })
+            return NextResponse.json(error.response, { status: error.status })
         }
         throw error
     }
