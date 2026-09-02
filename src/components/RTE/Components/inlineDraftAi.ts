@@ -12,6 +12,7 @@ export interface InlineDraftAiRequestDescriptor {
   readonly instruction?: string;
   readonly label: string;
   readonly sourceContent: string;
+  readonly sourceKind?: "source" | "proposal";
   readonly sourceRevision?: number;
 }
 

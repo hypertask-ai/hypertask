@@ -73,6 +73,7 @@ interface LastAction {
   instruction?: string;
   label?: string;
   sourceContent?: string;
+  sourceKind?: "source" | "proposal";
   sourceRevision?: number;
 }
 
@@ -455,9 +456,11 @@ const InlineDraftAiFloat = ({
         : selectionPresent
           ? selectedHtml(editor, range)
           : "");
+    const sourceKind =
+      action.sourceKind ?? (refiningProposal ? "proposal" : "source");
     const sourceRevision =
       action.sourceRevision ??
-      (refiningProposal
+      (sourceKind === "proposal"
         ? mobileProposalRevisionRef.current
         : mobileSourceRevisionRef.current);
     // Media-only / text drafts require content for edits. True empty docs may
@@ -482,6 +485,7 @@ const InlineDraftAiFloat = ({
             instruction: action.instruction,
             label: action.label ?? "AI edit",
             sourceContent: content,
+            sourceKind,
             sourceRevision,
           }
         : null;
@@ -550,7 +554,7 @@ const InlineDraftAiFloat = ({
         isMobileAiSheet &&
         mobileDescriptor?.sourceRevision !== undefined &&
         mobileDescriptor.sourceRevision !==
-          (mobileReview.isRefining
+          (mobileDescriptor.sourceKind === "proposal"
             ? mobileProposalRevisionRef.current
             : mobileSourceRevisionRef.current)
       ) {
