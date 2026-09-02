@@ -4,8 +4,9 @@ import { IProject } from "@/models/model";
 import { currentProjectAtom } from "@/store";
 import { archiveProjectById } from "@/utils/api/Homepage";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
+import toast from "react-hot-toast";
 import { Archive } from "lucide-react";
 
 type Props = {
@@ -19,7 +20,6 @@ const ConfirmArchiveBoard = (props: Props) => {
     const [loading, setLoading] = useState(false)
     const queryClient = useQueryClient();
     const router = useRouter();
-    const pathname = usePathname();
     const targetProject = project ?? currentProject
 
     const closeHandler = useCallback(() => {
@@ -36,17 +36,18 @@ const ConfirmArchiveBoard = (props: Props) => {
             await queryClient.refetchQueries({queryKey:["projectsAll"]})
             await queryClient.refetchQueries({queryKey:["getAllFavorites"]})
             const firstProject = response.data?.firstProject
-            if (pathname?.startsWith('/project') && currentProject?.id === targetProject.id && firstProject?.id) {
-                router.replace(`/project?id=${firstProject.id}`)
+            if (currentProject?.id === targetProject.id) {
+                router.replace(firstProject?.id ? `/project?id=${firstProject.id}` : "/project")
             }
             else router.refresh()
+            toast.success(`Archived ${targetProject.title ?? targetProject.name ?? "board"}`)
             onClose(response, targetProject)
         }
         catch (error) {
             console.error(error)
             setLoading(false)
         }
-    }, [currentProject?.id, loading, onClose, pathname, queryClient, router, targetProject])
+    }, [currentProject?.id, loading, onClose, queryClient, router, targetProject])
 
     if (!targetProject) return null;
 
