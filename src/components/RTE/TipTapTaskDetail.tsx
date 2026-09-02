@@ -57,7 +57,6 @@ import {
 import type { Content } from "@tiptap/core";
 import { Node, Fragment } from "@tiptap/pm/model";
 import dynamic from "next/dynamic";
-import { createPortal } from "react-dom";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import EmojiGifPicker, {
