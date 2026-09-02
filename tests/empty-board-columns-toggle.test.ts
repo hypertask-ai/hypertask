@@ -356,6 +356,19 @@ test("the command toggles both directions through the optimistic shared save", (
   );
 });
 
+test("the canonical URL view reaches the durable unsaved-view branch", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/pages/api/projects/views/unsaved-view.ts"),
+    "utf8",
+  );
+  const transientGuard = source.indexOf("shouldUseTransientTabSettings(");
+  const durableWrite = source.indexOf("const createUnsavedViewHandler", transientGuard);
+
+  assert.ok(transientGuard >= 0);
+  assert.ok(durableWrite > transientGuard);
+  assert.match(source.slice(durableWrite), /board_empty_sections/);
+});
+
 test("the command saves against the URL-pinned view instead of the raw cache view", () => {
   const source = fs.readFileSync(
     path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
