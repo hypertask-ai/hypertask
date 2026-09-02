@@ -10,8 +10,10 @@ import {
   getAiEffortLabel,
   getAiModelOption,
   getAiModelOptionById,
+  getMobileAiChatModelLabel,
   getNearestAiModelOption,
   isPremiumAiModelDefinition,
+  MOBILE_AI_CHAT_QUICK_MODEL_IDS,
   preferredAiModelOption,
   pickAutoAiModelOption,
   type TAiEffort,
@@ -31,7 +33,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Gauge, RotateCcw } from "lucide-react";
 import { ClassNameValue } from "tailwind-merge";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { TAiModal } from "@/models/AI_Task_writer_model";
@@ -53,6 +55,7 @@ type SubmenuPlacement =
 // Kept in step with the menu's `w-[250px]`: the open handler has to know how
 // wide the menu will be before it renders.
 const MENU_WIDTH_PX = 250;
+const MOBILE_MENU_WIDTH_PX = 210;
 const VIEWPORT_GUTTER_PX = 8;
 
 const effortNotes: Record<TAiEffort, string> = {
@@ -72,6 +75,7 @@ const AIModelDropDownButton = ({
   modelTeamId,
   modelBilling,
   effortLabelClassName,
+  mobileQuickPicker = false,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -85,6 +89,7 @@ const AIModelDropDownButton = ({
   // Extra classes for the effort word on the trigger (e.g. `hidden` to drop it
   // in the narrow docked chat rail; effort stays selectable in-menu). HTPR-4548.
   effortLabelClassName?: ClassNameValue;
+  mobileQuickPicker?: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [submenu, setSubmenu] = useState<Submenu | null>(null);
@@ -92,6 +97,7 @@ const AIModelDropDownButton = ({
     useState<SubmenuPlacement>("right");
   const [menuAlign, setMenuAlign] = useState<"left" | "right">("left");
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const boardBilling = useCurrentBoardBilling();
   const billing = modelBilling === undefined ? boardBilling : modelBilling;
@@ -246,6 +252,7 @@ const AIModelDropDownButton = ({
       event.stopPropagation();
       setIsOpen(false);
       setSubmenu(null);
+      triggerRef.current?.focus();
     };
 
     document.addEventListener("mousedown", closeOnOutsideClick);
@@ -255,6 +262,20 @@ const AIModelDropDownButton = ({
       document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!mobileQuickPicker || !isOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      const selected = menuRef.current?.querySelector<HTMLElement>(
+        '[role="menuitemradio"][aria-checked="true"]',
+      );
+      const first = menuRef.current?.querySelector<HTMLElement>(
+        '[role="menuitemradio"]:not([disabled])',
+      );
+      (selected ?? first)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isOpen, mobileQuickPicker]);
 
   const openSubmenu = (nextSubmenu: Submenu) => {
     if (submenu === nextSubmenu) {
@@ -309,9 +330,143 @@ const AIModelDropDownButton = ({
     "left-up": "right-[calc(100%+6px)] bottom-0",
   }[submenuPlacement];
 
+  if (mobileQuickPicker) {
+    return (
+      <div ref={rootRef} className="relative shrink-0 text-left">
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={`Choose AI model. Current: ${getMobileAiChatModelLabel(selectedOption)}`}
+          aria-controls="mobile-ai-chat-model-menu"
+          aria-expanded={isOpen}
+          className={cn(
+            "flex h-11 w-11 touch-manipulation items-center justify-center rounded-[4px] text-icon-dark-gray outline-none transition-colors hover:bg-hover-active hover:text-white-black",
+            dropDownClassName,
+          )}
+          onClick={() => {
+            if (!isOpen) {
+              const left = rootRef.current?.getBoundingClientRect().left;
+              if (left != null) {
+                setMenuAlign(
+                  left + MOBILE_MENU_WIDTH_PX >
+                    window.innerWidth - VIEWPORT_GUTTER_PX
+                    ? "right"
+                    : "left",
+                );
+              }
+            }
+            setIsOpen((open) => !open);
+          }}
+        >
+          <Gauge size={20} strokeWidth={1.75} aria-hidden />
+        </button>
+        {isOpen ? (
+          <div
+            ref={menuRef}
+            id="mobile-ai-chat-model-menu"
+            role="menu"
+            aria-label="AI model"
+            className={cn(
+              "absolute bottom-[calc(100%+8px)] z-[1200] min-w-[210px] rounded-[5px] bg-modalBackground p-1.5 text-dense text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]",
+              menuAlign === "right" ? "right-0" : "left-0",
+            )}
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+              event.preventDefault();
+              const rows = Array.from(
+                event.currentTarget.querySelectorAll<HTMLButtonElement>(
+                  '[role="menuitemradio"]:not([disabled])',
+                ),
+              );
+              const currentIndex = rows.indexOf(
+                document.activeElement as HTMLButtonElement,
+              );
+              const step = event.key === "ArrowDown" ? 1 : -1;
+              const nextIndex =
+                currentIndex < 0
+                  ? 0
+                  : (currentIndex + step + rows.length) % rows.length;
+              rows[nextIndex]?.focus();
+            }}
+          >
+            <div className="px-2.5 pb-1 pt-1.5 text-micro font-semibold uppercase tracking-[0.08em] text-text-light-gray">
+              Model
+            </div>
+            {MOBILE_AI_CHAT_QUICK_MODEL_IDS.map((quickModelId) => {
+              const catalogOption = getAiModelOptionById(quickModelId);
+              if (!catalogOption) return null;
+              const option = availableOptions.find(
+                (candidate) => candidate.id === catalogOption.id,
+              );
+              const definition = getAiModelDefinition(catalogOption.modelKey);
+              const isGuestLocked =
+                isGuest && !isGuestAllowedModelKey(catalogOption.modelKey);
+              const hasCustomerKey =
+                !!option && isProviderEnabled(catalogOption.source);
+              const isPremiumLocked =
+                !isGuest &&
+                respectTeamAvailability &&
+                isPremiumAiModelDefinition(definition) &&
+                (scopedBilling?.storePlanId === "Free" ||
+                  (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
+              const locked = isGuestLocked || isPremiumLocked;
+              const disabled = !option && !locked;
+              const selected = selectedOption.id === catalogOption.id;
+
+              return (
+                <button
+                  key={quickModelId}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  disabled={disabled}
+                  className={cn(
+                    "flex min-h-11 w-full items-center justify-between gap-3 rounded-[3px] px-2.5 py-2 text-left transition-colors hover:bg-hoverCardBackground disabled:cursor-not-allowed disabled:opacity-45",
+                    locked && "opacity-45",
+                    selected && "font-semibold text-white-black",
+                  )}
+                  onClick={() => {
+                    if (isGuestLocked) {
+                      setIsOpen(false);
+                      router.push("/login");
+                      return;
+                    }
+                    if (isPremiumLocked) {
+                      if (pricingHref) {
+                        selectSettingsTeam();
+                        router.push(pricingHref);
+                      }
+                      return;
+                    }
+                    if (!option) return;
+                    optionCallback(option);
+                    setIsOpen(false);
+                    window.requestAnimationFrame(() => triggerRef.current?.focus());
+                  }}
+                >
+                  <span>{getMobileAiChatModelLabel(catalogOption)}</span>
+                  <Check
+                    size={15}
+                    className={cn(
+                      "shrink-0 text-hypertasks-purple",
+                      selected ? "opacity-100" : "opacity-0",
+                    )}
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div ref={rootRef} className="relative inline-block min-w-0 max-w-full text-left">
       <button
+        ref={triggerRef}
         type="button"
         aria-expanded={isOpen}
         title={

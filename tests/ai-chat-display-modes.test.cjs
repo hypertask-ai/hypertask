@@ -69,7 +69,9 @@ test("mobile chat uses the approved header controls and guarded new-chat action"
   assert.match(mobileBranch[0], /data-ai-chat-mobile-header/);
   assert.match(mobileBranch[0], /currentSession\?\.title/);
   assert.doesNotMatch(mobileBranch[0], /sessions\[0\]\?\.title/);
-  assert.match(mobileBranch[0], /<AIModelDropDownButton/);
+  assert.match(mobileBranch[0], /data-ai-chat-mobile-model-label/);
+  assert.match(mobileBranch[0], /getMobileAiChatModelLabel\(currentAiOption\)/);
+  assert.doesNotMatch(mobileBranch[0], /<AIModelDropDownButton/);
   for (const label of ["Close AI chat", "Chat history", "New chat"]) {
     const button = mobileBranch[0].match(
       new RegExp(`<button(?:(?!</button>)[\\s\\S])*?aria-label="${label}"(?:(?!</button>)[\\s\\S])*?</button>`)

@@ -618,6 +618,13 @@ export const defaultAiModelOption =
   aiModelOptions.find((option) => option.id === "gpt-5.4-mini") ??
   aiModelOptions[0];
 
+export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
+  "gpt-5.6-luna-high",
+  "gpt-5.6-luna",
+  "gpt-5.6-sol-high",
+  "gpt-5.6-sol-light",
+] as const satisfies readonly TAiModelOptionId[];
+
 export function getDefaultAiModelOptionForPlan(
   storePlanId: StorePlanKind | null | undefined,
   hasEligibleByokCredential = false,
@@ -649,6 +656,21 @@ export function getAiModelOptionById(
 
 export function getAiModelDefinition(modelKey: TAiModelKey) {
   return aiModelDefinitions.find((model) => model.key === modelKey);
+}
+
+export function getMobileAiChatModelLabel(
+  option: { id: string } | undefined,
+): string {
+  const catalogOption = getAiModelOptionById(option?.id);
+  if (!catalogOption) return "Select model";
+  const modelLabel = getAiModelDefinition(catalogOption.modelKey)?.label;
+  let effortLabel: string | null = null;
+  if (catalogOption.id === "gpt-5.6-sol-light") {
+    effortLabel = "Fast";
+  } else if (catalogOption.effort) {
+    effortLabel = getAiEffortLabel(catalogOption.modelKey, catalogOption.effort);
+  }
+  return [modelLabel, effortLabel].filter(Boolean).join(" · ");
 }
 
 export function isPremiumAiModelDefinition(

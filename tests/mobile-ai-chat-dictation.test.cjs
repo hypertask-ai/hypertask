@@ -44,7 +44,11 @@ stubModule(require.resolve("next/navigation"), {
   usePathname: () => pathname,
 });
 stubSourceModule("src/components/Global/ModelSelectorDropdown.tsx", {
-  default: () => React.createElement("button", { "data-control": "model" }),
+  default: ({ mobileQuickPicker }) =>
+    React.createElement("button", {
+      "data-control": "model",
+      "data-mobile-quick-picker": mobileQuickPicker ? "true" : undefined,
+    }),
 });
 stubSourceModule("src/components/Common/Tooltip.tsx", {
   default: () => null,
@@ -377,6 +381,26 @@ test("mobile composer follows live recording state without remounting recorder",
     assert.match(addContext.className, /rounded-\[4px\]/);
     assert.doesNotMatch(addContext.className, /rounded-full/);
     assert.equal(overflow.hidden, false);
+    const mobileModelControl = container.querySelector(
+      "[data-ai-chat-mobile-model-control]",
+    );
+    assert.ok(mobileModelControl);
+    assert.equal(mobileModelControl.hidden, false);
+    assert.equal(
+      mobileModelControl.querySelector("[data-mobile-quick-picker]")?.dataset
+        .mobileQuickPicker,
+      "true",
+    );
+    assert.strictEqual(
+      overflow.nextElementSibling,
+      mobileModelControl,
+      "the model gauge belongs immediately after Plus",
+    );
+    assert.strictEqual(
+      mobileModelControl.nextElementSibling,
+      recorderBefore,
+      "the mounted recorder follows the model gauge",
+    );
     const overflowActions = overflow
       .querySelector('[role="group"]')
       .querySelectorAll("button");
@@ -471,6 +495,10 @@ test("mobile composer follows live recording state without remounting recorder",
       container.querySelector("[data-ai-chat-mobile-overflow]").hidden,
       true,
     );
+    assert.equal(
+      container.querySelector("[data-ai-chat-mobile-model-control]").hidden,
+      true,
+    );
     assert.equal(container.querySelector("[data-ai-chat-primary-send]"), null);
     assert.match(
       container.querySelector("[data-ai-chat-recorder-row]").className,
@@ -498,6 +526,15 @@ test("mobile composer follows live recording state without remounting recorder",
     assert.match(desktopComposer.className, /!rounded-lg/);
     assert.match(desktopComposer.className, /\bp-2\b/);
     assert.doesNotMatch(desktopComposer.className, /\bpx-3\b/);
+    assert.equal(
+      container.querySelector("[data-ai-chat-mobile-model-control]"),
+      null,
+    );
+    assert.equal(container.querySelectorAll('[data-control="model"]').length, 1);
+    assert.equal(
+      container.querySelector('[data-control="model"]').dataset.mobileQuickPicker,
+      undefined,
+    );
   } finally {
     pathname = "/project";
     await act(async () => reactRoot.unmount());

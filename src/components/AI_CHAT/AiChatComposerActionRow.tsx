@@ -9,6 +9,7 @@ type AiChatComposerActionRowProps = {
   mobileDictating: boolean;
   hasText: boolean;
   leadingControls: ReactNode;
+  mobileModelControl: ReactNode;
   attachmentControl: ReactNode;
   contextControl: ReactNode;
   screenshotControl: ReactNode;
@@ -22,6 +23,7 @@ export function AiChatComposerActionRow({
   mobileDictating,
   hasText,
   leadingControls,
+  mobileModelControl,
   attachmentControl,
   contextControl,
   screenshotControl,
@@ -110,11 +112,18 @@ export function AiChatComposerActionRow({
                 {screenshotControl}
               </div>
             </details>
+            <div
+              data-ai-chat-mobile-model-control
+              hidden={mobileDictating}
+              className="order-2 shrink-0"
+            >
+              {mobileModelControl}
+            </div>
             {recorder}
             <div
               data-ai-chat-stream-control
               hidden={mobileDictating}
-              className={`order-2 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center ${
+              className={`order-3 [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center ${
                 mobileDictating ? "hidden" : ""
               }`}
             >
