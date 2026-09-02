@@ -103,6 +103,12 @@ test("archiving the active board confirms success and replaces its route", () =>
     archive,
     /toast\.success\(`Archived \$\{targetProject\.title \?\? targetProject\.name \?\? "board"\}`\)/,
   );
+  assert.ok(
+    archive.indexOf("toast.success") <
+      archive.indexOf('queryClient.refetchQueries({queryKey:["getAllTeamsMinimal"]})'),
+    "success feedback must not wait for cache refreshes",
+  );
+  assert.match(archive, /try \{[\s\S]*?await Promise\.all\([\s\S]*?queryClient\.refetchQueries/);
 });
 
 test("canceling a lifecycle dialog preserves the board and restore refreshes every board cache", () => {

@@ -32,9 +32,6 @@ const ConfirmArchiveBoard = (props: Props) => {
         setLoading(true)
         try {
             const response = await archiveProjectById({ projectId: targetProject.id })
-            await queryClient.refetchQueries({queryKey:["getAllTeamsMinimal"]})
-            await queryClient.refetchQueries({queryKey:["projectsAll"]})
-            await queryClient.refetchQueries({queryKey:["getAllFavorites"]})
             const firstProject = response.data?.firstProject
             if (currentProject?.id === targetProject.id) {
                 router.replace(firstProject?.id ? `/project?id=${firstProject.id}` : "/project")
@@ -42,6 +39,15 @@ const ConfirmArchiveBoard = (props: Props) => {
             else router.refresh()
             toast.success(`Archived ${targetProject.title ?? targetProject.name ?? "board"}`)
             onClose(response, targetProject)
+            try {
+                await Promise.all([
+                    queryClient.refetchQueries({queryKey:["getAllTeamsMinimal"]}),
+                    queryClient.refetchQueries({queryKey:["projectsAll"]}),
+                    queryClient.refetchQueries({queryKey:["getAllFavorites"]}),
+                ])
+            } catch (refreshError) {
+                console.error("Board archive succeeded but cache refresh failed", refreshError)
+            }
         }
         catch (error) {
             console.error(error)
