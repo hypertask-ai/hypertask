@@ -78,8 +78,14 @@ export async function DELETE(
             WHERE "client_id" = ${clientId}
             FOR UPDATE
           `;
-          const refreshTokens = await tx.$queryRaw<Array<{ userId: number }>>`
-            SELECT "userId"
+          const refreshTokens = await tx.$queryRaw<
+            Array<{
+              userId: number;
+              accessTokenJti: string;
+              accessTokenExpiresAt: Date;
+            }>
+          >`
+            SELECT "userId", "accessTokenJti", "accessTokenExpiresAt"
             FROM "OAuthRefreshToken"
             WHERE "clientId" = ${clientId}
             FOR UPDATE
@@ -97,12 +103,25 @@ export async function DELETE(
             refreshTokens.some((token) => token.userId !== session.userId);
           if (!ownsClient || hasOtherOwner) throw new ClientNotOwnedError();
 
-          // Legacy OAuth access tokens do not carry their client id, so the
-          // account revocation timestamp is the only way to invalidate them.
-          await tx.user.update({
-            where: { id: session.userId },
-            data: { mcpTokensRevokedAt: new Date() },
-          });
+          const now = new Date();
+          for (const token of refreshTokens) {
+            if (
+              token.userId !== session.userId ||
+              token.accessTokenExpiresAt <= now
+            ) {
+              continue;
+            }
+            await tx.revokedToken.upsert({
+              where: { jti: token.accessTokenJti },
+              create: {
+                jti: token.accessTokenJti,
+                user_id: session.userId,
+                revoked_at: now,
+                expires_at: token.accessTokenExpiresAt,
+              },
+              update: { revoked_at: now },
+            });
+          }
           await tx.oAuthClient.delete({ where: { client_id: clientId } });
         });
         break;

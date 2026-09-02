@@ -36,13 +36,19 @@ function loadRoute({
   sessionUserId = 6,
   clientExists = true,
   authorizationCodes = [{ user_id: 6, used: true }],
-  refreshTokens = [{ userId: 6 }],
+  refreshTokens = [
+    {
+      userId: 6,
+      accessTokenJti: "selected-client-access-token",
+      accessTokenExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    },
+  ],
   deleteError = null,
   transactionErrors = [],
 } = {}) {
   const calls = {
     queries: [],
-    userUpdates: [],
+    revokedTokenUpserts: [],
     clientDeletes: [],
     committed: [],
     rolledBack: 0,
@@ -68,10 +74,10 @@ function loadRoute({
           if (queryIndex === 3) return refreshTokens;
           throw new Error("Unexpected query");
         },
-        user: {
-          update: async (args) => {
-            calls.userUpdates.push(args);
-            staged.push(["user", args]);
+        revokedToken: {
+          upsert: async (args) => {
+            calls.revokedTokenUpserts.push(args);
+            staged.push(["revokedToken", args]);
             return {};
           },
         },
@@ -174,7 +180,7 @@ test("a different user cannot remove an OAuth client or learn whether it exists"
     success: false,
     error: "Client not found",
   });
-  assert.deepEqual(calls.userUpdates, []);
+  assert.deepEqual(calls.revokedTokenUpserts, []);
   assert.deepEqual(calls.clientDeletes, []);
   assert.deepEqual(calls.committed, []);
 });
@@ -189,7 +195,7 @@ test("a shared registration is not cascade-deleted by either user", async () => 
   const response = await remove(DELETE);
 
   assert.equal(response.status, 404);
-  assert.deepEqual(calls.userUpdates, []);
+  assert.deepEqual(calls.revokedTokenUpserts, []);
   assert.deepEqual(calls.clientDeletes, []);
 });
 
@@ -201,7 +207,7 @@ test("a surviving refresh token proves ownership after authorization-code cleanu
   assert.equal(calls.committed.length, 2);
 });
 
-test("the owner revokes account credentials and deletes the locked registration", async () => {
+test("the owner revokes the selected client's tracked access token and registration", async () => {
   const { DELETE, calls } = loadRoute();
   const response = await remove(DELETE);
 
@@ -212,9 +218,16 @@ test("the owner revokes account credentials and deletes the locked registration"
   });
   assert.equal(calls.queries.length, 3);
   assert.ok(calls.queries.every(({ sql }) => sql.includes("FOR UPDATE")));
-  assert.equal(calls.userUpdates.length, 1);
-  assert.deepEqual(calls.userUpdates[0].where, { id: 6 });
-  assert.ok(calls.userUpdates[0].data.mcpTokensRevokedAt instanceof Date);
+  assert.equal(calls.revokedTokenUpserts.length, 1);
+  assert.deepEqual(calls.revokedTokenUpserts[0].where, {
+    jti: "selected-client-access-token",
+  });
+  assert.equal(calls.revokedTokenUpserts[0].create.user_id, 6);
+  assert.ok(calls.revokedTokenUpserts[0].create.revoked_at instanceof Date);
+  assert.deepEqual(
+    calls.revokedTokenUpserts[0].create.expires_at,
+    new Date("2099-01-01T00:00:00.000Z"),
+  );
   assert.deepEqual(calls.clientDeletes, [
     { where: { client_id: "owned-client" } },
   ]);
