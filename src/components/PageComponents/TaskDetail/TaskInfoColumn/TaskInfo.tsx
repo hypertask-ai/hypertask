@@ -180,43 +180,9 @@ const TaskInfo = (props: ITaskInfoContainer) => {
   const [pullRequests, setPullRequests] = useState<ITaskPullRequest[]>(
     currentTask.pullRequests ?? []
   );
-  const [showPullRequestInput, setShowPullRequestInput] = useState(false);
-  const [pullRequestUrl, setPullRequestUrl] = useState("");
-  const [linkingPullRequest, setLinkingPullRequest] = useState(false);
   useEffect(() => {
     setPullRequests(currentTask.pullRequests ?? []);
-    setShowPullRequestInput(false);
-    setPullRequestUrl("");
   }, [currentTask.id, currentTask.pullRequests]);
-  const linkPullRequest = async () => {
-    if (!pullRequestUrl.trim() || linkingPullRequest) return;
-    setLinkingPullRequest(true);
-    try {
-      const response = await axios.post("/api/tasks/linkPullRequest", {
-        taskId: currentTask.id,
-        url: pullRequestUrl.trim(),
-      });
-      const pullRequest = response.data.pullRequest as ITaskPullRequest;
-      setPullRequests((current) =>
-        current.some((item) => item.id === pullRequest.id)
-          ? current
-          : [...current, pullRequest]
-      );
-      setPullRequestUrl("");
-      setShowPullRequestInput(false);
-      await queryClient.invalidateQueries({
-        queryKey: ["task-", currentTask.id],
-      });
-    } catch (error) {
-      toast.error(
-        axios.isAxiosError(error)
-          ? error.response?.data?.message ?? "Unable to link pull request"
-          : "Unable to link pull request"
-      );
-    } finally {
-      setLinkingPullRequest(false);
-    }
-  };
   const openWaitingOnPicker = () =>
     setShowCommands({ show: true, mode: CommandMode.OpenBlockedByModal });
   const clearWaitingOn = async (event: React.MouseEvent) => {
@@ -453,88 +419,51 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         })()}
       </TaskInfoRow>
 
-      {/* HTPR-5899: this visible linking affordance is the owner-approved wireframe exception. */}
-      <TaskInfoRow alignTop>
-        <LocalRightSideInfo
-          onClick={() => setShowPullRequestInput(true)}
-          title="Pull requests"
-          left={0}
-          bottom={-40}
-          tooltipText="Link pull request"
-          KeyCombination={null}
-          showTooltip={false}
-        />
-        <TaskInfoValue className="flex flex-col gap-1">
-          {pullRequests.map((pullRequest) => {
-            const displayState = derivePullRequestDisplayState(
-              pullRequest.lifecycle,
-              pullRequest.checkState
-            );
-            const badge = pullRequestBadgeByState[displayState];
-            const PullRequestIcon =
-              displayState === "merged" ? GitMerge : GitPullRequest;
-            return (
-              <a
-                key={pullRequest.id}
-                href={pullRequest.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-w-0 items-center gap-1.5 py-0.5"
-                title={pullRequest.title}
-              >
-                <PullRequestIcon
-                  size={14}
-                  strokeWidth={1.8}
-                  className="shrink-0"
-                  style={{ color: badge.color }}
-                />
-                <span className="min-w-0 truncate text-white-black hover:underline">
-                  #{pullRequest.number} {pullRequest.repositoryName}
-                </span>
-                <span
-                  className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold leading-none"
-                  style={{ color: badge.color }}
+      {pullRequests.length > 0 && (
+        <TaskInfoRow alignTop>
+          <TaskInfoValue className="flex flex-col gap-1">
+            {pullRequests.map((pullRequest) => {
+              const displayState = derivePullRequestDisplayState(
+                pullRequest.lifecycle,
+                pullRequest.checkState
+              );
+              const badge = pullRequestBadgeByState[displayState];
+              const PullRequestIcon =
+                displayState === "merged" ? GitMerge : GitPullRequest;
+              return (
+                <a
+                  key={pullRequest.id}
+                  href={pullRequest.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-w-0 items-center gap-1.5 py-0.5"
+                  title={pullRequest.title}
                 >
-                  <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: badge.color }}
+                  <PullRequestIcon
+                    size={14}
+                    strokeWidth={1.8}
+                    className="shrink-0"
+                    style={{ color: badge.color }}
                   />
-                  {badge.label}
-                </span>
-              </a>
-            );
-          })}
-          {showPullRequestInput ? (
-            <input
-              autoFocus
-              type="url"
-              value={pullRequestUrl}
-              disabled={linkingPullRequest}
-              aria-label="GitHub pull request URL"
-              placeholder="GitHub pull request URL"
-              className="w-full rounded-[4px] border-0 bg-dropdownBackground px-2 py-1 text-content text-white-black shadow-lg outline-none placeholder:text-text-light-gray disabled:opacity-60"
-              onChange={(event) => setPullRequestUrl(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void linkPullRequest();
-                } else if (event.key === "Escape") {
-                  setPullRequestUrl("");
-                  setShowPullRequestInput(false);
-                }
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              className="w-fit border-0 bg-transparent p-0 text-left text-text-light-gray hover:text-white-black"
-              onClick={() => setShowPullRequestInput(true)}
-            >
-              + Link pull request
-            </button>
-          )}
-        </TaskInfoValue>
-      </TaskInfoRow>
+                  <span className="min-w-0 truncate text-white-black hover:underline">
+                    #{pullRequest.number} {pullRequest.repositoryName}
+                  </span>
+                  <span
+                    className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold leading-none"
+                    style={{ color: badge.color }}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: badge.color }}
+                    />
+                    {badge.label}
+                  </span>
+                </a>
+              );
+            })}
+          </TaskInfoValue>
+        </TaskInfoRow>
+      )}
       {(currentTask.project?.cyclesEnabled || currentTask.cycle) && (
         <TaskInfoRow>
           <LocalRightSideInfo

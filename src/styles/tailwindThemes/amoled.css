@@ -83,6 +83,10 @@
   --color-mention-highlight: #f9f267;
   --color-horizontal-scrollbar-track: #0c0c0c;
   --color-archived-state: #4ade80;
+  --color-pull-request-open: #4ade80;
+  --color-pull-request-checks-red: #f87171;
+  --color-pull-request-green: #4ade80;
+  --color-pull-request-merged: #c084fc;
 }
 
 /* AMOLED Theme Focus Rings */

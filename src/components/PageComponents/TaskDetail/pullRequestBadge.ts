@@ -11,18 +11,18 @@ export const pullRequestBadgeByState: Record<
 > = {
   open: {
     label: "Open",
-    color: "#3fb950",
+    color: "var(--color-pull-request-open)",
   },
   checks_red: {
     label: "Checks red",
-    color: "#f85149",
+    color: "var(--color-pull-request-checks-red)",
   },
   green: {
     label: "Checks green",
-    color: "#3fb950",
+    color: "var(--color-pull-request-green)",
   },
   merged: {
     label: "Merged",
-    color: "#a371f7",
+    color: "var(--color-pull-request-merged)",
   },
 };

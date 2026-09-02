@@ -99,6 +99,19 @@ export async function syncPullRequestFromWebhook(
     });
 
     let taskIds = [...new Set(existingLinks.map((link) => link.taskId))];
+    if (taskIds.length === 0) {
+      const globallyLinked = await transaction.taskPullRequest.findUnique({
+        where: {
+          repositoryOwner_repositoryName_number: {
+            repositoryOwner: input.repositoryOwner,
+            repositoryName: input.repositoryName,
+            number: input.number,
+          },
+        },
+        select: { id: true },
+      });
+      if (globallyLinked) return { linked: 0, updated: 0, taskIds: [] };
+    }
     if (taskIds.length === 0 && input.ticketNumber) {
       const task = await transaction.task.findFirst({
         where: {

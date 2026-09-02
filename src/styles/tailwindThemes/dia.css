@@ -74,6 +74,10 @@
   --color-kanban-column-scrollbar: transparent;
   --color-horizontal-scrollbar-track: #d8d2c6;
   --color-mention-highlight: #3e6b4f;
+  --color-pull-request-open: #166534;
+  --color-pull-request-checks-red: #b42318;
+  --color-pull-request-green: #166534;
+  --color-pull-request-merged: #6941c6;
 }
 
 /* Dia Theme Focus Rings */

@@ -77,6 +77,10 @@
   --color-horizontal-scrollbar-track: #ececef;
   --color-mention-highlight: #1365a3;
   --color-archived-state: #166534;
+  --color-pull-request-open: #1a7f37;
+  --color-pull-request-checks-red: #cf222e;
+  --color-pull-request-green: #1a7f37;
+  --color-pull-request-merged: #8250df;
 }
 
 .porcelain {

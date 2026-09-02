@@ -80,6 +80,10 @@
   --color-mention-highlight: #d29f02;
   --color-horizontal-scrollbar-track: #363b44;
   --color-archived-state: #86efac;
+  --color-pull-request-open: #4ade80;
+  --color-pull-request-checks-red: #f87171;
+  --color-pull-request-green: #4ade80;
+  --color-pull-request-merged: #c084fc;
 }
 
 /* Graphite Theme Focus Rings */
