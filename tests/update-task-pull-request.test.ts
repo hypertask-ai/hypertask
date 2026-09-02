@@ -33,6 +33,20 @@ function makeTask(id: number) {
     followers: [],
     taskLabels: [],
     attachments: [],
+    pullRequests: [
+      {
+        id: 'linked-pr',
+        repositoryOwner: 'hypertask-ai',
+        repositoryName: 'hypertask',
+        number: 110,
+        url: 'https://github.com/hypertask-ai/hypertask/pull/110',
+        title: 'HTPR-5899 linked PR property',
+        lifecycle: 'open',
+        checkState: 'passing',
+        headSha: 'abc123',
+        updatedAt: timestamp,
+      },
+    ],
     _count: { comments: 0 },
     user: {
       id: 6,
@@ -159,6 +173,9 @@ async function main() {
         url: canonicalUrl,
       },
     ])
+    const linkedBody = await linked.response.json()
+    assert.equal(linkedBody.task.pullRequests[0].displayState, 'green')
+    assert.equal(linkedBody.task.pullRequests[0].updatedAt, '2026-09-01T12:00:00.000Z')
   } finally {
     prismaMock.task.findMany = originalTaskFindMany
     prismaMock.user.findUnique = originalUserFindUnique

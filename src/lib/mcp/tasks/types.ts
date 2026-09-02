@@ -55,6 +55,19 @@ export interface TaskDetail {
         fileSize: number;
         fileSource: string; // URL to the attachment
     }>;
+    pullRequests?: Array<{
+        id: string;
+        repositoryOwner: string;
+        repositoryName: string;
+        number: number;
+        url: string;
+        title: string;
+        lifecycle: 'open' | 'closed' | 'merged';
+        checkState: 'pending' | 'passing' | 'failing';
+        displayState: 'open' | 'checks_red' | 'green' | 'merged';
+        headSha: string | null;
+        updatedAt: string;
+    }>;
     totalComments: number;
     createdAt: string;
     updatedAt: string;
