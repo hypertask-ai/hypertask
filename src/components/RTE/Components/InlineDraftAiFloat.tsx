@@ -16,7 +16,7 @@ import {
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 
-import { LoaderCircle, X } from "lucide-react";
+import { LoaderCircle, PencilSparkles, X } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { SendArrow } from "@/components/Common/SendArrow";
@@ -70,6 +70,16 @@ const EDIT_ACTIONS = [
   ["Simplify", "Simplify"],
   ["Unslop", "Unslop"],
   ["Structured", "Structured"],
+] as const;
+
+const MOBILE_EDIT_ACTIONS = [
+  ["Improve readability", "ImproveReadability", undefined],
+  ["Fix spelling", "FixSpellingAndGrammar", undefined],
+  ["Simplify", "Simplify", undefined],
+  ["Unslop", "Unslop", undefined],
+  ["Structured", "Structured", undefined],
+  ["Shorter", "MakeShorter", undefined],
+  ["Friendlier", "CustomEdit", "Make the tone friendlier."],
 ] as const;
 
 interface LastAction {
@@ -959,11 +969,11 @@ const InlineDraftAiFloat = ({
     syncMobileEditablePlaceholder(event.currentTarget, html);
   };
 
-  let mobilePromptPlaceholder = "Describe the comment you want to write…";
+  let mobilePromptPlaceholder = "Describe the text you want written…";
   if (mobileReview.isRefining) {
     mobilePromptPlaceholder = "Tell AI how to refine this proposal…";
   } else if (hasOpeningDraft) {
-    mobilePromptPlaceholder = "Or tell it what to change…";
+    mobilePromptPlaceholder = "Describe how to edit the text";
   }
 
   let mobileInputLabel = "Comment";
@@ -973,7 +983,12 @@ const InlineDraftAiFloat = ({
   const mobilePromptComposer = (
     <div
       data-mobile-write-ai-prompt
-      className="mt-3 rounded-lg bg-newcomment-well px-3 pb-2 pt-3"
+      className={cn(
+        "rounded-lg bg-newcomment-well px-3 pb-2 pt-3",
+        hasOpeningDraft || mobileReview.isRefining
+          ? "mt-3"
+          : "flex h-full flex-col",
+      )}
       onKeyDown={handlePanelKeyDown}
     >
       {!dictationActive && (
@@ -988,7 +1003,12 @@ const InlineDraftAiFloat = ({
           className="min-h-11 w-full border-0 bg-transparent text-[16px] leading-6 text-white-black outline-none placeholder:text-text-light-gray"
         />
       )}
-      <div className="flex min-h-11 w-full items-center gap-2">
+      <div
+        className={cn(
+          "flex min-h-11 w-full items-center gap-2",
+          !hasOpeningDraft && !mobileReview.isRefining && "mt-auto",
+        )}
+      >
         {dictationButton}
         {prompt.trim() && !dictationActive ? (
           <button
@@ -996,7 +1016,7 @@ const InlineDraftAiFloat = ({
             aria-label="Send AI instruction"
             disabled={isLoading || audioProcessing}
             onClick={submitPrompt}
-            className="ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-hypertasks-ai-purple text-white disabled:opacity-50"
+            className="ml-auto flex h-11 w-12 shrink-0 items-center justify-center rounded-[4px] bg-white-black text-white-black-inverted disabled:opacity-50"
           >
             <SendArrow size={18} />
           </button>
@@ -1052,7 +1072,14 @@ const InlineDraftAiFloat = ({
           className="flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden bg-ai-chat text-meta"
         >
           <div className="z-10 flex shrink-0 items-center justify-between gap-4 px-3 py-2 text-content text-white-black">
-            <h2 className="min-w-0 truncate font-medium">Write with AI</h2>
+            <div className="flex min-w-0 items-center gap-2">
+              <PencilSparkles
+                size={20}
+                className="shrink-0 text-hypertasks-ai-purple"
+                aria-hidden
+              />
+              <h2 className="min-w-0 truncate font-medium">Write with AI</h2>
+            </div>
             <button
               type="button"
               onClick={close}
@@ -1146,27 +1173,32 @@ const InlineDraftAiFloat = ({
               </>
             ) : (
               <>
-                <div className="rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
-                  <p className="mb-2 text-micro font-medium uppercase tracking-wide text-text-light-gray">
-                    {mobileInputLabel}
-                  </p>
-                  <div
-                    ref={mobileEditableSurfaceRef}
-                    className={cn(styles.editorContainer, "min-h-11 outline-none")}
-                    contentEditable={!isLoading}
-                    suppressContentEditableWarning
-                    onBlur={handleMobileEditableBlur}
-                    onDragStart={handleMobileEditableDragStart}
-                    onDragEnd={handleMobileEditableDragEnd}
-                    onDrop={handleMobileEditableDrop}
-                    onPaste={insertSanitizedEditableTransfer}
-                    onInput={
-                      mobileReview.isRefining
-                        ? handleMobileProposalInput
-                        : handleMobileSourceInput
-                    }
-                  />
-                </div>
+                {hasOpeningDraft || mobileReview.isRefining ? (
+                  <div className="rounded-[4px] bg-cardBackground px-3 py-3 text-content leading-relaxed text-white-black">
+                    <p className="mb-2 text-micro font-medium uppercase tracking-wide text-text-light-gray">
+                      {mobileInputLabel}
+                    </p>
+                    <div
+                      ref={mobileEditableSurfaceRef}
+                      className={cn(
+                        styles.editorContainer,
+                        "min-h-11 outline-none",
+                      )}
+                      contentEditable={!isLoading}
+                      suppressContentEditableWarning
+                      onBlur={handleMobileEditableBlur}
+                      onDragStart={handleMobileEditableDragStart}
+                      onDragEnd={handleMobileEditableDragEnd}
+                      onDrop={handleMobileEditableDrop}
+                      onPaste={insertSanitizedEditableTransfer}
+                      onInput={
+                        mobileReview.isRefining
+                          ? handleMobileProposalInput
+                          : handleMobileSourceInput
+                      }
+                    />
+                  </div>
+                ) : null}
 
                 {mobileReview.phase === "loading" ? (
                   <div
@@ -1186,26 +1218,24 @@ const InlineDraftAiFloat = ({
                   <>
                     {hasOpeningDraft && !mobileReview.isRefining ? (
                       <div className="scrollbar-none mt-3 flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto pb-1">
-                        {EDIT_ACTIONS.map(([label, command]) => (
-                          <button
-                            key={command}
-                            type="button"
-                            className={CHIP_LINK_CLASS}
-                            onClick={() =>
-                              void runAction({
-                                command,
-                                label:
-                                  command === "FixSpellingAndGrammar"
-                                    ? "Fix spelling"
-                                    : label,
-                              })
-                            }
-                          >
-                            {command === "FixSpellingAndGrammar"
-                              ? "Fix spelling"
-                              : label}
-                          </button>
-                        ))}
+                        {MOBILE_EDIT_ACTIONS.map(
+                          ([label, command, instruction]) => (
+                            <button
+                              key={label}
+                              type="button"
+                              className={CHIP_LINK_CLASS}
+                              onClick={() =>
+                                void runAction({
+                                  command,
+                                  instruction,
+                                  label,
+                                })
+                              }
+                            >
+                              {label}
+                            </button>
+                          ),
+                        )}
                       </div>
                     ) : null}
                     {mobilePromptComposer}
