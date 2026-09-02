@@ -183,6 +183,14 @@ test("a shared registration is not cascade-deleted by either user", async () => 
   assert.deepEqual(calls.clientDeletes, []);
 });
 
+test("a surviving refresh token proves ownership after authorization-code cleanup", async () => {
+  const { DELETE, calls } = loadRoute({ authorizationCodes: [] });
+  const response = await remove(DELETE);
+
+  assert.equal(response.status, 200);
+  assert.equal(calls.committed.length, 2);
+});
+
 test("the owner revokes account credentials and deletes the locked registration", async () => {
   const { DELETE, calls } = loadRoute();
   const response = await remove(DELETE);

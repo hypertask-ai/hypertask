@@ -76,9 +76,11 @@ export async function DELETE(
             FOR UPDATE
           `;
 
-          const ownsClient = authorizationCodes.some(
-            (code) => code.user_id === session.userId && code.used,
-          );
+          const ownsClient =
+            authorizationCodes.some(
+              (code) => code.user_id === session.userId && code.used,
+            ) ||
+            refreshTokens.some((token) => token.userId === session.userId);
           const hasOtherOwner =
             authorizationCodes.some(
               (code) => code.user_id !== session.userId,
