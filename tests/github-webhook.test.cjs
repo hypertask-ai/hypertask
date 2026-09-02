@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const fs = require("node:fs");
 const { createHmac } = require("node:crypto");
 
 const root = path.resolve(__dirname, "..");
@@ -121,6 +122,19 @@ test("the GitHub webhook rejects a configured pull request event without its pay
       else delete require.cache[modulePath];
     }
   }
+});
+
+test("merged pull requests move linked tickets to QA in both webhook paths", () => {
+  const route = fs.readFileSync(
+    path.join(root, "src/app/api/webhooks/github/route.ts"),
+    "utf8"
+  );
+  const mergedTargets = [...route.matchAll(
+    /else if \(pullRequest\.merged\) \{\s+targetSectionName = "([^"]+)";/g
+  )].map((match) => match[1]);
+
+  assert.deepEqual(mergedTargets, ["QA", "QA"]);
+  assert.doesNotMatch(route, /targetSectionName = "Done"/);
 });
 
 test("extractTicketId checks branch, then title, then body, in that order", () => {

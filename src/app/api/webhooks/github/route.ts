@@ -96,7 +96,7 @@ function repositoryParts(fullName: unknown) {
 
 async function moveTaskForPullRequest(
   task: WebhookTask,
-  targetSectionName: "AI Review" | "Valentin Review" | "Done" | null,
+  targetSectionName: "AI Review" | "Valentin Review" | "QA" | null,
 ): Promise<boolean> {
   if (!targetSectionName) return false;
   const section = await prisma.section.findFirst({
@@ -449,7 +449,7 @@ export async function POST(request: NextRequest) {
         let targetSectionName:
           | "AI Review"
           | "Valentin Review"
-          | "Done"
+          | "QA"
           | null = null;
         if (
           pullRequestPayload.action === "opened" ||
@@ -457,7 +457,7 @@ export async function POST(request: NextRequest) {
         ) {
           targetSectionName = chooseReviewSectionName(task.riskLevel);
         } else if (pullRequest.merged) {
-          targetSectionName = "Done";
+          targetSectionName = "QA";
         }
         if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
       }
@@ -525,7 +525,7 @@ export async function POST(request: NextRequest) {
     let targetSectionName:
       | "AI Review"
       | "Valentin Review"
-      | "Done"
+      | "QA"
       | null = null;
     let commentLead: string;
     let commentText: string;
@@ -535,7 +535,7 @@ export async function POST(request: NextRequest) {
       commentLead = "Pull request opened:";
       commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p><p>Linked to <a href="${ticketUrl}">${ticketId}</a>.</p>`;
     } else if (pullRequest.merged) {
-      targetSectionName = "Done";
+      targetSectionName = "QA";
       commentLead = "Pull request merged:";
       commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
     } else {
