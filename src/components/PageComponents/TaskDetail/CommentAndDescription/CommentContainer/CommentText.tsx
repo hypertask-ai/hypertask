@@ -72,6 +72,7 @@ const PersistentFigmaComment = ({
         // CommentsContainer continues to render the standalone AttachmentView.
         // This prop only keeps those files in inline-image carousel navigation.
         carouselAttachments={comment.attachments}
+        attachments={isMobile && isEditing ? comment.attachments : undefined}
         handleSave={redirectAPI}
         mode="read-edit-comments"
         allowEdit={isEditing}
@@ -176,6 +177,7 @@ const CommentText = () => {
     return (
       <Tiptap
         allowPerks={allowPerks}
+        attachments={isMobile && isEditing ? comment.attachments : undefined}
         handleSave={redirectAPI}
         mode="read-edit-comments"
         allowEdit

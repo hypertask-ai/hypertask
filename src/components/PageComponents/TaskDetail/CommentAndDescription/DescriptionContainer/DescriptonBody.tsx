@@ -47,7 +47,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
         allowPerks={allowPerks}
         attachments={descriptionAttachments}
         mode="read-edit-description"
-        allowEdit={isEditing && !uploadingDescription}
+        allowEdit={isEditing}
         handleSave={redirectAPI}
         user={task.user}
         shouldTriggerAiTaskWriter={editMode === "description-ai"}

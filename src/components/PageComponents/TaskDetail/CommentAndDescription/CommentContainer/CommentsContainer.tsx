@@ -253,7 +253,7 @@ const CommentsContainer = () => {
           >
             <CommentText />
 
-            {comment.attachments && (
+            {comment.attachments && editState !== i && (
               <AttachmentView
                 active={
                   currentId === `comment-${i}` ||

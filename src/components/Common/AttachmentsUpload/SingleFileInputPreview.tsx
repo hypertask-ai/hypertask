@@ -16,6 +16,7 @@ interface ISingleFile {
     allowDelete?: boolean;
     handleRemove: any;
     callback?:(attachmentReturned: any) => void;
+    onUploadFailed?: () => void;
     variant?: "default" | "chat";
   }
   const SingleFileInputPreview: React.FC<ISingleFile> = ({
@@ -27,6 +28,7 @@ interface ISingleFile {
     allowDelete,
     shouldUpload,
     callback,
+    onUploadFailed: reportUploadFailure,
     variant = "default",
   }) => {
     // if upload is true, we will display a progress bar here, and show its progress. 
@@ -79,6 +81,7 @@ interface ISingleFile {
           : `Could not upload "${file.name}". Please try again.`;
       toast.error(message);
       handleRemove?.(file.name);
+      reportUploadFailure?.();
     };
 
     useEffect(()=>{

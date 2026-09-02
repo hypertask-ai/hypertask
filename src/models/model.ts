@@ -76,13 +76,19 @@ export interface NavigateToNextTaskParams {
   markAsDone?: boolean;
   taskStatus?: IStatus;
 }
+export interface IEditorAttachmentFile {
+  name: string;
+  size?: number | string | null;
+  type: string;
+  source?: string;
+}
 export interface RedirectAPIParams {
   content: string;
   id: string;
   text: string;
   navigateToNext: boolean;
   mode: RedirectMode;
-  attachments_?: File[] | [];
+  attachments_?: IEditorAttachmentFile[];
   inbox?: boolean;
   inboxFlow?: string | null;
   markAsDone?: boolean;
@@ -985,6 +991,7 @@ export interface IUploadingDescription {
   content: any;
   descriptionAttachments: any[];
   totalAttachments: number;
+  onComplete?: (saved: boolean) => void;
 }
 
 export interface DeleteTasks {

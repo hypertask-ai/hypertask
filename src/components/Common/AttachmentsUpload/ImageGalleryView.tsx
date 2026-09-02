@@ -21,10 +21,11 @@ interface IProps {
   mode:"others"|"Creating task"
   allowDelete?: boolean;
   callbackAttachments?:any;
+  onUploadFailed?: () => void;
   variant?: "default" | "chat";
 }
 const ImageGallery = (props: IProps) => {
-  const {files, mode, callbackAttachments, allowDelete, handleRemove, shouldUpload, variant = "default"} = props
+  const {files, mode, callbackAttachments, onUploadFailed, allowDelete, handleRemove, shouldUpload, variant = "default"} = props
   const [isModalOpen, setModalOpen] = useState(false);
   const [files_, setFiles] = useState<any[]>(files ?? [[]]);
   // console.log("🚀 ~ ImageGallery ~ files_:", files_)
@@ -105,6 +106,7 @@ const ImageGallery = (props: IProps) => {
               allowDelete={allowDelete}
               showModalImage={showModalImage}
               callback={sendBack}
+              onUploadFailed={onUploadFailed}
               handleRemove={removeHandler}
               variant={variant}
             />

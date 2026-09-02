@@ -8,10 +8,12 @@ import {
   useState,
   useRef,
 } from "react";
+import { createPortal } from "react-dom";
 import "@/styles/attachmentUpload.scss";
 import {
   IAttachment,
   IDraft,
+  IEditorAttachmentFile,
   ITaskLabel,
   IUser,
   RedirectAPIParams,
@@ -96,6 +98,8 @@ import {
   preserveInboxFlowOnTaskHref,
   resolveCommentEnterShortcutAction,
 } from "@/lib/taskDetailInboxFlow";
+import { armBackDismiss } from "@/lib/mobile/backDismiss";
+import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 const SetLinkModal = dynamic(
   () => import("../Modals/LinksModal/SetLinkModal"),
   {
@@ -141,7 +145,9 @@ interface TiptapProps {
   currentUserCommentInfo?: string;
   randomUserCommentInfo?: string;
   descriptionClass?: string;
-  handleSave?: (params: RedirectAPIParams) => void;
+  handleSave?: (
+    params: RedirectAPIParams
+  ) => boolean | void | Promise<boolean | void>;
   setLoading?: Dispatch<SetStateAction<boolean>>;
   shouldTriggerAiTaskWriter?: boolean;
   currentTask?: any;
@@ -250,8 +256,23 @@ const Tiptap = ({
   const [emojiGifPicker, setEmojiGifPicker] = useState<
     Omit<EmojiGifPickerEventDetail, "editor"> | null
   >(null);
+  const mobileExistingEditOpen = Boolean(isMbl && isReadEditMode && allowEdit);
+  const mobileEditViewport = useMobileVisualViewport(mobileExistingEditOpen);
+  const [mobileEditSaving, setMobileEditSaving] = useState(false);
+  const mobileEditSavingRef = useRef(false);
+  const mobileEditSessionActiveRef = useRef(false);
+  const cancelMobileExistingEditRef = useRef<() => void>(() => {});
+  type EditorAttachmentStateItem =
+    | IEditorAttachmentFile
+    | { id: number; file: IEditorAttachmentFile };
+  const mobileEditSnapshotRef = useRef<{
+    html: string;
+    attachments: EditorAttachmentStateItem[];
+  } | null>(null);
   
-  const [newCommentAttachments, setNewCommentAttachments] = useState<any[]>(
+  const [newCommentAttachments, setNewCommentAttachments] = useState<
+    EditorAttachmentStateItem[]
+  >(
     (attachments ?? []).map((originalItem, index) => ({
       id: index,
       file: {
@@ -502,52 +523,92 @@ const Tiptap = ({
   const toggleHighlightHandler = (state: boolean) => setToggleHighlight(state);
 
   const handleCallback = async (mode_?: "moveToNext", inbox?: boolean, markAsDone?: boolean) => {
-    if (!handleSave) return;
+    if (!handleSave || mobileEditSavingRef.current) return;
 
-    if (mode === "read-edit-description" && uploadingDescription) {
-      return;
+    if (mode === "read-edit-description" && uploadingDescription) return false;
+
+    if (mode === "create-comment" && editor?.isEmpty && newCommentAttachments.length === 0) {
+      toast("Cannot post a blank comment");
+      return false;
+    }
+
+    const isMobileExistingSave = mobileExistingEditOpen;
+    if (isMobileExistingSave) {
+      mobileEditSavingRef.current = true;
+      setMobileEditSaving(true);
+      setShouldShowAITaskWriter(false);
+      setAiTriggerData({ initialPrompt: "", autoTrigger: false });
+      editor?.setEditable(false, false);
     }
 
     cancelDebounceRef.current?.();
-
-    if (mode === "read-edit-description") {
-      cancelPendingDraftUpdates();
-      clearDescriptionDraftCache();
-    }
-
+    if (mode === "read-edit-description") cancelPendingDraftUpdates();
     editor?.commands.blur();
 
-    setTrigger(prev => !prev);
-    
-    if (mode !== "read-edit-description") {
-      setNewCommentAttachments([]);
-      const updatedDraft = draftsFromTQ
-      ?.filter((draft: IDraft) => draft.type === "Description");
-      queryClient.setQueryData(draftQueryKey, updatedDraft);
-      invalidateUserDrafts();
-    }
-
-    if (mode === "create-comment" && editor?.isEmpty && newCommentAttachments.length === 0) {
-      return toast("Cannot post a blank comment");
-    }
-
     console.log("🚀 ~ Saving", mode, "with", newCommentAttachments.length, "attachments");
-    handleSave({
-      content: editor?.getHTML()!,
-      text: editor?.getText() || "",
-      id: mode === "read-edit-comments" ? commentId! : id,
-      mode: mode as RedirectMode,
-      attachments_: newCommentAttachments,
-      navigateToNext: mode_ ? true : false,
-      inbox: inbox,
-      inboxFlow: inboxFlow,
-      markAsDone: markAsDone,
-      taskStatus: currentTask?.status,
-    });
-    
-    if (mode === "create-comment") {
-      editor?.commands.setContent("");
-      editor?.commands.blur();
+    const currentAttachmentFiles = newCommentAttachments.map((attachment) =>
+      "file" in attachment ? attachment.file : attachment,
+    );
+    let attachmentFilesForSave: IEditorAttachmentFile[] | undefined =
+      currentAttachmentFiles;
+    if (mode === "read-edit-comments" && attachments === undefined) {
+      attachmentFilesForSave =
+        currentAttachmentFiles.length === 0
+          ? undefined
+          : [
+              ...(carouselAttachments ?? []).map((attachment) => ({
+                name: attachment.fileName,
+                size: attachment.fileSize,
+                type: attachment.fileType,
+                source: attachment.fileSource,
+              })),
+              ...currentAttachmentFiles,
+            ];
+    }
+    try {
+      const result = await handleSave({
+        content: editor?.getHTML()!,
+        text: editor?.getText() || "",
+        id: mode === "read-edit-comments" ? commentId! : id,
+        mode: mode as RedirectMode,
+        attachments_: attachmentFilesForSave,
+        navigateToNext: mode_ ? true : false,
+        inbox: inbox,
+        inboxFlow: inboxFlow,
+        markAsDone: markAsDone,
+        taskStatus: currentTask?.status,
+      });
+      const saved = result !== false;
+      if (!saved) return false;
+
+      setTrigger(prev => !prev);
+      if (mode === "read-edit-description") {
+        clearDescriptionDraftCache();
+      } else {
+        setNewCommentAttachments([]);
+        const updatedDraft = draftsFromTQ
+          ?.filter((draft: IDraft) => draft.type === "Description");
+        queryClient.setQueryData(draftQueryKey, updatedDraft);
+        invalidateUserDrafts();
+      }
+
+      if (mode === "create-comment") {
+        editor?.commands.setContent("");
+        editor?.commands.blur();
+      }
+      return true;
+    } catch (error) {
+      console.error("Could not save editor content", error);
+      toast.error("Could not save. Your changes are still here.");
+      return false;
+    } finally {
+      if (isMobileExistingSave) {
+        mobileEditSavingRef.current = false;
+        setMobileEditSaving(false);
+        if (allowEdit && editor && !editor.isDestroyed) {
+          editor.setEditable(!isRecording, false);
+        }
+      }
     }
   };
 
@@ -574,6 +635,11 @@ const Tiptap = ({
   };
 
   const toggleAiTaskWriter = () => {
+    if (mobileExistingEditOpen) {
+      setShouldShowAITaskWriter((prev) => !prev);
+      return;
+    }
+
     document.getElementById(divIds.popoverContainer)?.scrollIntoView({
       behavior: "smooth",
       block: "center",
@@ -585,6 +651,7 @@ const Tiptap = ({
   };
 
   const audioTiptapCallback = (text: string, setContent: boolean = false) => {
+    if (isMbl && isReadEditMode && !mobileEditSessionActiveRef.current) return;
     if (editor) {
       setContent ? 
         editor.chain().setContent(text).focus("end").run() :
@@ -595,6 +662,29 @@ const Tiptap = ({
   const getAttachments = async (files: File[]) => {
     setNewCommentAttachments(files);
   };
+
+  const cancelMobileExistingEdit = () => {
+    if (!mobileExistingEditOpen || mobileEditSavingRef.current) return;
+
+    mobileEditSessionActiveRef.current = false;
+    toggleRecording(false);
+    cancelDebounceRef.current?.();
+    if (mode === "read-edit-description") cancelPendingDraftUpdates();
+    setShouldShowAITaskWriter(false);
+    setAiTriggerData({ initialPrompt: "", autoTrigger: false });
+
+    const snapshot = mobileEditSnapshotRef.current;
+    if (snapshot && editor && !editor.isDestroyed) {
+      editor.commands.setContent(snapshot.html, { emitUpdate: false });
+      setNewCommentAttachments(snapshot.attachments);
+      setTrigger((prev) => !prev);
+      editor.commands.blur();
+    }
+
+    if (mode === "read-edit-comments") setEditState(null);
+    setEditMode(null);
+  };
+  cancelMobileExistingEditRef.current = cancelMobileExistingEdit;
 
   function handleCommentEscape () {
     editor?.commands.blur();
@@ -632,8 +722,19 @@ const Tiptap = ({
       return;
     }
     
+    const handleEscape = () => {
+      if (mobileExistingEditOpen) {
+        cancelMobileExistingEdit();
+        return;
+      }
+      if (mode === "read-edit-description") {
+        void handleCallback();
+        return;
+      }
+      handleCommentEscape();
+    };
     const keyHandlers: Record<string, () => void> = {
-      'Escape': () => mode === "read-edit-description" ? handleCallback() : handleCommentEscape(),
+      'Escape': handleEscape,
       'j': () => cmdControl && (e.preventDefault(), toggleAiTaskWriter()),
     };
 
@@ -773,7 +874,12 @@ const Tiptap = ({
   };
 
   const handleOutsideClickDescription = () => {
-    if (mode === "read-edit-description" && editor?.isFocused && isMbl) {
+    if (
+      mode === "read-edit-description" &&
+      editor?.isFocused &&
+      isMbl &&
+      !mobileExistingEditOpen
+    ) {
       handleCallback();
     }
   };
@@ -980,7 +1086,7 @@ const Tiptap = ({
   const getDefaultMode = () => mode === "read-edit-description" ? "AiTaskWriter" : "WriteWithAI";
   const shouldShowInlineDraftAi = Boolean(
     shouldShowAiTaskWriter && getDefaultMode() === "WriteWithAI"
-  );
+  ) || Boolean(shouldShowAiTaskWriter && mobileExistingEditOpen);
   shouldShowInlineDraftAiRef.current = shouldShowInlineDraftAi;
   const shouldShowFullAiTaskWriter =
     shouldShowAiTaskWriter && !shouldShowInlineDraftAi;
@@ -1052,6 +1158,55 @@ const Tiptap = ({
 
   // Effects
   useLayoutEffect(() => {
+    if (!mobileExistingEditOpen || !editor || mobileEditSnapshotRef.current) {
+      if (!mobileExistingEditOpen) {
+        mobileEditSessionActiveRef.current = false;
+        mobileEditSnapshotRef.current = null;
+      }
+      return;
+    }
+
+    mobileEditSnapshotRef.current = {
+      html: editor.getHTML(),
+      attachments: [...newCommentAttachments],
+    };
+    mobileEditSessionActiveRef.current = true;
+  }, [editor, mobileExistingEditOpen, newCommentAttachments]);
+
+  useLayoutEffect(() => {
+    if (!mobileExistingEditOpen || !editor) return;
+    const focusFrame = requestAnimationFrame(() => {
+      if (mobileEditSessionActiveRef.current && !editor.isDestroyed) {
+        editor.commands.focus("end");
+      }
+    });
+    return () => cancelAnimationFrame(focusFrame);
+  }, [editor, mobileExistingEditOpen]);
+
+  useEffect(() => {
+    if (!mobileExistingEditOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const previousBackHandler = window.__htHandleBack;
+    document.body.style.overflow = "hidden";
+    window.__htHandleBack = () => {
+      cancelMobileExistingEditRef.current();
+      return true;
+    };
+    const disarmBack = armBackDismiss(window, {
+      key: "__htMobileExistingContentEdit",
+      onBack: () => cancelMobileExistingEditRef.current(),
+      shouldRearm: () => mobileEditSavingRef.current,
+    });
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.__htHandleBack = previousBackHandler;
+      disarmBack();
+    };
+  }, [mobileExistingEditOpen]);
+
+  useLayoutEffect(() => {
     pendingGuestDescriptionFocusTaskRef.current = null;
     if (mode !== "read-edit-description" || !currentTask?.id) return;
 
@@ -1069,7 +1224,7 @@ const Tiptap = ({
   }, [currentTask?.id, id, mode]);
 
   useEffect(() => {
-    if (!editor || isReadOnlyContent) return;
+    if (!editor || isReadOnlyContent || mobileExistingEditOpen) return;
     const handleEditorUpdate = () => {
       // Serialize while Tiptap is alive. If navigation happens before the
       // debounce expires, useDebounceWithCancel flushes this captured value on
@@ -1089,7 +1244,13 @@ const Tiptap = ({
       editor.off("update", handleEditorUpdate);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, inViewObject.taskId, inViewObject.taskProjectId, isReadOnlyContent]);
+  }, [
+    editor,
+    inViewObject.taskId,
+    inViewObject.taskProjectId,
+    isReadOnlyContent,
+    mobileExistingEditOpen,
+  ]);
 
   useLayoutEffect(() => {
     if (
@@ -1119,9 +1280,14 @@ const Tiptap = ({
       // emitUpdate:false — setEditable fires a fake "update" otherwise, which the
       // draft autosave reads as a real edit and writes an empty draft over a
       // stored one (and which hides a draft that is still loading).
-      editor.setEditable(allowEdit && !isRecording, false);
+      editor.setEditable(
+        allowEdit &&
+          !isRecording &&
+          !(mode === "read-edit-description" && uploadingDescription),
+        false,
+      );
     }
-  }, [allowEdit, editor, isRecording]);
+  }, [allowEdit, editor, isRecording, mode, uploadingDescription]);
 
   useEffect(() => {
     if (
@@ -1439,7 +1605,11 @@ const Tiptap = ({
           newCommentAttachments={newCommentAttachments}
           creator={{ creator: creatorname, createdAt }}
           trigger={trigger}
-          isEditable={allowEdit && !isRecording}
+          isEditable={
+            allowEdit &&
+            !isRecording &&
+            !(mode === "read-edit-description" && uploadingDescription)
+          }
           isEditModeActive={allowEdit}
           toggleHighlightHandler={toggleHighlightHandler}
           createdAt={createdAt}
@@ -1516,7 +1686,29 @@ const Tiptap = ({
             )}
           </div>
 
-          <TiptapMainContainer />
+          {mobileExistingEditOpen && typeof document !== "undefined" ? (
+            createPortal(
+              <div
+                data-mobile-existing-content-editor
+                className="fixed inset-x-0 z-[1200] bg-modalBackground"
+                style={{
+                  bottom: mobileEditViewport?.bottomInset ?? 0,
+                  height: mobileEditViewport
+                    ? `${mobileEditViewport.visibleHeight}px`
+                    : "100dvh",
+                }}
+              >
+                <TiptapMainContainer
+                  mobileEditOpen
+                  mobileEditSaving={mobileEditSaving}
+                  onCancelMobileEdit={cancelMobileExistingEdit}
+                />
+              </div>,
+              document.body,
+            )
+          ) : (
+            <TiptapMainContainer />
+          )}
 
           <button
             className="hidden"

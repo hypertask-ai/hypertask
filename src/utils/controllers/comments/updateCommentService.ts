@@ -15,31 +15,82 @@ export interface UpdateCommentParams {
   text: string
   userId: number
   agentId?: string | null
+  attachments?: Array<{
+    fileType: string
+    fileSource: string
+    fileName: string
+    fileSize?: string | null
+  }>
 }
 
 /**
  * Updates a comment and runs all post-update hooks.
- * Caller must ensure: comment exists, user is the creator.
+ * The authenticated user must own the stored comment.
  */
 export async function updateCommentService(params: UpdateCommentParams) {
-  const { commentId, text, userId, agentId } = params
+  const { commentId, text, userId, agentId, attachments } = params
 
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
+  const comment = await prisma.comment.findFirst({
+    where: { id: commentId, creatorId: userId },
     select: { id: true, taskId: true, task: { select: { projectId: true } } }
   })
 
   if (!comment) {
-    throw new Error('Comment not found')
+    throw new Error('Comment not found or not owned by user')
   }
 
   await invalidateHyperAiCommentOrigin(commentId)
-  const updatedComment = await prisma.comment.update({
-    where: { id: commentId },
-    data: { text, summary: null },
-    include: {
-      creator: { select: { id: true, email: true, displayName: true } }
+  const updatedComment = await prisma.$transaction(async (transaction) => {
+    if (attachments) {
+      const existingAttachments = await transaction.attachment.findMany({
+        where: { commentId },
+        select: { id: true, fileSource: true }
+      })
+      const desiredAttachments = Array.from(
+        new Map(
+          attachments.map((attachment) => [attachment.fileSource, attachment])
+        ).values()
+      )
+      const desiredSources = new Set(
+        desiredAttachments.map((attachment) => attachment.fileSource)
+      )
+      const attachmentIdsToDelete = existingAttachments
+        .filter((attachment) => !desiredSources.has(attachment.fileSource))
+        .map((attachment) => attachment.id)
+      if (attachmentIdsToDelete.length > 0) {
+        await transaction.attachment.deleteMany({
+          where: { id: { in: attachmentIdsToDelete } }
+        })
+      }
+
+      const existingSources = new Set(
+        existingAttachments.map((attachment) => attachment.fileSource)
+      )
+      const attachmentsToCreate = desiredAttachments.filter(
+        (attachment) => !existingSources.has(attachment.fileSource)
+      )
+      if (attachmentsToCreate.length > 0) {
+        await transaction.attachment.createMany({
+          data: attachmentsToCreate.map((attachment) => ({
+            fileType: attachment.fileType,
+            fileSource: attachment.fileSource,
+            fileName: attachment.fileName,
+            fileSize: attachment.fileSize,
+            commentId,
+            taskId: comment.taskId
+          }))
+        })
+      }
     }
+
+    return transaction.comment.update({
+      where: { id: commentId },
+      data: { text, summary: null },
+      include: {
+        creator: { select: { id: true, email: true, displayName: true } },
+        attachments: true
+      }
+    })
   })
 
   await scheduleCommentSummaryGeneration({ commentId }).catch((err) =>
