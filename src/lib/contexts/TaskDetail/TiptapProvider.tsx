@@ -19,10 +19,10 @@ interface TiptapProviderProps {
     mode_?: "moveToNext",
     inbox?: boolean,
     markAsDone?: boolean
-  ) => Promise<string | undefined>;
+  ) => Promise<boolean | undefined>;
   // Default send action: archives the inbox notification and, per the user's
   // inbox setting, advances to the next task.
-  sendComment: () => Promise<string | undefined>;
+  sendComment: () => Promise<boolean | undefined>;
   createdAt: string | undefined;
   getAttachments: (files: File[]) => Promise<void>;
   toggleHighlightHandler: (state: boolean) => void;

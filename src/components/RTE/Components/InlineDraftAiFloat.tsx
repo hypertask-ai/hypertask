@@ -228,7 +228,7 @@ const InlineDraftAiFloat = ({
   allowSuggestReply?: boolean;
   toggleRecording?: (val: boolean) => void;
   isRecording?: boolean;
-  presentation?: "inline" | "composer" | "refine-fullscreen";
+  presentation?: "inline" | "composer" | "refine-fullscreen" | "edit-inline";
   suppressEditorSelectionHighlight?: boolean;
 }) => {
   const [prompt, setPrompt] = useState("");
@@ -285,6 +285,7 @@ const InlineDraftAiFloat = ({
 
   const isComposer = presentation === "composer";
   const isRefineFullscreen = presentation === "refine-fullscreen";
+  const isEditInline = presentation === "edit-inline";
   const isMobileAiSheet = isRefineFullscreen || isComposer;
   const sheetViewport = useMobileVisualViewport(isMobileAiSheet);
   const sheetContainerStyle = getMobileOverlaySheetContainerStyle(sheetViewport);
@@ -553,8 +554,10 @@ const InlineDraftAiFloat = ({
   const showEditChips =
     (isMobileAiSheet && hasOpeningDraft) ||
     shouldShowInlineDraftAiChips(hasSelection, prompt);
-  const showDictation = Boolean(toggleRecording);
   const dictationActive = isRecording || audioProcessing;
+  let mobileDictationPresentation: "prominent" | "compact" | undefined;
+  if (isMobileAiSheet) mobileDictationPresentation = "prominent";
+  else if (isEditInline) mobileDictationPresentation = "compact";
 
   const appendDictation = (text: string, setContent?: boolean) => {
     setPrompt((current) =>
@@ -562,9 +565,9 @@ const InlineDraftAiFloat = ({
     );
   };
 
-  const dictationButton = showDictation ? (
+  const dictationButton = toggleRecording ? (
     <AudioButton
-      toggleRecording={toggleRecording!}
+      toggleRecording={toggleRecording}
       callbackHandler={appendDictation}
       defaultContent={prompt}
       editor={null}
@@ -573,7 +576,7 @@ const InlineDraftAiFloat = ({
       hasText={Boolean(prompt.trim())}
       onProcessingChange={setAudioProcessing}
       ariaLabel="Dictate AI prompt"
-      mobilePresentation={isMobileAiSheet ? "prominent" : undefined}
+      mobilePresentation={mobileDictationPresentation}
       wrapperClassName={
         isMobileAiSheet && !prompt.trim() ? "ml-auto" : undefined
       }
@@ -1001,6 +1004,23 @@ const InlineDraftAiFloat = ({
       </div>
     </div>
   );
+
+  if (isEditInline) {
+    return (
+      <div
+        ref={rootRef}
+        data-mobile-edit-ai
+        role="group"
+        aria-label="Write with AI"
+        className="flex w-full min-w-0 shrink-0 flex-col gap-2 px-2 pb-1 text-content"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={handlePanelKeyDown}
+      >
+        {inlineEditChips}
+        {promptRow}
+      </div>
+    );
+  }
 
   if (isRefineFullscreen || isComposer) {
     return (

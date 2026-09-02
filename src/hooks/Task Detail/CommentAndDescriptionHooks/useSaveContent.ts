@@ -3,6 +3,7 @@ import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measur
 import {
   IAttachment,
   IComment,
+  IEditorAttachmentFile,
   IUrl,
   modifiedHtml,
   NavigateToNextTaskParams,
@@ -41,6 +42,7 @@ import {
 } from "@/lib/aiModelOptions";
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
 import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorialState";
+import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
 
 export default function useSaveContent() {
   const {
@@ -100,7 +102,7 @@ export default function useSaveContent() {
   function processHtml(
     htmlString: string,
     callback?: React.Dispatch<React.SetStateAction<number>>
-  ): Promise<unknown> {
+  ): Promise<modifiedHtml> {
     return new Promise((resolve, reject) => {
       try {
         const parser = new DOMParser();
@@ -444,10 +446,13 @@ export default function useSaveContent() {
   // ---------------------- SAVE DESCRIPTION -------------------
   const handleSubmit = async (
     unprocessedHTML: string,
-    result: any,
-    attachments?: any[]
+    result: modifiedHtml | null,
+    attachments?: IEditorAttachmentFile[]
   ) => {
-    cancelPendingDraftUpdates();
+    let saved = false;
+    const completeDescriptionSave = uploadingDescription?.onComplete;
+    try {
+      cancelPendingDraftUpdates();
     if (currentTask?.id && currentUser?.id) {
       resetDescriptionQuery(currentTask.id, currentUser.id);
       setHasDraftInit(false);
@@ -455,7 +460,6 @@ export default function useSaveContent() {
 
     focusOn(descriptionContainerId, false);
     scrollVirtualize("description");
-    setDescription(unprocessedHTML ?? "");
     if (result) {
       try {
         // const result: any = await processHtml(content);
@@ -463,12 +467,11 @@ export default function useSaveContent() {
           description: result.html,
           id: currentTask?.id,
         };
-        setDescription(result.html ?? "");
         const { AttachmentObjectsToPush, AttachmentUrls } =
           await uploadAttachmentsDescription(attachments);
 
         const payload = {
-          urlsToAdd: [...result.urls, ...AttachmentUrls],
+          urlsToAdd: [...(result.urls ?? []), ...AttachmentUrls],
           taskId: currentTask?.id,
         };
         const response = await updateTask(newTask, payload, "SaveDescription");
@@ -485,11 +488,12 @@ export default function useSaveContent() {
           PostMention(x.userId, x.currentTaskId);
         });
 
-        result.agentMentions.forEach((agentId: string) => {
+        result.agentMentions?.forEach((agentId: string) => {
           handleAgentMention(agentId, currentTask?.id!);
         });
         
         if (response.status === 200) {
+          setDescription(result.html ?? unprocessedHTML ?? "");
           if (result.hyperMention && currentTask)
             postHyperMention("Description", "Update", {
               ownerId: currentTask.userId,
@@ -574,23 +578,36 @@ export default function useSaveContent() {
             })
           );
           if (hasDraftInit) setHasDraftInit(false);
+          saved = true;
+        } else {
+          toast.error("Could not save description. Your changes are still here.");
         }
       } catch (error) {
         console.log("🚀 ~ handleSubmit ~ error:", error)
-      } finally {
-        console.log(
-          " ============= Description upload finished ================="
-        );
-        setUploadingDescription(undefined);
-        setEditMode(null);
+        toast.error("Could not save description. Your changes are still here.");
       }
+    } else {
+      toast.error("Could not prepare description. Your changes are still here.");
     }
+    } catch (error) {
+      console.log("🚀 ~ handleSubmit ~ error:", error)
+      toast.error("Could not save description. Your changes are still here.");
+    } finally {
+      console.log(
+        " ============= Description upload finished ================="
+      );
+      setUploadingDescription(undefined);
+      completeDescriptionSave?.(saved);
+      if (saved) setEditMode(null);
+    }
+    return saved;
   };
 
   // ---------------------- SAVE COMMENTS -------------------
   const updateCommentHandler = async (
     content: string | undefined,
-    id: string
+    id: string,
+    attachments?: IEditorAttachmentFile[],
   ) => {
     if (
       currentTask &&
@@ -604,34 +621,66 @@ export default function useSaveContent() {
         if (currentIndex !== undefined) {
           scrollVirtualize("comment", parseInt(currentIndex));
         }
-        const result: any = await processHtml(content);
+        const result = await processHtml(content);
         // console.log("🚀 ~ file: TaskDetailComp.tsx:1616 ~ updateCommentHandler ~ result:", result)
+        const comment = comments.find((comment) => comment.id === id);
+        if (!comment) {
+          toast.error("This comment no longer exists. Refresh the task and try again.");
+          return false;
+        }
+
+        const shouldSyncAttachments = attachments !== undefined;
+        let attachmentObjectsToPush = comment.attachments ?? [];
+        let attachmentUrls: IUrl[] = attachmentObjectsToPush.map(
+          (attachment) => ({
+            TaskId: currentTask.id,
+            urlString: attachment.fileSource,
+            Attachment: true,
+            title: attachment.fileName,
+            fileSize: measuredSizeNumber(attachment.fileSize),
+          }),
+        );
+        if (shouldSyncAttachments) {
+          const uploadedAttachments = await Promise.all(
+            attachments.map(async (attachment) => {
+              if (attachment.source) return attachment;
+              if (!(attachment instanceof File)) {
+                throw new Error("Attachment upload source is missing");
+              }
+              const source = await uploadSingleFileViaApi(attachment);
+              return {
+                name: attachment.name,
+                size: attachment.size,
+                type: attachment.type,
+                source,
+              };
+            }),
+          );
+          const uploaded = await uploadAttachmentsComments(
+            uploadedAttachments,
+            Number(id),
+          );
+          attachmentObjectsToPush = uploaded.AttachmentObjectsToPush;
+          attachmentUrls = uploaded.AttachmentUrls;
+        }
+        const urlsToSave = [...(result.urls ?? []), ...attachmentUrls];
         const updatedComment = {
           text: result.html,
           creatorId: currentUser?.id,
           commentId: id,
           taskId: currentTask?.id,
+          attachments: shouldSyncAttachments
+            ? attachmentObjectsToPush.map(
+                ({ fileType, fileSource, fileName, fileSize }) => ({
+                  fileType,
+                  fileSource,
+                  fileName,
+                  fileSize,
+                }),
+              )
+            : undefined,
+          replaceAttachments: shouldSyncAttachments,
         };
-
-        // also add the attachments into this flow.
-        var AttachmentUrls: IUrl[] = [];
-        const comment = comments.filter((comment) => {
-          return comment.id === id;
-        });
-        if (comment[0].attachments && comment[0].attachments.length > 0) {
-          comment[0].attachments.forEach((attachment, index) => {
-            let urlToAdd: IUrl = {
-              TaskId: currentTask?.id!,
-              urlString: attachment.fileSource as string,
-              Attachment: true,
-              title: attachment.fileName,
-              fileSize: measuredSizeNumber(attachment.fileSize),
-            };
-
-            AttachmentUrls.push(urlToAdd);
-          });
-        }
-        const urlsToSave = [...result.urls, ...AttachmentUrls];
 
         const response = await updateComment(updatedComment, urlsToSave, id);
         if (result.hyperMention)
@@ -661,8 +710,8 @@ export default function useSaveContent() {
             modelMentionLabel: result.hyperMention.modelLabel,
             taskDescription: description,
             taskTitle: currentTask.title,
-            attachments: comment[0].attachments,
-            previousText: comment[0].text,
+            attachments: attachmentObjectsToPush,
+            previousText: comment.text,
             sourceCommentId: id,
           });
         else if (result.imageMention)
@@ -671,32 +720,34 @@ export default function useSaveContent() {
             projectId: currentProject?.id ?? -1,
             taskId: currentTask.id,
             modelKey: result.imageMention.modelKey,
-            previousText: comment[0].text,
+            previousText: comment.text,
           });
 
-        setEditState(null);
         const data = await response.data;
-        if (response.status == 200) {
+        if (response.status === 200) {
           toast("Comment updated successfully!");
           setComments((prev) => {
             const updatedComments = prev.map((comment) => {
               if (comment.id === data.id) {
-                return data; // Replace with the updated comment
+                return data;
               }
               return comment; // Keep other comments unchanged
             });
             return updatedComments;
           });
+          setEditState(null);
+          setEditMode(null);
+          return true;
         } else {
           console.error("Error updating comment:", data.error); // You might want to handle the error in a better way
+          toast.error("Could not update comment. Your changes are still here.");
         }
       } catch (error) {
         console.error(error);
-      } finally {
-        // setLoading(false);
-        setEditMode(null);
+        toast.error("Could not update comment. Your changes are still here.");
       }
     }
+    return false;
   };
 
   // ---------------------- CREATE COMMENT -------------------
@@ -1054,11 +1105,12 @@ export default function useSaveContent() {
           ownerId: currentTask?.userId,
         },
       ]);
+      return true;
     } else if (mode === "read-edit-comments") {
-      updateCommentHandler(content, id);
+      return updateCommentHandler(content, id, attachments_);
     } else {
       if (uploadingDescription) {
-        return;
+        return false;
       }
 
       cancelPendingDraftUpdates();
@@ -1067,11 +1119,14 @@ export default function useSaveContent() {
         setHasDraftInit(false);
       }
 
-      setUploadingDescription({
-        content,
-        descriptionAttachments: attachments ?? [],
-        id: "description",
-        totalAttachments,
+      return new Promise<boolean>((resolve) => {
+        setUploadingDescription({
+          content,
+          descriptionAttachments: attachments ?? [],
+          id: "description",
+          totalAttachments,
+          onComplete: resolve,
+        });
       });
     }
   };

@@ -111,4 +111,6 @@ export const MOBILE_AI_TASK_WRITER_FOCUS = {
     defaultFocus: "Description",
 } satisfies TDefaultEditFocus;
 export type TSendBackButtonParam = "Save" | "SaveAndClose" | "SaveAndNew"
-export type TSendBackAttachmentButton = (sendBackType?:TSendBackButtonParam)=>void
+export type TSendBackAttachmentButton = (
+  sendBackType?: TSendBackButtonParam,
+) => void | boolean | Promise<unknown>

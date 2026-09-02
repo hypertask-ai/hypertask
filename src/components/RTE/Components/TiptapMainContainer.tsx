@@ -1,5 +1,5 @@
 import { useTiptapGlobalContext } from "@/lib/contexts/TaskDetail/TiptapProvider";
-import React, { ReactNode, useContext } from "react";
+import React, { useContext } from "react";
 import styles from "@/styles/tiptap.module.scss";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import CreatedInfoTiptap from "./CreatedInfoTiptap";
@@ -7,8 +7,19 @@ import TiptapEditor from "./TiptapEditor";
 import AttachmentsUpload from "@/components/Common/AttachmentsUpload";
 import FileDragOverlay from "@/components/Common/FileDragAndDrop";
 import InlineDraftAiFloat from "./InlineDraftAiFloat";
+import { X } from "lucide-react";
 
-const TiptapMainContainer = () => {
+interface TiptapMainContainerProps {
+  mobileEditOpen?: boolean;
+  mobileEditSaving?: boolean;
+  onCancelMobileEdit?: () => void;
+}
+
+const TiptapMainContainer = ({
+  mobileEditOpen = false,
+  mobileEditSaving = false,
+  onCancelMobileEdit,
+}: TiptapMainContainerProps) => {
   const {
     mode,
     isEditable,
@@ -54,6 +65,86 @@ const TiptapMainContainer = () => {
     (mode === "read-edit-description" || mode === "read-edit-comments");
   // =============================================== Mobile
   if (isMbl) {
+    if (mobileEditOpen) {
+      const aiOpen = shouldShowInlineDraftAi && !!editor;
+      const title =
+        mode === "read-edit-description" ? "Edit description" : "Edit comment";
+      const wellSurface =
+        mode === "read-edit-description"
+          ? "rounded-[5px] bg-comment-description"
+          : "rounded-[8px] bg-newcomment-well";
+
+      return (
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-modalBackground text-white-black">
+          <header className="flex min-h-14 shrink-0 items-center justify-between gap-3 px-4">
+            <h1
+              className={
+                aiOpen
+                  ? "truncate text-content font-semibold text-hypertasks-ai-purple"
+                  : "truncate text-content font-semibold"
+              }
+            >
+              {aiOpen ? "Write with AI" : title}
+            </h1>
+            <button
+              type="button"
+              aria-label={`Close ${title.toLowerCase()}`}
+              disabled={mobileEditSaving}
+              onClick={onCancelMobileEdit}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black disabled:opacity-40"
+            >
+              <X size={20} strokeWidth={1.75} aria-hidden />
+            </button>
+          </header>
+
+          <div
+            id={id}
+            tabIndex={0}
+            onKeyDown={handleKeydown}
+            className={`mx-3 mb-3 flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 ${wellSurface}`}
+          >
+            <div
+              className="min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-thin scrollbar-track-transparent scrollbar-thumb-icon-dark-gray [&>div]:!mt-0 [&>div]:!max-w-full"
+              onClick={handleFocus}
+            >
+              <TiptapEditor />
+            </div>
+            {aiOpen && closeInlineDraftAi && editor && (
+              <InlineDraftAiFloat
+                editor={editor}
+                onClose={closeInlineDraftAi}
+                projectId={aiProjectId}
+                taskId={aiTaskId}
+                toggleRecording={toggleRecording}
+                isRecording={isRecording}
+                presentation="edit-inline"
+                suppressEditorSelectionHighlight
+              />
+            )}
+            <AttachmentsUpload
+              filesFromParent={newCommentAttachments}
+              trigger={trigger}
+              callback={getAttachments}
+              droppedFiles={[]}
+              mode={mode}
+              sendOnClick={() => handleCallback()}
+              editor={editor}
+              discardDraft={discardDraft}
+              audioTiptapCallback={audioTiptapCallback}
+              audioDefaultContent={editor?.getText()}
+              toggleRecording={toggleRecording}
+              isRecording={isRecording}
+              toggleAiTaskWriter={toggleAiTaskWriter}
+              hideComposerDictation={aiOpen}
+              mobileExistingEdit
+              mobileEditSaving={mobileEditSaving}
+              onCancelMobileEdit={onCancelMobileEdit}
+            />
+          </div>
+        </div>
+      );
+    }
+
     // FOR: New comment on mobile
     if (mode === "create-comment") {
       const aiRefineOpen =

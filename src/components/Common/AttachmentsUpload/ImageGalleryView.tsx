@@ -7,6 +7,12 @@ import dynamic from "next/dynamic";
 import { useRecoilState } from "@/lib/state";
 import { uploadingStateCreateTaskModalAtom } from "@/store";
 import { createRemoveHandler } from "./createRemoveHandler";
+import type { IEditorAttachmentFile } from "@/models/model";
+
+type GalleryAttachment = {
+  id: number;
+  file: File & IEditorAttachmentFile;
+};
 
 const SingleFileInputPreview = dynamic(()=>import("./SingleFileInputPreview"))
 // import SingleFileInputPreview from "./SingleFileInputPreview";
@@ -20,11 +26,15 @@ interface IProps {
   shouldUpload: boolean;
   mode:"others"|"Creating task"
   allowDelete?: boolean;
-  callbackAttachments?:any;
+  callbackAttachments?: (
+    attachments: GalleryAttachment[],
+  ) => void | Promise<void>;
+  onUploadFailed?: (fileName: string) => void;
+  onUploadPendingChange?: (pending: boolean) => void;
   variant?: "default" | "chat";
 }
 const ImageGallery = (props: IProps) => {
-  const {files, mode, callbackAttachments, allowDelete, handleRemove, shouldUpload, variant = "default"} = props
+  const { files, mode, callbackAttachments, onUploadFailed, onUploadPendingChange, allowDelete, handleRemove, shouldUpload, variant = "default" } = props
   const [isModalOpen, setModalOpen] = useState(false);
   const [files_, setFiles] = useState<any[]>(files ?? [[]]);
   // console.log("🚀 ~ ImageGallery ~ files_:", files_)
@@ -47,6 +57,16 @@ const ImageGallery = (props: IProps) => {
     setFiles(files);
     
   }, [files]);
+
+  useEffect(() => {
+    if (!onUploadPendingChange) return;
+    const pending = shouldUpload && files_.some(
+      ({ file, id }) =>
+        !file?.source && !uploadedFiles.some((uploaded) => uploaded.id === id),
+    );
+    onUploadPendingChange(pending);
+    return () => onUploadPendingChange(false);
+  }, [files_, onUploadPendingChange, shouldUpload, uploadedFiles]);
 
   
   const sendBack = useCallback(
@@ -105,6 +125,7 @@ const ImageGallery = (props: IProps) => {
               allowDelete={allowDelete}
               showModalImage={showModalImage}
               callback={sendBack}
+              onUploadFailed={onUploadFailed}
               handleRemove={removeHandler}
               variant={variant}
             />
