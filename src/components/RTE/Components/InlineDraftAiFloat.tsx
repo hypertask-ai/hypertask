@@ -209,6 +209,7 @@ const InlineDraftAiFloat = ({
   const promptRef = useRef(prompt);
   const mobilePromptInputRef = useRef<HTMLInputElement>(null);
   const mobileEditableSurfaceRef = useRef<HTMLDivElement>(null);
+  const mobileEditableInputHtmlRef = useRef<string | null>(null);
   const mobileInternalDragRef = useRef(false);
   const mobileSourceDraftRef = useRef("");
   const mobileProposalDraftRef = useRef("");
@@ -466,9 +467,13 @@ const InlineDraftAiFloat = ({
   useLayoutEffect(() => {
     if (!isMobileAiSheet) return;
     const surface = mobileEditableSurfaceRef.current;
-    if (!surface || surface.innerHTML === mobileEditableSurfaceHtml) return;
-    // Keep typing uncontrolled; only sync when the displayed draft changes externally.
-    if (document.activeElement === surface) return;
+    if (!surface) return;
+    const isUserInputRender =
+      mobileEditableInputHtmlRef.current === mobileEditableHtml;
+    mobileEditableInputHtmlRef.current = null;
+    if (isUserInputRender || surface.innerHTML === mobileEditableSurfaceHtml) {
+      return;
+    }
     surface.innerHTML = mobileEditableSurfaceHtml;
   }, [
     isMobileAiSheet,
@@ -865,6 +870,7 @@ const InlineDraftAiFloat = ({
 
   const handleMobileSourceInput = (event: FormEvent<HTMLDivElement>) => {
     const sourceDraft = sanitizedEditableHtml(event);
+    mobileEditableInputHtmlRef.current = sourceDraft;
     mobileSourceDraftRef.current = sourceDraft;
     setMobileSourceDraft(sourceDraft);
     mobileSourceRevisionRef.current += 1;
@@ -872,6 +878,7 @@ const InlineDraftAiFloat = ({
 
   const handleMobileProposalInput = (event: FormEvent<HTMLDivElement>) => {
     const proposal = sanitizedEditableHtml(event);
+    mobileEditableInputHtmlRef.current = proposal;
     mobileProposalDraftRef.current = proposal;
     mobileProposalRevisionRef.current += 1;
     dispatchMobileReview({

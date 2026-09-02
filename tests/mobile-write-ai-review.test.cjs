@@ -244,13 +244,15 @@ test("mobile Write with AI keeps an edited existing draft as the rewrite source"
       };
     };
 
-    await setEditableHtml(
-      container.querySelector('[contenteditable="true"]'),
-      "<p>Edited draft</p>",
-    );
+    const source = container.querySelector('[contenteditable="true"]');
+    await setEditableHtml(source, "<p>Edited draft</p>");
+    source.focus();
+    assert.equal(document.activeElement, source);
     await click(dom, buttonWithText(container, "Improve readability"));
 
     assert.equal(requests[0].content, "<p>Edited draft</p>");
+    assert.match(container.textContent, /Proposal/);
+    assert.doesNotMatch(container.textContent, /Edited draft/);
     assert.equal(editor.setContentCalls.length, 0);
   });
 });
