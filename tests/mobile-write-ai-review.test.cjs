@@ -329,6 +329,50 @@ test("mobile Write with AI renders the complete existing-draft chip strip", asyn
   });
 });
 
+test("mobile Write with AI keeps the keyboard target and chip strip in place while rewriting", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom }) => {
+    let resolveResponse;
+    global.fetch = () =>
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
+
+    const prompt = container.querySelector("input");
+    const strip = container.querySelector(".overflow-x-auto");
+    const chip = buttonWithText(container, "Improve readability");
+    prompt.focus();
+
+    let pointerDownAccepted;
+    await act(async () => {
+      pointerDownAccepted = chip.dispatchEvent(
+        new dom.window.MouseEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    assert.equal(pointerDownAccepted, false);
+
+    await click(dom, chip);
+
+    assert.strictEqual(container.querySelector("input"), prompt);
+    assert.strictEqual(container.querySelector(".overflow-x-auto"), strip);
+    assert.equal(document.activeElement, prompt);
+    assert.equal(chip.disabled, true);
+    assert.match(container.textContent, /Rewriting draft/);
+    await setInput(dom, prompt, "Next instruction");
+
+    await act(async () => {
+      resolveResponse({
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Clearer draft</p>" }),
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    assert.equal(prompt.value, "Next instruction");
+  });
+});
+
 test("mobile Write with AI does not replace newer typing with an older render", () => {
   const completeInput = "<p>Starting draft. Keyboard works.</p>";
   const staleRender = "<p>Starting draft. Keybod woks.</p>";
