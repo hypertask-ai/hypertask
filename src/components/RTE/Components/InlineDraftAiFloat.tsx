@@ -82,7 +82,6 @@ interface LastAction {
 }
 
 interface MobileOpeningSource {
-  html: string;
   snapshot: InlineDraftAiSourceSnapshot;
 }
 
@@ -307,7 +306,6 @@ const InlineDraftAiFloat = ({
       const openingHtml = selectedHtml(editor, initial);
       dispatchMobileReview({ type: "reset" });
       setMobileOpeningSource({
-        html: openingHtml,
         snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, initial),
       });
       setMobileSourceDraft(openingHtml);
