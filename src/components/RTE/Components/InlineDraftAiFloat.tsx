@@ -110,18 +110,48 @@ function stripEditablePlaceholderMetadata(root: ParentNode) {
   });
 }
 
-// Empty paragraphs are browser placeholders; media-only drafts still count as content.
-function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
-  const hasText = Boolean(event.currentTarget.textContent?.trim());
-  const hasMedia = Boolean(
-    event.currentTarget.querySelector(
-      "img, video, audio, iframe, table, [data-type]",
-    ),
-  );
-  if (!hasText && !hasMedia) return "";
+const EMPTY_EDITABLE_CONTAINER_TAGS = new Set([
+  "A",
+  "BLOCKQUOTE",
+  "BR",
+  "CODE",
+  "DIV",
+  "EM",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "LI",
+  "OL",
+  "P",
+  "PRE",
+  "S",
+  "SPAN",
+  "STRONG",
+  "U",
+  "UL",
+]);
 
+function hasMeaningfulEditableContent(node: Node): boolean {
+  if (node.nodeType === 3) return Boolean(node.textContent?.trim());
+  if (node.nodeType !== 1) return false;
+  const element = node as Element;
+  if (
+    element.hasAttribute("data-type") ||
+    !EMPTY_EDITABLE_CONTAINER_TAGS.has(element.tagName)
+  ) {
+    return true;
+  }
+  return Array.from(element.childNodes).some(hasMeaningfulEditableContent);
+}
+
+// Empty structural wrappers are browser placeholders; rich-text atoms still count.
+function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
   const clone = event.currentTarget.cloneNode(true) as HTMLDivElement;
   stripEditablePlaceholderMetadata(clone);
+  if (!Array.from(clone.childNodes).some(hasMeaningfulEditableContent)) return "";
   return sanitizeAiHtml(clone.innerHTML);
 }
 

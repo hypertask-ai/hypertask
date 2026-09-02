@@ -261,6 +261,27 @@ test("mobile Write with AI keeps an edited existing draft as the rewrite source"
   });
 });
 
+test("mobile Write with AI preserves atomic rich-text draft content", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom }) => {
+    const requests = [];
+    global.fetch = async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Proposal</p>" }),
+      };
+    };
+
+    await setEditableHtml(
+      container.querySelector('[contenteditable="true"]'),
+      "<hr>",
+    );
+    await click(dom, buttonWithText(container, "Simplify"));
+
+    assert.equal(requests[0].content, "<hr>");
+  });
+});
+
 test("mobile Write with AI accepts edits made directly to the isolated proposal", async () => {
   await withRenderedSheet("Original draft", async ({ container, dom, editor, getCloseCalls }) => {
     global.fetch = async () => ({
