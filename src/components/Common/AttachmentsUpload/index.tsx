@@ -417,9 +417,17 @@ const AttachmentsUpload = (props: IProps) => {
               type="button"
               aria-label="Done editing"
               disabled={mobileEditSaving}
-              onClick={(event) => {
+              onClick={async (event) => {
                 event.stopPropagation();
-                void sendOnClick?.();
+                try {
+                  const result = await sendOnClick?.();
+                  if (result === false) {
+                    toast.error("Could not save. Your changes are still here.");
+                  }
+                } catch (error) {
+                  console.error("Could not save editor content", error);
+                  toast.error("Could not save. Your changes are still here.");
+                }
               }}
               className="ml-auto flex min-h-11 shrink-0 items-center gap-1.5 rounded-[4px] bg-white-black px-3 text-meta font-bold text-white-black-inverted hover:opacity-90 disabled:opacity-40"
             >

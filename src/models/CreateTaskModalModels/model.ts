@@ -107,4 +107,6 @@ export type TDefaultEditFocus={
     aiPrompt?:string;
 }
 export type TSendBackButtonParam = "Save" | "SaveAndClose" | "SaveAndNew"
-export type TSendBackAttachmentButton = (sendBackType?:TSendBackButtonParam)=>void
+export type TSendBackAttachmentButton = (
+  sendBackType?: TSendBackButtonParam,
+) => void | boolean | Promise<unknown>
