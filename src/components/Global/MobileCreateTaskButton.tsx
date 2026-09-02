@@ -37,15 +37,7 @@ const MobileCreateTaskButton = ({
         ariaLabel="Create task"
         bottomOffset={bottomOffset}
         icon={<Plus size={20} strokeWidth={1.75} aria-hidden="true" />}
-        onClick={() =>
-          setCreateTaskModal({
-            show: true,
-            defaultEditFocus: {
-              defaultEditMode: "Description-ai",
-              defaultFocus: "Description",
-            },
-          })
-        }
+        onClick={() => setCreateTaskModal({ show: true })}
       />
     </>
   );
