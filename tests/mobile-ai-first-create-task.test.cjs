@@ -39,7 +39,8 @@ const { MOBILE_AI_TASK_WRITER_FOCUS } = jiti(
 );
 
 test("mobile plus opens the create modal in AI task-writer mode", () => {
-  assert.match(mobileButton, /defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS/);
+  assert.match(mobileButton, /defaultEditMode: "Description-ai"/);
+  assert.match(mobileButton, /defaultFocus: "Description"/);
   assert.deepEqual(MOBILE_AI_TASK_WRITER_FOCUS, {
     defaultEditMode: "Description-ai",
     defaultFocus: "Description",

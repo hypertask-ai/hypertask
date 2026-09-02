@@ -3,7 +3,6 @@
 import { Plus, Sparkles } from "lucide-react";
 import { useSetRecoilState } from "@/lib/state";
 import { showCreateTaskModalAtom } from "@/store";
-import { MOBILE_AI_TASK_WRITER_FOCUS } from "@/models/CreateTaskModalModels/model";
 import { useGlobalUIState } from "../ProviderGlobal/useGlobalUIState";
 import MobileFloatingActionButton from "./MobileFloatingActionButton";
 
@@ -41,7 +40,10 @@ const MobileCreateTaskButton = ({
         onClick={() =>
           setCreateTaskModal({
             show: true,
-            defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS,
+            defaultEditFocus: {
+              defaultEditMode: "Description-ai",
+              defaultFocus: "Description",
+            },
           })
         }
       />
