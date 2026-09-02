@@ -14,6 +14,10 @@ const jiti = createJiti(__filename, {
 });
 
 const mobileButton = read("src/components/Global/MobileCreateTaskButton.tsx");
+const boardSections = read("src/hooks/Homepage/useSections.ts");
+const boardNewTaskButton = read(
+  "src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx",
+);
 const createTaskModal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
 const writerContainer = read(
   "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx",
@@ -37,6 +41,21 @@ const { extractTaskProperties } = jiti(
 test("mobile plus opens the create modal in AI task-writer mode", () => {
   assert.match(mobileButton, /defaultEditMode: "Description-ai"/);
   assert.match(mobileButton, /defaultFocus: "Description"/);
+});
+
+test("mobile board section plus and C shortcut default to the AI task writer", () => {
+  assert.match(
+    boardNewTaskButton,
+    /onClick=\{\(\)=>createTaskAt\("top", sectionPayload\)\}/,
+  );
+  assert.match(
+    boardSections,
+    /defaultEditFocus \?\? \(isMbl[\s\S]*?defaultEditMode: "Description-ai",[\s\S]*?defaultFocus: "Description",/,
+  );
+  assert.match(
+    boardSections,
+    /\/\/ \[c\] for creating task[\s\S]*?createTaskAt\("top", \{[\s\S]*?sectionId: sectionId,[\s\S]*?sectionTitle: title,/,
+  );
 });
 
 test("mobile create uses the shared writer and applies its response before save", () => {

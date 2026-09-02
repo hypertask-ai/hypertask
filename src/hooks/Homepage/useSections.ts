@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useCallback, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
 
 import axios from "axios";
 import { activeItemAtom, currentProjectAtom } from "@/store";
@@ -16,6 +16,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -76,6 +77,7 @@ const useSections = ({
   const [showAddItem, setShowAddItem] = useState(false);
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
+  const isMbl = useContext(MobileViewContext);
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -96,7 +98,15 @@ const useSections = ({
       // setShowAddItem(true);
       // setPosition("top");
       // topInputRef.current?.focus();
-      toggleCreateTaskGlobally(sectionPayload, defaultEditFocus)
+      toggleCreateTaskGlobally(
+        sectionPayload,
+        defaultEditFocus ?? (isMbl
+          ? {
+              defaultEditMode: "Description-ai",
+              defaultFocus: "Description",
+            }
+          : undefined),
+      )
     // }
     //  else {
     //   setShowAddItem(true);
