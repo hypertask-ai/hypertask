@@ -274,7 +274,7 @@ test("mobile classic properties appear before the description and include start 
   }
   assert.match(properties, /<AssigneesContainerCreateTaskGlobally[\s\S]*?compact/);
   assert.match(assignees, /compact[\s\S]*?Assignee:/);
-  assert.match(properties, /Filled in by the AI task writer/);
+  assert.doesNotMatch(properties, /Filled in by the AI task writer/);
   assert.match(properties, /mode="Create"/);
   assert.match(properties, /<StartDateModal/);
   assert.doesNotMatch(properties, /min-h-11 rounded-sm bg-cardBackground/);

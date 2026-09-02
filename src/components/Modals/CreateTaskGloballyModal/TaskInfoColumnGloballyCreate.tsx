@@ -31,7 +31,7 @@ export const MobileCreateTaskProperties = () => {
     } = useContextCreateTaskInfoColumn()
     const {
         formValues, handleChange, allProjects, handleProjectChange,
-        showAssignModal, setShowAssignModal, setEditMode, taskWriterFilled,
+        showAssignModal, setShowAssignModal, setEditMode,
     } = useContextCreateTaskModal()
 
     const callbackForMoveModal = (section: ISection) => {
@@ -122,11 +122,6 @@ export const MobileCreateTaskProperties = () => {
                     </button>
                 ))}
             </div>
-            {taskWriterFilled && (
-                <p className="px-2 pb-2 text-content text-hypertasks-ai-purple">
-                    ✦ Filled in by the AI task writer · edit anything before saving
-                </p>
-            )}
             {showTagsModal && <CreateLabel previouslyAddedFilters={formValues.tags ?? []} mode="CreateTaskGlobally" closeHandlerForCreateNewTask={labelsHandler} currentProject={formValues.currentProject} />}
             {showSizeModal && <TaskEstimateModal mode="TaskModalGlobally" closeHandler={estimateHandler} />}
             {formValues.currentProject && showMoveModal && <MoveToColumn mode="CreatingTask" callback={callbackForMoveModal} projectId={formValues.currentProject.id} moveTaskToColumnHandler={toggleMoveModal} />}
