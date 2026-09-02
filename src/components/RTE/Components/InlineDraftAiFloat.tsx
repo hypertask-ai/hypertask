@@ -55,6 +55,8 @@ import {
 } from "./inlineDraftAi";
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
 
+const INTERNAL_EDITOR_DRAG_TYPE = "application/x-htpr-editor-drag";
+
 const CHIP_LINK_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 text-text-light-gray hover:bg-hover-active hover:text-white-black focus-visible:outline-none focus-visible:bg-hypertasks-ai-purple focus-visible:font-semibold focus-visible:text-white disabled:opacity-50";
 const CHIP_DONE_CLASS =
@@ -115,11 +117,48 @@ function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
   return hasText || hasMedia ? html : "";
 }
 
+function placeCaretAtDropPoint(event: ReactDragEvent<HTMLDivElement>) {
+  const documentWithCaret = event.currentTarget.ownerDocument as Document & {
+    caretPositionFromPoint?: (
+      x: number,
+      y: number,
+    ) => { offsetNode: Node; offset: number } | null;
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+  };
+  const range = documentWithCaret.caretRangeFromPoint
+    ? documentWithCaret.caretRangeFromPoint(event.clientX, event.clientY)
+    : (() => {
+        const position = documentWithCaret.caretPositionFromPoint?.(
+          event.clientX,
+          event.clientY,
+        );
+        if (!position) return null;
+        const nextRange = documentWithCaret.createRange();
+        nextRange.setStart(position.offsetNode, position.offset);
+        nextRange.collapse(true);
+        return nextRange;
+      })();
+  const selection = documentWithCaret.getSelection();
+  if (!range || !selection) return;
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function markInternalEditorDrag(event: ReactDragEvent<HTMLDivElement>) {
+  event.dataTransfer.setData(INTERNAL_EDITOR_DRAG_TYPE, "true");
+}
+
 function insertSanitizedEditableTransfer(
   event:
     | ReactClipboardEvent<HTMLDivElement>
     | ReactDragEvent<HTMLDivElement>,
 ) {
+  if (
+    "dataTransfer" in event &&
+    event.dataTransfer.getData(INTERNAL_EDITOR_DRAG_TYPE) === "true"
+  ) {
+    return;
+  }
   const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
   const html = sanitizeAiHtml(transfer.getData("text/html"));
   const text = transfer.getData("text/plain");
@@ -127,6 +166,7 @@ function insertSanitizedEditableTransfer(
 
   // Prevent the browser from inserting unsanitized clipboard/drop markup into the live editor.
   event.preventDefault();
+  if ("dataTransfer" in event) placeCaretAtDropPoint(event);
   if (html) {
     document.execCommand("insertHTML", false, html);
   } else {
@@ -940,6 +980,7 @@ const InlineDraftAiFloat = ({
                     contentEditable={!mobileReview.showOriginal}
                     suppressContentEditableWarning
                     onBlur={handleMobileEditableBlur}
+                    onDragStart={markInternalEditorDrag}
                     onDrop={insertSanitizedEditableTransfer}
                     onPaste={insertSanitizedEditableTransfer}
                     onInput={
@@ -1007,6 +1048,7 @@ const InlineDraftAiFloat = ({
                     contentEditable={!isLoading}
                     suppressContentEditableWarning
                     onBlur={handleMobileEditableBlur}
+                    onDragStart={markInternalEditorDrag}
                     onDrop={insertSanitizedEditableTransfer}
                     onPaste={insertSanitizedEditableTransfer}
                     onInput={

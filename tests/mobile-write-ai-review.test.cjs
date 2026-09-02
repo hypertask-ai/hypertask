@@ -153,6 +153,7 @@ async function setInput(_dom, input, value) {
 }
 
 async function setEditableHtml(element, html) {
+  assert.ok(element);
   const propsKey = Object.keys(element).find((key) =>
     key.startsWith("__reactProps$"),
   );
