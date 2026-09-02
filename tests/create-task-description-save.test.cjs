@@ -36,6 +36,11 @@ test("a missing or stale generated title is refreshed from the save-time descrip
   );
   assert.match(titleSource, /Generating title from description…/);
   assert.match(titleSource, /role="alert"/);
+  assert.match(
+    stateSource,
+    /autoTitleCoordinator\.manualTitleChanged\(String\(value\)\)/,
+    "an empty title field must restore description title generation",
+  );
 });
 
 test("global task creation processes the save-time description override", () => {

@@ -98,10 +98,11 @@ export function createAutoTitleGenerationCoordinator(
       return runGeneration(generationRevision, run);
     },
 
-    manualTitleChanged() {
+    manualTitleChanged(title: string) {
       invalidate();
-      enabled = false;
-      ownership = "manual";
+      const hasTitle = Boolean(title.trim());
+      enabled = !hasTitle;
+      ownership = hasTitle ? "manual" : "empty";
       descriptionDirty = false;
     },
 

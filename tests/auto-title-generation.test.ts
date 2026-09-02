@@ -112,7 +112,7 @@ test("manual title input cancels an in-flight response until Task Writer re-enab
     apply: (title) => applied.push(title),
   });
   timers.runNext();
-  coordinator.manualTitleChanged();
+  coordinator.manualTitleChanged("Manual title");
   assert.equal(firstSignal?.aborted, true);
   first.resolve("Stale title");
   await flushPromises();
@@ -127,6 +127,28 @@ test("manual title input cancels an in-flight response until Task Writer re-enab
   timers.runNext();
   await flushPromises();
   assert.deepEqual(applied, ["Fresh title"]);
+});
+
+test("clearing a manual title restores description title generation", async () => {
+  const timers = fakeTimers();
+  const applied: string[] = [];
+  const coordinator = createAutoTitleGenerationCoordinator({
+    initialTitle: "Template title",
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+  });
+
+  coordinator.manualTitleChanged("");
+  coordinator.schedule("updated description", {
+    generate: async () => "Updated title",
+    apply: (title) => applied.push(title),
+  });
+
+  assert.equal(coordinator.isEnabled(), true);
+  assert.equal(timers.size, 1);
+  timers.runNext();
+  await flushPromises();
+  assert.deepEqual(applied, ["Updated title"]);
 });
 
 test("save cancels background work and returns the newest generated title directly", async () => {
@@ -193,7 +215,7 @@ test("a manual title during save ends automatic generation", async () => {
     generate: () => saving.promise,
   });
 
-  coordinator.manualTitleChanged();
+  coordinator.manualTitleChanged("Manual title");
   saving.resolve("Stale generated title");
 
   assert.equal(await saveResult, null);
@@ -216,7 +238,7 @@ test("board changes clear generated titles but preserve manual title ownership",
   );
   assert.equal(coordinator.boardChanged(), true);
 
-  coordinator.manualTitleChanged();
+  coordinator.manualTitleChanged("Manual title");
   assert.equal(coordinator.boardChanged(), false);
   assert.equal(coordinator.isEnabled(), false);
 });
@@ -257,7 +279,7 @@ test("current request failures propagate while superseded failures are ignored",
   const oldResult = coordinator.generateNow("old", {
     generate: () => superseded.promise,
   });
-  coordinator.manualTitleChanged();
+  coordinator.manualTitleChanged("Manual title");
   superseded.reject(failure);
   assert.equal(await oldResult, null);
 
