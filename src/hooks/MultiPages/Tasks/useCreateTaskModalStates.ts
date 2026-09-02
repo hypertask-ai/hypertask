@@ -48,6 +48,7 @@ import {
 } from "@/lib/ai/boardMemoryClient";
 import { createDictationCoordinator } from "@/lib/dictationCoordinator";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
+import { normalizeCreateTaskFormDate } from "@/lib/createTaskFormDate";
 import {
   beginTaskCreatePerformanceTrace,
   type TaskCreateTraceScope,
@@ -191,7 +192,9 @@ const useCreateTaskModalGlobalStates = () => {
         createTaskModal.duplicate?.priority ??
         createTaskModal.column_payload?.priority,
       estimate: createTaskModal.duplicate?.estimate ?? undefined,
-      dueDate: createTaskModal.column_payload?.prefilledDueDate ?? undefined,
+      dueDate: normalizeCreateTaskFormDate(
+        createTaskModal.column_payload?.prefilledDueDate,
+      ),
       startDate: undefined,
       tags:
         createTaskModal.duplicate?.taskLabels.map(
@@ -254,8 +257,14 @@ const useCreateTaskModalGlobalStates = () => {
       autoTitleCoordinator.manualTitleChanged();
       if (String(value).trim()) setTitleGenerationError(null);
     }
-    formValuesRef.current = { ...formValuesRef.current, [key]: value };
-    setFormValues((prev) => ({ ...prev, [key]: value }));
+    let nextValue = value;
+    if (key === "dueDate" || key === "startDate") {
+      const normalizedValue = normalizeCreateTaskFormDate(value);
+      if (value !== null && value !== undefined && !normalizedValue) return;
+      nextValue = normalizedValue;
+    }
+    formValuesRef.current = { ...formValuesRef.current, [key]: nextValue };
+    setFormValues((prev) => ({ ...prev, [key]: nextValue }));
   };
 
   const appendDictationToTitle = useCallback((transcript: string) => {
