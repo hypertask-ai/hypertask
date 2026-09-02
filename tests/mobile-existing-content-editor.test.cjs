@@ -183,7 +183,9 @@ test("late dictation, AI, and upload completion cannot mutate a closed edit", ()
 });
 
 test("description and comment failures leave edit mode open", () => {
-  assert.match(commentsContainer, /!isStacked && editState !== i && comment\.attachments/);
+  assert.match(commentsContainer, /!isStacked && comment\.attachments/);
+  assert.match(commentsContainer, /comment\.attachments && editState !== i/);
+  assert.match(actions, /aria-label="More edit actions"[\s\S]*?shadow-md/);
   assert.match(save, /response\.status === 200[\s\S]*?Could not save description\. Your changes are still here/);
   assert.match(save, /Could not prepare description\. Your changes are still here/);
   assert.match(save, /if \(!comment\)[\s\S]*?This comment no longer exists/);

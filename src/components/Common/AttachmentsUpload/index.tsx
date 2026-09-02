@@ -386,7 +386,7 @@ const AttachmentsUpload = (props: IProps) => {
               <div
                 role="menu"
                 aria-label="More edit actions"
-                className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] w-[240px] overflow-hidden rounded-[4px] bg-modalBackground p-1.5 text-content text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]"
+                className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] w-[240px] overflow-hidden rounded-[4px] bg-modalBackground p-1.5 text-content text-white-black shadow-md"
                 onClickCapture={closeMobileCommentActions}
               >
                 <button

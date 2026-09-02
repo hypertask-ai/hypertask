@@ -196,7 +196,7 @@ const CommentsContainer = () => {
                 {!isStacked && <CommentReadReceipts />}
               </CommentBodyDesktop>
 
-              {!isStacked && editState !== i && comment.attachments && (
+              {!isStacked && comment.attachments && (
                 <AttachmentView
                   active={
                     currentId === `comment-${i}` ||
