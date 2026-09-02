@@ -566,7 +566,7 @@ const InlineDraftAiFloat = ({
 
   const hasSelection = scope.to > scope.from;
   const showEditChips =
-    (isMobileAiSheet && hasMobileDraft) ||
+    (isMobileAiSheet && Boolean(mobileSourceDraft)) ||
     shouldShowInlineDraftAiChips(hasSelection, prompt);
   const dictationActive = isRecording || audioProcessing;
   let mobileDictationPresentation: "prominent" | "compact" | undefined;
@@ -1264,7 +1264,7 @@ const InlineDraftAiFloat = ({
                   </div>
                 ) : (
                   <>
-                    {hasMobileDraft && !mobileReview.isRefining ? (
+                    {Boolean(mobileSourceDraft) && !mobileReview.isRefining ? (
                       <div className="scrollbar-none mt-2 flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 overflow-x-auto">
                         {MOBILE_EDIT_ACTIONS.map(
                           ([label, command, instruction]) => (

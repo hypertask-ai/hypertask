@@ -358,6 +358,16 @@ test("mobile Write with AI keeps an edited existing draft as the rewrite source"
   });
 });
 
+test("mobile Write with AI keeps an empty edited draft open without inert chips", async () => {
+  await withRenderedSheet("Original draft", async ({ container }) => {
+    await setEditableHtml(container.querySelector('[contenteditable="true"]'), "");
+
+    assert.ok(container.querySelector('[contenteditable="true"]'));
+    assert.match(container.textContent, /Your draft · tap to edit/i);
+    assert.equal(container.querySelector(".overflow-x-auto"), null);
+  });
+});
+
 test("mobile Write with AI preserves atomic rich-text draft content", async () => {
   await withRenderedSheet("Original draft", async ({ container, dom }) => {
     const requests = [];
