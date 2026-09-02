@@ -55,8 +55,6 @@ import {
 } from "./inlineDraftAi";
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
 
-const INTERNAL_EDITOR_DRAG_TYPE = "application/x-htpr-editor-drag";
-
 const CHIP_LINK_CLASS =
   "text-meta whitespace-nowrap rounded-sm px-1.5 py-0.5 text-text-light-gray hover:bg-hover-active hover:text-white-black focus-visible:outline-none focus-visible:bg-hypertasks-ai-purple focus-visible:font-semibold focus-visible:text-white disabled:opacity-50";
 const CHIP_DONE_CLASS =
@@ -144,21 +142,11 @@ function placeCaretAtDropPoint(event: ReactDragEvent<HTMLDivElement>) {
   selection.addRange(range);
 }
 
-function markInternalEditorDrag(event: ReactDragEvent<HTMLDivElement>) {
-  event.dataTransfer.setData(INTERNAL_EDITOR_DRAG_TYPE, "true");
-}
-
 function insertSanitizedEditableTransfer(
   event:
     | ReactClipboardEvent<HTMLDivElement>
     | ReactDragEvent<HTMLDivElement>,
 ) {
-  if (
-    "dataTransfer" in event &&
-    event.dataTransfer.getData(INTERNAL_EDITOR_DRAG_TYPE) === "true"
-  ) {
-    return;
-  }
   const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
   const html = sanitizeAiHtml(transfer.getData("text/html"));
   const text = transfer.getData("text/plain");
@@ -220,6 +208,7 @@ const InlineDraftAiFloat = ({
   const promptRef = useRef(prompt);
   const mobilePromptInputRef = useRef<HTMLInputElement>(null);
   const mobileEditableSurfaceRef = useRef<HTMLDivElement>(null);
+  const mobileInternalDragRef = useRef(false);
   const mobileSourceDraftRef = useRef("");
   const mobileProposalDraftRef = useRef("");
   const mobileSourceRevisionRef = useRef(0);
@@ -488,6 +477,22 @@ const InlineDraftAiFloat = ({
   ]);
 
   if (!editor || !scope) return null;
+
+  const handleMobileEditableDragStart = () => {
+    mobileInternalDragRef.current = true;
+  };
+  const handleMobileEditableDragEnd = () => {
+    mobileInternalDragRef.current = false;
+  };
+  const handleMobileEditableDrop = (
+    event: ReactDragEvent<HTMLDivElement>,
+  ) => {
+    if (mobileInternalDragRef.current) {
+      mobileInternalDragRef.current = false;
+      return;
+    }
+    insertSanitizedEditableTransfer(event);
+  };
 
   const hasOpeningDraft = Boolean(mobileSourceDraft);
   const hasSelection = scope.to > scope.from;
@@ -980,8 +985,9 @@ const InlineDraftAiFloat = ({
                     contentEditable={!mobileReview.showOriginal}
                     suppressContentEditableWarning
                     onBlur={handleMobileEditableBlur}
-                    onDragStart={markInternalEditorDrag}
-                    onDrop={insertSanitizedEditableTransfer}
+                    onDragStart={handleMobileEditableDragStart}
+                    onDragEnd={handleMobileEditableDragEnd}
+                    onDrop={handleMobileEditableDrop}
                     onPaste={insertSanitizedEditableTransfer}
                     onInput={
                       mobileReview.showOriginal
@@ -1048,8 +1054,9 @@ const InlineDraftAiFloat = ({
                     contentEditable={!isLoading}
                     suppressContentEditableWarning
                     onBlur={handleMobileEditableBlur}
-                    onDragStart={markInternalEditorDrag}
-                    onDrop={insertSanitizedEditableTransfer}
+                    onDragStart={handleMobileEditableDragStart}
+                    onDragEnd={handleMobileEditableDragEnd}
+                    onDrop={handleMobileEditableDrop}
                     onPaste={insertSanitizedEditableTransfer}
                     onInput={
                       mobileReview.isRefining
