@@ -8,12 +8,14 @@ import SubTaskLink from './SubtaskLink';
 import BaseTitleContainer from './BaseTitleContainer';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
+import MobileTaskDueDate from "./MobileTaskDueDate";
 
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
+  toggleDueDate: () => void;
 }
 
-const TaskDetailTitleContainer = ({ containerRef }: TaskDetailTitleContainerProps) => {
+const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTitleContainerProps) => {
   const { currentTask, parsedTask } = useTaskContext();
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -57,6 +59,12 @@ const TaskDetailTitleContainer = ({ containerRef }: TaskDetailTitleContainerProp
             <TaskSummary taskSummary={currentTask.Task_Summary[0].content} />
           )
         )}
+
+        <MobileTaskDueDate
+          dueDate={currentTask?.dueDate}
+          isMobile={_mbl}
+          onClick={toggleDueDate}
+        />
 
         {/* --------------------------- PARENT TASK INFO ------------------------------ */}
         {
