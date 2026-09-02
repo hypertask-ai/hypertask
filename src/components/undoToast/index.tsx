@@ -58,20 +58,19 @@ export const UndoToastContent = ({
     } as const;
     return (
       <div
-        className="flex max-w-[150px] flex-col items-start gap-1.5 rounded-md bg-modalBackground px-3.5 py-2.5 shadow-lg"
+        className="relative flex max-w-[110px] flex-col items-start gap-1 rounded-md bg-modalBackground px-2 py-1 shadow-lg"
         style={slide}
       >
-        <div className="flex w-full items-start gap-1.5">
-          <span className="min-w-0 flex-1 text-[13px] leading-snug text-white-black">
+        <div className="w-full pr-6">
+          <span className="block min-w-0 text-[12px] leading-tight text-white-black">
             {toastText}
           </span>
           <button
             type="button"
             aria-label="Dismiss"
-            // 44px touch target per the glyph-only rule (HTPR-5098); the
-            // negative margins keep the oversized target from growing the
-            // pill beyond its wireframe footprint.
-            className={`${MOBILE_TARGET} -my-3 cursor-pointer rounded text-[13px] font-bold leading-none text-text-light-gray`}
+            // Keep the required 44px target outside the layout so it does not
+            // add empty space to the visible pill.
+            className={`${MOBILE_TARGET} absolute -right-3 -top-3 cursor-pointer rounded text-[12px] font-bold leading-none text-text-light-gray`}
             onClick={() => toast.dismiss(t.id)}
           >
             X
@@ -80,7 +79,7 @@ export const UndoToastContent = ({
         <button
           type="button"
           aria-label="Undo"
-          className="text-[13px] font-semibold leading-none text-hypertasks-header-blue"
+          className="text-[12px] font-semibold leading-none text-hypertasks-header-blue"
           onClick={() => onUndo(t.id)}
         >
           Undo
