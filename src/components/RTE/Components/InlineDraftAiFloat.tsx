@@ -260,6 +260,7 @@ const InlineDraftAiFloat = ({
     useState<MobileOpeningSource | null>(null);
   const [mobileSourceDraft, setMobileSourceDraft] = useState("");
   const [hasMobileDraft, setHasMobileDraft] = useState(false);
+  const [hasMobileGeneratedDraft, setHasMobileGeneratedDraft] = useState(false);
   const [mobileReview, dispatchMobileReview] = useReducer(
     inlineDraftAiReviewReducer,
     initialInlineDraftAiReviewState,
@@ -379,6 +380,7 @@ const InlineDraftAiFloat = ({
       });
       setMobileSourceDraft(openingHtml);
       setHasMobileDraft(Boolean(openingHtml));
+      setHasMobileGeneratedDraft(false);
       mobileSourceDraftRef.current = openingHtml;
       mobileProposalDraftRef.current = "";
       mobileSourceRevisionRef.current = 0;
@@ -809,6 +811,7 @@ const InlineDraftAiFloat = ({
         mobileSourceDraftRef.current = html;
         setMobileSourceDraft(html);
         setHasMobileDraft(true);
+        setHasMobileGeneratedDraft(true);
         mobileSourceRevisionRef.current += 1;
         dispatchMobileReview({ type: "reset" });
         toast.success("Draft updated", { id: toastId });
@@ -1269,6 +1272,19 @@ const InlineDraftAiFloat = ({
                       }
                     />
                   </div>
+                ) : null}
+
+                {hasMobileGeneratedDraft &&
+                Boolean(mobileSourceDraft) &&
+                mobileReview.phase !== "loading" &&
+                !mobileReview.isRefining ? (
+                  <button
+                    type="button"
+                    onClick={close}
+                    className="mt-3 min-h-11 w-full shrink-0 rounded-sm bg-shadcn-primary px-3 text-content font-semibold text-primary-foreground"
+                  >
+                    Use this text
+                  </button>
                 ) : null}
 
                 {mobileReview.phase === "loading" ? (
