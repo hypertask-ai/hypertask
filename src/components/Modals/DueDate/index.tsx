@@ -34,9 +34,15 @@ type TMode= "Create" | "Update"
 
 export const resolveDueDateForModal = (
   mode: TMode,
-  dueDate: Date | undefined,
-  queriedDueDate: Date | null | undefined,
-): Date | null => mode === "Create" ? dueDate ?? null : dueDate ?? queriedDueDate ?? null
+  dueDate: Date | string | undefined,
+  queriedDueDate: Date | string | null | undefined,
+): Date | null => {
+  const currentDate = mode === "Create" ? dueDate : dueDate ?? queriedDueDate
+  if (typeof currentDate !== "string") return currentDate ?? null
+
+  const parsedDate = new Date(currentDate)
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate
+}
 
 interface Props {
   closeHandler: (callback: Date|null, reset?:boolean) => void;

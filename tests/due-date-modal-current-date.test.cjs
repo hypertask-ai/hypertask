@@ -44,3 +44,15 @@ test("the due-date modal still falls back to its task query outside task detail"
   );
   assert.equal(resolveDueDateForModal("Create", undefined, queriedDueDate), null);
 });
+
+test("the due-date modal normalizes API date strings", () => {
+  const currentDate = resolveDueDateForModal(
+    "Update",
+    "2026-09-01T09:00:00.000Z",
+    undefined,
+  );
+
+  assert.ok(currentDate instanceof Date);
+  assert.equal(currentDate.toISOString(), "2026-09-01T09:00:00.000Z");
+  assert.equal(resolveDueDateForModal("Update", "not-a-date", undefined), null);
+});
