@@ -102,12 +102,90 @@ function repositoryParts(fullName: unknown) {
     : null;
 }
 
-type PullRequestMoveResult = {
-  moved: boolean;
-  targetReached: boolean;
-  targetSectionId: number | null;
-  actor: IUser | null;
-};
+async function moveTaskForPullRequest(
+  task: WebhookTask,
+  targetSectionName: PullRequestTargetSection,
+): Promise<boolean> {
+  if (!targetSectionName) return false;
+  const section = await prisma.section.findFirst({
+    where: {
+      projectId: task.projectId,
+      deleted: false,
+      section_title: { equals: targetSectionName, mode: "insensitive" },
+    },
+  });
+  if (!section) {
+    console.warn(
+      `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
+    );
+    return false;
+  }
+  if (section.id === task.sectionId) return false;
+
+  const [lastTask, botUser] = await Promise.all([
+    prisma.task.findFirst({
+      where: { sectionId: section.id, status: "Normal" },
+      orderBy: { ranking: "desc" },
+      select: { ranking: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: generalConfig.hyperAiId },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        photoURL: true,
+      },
+    }),
+  ]);
+  if (!botUser) throw new Error("HyperAI user not found");
+
+  const currentUser = {
+    id: botUser.id,
+    email: botUser.email ?? "",
+    displayName: botUser.displayName ?? undefined,
+    photoURL: botUser.photoURL ?? undefined,
+    uid: "",
+    stripe_customer_id: "",
+    joinedAt: new Date(),
+    UserSettingId: "",
+    UserSetting: {} as any,
+  };
+  const moveResult = await updateTaskSingle(
+    {
+      id: task.id,
+      sectionId: section.id,
+      section: section.section_title,
+      ranking: generateRank(lastTask?.ranking, undefined),
+      updatedAt: new Date(),
+    },
+    currentUser,
+    null,
+    {
+      trustedCaller: true,
+      taskMovedActivity: {
+        sendNotification: () =>
+          sendNotificationForTask(
+            generalConfig.hyperAiId,
+            "TaskMoved",
+            task.id,
+            task.projectId,
+            null,
+          ),
+      },
+    },
+  );
+  if (moveResult.status === 409) {
+    // The PR link is already durable. The active writer owns the task's next
+    // section; failing here only produces manual redeliveries and duplicate comments.
+    console.warn(
+      `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
+    );
+    return false;
+  }
+  if (moveResult.status !== 200) throw new Error("Task move failed");
+  return true;
+}
 
 async function githubWebhookActor(): Promise<IUser> {
   const botUser = await prisma.user.findUnique({
@@ -134,117 +212,33 @@ async function githubWebhookActor(): Promise<IUser> {
   };
 }
 
-async function moveTaskForPullRequest(
-  task: WebhookTask,
-  targetSectionName: PullRequestTargetSection,
-): Promise<PullRequestMoveResult> {
-  const notReached = {
-    moved: false,
-    targetReached: false,
-    targetSectionId: null,
-    actor: null,
-  };
-  if (!targetSectionName) return notReached;
-  const section = await prisma.section.findFirst({
-    where: {
-      projectId: task.projectId,
-      deleted: false,
-      section_title: { equals: targetSectionName, mode: "insensitive" },
-    },
-  });
-  if (!section) {
-    console.warn(
-      `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
-    );
-    return notReached;
-  }
-
-  if (section.id === task.sectionId) {
-    return {
-      moved: false,
-      targetReached: true,
-      targetSectionId: section.id,
-      actor: null,
-    };
-  }
-
-  const [lastTask, actor] = await Promise.all([
-    prisma.task.findFirst({
-      where: { sectionId: section.id, status: "Normal" },
-      orderBy: { ranking: "desc" },
-      select: { ranking: true },
-    }),
-    githubWebhookActor(),
-  ]);
-  const moveResult = await updateTaskSingle(
-    {
-      id: task.id,
-      sectionId: section.id,
-      section: section.section_title,
-      ranking: generateRank(lastTask?.ranking, undefined),
-      updatedAt: new Date(),
-    },
-    actor,
-    null,
-    {
-      trustedCaller: true,
-      taskMovedActivity: {
-        sendNotification: () =>
-          sendNotificationForTask(
-            generalConfig.hyperAiId,
-            "TaskMoved",
-            task.id,
-            task.projectId,
-            null,
-          ),
-      },
-    },
-  );
-  if (moveResult.status === 409) {
-    // The PR link is already durable. The active writer owns the task's next
-    // section; failing here only produces manual redeliveries and duplicate comments.
-    console.warn(
-      `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
-    );
-    return { ...notReached, actor };
-  }
-  if (moveResult.status !== 200) throw new Error("Task move failed");
-  return {
-    moved: true,
-    targetReached: true,
-    targetSectionId: section.id,
-    actor,
-  };
-}
-
 async function reconcileMergedPullRequestAssignees(
   task: WebhookTask,
-  moveResult: PullRequestMoveResult,
 ): Promise<boolean> {
-  if (!moveResult.targetReached || moveResult.targetSectionId === null) {
-    return false;
-  }
-
-  const [currentTask, qaSection] = await Promise.all([
-    prisma.task.findUnique({
-      where: { id: task.id },
-      select: { projectId: true, sectionId: true, status: true },
-    }),
-    prisma.section.findUnique({
-      where: { id: moveResult.targetSectionId },
-      select: {
-        projectId: true,
-        deleted: true,
-        section_title: true,
-        autoAssignAgentId: true,
-      },
-    }),
-  ]);
+  const currentTask = await prisma.task.findUnique({
+    where: { id: task.id },
+    select: { projectId: true, sectionId: true, status: true },
+  });
   if (
     !currentTask ||
     currentTask.status !== "Normal" ||
     currentTask.projectId !== task.projectId ||
-    currentTask.sectionId !== moveResult.targetSectionId ||
+    currentTask.sectionId === null
+  ) {
+    return false;
+  }
+
+  const qaSection = await prisma.section.findUnique({
+    where: { id: currentTask.sectionId },
+    select: {
+      id: true,
+      projectId: true,
+      deleted: true,
+      section_title: true,
+      autoAssignAgentId: true,
+    },
+  });
+  if (
     !qaSection ||
     qaSection.deleted ||
     qaSection.projectId !== task.projectId ||
@@ -262,10 +256,10 @@ async function reconcileMergedPullRequestAssignees(
     return false;
   }
 
-  const actor = moveResult.actor ?? (await githubWebhookActor());
+  const actor = await githubWebhookActor();
   const mutationOptions = {
     expectedProjectId: task.projectId,
-    expectedSectionId: moveResult.targetSectionId,
+    expectedSectionId: qaSection.id,
     allowHumanOverride: false,
   };
   const qaAssignment = await assigneesAssign(
@@ -617,20 +611,22 @@ export async function POST(request: NextRequest) {
         } else if (pullRequest.merged) {
           targetSectionName = MERGED_PULL_REQUEST_SECTION;
         }
-        const moveResult = await moveTaskForPullRequest(task, targetSectionName);
-        if (moveResult.moved) moved += 1;
+        if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
         if (pullRequest.merged) {
           assignmentsChanged =
-            (await reconcileMergedPullRequestAssignees(task, moveResult)) ||
+            (await reconcileMergedPullRequestAssignees(task)) ||
             assignmentsChanged;
         }
       }
       if (
-        syncResult.linked > 0 ||
-        syncResult.updated > 0 ||
-        moved > 0 ||
-        assignmentsChanged
+        assignmentsChanged &&
+        syncResult.linked === 0 &&
+        syncResult.updated === 0 &&
+        moved === 0
       ) {
+        await broadcastPullRequestChanges(boardId, syncResult.taskIds);
+      }
+      if (syncResult.linked > 0 || syncResult.updated > 0 || moved > 0) {
         await broadcastPullRequestChanges(boardId, syncResult.taskIds);
       }
       return NextResponse.json({
@@ -739,19 +735,120 @@ export async function POST(request: NextRequest) {
       commented = true;
     }
 
-    const moveResult = await moveTaskForPullRequest(task, targetSectionName);
-    const moved = moveResult.moved;
+    let moved = false;
+    if (targetSectionName) {
+      const section = await prisma.section.findFirst({
+        where: {
+          projectId: task.projectId,
+          deleted: false,
+          section_title: {
+            equals: targetSectionName,
+            mode: "insensitive",
+          },
+        },
+      });
+
+      if (!section) {
+        console.warn(
+          `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
+        );
+      } else if (section.id !== task.sectionId) {
+        const [lastTask, botUser] = await Promise.all([
+          prisma.task.findFirst({
+            where: { sectionId: section.id, status: "Normal" },
+            orderBy: { ranking: "desc" },
+            select: { ranking: true },
+          }),
+          prisma.user.findUnique({
+            where: { id: generalConfig.hyperAiId },
+            select: {
+              id: true,
+              email: true,
+              displayName: true,
+              photoURL: true,
+            },
+          }),
+        ]);
+
+        if (!botUser) {
+          throw new Error("HyperAI user not found");
+        }
+
+        const currentUser = {
+          id: botUser.id,
+          email: botUser.email ?? "",
+          displayName: botUser.displayName ?? undefined,
+          photoURL: botUser.photoURL ?? undefined,
+          uid: "",
+          stripe_customer_id: "",
+          joinedAt: new Date(),
+          UserSettingId: "",
+          UserSetting: {} as any,
+        };
+        const ranking = generateRank(lastTask?.ranking, undefined);
+        const moveResult = await updateTaskSingle(
+          {
+            id: task.id,
+            sectionId: section.id,
+            section: section.section_title,
+            ranking,
+            updatedAt: new Date(),
+          },
+          currentUser,
+          null,
+          {
+            // The signature check above is the gate. currentUser is the
+            // synthetic bot, which is on no board.
+            trustedCaller: true,
+            taskMovedActivity: {
+              sendNotification: () =>
+                sendNotificationForTask(
+                  generalConfig.hyperAiId,
+                  "TaskMoved",
+                  task.id,
+                  task.projectId,
+                  null,
+                ),
+            },
+          },
+        );
+
+        if (moveResult.status === 409) {
+          // The linked PR remains authoritative while the active writer chooses
+          // the task's next section. A failed delivery invites duplicate comments.
+          console.warn(
+            `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
+          );
+        } else if (moveResult.status !== 200) {
+          throw new Error("Task move failed");
+        } else {
+          moved = true;
+        }
+
+        try {
+          await broadcastBoardChange(task.projectId, {
+            originUserId: generalConfig.hyperAiId,
+          });
+        } catch (error) {
+          console.warn(
+            `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
+            error,
+          );
+        }
+      }
+    }
+
     const assignmentsChanged = pullRequest.merged
-      ? await reconcileMergedPullRequestAssignees(task, moveResult)
+      ? await reconcileMergedPullRequestAssignees(task)
       : false;
-    if (moved || assignmentsChanged) {
+    if (assignmentsChanged && !moved) {
       try {
         await broadcastBoardChange(task.projectId, {
           originUserId: generalConfig.hyperAiId,
         });
       } catch (error) {
         console.warn(
-          `[GitHub webhook] Task ${task.id} changed, but a follow-up side effect failed.`,
+          `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
           error,
         );
       }
