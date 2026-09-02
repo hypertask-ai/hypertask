@@ -130,6 +130,7 @@ test("mobile task detail exposes its existing due date exactly once", async () =
     assert.match(button.textContent, /Sep 02/);
     assert.ok(button.classList.contains("min-h-[44px]"));
     assert.ok(button.classList.contains("min-w-[44px]"));
+    assert.ok(button.querySelector(".label-pill").classList.contains("text-meta"));
 
     await React.act(async () => button.click());
     assert.equal(clickCount, 1);

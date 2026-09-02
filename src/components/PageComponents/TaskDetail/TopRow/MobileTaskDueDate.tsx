@@ -26,8 +26,8 @@ const MobileTaskDueDate = ({
         <DueDateLabel
           dueDate={dueDate}
           flexBasis={false}
-          fontSize={12}
           fontWeight={500}
+          className="text-meta"
           isTaskInfo={true}
         />
       </button>
