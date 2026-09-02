@@ -9,6 +9,10 @@ import {
 } from "./getAllIncludes";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { attachWaitingOnUsers } from "@/utils/controllers/tasks/attachWaitingOnUsers";
+import {
+  attachOpenBlockingTasks,
+  type TaskWithBlockingRelations,
+} from "@/utils/controllers/tasks/attachOpenBlockingTasks";
 
 /**
  * Tasks/views for one board in the BoardTasksPayload client contract. The
@@ -53,7 +57,10 @@ const getBoardTasks = async (
         },
       },
     });
-    const tasksWithWaitingOnUsers = await attachWaitingOnUsers(tasks);
+    const tasksWithOpenBlockers = await attachOpenBlockingTasks(
+      tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
+    );
+    const tasksWithWaitingOnUsers = await attachWaitingOnUsers(tasksWithOpenBlockers);
 
     const sanitizedProject = sanitizeProjectBoardFilters(project);
     const { allViews = [], ...projectView } =

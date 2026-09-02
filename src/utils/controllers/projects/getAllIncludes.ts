@@ -349,6 +349,29 @@ export const getBoardTaskInclude = (
         },
       },
     },
+    {
+      relatedFromTasks: {
+        where: {
+          relationType: "BlockedBy",
+          targetTask: {
+            project: { is: getProjectWhere(options.userId) },
+          },
+        },
+        select: {
+          targetTask: {
+            select: {
+              id: true,
+              projectId: true,
+              uniqueIndex: true,
+              ticketNumber: true,
+              title: true,
+              status: true,
+              section: true,
+            },
+          },
+        },
+      },
+    },
     layers.priorityEstimate,
     layers.subTasks,
     layers.parentTask,

@@ -6,6 +6,7 @@ import type {
   CalendarTaskV1,
 } from "@/lib/calendarSync/contract";
 import { attachWaitingOnUsers } from "./attachWaitingOnUsers";
+import { attachOpenBlockingTasks } from "./attachOpenBlockingTasks";
 import {
   buildCalendarTaskOverlapWhere,
   calendarTaskOverlapsRange,
@@ -159,6 +160,27 @@ export const getCalendarReadModel = async ({
             label: { select: { id: true, value: true, projectId: true } },
           },
         },
+        relatedFromTasks: {
+          where: {
+            relationType: "BlockedBy",
+            targetTask: {
+              project: { is: calendarAccessibleProjectWhere(userId) },
+            },
+          },
+          select: {
+            targetTask: {
+              select: {
+                id: true,
+                projectId: true,
+                uniqueIndex: true,
+                ticketNumber: true,
+                title: true,
+                status: true,
+                section: true,
+              },
+            },
+          },
+        },
         _count: {
           select: {
             comments: {
@@ -181,12 +203,20 @@ export const getCalendarReadModel = async ({
   // them could yield tasks for a project absent from `projects`. The projects
   // read is authoritative: drop any task outside its id set.
   const authorizedProjectIds = new Set(projects.map((project) => project.id));
-  const authorizedTasks = tasks.filter(
-    (task) =>
-      authorizedProjectIds.has(task.projectId) &&
-      calendarTaskOverlapsRange(task, start, endExclusive),
-  );
-  const calendarTasks = await attachWaitingOnUsers(authorizedTasks);
+  const authorizedTasks = tasks
+    .filter(
+      (task) =>
+        authorizedProjectIds.has(task.projectId) &&
+        calendarTaskOverlapsRange(task, start, endExclusive),
+    )
+    .map((task) => ({
+      ...task,
+      relatedFromTasks: task.relatedFromTasks.filter(({ targetTask }) =>
+        authorizedProjectIds.has(targetTask.projectId),
+      ),
+    }));
+  const tasksWithOpenBlockers = await attachOpenBlockingTasks(authorizedTasks);
+  const calendarTasks = await attachWaitingOnUsers(tasksWithOpenBlockers);
 
   const calendarProjects: CalendarProjectV1[] = projects.map((project) => ({
     id: project.id,

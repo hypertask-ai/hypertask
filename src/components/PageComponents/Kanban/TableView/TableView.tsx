@@ -33,6 +33,7 @@ import DueDateLabel from "@/components/Labels/DueDateLabel";
 import formatDateDifference, { formatDateWithYearIfPast } from "@/utils/generateTime";
 import { daysSince, stalenessLevel } from "@/lib/staleness";
 import { TriangleAlert } from "lucide-react";
+import { BlockerTaskChip } from "@/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { MAX_SORT_LEVELS, getActiveTableSortFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
@@ -1018,9 +1019,12 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
             <span
               key="title"
               style={{ left: frozenColumnOffset("title") }}
-              className={`md:sticky md:z-[1] font-medium text-white-black truncate whitespace-nowrap min-w-0 ${stickyBackground}`}
+              className={`md:sticky md:z-[1] flex items-center gap-1 overflow-hidden font-medium text-white-black whitespace-nowrap min-w-0 ${stickyBackground}`}
             >
-              {task.title ?? ""}
+              <span className="truncate">{task.title ?? ""}</span>
+              {task.blockingTasks?.map((blockingTask) => (
+                <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+              ))}
             </span>
           );
         case "status":

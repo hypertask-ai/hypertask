@@ -539,6 +539,7 @@ export interface ITask {
   } | null;
   waitingOnSetById?: number | null;
   waitingOnSetAt?: string | null;
+  blockingTasks?: IBlockingTask[];
   dueDate?: Date;
   startDate?: Date;
   recurrence?: string | null;
@@ -575,6 +576,16 @@ export interface ITask {
   agentId?: string;
   agent?: IAgent;
   pullRequests?: ITaskPullRequest[];
+}
+
+export interface IBlockingTask {
+  id: number;
+  projectId: number;
+  uniqueIndex: number;
+  ticketNumber: string | null;
+  title: string;
+  status: Status;
+  section: string;
 }
 
 export interface TaskRelations {

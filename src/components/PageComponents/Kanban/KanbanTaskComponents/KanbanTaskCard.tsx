@@ -136,7 +136,10 @@ const KanbanTaskCard = ({
       _currentProject={project}
       openDetail={openDetail}
       active={active}
-      blocked={task.waitingOnUserId != null}
+      blocked={
+        (task.waitingOnUserId !== null && task.waitingOnUserId !== undefined) ||
+        (task.blockingTasks?.length ?? 0) > 0
+      }
       linkClassName={cn(
         "group-hover/kanban-selection:pl-7",
         (selectionMode || selected) && "pl-7",

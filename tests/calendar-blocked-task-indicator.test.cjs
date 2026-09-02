@@ -29,19 +29,37 @@ const blockingUser = {
   photoURL: "https://example.com/valentin.jpg",
 };
 
-const task = (waitingOnUserId) => ({
-  id: waitingOnUserId == null ? 1 : 2,
-  uniqueIndex: waitingOnUserId == null ? 1 : 2,
-  ticketNumber: waitingOnUserId == null ? "HTPR-1" : "HTPR-2",
-  title: waitingOnUserId == null ? "Ready task" : "Blocked task",
+const blockingTask = (id, title = "Blocking task") => ({
+  id,
   projectId: 15,
-  dueDate: new Date("2026-08-31T12:00:00.000Z"),
-  waitingOnUserId,
-  waitingOnUser: waitingOnUserId == null ? null : blockingUser,
-  assignees: [],
-  taskLabels: [],
-  _count: { comments: 0, savedContent: 0 },
+  uniqueIndex: id,
+  ticketNumber: `HTPR-${id}`,
+  title,
+  status: "Normal",
+  section: "In Progress",
 });
+
+const task = (waitingOnUserId, blockingTasks = []) => {
+  const hasBlockingUser =
+    waitingOnUserId !== null && waitingOnUserId !== undefined;
+  let id = hasBlockingUser ? 2 : 1;
+  if (blockingTasks.length > 0) id = 3;
+
+  return {
+    id,
+    uniqueIndex: id,
+    ticketNumber: `HTPR-${id}`,
+    title: id === 1 ? "Ready task" : "Blocked task",
+    projectId: 15,
+    dueDate: new Date("2026-08-31T12:00:00.000Z"),
+    waitingOnUserId,
+    waitingOnUser: hasBlockingUser ? blockingUser : null,
+    blockingTasks,
+    assignees: [],
+    taskLabels: [],
+    _count: { comments: 0, savedContent: 0 },
+  };
+};
 
 test("mobile agenda cards show the blocked indicator", () => {
   const previousReact = global.React;
@@ -75,10 +93,13 @@ test("mobile agenda cards show the blocked indicator", () => {
     stubModule(
       "src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx",
       {
-        default: ({ blockingUser }) =>
+        default: ({ blockingUser, task: calendarTask }) =>
           React.createElement(
             "div",
-            { "data-blocking-user": blockingUser?.id ?? "" },
+            {
+              "data-blocking-user": blockingUser?.id ?? "",
+              "data-blocking-tasks": calendarTask.blockingTasks?.length ?? 0,
+            },
             blockingUser?.displayName,
           ),
       },
@@ -117,6 +138,10 @@ test("mobile agenda cards show the blocked indicator", () => {
       "6",
     );
     assert.doesNotMatch(renderAgendaRow(task(null)).body.textContent, /Valentin Yeo/);
+    assert.equal(
+      renderAgendaRow(task(null, [blockingTask(1606)])).querySelector("[data-blocking-tasks]").dataset.blockingTasks,
+      "1",
+    );
   } finally {
     restoreStubs();
     if (previousReact === undefined) delete global.React;
@@ -124,10 +149,11 @@ test("mobile agenda cards show the blocked indicator", () => {
   }
 });
 
-test("calendar cards show the board blocked indicator in month, week, and day views", () => {
+test("calendar cards show person and task blockers in month, week, and day views", () => {
   const dndPath = require.resolve("@hello-pangea/dnd");
   const previousDnd = require.cache[dndPath];
   const previousReact = global.React;
+  const navigations = [];
 
   try {
     global.React = React;
@@ -149,6 +175,11 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
     };
     stubModule("src/lib/state.tsx", { useRecoilValue: () => ({ id: 15 }) });
     stubModule("src/store/index.ts", { currentProjectAtom: {} });
+    stubModule("src/hooks/MultiPages/Route/useHypertasksNavigate.ts", {
+      default: () => ({
+        navigateToTask: (...args) => navigations.push(args),
+      }),
+    });
     stubModule("src/components/Common/Tooltip.tsx", { default: () => null });
     stubModule("src/components/Common/UserAvatar.tsx", { default: () => null });
     require.cache[modulePath("src/components/Common/UserAvatar.tsx")].exports = {
@@ -206,6 +237,10 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
       modulePath("src/components/PageComponents/Calendar/task-card.tsx"),
     );
     const blockedTask = task(6);
+    const taskBlockedByTasks = task(null, [
+      blockingTask(1606, "First dependency"),
+      blockingTask(1537, "Second dependency"),
+    ]);
     const unblockedTask = task(null);
     const day = new Date("2026-08-31T00:00:00.000Z");
     const cardClassName = (calendarTask, view) => {
@@ -241,7 +276,20 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
         cardClassName(blockedTask, view),
         /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
       );
+      assert.match(
+        cardClassName(taskBlockedByTasks, view),
+        /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
+      );
       assert.match(cardClassName(unblockedTask, view), /border-transparent/);
+
+      const taskBlockedCard = cardDocument(taskBlockedByTasks, view).querySelector(
+        ".kanban-task-card",
+      );
+      assert.match(taskBlockedCard.textContent, /HTPR-1606/);
+      assert.match(taskBlockedCard.textContent, /First dependency/);
+      assert.match(taskBlockedCard.textContent, /HTPR-1537/);
+      assert.match(taskBlockedCard.textContent, /Second dependency/);
+      assert.equal(taskBlockedCard.querySelectorAll("[data-blocking-task]").length, 2);
 
       const blockedCard = cardDocument(blockedTask, view).querySelector(
         ".kanban-task-card",
@@ -265,7 +313,7 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
         currentTask: -1,
         view: "day",
         toggleDueDateModal: () => {},
-        getTasksForDate: () => [blockedTask, unblockedTask],
+        getTasksForDate: () => [blockedTask, taskBlockedByTasks, unblockedTask],
         handleTaskClick: () => {},
       }),
     );
@@ -275,8 +323,16 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
       /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
     );
     assert.match(
+      dayDocument.getElementById("task-3").className,
+      /border-\[hsl\(0_62\.8%_30\.6%\)\]/,
+    );
+    assert.match(
       dayDocument.getElementById("task-1").className,
       /border-l-transparent/,
+    );
+    assert.equal(
+      dayDocument.getElementById("task-3").querySelectorAll("[data-blocking-task]").length,
+      2,
     );
 
     const blockedDayRow = dayDocument.getElementById("task-2");
@@ -288,6 +344,29 @@ test("calendar cards show the board blocked indicator in month, week, and day vi
       dayDocument.getElementById("task-1").textContent,
       /Valentin Yeo/,
     );
+
+    const { BlockerTaskChip } = jiti(
+      modulePath("src/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip.tsx"),
+    );
+    const chip = BlockerTaskChip({ task: blockingTask(1606) });
+    let defaultPrevented = false;
+    let propagationStopped = false;
+    const interaction = (key) => ({
+      key,
+      preventDefault: () => { defaultPrevented = true; },
+      stopPropagation: () => { propagationStopped = true; },
+    });
+    assert.equal(chip.props.role, "link");
+    assert.equal(chip.props.tabIndex, 0);
+    assert.match(chip.props["aria-label"], /Open blocker HTPR-1606/);
+    chip.props.onClick(interaction());
+    assert.equal(defaultPrevented, true);
+    assert.equal(propagationStopped, true);
+    chip.props.onKeyDown(interaction("Escape"));
+    assert.deepEqual(navigations, [[15, 1606]]);
+    chip.props.onKeyDown(interaction("Enter"));
+    chip.props.onKeyDown(interaction(" "));
+    assert.deepEqual(navigations, [[15, 1606], [15, 1606], [15, 1606]]);
   } finally {
     restoreStubs();
     if (previousDnd === undefined) delete require.cache[dndPath];

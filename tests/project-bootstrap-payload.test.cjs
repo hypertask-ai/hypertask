@@ -21,8 +21,14 @@ const schemaSource = read("src/prisma/schema.prisma");
 const boardTaskTagsSource = read(
   "src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx"
 );
+const boardTaskCardSource = read(
+  "src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx"
+);
 const tableTaskTitleSource = read(
   "src/components/Common/TaskRowComponents/TaskTitle.tsx"
+);
+const boardTableSource = read(
+  "src/components/PageComponents/Kanban/TableView/TableView.tsx"
 );
 
 test("inactive board bootstrap records exclude feature-heavy relations", () => {
@@ -110,6 +116,21 @@ test("Board/Table uses the narrow relation and scalar projection", () => {
   ]) {
     assert.match(boardOmit, new RegExp(`${field}: true`));
   }
+});
+
+test("Board and Table wire blocker chips into the title and blocked-card paths", () => {
+  const tableTitleStart = boardTableSource.indexOf('case "title":');
+  const tableTitleEnd = boardTableSource.indexOf('case "status":');
+  assert.notEqual(tableTitleStart, -1);
+  assert.ok(tableTitleEnd > tableTitleStart);
+  const tableTitleCell = boardTableSource.slice(tableTitleStart, tableTitleEnd);
+
+  assert.match(boardTaskTagsSource, /task\.blockingTasks\?\.map/);
+  assert.match(boardTaskTagsSource, /<BlockerTaskChip/);
+  assert.match(boardTaskCardSource, /task\.blockingTasks\?\.length/);
+  assert.match(tableTitleCell, /task\.blockingTasks\?\.map/);
+  assert.match(tableTitleCell, /<BlockerTaskChip/);
+  assert.match(tableTitleCell, /overflow-hidden/);
 });
 
 test("Board/Table label projection keeps every rendered label field", () => {

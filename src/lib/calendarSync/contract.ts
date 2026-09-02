@@ -5,7 +5,7 @@ import { buildCalendarAuthorizationRevision } from "./access";
 import { calendarTaskOverlapsRange } from "./taskRange";
 
 export const CALENDAR_SYNC_CONTRACT_VERSION = 1 as const;
-export const CALENDAR_READ_MODEL_SCHEMA_VERSION = 3 as const;
+export const CALENDAR_READ_MODEL_SCHEMA_VERSION = 4 as const;
 export const CALENDAR_READ_MODEL_TTL_MS = 24 * 60 * 60 * 1_000;
 
 export type CalendarUserSummary = {
@@ -196,6 +196,16 @@ const isCalendarTaskLabel = (
   value.labelId === value.label.id &&
   value.label.projectId === projectId;
 
+const isCalendarBlockingTask = (value: unknown): boolean =>
+  isRecord(value) &&
+  isPositiveInteger(value.id) &&
+  isPositiveInteger(value.projectId) &&
+  isPositiveInteger(value.uniqueIndex) &&
+  isNullableString(value.ticketNumber) &&
+  typeof value.title === "string" &&
+  value.status === "Normal" &&
+  typeof value.section === "string";
+
 const isCalendarTaskV1 = (value: unknown): value is CalendarTaskV1 => {
   if (!isRecord(value)) return false;
   const id = value.id;
@@ -234,6 +244,8 @@ const isCalendarTaskV1 = (value: unknown): value is CalendarTaskV1 => {
     value.taskLabels.every((taskLabel) =>
       isCalendarTaskLabel(taskLabel, id, projectId),
     ) &&
+    Array.isArray(value.blockingTasks) &&
+    value.blockingTasks.every(isCalendarBlockingTask) &&
     isRecord(value._count) &&
     isNonNegativeInteger(value._count.comments) &&
     isNonNegativeInteger(value._count.savedContent)
@@ -384,7 +396,11 @@ export const isCalendarReadModelSnapshotV1 = (
   }
   if (
     Object.values(snapshot.tasksById).some(
-      (task) => !isCalendarTaskV1(task),
+      (task) =>
+        !isCalendarTaskV1(task) ||
+        task.blockingTasks?.some(
+          (blockingTask) => !projectIds.has(blockingTask.projectId),
+        ),
     )
   ) {
     return false;
@@ -471,6 +487,13 @@ export const createCalendarReadModelSnapshot = ({
     const task = normalizeCalendarTaskForSnapshot(candidate);
     if (!isCalendarTaskV1(task)) return null;
     if (
+      task.blockingTasks?.some(
+        (blockingTask) => !(String(blockingTask.projectId) in projectsById),
+      )
+    ) {
+      return null;
+    }
+    if (
       !isPositiveInteger(task?.id) ||
       task.status !== "Normal" ||
       task.deletedAt != null ||
@@ -487,7 +510,11 @@ export const createCalendarReadModelSnapshot = ({
   }
 
   return {
-    ...range,
+    rangeStart: range.rangeStart,
+    rangeEndExclusive: range.rangeEndExclusive,
+    startIso: range.startIso,
+    endExclusiveIso: range.endExclusiveIso,
+    timezone: range.timezone,
     key: calendarReadModelKey(payload.accountId, range),
     contractVersion: CALENDAR_SYNC_CONTRACT_VERSION,
     schemaVersion: CALENDAR_READ_MODEL_SCHEMA_VERSION,
