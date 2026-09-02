@@ -1292,8 +1292,9 @@ const InlineDraftAiFloat = ({
                     />
                     {mobileReview.phase === "loading" ? (
                       <div
-                        className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 rounded-[4px] bg-cardBackground text-content text-text-light-gray"
+                        className="absolute inset-0 flex items-center justify-center gap-2 rounded-[4px] bg-cardBackground text-content text-text-light-gray"
                         role="status"
+                        onPointerDown={(event) => event.preventDefault()}
                       >
                         <LoaderCircle
                           size={18}

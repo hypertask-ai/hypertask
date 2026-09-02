@@ -360,6 +360,18 @@ test("mobile Write with AI keeps the keyboard target and chip strip in place whi
     assert.equal(document.activeElement, prompt);
     assert.equal(chip.disabled, true);
     assert.match(container.textContent, /Rewriting draft/);
+    assert.equal(
+      container
+        .querySelector('[role="status"]')
+        .dispatchEvent(
+          new dom.window.MouseEvent("pointerdown", {
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      false,
+    );
+    assert.equal(document.activeElement, prompt);
     await setInput(dom, prompt, "Next instruction");
 
     await act(async () => {
