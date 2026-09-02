@@ -54,6 +54,7 @@ stubSourceModule("src/lib/mobileCommentViewport.ts", {
 });
 stubSourceModule("src/styles/tiptap.module.scss", {
   editorContainer: "editor-container",
+  is_editor_empty: "is-editor-empty",
 });
 stubSourceModule("src/utils/helperFunctions/sanitizeHtml.ts", {
   sanitizeAiHtml: (html) => html,
@@ -245,7 +246,10 @@ test("mobile Write with AI keeps an edited existing draft as the rewrite source"
     };
 
     const source = container.querySelector('[contenteditable="true"]');
-    await setEditableHtml(source, "<p>Edited draft</p>");
+    await setEditableHtml(
+      source,
+      '<p class="is-editor-empty" data-placeholder="Nothing written yet.">Edited draft</p>',
+    );
     source.focus();
     assert.equal(document.activeElement, source);
     await click(dom, buttonWithText(container, "Improve readability"));

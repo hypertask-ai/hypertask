@@ -104,14 +104,21 @@ function focusablesIn(root: HTMLElement) {
 
 // Empty paragraphs are browser placeholders; media-only drafts still count as content.
 function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
-  const html = sanitizeAiHtml(event.currentTarget.innerHTML);
   const hasText = Boolean(event.currentTarget.textContent?.trim());
   const hasMedia = Boolean(
     event.currentTarget.querySelector(
       "img, video, audio, iframe, table, [data-type]",
     ),
   );
-  return hasText || hasMedia ? html : "";
+  if (!hasText && !hasMedia) return "";
+
+  const clone = event.currentTarget.cloneNode(true) as HTMLDivElement;
+  clone.querySelectorAll<HTMLElement>("[data-placeholder]").forEach((node) => {
+    node.classList.remove(styles.is_editor_empty);
+    node.removeAttribute("data-placeholder");
+    if (!node.className) node.removeAttribute("class");
+  });
+  return sanitizeAiHtml(clone.innerHTML);
 }
 
 function placeCaretAtDropPoint(event: ReactDragEvent<HTMLDivElement>) {
@@ -873,6 +880,7 @@ const InlineDraftAiFloat = ({
     element.querySelectorAll<HTMLElement>("[data-placeholder]").forEach((node) => {
       node.classList.remove(styles.is_editor_empty);
       node.removeAttribute("data-placeholder");
+      if (!node.className) node.removeAttribute("class");
     });
     if (!html) {
       element.innerHTML = `<p class="${styles.is_editor_empty}" data-placeholder="${mobileEditableEmptyPlaceholder}"></p>`;
