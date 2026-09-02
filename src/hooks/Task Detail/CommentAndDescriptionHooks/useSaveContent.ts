@@ -718,7 +718,7 @@ export default function useSaveContent() {
           });
 
         const data = await response.data;
-        if (response.status == 200) {
+        if (response.status === 200) {
           toast("Comment updated successfully!");
           setComments((prev) => {
             const updatedComments = prev.map((comment) => {
