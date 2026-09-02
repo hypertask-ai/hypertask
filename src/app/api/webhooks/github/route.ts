@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { generalConfig } from "@/lib/configs/general.config";
-import { broadcastBoardChange } from "@/lib/realtime/server";
+import {
+  broadcastBoardChange,
+  broadcastTaskChange,
+} from "@/lib/realtime/server";
 import generateRank from "@/utils/generateRank";
+import {
+  boardForGithubRepository,
+  parseGithubPullRequestUrl,
+  type PullRequestLifecycle,
+} from "@/lib/pullRequests/githubPullRequests";
+import {
+  syncCheckSuiteFromWebhook,
+  syncPullRequestFromWebhook,
+} from "@/lib/pullRequests/syncTaskPullRequests";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
@@ -14,16 +26,177 @@ import {
 
 interface GithubPullRequestPayload {
   action: string;
+  repository: {
+    id: number;
+    full_name: string;
+    private: boolean;
+    fork: boolean;
+  };
   pull_request: {
+    id: number;
     number: number;
     title: string;
     body: string | null;
     html_url: string;
     merged: boolean;
+    state: string;
+    updated_at: string;
     head: {
       ref: string;
+      sha: string;
+    };
+    base: {
+      repo: {
+        id: number;
+        full_name: string;
+      };
     };
   };
+}
+
+interface GithubCheckSuitePayload {
+  action: string;
+  repository: {
+    full_name: string;
+    private: boolean;
+    fork: boolean;
+  };
+  check_suite: {
+    app: { id: number; name: string };
+    head_sha: string;
+    status: string;
+    conclusion: string | null;
+    updated_at: string;
+    pull_requests: Array<{
+      number: number;
+      base: { repo: { full_name: string } };
+    }>;
+  };
+}
+
+type WebhookTask = {
+  id: number;
+  projectId: number;
+  userId: number;
+  sectionId: number | null;
+  riskLevel: "Low" | "Medium" | "High" | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function repositoryParts(fullName: unknown) {
+  if (typeof fullName !== "string") return null;
+  const [owner, repository, ...extra] = fullName.toLowerCase().split("/");
+  return owner && repository && extra.length === 0
+    ? { owner, repository }
+    : null;
+}
+
+async function moveTaskForPullRequest(
+  task: WebhookTask,
+  targetSectionName: "AI Review" | "Valentin Review" | "Done" | null,
+): Promise<boolean> {
+  if (!targetSectionName) return false;
+  const section = await prisma.section.findFirst({
+    where: {
+      projectId: task.projectId,
+      deleted: false,
+      section_title: { equals: targetSectionName, mode: "insensitive" },
+    },
+  });
+  if (!section) {
+    console.warn(
+      `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
+    );
+    return false;
+  }
+  if (section.id === task.sectionId) return false;
+
+  const [lastTask, botUser] = await Promise.all([
+    prisma.task.findFirst({
+      where: { sectionId: section.id, status: "Normal" },
+      orderBy: { ranking: "desc" },
+      select: { ranking: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: generalConfig.hyperAiId },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        photoURL: true,
+      },
+    }),
+  ]);
+  if (!botUser) throw new Error("HyperAI user not found");
+
+  const currentUser = {
+    id: botUser.id,
+    email: botUser.email ?? "",
+    displayName: botUser.displayName ?? undefined,
+    photoURL: botUser.photoURL ?? undefined,
+    uid: "",
+    stripe_customer_id: "",
+    joinedAt: new Date(),
+    UserSettingId: "",
+    UserSetting: {} as any,
+  };
+  const moveResult = await updateTaskSingle(
+    {
+      id: task.id,
+      sectionId: section.id,
+      section: section.section_title,
+      ranking: generateRank(lastTask?.ranking, undefined),
+      updatedAt: new Date(),
+    },
+    currentUser,
+    null,
+    {
+      trustedCaller: true,
+      taskMovedActivity: {
+        sendNotification: () =>
+          sendNotificationForTask(
+            generalConfig.hyperAiId,
+            "TaskMoved",
+            task.id,
+            task.projectId,
+            null,
+          ),
+      },
+    },
+  );
+  if (moveResult.status !== 200) throw new Error("Task move failed");
+  return true;
+}
+
+function invalidPayload(message: string) {
+  return NextResponse.json(
+    { success: false, error: message },
+    { status: 400 },
+  );
+}
+
+async function broadcastPullRequestChanges(
+  boardId: number,
+  taskIds: Iterable<number>,
+): Promise<void> {
+  const results = await Promise.allSettled([
+    broadcastBoardChange(boardId, {
+      originUserId: generalConfig.hyperAiId,
+    }),
+    ...[...taskIds].map((taskId) =>
+      broadcastTaskChange(taskId, {
+        originUserId: generalConfig.hyperAiId,
+      }),
+    ),
+  ]);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.warn("[GitHub webhook] Realtime delivery failed", result.reason);
+    }
+  }
 }
 
 function escapeHtml(value: string): string {
@@ -50,21 +223,254 @@ export async function POST(request: NextRequest) {
     }
 
     const event = request.headers.get("x-github-event");
-    if (event !== "pull_request") {
+    if (event !== "pull_request" && event !== "check_suite") {
       return NextResponse.json(
         { success: true, ignored: `Unsupported event: ${event ?? "missing"}` },
         { status: 200 },
       );
     }
 
-    let payload: GithubPullRequestPayload;
+    let parsedPayload: unknown;
     try {
-      payload = JSON.parse(rawBody) as GithubPullRequestPayload;
+      parsedPayload = JSON.parse(rawBody);
     } catch {
-      return NextResponse.json(
-        { success: false, error: "Invalid JSON payload" },
-        { status: 400 },
+      return invalidPayload("Invalid JSON payload");
+    }
+    if (!isRecord(parsedPayload) || !isRecord(parsedPayload.repository)) {
+      return invalidPayload("Invalid webhook payload");
+    }
+
+    const payload = parsedPayload as unknown as
+      | GithubPullRequestPayload
+      | GithubCheckSuitePayload;
+    const repositoryFullName = payload.repository.full_name;
+    const boardId = boardForGithubRepository({
+      fullName: repositoryFullName,
+      isPrivate: payload.repository?.private,
+      isFork: payload.repository?.fork,
+    });
+    const repository = repositoryParts(repositoryFullName);
+    if (!boardId || !repository) {
+      return NextResponse.json({
+        success: true,
+        ignored: "Repository is not configured for a board",
+      });
+    }
+
+    if (event === "check_suite") {
+      const rawSuite = parsedPayload.check_suite;
+      if (
+        !isRecord(rawSuite) ||
+        !isRecord(rawSuite.app) ||
+        typeof rawSuite.app.id !== "number" ||
+        typeof rawSuite.app.name !== "string" ||
+        typeof rawSuite.head_sha !== "string" ||
+        typeof rawSuite.status !== "string" ||
+        (rawSuite.conclusion !== null &&
+          typeof rawSuite.conclusion !== "string") ||
+        typeof rawSuite.updated_at !== "string" ||
+        !Array.isArray(rawSuite.pull_requests) ||
+        !rawSuite.pull_requests.every(
+          (pullRequest) =>
+            isRecord(pullRequest) &&
+            Number.isInteger(pullRequest.number) &&
+            isRecord(pullRequest.base) &&
+            isRecord(pullRequest.base.repo) &&
+            typeof pullRequest.base.repo.full_name === "string",
+        )
+      ) {
+        return invalidPayload("Invalid check suite payload");
+      }
+    } else {
+      const rawPullRequest = parsedPayload.pull_request;
+      if (
+        !isRecord(rawPullRequest) ||
+        !Number.isInteger(rawPullRequest.id) ||
+        !Number.isInteger(rawPullRequest.number) ||
+        typeof rawPullRequest.title !== "string" ||
+        (rawPullRequest.body !== null &&
+          typeof rawPullRequest.body !== "string") ||
+        typeof rawPullRequest.html_url !== "string" ||
+        typeof rawPullRequest.merged !== "boolean" ||
+        typeof rawPullRequest.state !== "string" ||
+        typeof rawPullRequest.updated_at !== "string" ||
+        !isRecord(rawPullRequest.head) ||
+        typeof rawPullRequest.head.ref !== "string" ||
+        typeof rawPullRequest.head.sha !== "string" ||
+        !isRecord(rawPullRequest.base) ||
+        !isRecord(rawPullRequest.base.repo) ||
+        !Number.isInteger(rawPullRequest.base.repo.id) ||
+        typeof rawPullRequest.base.repo.full_name !== "string"
+      ) {
+        return invalidPayload("Invalid pull request payload");
+      }
+    }
+
+    if (event === "check_suite") {
+      const checkPayload = payload as GithubCheckSuitePayload;
+      if (
+        !["requested", "rerequested", "completed"].includes(
+          checkPayload.action,
+        )
+      ) {
+        return NextResponse.json({
+          success: true,
+          ignored: `Unsupported action: ${checkPayload.action}`,
+        });
+      }
+      const suite = checkPayload.check_suite;
+      const sourceUpdatedAt = new Date(suite.updated_at);
+      if (
+        !suite.app?.id ||
+        !suite.head_sha ||
+        !suite.status ||
+        Number.isNaN(sourceUpdatedAt.getTime())
+      ) {
+        return invalidPayload("Invalid check suite payload");
+      }
+
+      const pullRequestNumbers = [
+        ...new Set(
+          (suite.pull_requests ?? [])
+            .filter(
+              (pullRequest) =>
+                pullRequest.base?.repo?.full_name?.toLowerCase() ===
+                  repositoryFullName.toLowerCase() &&
+                Number.isInteger(pullRequest.number),
+            )
+            .map((pullRequest) => pullRequest.number),
+        ),
+      ];
+      const syncResults = await Promise.all(
+        pullRequestNumbers.map((number) =>
+          syncCheckSuiteFromWebhook({
+            repositoryOwner: repository.owner,
+            repositoryName: repository.repository,
+            number,
+            githubAppId: String(suite.app.id),
+            appName: suite.app.name,
+            headSha: suite.head_sha,
+            status: suite.status,
+            conclusion: suite.conclusion,
+            sourceUpdatedAt,
+          }),
+        ),
       );
+      const taskIds = new Set<number>();
+      let updated = 0;
+      for (const result of syncResults) {
+        updated += result.updated;
+        result.taskIds.forEach((taskId) => taskIds.add(taskId));
+      }
+      if (updated > 0) {
+        await broadcastPullRequestChanges(boardId, taskIds);
+      }
+      return NextResponse.json({
+        success: true,
+        updated,
+        taskIds: [...taskIds],
+      });
+    }
+
+    const pullRequestPayload = payload as GithubPullRequestPayload;
+    if (
+      !["opened", "reopened", "synchronize", "closed"].includes(
+        pullRequestPayload.action,
+      )
+    ) {
+      return NextResponse.json({
+        success: true,
+        ignored: `Unsupported action: ${pullRequestPayload.action}`,
+      });
+    }
+
+    const pullRequest = pullRequestPayload.pull_request;
+    const sourceUpdatedAt = new Date(pullRequest.updated_at);
+    const parsedUrl = parseGithubPullRequestUrl(pullRequest.html_url);
+    if (
+      pullRequest.base?.repo?.full_name.toLowerCase() !==
+        repositoryFullName.toLowerCase() ||
+      String(pullRequest.base.repo.id) !== String(pullRequestPayload.repository.id) ||
+      !parsedUrl ||
+      parsedUrl.owner !== repository.owner ||
+      parsedUrl.repository !== repository.repository ||
+      parsedUrl.number !== pullRequest.number ||
+      !Number.isInteger(pullRequest.number) ||
+      !pullRequest.head?.sha ||
+      Number.isNaN(sourceUpdatedAt.getTime())
+    ) {
+      return invalidPayload("Invalid pull request payload");
+    }
+
+    const ticketId = extractTicketId({
+      title: pullRequest.title,
+      headRef: pullRequest.head?.ref,
+      body: pullRequest.body,
+    });
+    const lifecycle: PullRequestLifecycle = pullRequest.merged
+      ? "merged"
+      : pullRequest.state === "closed"
+        ? "closed"
+        : "open";
+    const syncResult = await syncPullRequestFromWebhook({
+      boardId,
+      ticketNumber: ticketId,
+      repositoryOwner: repository.owner,
+      repositoryName: repository.repository,
+      repositoryId: String(pullRequestPayload.repository.id),
+      pullRequestId: String(pullRequest.id),
+      number: pullRequest.number,
+      url: pullRequest.html_url,
+      title: pullRequest.title,
+      lifecycle,
+      headSha: pullRequest.head.sha,
+      sourceUpdatedAt,
+      action: pullRequestPayload.action as
+        | "opened"
+        | "reopened"
+        | "synchronize"
+        | "closed",
+      actorUserId: generalConfig.hyperAiId,
+    });
+
+    if (syncResult.taskIds.length > 0) {
+      const tasks = await prisma.task.findMany({
+        where: { id: { in: syncResult.taskIds }, status: { not: "Deleted" } },
+        select: {
+          id: true,
+          projectId: true,
+          userId: true,
+          sectionId: true,
+          riskLevel: true,
+        },
+      });
+      let moved = 0;
+      for (const task of tasks) {
+        let targetSectionName:
+          | "AI Review"
+          | "Valentin Review"
+          | "Done"
+          | null = null;
+        if (
+          pullRequestPayload.action === "opened" ||
+          pullRequestPayload.action === "reopened"
+        ) {
+          targetSectionName = chooseReviewSectionName(task.riskLevel);
+        } else if (pullRequest.merged) {
+          targetSectionName = "Done";
+        }
+        if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
+      }
+      if (syncResult.linked > 0 || syncResult.updated > 0 || moved > 0) {
+        await broadcastPullRequestChanges(boardId, syncResult.taskIds);
+      }
+      return NextResponse.json({
+        success: true,
+        ticketId,
+        linked: syncResult.linked,
+        updated: syncResult.updated,
+        moved,
+      });
     }
 
     if (!["opened", "reopened", "closed"].includes(payload.action)) {
@@ -74,13 +480,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const pullRequest = payload.pull_request;
-    const ticketId = extractTicketId({
-      title: pullRequest.title,
-      headRef: pullRequest.head?.ref,
-      body: pullRequest.body,
-    });
+    if (!ticketId) {
+      return NextResponse.json(
+        { success: true, ignored: "No ticket reference found" },
+        { status: 200 },
+      );
+    }
 
+    // Legacy ticket handling remains below for repositories whose PR could not
+    // be linked to a task by the first-class synchronization path.
     if (!ticketId) {
       return NextResponse.json(
         { success: true, ignored: "No ticket reference found" },

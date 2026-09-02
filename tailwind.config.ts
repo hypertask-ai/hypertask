@@ -71,6 +71,10 @@ const config: Config = {
         'selectionDark': '#555555',  // Dark grey for dark theme
         'light-white': 'rgba(255, 255, 255, 0.8)', // White with 80% opacity
         "mention-highlight":"var(--color-mention-highlight)",
+        "pull-request-open":"var(--color-pull-request-open)",
+        "pull-request-checks-red":"var(--color-pull-request-checks-red)",
+        "pull-request-green":"var(--color-pull-request-green)",
+        "pull-request-merged":"var(--color-pull-request-merged)",
       },
       width:{
         "new-notification":"7px",

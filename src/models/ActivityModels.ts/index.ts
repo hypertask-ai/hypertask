@@ -40,6 +40,23 @@ export interface ITaskUpdateDescriptionActivity {
   };
 }
 
+export interface ITaskPullRequestActivity {
+  type: "TaskPullRequest";
+  data: {
+    fromUserId?: number;
+    fromUser?: IUser;
+    fromAgent?: IAgent | null;
+    action: "linked" | "state_changed" | "closed";
+    pullRequest: {
+      url: string;
+      title: string;
+      number: number;
+      repository: string;
+      displayState: "open" | "checks_red" | "green" | "merged";
+    };
+  };
+}
+
 export interface ITaskWaitingOnActivity {
   type: "TaskWaitingOn";
   data: {

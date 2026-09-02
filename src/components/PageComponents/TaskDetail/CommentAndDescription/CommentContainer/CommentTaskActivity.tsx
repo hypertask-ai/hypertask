@@ -11,6 +11,7 @@ import {
   ITaskLabelActivity,
   ITaskMoveActivity,
   ITaskPriorityActivity,
+  ITaskPullRequestActivity,
   ITaskUpdateDescriptionActivity,
   ITaskWaitingOnActivity,
 } from "@/models/ActivityModels.ts";
@@ -20,6 +21,7 @@ import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelCompone
 import CreatedBy from "../Common/CreatedBy";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { activityAgentId } from "@/lib/agents/activityAttribution";
+import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
 
 const CommentTaskActivity = () => {
   const { comment } = useCommentsContext();
@@ -75,6 +77,8 @@ const CommentTaskActivity = () => {
           </>
         ) : comment.activity?.type === "TaskWaitingOn" ? (
           <TaskWaitingOnActivity activity={comment.activity} />
+        ) : comment.activity?.type === "TaskPullRequest" ? (
+          <TaskPullRequestActivity activity={comment.activity} />
         ) : null}
       </span>
       {!_mbl && <CreatedAtCard stacked={true} createdAt={comment.createdAt} />}
@@ -217,6 +221,58 @@ const TaskWaitingOnActivity = ({
       : "cleared blocked by"}
   </>
 );
+
+const TaskPullRequestActivity = ({
+  activity,
+}: {
+  activity: ITaskPullRequestActivity;
+}) => {
+  const { action, pullRequest, fromAgent, fromUser } = activity.data;
+  const badge = pullRequestBadgeByState[pullRequest.displayState];
+  const statusBadge = (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] font-semibold leading-none"
+      style={{ color: badge.color }}
+    >
+      <span
+        className="h-1.5 w-1.5 rounded-full"
+        style={{ backgroundColor: badge.color }}
+      />
+      {badge.label}
+    </span>
+  );
+  const actor = fromAgent ?? fromUser;
+
+  if (action === "linked") {
+    return (
+      <>
+        {actor && (
+          <BoldElement>
+            <CreatedByLocal
+              name={actor.displayName ?? ""}
+              pfp={actor.photoURL ?? ""}
+            />
+          </BoldElement>
+        )}{" "}
+        linked pull request{" "}
+        <a href={pullRequest.url} target="_blank" rel="noopener noreferrer">
+          <BoldElement>#{pullRequest.number}</BoldElement>
+        </a>{" "}
+        {statusBadge}
+      </>
+    );
+  }
+
+  return (
+    <>
+      Pull request{" "}
+      <a href={pullRequest.url} target="_blank" rel="noopener noreferrer">
+        <BoldElement>#{pullRequest.number}</BoldElement>
+      </a>{" "}
+      {action === "closed" ? "was" : "checks turned"} {statusBadge}
+    </>
+  );
+};
 
 const TaskAssignedActivity = ({
   activity,

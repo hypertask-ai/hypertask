@@ -1,6 +1,7 @@
 import React, {
   Suspense,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -29,13 +30,20 @@ import {
   ISection,
   ITask,
   ITaskLabel,
+  ITaskPullRequest,
   IUser,
   IAssignees,
   ICycle,
 } from "@/models/model";
 import RelatedTaskLabel from "./RelatedTaskLabel";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
-import { ArrowRight, CornerLeftUp, TriangleAlert } from "lucide-react";
+import {
+  ArrowRight,
+  CornerLeftUp,
+  GitMerge,
+  GitPullRequest,
+  TriangleAlert,
+} from "lucide-react";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { EstimateConstants } from "@/lib/constants/constants";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
@@ -51,6 +59,8 @@ import {
   formatWaitingOnAge,
   WAITING_ON_OVERDUE_MS,
 } from "@/lib/waitingOn";
+import { derivePullRequestDisplayState } from "@/lib/pullRequests/githubPullRequests";
+import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
 
 type RelationDirection = "from" | "to";
 
@@ -167,6 +177,12 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     ? waitingOnNow - new Date(currentTask.waitingOnSetAt).getTime() >
       WAITING_ON_OVERDUE_MS
     : false;
+  const [pullRequests, setPullRequests] = useState<ITaskPullRequest[]>(
+    currentTask.pullRequests ?? []
+  );
+  useEffect(() => {
+    setPullRequests(currentTask.pullRequests ?? []);
+  }, [currentTask.id, currentTask.pullRequests]);
   const openWaitingOnPicker = () =>
     setShowCommands({ show: true, mode: CommandMode.OpenBlockedByModal });
   const clearWaitingOn = async (event: React.MouseEvent) => {
@@ -403,6 +419,51 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         })()}
       </TaskInfoRow>
 
+      {pullRequests.length > 0 && (
+        <TaskInfoRow alignTop>
+          <TaskInfoValue className="flex flex-col gap-1">
+            {pullRequests.map((pullRequest) => {
+              const displayState = derivePullRequestDisplayState(
+                pullRequest.lifecycle,
+                pullRequest.checkState
+              );
+              const badge = pullRequestBadgeByState[displayState];
+              const PullRequestIcon =
+                displayState === "merged" ? GitMerge : GitPullRequest;
+              return (
+                <a
+                  key={pullRequest.id}
+                  href={pullRequest.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex min-w-0 items-center gap-1.5 py-0.5"
+                  title={pullRequest.title}
+                >
+                  <PullRequestIcon
+                    size={14}
+                    strokeWidth={1.8}
+                    className="shrink-0"
+                    style={{ color: badge.color }}
+                  />
+                  <span className="min-w-0 truncate text-white-black hover:underline">
+                    #{pullRequest.number} {pullRequest.repositoryName}
+                  </span>
+                  <span
+                    className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold leading-none"
+                    style={{ color: badge.color }}
+                  >
+                    <span
+                      className="h-1.5 w-1.5 rounded-full"
+                      style={{ backgroundColor: badge.color }}
+                    />
+                    {badge.label}
+                  </span>
+                </a>
+              );
+            })}
+          </TaskInfoValue>
+        </TaskInfoRow>
+      )}
       {(currentTask.project?.cyclesEnabled || currentTask.cycle) && (
         <TaskInfoRow>
           <LocalRightSideInfo

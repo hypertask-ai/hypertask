@@ -292,6 +292,21 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
       },
     },
     agent: { select: publicAgentSelect },
+    pullRequests: {
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        repositoryOwner: true,
+        repositoryName: true,
+        number: true,
+        url: true,
+        title: true,
+        lifecycle: true,
+        checkState: true,
+        headSha: true,
+        updatedAt: true,
+      },
+    },
     customFieldValues: {
       select: { fieldId: true, value: true, numericValue: true },
     },

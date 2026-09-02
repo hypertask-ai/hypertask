@@ -75,6 +75,10 @@
   --color-mention-highlight:#d29f02;
   --color-horizontal-scrollbar-track:#4F5766;
   --color-archived-state: #86efac;
+  --color-pull-request-open: #3fb950;
+  --color-pull-request-checks-red: #f85149;
+  --color-pull-request-green: #3fb950;
+  --color-pull-request-merged: #a371f7;
 
 }
 

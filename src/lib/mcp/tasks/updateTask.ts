@@ -36,6 +36,11 @@ import {
     isActiveTaskMutationTarget,
 } from "@/lib/mcp/tasks/activeTaskMutation";
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests";
+import {
+    linkTaskPullRequest,
+    PullRequestLinkError,
+} from "@/lib/pullRequests/taskPullRequests";
 
 export interface UpdateTaskResponse {
     success: boolean;
@@ -51,14 +56,28 @@ interface UpdateTaskErrorResponse {
     success: false;
     tasks: TaskDetail[];
     error: string;
+    code?: string;
 }
 
 class UpdateTaskPersistenceError extends Error {
-    constructor(readonly response: UpdateTaskErrorResponse) {
+    constructor(
+        readonly response: UpdateTaskErrorResponse,
+        readonly status: number = 500,
+    ) {
         super(response.error)
         this.name = 'UpdateTaskPersistenceError'
     }
 }
+
+type TaskUpdateResult =
+    | { success: true; taskId: number }
+    | {
+          success: false
+          taskId: number
+          error: string
+          status?: number
+          code?: string
+      }
 
 const VALID_STATUSES = ['Normal', 'Archive', 'Deleted'] as const;
 
@@ -84,6 +103,7 @@ export interface UpdateTaskBody {
     risk_level?: string;
     acceptance_criteria?: string;
     verify_command?: string;
+    pull_request_url?: string;
 }
 
 export interface TaskUpdateExecutionResult {
@@ -123,6 +143,7 @@ interface ExecuteTaskUpdateOptions {
     dryRun?: boolean;
     assignAssignees?: TaskUpdateAssigneeHandler;
     clearAssignees?: TaskClearAssigneesHandler;
+    linkPullRequest?: typeof linkTaskPullRequest;
     strictSideEffectFailures?: boolean;
     persist?: (
         persistTaskUpdates: () => Promise<UpdateTaskResponse>
@@ -200,6 +221,7 @@ export async function executeTaskUpdate({
     dryRun = false,
     assignAssignees,
     clearAssignees,
+    linkPullRequest = linkTaskPullRequest,
     strictSideEffectFailures = false,
     persist,
 }: ExecuteTaskUpdateOptions): Promise<TaskUpdateExecutionResult> {
@@ -264,6 +286,7 @@ export async function executeTaskUpdate({
     const hasAssigneeField = requestBody.assignee !== undefined;
     const hasDescriptionUpdate = requestBody.description !== undefined;
     const hasTextOrParentUpdate = hasSingleTaskUpdate(requestBody);
+    const hasPullRequestUpdate = requestBody.pull_request_url !== undefined;
     const hasContractFieldUpdate =
         requestBody.risk_level !== undefined ||
         requestBody.acceptance_criteria !== undefined ||
@@ -290,7 +313,7 @@ export async function executeTaskUpdate({
         }
         contractFieldUpdates = parsedContractFields.value;
     }
-    if (!hasTextOrParentUpdate && requestBody.estimate === undefined && requestBody.priority === undefined && !requestBody.sectionId && !requestBody.status && !hasLabels && !hasLabelMutation && !hasDueDate && !hasAssigneeField && !hasContractFieldUpdate) {
+    if (!hasTextOrParentUpdate && requestBody.estimate === undefined && requestBody.priority === undefined && !requestBody.sectionId && !requestBody.status && !hasLabels && !hasLabelMutation && !hasDueDate && !hasAssigneeField && !hasContractFieldUpdate && !hasPullRequestUpdate) {
         console.log('[MCP Update Task] Validation failed: No fields to update')
         return NextResponse.json(
             {
@@ -318,6 +341,23 @@ export async function executeTaskUpdate({
         return NextResponse.json(
             {
                 ...buildFieldError('invalid_field', 'description', 'description must be a string'),
+                ...(dryRun && { valid: false })
+            },
+            { status: 400 }
+        )
+    }
+
+    const parsedPullRequest = hasPullRequestUpdate
+        ? parseGithubPullRequestUrl(requestBody.pull_request_url)
+        : null;
+    if (hasPullRequestUpdate && !parsedPullRequest) {
+        return NextResponse.json(
+            {
+                ...buildFieldError(
+                    'invalid_field',
+                    'pull_request_url',
+                    'Use a full GitHub pull request URL'
+                ),
                 ...(dryRun && { valid: false })
             },
             { status: 400 }
@@ -536,6 +576,9 @@ export async function executeTaskUpdate({
     if (priorityIndex !== undefined) {
         normalizedRequestBody.priority = priorityIndex
     }
+    if (parsedPullRequest) {
+        normalizedRequestBody.pull_request_url = parsedPullRequest.url
+    }
 
     // Find tasks by identifier
     const tasks = await findTasksByIdentifier(
@@ -667,7 +710,8 @@ export async function executeTaskUpdate({
 
     const persistTaskUpdates = async (): Promise<UpdateTaskResponse> => {
     // Update all tasks in parallel
-    const updatePromises = tasks.map(async (task) => {
+    const updatePromises: Promise<TaskUpdateResult>[] = tasks.map(
+        async (task): Promise<TaskUpdateResult> => {
         try {
             // The writes below are internal HTTP requests, and the one-shot
             // lease adoption this request was granted lives in AsyncLocalStorage,
@@ -904,6 +948,15 @@ export async function executeTaskUpdate({
                 }
             }
 
+            if (parsedPullRequest) {
+                await linkPullRequest({
+                    taskId: task.id,
+                    userId: user.id,
+                    agentId: ctx.agentId,
+                    url: parsedPullRequest.url,
+                });
+            }
+
             // Assignees via MCP route (validates project membership for all user ids)
             if (assigneeUserIds !== undefined) {
                 if (assigneeUserIds.length === 0) {
@@ -1025,10 +1078,14 @@ export async function executeTaskUpdate({
             return { success: true, taskId: task.id }
         } catch (error) {
             console.error(`[MCP Update Task] Error updating task ${task.id}:`, error)
+            const linkError = error instanceof PullRequestLinkError ? error : null
             return {
                 success: false,
                 taskId: task.id,
                 error: toErrorMessage(error, 'Unknown error'),
+                ...(linkError
+                    ? { status: linkError.status, code: linkError.code }
+                    : {}),
             }
         }
     })
@@ -1047,11 +1104,18 @@ export async function executeTaskUpdate({
     // If all tasks failed, return an error
     if (updatedTaskIds.length === 0) {
         const errorMessages = failedTasks.map(ft => ft.error).filter(Boolean)
-        throw new UpdateTaskPersistenceError({
-            success: false,
-            tasks: [],
-            error: `Failed to update ${failedTasks.length} task(s). ${errorMessages.length > 0 ? errorMessages[0] : 'Unknown error'}`
-        })
+        const linkFailure = failedTasks.find(
+            (failure) => failure.status !== undefined && failure.code !== undefined,
+        )
+        throw new UpdateTaskPersistenceError(
+            {
+                success: false,
+                tasks: [],
+                error: `Failed to update ${failedTasks.length} task(s). ${errorMessages.length > 0 ? errorMessages[0] : 'Unknown error'}`,
+                ...(linkFailure?.code ? { code: linkFailure.code } : {}),
+            },
+            linkFailure?.status ?? 500,
+        )
     }
 
     // Fetch complete tasks with all relations for MCP response format
@@ -1103,7 +1167,7 @@ export async function executeTaskUpdate({
         return NextResponse.json(mcpResponse, { status: 200 })
     } catch (error) {
         if (error instanceof UpdateTaskPersistenceError) {
-            return NextResponse.json(error.response, { status: 500 })
+            return NextResponse.json(error.response, { status: error.status })
         }
         throw error
     }

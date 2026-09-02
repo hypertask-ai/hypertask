@@ -1,5 +1,6 @@
 import { mapMcpAgent, mcpAgentSelect } from '@/lib/mcp/agents';
 import { taskStaleness } from '@/lib/staleness';
+import { derivePullRequestDisplayState } from '@/lib/pullRequests/githubPullRequests';
 import { McpTaskAssignee, TaskDetail } from './types';
 
 
@@ -113,7 +114,22 @@ export const taskDetailInclude = {
         select: {
             comments: mcpTaskUserCommentCount
         }
-    }
+    },
+    pullRequests: {
+        orderBy: { createdAt: 'asc' as const },
+        select: {
+            id: true,
+            repositoryOwner: true,
+            repositoryName: true,
+            number: true,
+            url: true,
+            title: true,
+            lifecycle: true,
+            checkState: true,
+            headSha: true,
+            updatedAt: true,
+        },
+    },
 };
 
 /** GET /api/mcp/tasks single-task lookup (includes hierarchy fields). */
@@ -309,6 +325,22 @@ export function mapTaskToDetail(task: any): TaskDetail {
             fileType: a.fileType,
             fileSize: a.fileSize ? (typeof a.fileSize === 'string' ? parseInt(a.fileSize) || 0 : a.fileSize) : 0,
             fileSource: a.fileSource || ''
+        })) || [],
+        pullRequests: (task.pullRequests ?? []).map((pullRequest: any) => ({
+            id: pullRequest.id,
+            repositoryOwner: pullRequest.repositoryOwner,
+            repositoryName: pullRequest.repositoryName,
+            number: pullRequest.number,
+            url: pullRequest.url,
+            title: pullRequest.title,
+            lifecycle: pullRequest.lifecycle,
+            checkState: pullRequest.checkState,
+            displayState: derivePullRequestDisplayState(
+                pullRequest.lifecycle,
+                pullRequest.checkState,
+            ),
+            headSha: pullRequest.headSha ?? null,
+            updatedAt: pullRequest.updatedAt?.toISOString?.() ?? pullRequest.updatedAt,
         })) || [],
         totalComments: task._count?.comments || 0,
         createdAt: task.createdAt.toISOString(),
