@@ -446,10 +446,7 @@ const InlineDraftAiFloat = ({
   let mobileEditableHtml = "";
   if (mobileReview.phase === "review") {
     if (mobileReview.showOriginal) {
-      mobileEditableHtml =
-        mobileReview.lastRequest?.sourceContent ??
-        mobileOpeningSource?.html ??
-        "";
+      mobileEditableHtml = mobileSourceDraft;
     } else {
       mobileEditableHtml = mobileReview.proposal;
     }
