@@ -47,6 +47,7 @@ export type WebhookTaskState = {
   status: WebhookTaskStatus
   priority: WebhookTaskPriority | null
   dueDate: string | null
+  startDate: string | null
 }
 
 type RequireAtLeastOne<T> = {
@@ -227,6 +228,7 @@ function sanitizeWebhookDelivery(delivery: WebhookDelivery): WebhookDelivery {
             status: delivery.data.state.status,
             priority: sanitizePriority(delivery.data.state.priority),
             dueDate: delivery.data.state.dueDate,
+            startDate: delivery.data.state.startDate,
           },
           actor: sanitizeActor(delivery.data.actor),
         },
@@ -317,6 +319,7 @@ export const WEBHOOK_EVENT_DEFINITIONS = {
       'state.status': '"Normal"|"Archive"|"Deleted"',
       'state.priority': '{ id:string, index:number, value:string }|null',
       'state.dueDate': 'string|null — ISO-8601 timestamp',
+      'state.startDate': 'string|null — ISO-8601 timestamp',
       ...actorFields,
     },
   },

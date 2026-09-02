@@ -13,10 +13,12 @@ import { IUser } from "@/models/model";
 interface IProps {
   toggleModal: () => void;
   showModal: boolean;
+  compact?: boolean;
 }
 const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
   toggleModal,
   showModal,
+  compact = false,
 }) => {
   const isMbl = useContext(MobileViewContext);
   const { formValues, handleChange } = useContextCreateTaskModal();
@@ -47,6 +49,33 @@ const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
   };
 
   if (!formValues.currentProject) return <></>;
+  if (compact) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={toggleModal}
+          className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+          aria-label="Set assignee"
+        >
+          Assignee:{" "}
+          {formValues.assignees.length
+            ? formValues.assignees
+                .map((assignee) => assignee.displayName)
+                .join(", ")
+            : "Assign"}
+        </button>
+        {showModal && (
+          <AssignModal
+            mode="Create"
+            onClose={callbackHandler}
+            project={formValues.currentProject}
+            assignees={formValues.assignees}
+          />
+        )}
+      </>
+    );
+  }
   return (
     <>
       <TaskInfoLabel

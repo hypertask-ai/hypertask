@@ -6,6 +6,7 @@ import { useContextCreateTaskModal } from '@/lib/contexts/Multipages/CreateTaskG
 import { ILabel, IProject, ISection } from '@/models/model'
 import { currentProjectAtom, showCreateTaskModalAtom } from '@/store'
 import React, { Suspense, useContext, useEffect, useRef } from 'react'
+import { format } from 'date-fns'
 import { useRecoilState } from '@/lib/state'
 import MoveToColumn from '../commands/moveToColumn'
 import PriorityLabelComponent from '../TaskPriority/PriorityLabelComponent'
@@ -14,10 +15,128 @@ import SetPriorityModal from '../TaskPriority'
 import TaskEstimateModal from '../TaskEstimate/TaskEstimate'
 import DueDateLabel from '@/components/Labels/DueDateLabel'
 import DueDateModal from '../DueDate'
+import StartDateModal from '../StartDate'
 import TaskLabelComponent from '../CreateLabel/TaskLabelComponent'
 import CreateLabel from '../CreateLabel/CreateLabel'
 import SetProjectsModal from '../SetProjectModal/SetProjectModal'
 import AssigneesContainerCreateTaskGlobally from './AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally'
+
+export const MobileCreateTaskProperties = () => {
+    const {
+        toggleMoveModal, showMoveModal, setShowMoveModal,
+        showPriorityModal, togglePriorityModal, toggleShowSizeModal,
+        showSizeModal, toggleDueDateModal, showDueDateModal,
+        toggleShowTagsModal, showTagsModal, showProjectsModal,
+        toggleProjectsModal, showStartDateModal, toggleStartDateModal,
+    } = useContextCreateTaskInfoColumn()
+    const {
+        formValues, handleChange, allProjects, handleProjectChange,
+        showAssignModal, setShowAssignModal, setEditMode, taskWriterFilled,
+    } = useContextCreateTaskModal()
+
+    const callbackForMoveModal = (section: ISection) => {
+        setShowMoveModal(false)
+        handleChange("status", {
+            sectionId: section.id,
+            sectionTitle: section.section_title,
+            sectionIdx: 0,
+            position: "top",
+        })
+    }
+    const priorityHandler = (param?: IPrioritiesConstants) => {
+        handleChange("priority", param?.priority_index === 0 ? undefined : param)
+        togglePriorityModal()
+    }
+    const estimateHandler = (param?: IEstimateConstants) => {
+        handleChange("estimate", param?.estimate_index === 0 ? undefined : param)
+        toggleShowSizeModal()
+    }
+    const labelsHandler = (param?: ILabel) => {
+        toggleShowTagsModal()
+        if (!param) return
+        const previousState = formValues.tags ?? []
+        const nextTags = previousState.some((tag) => tag.id === param.id)
+            ? previousState.filter((tag) => tag.id !== param.id)
+            : [...previousState, param]
+        handleChange("tags", nextTags)
+    }
+    const dueDateHandler = (date: Date | null, reset?: boolean) => {
+        toggleDueDateModal()
+        if (date) handleChange("dueDate", date)
+        else if (reset) handleChange("dueDate", undefined)
+    }
+    const startDateHandler = (date: Date | null, reset?: boolean) => {
+        toggleStartDateModal()
+        if (date) handleChange("startDate", date)
+        else if (reset) handleChange("startDate", undefined)
+    }
+    const toggleAssigneeModal = () => {
+        setShowAssignModal((previous) => {
+            setEditMode(previous ? null : "assignees")
+            return !previous
+        })
+    }
+    const setProjectHandler = (project?: IProject) => {
+        if (project) handleProjectChange(project)
+        toggleProjectsModal()
+    }
+    const dateValue = (date?: Date) => date ? format(date, "MMM d") : "+"
+    const propertyPills = [
+        { label: "Board", value: formValues.currentProject?.title ?? "Choose board", onClick: toggleProjectsModal },
+        { label: "Section", value: formValues.status?.sectionTitle ?? "Choose section", onClick: toggleMoveModal },
+        { label: "Priority", value: formValues.priority?.Priority_Value ?? "None", onClick: togglePriorityModal },
+        { label: "Labels", value: formValues.tags?.length ? formValues.tags.map((tag) => tag.value).join(", ") : "+", onClick: toggleShowTagsModal },
+        { label: "Due", value: dateValue(formValues.dueDate), onClick: toggleDueDateModal },
+        { label: "Size", value: formValues.estimate?.estimate_full_value ?? "+", onClick: toggleShowSizeModal },
+        { label: "Start", value: dateValue(formValues.startDate), onClick: toggleStartDateModal },
+    ]
+
+    return (
+        <>
+            <div className="flex flex-wrap gap-2 px-2 pb-2">
+                {propertyPills.slice(0, 3).map((property) => (
+                    <button
+                        key={property.label}
+                        type="button"
+                        onClick={property.onClick}
+                        className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
+                    >
+                        <span className="text-text-light-gray">{property.label}:</span>{" "}
+                        <strong>{property.value}</strong>
+                    </button>
+                ))}
+                <AssigneesContainerCreateTaskGlobally
+                    compact
+                    showModal={showAssignModal}
+                    toggleModal={toggleAssigneeModal}
+                />
+                {propertyPills.slice(3).map((property) => (
+                    <button
+                        key={property.label}
+                        type="button"
+                        onClick={property.onClick}
+                        className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
+                    >
+                        <span className="text-text-light-gray">{property.label}:</span>{" "}
+                        <strong>{property.value}</strong>
+                    </button>
+                ))}
+            </div>
+            {taskWriterFilled && (
+                <p className="px-2 pb-2 text-content text-hypertasks-ai-purple">
+                    ✦ Filled in by the AI task writer · edit anything before saving
+                </p>
+            )}
+            {showTagsModal && <CreateLabel previouslyAddedFilters={formValues.tags ?? []} mode="CreateTaskGlobally" closeHandlerForCreateNewTask={labelsHandler} currentProject={formValues.currentProject} />}
+            {showSizeModal && <TaskEstimateModal mode="TaskModalGlobally" closeHandler={estimateHandler} />}
+            {formValues.currentProject && showMoveModal && <MoveToColumn mode="CreatingTask" callback={callbackForMoveModal} projectId={formValues.currentProject.id} moveTaskToColumnHandler={toggleMoveModal} />}
+            {showPriorityModal && <SetPriorityModal mode="TaskModalGlobally" closeHandler={priorityHandler} />}
+            {showDueDateModal && <DueDateModal dueDate={formValues.dueDate} mode="Create" closeHandler={dueDateHandler} />}
+            {showStartDateModal && <StartDateModal startDate={formValues.startDate} mode="Create" closeHandler={startDateHandler} />}
+            {showProjectsModal && <SetProjectsModal toggle={setProjectHandler} currentProject={formValues.currentProject} allProjects={allProjects} />}
+        </>
+    )
+}
 
 const TaskInfoColumnGloballyCreate = () => {
     const {
@@ -45,6 +164,8 @@ const TaskInfoColumnGloballyCreate = () => {
         toggleProjectsModal()
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [allProjects.length])
+
+    if (_mbl) return <MobileCreateTaskProperties />
 
     const callbackForMoveModal = (section: ISection) => {
         setShowMoveModal(false)

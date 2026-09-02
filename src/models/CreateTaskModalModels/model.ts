@@ -12,6 +12,7 @@ export interface IForm{
     "priority"?:IPrioritiesConstants|undefined;
     "estimate"?:IEstimateConstants;
     "dueDate"?:Date;
+    "startDate"?:Date;
     "tags"?:ILabel[];
     "currentProject"?:IProject;
 }
@@ -21,7 +22,7 @@ export interface IParentTask{
     id?: number;
     ticketNumber?:string;
 }
-export type TFormKey = "title"| "description" |"assignees"|"attachments" | "status" | "priority" | "estimate" |"dueDate" | "tags" | "currentProject"
+export type TFormKey = "title"| "description" |"assignees"|"attachments" | "status" | "priority" | "estimate" |"dueDate" | "startDate" | "tags" | "currentProject"
 
 export type TEditModeCTModal = "title" | "assignees" | "Description" |"Description-ai"| null 
 export type TCurrentFocusedElement = "Title" | "Assignees" |"Save" |"Description"|"title-input"
@@ -69,6 +70,8 @@ export interface ITaskGlobalStates{
     toggleRecording: (val: boolean) => void;
     isRecording: boolean;
     hasUnsavedChanges: () => boolean;
+    taskWriterFilled: boolean;
+    setTaskWriterFilled: Dispatch<SetStateAction<boolean>>;
 }
 
 

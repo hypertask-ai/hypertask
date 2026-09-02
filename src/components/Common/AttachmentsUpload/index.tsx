@@ -714,27 +714,21 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
         />
       )}
       {!isDictating && toggleAiTaskWriter && (
-        <span
+        <button
+          type="button"
           id="create-task-modal-ai-writer-button"
-          role="button"
-          tabIndex={0}
+          aria-label="Write with AI"
           onClick={(e) => {
-            e.stopPropagation();
-            toggleAiTaskWriter();
-          }}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" && e.key !== " ") return;
-            e.preventDefault();
             e.stopPropagation();
             toggleAiTaskWriter();
           }}
           className={cn(
             MOBILE_TARGET,
-            "order-3 ml-auto min-w-0 shrink-0 rounded-sm px-3 border-thin border-icon-dark-gray cursor-pointer whitespace-nowrap"
+            "order-3 ml-auto inline-flex min-w-0 shrink-0 items-center justify-center rounded-sm text-hypertasks-ai-purple"
           )}
         >
-          Ai Task Writer
-        </span>
+          <PencilSparkles size={20} strokeWidth={1.75} aria-hidden="true" />
+        </button>
       )}
       {/* Dictation is how tasks get created on a phone: it went missing when this
           bar stopped reusing the desktop row. Keep this instance mounted while

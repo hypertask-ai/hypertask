@@ -13,6 +13,7 @@ import TiptapBubbleMenu from "./Components/TiptapBubbleMenu";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { EditorContent } from "@tiptap/react";
 import { useContextCreateTaskModal } from "@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskModal";
+import { useContextCreateTaskInfoColumn } from "@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskGloballyInfoColumn";
 import AttachmentsUpload from "../Common/AttachmentsUpload";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { TSendBackButtonParam } from "@/models/CreateTaskModalModels/model";
@@ -42,6 +43,12 @@ import { useTourContext } from "@/lib/tours/context/TourContext";
 import { usePathname } from "next/navigation";
 import { closeBackDismissBeforeNavigation } from "@/lib/mobile/backDismiss";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
+import { useGetAllMembersForAssign } from "@/hooks/MultiPages/useGetMembersForAssignees";
+import type {
+  ITaskWriterAttachment,
+  ITaskWriterResult,
+} from "@/models/AI_Task_writer_model";
+import type { IAgent, IUser } from "@/models/model";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   buildTaskWriterAutoDraftPrompt,
@@ -57,6 +64,19 @@ import {
 } from "@/lib/analytics/productPerformance";
 const attachmentButtonId = "create-task-modal-attachmentUpload";
 
+const hasTaskDescriptionContent = (value: string | null | undefined) => {
+  if (!value) return false;
+  if (/<(?:audio|embed|iframe|img|object|video)\b/i.test(value)) return true;
+  return Boolean(
+    value
+      .replace(/<br\s*\/?>(?=.)/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&(?:nbsp|#160|#xA0);/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+};
+
 const TiptapCreateTaskModal = () => {
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
@@ -68,6 +88,7 @@ const TiptapCreateTaskModal = () => {
     formValues,
     resetFormValues,
     showAssignModal,
+    setShowAssignModal,
     uploadInProgress,
     setUploadInProgress,
     CreateTaskAndDescription,
@@ -85,7 +106,10 @@ const TiptapCreateTaskModal = () => {
     getCurrentTitle,
     saveEpochRef,
     dictationCoordinator,
+    setTaskWriterFilled,
   } = useContextCreateTaskModal();
+  const { togglePriorityModal, toggleProjectsModal } =
+    useContextCreateTaskInfoColumn();
 
   const { editor } = useTiptap({
     mode: "read-edit-description",
@@ -105,6 +129,13 @@ const TiptapCreateTaskModal = () => {
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
   const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false
+  );
+  const [hasOpenedClassicForm, setHasOpenedClassicForm] = useState(false);
+  const openingSectionIdRef = useRef<number | undefined>(
+    formValues.status?.sectionId,
+  );
+  const openingProjectIdRef = useRef<number | undefined>(
+    formValues.currentProject?.id,
   );
   const [_currentProject, __] = useRecoilState(currentProjectAtom);
   const [createTaskModal] = useRecoilState(showCreateTaskModalAtom);
@@ -139,9 +170,14 @@ const TiptapCreateTaskModal = () => {
   const autoDraftPrompt = buildTaskWriterAutoDraftPrompt({
     title: formValues.title,
     description: taskWriterDescription,
+    board: formValues.currentProject?.title,
+    status: formValues.status,
+    assignees: formValues.assignees,
     tags: formValues.tags,
     priority: formValues.priority,
     estimate: formValues.estimate,
+    dueDate: formValues.dueDate,
+    startDate: formValues.startDate,
   });
   const taskWriterOpening = resolveCreateTaskWriterOpening(
     seedPrompt,
@@ -162,11 +198,43 @@ const TiptapCreateTaskModal = () => {
   const projectForContext =
     formValues.currentProject ?? _currentProject ?? undefined;
   const projectId = projectForContext?.id;
-  const { data: projectLabels } = useGetAllProjectLabels(projectId ?? undefined);
+  const { data: projectLabels } = useGetAllProjectLabels(
+    projectId ?? undefined,
+  );
+  const { data: membersAndOwner } = useGetAllMembersForAssign(
+    ["create-task-writer-assignees", projectId],
+    projectId ?? 0,
+  );
+  const projectAssignees = React.useMemo(() => {
+    const options: (IUser | IAgent)[] = [
+      ...(membersAndOwner?.members?.map(({ user }: { user: IUser }) => user) ??
+        []),
+      ...(membersAndOwner?.owner ? [membersAndOwner.owner] : []),
+      ...(membersAndOwner?.boardAgents ?? []),
+    ];
+    return Array.from(
+      new Map(
+        options.map((assignee) => [String(assignee.id), assignee]),
+      ).values(),
+    );
+  }, [membersAndOwner]);
   const projectSections = React.useMemo(
     () => getActiveColumnsViewFromProject(projectForContext) ?? [],
-    [projectForContext]
+    [projectForContext],
   );
+  useEffect(() => {
+    if (openingProjectIdRef.current !== formValues.currentProject?.id) {
+      openingProjectIdRef.current = formValues.currentProject?.id;
+      openingSectionIdRef.current = formValues.status?.sectionId;
+      return;
+    }
+    if (
+      openingSectionIdRef.current === undefined &&
+      formValues.status?.sectionId !== undefined
+    ) {
+      openingSectionIdRef.current = formValues.status.sectionId;
+    }
+  }, [formValues.currentProject?.id, formValues.status?.sectionId]);
   const id = "create-task-tiptap-description";
   const divIds = {
     popoverContainer: "popover-wrapper-" + id,
@@ -270,6 +338,7 @@ const TiptapCreateTaskModal = () => {
     setTrigger((current) => !current);
     handleSetUserInput("");
     aiPromptRef.current = undefined;
+    setHasOpenedClassicForm(false);
     setShouldShowAITaskWriter(false);
     editor?.chain().unsetHighlight().clearContent().run();
     setUploadingStateCreateTaskModal(undefined);
@@ -446,10 +515,171 @@ const TiptapCreateTaskModal = () => {
       behavior: "smooth",
       block: "center",
     });
+    if (!shouldShowAiTaskWriter) setHasOpenedClassicForm(true);
     toggleAiTaskWriterVisibility();
     if (editMode === "Description" && !shouldShowAiTaskWriter)
       setEditMode("Description-ai");
   };
+
+  const showClassicForm = useCallback(() => {
+    setHasOpenedClassicForm(true);
+    closeAiTaskWriter();
+    editor?.commands.unsetHighlight();
+    setEditMode(null);
+    setCurrentFocusedElement("Description");
+  }, [closeAiTaskWriter, editor, setCurrentFocusedElement, setEditMode]);
+
+  const applyCreateTaskResult = useCallback(
+    (
+      result: ITaskWriterResult,
+      attachments: ITaskWriterAttachment[] | undefined,
+      responseProjectId: number | undefined,
+    ) => {
+      const currentProjectId = projectForContext?.id;
+      // The provider's request scope identifies the board used by the model.
+      // Never apply a response after the user has switched boards.
+      if (
+        !currentProjectId ||
+        responseProjectId === undefined ||
+        responseProjectId !== currentProjectId
+      ) {
+        // Do not leave the user behind in a writer whose response belongs to a
+        // board they just left. The response is discarded by the caller.
+        showClassicForm();
+        return false;
+      }
+
+      const currentDescription = editor?.getHTML() ?? formValues.description;
+      const hasDescription = hasTaskDescriptionContent(currentDescription);
+      let changed = false;
+
+      if (!formValues.title.trim() && result.title?.trim()) {
+        applyTaskWriterTitle(result.title.trim());
+        changed = true;
+      }
+      if (!hasDescription && hasTaskDescriptionContent(result.description)) {
+        const description = result.description;
+        editor?.commands.setContent(description);
+        handleChange("description", description);
+        changed = true;
+      }
+      if (!formValues.priority && result.priority) {
+        handleChange("priority", result.priority);
+        changed = true;
+      }
+      if (!formValues.estimate && result.estimate) {
+        handleChange("estimate", result.estimate);
+        changed = true;
+      }
+      if (
+        (!formValues.tags || formValues.tags.length === 0) &&
+        result.tags?.length
+      ) {
+        handleChange("tags", result.tags);
+        changed = true;
+      }
+      if (formValues.assignees.length === 0 && result.assignees?.length) {
+        handleChange("assignees", result.assignees);
+        changed = true;
+      }
+      if (!formValues.dueDate && result.dueDate) {
+        handleChange("dueDate", result.dueDate);
+        changed = true;
+      }
+      if (!formValues.startDate && result.startDate) {
+        handleChange("startDate", result.startDate);
+        changed = true;
+      }
+      const currentSectionId = formValues.status?.sectionId;
+      if (
+        result.status &&
+        (currentSectionId === undefined ||
+          currentSectionId === openingSectionIdRef.current)
+      ) {
+        handleChange("status", {
+          ...result.status,
+          position: result.status.position ?? "top",
+        });
+        changed = true;
+      }
+      if (formValues.attachments.length === 0 && attachments?.length) {
+        const mappedAttachments = attachments.map((attachment, index) => ({
+          id: index,
+          file: {
+            name: attachment.file.name,
+            size: attachment.file.size,
+            type: attachment.file.type,
+            source: attachment.preview,
+          },
+        }));
+        callbackAttachments(mappedAttachments);
+        changed = true;
+      }
+
+      setTaskWriterFilled(changed);
+      showClassicForm();
+      return changed;
+    },
+    [
+      applyTaskWriterTitle,
+      callbackAttachments,
+      editor,
+      formValues,
+      handleChange,
+      projectForContext,
+      showClassicForm,
+    ],
+  );
+
+  const mobileCreateFormDescription = editor?.getText().trim() || "";
+  const mobileCreateFormProperties = [
+    formValues.status?.sectionTitle
+      ? `Section: ${formValues.status.sectionTitle}`
+      : undefined,
+    formValues.priority?.Priority_Value
+      ? `Priority: ${formValues.priority.Priority_Value}`
+      : undefined,
+    formValues.assignees.length
+      ? `Assignee: ${formValues.assignees.map((assignee) => assignee.displayName).join(", ")}`
+      : undefined,
+    formValues.tags?.length
+      ? `Labels: ${formValues.tags.map((tag) => tag.value).join(", ")}`
+      : undefined,
+    formValues.dueDate
+      ? `Due: ${formValues.dueDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+      : undefined,
+    formValues.estimate?.estimate_full_value
+      ? `Size: ${formValues.estimate.estimate_full_value}`
+      : undefined,
+    formValues.startDate
+      ? `Start: ${formValues.startDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+      : undefined,
+  ].filter((value): value is string => Boolean(value));
+  const mobileCreateAssigneeLabel = formValues.assignees.length
+    ? formValues.assignees
+        .map((assignee) => assignee.displayName)
+        .join(", ")
+    : "Assign";
+  const mobileCreateFormSummary = hasOpenedClassicForm
+    ? {
+        title: formValues.title.trim() || undefined,
+        description: mobileCreateFormDescription || undefined,
+        properties: mobileCreateFormProperties,
+      }
+    : undefined;
+  const mobileCreateTask = isMbl
+    ? {
+        boardLabel: formValues.currentProject?.title ?? "Choose board",
+        priorityLabel: formValues.priority?.Priority_Value ?? "None",
+        assigneeLabel: mobileCreateAssigneeLabel,
+        formSummary: mobileCreateFormSummary,
+        onBoardClick: toggleProjectsModal,
+        onPriorityClick: togglePriorityModal,
+        onAssigneeClick: () => setShowAssignModal(true),
+        onClassicForm: showClassicForm,
+        onClose: () => closeHandler(false),
+      }
+    : undefined;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const handleKeyDown = (e: any) => {
@@ -488,7 +718,6 @@ const TiptapCreateTaskModal = () => {
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
       editor?.chain().focus().toggleHighlight({ color: "#b89bdd" });
       toggleAiTaskWriterVisibility();
-
     }
     // [Attachments] cmd/cntrl + shift + [1]
     if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.ONE) {
@@ -507,7 +736,7 @@ const TiptapCreateTaskModal = () => {
         if (from === to) editor.chain().focus().selectAll().run();
         return editor.state.selection ?? { from: 0, to: 0 };
       };
-    
+
       if (e.altKey) {
         const { from, to } = selectAllIfNeeded();
         const text = editor.state.doc.textBetween(from, to, "\n");
@@ -667,6 +896,9 @@ const TiptapCreateTaskModal = () => {
                 initialPrompt={taskWriterOpening.initialPrompt}
                 projectLabels={projectLabels}
                 projectSections={projectSections}
+                projectAssignees={projectAssignees}
+                mobileCreateTask={mobileCreateTask}
+                applyCreateTaskResult={applyCreateTaskResult}
                 project={projectForContext}
                 EscapeHandler={() => {
                   closeAiTaskWriter();
@@ -703,6 +935,11 @@ const TiptapCreateTaskModal = () => {
                       ...props.status,
                       position: props.status.position ?? "top",
                     });
+                  if (props?.assignees)
+                    handleChange("assignees", props.assignees);
+                  if (props?.dueDate) handleChange("dueDate", props.dueDate);
+                  if (props?.startDate)
+                    handleChange("startDate", props.startDate);
                 }}
                 attachments={newCommentAttachments}
                 returnUserInputHandler={handleSetUserInput}

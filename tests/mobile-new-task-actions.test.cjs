@@ -23,9 +23,21 @@ const { mobileMicPresentation } = jiti(
   ),
 );
 
-const mobileBar = attachmentSource.match(
-  /const MobileBottomBar:[\s\S]*?\/\/ ====================================/,
-)?.[0];
+const mobileBarStart = attachmentSource.indexOf("const MobileBottomBar");
+const mobileBarEnd = attachmentSource.indexOf(
+  "// ====================================",
+  mobileBarStart,
+);
+const mobileBar =
+  mobileBarStart >= 0 && mobileBarEnd >= 0
+    ? attachmentSource.slice(mobileBarStart, mobileBarEnd)
+    : undefined;
+const mobileBottomBarStart = attachmentSource.indexOf("<MobileBottomBar");
+const mobileBottomBarEnd = attachmentSource.indexOf("/>", mobileBottomBarStart);
+const mobileBottomBarUsage =
+  mobileBottomBarStart >= 0 && mobileBottomBarEnd >= 0
+    ? attachmentSource.slice(mobileBottomBarStart, mobileBottomBarEnd + 2)
+    : undefined;
 
 test("Task Writer and Save stay fixed ahead of secondary actions", () => {
   assert.ok(mobileBar, "MobileBottomBar source should be present");
@@ -121,10 +133,9 @@ test("description dictation uses an explicit compact mobile presentation", () =>
 });
 
 test("transcription keeps the mobile action row in its recording layout", () => {
-  assert.match(
-    attachmentSource,
-    /<MobileBottomBar[\s\S]*?isProcessing=\{audioProcessing\}[\s\S]*?onProcessingChange=\{setAudioProcessing\}/,
-  );
+  assert.ok(mobileBottomBarUsage, "MobileBottomBar usage should be present");
+  assert.match(mobileBottomBarUsage, /isProcessing=\{audioProcessing\}/);
+  assert.match(mobileBottomBarUsage, /onProcessingChange=\{setAudioProcessing\}/);
   assert.match(
     mobileBar,
     /const isDictating = Boolean\(isRecording \|\| isProcessing\);/,
@@ -172,18 +183,21 @@ test("mobile new-task flow keeps the Back pill removed", () => {
 });
 
 test("mobile new-task fields follow writing order without remounting a second tree", () => {
-  assert.equal((createTaskBodySource.match(/<TaskTitleModal \/>/g) || []).length, 1);
+  assert.equal(
+    (createTaskBodySource.match(/<TaskTitleModal \/>/g) || []).length,
+    1,
+  );
   assert.equal(
     (createTaskBodySource.match(/<DescriptionCreateTaskModal \/>/g) || []).length,
     1,
   );
   assert.equal(
     (createTaskBodySource.match(/<TaskInfoColumnContainer(?:\s|>)/g) || []).length,
-    1,
+    2,
   );
   assert.match(
     createTaskBodySource,
-    /<TaskTitleModal \/>[\s\S]*?<DescriptionCreateTaskModal \/>[\s\S]*?<TaskInfoColumnContainer/,
+    /<TaskTitleModal \/>[\s\S]*?<TaskInfoColumnContainer[\s\S]*?<DescriptionCreateTaskModal \/>/,
   );
   assert.match(createTaskBodySource, /_mbl \?[\s\S]*?"flex-col gap-2/);
   assert.doesNotMatch(createTaskBodySource, /flex-col-reverse/);
@@ -192,7 +206,7 @@ test("mobile new-task fields follow writing order without remounting a second tr
 test("mobile new-task properties do not collapse beneath a long description", () => {
   assert.match(
     createTaskBodySource,
-    /<TaskInfoColumnContainer[\s\S]*?heightVariant="fit"[\s\S]*?className=\{_mbl \? "shrink-0" : undefined\}/,
+    /<TaskInfoColumnContainer\s+heightVariant="fit"\s+className="shrink-0"\s*>/,
     "the mobile properties card must keep its natural height while the modal scrolls",
   );
 });

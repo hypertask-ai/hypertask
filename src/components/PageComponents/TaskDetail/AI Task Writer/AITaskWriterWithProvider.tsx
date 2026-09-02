@@ -5,7 +5,7 @@ import { IAITaskWriterContainerProps } from "@/models/AI_Task_writer_model";
 import { TAiMode } from "@/models/AI_Task_writer_model";
 import { ITask, ILabel, type IProject } from "@/models/model";
 
-interface AITaskWriterWithProviderProps extends Omit<IAITaskWriterContainerProps, 'backgroundContent' | 'additionalContext' | 'defaultMode' | 'attachments' | 'currentTask' | 'projectLabels' | 'projectSections'> {
+interface AITaskWriterWithProviderProps extends Omit<IAITaskWriterContainerProps, 'backgroundContent' | 'additionalContext' | 'defaultMode' | 'attachments' | 'currentTask' | 'projectLabels' | 'projectSections' | 'projectAssignees'> {
   autoTrigger?: boolean;
   initialPrompt?: string;
   // Provider props
@@ -18,6 +18,8 @@ interface AITaskWriterWithProviderProps extends Omit<IAITaskWriterContainerProps
   projectLabels?: ILabel[];
   /** Project sections/columns for Task Writer - injected into prompt (Task Writer only) */
   projectSections?: { id?: number; section_title?: string }[];
+  /** Assignable people and agents for Task Writer. */
+  projectAssignees?: (import("@/models/model").IUser | import("@/models/model").IAgent)[];
   /** Destination board for global task creation. */
   project?: IProject;
   requestKind?: "manual" | "auto-description";
@@ -32,6 +34,7 @@ const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
   currentTask,
   projectLabels,
   projectSections,
+  projectAssignees,
   project,
   requestKind,
   // Container props
@@ -46,6 +49,7 @@ const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
       currentTask={currentTask}
       projectLabels={projectLabels}
       projectSections={projectSections}
+      projectAssignees={projectAssignees}
       project={project}
       requestKind={requestKind}
     >
@@ -54,6 +58,7 @@ const AITaskWriterWithProvider: React.FC<AITaskWriterWithProviderProps> = ({
         backgroundContent={backgroundContent}
         projectLabels={projectLabels}
         projectSections={projectSections}
+        projectAssignees={projectAssignees}
       />
     </AITaskWriterProvider>
   );

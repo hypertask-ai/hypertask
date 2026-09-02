@@ -24,6 +24,7 @@ interface IProps {
   priority?: IPrioritiesConstants;
   estimate?: IEstimateConstants;
   dueDate?: Date;
+  startDate?: Date;
   tags?: ILabel[];
   parentTask?: IParentTask;
   assignees: (IUser | IAgent)[];

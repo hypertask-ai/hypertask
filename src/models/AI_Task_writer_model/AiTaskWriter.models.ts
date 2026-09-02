@@ -17,6 +17,40 @@ export interface ITaskWriterProperties {
   estimate?: import("@/lib/constants/constants").IEstimateConstants;
   tags?: import("../model").ILabel[];
   status?: import("@/models/CreateTaskModalModels/model").TSectionPayload;
+  assignees?: (import("../model").IUser | import("../model").IAgent)[];
+  dueDate?: Date;
+  startDate?: Date;
+}
+
+export interface ITaskWriterResult extends ITaskWriterProperties {
+  title: string | null;
+  description: string;
+}
+
+export interface ITaskWriterAttachment {
+  id: string;
+  file: {
+    name: string;
+    size: number;
+    type: string;
+  };
+  preview: string;
+}
+
+export interface IMobileCreateTaskWriter {
+  boardLabel: string;
+  priorityLabel: string;
+  assigneeLabel: string;
+  formSummary?: {
+    title?: string;
+    description?: string;
+    properties: string[];
+  };
+  onBoardClick: () => void;
+  onPriorityClick: () => void;
+  onAssigneeClick: () => void;
+  onClassicForm: () => void;
+  onClose: () => void;
 }
 
 export interface IAITaskWriterContainerProps {
@@ -32,6 +66,12 @@ export interface IAITaskWriterContainerProps {
     description: string,
     props?: ITaskWriterProperties
   ) => void;
+  applyCreateTaskResult?: (
+    result: ITaskWriterResult,
+    attachments: ITaskWriterAttachment[] | undefined,
+    projectId: number | undefined,
+  ) => boolean;
+  mobileCreateTask?: IMobileCreateTaskWriter;
   returnUserInputHandler?: (input: string) => void;
   triggerAIWriterConfirm?: boolean;
   createTask?: boolean;

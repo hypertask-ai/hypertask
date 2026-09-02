@@ -20,6 +20,8 @@ import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllInclude
 /** First argument to `pg_advisory_xact_lock`; pairs with `projectId` for uniqueIndex allocation. */
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 
+class TaskSectionValidationError extends Error {}
+
 type TaskCreatedGlobally = Prisma.TaskGetPayload<{
   include: { project: true; parentTask: true; description_: true };
 }>;
@@ -142,6 +144,7 @@ const handler: NextApiHandler = async (
       priority,
       estimate,
       dueDate,
+      startDate,
       tags,
       parentTask,
       parentTaskId,
@@ -306,17 +309,76 @@ const handler: NextApiHandler = async (
       }
     }
 
-    // HTPR-5928 review: section_title is client-supplied (destructured from
-    // req.body above), not DB truth — a stale/renamed value must not leak into
-    // the task.created webhook payload. Fetched here, outside the transaction's
-    // advisory lock, so it costs nothing extra inside the locked section below.
-    const sectionRow =
-      sectionId == null
-        ? null
-        : await prisma.section.findUnique({
-            where: { id: sectionId },
-            select: { section_title: true },
-          });
+    // HTPR-5922: validate the final section against the selected board. The
+    // writer may suggest a section, but a stale or foreign section must never
+    // be written into a task on the current board.
+    let normalizedSectionId: number | null = null;
+    if (sectionId != null) {
+      const isCanonicalSectionId =
+        (typeof sectionId === "number" && Number.isSafeInteger(sectionId)) ||
+        (typeof sectionId === "string" && /^(?:0|[1-9]\d*)$/.test(sectionId));
+      normalizedSectionId = isCanonicalSectionId ? Number(sectionId) : NaN;
+    }
+    if (
+      normalizedSectionId !== null &&
+      (!Number.isSafeInteger(normalizedSectionId) || normalizedSectionId <= 0)
+    ) {
+      return res.status(400).json({ message: "Invalid section" });
+    }
+
+    let parsedStartDate: Date | null | undefined;
+    if (startDate != null) {
+      if (startDate instanceof Date) {
+        if (Number.isNaN(startDate.getTime())) {
+          return res.status(400).json({ message: "Invalid start date" });
+        }
+        parsedStartDate = startDate;
+      } else if (typeof startDate === "string") {
+        const normalizedStartDate = startDate.trim();
+        const dateParts = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(
+          normalizedStartDate,
+        );
+        const calendarDate = dateParts
+          ? new Date(
+              `${dateParts[1]}-${dateParts[2]}-${dateParts[3]}T00:00:00.000Z`,
+            )
+          : null;
+        const hasValidCalendarDate =
+          calendarDate !== null &&
+          !Number.isNaN(calendarDate.getTime()) &&
+          calendarDate.getUTCFullYear() === Number(dateParts?.[1]) &&
+          calendarDate.getUTCMonth() + 1 === Number(dateParts?.[2]) &&
+          calendarDate.getUTCDate() === Number(dateParts?.[3]);
+        const parsed = new Date(normalizedStartDate);
+        if (!hasValidCalendarDate || Number.isNaN(parsed.getTime())) {
+          return res.status(400).json({ message: "Invalid start date" });
+        }
+        parsedStartDate = parsed;
+      } else {
+        return res.status(400).json({ message: "Invalid start date" });
+      }
+    }
+
+    const requestedSectionTitle =
+      typeof section_title === "string" ? section_title.trim() : "";
+    const sectionWhere: Prisma.SectionWhereInput = {
+      projectId,
+      visibility: true,
+      deleted: false,
+    };
+    if (normalizedSectionId !== null) {
+      sectionWhere.id = normalizedSectionId;
+    } else if (requestedSectionTitle) {
+      sectionWhere.section_title = requestedSectionTitle;
+    }
+    const sectionOrderBy =
+      normalizedSectionId === null && !requestedSectionTitle
+        ? { ranking: "asc" as const }
+        : undefined;
+    const sectionErrorMessage =
+      normalizedSectionId === null && !requestedSectionTitle
+        ? "No active section found"
+        : "Section does not belong to this project";
 
     const validationFinishedAt = performance.now();
     let newTask: TaskCreatedGlobally;
@@ -330,19 +392,27 @@ const handler: NextApiHandler = async (
     try {
       const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+        const sectionRow = await tx.section.findFirst({
+          where: sectionWhere,
+          ...(sectionOrderBy ? { orderBy: sectionOrderBy } : {}),
+          select: { id: true, section_title: true },
+        });
+        if (!sectionRow) throw new TaskSectionValidationError(sectionErrorMessage);
+
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
         const body = {
           title: title,
           description: "",
-          section: section_title,
+          section: sectionRow.section_title,
           userId,
           uniqueIndex: nextUniqueIndex,
           ticketNumber: projectIdentifier + "-" + nextUniqueIndex.toString(),
           ranking,
           projectId,
-          sectionId: sectionId,
+          sectionId: sectionRow.id,
           dueDate,
+          startDate: parsedStartDate,
           // Explicit for parity with setDueDate.ts's reset-on-change (see invokeDueDate.ts).
           dueDateNotifiedAt: null,
           updatedAt: currentDate,
@@ -431,6 +501,7 @@ const handler: NextApiHandler = async (
             title: task.title,
             status: task.status,
             dueDate: task.dueDate,
+            startDate: task.startDate,
             sectionId: task.sectionId,
             section: sectionRow?.section_title ?? task.section,
             priority: createdPriority
@@ -449,6 +520,9 @@ const handler: NextApiHandler = async (
       tagsCreated = created.result.taskLabels;
       assignmentsCreated = created.result.assignments;
     } catch (e) {
+      if (e instanceof TaskSectionValidationError) {
+        return res.status(400).json({ message: e.message });
+      }
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === "P2002"

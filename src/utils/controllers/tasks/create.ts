@@ -35,6 +35,7 @@ export function buildWebhookTaskSnapshot(
     title: string;
     status: WebhookTaskSnapshot["status"];
     dueDate: Date | null;
+    startDate: Date | null;
     sectionId: number | null;
     priority: { id: string; priority_index: number; Priority_Value: string } | null;
   },
@@ -47,6 +48,7 @@ export function buildWebhookTaskSnapshot(
     title: row.title,
     status: row.status,
     dueDate: row.dueDate,
+    startDate: row.startDate ?? null,
     sectionId: row.sectionId,
     section: sectionTitle,
     priority: row.priority,

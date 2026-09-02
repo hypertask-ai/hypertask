@@ -17,6 +17,9 @@ interface ModalState {
   toggleDueDateModal: () => void;
   showDueDateModal: boolean;
   setDueDateModal: React.Dispatch<React.SetStateAction<boolean>>;
+  showStartDateModal: boolean;
+  setStartDateModal: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleStartDateModal: () => void;
   showProjectsModal: boolean;
   toggleProjectsModal: () => void;
 }
@@ -36,12 +39,14 @@ export const CreateTaskInfoColumnProvider: React.FC<ModalProviderProps> = ({
   const [showPriorityModal, setShowPriorityModal] = useState<boolean>(false);
   const [showSizeModal, setShowSizeModal] = useState<boolean>(false);
   const [showDueDateModal, setDueDateModal] = useState<boolean>(false);
+  const [showStartDateModal, setStartDateModal] = useState<boolean>(false);
   const [showTagsModal, setShowTagsModal] = useState<boolean>(false);
   const [showProjectsModal, setShowProjectsModal] = useState<boolean>(false);
 
   const _mbl = useContext(MobileViewContext);
 
   const toggleDueDateModal = () => setDueDateModal((prev) => !prev);
+  const toggleStartDateModal = () => setStartDateModal((prev) => !prev);
   const toggleMoveModal = () => setShowMoveModal((prev) => !prev);
   const togglePriorityModal = () => setShowPriorityModal((prev) => !prev);
   const toggleShowSizeModal = () => setShowSizeModal((prev) => !prev);
@@ -55,6 +60,9 @@ export const CreateTaskInfoColumnProvider: React.FC<ModalProviderProps> = ({
     toggleDueDateModal,
     showDueDateModal,
     setDueDateModal,
+    showStartDateModal,
+    setStartDateModal,
+    toggleStartDateModal,
     toggleMoveModal,
     showMoveModal,
     setShowMoveModal,

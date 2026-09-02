@@ -170,6 +170,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                 title: created.title,
                 status: created.status,
                 dueDate: created.dueDate,
+                startDate: created.startDate ?? null,
                 sectionId: created.sectionId,
                 section: created.section,
                 priority: created.priority
