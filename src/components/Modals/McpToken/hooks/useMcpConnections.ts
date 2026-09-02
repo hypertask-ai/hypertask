@@ -8,6 +8,7 @@ export function useMcpConnections() {
   const [connections, setConnections] = useState<Connection[]>([])
   const [isLoadingConnections, setIsLoadingConnections] = useState(false)
   const [revokingClientId, setRevokingClientId] = useState<string | null>(null)
+  const [removingClientId, setRemovingClientId] = useState<string | null>(null)
   const [isRevokingAll, setIsRevokingAll] = useState(false)
 
   const fetchConnections = async () => {
@@ -58,6 +59,33 @@ export function useMcpConnections() {
     }
   }
 
+  const handleRemove = async (clientId: string) => {
+    try {
+      setRemovingClientId(clientId)
+      const response = await fetch(
+        `/api/connections/${encodeURIComponent(clientId)}`,
+        { method: "DELETE" }
+      )
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        toast.error(data.error || "Failed to remove client")
+        return false
+      }
+
+      setConnections((current) =>
+        current.filter((connection) => connection.client_id !== clientId)
+      )
+      toast.success("Client removed")
+      return true
+    } catch (error) {
+      console.error("Error removing OAuth client:", error)
+      toast.error("Failed to remove client")
+      return false
+    } finally {
+      setRemovingClientId(null)
+    }
+  }
+
   const handleRevokeAll = async (onSuccess?: () => void) => {
     if (
       !confirm(
@@ -92,8 +120,10 @@ export function useMcpConnections() {
     connections,
     isLoadingConnections,
     revokingClientId,
+    removingClientId,
     isRevokingAll,
     handleRevoke,
+    handleRemove,
     handleRevokeAll,
     fetchConnections,
   }

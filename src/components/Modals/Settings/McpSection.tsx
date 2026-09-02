@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
+import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
+import type { Connection } from "@/components/Modals/McpToken/types";
 import {
   MCP_DOCS_URL,
   MCP_INTEGRATIONS,
@@ -19,6 +22,7 @@ const McpSection = () => {
   const [selectedIntegration, setSelectedIntegration] =
     useState<IntegrationId>("claude-code");
   const [useBearer, setUseBearer] = useState(false);
+  const [clientToRemove, setClientToRemove] = useState<Connection | null>(null);
   const tokenState = useSettingsMcpToken();
   const integration = MCP_INTEGRATIONS.find(
     (candidate) => candidate.id === selectedIntegration
@@ -28,6 +32,11 @@ const McpSection = () => {
     useBearer,
     tokenState.token
   );
+  const removeClient = async () => {
+    if (!clientToRemove) return;
+    const removed = await tokenState.handleRemove(clientToRemove.client_id);
+    if (removed) setClientToRemove(null);
+  };
 
   return (
     <SettingsSectionShell title="MCP">
@@ -130,18 +139,32 @@ const McpSection = () => {
                     Connected {new Date(connection.lastAuthorized).toLocaleDateString()}
                   </p>
                 </div>
-                <button
-                  className="rounded-[5px] px-2 py-1 text-dense font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:text-text-light-gray"
-                  disabled={
-                    tokenState.revokingClientId === connection.client_id
-                  }
-                  onClick={() => tokenState.handleRevoke(connection.client_id)}
-                  type="button"
-                >
-                  {tokenState.revokingClientId === connection.client_id
-                    ? "Disconnecting"
-                    : "Disconnect"}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="rounded-[5px] px-2 py-1 text-dense font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:text-text-light-gray"
+                    disabled={
+                      tokenState.revokingClientId === connection.client_id
+                    }
+                    onClick={() => tokenState.handleRevoke(connection.client_id)}
+                    type="button"
+                  >
+                    {tokenState.revokingClientId === connection.client_id
+                      ? "Disconnecting"
+                      : "Disconnect"}
+                  </button>
+                  <button
+                    className="rounded-[5px] px-2 py-1 text-dense font-semibold text-white-black hover:bg-hover-active focus-visible:outline-none disabled:text-text-light-gray"
+                    disabled={
+                      tokenState.removingClientId === connection.client_id
+                    }
+                    onClick={() => setClientToRemove(connection)}
+                    type="button"
+                  >
+                    {tokenState.removingClientId === connection.client_id
+                      ? "Removing"
+                      : "Remove"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -159,6 +182,22 @@ const McpSection = () => {
           Read the MCP docs
         </a>
       </SettingsCard>
+
+      {clientToRemove && (
+        <ConfirmDialog
+          confirmLabel="Remove client"
+          footerVerb="remove"
+          icon={Trash2}
+          id="confirm-remove-oauth-client"
+          loading={
+            tokenState.removingClientId === clientToRemove.client_id
+          }
+          loadingLabel="Removing client"
+          message={`Remove ${clientToRemove.client_name || "this client"}? It disconnects now and must register again before it can reconnect.`}
+          onCancel={() => setClientToRemove(null)}
+          onConfirm={() => void removeClient()}
+        />
+      )}
     </SettingsSectionShell>
   );
 };
