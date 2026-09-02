@@ -222,7 +222,15 @@ const assigneesAssign = async (
         assignmentOutcome = result.outcome;
       } else {
         assignStatus = "Unassigned";
-        await removeAssignee({ ...props, assign, assigneeIntent: "Unassigned" });
+        const removalOutcome = await removeAssignee({
+          ...props,
+          assign,
+          assigneeIntent: "Unassigned",
+        });
+        if (removalOutcome === "stale-task") {
+          assignmentOutcome = "stale-task";
+          assignStatus = "Conflict";
+        }
       }
     }
 
