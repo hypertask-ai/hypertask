@@ -667,7 +667,9 @@ const removeAssignee = async ({
     );
     return { removed: true, webhookDeliveryId, boardWebhookDeliveryIds };
   });
-  if (removal.staleTask) return "stale-task" as const;
+  if ("staleTask" in removal && removal.staleTask) {
+    return "stale-task" as const;
+  }
   if (!removal.removed) return "already-unassigned" as const;
   await publishAgentWebhookDeliveries([removal.webhookDeliveryId]);
   await publishBoardWebhookDeliveries(removal.boardWebhookDeliveryIds);
