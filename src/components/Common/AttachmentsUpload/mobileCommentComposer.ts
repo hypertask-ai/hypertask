@@ -21,6 +21,16 @@
  * rendering the mic under a different parent unmounts it and throws away an
  * in-flight MediaRecorder (#2666).
  */
+export function mobileEditorTriggerText(
+  trigger: "@" | "/",
+  textBeforeCaret: string,
+) {
+  if (trigger === "@" && textBeforeCaret && !/\s$/.test(textBeforeCaret)) {
+    return " @";
+  }
+  return trigger;
+}
+
 export function mobileCommentMicWrapperClass({
   hasText,
   isRecording,

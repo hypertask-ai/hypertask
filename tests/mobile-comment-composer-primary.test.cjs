@@ -24,6 +24,7 @@ const jiti = require("jiti")(__filename, {
 });
 const {
   mobileCommentMicWrapperClass,
+  mobileEditorTriggerText,
 } = jiti(
   path.join(root, "src/components/Common/AttachmentsUpload/mobileCommentComposer.ts"),
 );
@@ -40,6 +41,13 @@ const commentMicState = {
   isMobileAiChat: false,
   isProcessing: false,
 };
+
+test("the + menu inserts a mention prefix that always opens the picker", () => {
+  assert.equal(mobileEditorTriggerText("@", ""), "@");
+  assert.equal(mobileEditorTriggerText("@", " "), "@");
+  assert.equal(mobileEditorTriggerText("@", "text"), " @");
+  assert.equal(mobileEditorTriggerText("/", "text"), "/");
+});
 
 test("empty composer: the mic is the primary, pinned to the right", () => {
   const cls = mobileCommentMicWrapperClass({ hasText: false });

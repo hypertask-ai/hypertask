@@ -47,3 +47,27 @@ export const shouldSyncDraft = (
   rendered: string,
   userHasEdited: boolean
 ) => !userHasEdited && incoming !== rendered;
+
+export function shouldSkipUnchangedMobileDescriptionSave({
+  isMobileExistingSave,
+  mode,
+  hasDraft,
+  openingHtml,
+  currentHtml,
+  attachmentsChanged,
+}: {
+  isMobileExistingSave: boolean;
+  mode: string;
+  hasDraft: boolean;
+  openingHtml?: string;
+  currentHtml?: string;
+  attachmentsChanged: boolean;
+}) {
+  return (
+    isMobileExistingSave &&
+    mode === "read-edit-description" &&
+    !hasDraft &&
+    normalizeEditorHtml(openingHtml) === normalizeEditorHtml(currentHtml) &&
+    !attachmentsChanged
+  );
+}
