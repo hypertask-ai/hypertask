@@ -27,6 +27,8 @@ const clientId = 'android-client'
 const refreshRows = new Map()
 const revokedAccessTokens = []
 let authorizationCodeUsed = false
+let claimedOwnerId = null
+const clientLocks = []
 
 const authCode = {
   code: 'android-one-time-code',
@@ -42,6 +44,23 @@ const authCode = {
 
 function transactionClient() {
   return {
+    $queryRaw: async (strings, ...values) => {
+      clientLocks.push({ sql: strings.join('?'), values })
+      return [{ client_id: clientId }]
+    },
+    oAuthClient: {
+      updateMany: async ({ where, data }) => {
+        if (
+          where.client_id !== clientId ||
+          where.owner_id !== null ||
+          claimedOwnerId !== null
+        ) {
+          return { count: 0 }
+        }
+        claimedOwnerId = data.owner_id
+        return { count: 1 }
+      },
+    },
     oAuthAuthorizationCode: {
       updateMany: async () => {
         if (authorizationCodeUsed) return { count: 0 }
@@ -158,6 +177,10 @@ test('Android receives a hashed, rotating, revocable OAuth session', async () =>
   const initial = await initialResponse.json()
 
   assert.equal(initialResponse.status, 200, JSON.stringify(initial))
+  assert.equal(clientLocks.length, 1)
+  assert.match(clientLocks[0].sql, /WHERE "client_id" = \?\s+FOR UPDATE/)
+  assert.deepEqual(clientLocks[0].values, [clientId])
+  assert.equal(claimedOwnerId, owner.id)
   const initialAccess = jwt.verify(initial.access_token, process.env.JWT_SECRET, {
     issuer: process.env.JWT_ISSUER,
     audience: process.env.JWT_OAUTH_AUDIENCE,

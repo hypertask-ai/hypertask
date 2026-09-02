@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
         createdAt: Date;
         lastAuthorized: Date;
         enabled: boolean | null;
+        is_owner: boolean;
         connected_via_agent: boolean;
         agent_display_name: string | null;
       }
@@ -62,6 +63,7 @@ export async function GET(request: NextRequest) {
           createdAt: client.createdAt,
           lastAuthorized: authCode.createdAt,
           enabled: (client as { enabled?: boolean }).enabled ?? true,
+          is_owner: client.owner_id === user.id,
           connected_via_agent: Boolean(authCode.agent_id),
           agent_display_name: authCode.agent?.displayName ?? null,
         });

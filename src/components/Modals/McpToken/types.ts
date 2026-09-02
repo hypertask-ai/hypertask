@@ -7,6 +7,7 @@ export interface Connection {
   createdAt: Date
   lastAuthorized: Date
   enabled: boolean | null
+  is_owner: boolean
   connected_via_agent?: boolean
   agent_display_name?: string | null
 }

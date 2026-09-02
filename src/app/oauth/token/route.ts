@@ -423,11 +423,24 @@ export async function POST(request: NextRequest) {
     // transaction can consume the code and return a token.
     try {
       session = await prisma.$transaction(async (tx) => {
+        // Match deletion's parent-before-children lock order so ownership claims
+        // and one-time code consumption cannot deadlock with client removal.
+        await tx.$queryRaw<Array<{ client_id: string }>>`
+          SELECT "client_id"
+          FROM "OAuthClient"
+          WHERE "client_id" = ${authCode.client_id}
+          FOR UPDATE
+        `
         const consumed = await tx.oAuthAuthorizationCode.updateMany({
           where: { code: code as string, used: false },
           data: { used: true }
         })
         if (consumed.count !== 1) return null
+
+        await tx.oAuthClient.updateMany({
+          where: { client_id: authCode.client_id, owner_id: null },
+          data: { owner_id: authCode.user.id },
+        })
 
         try {
           const accessToken = createOAuthToken(
