@@ -182,15 +182,14 @@ const AttachmentsUpload = (props: IProps) => {
   const insertEditorTrigger = (trigger: "@" | "/") => {
     if (!editor) return;
     const { $from } = editor.state.selection;
-    const textBeforeCaret =
-      $from.parentOffset > 0
-        ? $from.parent.textBetween(
-            $from.parentOffset - 1,
-            $from.parentOffset,
-            "\n",
-            "\n",
-          )
-        : "";
+    const nodeBefore = $from.nodeBefore;
+    const textBeforeCaret = nodeBefore?.isText
+      ? nodeBefore.text?.slice(-1) ?? ""
+      : nodeBefore?.type.name === "hardBreak"
+        ? "\n"
+        : nodeBefore
+          ? "\uFFFC"
+          : "";
     editor
       .chain()
       .focus()

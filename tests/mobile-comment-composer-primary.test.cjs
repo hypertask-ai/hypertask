@@ -46,6 +46,8 @@ test("the + menu inserts a mention prefix that always opens the picker", () => {
   assert.equal(mobileEditorTriggerText("@", ""), "@");
   assert.equal(mobileEditorTriggerText("@", " "), "@");
   assert.equal(mobileEditorTriggerText("@", "text"), " @");
+  assert.equal(mobileEditorTriggerText("@", "\uFFFC"), " @");
+  assert.equal(mobileEditorTriggerText("@", "\n"), "@");
   assert.equal(mobileEditorTriggerText("/", "text"), "/");
 });
 
