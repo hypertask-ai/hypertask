@@ -1038,8 +1038,10 @@ export function useAiChat() {
 
     if (!content.trim()) return;
     sendInFlightRef.current = true;
+    const taskAwareChatSurface =
+      surface === "task_detail" || surface === "inbox";
     const streamTaskId =
-      !isFullScreenChat && isDetailPage && inViewObject?.taskId
+      taskAwareChatSurface && inViewObject?.taskId
         ? inViewObject.taskId
         : undefined;
 

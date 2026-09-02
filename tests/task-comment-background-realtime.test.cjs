@@ -558,5 +558,7 @@ test("successful AI stream completion refreshes the task captured before streami
 
   assert.ok(captureIndex > -1 && captureIndex < sessionAwaitIndex);
   assert.ok(successIndex > sessionAwaitIndex && refreshIndex > successIndex);
+  assert.match(src, /surface === "task_detail"/);
+  assert.match(src, /surface === "inbox"/);
   assert.match(src, /\.\.\.\(streamTaskId \? \{ task_id: streamTaskId \} : \{\}\)/);
 });
