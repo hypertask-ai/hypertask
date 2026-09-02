@@ -10,6 +10,7 @@ const { Schema } = require("@tiptap/pm/model");
 const root = path.resolve(__dirname, "..");
 const originalCache = new Map(Object.entries(require.cache));
 const toastErrors = [];
+const toastSuccesses = [];
 
 const stubModule = (filename, exports) => {
   require.cache[filename] = {
@@ -26,7 +27,9 @@ stubModule(require.resolve("react-hot-toast"), {
   default: {
     dismiss: () => {},
     error: (message) => toastErrors.push(message),
+    loading: () => {},
     promise: (request) => request,
+    success: (message) => toastSuccesses.push(message),
   },
 });
 stubSourceModule("src/components/Common/SendArrow.tsx", {
@@ -420,6 +423,7 @@ test("first mobile AI generation becomes the editable draft with edit controls",
 
 test("mobile Write with AI keeps a newer draft when an AI response becomes stale", async () => {
   toastErrors.length = 0;
+  toastSuccesses.length = 0;
   await withRenderedSheet("Original draft", async ({ container, dom, editor }) => {
     let resolveResponse;
     global.fetch = () =>
@@ -439,5 +443,6 @@ test("mobile Write with AI keeps a newer draft when an AI response becomes stale
 
     assert.equal(editor.setContentCalls.length, 0);
     assert.match(toastErrors.at(-1), /newer draft was preserved/);
+    assert.deepEqual(toastSuccesses, []);
   });
 });

@@ -736,19 +736,21 @@ const InlineDraftAiFloat = ({
     })();
 
     try {
-      const html = await toast.promise(
-        request,
-        {
-          loading:
-            action.command === "WriteContent"
-              ? "Writing draft"
-              : "Rewriting draft",
-          success: "Draft updated",
-          error: (error) =>
-            error instanceof Error ? error.message : "AI edit failed",
-        },
-        { id: toastId },
-      );
+      const loadingMessage =
+        action.command === "WriteContent" ? "Writing draft" : "Rewriting draft";
+      if (isMobileAiSheet) toast.loading(loadingMessage, { id: toastId });
+      const html = isMobileAiSheet
+        ? await request
+        : await toast.promise(
+            request,
+            {
+              loading: loadingMessage,
+              success: "Draft updated",
+              error: (error) =>
+                error instanceof Error ? error.message : "AI edit failed",
+            },
+            { id: toastId },
+          );
       if (requestId !== requestIdRef.current) return;
       if (
         isMobileAiSheet &&
@@ -759,6 +761,7 @@ const InlineDraftAiFloat = ({
             : mobileSourceRevisionRef.current)
       ) {
         dispatchMobileReview({ type: "reject", requestId });
+        toast.dismiss(toastId);
         return;
       }
       setPrompt("");
@@ -775,6 +778,7 @@ const InlineDraftAiFloat = ({
           dispatchMobileReview({ type: "reject", requestId });
           toast.error(
             "This comment changed while AI was working. The newer draft was preserved.",
+            { id: toastId },
           );
           return;
         }
@@ -783,15 +787,19 @@ const InlineDraftAiFloat = ({
         setHasMobileDraft(true);
         mobileSourceRevisionRef.current += 1;
         dispatchMobileReview({ type: "reset" });
+        toast.success("Draft updated", { id: toastId });
         return;
       }
       replaceScope(html, range);
       setHasResult(true);
-    } catch {
+    } catch (error) {
       if (isMobileAiSheet) {
         dispatchMobileReview({ type: "reject", requestId });
+        toast.error(error instanceof Error ? error.message : "AI edit failed", {
+          id: toastId,
+        });
       }
-      // toast.promise already reports the request error.
+      // Desktop request errors are reported by toast.promise.
     } finally {
       if (requestId === requestIdRef.current) {
         loadingRef.current = false;
