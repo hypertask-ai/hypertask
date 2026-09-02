@@ -5,7 +5,7 @@ const React = require("react");
 const { act } = React;
 const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
-const { Schema } = require("@tiptap/pm/model");
+const { DOMParser: ProseMirrorDOMParser, Schema } = require("@tiptap/pm/model");
 
 const root = path.resolve(__dirname, "..");
 const originalCache = new Map(Object.entries(require.cache));
@@ -84,9 +84,22 @@ const schema = new Schema({
   nodes: {
     doc: { content: "block+" },
     paragraph: {
-      content: "text*",
+      content: "inline*",
       group: "block",
+      parseDOM: [{ tag: "p" }],
       toDOM: () => ["p", 0],
+    },
+    horizontal_rule: {
+      atom: true,
+      group: "block",
+      parseDOM: [{ tag: "hr" }],
+      toDOM: () => ["hr"],
+    },
+    hard_break: {
+      group: "inline",
+      inline: true,
+      parseDOM: [{ tag: "br" }],
+      toDOM: () => ["br"],
     },
     text: { group: "inline" },
   },
@@ -117,9 +130,10 @@ function createEditor(text = "") {
       },
       setContent: (html) => {
         editor.setContentCalls.push(html);
-        const textContent = html.replace(/<[^>]*>/g, "").trim();
-        editor.state.doc = schema.node("doc", null, [paragraph(textContent)]);
-        editor.isEmpty = !textContent;
+        const element = global.document.createElement("div");
+        element.innerHTML = html;
+        editor.state.doc = ProseMirrorDOMParser.fromSchema(schema).parse(element);
+        editor.isEmpty = !element.textContent.trim() && !element.querySelector("hr");
         return true;
       },
       setTextSelection: (range) => {
