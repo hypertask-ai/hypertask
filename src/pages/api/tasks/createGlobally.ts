@@ -312,13 +312,38 @@ const handler: NextApiHandler = async (
     // HTPR-5922: validate the final section against the selected board. The
     // writer may suggest a section, but a stale or foreign section must never
     // be written into a task on the current board.
-    const normalizedSectionId = sectionId == null ? null : Number(sectionId);
+    let normalizedSectionId: number | null = null;
+    if (sectionId != null) {
+      const isCanonicalSectionId =
+        (typeof sectionId === "number" && Number.isSafeInteger(sectionId)) ||
+        (typeof sectionId === "string" && /^(?:0|[1-9]\d*)$/.test(sectionId));
+      normalizedSectionId = isCanonicalSectionId ? Number(sectionId) : NaN;
+    }
     if (
       normalizedSectionId !== null &&
-      (!Number.isInteger(normalizedSectionId) || normalizedSectionId <= 0)
+      (!Number.isSafeInteger(normalizedSectionId) || normalizedSectionId <= 0)
     ) {
       return res.status(400).json({ message: "Invalid section" });
     }
+
+    let parsedStartDate: Date | null | undefined;
+    if (startDate != null) {
+      if (startDate instanceof Date) {
+        if (Number.isNaN(startDate.getTime())) {
+          return res.status(400).json({ message: "Invalid start date" });
+        }
+        parsedStartDate = startDate;
+      } else if (typeof startDate === "string") {
+        const parsed = new Date(startDate);
+        if (Number.isNaN(parsed.getTime())) {
+          return res.status(400).json({ message: "Invalid start date" });
+        }
+        parsedStartDate = parsed;
+      } else {
+        return res.status(400).json({ message: "Invalid start date" });
+      }
+    }
+
     const requestedSectionTitle =
       typeof section_title === "string" ? section_title.trim() : "";
     const sectionWhere: Prisma.SectionWhereInput = {
@@ -372,7 +397,7 @@ const handler: NextApiHandler = async (
           projectId,
           sectionId: sectionRow.id,
           dueDate,
-          startDate,
+          startDate: parsedStartDate,
           // Explicit for parity with setDueDate.ts's reset-on-change (see invokeDueDate.ts).
           dueDateNotifiedAt: null,
           updatedAt: currentDate,

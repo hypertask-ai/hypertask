@@ -112,8 +112,7 @@ test("mobile classic properties appear before the description and include start 
 
 test("start-date selection is local to create mode and is persisted in task creation", () => {
   assert.match(startDate, /mode === "Update" && inViewObject\.taskId/);
-  assert.match(createRoute, /startDate,/);
-  assert.match(createRoute, /startDate,\n\s+\/\/ Explicit/);
+  assert.match(createRoute, /startDate: parsedStartDate,/);
   assert.match(createRoute, /sectionId: sectionRow\.id,/);
   assert.match(createRoute, /requestedSectionTitle/);
   assert.match(createRoute, /Section does not belong to this project/);

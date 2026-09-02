@@ -315,3 +315,31 @@ test("section fallback rejects a foreign section title", async () => {
   assert.match(response.result().body.message, /does not belong/);
   assert.equal(createdTaskData.length, 0);
 });
+
+test("malformed section IDs are rejected before section lookup", async () => {
+  const { handler, createdTaskData, sectionLookupCalls } = loadCreateRoute();
+  const response = responseHarness();
+
+  await createTask(handler, taskCreateBody({ sectionId: true }), response);
+
+  assert.equal(response.result().status, 400);
+  assert.match(response.result().body.message, /Invalid section/);
+  assert.equal(sectionLookupCalls.length, 0);
+  assert.equal(createdTaskData.length, 0);
+});
+
+test("malformed start dates are rejected before task creation", async () => {
+  const { handler, createdTaskData, sectionLookupCalls } = loadCreateRoute();
+  const response = responseHarness();
+
+  await createTask(
+    handler,
+    taskCreateBody({ startDate: "not-a-date" }),
+    response,
+  );
+
+  assert.equal(response.result().status, 400);
+  assert.match(response.result().body.message, /Invalid start date/);
+  assert.equal(sectionLookupCalls.length, 0);
+  assert.equal(createdTaskData.length, 0);
+});
