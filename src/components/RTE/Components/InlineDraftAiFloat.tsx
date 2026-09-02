@@ -489,6 +489,7 @@ const InlineDraftAiFloat = ({
     surface.innerHTML = mobileEditableSurfaceHtml;
   }, [
     isMobileAiSheet,
+    mobileEditableHtml,
     mobileEditableSurfaceHtml,
     mobileReview.isRefining,
     mobileReview.phase,
