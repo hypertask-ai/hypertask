@@ -1,5 +1,6 @@
 import React from "react";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
 interface MobileTaskDueDateProps {
   dueDate: Date | string | null | undefined;
@@ -19,7 +20,7 @@ const MobileTaskDueDate = ({
       <button
         type="button"
         aria-label="Change due date"
-        className="appearance-none bg-transparent text-left touch-manipulation"
+        className={`${MOBILE_TARGET} appearance-none bg-transparent text-left touch-manipulation`}
         onClick={onClick}
       >
         <DueDateLabel
