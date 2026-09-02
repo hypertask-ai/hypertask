@@ -30,6 +30,7 @@ function transactionHarness({ failOutbox = false } = {}) {
               title: data.title,
               status: "Normal",
               dueDate: null,
+              startDate: null,
               sectionId: 9,
               priority: null,
             };
@@ -83,6 +84,7 @@ test("task creation commits with its task.created outbox row", async () => {
           title: task.title,
           status: task.status,
           dueDate: task.dueDate,
+          startDate: task.startDate,
           sectionId: task.sectionId,
           section: "Bugs",
           priority: task.priority,
@@ -122,6 +124,7 @@ test("task creation rolls back when its outbox row cannot be written", async () 
             title: task.title,
             status: task.status,
             dueDate: task.dueDate,
+            startDate: task.startDate,
             sectionId: task.sectionId,
             section: "Bugs",
             priority: task.priority,

@@ -99,7 +99,7 @@ export const MobileCreateTaskProperties = () => {
                         key={property.label}
                         type="button"
                         onClick={property.onClick}
-                        className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+                        className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
                     >
                         <span className="text-text-light-gray">{property.label}:</span>{" "}
                         <strong>{property.value}</strong>
@@ -115,7 +115,7 @@ export const MobileCreateTaskProperties = () => {
                         key={property.label}
                         type="button"
                         onClick={property.onClick}
-                        className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+                        className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
                     >
                         <span className="text-text-light-gray">{property.label}:</span>{" "}
                         <strong>{property.value}</strong>

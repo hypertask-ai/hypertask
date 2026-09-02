@@ -115,6 +115,8 @@ test("mobile classic properties appear before the description and include start 
   assert.match(properties, /Filled in by the AI task writer/);
   assert.match(properties, /mode="Create"/);
   assert.match(properties, /<StartDateModal/);
+  assert.doesNotMatch(properties, /min-h-11 rounded-sm bg-cardBackground/);
+  assert.doesNotMatch(writerContainer, /min-h-11 rounded-sm bg-cardBackground/);
 });
 
 test("start-date selection stays local to create mode", () => {

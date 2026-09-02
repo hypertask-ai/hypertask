@@ -766,7 +766,7 @@ const AITaskWriterContainer: React.FC<
         <button
           type="button"
           onClick={mobileCreateTask.onBoardClick}
-          className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+          className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
         >
           <span className="text-text-light-gray">Board:</span>{" "}
           <strong>{mobileCreateTask.boardLabel}</strong>
@@ -774,14 +774,14 @@ const AITaskWriterContainer: React.FC<
         <button
           type="button"
           onClick={mobileCreateTask.onPriorityClick}
-          className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+          className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
         >
           Priority: {mobileCreateTask.priorityLabel}
         </button>
         <button
           type="button"
           onClick={mobileCreateTask.onAssigneeClick}
-          className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+          className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
         >
           Assignee: {mobileCreateTask.assigneeLabel}
         </button>

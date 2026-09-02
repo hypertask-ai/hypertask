@@ -24,6 +24,7 @@ function txWithPriority(priority) {
       title: 'Created with a priority',
       status: 'Normal',
       dueDate: null,
+      startDate: null,
       sectionId: null,
       section: 'To Do',
       priority,

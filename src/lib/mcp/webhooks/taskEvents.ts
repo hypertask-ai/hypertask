@@ -29,6 +29,7 @@ export interface WebhookTaskSnapshot {
   title: string
   status: WebhookTaskStatus
   dueDate: Date | null
+  startDate: Date | null
   sectionId: number | null
   section: string
   priority: { id: string; priority_index: number; Priority_Value: string } | null
@@ -104,6 +105,7 @@ export async function persistTaskCreatedWebhook(
             }
           : null,
         dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+        startDate: task.startDate ? task.startDate.toISOString() : null,
       },
       actor: { userId: actorUserId, agentId: actorAgentId },
     },

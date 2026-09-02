@@ -501,6 +501,7 @@ const handler: NextApiHandler = async (
             title: task.title,
             status: task.status,
             dueDate: task.dueDate,
+            startDate: task.startDate,
             sectionId: task.sectionId,
             section: sectionRow?.section_title ?? task.section,
             priority: createdPriority
