@@ -36,7 +36,10 @@ import {
 import TutorialTooltip from "@/components/PageComponents/Interactive-Onboarding/Components/TutorialTip";
 import { IAllCommands, IProject } from "@/models/model";
 import { useTourContext } from "@/lib/contexts/TourContext";
-import { getHTCFrecencyScore } from "./htcFrecency";
+import {
+  getHTCFrecencyScore,
+  recordHTCCommandUsage,
+} from "./htcFrecency";
 import { findCommandPosition } from "./commandSelection";
 import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
@@ -395,34 +398,13 @@ const Commands = (props: Props) => {
     };
   }, []);
     
-    // Function to update the command frequency map with the selected command
     function updateCommandFrequency(command: ICommandList) {
       if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
       if(isInteractive) return callback(command)
-      //Added this return statement below because Task/Comment Options has dynamic wordings that will make no sense if theyre saved in frequent.
-      //ie reply to comment wont make sense in kanban page.
-      if(contextOptions?.context !== "Task" && command.key !== "toggleArchivedOnBoard")
-        setFrequentlyUsed(prevFrequentlyUsed => {
-            // Check if the command already exists in the object
-            if (prevFrequentlyUsed.hasOwnProperty(command.key)) {
-                // If the command exists, update its frequency
-                const updatedCommand = {
-                  ...command,
-                  frequency: (prevFrequentlyUsed[command.key].frequency || 0) + 1,
-                  lastUsedAt: Date.now(),
-                  };
-                console.log("🚀 ~ updateCommandFrequency ~ updatedCommand:", updatedCommand)
-                  // Update the command in the object
-                return { ...prevFrequentlyUsed, [command.key]: updatedCommand };
-            } else {
-                // If the command does not exist, add it with a frequency of 1
-                return {
-                  ...prevFrequentlyUsed,
-                  [command.key]: { ...command, frequency: 1, lastUsedAt: Date.now() },
-                };
-            }
-        });
+      setFrequentlyUsed((previousUsage) =>
+        recordHTCCommandUsage(previousUsage, command)
+      );
       (document.activeElement as HTMLElement).blur();
       if (command.key === "toggleTableTitleWrap") {
         setTableTitleWrap((prev) => !prev);
