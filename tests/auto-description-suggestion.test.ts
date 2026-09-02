@@ -7,6 +7,7 @@ import {
   dismissDescriptionSuggestion,
   hasDescriptionContent,
   isDescriptionSuggestionDismissed,
+  mergeDescriptionTakeoverAttachments,
   shouldSuggestDescription,
   snapshotDescriptionAttachments,
 } from "../src/lib/ai/autoDescriptionSuggestion";
@@ -88,6 +89,13 @@ test("takeover requires an empty editor and Undo requires unchanged generated co
   assert.equal(
     canUndoDescriptionTakeover("<p>AI draft with user edit</p>", takeover),
     false,
+  );
+  assert.deepEqual(
+    mergeDescriptionTakeoverAttachments(
+      [{ id: "existing" }],
+      [{ id: 0, file: generatedFile }],
+    ),
+    [{ id: "existing" }, { id: 0, file: generatedFile }],
   );
   assert.equal(
     snapshotDescriptionAttachments([{ id: 0, file: generatedFile }]),

@@ -86,6 +86,7 @@ import {
   hasDescriptionContent,
   type AutoDescriptionTakeover,
   isDescriptionSuggestionDismissed,
+  mergeDescriptionTakeoverAttachments,
   shouldSuggestDescription,
   snapshotDescriptionAttachments,
 } from "@/lib/ai/autoDescriptionSuggestion";
@@ -864,7 +865,11 @@ const Tiptap = ({
     }
   }
 
-  const handleAISave = (content: Node | Content | Fragment, attachments?: any[]) => {
+  const handleAISave = (
+    content: Node | Content | Fragment,
+    attachments?: any[],
+    preserveExistingAttachments = false,
+  ) => {
     editor?.commands.setContent(content);
     
     // Map AI attachments to match FileItem structure: { id, file }
@@ -881,15 +886,21 @@ const Tiptap = ({
         taskId: null, // AI generated attachments don't have a taskId yet
       }
     })) || [];
+    const attachmentsToSave = preserveExistingAttachments
+      ? mergeDescriptionTakeoverAttachments(
+          newCommentAttachments,
+          mappedAttachments,
+        )
+      : mappedAttachments;
     
     console.log("🚀 ~ AI attachments mapped for TipTap:", mappedAttachments);
-    setNewCommentAttachments(mappedAttachments);
+    setNewCommentAttachments(attachmentsToSave);
     setTrigger(prev => !prev);
     setShouldShowAITaskWriter(false);
     editor?.commands.unsetHighlight();
     handleFocus(true);
     setAiTriggerData({ initialPrompt: "", autoTrigger: false });
-    return mappedAttachments;
+    return attachmentsToSave;
   };
 
   const handleAutoDescriptionTakeover = (
@@ -904,7 +915,11 @@ const Tiptap = ({
     const before = editor.getHTML();
     autoDescriptionAttachmentsBeforeRef.current = [...newCommentAttachments];
     setEditMode("description");
-    const insertedAttachments = handleAISave(content, generatedAttachments);
+    const insertedAttachments = handleAISave(
+      content,
+      generatedAttachments,
+      true,
+    );
     autoDescriptionAttachmentsAfterSnapshotRef.current =
       snapshotDescriptionAttachments(insertedAttachments);
     setAutoDescriptionVisible(false);

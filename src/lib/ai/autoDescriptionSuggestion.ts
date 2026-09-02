@@ -57,6 +57,13 @@ export function canUndoDescriptionTakeover(
   return currentHtml === takeover.inserted;
 }
 
+export function mergeDescriptionTakeoverAttachments<TExisting, TGenerated>(
+  existing: readonly TExisting[],
+  generated: readonly TGenerated[],
+) {
+  return [...existing, ...generated];
+}
+
 export function snapshotDescriptionAttachments(attachments: readonly unknown[]) {
   return JSON.stringify(
     attachments.map((attachment) => {
