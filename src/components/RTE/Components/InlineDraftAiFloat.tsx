@@ -147,14 +147,14 @@ function insertSanitizedEditableTransfer(
     | ReactClipboardEvent<HTMLDivElement>
     | ReactDragEvent<HTMLDivElement>,
 ) {
+  // Prevent unsupported drops and unsanitized clipboard/drop markup from reaching the live editor.
+  event.preventDefault();
   const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
   const rawHtml = transfer.getData("text/html");
   const html = sanitizeAiHtml(rawHtml);
   const text = transfer.getData("text/plain");
   if (!rawHtml && !text) return;
 
-  // Prevent the browser from inserting unsanitized clipboard/drop markup into the live editor.
-  event.preventDefault();
   if ("dataTransfer" in event) placeCaretAtDropPoint(event);
   if (html) {
     document.execCommand("insertHTML", false, html);
