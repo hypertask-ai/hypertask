@@ -106,5 +106,9 @@ export type TDefaultEditFocus={
      */
     aiPrompt?:string;
 }
+export const MOBILE_AI_TASK_WRITER_FOCUS = {
+    defaultEditMode: "Description-ai",
+    defaultFocus: "Description",
+} satisfies TDefaultEditFocus;
 export type TSendBackButtonParam = "Save" | "SaveAndClose" | "SaveAndNew"
 export type TSendBackAttachmentButton = (sendBackType?:TSendBackButtonParam)=>void

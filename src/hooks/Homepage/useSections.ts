@@ -9,7 +9,7 @@ import { useStore } from "jotai";
 import { ITask } from "@/models/model";
 import { useRouter } from "next/navigation";
 import useAddDeleteTaskInBoards from "../MultiPages/useAddDeleteTaskInBoards";
-import { TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
+import { MOBILE_AI_TASK_WRITER_FOCUS, TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
 import useHypertasksRecoilStates from "../RecoilRoot/useHypertasksRecoilStates";
 import globalConstants from "@/lib/constants";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
@@ -100,12 +100,7 @@ const useSections = ({
       // topInputRef.current?.focus();
       toggleCreateTaskGlobally(
         sectionPayload,
-        defaultEditFocus ?? (isMbl
-          ? {
-              defaultEditMode: "Description-ai",
-              defaultFocus: "Description",
-            }
-          : undefined),
+        defaultEditFocus ?? (isMbl ? MOBILE_AI_TASK_WRITER_FOCUS : undefined),
       )
     // }
     //  else {
