@@ -262,6 +262,7 @@ const Tiptap = ({
     ? `${mobileEditViewport.visibleHeight}px`
     : "100dvh";
   const [mobileEditSaving, setMobileEditSaving] = useState(false);
+  const [saveInFlight, setSaveInFlight] = useState(false);
   const mobileEditSavingRef = useRef(false);
   const saveInFlightRef = useRef(false);
   const mobileEditSessionActiveRef = useRef(false);
@@ -538,6 +539,7 @@ const Tiptap = ({
     }
 
     saveInFlightRef.current = true;
+    setSaveInFlight(true);
 
     const isMobileExistingSave = mobileExistingEditOpen;
     if (isMobileExistingSave) {
@@ -545,8 +547,8 @@ const Tiptap = ({
       setMobileEditSaving(true);
       setShouldShowAITaskWriter(false);
       setAiTriggerData({ initialPrompt: "", autoTrigger: false });
-      editor?.setEditable(false, false);
     }
+    editor?.setEditable(false, false);
 
     cancelDebounceRef.current?.();
     if (mode === "read-edit-description") cancelPendingDraftUpdates();
@@ -610,12 +612,13 @@ const Tiptap = ({
       return false;
     } finally {
       saveInFlightRef.current = false;
+      setSaveInFlight(false);
       if (isMobileExistingSave) {
         mobileEditSavingRef.current = false;
         setMobileEditSaving(false);
-        if (allowEdit && editor && !editor.isDestroyed) {
-          editor.setEditable(!isRecording, false);
-        }
+      }
+      if (allowEdit && editor && !editor.isDestroyed) {
+        editor.setEditable(!isRecording, false);
       }
     }
   };
@@ -1616,6 +1619,7 @@ const Tiptap = ({
           isEditable={
             allowEdit &&
             !isRecording &&
+            !saveInFlight &&
             !(mode === "read-edit-description" && uploadingDescription)
           }
           isEditModeActive={allowEdit}
@@ -1706,14 +1710,14 @@ const Tiptap = ({
               >
                 <TiptapMainContainer
                   mobileEditOpen
-                  mobileEditSaving={mobileEditSaving}
+                  mobileEditSaving={mobileEditSaving || saveInFlight}
                   onCancelMobileEdit={cancelMobileExistingEdit}
                 />
               </div>,
               document.body,
             )
           ) : (
-            <TiptapMainContainer />
+            <TiptapMainContainer mobileEditSaving={saveInFlight} />
           )}
 
           <button

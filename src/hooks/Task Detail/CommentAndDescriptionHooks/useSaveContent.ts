@@ -451,7 +451,8 @@ export default function useSaveContent() {
   ) => {
     let saved = false;
     const completeDescriptionSave = uploadingDescription?.onComplete;
-    cancelPendingDraftUpdates();
+    try {
+      cancelPendingDraftUpdates();
     if (currentTask?.id && currentUser?.id) {
       resetDescriptionQuery(currentTask.id, currentUser.id);
       setHasDraftInit(false);
@@ -584,18 +585,20 @@ export default function useSaveContent() {
       } catch (error) {
         console.log("🚀 ~ handleSubmit ~ error:", error)
         toast.error("Could not save description. Your changes are still here.");
-      } finally {
-        console.log(
-          " ============= Description upload finished ================="
-        );
-        setUploadingDescription(undefined);
-        completeDescriptionSave?.(saved);
-        if (saved) setEditMode(null);
       }
     } else {
       toast.error("Could not prepare description. Your changes are still here.");
+    }
+    } catch (error) {
+      console.log("🚀 ~ handleSubmit ~ error:", error)
+      toast.error("Could not save description. Your changes are still here.");
+    } finally {
+      console.log(
+        " ============= Description upload finished ================="
+      );
       setUploadingDescription(undefined);
-      completeDescriptionSave?.(false);
+      completeDescriptionSave?.(saved);
+      if (saved) setEditMode(null);
     }
     return saved;
   };
