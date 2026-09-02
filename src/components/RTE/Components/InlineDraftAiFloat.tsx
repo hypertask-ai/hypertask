@@ -7,6 +7,8 @@ import {
   useReducer,
   useRef,
   useState,
+  type ClipboardEvent as ReactClipboardEvent,
+  type DragEvent as ReactDragEvent,
   type FormEvent,
   type FocusEvent as ReactFocusEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -111,6 +113,25 @@ function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
     ),
   );
   return hasText || hasMedia ? html : "";
+}
+
+function insertSanitizedEditableTransfer(
+  event:
+    | ReactClipboardEvent<HTMLDivElement>
+    | ReactDragEvent<HTMLDivElement>,
+) {
+  const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
+  const html = sanitizeAiHtml(transfer.getData("text/html"));
+  const text = transfer.getData("text/plain");
+  if (!html && !text) return;
+
+  // Prevent the browser from inserting unsanitized clipboard/drop markup into the live editor.
+  event.preventDefault();
+  if (html) {
+    document.execCommand("insertHTML", false, html);
+  } else {
+    document.execCommand("insertText", false, text);
+  }
 }
 
 const InlineDraftAiFloat = ({
@@ -392,14 +413,21 @@ const InlineDraftAiFloat = ({
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, [editor, isMobileAiSheet]);
 
-  const mobileEditableHtml =
-    mobileReview.phase === "review"
-      ? mobileReview.showOriginal
-        ? mobileOpeningSource?.html ?? ""
-        : mobileReview.proposal
-      : mobileReview.isRefining
-        ? mobileReview.proposal
-        : mobileSourceDraft;
+  let mobileEditableHtml = "";
+  if (mobileReview.phase === "review") {
+    if (mobileReview.showOriginal) {
+      mobileEditableHtml =
+        mobileReview.lastRequest?.sourceContent ??
+        mobileOpeningSource?.html ??
+        "";
+    } else {
+      mobileEditableHtml = mobileReview.proposal;
+    }
+  } else if (mobileReview.isRefining) {
+    mobileEditableHtml = mobileReview.proposal;
+  } else {
+    mobileEditableHtml = mobileSourceDraft;
+  }
   const mobileEditableSurfaceHtml =
     sanitizeAiHtml(mobileEditableHtml) ||
     `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet."></p>`;
@@ -421,7 +449,7 @@ const InlineDraftAiFloat = ({
 
   if (!editor || !scope) return null;
 
-  const hasOpeningDraft = Boolean(mobileOpeningSource?.html);
+  const hasOpeningDraft = Boolean(mobileSourceDraft);
   const hasSelection = scope.to > scope.from;
   const showEditChips =
     (isMobileAiSheet && hasOpeningDraft) ||
@@ -912,6 +940,8 @@ const InlineDraftAiFloat = ({
                     contentEditable={!mobileReview.showOriginal}
                     suppressContentEditableWarning
                     onBlur={handleMobileEditableBlur}
+                    onDrop={insertSanitizedEditableTransfer}
+                    onPaste={insertSanitizedEditableTransfer}
                     onInput={
                       mobileReview.showOriginal
                         ? undefined
@@ -977,6 +1007,8 @@ const InlineDraftAiFloat = ({
                     contentEditable={!isLoading}
                     suppressContentEditableWarning
                     onBlur={handleMobileEditableBlur}
+                    onDrop={insertSanitizedEditableTransfer}
+                    onPaste={insertSanitizedEditableTransfer}
                     onInput={
                       mobileReview.isRefining
                         ? handleMobileProposalInput
