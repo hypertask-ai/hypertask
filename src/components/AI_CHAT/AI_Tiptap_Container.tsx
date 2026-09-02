@@ -292,6 +292,14 @@ export function AI_Tiptap_Container() {
               {!pathname?.startsWith("/chat") && <ChatScopeDropdown />}
             </>
           }
+          mobileModelControl={
+            <AIModelDropDownButton
+              optionCallback={dropDownButtonAICallback}
+              aiSelected={currentAiOption}
+              currentOptions={displayAiOptions}
+              mobileQuickPicker
+            />
+          }
           attachmentControl={
             <AttachmentButton
               disabled={false}

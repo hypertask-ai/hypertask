@@ -25,7 +25,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { IChatSession } from "@/models/model";
-import AIModelDropDownButton from "../Global/ModelSelectorDropdown";
+import { getMobileAiChatModelLabel } from "@/lib/aiModelOptions";
 import { useRecoilState } from "@/lib/state";
 import toast from "react-hot-toast";
 import {
@@ -100,9 +100,7 @@ export const ChatHeader = () => {
     toggleRenameChatModal,
     deleteSession,
     editor,
-    dropDownButtonAICallback,
     currentAiOption,
-    displayAiOptions,
   } = useAiChatContext();
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
@@ -237,13 +235,15 @@ export const ChatHeader = () => {
           >
             {currentSession?.title ?? "AI Chat"}
           </div>
-          <AIModelDropDownButton
-            optionCallback={dropDownButtonAICallback}
-            aiSelected={currentAiOption}
-            currentOptions={displayAiOptions}
-            dropDownClassName="-my-2 min-h-11 px-2 py-2 text-text-light-gray"
-            stackSubmenus
-          />
+          <div
+            data-ai-chat-mobile-model-label
+            className="flex min-h-6 items-center gap-1 px-2 text-dense text-text-light-gray"
+          >
+            <span className="truncate">
+              {getMobileAiChatModelLabel(currentAiOption)}
+            </span>
+            <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
+          </div>
         </div>
         <div className="relative shrink-0" ref={dropdownRef}>
           <button
