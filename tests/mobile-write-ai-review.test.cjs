@@ -439,23 +439,41 @@ test("mobile Write with AI preserves atomic rich-text draft content", async () =
   });
 });
 
-test("first mobile AI generation becomes the editable draft with edit controls", async () => {
-  await withRenderedSheet("", async ({ container, dom, editor }) => {
+test("first mobile AI generation can be accepted below the editable draft", async () => {
+  await withRenderedSheet("", async ({ container, dom, editor, getCloseCalls }) => {
     const requests = [];
     const responses = ["<p>Generated draft</p>", "<p>Short draft</p>"];
-    global.fetch = async (_url, options) => {
+    let resolveFirstResponse;
+    global.fetch = (_url, options) => {
       requests.push(JSON.parse(options.body));
-      return {
+      if (requests.length === 1) {
+        return new Promise((resolve) => {
+          resolveFirstResponse = resolve;
+        });
+      }
+      return Promise.resolve({
         ok: true,
         json: async () => ({ corrected_html: responses.shift() }),
-      };
+      });
     };
 
+    assert.equal(buttonWithText(container, "Use this text"), undefined);
     await setInput(dom, container.querySelector("input"), "Draft a reply");
     await click(dom, container.querySelector('[aria-label="Send AI instruction"]'));
 
     assert.equal(requests[0].command, "WriteContent");
     assert.equal(requests[0].content, "");
+    assert.equal(buttonWithText(container, "Use this text"), undefined);
+    assert.match(container.textContent, /Writing draft/);
+
+    await act(async () => {
+      resolveFirstResponse({
+        ok: true,
+        json: async () => ({ corrected_html: responses.shift() }),
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
     assert.equal(
       container.querySelector('[contenteditable="true"]').innerHTML,
       "<p>Generated draft</p>",
@@ -465,9 +483,10 @@ test("first mobile AI generation becomes the editable draft with edit controls",
       container.querySelector("input").placeholder,
       "Describe how to edit the text",
     );
+    const editActions = container.querySelector(".overflow-x-auto");
     assert.deepEqual(
-      [...container.querySelector(".overflow-x-auto").querySelectorAll("button")].map(
-        (button) => button.textContent.trim(),
+      [...editActions.querySelectorAll("button")].map((button) =>
+        button.textContent.trim(),
       ),
       [
         "Improve readability",
@@ -479,7 +498,11 @@ test("first mobile AI generation becomes the editable draft with edit controls",
         "Friendlier",
       ],
     );
-    assert.doesNotMatch(container.textContent, /AI proposal|Try again|Use this text/i);
+    const useText = buttonWithText(container, "Use this text");
+    assert.ok(useText);
+    assert.match(useText.className, /w-full/);
+    assert.match(useText.className, /bg-shadcn-primary/);
+    assert.equal(editActions.previousElementSibling, useText);
     assert.deepEqual(editor.setContentCalls, ["<p>Generated draft</p>"]);
 
     await click(dom, buttonWithText(container, "Shorter"));
@@ -492,6 +515,10 @@ test("first mobile AI generation becomes the editable draft with edit controls",
       "<p>Generated draft</p>",
       "<p>Short draft</p>",
     ]);
+
+    await click(dom, buttonWithText(container, "Use this text"));
+    assert.equal(getCloseCalls(), 1);
+    assert.equal(editor.setContentCalls.at(-1), "<p>Short draft</p>");
   });
 });
 
