@@ -90,7 +90,7 @@ test("mobile controls sit in a left-aligned row with the primary pushed right", 
   );
   assert.match(
     audio,
-    /mobileMicPresentation\(\{[\s\S]*?isMobileCreateComment,[\s\S]*?isMobileTaskWriter,[\s\S]*?isMobileNewTask,[\s\S]*?isMobileAiChat,[\s\S]*?globalRecording,[\s\S]*?hasText,[\s\S]*?isProcessing,[\s\S]*?\}\)/,
+    /mobileMicPresentation\(\{[\s\S]*?isMobileCreateComment,[\s\S]*?isMobileTaskWriter,[\s\S]*?isMobileNewTask,[\s\S]*?isMobileAiChat,[\s\S]*?globalRecording,[\s\S]*?hasText,[\s\S]*?isProcessing,[\s\S]*?primaryTone: mobilePrimaryTone,[\s\S]*?\}\)/,
   );
   assert.match(audio, /prominent \? prominentClassName : "h-\[32px\]"/);
   for (const mode of ["isMobileTaskWriter", "isMobileNewTask", "isMobileAiChat"]) {

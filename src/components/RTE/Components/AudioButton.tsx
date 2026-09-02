@@ -14,7 +14,10 @@ import { createTapGuard } from "@/lib/utils/deliberateTap";
 import { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 import { collectDictationTranscriptFromSse } from "@/lib/dictationSse";
 import { mobileMicPresentation } from "./mobileAudioButtonPresentation";
-import type { MobileMicPresentation } from "./mobileAudioButtonPresentation";
+import type {
+  MobileMicPresentation,
+  MobileMicPrimaryTone,
+} from "./mobileAudioButtonPresentation";
 import type {
   DictationCoordinator,
   DictationLease,
@@ -45,6 +48,8 @@ interface IProp {
   ariaLabel?: string;
   /** Explicit mobile hierarchy for field-level mics that must not become a primary CTA. */
   mobilePresentation?: MobileMicPresentation;
+  /** Optional accent for a surface whose approved primary action uses the AI brand color. */
+  mobilePrimaryTone?: MobileMicPrimaryTone;
   /** Serializes recorder instances that write into the same draft. */
   dictationCoordinator?: DictationCoordinator;
   disabled?: boolean;
@@ -76,6 +81,7 @@ export const AudioButton = ({
   idleLabel,
   ariaLabel,
   mobilePresentation,
+  mobilePrimaryTone = "default",
   dictationCoordinator,
   disabled = false,
 }: IProp) => {
@@ -668,12 +674,15 @@ export const AudioButton = ({
                 hasText,
                 isProcessing,
                 mobilePresentation,
+                primaryTone: mobilePrimaryTone,
               });
             let micColorClassName = "text-icon-dark-gray hover:text-white-black";
             if (prominent) {
               micColorClassName = hasText
                 ? "text-icon-dark-gray"
-                : "text-white-black-inverted";
+                : mobilePrimaryTone === "ai"
+                  ? "text-white"
+                  : "text-white-black-inverted";
             }
             return (
               <div
@@ -714,7 +723,7 @@ export const AudioButton = ({
                       className={cn(
                         "animate-spin",
                         "keep-stroke",
-                        isDesktopAiMic
+                        isDesktopAiMic || mobilePrimaryTone === "ai"
                           ? "text-hypertasks-ai-purple"
                           : "text-icon-dark-gray",
                       )}
@@ -860,7 +869,9 @@ export const AudioButton = ({
             className={cn(
               "group relative flex items-center justify-center rounded-[4px]",
               isMobileView
-                ? "h-11 w-12 bg-white-black text-white-black-inverted"
+                ? mobilePrimaryTone === "ai"
+                  ? "h-11 w-12 bg-hypertasks-ai-purple text-white"
+                  : "h-11 w-12 bg-white-black text-white-black-inverted"
                 : "h-[28px] w-[28px] bg-hypertasks-ai-purple text-white",
             )}
           >

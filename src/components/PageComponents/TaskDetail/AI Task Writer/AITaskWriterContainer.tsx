@@ -21,9 +21,7 @@ import {
   ArrowUp,
   ChevronDown,
   Paperclip,
-  PenLine,
   RotateCw,
-  Sparkles,
   X,
 } from "lucide-react";
 import { SendArrow } from "@/components/Common/SendArrow";
@@ -135,6 +133,7 @@ const AITaskWriterContainer: React.FC<
   const hasFocusedMobilePrompt = useRef(false);
   const mobilePromptVisibilityObserver = useRef<MutationObserver | null>(null);
   const mobilePromptCanFocus = useRef(true);
+  const mobileCreateRequestPendingRef = useRef(false);
   mobilePromptCanFocus.current = !isLoading && !currentDisplayResponse;
 
   // Hooks
@@ -246,7 +245,11 @@ const AITaskWriterContainer: React.FC<
   );
 
   const onClickHandler = useCallback(() => {
-    if (isByokBlocked) return;
+    if (
+      isLoading ||
+      isByokBlocked ||
+      (isMobileCreateFlow && mobileCreateRequestPendingRef.current)
+    ) return;
     const promptToUse = resolveTaskWriterSubmitPrompt(
       autoTrigger,
       presentation,
@@ -263,14 +266,19 @@ const AITaskWriterContainer: React.FC<
 
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
-    sendAIRequest(
+    if (isMobileCreateFlow) mobileCreateRequestPendingRef.current = true;
+    void sendAIRequest(
       buildTaskWriterPrompt(promptToUse, taskTitle),
       "Thinking...",
-    );
+    ).finally(() => {
+      mobileCreateRequestPendingRef.current = false;
+    });
   }, [
     autoTrigger,
     initialPrompt,
     isByokBlocked,
+    isLoading,
+    isMobileCreateFlow,
     presentation,
     userPrompt,
     sendAIRequest,
@@ -560,9 +568,8 @@ const AITaskWriterContainer: React.FC<
       : "Tap to type, or hit the mic and just talk…";
   }
 
-  const inputAndToolbarEl = (
-    <>
-      <AITaskWriterInputArea
+  const inputAreaEl = (
+    <AITaskWriterInputArea
         isLoading={isLoading}
         autoTrigger={autoTrigger}
         currentDisplayResponse={currentDisplayResponse}
@@ -580,7 +587,9 @@ const AITaskWriterContainer: React.FC<
         uploadProgress={uploadProgress}
         placeholder={mobileWriterPlaceholder}
       />
-      <hr className="w-full text-white-black my-1 h-[0.2px] opacity-10" />
+  );
+
+  const toolbarEl = (
       <div className="flex justify-between items-center w-full">
         {/* On a phone these were 20px glyphs pinned to the extreme bottom-right,
             the hardest corner to reach one-handed. 44px targets, and the row
@@ -592,7 +601,7 @@ const AITaskWriterContainer: React.FC<
             isMobile ? "justify-start gap-1" : "justify-end"
           )}
         >
-          {!isLoading && (
+          {!isLoading && !isMobileCreateFlow && (
             <div className="group relative">
               <button
                 type="button"
@@ -621,6 +630,7 @@ const AITaskWriterContainer: React.FC<
               editor={null}
               id="ai-writer-audio-button"
               hasText={Boolean(userPrompt.trim())}
+              mobilePrimaryTone={isMobileCreateFlow ? "ai" : undefined}
               dictationCoordinator={dictationCoordinator}
               className={isMobile ? MOBILE_TARGET : undefined}
               // Empty composer: the filled mic is the primary and sits far
@@ -673,7 +683,12 @@ const AITaskWriterContainer: React.FC<
               className={cn(
                 "relative group",
                 isMobile &&
-                  "ml-auto flex h-11 w-12 cursor-pointer items-center justify-center rounded-[4px] bg-white-black text-white-black-inverted"
+                  "ml-auto flex h-11 w-12 cursor-pointer items-center justify-center rounded-[4px]",
+                isMobileCreateFlow
+                  ? "bg-hypertasks-ai-purple text-white"
+                  : isMobile
+                    ? "bg-white-black text-white-black-inverted"
+                    : undefined,
               )}
             >
               <span
@@ -701,6 +716,13 @@ const AITaskWriterContainer: React.FC<
           )}
         </div>
       </div>
+  );
+
+  const inputAndToolbarEl = (
+    <>
+      {inputAreaEl}
+      <hr className="w-full text-white-black my-1 h-[0.2px] opacity-10" />
+      {toolbarEl}
     </>
   );
 
@@ -721,39 +743,9 @@ const AITaskWriterContainer: React.FC<
       </div>
     ) : null;
 
-  const mobileCreateHeaderEl = mobileCreateTask ? (
+  const mobileCreateIntroEl = mobileCreateTask ? (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-subheading font-semibold text-hypertasks-ai-purple">
-          <span className="relative flex h-6 w-6 items-center justify-center">
-            <PenLine size={22} strokeWidth={1.75} />
-            <Sparkles
-              size={10}
-              strokeWidth={1.75}
-              className="absolute -right-1 -top-0.5"
-            />
-          </span>
-          <span>AI task writer</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={mobileCreateTask.onClassicForm}
-            className="min-h-11 rounded-sm px-3 text-content font-semibold text-text-light-gray hover:bg-hover-active hover:text-white-black"
-          >
-            Classic form
-          </button>
-          <button
-            type="button"
-            onClick={mobileCreateTask.onClose}
-            aria-label="Close new task"
-            className={`${MOBILE_TARGET} rounded-sm text-text-light-gray hover:bg-hover-active hover:text-white-black`}
-          >
-            <X size={20} strokeWidth={1.75} />
-          </button>
-        </div>
-      </div>
-      <h2 className="mt-5 text-heading font-semibold leading-tight text-white-black">
+      <h2 className="text-heading font-semibold leading-tight text-white-black">
         {mobileCreateTask.formSummary
           ? "What should the writer add or change?"
           : "What is this task about?"}
@@ -766,24 +758,27 @@ const AITaskWriterContainer: React.FC<
         <button
           type="button"
           onClick={mobileCreateTask.onBoardClick}
-          className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
+          className="min-h-11 rounded-full border border-border-light-gray-thin px-3 text-content text-white-black hover:bg-hover-active"
         >
           <span className="text-text-light-gray">Board:</span>{" "}
           <strong>{mobileCreateTask.boardLabel}</strong>
+          <ChevronDown className="ml-1 inline" size={14} strokeWidth={1.75} />
         </button>
         <button
           type="button"
           onClick={mobileCreateTask.onPriorityClick}
-          className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
+          className="min-h-11 rounded-full border border-border-light-gray-thin px-3 text-content text-white-black hover:bg-hover-active"
         >
           Priority: {mobileCreateTask.priorityLabel}
+          <ChevronDown className="ml-1 inline" size={14} strokeWidth={1.75} />
         </button>
         <button
           type="button"
           onClick={mobileCreateTask.onAssigneeClick}
-          className="min-h-11 rounded-sm px-3 text-content text-white-black hover:bg-hover-active"
+          className="min-h-11 rounded-full border border-border-light-gray-thin px-3 text-content text-white-black hover:bg-hover-active"
         >
           Assignee: {mobileCreateTask.assigneeLabel}
+          <ChevronDown className="ml-1 inline" size={14} strokeWidth={1.75} />
         </button>
       </div>
       {mobileCreateTask.formSummary && (
@@ -984,7 +979,7 @@ const AITaskWriterContainer: React.FC<
             prompt.setSelectionRange(prompt.value.length, prompt.value.length);
             hasFocusedMobilePrompt.current = true;
           }}
-          detent="full-height"
+          detent={isMobileCreateFlow ? "content-height" : "full-height"}
           sheetClassName="!z-[12000]"
           // dvh tracks the LAYOUT viewport, which does not shrink when the
           // on-screen keyboard opens, so the keyboard slid up over the writer's
@@ -1006,7 +1001,7 @@ const AITaskWriterContainer: React.FC<
             "ai-task-writer-panel text-white-black",
             styles.hellow,
             isMobileCreateFlow
-              ? "rounded-none bg-pageBackground shadow-none"
+              ? "rounded-t-[16px] bg-modalBackground shadow-md"
               : "rounded-t-[5px] border-x border-t border-thin border-hypertasks-ai-purple/70 bg-comment-description shadow-customshadow-1",
           )}
           bodyClassName={cn(
@@ -1016,7 +1011,7 @@ const AITaskWriterContainer: React.FC<
           )}
         >
           <div className="flex-shrink-0 pb-1 pt-2">
-            {isMobileCreateFlow ? mobileCreateHeaderEl : headlineEl}
+            {isMobileCreateFlow ? mobileCreateIntroEl : headlineEl}
           </div>
           {!isMobileCreateFlow && currentDisplayResponse ? (
             <SheetScroller
@@ -1025,16 +1020,38 @@ const AITaskWriterContainer: React.FC<
             >
               <div className="animate-fadeIn pr-1">{responseBodyEl}</div>
             </SheetScroller>
-          ) : (
+          ) : !isMobileCreateFlow ? (
             <div className="flex-1 min-h-0" />
+          ) : null}
+          {isMobileCreateFlow ? (
+            <div
+              data-mobile-task-writer-composer
+              className="mt-4 flex flex-shrink-0 flex-col"
+            >
+              <div
+                data-mobile-task-writer-field
+                className="min-h-[76px] rounded-[12px] border border-border-light-gray-thin px-3"
+              >
+                {inputAreaEl}
+              </div>
+              <div className="mt-2">{toolbarEl}</div>
+              <button
+                type="button"
+                onClick={mobileCreateTask!.onClassicForm}
+                className="mx-auto mt-4 min-h-11 px-3 text-meta text-text-light-gray underline underline-offset-2"
+              >
+                Skip AI, use the classic form
+              </button>
+            </div>
+          ) : (
+            <div
+              data-mobile-task-writer-composer
+              className="mt-1 flex flex-shrink-0 flex-col gap-0 rounded-lg bg-newcomment-well px-2 pb-1 pt-2"
+            >
+              {inputAndToolbarEl}
+              {aiOptionsEl}
+            </div>
           )}
-          <div
-            data-mobile-task-writer-composer
-            className="flex-shrink-0 flex flex-col gap-0 rounded-lg bg-newcomment-well px-2 pb-1 pt-2 mt-1"
-          >
-            {inputAndToolbarEl}
-            {aiOptionsEl}
-          </div>
         </AppSheet>
 
         {showConfirmationModal && (

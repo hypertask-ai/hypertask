@@ -19,6 +19,7 @@ const createTaskModal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
 const writerContainer = read(
   "src/components/PageComponents/TaskDetail/AI Task Writer/AITaskWriterContainer.tsx",
 );
+const audioButton = read("src/components/RTE/Components/AudioButton.tsx");
 const createBody = read(
   "src/components/Modals/CreateTaskGloballyModal/CreateTaskModalBody.tsx",
 );
@@ -37,6 +38,12 @@ const { extractTaskProperties } = jiti(
 const { MOBILE_AI_TASK_WRITER_FOCUS } = jiti(
   path.join(root, "src/models/CreateTaskModalModels/model.ts"),
 );
+const { mobileMicPresentation } = jiti(
+  path.join(
+    root,
+    "src/components/RTE/Components/mobileAudioButtonPresentation.ts",
+  ),
+);
 
 test("mobile plus opens the classic create form", () => {
   assert.match(
@@ -44,6 +51,75 @@ test("mobile plus opens the classic create form", () => {
     /onClick=\{\(\) => setCreateTaskModal\(\{ show: true \}\)\}/,
   );
   assert.doesNotMatch(mobileButton, /defaultEditMode: "Description-ai"/);
+});
+
+test("mobile create writer matches the approved stripped-down hierarchy", () => {
+  const introStart = writerContainer.indexOf("const mobileCreateIntroEl");
+  const introEnd = writerContainer.indexOf("useEffect(() =>", introStart);
+  const intro = writerContainer.slice(introStart, introEnd);
+  const composerStart = writerContainer.indexOf(
+    "{isMobileCreateFlow ? (\n            <div\n              data-mobile-task-writer-composer",
+  );
+  const composerEnd = writerContainer.indexOf("</AppSheet>", composerStart);
+  const composer = writerContainer.slice(composerStart, composerEnd);
+
+  assert.ok(introStart >= 0 && introEnd > introStart);
+  assert.doesNotMatch(intro, />AI task writer</);
+  assert.doesNotMatch(intro, />\s*Classic form\s*</);
+  assert.equal((intro.match(/rounded-full border border-border-light-gray-thin/g) || []).length, 3);
+  assert.match(
+    writerContainer,
+    /detent=\{isMobileCreateFlow \? "content-height" : "full-height"\}/,
+  );
+  assert.match(composer, /data-mobile-task-writer-field/);
+  assert.match(composer, /rounded-\[12px\] border border-border-light-gray-thin/);
+  assert.match(composer, /Skip AI, use the classic form/);
+  assert.match(composer, /onClick=\{mobileCreateTask!\.onClassicForm\}/);
+  assert.match(
+    writerContainer,
+    /\{!isLoading && !isMobileCreateFlow && \([\s\S]*?<Paperclip/,
+  );
+});
+
+test("mobile create dictation keeps one recorder and uses the approved purple primary", () => {
+  assert.equal((writerContainer.match(/<AudioButton/g) || []).length, 1);
+  assert.match(
+    writerContainer,
+    /mobilePrimaryTone=\{isMobileCreateFlow \? "ai" : undefined\}/,
+  );
+  assert.match(
+    audioButton,
+    /mobilePrimaryTone === "ai"[\s\S]*?bg-hypertasks-ai-purple text-white/,
+  );
+
+  const base = {
+    isMobileCreateComment: false,
+    isMobileTaskWriter: true,
+    isMobileNewTask: false,
+    isMobileAiChat: false,
+    isProcessing: false,
+  };
+  const approved = mobileMicPresentation({ ...base, primaryTone: "ai" });
+  const unchangedDefault = mobileMicPresentation(base);
+  assert.match(approved.className, /bg-hypertasks-ai-purple/);
+  assert.doesNotMatch(approved.className, /bg-white-black/);
+  assert.match(unchangedDefault.className, /bg-white-black/);
+});
+
+test("mobile create submit stays trimmed and single-flight", () => {
+  assert.match(
+    writerContainer,
+    /isLoading \|\|[\s\S]*?isByokBlocked \|\|[\s\S]*?isMobileCreateFlow && mobileCreateRequestPendingRef\.current/,
+  );
+  assert.match(writerContainer, /if \(!promptToUse\.trim\(\)\) return;/);
+  assert.match(
+    writerContainer,
+    /if \(isMobileCreateFlow\) mobileCreateRequestPendingRef\.current = true;[\s\S]*?sendAIRequest\([\s\S]*?\.finally\(\(\) => \{[\s\S]*?mobileCreateRequestPendingRef\.current = false;/,
+  );
+  assert.match(
+    writerContainer,
+    /appliedCreateResponseRef\.current === currentResponseItem\.id/,
+  );
 });
 
 test("mobile board section plus and C shortcut open the AI task writer", async () => {
