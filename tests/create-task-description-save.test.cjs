@@ -38,7 +38,7 @@ test("a missing or stale generated title is refreshed from the save-time descrip
   assert.match(titleSource, /role="alert"/);
   assert.match(
     stateSource,
-    /autoTitleCoordinator\.manualTitleChanged\(String\(value\)\)/,
+    /autoTitleCoordinator\.manualTitleChanged\(\);[\s\S]*?autoTitleCoordinator\.emptyTitleChanged\(\)/,
     "an empty title field must restore description title generation",
   );
 });

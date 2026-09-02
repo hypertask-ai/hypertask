@@ -254,7 +254,8 @@ const useCreateTaskModalGlobalStates = () => {
 
   const handleChange = (key: TFormKey, value: any) => {
     if (key === "title") {
-      autoTitleCoordinator.manualTitleChanged(String(value));
+      autoTitleCoordinator.manualTitleChanged();
+      if (!String(value).trim()) autoTitleCoordinator.emptyTitleChanged();
       if (String(value).trim()) setTitleGenerationError(null);
     }
     let nextValue = value;
@@ -269,12 +270,11 @@ const useCreateTaskModalGlobalStates = () => {
 
   const appendDictationToTitle = useCallback((transcript: string) => {
     if (!transcript.trim()) return;
-    const title = appendTitleDictation(formValuesRef.current.title, transcript);
-    autoTitleCoordinatorRef.current?.manualTitleChanged(title);
+    autoTitleCoordinatorRef.current?.manualTitleChanged();
     setTitleGenerationError(null);
     formValuesRef.current = {
       ...formValuesRef.current,
-      title,
+      title: appendTitleDictation(formValuesRef.current.title, transcript),
     };
     setFormValues((current) => ({
       ...current,
