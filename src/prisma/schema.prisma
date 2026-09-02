@@ -809,10 +809,11 @@ model Report {
 }
 
 model View_Last_Used {
-  id         String    @id @default(uuid())
-  createdAt  DateTime  @default(now())
-  lastUsedAt DateTime?
-  userId     Int
+  id                   String         @id @default(uuid())
+  createdAt            DateTime       @default(now())
+  lastUsedAt            DateTime?
+  board_empty_sections EmptySections?
+  userId                Int
   user       User      @relation(fields: [userId], references: [id])
   viewId     String
   view       View      @relation(fields: [viewId], references: [id])

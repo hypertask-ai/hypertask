@@ -14,6 +14,8 @@ import {
   IViewAPI,
 } from "@/models/model";
 import {
+  isBoardEmptySectionSetting,
+  PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
   TBoardEmptySections,
   TBoardSortingLevel,
   TBoardSortingViewMode,
@@ -40,6 +42,7 @@ import {
   getViewFromProject,
   enqueueBoardViewMutation,
   patchProjectViewBoardLayout,
+  patchProjectViewEmptySections,
   replaceProjectSurface,
   savedBoardLayoutFromExplicitSurface,
   savedBoardLayoutToClient,
@@ -62,7 +65,7 @@ import { useRouter } from "next/navigation";
 
 let emptySectionMutationId = 0
 // Keep rapid toggles layered so one request settling cannot remove a newer choice.
-const emptySectionMutations = new Map<number, TEmptySectionMutationState>()
+const emptySectionMutations = new Map<string, TEmptySectionMutationState>()
 
 const useKanbanViews = (project: IProject | null) => {
   const hasUserSelectedView =
@@ -285,44 +288,82 @@ const useKanbanViews = (project: IProject | null) => {
     emptySection: TBoardEmptySections
   ) => {
     const mutationId = ++emptySectionMutationId
+    const targetView =
+      project.project_view?.user_project_views[0]?.appliedView ??
+      project.project_view?.default_view
+    const targetViewId = targetView?.id
+    const mutationKey = `${project.id}:${targetViewId ?? "unsaved"}`
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(project.id)
     const cachedProject = allData?.updatedProjects[projectToUpdateIndex]
     const projectView = cachedProject?.project_view ?? project.project_view
     if (projectView && projectToUpdateIndex !== -1) {
       const optimistic = beginEmptySectionMutation(
-        emptySectionMutations.get(project.id),
+        emptySectionMutations.get(mutationKey),
         projectView,
-        { id: mutationId, setting: emptySection },
+        { id: mutationId, setting: emptySection, viewId: targetViewId },
       )
-      emptySectionMutations.set(project.id, optimistic.state)
+      emptySectionMutations.set(mutationKey, optimistic.state)
       updateProjectView(projectToUpdateIndex, optimistic.projectView)
     }
 
-    return apiHandler(
-      (queuedProject) => buildUnsavedBody(queuedProject, {
-        board_empty_sections: emptySection,
-      }),
-      project,
-      (succeeded) => {
-        const state = emptySectionMutations.get(project.id)
-        const latest = getProjectIdxAndAllData(project.id)
-        const latestProject = latest.allData?.updatedProjects[latest.projectToUpdateIndex]
-        if (state && latestProject?.project_view && latest.projectToUpdateIndex !== -1) {
-          const settled = settleEmptySectionMutation(
-            state,
-            mutationId,
-            succeeded,
-            latestProject.project_view,
-          )
-          if (settled.state) emptySectionMutations.set(project.id, settled.state)
-          else emptySectionMutations.delete(project.id)
-          updateProjectView(latest.projectToUpdateIndex, settled.projectView)
-        } else {
-          emptySectionMutations.delete(project.id)
-        }
-        if (!succeeded) toast.error("Empty column visibility could not be saved")
-      },
-    )
+    const settleMutation = (
+      succeeded: boolean,
+      authoritativeSetting?: TBoardEmptySections,
+    ) => {
+      const state = emptySectionMutations.get(mutationKey)
+      const latest = getProjectIdxAndAllData(project.id)
+      const latestProject = latest.allData?.updatedProjects[latest.projectToUpdateIndex]
+      if (state && latestProject?.project_view && latest.projectToUpdateIndex !== -1) {
+        const authoritativeView = authoritativeSetting && targetViewId
+          ? patchProjectViewEmptySections(
+              latestProject.project_view,
+              authoritativeSetting,
+              targetViewId,
+            )
+          : latestProject.project_view
+        const settled = settleEmptySectionMutation(
+          state,
+          mutationId,
+          succeeded,
+          authoritativeView,
+        )
+        if (settled.state) emptySectionMutations.set(mutationKey, settled.state)
+        else emptySectionMutations.delete(mutationKey)
+        updateProjectView(latest.projectToUpdateIndex, settled.projectView)
+      } else {
+        emptySectionMutations.delete(mutationKey)
+      }
+      if (!succeeded) toast.error("Empty column visibility could not be saved")
+    }
+
+    if (!targetViewId) {
+      return apiHandler(
+        (queuedProject) => buildUnsavedBody(queuedProject, {
+          board_empty_sections: emptySection,
+        }),
+        project,
+        settleMutation,
+      )
+    }
+
+    return enqueueBoardViewMutation(project.id, async () => {
+      try {
+        const response = await axios.post(updateViewAPIRoute, {
+          projectId: project.id,
+          viewId: targetViewId,
+          updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
+          view_settings: { board_empty_sections: emptySection },
+        })
+        const savedSetting = response.data?.board_empty_sections
+        settleMutation(
+          true,
+          isBoardEmptySectionSetting(savedSetting) ? savedSetting : emptySection,
+        )
+      } catch (error) {
+        console.log("🚀 ~ saveEmptySectionsAPI ~ error:", error)
+        settleMutation(false)
+      }
+    })
   };
 
   // Persist the per-view staleness override into the ACTIVE SAVED view (applied,
