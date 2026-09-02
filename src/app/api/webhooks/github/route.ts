@@ -6,8 +6,6 @@ import {
   broadcastTaskChange,
 } from "@/lib/realtime/server";
 import generateRank from "@/utils/generateRank";
-import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
-import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import {
   boardForGithubRepository,
   parseGithubPullRequestUrl,
@@ -17,6 +15,9 @@ import {
   syncCheckSuiteFromWebhook,
   syncPullRequestFromWebhook,
 } from "@/lib/pullRequests/syncTaskPullRequests";
+import { createCommentService } from "@/utils/controllers/comments/createCommentService";
+import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
+import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import {
   chooseReviewSectionName,
   extractTicketId,
@@ -40,14 +41,26 @@ interface GithubPullRequestPayload {
     merged: boolean;
     state: string;
     updated_at: string;
-    head: { ref: string; sha: string };
-    base: { repo: { id: number; full_name: string } };
+    head: {
+      ref: string;
+      sha: string;
+    };
+    base: {
+      repo: {
+        id: number;
+        full_name: string;
+      };
+    };
   };
 }
 
 interface GithubCheckSuitePayload {
   action: string;
-  repository: { full_name: string; private: boolean; fork: boolean };
+  repository: {
+    full_name: string;
+    private: boolean;
+    fork: boolean;
+  };
   check_suite: {
     app: { id: number; name: string };
     head_sha: string;
@@ -182,37 +195,53 @@ async function broadcastPullRequestChanges(
   }
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
-    if (
-      !verifyGithubSignature(
-        rawBody,
-        request.headers.get("x-hub-signature-256"),
-        process.env.GITHUB_WEBHOOK_SECRET,
-      )
-    ) {
+    const signatureIsValid = verifyGithubSignature(
+      rawBody,
+      request.headers.get("x-hub-signature-256"),
+      process.env.GITHUB_WEBHOOK_SECRET,
+    );
+
+    if (!signatureIsValid) {
       return NextResponse.json(
         { success: false, error: "Invalid webhook signature" },
         { status: 401 },
       );
     }
 
+    const event = request.headers.get("x-github-event");
+    if (event !== "pull_request" && event !== "check_suite") {
+      return NextResponse.json(
+        { success: true, ignored: `Unsupported event: ${event ?? "missing"}` },
+        { status: 200 },
+      );
+    }
+
     let payload: GithubPullRequestPayload | GithubCheckSuitePayload;
     try {
-      payload = JSON.parse(rawBody);
+      payload = JSON.parse(rawBody) as
+        | GithubPullRequestPayload
+        | GithubCheckSuitePayload;
     } catch {
       return invalidPayload("Invalid JSON payload");
     }
 
-    const event = request.headers.get("x-github-event");
-    const fullName = payload.repository?.full_name;
+    const repositoryFullName = payload.repository?.full_name;
     const boardId = boardForGithubRepository({
-      fullName,
+      fullName: repositoryFullName,
       isPrivate: payload.repository?.private,
       isFork: payload.repository?.fork,
     });
-    const repository = repositoryParts(fullName ?? "");
+    const repository = repositoryParts(repositoryFullName);
     if (!boardId || !repository) {
       return NextResponse.json({
         success: true,
@@ -222,7 +251,11 @@ export async function POST(request: NextRequest) {
 
     if (event === "check_suite") {
       const checkPayload = payload as GithubCheckSuitePayload;
-      if (!["requested", "rerequested", "completed"].includes(checkPayload.action)) {
+      if (
+        !["requested", "rerequested", "completed"].includes(
+          checkPayload.action,
+        )
+      ) {
         return NextResponse.json({
           success: true,
           ignored: `Unsupported action: ${checkPayload.action}`,
@@ -245,7 +278,7 @@ export async function POST(request: NextRequest) {
             .filter(
               (pullRequest) =>
                 pullRequest.base?.repo?.full_name?.toLowerCase() ===
-                  fullName.toLowerCase() &&
+                  repositoryFullName.toLowerCase() &&
                 Number.isInteger(pullRequest.number),
             )
             .map((pullRequest) => pullRequest.number),
@@ -275,29 +308,32 @@ export async function POST(request: NextRequest) {
       if (updated > 0) {
         await broadcastPullRequestChanges(boardId, taskIds);
       }
-      return NextResponse.json({ success: true, updated, taskIds: [...taskIds] });
-    }
-
-    if (event !== "pull_request") {
       return NextResponse.json({
         success: true,
-        ignored: `Unsupported event: ${event ?? "missing"}`,
+        updated,
+        taskIds: [...taskIds],
       });
     }
 
-    const prPayload = payload as GithubPullRequestPayload;
-    if (!["opened", "reopened", "synchronize", "closed"].includes(prPayload.action)) {
+    const pullRequestPayload = payload as GithubPullRequestPayload;
+    if (
+      !["opened", "reopened", "synchronize", "closed"].includes(
+        pullRequestPayload.action,
+      )
+    ) {
       return NextResponse.json({
         success: true,
-        ignored: `Unsupported action: ${prPayload.action}`,
+        ignored: `Unsupported action: ${pullRequestPayload.action}`,
       });
     }
-    const pullRequest = prPayload.pull_request;
+
+    const pullRequest = pullRequestPayload.pull_request;
     const sourceUpdatedAt = new Date(pullRequest.updated_at);
     const parsedUrl = parseGithubPullRequestUrl(pullRequest.html_url);
     if (
-      pullRequest.base?.repo?.full_name.toLowerCase() !== fullName.toLowerCase() ||
-      String(pullRequest.base.repo.id) !== String(prPayload.repository.id) ||
+      pullRequest.base?.repo?.full_name.toLowerCase() !==
+        repositoryFullName.toLowerCase() ||
+      String(pullRequest.base.repo.id) !== String(pullRequestPayload.repository.id) ||
       !parsedUrl ||
       parsedUrl.owner !== repository.owner ||
       parsedUrl.repository !== repository.repository ||
@@ -311,18 +347,20 @@ export async function POST(request: NextRequest) {
 
     const ticketId = extractTicketId({
       title: pullRequest.title,
-      headRef: pullRequest.head.ref,
+      headRef: pullRequest.head?.ref,
       body: pullRequest.body,
     });
-    let lifecycle: PullRequestLifecycle = "open";
-    if (pullRequest.merged) lifecycle = "merged";
-    else if (pullRequest.state === "closed") lifecycle = "closed";
+    const lifecycle: PullRequestLifecycle = pullRequest.merged
+      ? "merged"
+      : pullRequest.state === "closed"
+        ? "closed"
+        : "open";
     const syncResult = await syncPullRequestFromWebhook({
       boardId,
       ticketNumber: ticketId,
       repositoryOwner: repository.owner,
       repositoryName: repository.repository,
-      repositoryId: String(prPayload.repository.id),
+      repositoryId: String(pullRequestPayload.repository.id),
       pullRequestId: String(pullRequest.id),
       number: pullRequest.number,
       url: pullRequest.html_url,
@@ -330,7 +368,7 @@ export async function POST(request: NextRequest) {
       lifecycle,
       headSha: pullRequest.head.sha,
       sourceUpdatedAt,
-      action: prPayload.action as
+      action: pullRequestPayload.action as
         | "opened"
         | "reopened"
         | "synchronize"
@@ -338,38 +376,253 @@ export async function POST(request: NextRequest) {
       actorUserId: generalConfig.hyperAiId,
     });
 
-    const tasks = await prisma.task.findMany({
-      where: { id: { in: syncResult.taskIds }, status: { not: "Deleted" } },
+    if (syncResult.taskIds.length > 0) {
+      const tasks = await prisma.task.findMany({
+        where: { id: { in: syncResult.taskIds }, status: { not: "Deleted" } },
+        select: {
+          id: true,
+          projectId: true,
+          userId: true,
+          sectionId: true,
+          riskLevel: true,
+        },
+      });
+      let moved = 0;
+      for (const task of tasks) {
+        let targetSectionName:
+          | "AI Review"
+          | "Valentin Review"
+          | "Done"
+          | null = null;
+        if (
+          pullRequestPayload.action === "opened" ||
+          pullRequestPayload.action === "reopened"
+        ) {
+          targetSectionName = chooseReviewSectionName(task.riskLevel);
+        } else if (pullRequest.merged) {
+          targetSectionName = "Done";
+        }
+        if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
+      }
+      if (syncResult.linked > 0 || syncResult.updated > 0 || moved > 0) {
+        await broadcastPullRequestChanges(boardId, syncResult.taskIds);
+      }
+      return NextResponse.json({
+        success: true,
+        ticketId,
+        linked: syncResult.linked,
+        updated: syncResult.updated,
+        moved,
+      });
+    }
+
+    if (!["opened", "reopened", "closed"].includes(payload.action)) {
+      return NextResponse.json(
+        { success: true, ignored: `Unsupported action: ${payload.action}` },
+        { status: 200 },
+      );
+    }
+
+    if (!ticketId) {
+      return NextResponse.json(
+        { success: true, ignored: "No ticket reference found" },
+        { status: 200 },
+      );
+    }
+
+    // Legacy ticket handling remains below for repositories whose PR could not
+    // be linked to a task by the first-class synchronization path.
+    if (!ticketId) {
+      return NextResponse.json(
+        { success: true, ignored: "No ticket reference found" },
+        { status: 200 },
+      );
+    }
+
+    const task = await prisma.task.findFirst({
+      where: {
+        ticketNumber: ticketId,
+        status: { not: "Deleted" },
+      },
       select: {
         id: true,
         projectId: true,
         userId: true,
         sectionId: true,
+        uniqueIndex: true,
+        ticketNumber: true,
         riskLevel: true,
       },
     });
-    let moved = 0;
-    for (const task of tasks) {
-      let targetSectionName: "AI Review" | "Valentin Review" | "Done" | null =
-        null;
-      if (prPayload.action === "opened" || prPayload.action === "reopened") {
-        targetSectionName = chooseReviewSectionName(task.riskLevel);
-      } else if (pullRequest.merged) {
-        targetSectionName = "Done";
-      }
-      if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
-    }
-    if (syncResult.linked > 0 || syncResult.updated > 0) {
-      await broadcastPullRequestChanges(boardId, syncResult.taskIds);
+
+    if (!task) {
+      return NextResponse.json(
+        { success: true, ticketId, ignored: "Ticket not found" },
+        { status: 200 },
+      );
     }
 
-    return NextResponse.json({
-      success: true,
-      ticketId,
-      linked: syncResult.linked,
-      updated: syncResult.updated,
-      moved,
+    const ticketUrl = `https://app.hypertask.ai/detail/project-${task.projectId}/${task.uniqueIndex}`;
+    const escapedTitle = escapeHtml(pullRequest.title);
+
+    let targetSectionName:
+      | "AI Review"
+      | "Valentin Review"
+      | "Done"
+      | null = null;
+    let commentLead: string;
+    let commentText: string;
+
+    if (payload.action === "opened" || payload.action === "reopened") {
+      targetSectionName = chooseReviewSectionName(task.riskLevel);
+      commentLead = "Pull request opened:";
+      commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p><p>Linked to <a href="${ticketUrl}">${ticketId}</a>.</p>`;
+    } else if (pullRequest.merged) {
+      targetSectionName = "Done";
+      commentLead = "Pull request merged:";
+      commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
+    } else {
+      commentLead = "Pull request closed without merging:";
+      commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
+    }
+
+    // ponytail: read-then-write, not a DB unique constraint. Two genuinely
+    // concurrent redeliveries of the same event could both pass this check
+    // and both post. GitHub redelivers sequentially in practice, so this is
+    // accepted; upgrade path if that ever changes is a unique index on
+    // (taskId, commentLead-derived key).
+    const existingComment = await prisma.comment.findFirst({
+      where: {
+        taskId: task.id,
+        AND: [
+          { text: { contains: pullRequest.html_url } },
+          { text: { contains: commentLead } },
+        ],
+      },
+      select: { id: true },
     });
+
+    let commented = false;
+    if (!existingComment) {
+      await createCommentService({
+        taskId: task.id,
+        ownerId: task.userId,
+        creatorId: generalConfig.hyperAiId,
+        currentUser: { id: generalConfig.hyperAiId },
+        agentId: null,
+        text: commentText,
+        trustedCaller: true,
+      });
+      commented = true;
+    }
+
+    let moved = false;
+    if (targetSectionName) {
+      const section = await prisma.section.findFirst({
+        where: {
+          projectId: task.projectId,
+          deleted: false,
+          section_title: {
+            equals: targetSectionName,
+            mode: "insensitive",
+          },
+        },
+      });
+
+      if (!section) {
+        console.warn(
+          `[GitHub webhook] Board ${task.projectId} has no ${targetSectionName} section; task ${task.id} was not moved.`,
+        );
+      } else if (section.id !== task.sectionId) {
+        const [lastTask, botUser] = await Promise.all([
+          prisma.task.findFirst({
+            where: { sectionId: section.id, status: "Normal" },
+            orderBy: { ranking: "desc" },
+            select: { ranking: true },
+          }),
+          prisma.user.findUnique({
+            where: { id: generalConfig.hyperAiId },
+            select: {
+              id: true,
+              email: true,
+              displayName: true,
+              photoURL: true,
+            },
+          }),
+        ]);
+
+        if (!botUser) {
+          throw new Error("HyperAI user not found");
+        }
+
+        const currentUser = {
+          id: botUser.id,
+          email: botUser.email ?? "",
+          displayName: botUser.displayName ?? undefined,
+          photoURL: botUser.photoURL ?? undefined,
+          uid: "",
+          stripe_customer_id: "",
+          joinedAt: new Date(),
+          UserSettingId: "",
+          UserSetting: {} as any,
+        };
+        const ranking = generateRank(lastTask?.ranking, undefined);
+        const moveResult = await updateTaskSingle(
+          {
+            id: task.id,
+            sectionId: section.id,
+            section: section.section_title,
+            ranking,
+            updatedAt: new Date(),
+          },
+          currentUser,
+          null,
+          {
+            // The signature check above is the gate. currentUser is the
+            // synthetic bot, which is on no board.
+            trustedCaller: true,
+            taskMovedActivity: {
+              sendNotification: () =>
+                sendNotificationForTask(
+                  generalConfig.hyperAiId,
+                  "TaskMoved",
+                  task.id,
+                  task.projectId,
+                  null,
+                ),
+            },
+          },
+        );
+
+        if (moveResult.status !== 200) {
+          throw new Error("Task move failed");
+        }
+
+        moved = true;
+
+        try {
+          await broadcastBoardChange(task.projectId, {
+            originUserId: generalConfig.hyperAiId,
+          });
+        } catch (error) {
+          console.warn(
+            `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
+            error,
+          );
+        }
+      }
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        ticketId,
+        commented,
+        moved,
+        targetSection: targetSectionName,
+      },
+      { status: 200 },
+    );
   } catch (error) {
     console.error("[GitHub webhook] Unexpected error:", error);
     return NextResponse.json(
