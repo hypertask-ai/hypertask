@@ -318,7 +318,14 @@ test("classic form carries content back into the shared writer", () => {
   assert.match(writerContainer, /Already in the form/);
   assert.match(writerContainer, /What should the writer add or change\?/);
   assert.match(createTaskModal, /onClassicForm: showClassicForm/);
-  assert.match(createTaskModal, /const mobileCreateFormSummary = hasOpenedClassicForm/);
+  assert.match(
+    createTaskModal,
+    /formValues\.status\.sectionId !== openingSectionIdRef\.current/,
+  );
+  assert.match(
+    createTaskModal,
+    /hasOpenedClassicForm &&[\s\S]*?mobileCreateFormProperties\.length > 0/,
+  );
   assert.match(createTaskModal, /formSummary: mobileCreateFormSummary/);
   assert.match(properties, /onClick=\{property\.onClick\}/);
   assert.doesNotMatch(

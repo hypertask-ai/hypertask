@@ -633,7 +633,8 @@ const TiptapCreateTaskModal = () => {
 
   const mobileCreateFormDescription = editor?.getText().trim() || "";
   const mobileCreateFormProperties = [
-    formValues.status?.sectionTitle
+    formValues.status?.sectionTitle &&
+    formValues.status.sectionId !== openingSectionIdRef.current
       ? `Section: ${formValues.status.sectionTitle}`
       : undefined,
     formValues.priority?.Priority_Value
@@ -660,13 +661,18 @@ const TiptapCreateTaskModal = () => {
         .map((assignee) => assignee.displayName)
         .join(", ")
     : "Assign";
-  const mobileCreateFormSummary = hasOpenedClassicForm
-    ? {
-        title: formValues.title.trim() || undefined,
-        description: mobileCreateFormDescription || undefined,
-        properties: mobileCreateFormProperties,
-      }
-    : undefined;
+  const mobileCreateFormTitle = formValues.title.trim() || undefined;
+  const mobileCreateFormSummary =
+    hasOpenedClassicForm &&
+    (mobileCreateFormTitle ||
+      mobileCreateFormDescription ||
+      mobileCreateFormProperties.length > 0)
+      ? {
+          title: mobileCreateFormTitle,
+          description: mobileCreateFormDescription || undefined,
+          properties: mobileCreateFormProperties,
+        }
+      : undefined;
   const mobileCreateTask = isMbl
     ? {
         boardLabel: formValues.currentProject?.title ?? "Choose board",
