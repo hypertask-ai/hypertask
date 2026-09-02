@@ -116,5 +116,6 @@ test("agent settings guide customers to a verified first delivery", () => {
   assert.match(panel, /Save this signing secret now/);
   assert.match(panel, /Send test/);
   assert.match(panel, /Verify signatures and process deliveries/);
-  assert.match(panel, /docs\.hypertask\.ai\/mcp\/agent-webhooks/);
+  assert.match(panel, /How webhooks work/);
+  assert.match(panel, /href="https:\/\/docs\.hypertask\.ai\/mcp\/agent-webhooks\/"/);
 });
