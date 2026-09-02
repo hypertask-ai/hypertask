@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import toast from "react-hot-toast";
 import ImageGallery from "./ImageGalleryView";
 import { processFiles } from "@/utils/helperFunctions/helperFunctions";
 import "@/styles/attachmentUpload.scss";
@@ -48,7 +49,7 @@ interface IProps {
   /** create-task-modal only: the modal's title field has text. Save must
       appear for a title-only task even though the description editor is empty. */
   hasTitle?: boolean;
-  callback: (files: File[]) => void;
+  callback: (files: File[]) => void | boolean | Promise<void | boolean>;
   trigger: boolean;
   filesFromParent: any[];
   mode: RedirectMode;
@@ -257,9 +258,21 @@ const AttachmentsUpload = (props: IProps) => {
                 callbackAttachments={async (
                   uploadedAttachments: Array<{ file: File }>,
                 ) => {
-                  await callback(
-                    uploadedAttachments.map((attachment) => attachment.file),
-                  );
+                  try {
+                    const result = await callback(
+                      uploadedAttachments.map((attachment) => attachment.file),
+                    );
+                    if (result === false) {
+                      toast.error(
+                        "Could not add attachment. Your changes are still here.",
+                      );
+                    }
+                  } catch (error) {
+                    console.error("Could not add attachment", error);
+                    toast.error(
+                      "Could not add attachment. Your changes are still here.",
+                    );
+                  }
                 }}
                 handleRemove={mobileEditSaving ? undefined : removeFile}
               />
