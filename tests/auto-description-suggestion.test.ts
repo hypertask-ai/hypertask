@@ -181,9 +181,23 @@ test("automatic description UI exists only in the new-task form", () => {
     "utf8",
   );
 
+  const takeoverHandler = createForm.slice(
+    createForm.indexOf("const handleAutoDescriptionTakeover"),
+    createForm.indexOf("const undoAutoDescriptionTakeover"),
+  );
+
   assert.match(createForm, /id="create-task-auto-description-writer"/);
   assert.match(createForm, /requestKind="auto-description"/);
   assert.match(createForm, /CreateTaskAndDescription\(descriptionAtSave, titleAtSave\)/);
+  assert.match(
+    createForm,
+    /if \(takeover && description !== takeover\.inserted\) \{[\s\S]*?setAutoDescriptionTakeover\(null\)/,
+  );
+  assert.doesNotMatch(
+    takeoverHandler,
+    /setNewCommentAttachments|callbackAttachments/,
+    "taking over a text suggestion must leave selected attachments unchanged",
+  );
   assert.doesNotMatch(taskDetail, /requestKind="auto-description"/);
   assert.match(taskDetail, /shouldTriggerAiTaskWriter/);
 });

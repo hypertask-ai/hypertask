@@ -149,6 +149,7 @@ const TiptapCreateTaskModal = () => {
   const [autoDescriptionDismissed, setAutoDescriptionDismissed] = useState(false);
   const [autoDescriptionTakeover, setAutoDescriptionTakeover] =
     useState<AutoDescriptionTakeover | null>(null);
+  const autoDescriptionTakeoverRef = useRef<AutoDescriptionTakeover | null>(null);
   const autoDescriptionTitleRef = useRef("");
   const [hasOpenedClassicForm, setHasOpenedClassicForm] = useState(false);
   const openingSectionIdRef = useRef<number | undefined>(
@@ -312,6 +313,11 @@ const TiptapCreateTaskModal = () => {
     const description = editor?.getHTML() ?? "";
     handleChange("description", description);
     scheduleTitleGeneration(description);
+    const takeover = autoDescriptionTakeoverRef.current;
+    if (takeover && description !== takeover.inserted) {
+      autoDescriptionTakeoverRef.current = null;
+      setAutoDescriptionTakeover(null);
+    }
     editor?.commands.setMeta("projectId", 2);
   };
   // ==================== get attachments from the componetn =============
@@ -425,11 +431,14 @@ const TiptapCreateTaskModal = () => {
     }
 
     const before = editor.getHTML();
+    // Auto suggestions are text-only, so neither selected nor generated files change here.
     editor.commands.setContent(content, { emitUpdate: true });
     const inserted = editor.getHTML();
     handleChange("description", inserted);
     setAutoDescriptionVisible(false);
-    setAutoDescriptionTakeover({ before, inserted });
+    const takeover = { before, inserted };
+    autoDescriptionTakeoverRef.current = takeover;
+    setAutoDescriptionTakeover(takeover);
   };
 
   const undoAutoDescriptionTakeover = () => {
@@ -438,6 +447,7 @@ const TiptapCreateTaskModal = () => {
       !autoDescriptionTakeover ||
       !canUndoDescriptionTakeover(editor.getHTML(), autoDescriptionTakeover)
     ) {
+      autoDescriptionTakeoverRef.current = null;
       setAutoDescriptionTakeover(null);
       return;
     }
@@ -445,6 +455,7 @@ const TiptapCreateTaskModal = () => {
       emitUpdate: true,
     });
     handleChange("description", autoDescriptionTakeover.before);
+    autoDescriptionTakeoverRef.current = null;
     setAutoDescriptionTakeover(null);
     setAutoDescriptionDismissed(true);
   };
@@ -483,6 +494,7 @@ const TiptapCreateTaskModal = () => {
     handleSetUserInput("");
     aiPromptRef.current = undefined;
     autoDescriptionTitleRef.current = "";
+    autoDescriptionTakeoverRef.current = null;
     setAutoDescriptionVisible(false);
     setAutoDescriptionDismissed(false);
     setAutoDescriptionTakeover(null);

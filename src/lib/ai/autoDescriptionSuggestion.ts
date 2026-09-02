@@ -84,7 +84,7 @@ export function hasMeaningfulDescriptionSuggestionTitle(
   title?: string | null,
 ) {
   const words = title?.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  return words.length >= 3 && words.join(" ") !== "new task";
+  return words.length >= 3;
 }
 
 export function shouldSuggestCreateDescription(
