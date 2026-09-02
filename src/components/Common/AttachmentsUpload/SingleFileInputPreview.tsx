@@ -148,7 +148,7 @@ interface ISingleFile {
           </span>
         </div>
         {
-          (shouldUpload && progressPercentage===100) || (!shouldUpload && allowDelete) && handleRemove ? (
+          allowDelete && handleRemove && (!shouldUpload || progressPercentage === 100) ? (
             <X size={18}
               className="absolute z-10 top-0 right-0 text-white-black rounded-full cursor-pointer xs:text-subheading sm:text-emphasis bg-red-600"
               onClick={() => handleRemove(file.name)}
