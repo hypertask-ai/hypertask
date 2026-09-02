@@ -33,6 +33,96 @@ test("verifyGithubSignature accepts a valid signature and rejects everything els
   assert.equal(verifyGithubSignature(rawBody, signature, ""), false);
 });
 
+test("the GitHub webhook rejects a configured pull request event without its payload", async () => {
+  const stubbedModules = {
+    "src/lib/prisma.ts": { default: {} },
+    "src/lib/realtime/server.ts": {
+      broadcastBoardChange: async () => {},
+      broadcastTaskChange: async () => {},
+    },
+    "src/utils/generateRank.ts": { default: () => "rank" },
+    "src/lib/pullRequests/syncTaskPullRequests.ts": {
+      syncCheckSuiteFromWebhook: async () => ({ updated: 0, taskIds: [] }),
+      syncPullRequestFromWebhook: async () => ({
+        linked: 0,
+        updated: 0,
+        taskIds: [],
+      }),
+    },
+    "src/utils/controllers/comments/createCommentService.ts": {
+      createCommentService: async () => {},
+    },
+    "src/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove.ts": {
+      default: async () => {},
+    },
+    "src/utils/controllers/tasks/single.ts": {
+      updateTaskSingle: async () => ({ status: 200 }),
+    },
+  };
+  const paths = Object.keys(stubbedModules).map((relativePath) =>
+    path.join(root, relativePath),
+  );
+  const routePath = path.join(root, "src/app/api/webhooks/github/route.ts");
+  const previous = new Map(
+    [...paths, routePath].map((modulePath) => [
+      modulePath,
+      require.cache[modulePath],
+    ]),
+  );
+  for (const modulePath of [...paths, routePath]) delete require.cache[modulePath];
+  for (const [relativePath, exports] of Object.entries(stubbedModules)) {
+    const modulePath = path.join(root, relativePath);
+    require.cache[modulePath] = {
+      id: modulePath,
+      filename: modulePath,
+      loaded: true,
+      exports,
+    };
+  }
+
+  const previousSecret = process.env.GITHUB_WEBHOOK_SECRET;
+  process.env.GITHUB_WEBHOOK_SECRET = "webhook-test-secret";
+  const rawBody = JSON.stringify({
+    action: "opened",
+    repository: {
+      full_name: "hypertask-ai/hypertask",
+      private: false,
+      fork: false,
+    },
+  });
+  const signature =
+    "sha256=" +
+    createHmac("sha256", process.env.GITHUB_WEBHOOK_SECRET)
+      .update(rawBody, "utf8")
+      .digest("hex");
+
+  try {
+    const { POST } = loadTs("src/app/api/webhooks/github/route.ts");
+    const response = await POST({
+      text: async () => rawBody,
+      headers: {
+        get: (name) =>
+          ({
+            "x-hub-signature-256": signature,
+            "x-github-event": "pull_request",
+          })[name] ?? null,
+      },
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      success: false,
+      error: "Invalid pull request payload",
+    });
+  } finally {
+    if (previousSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
+    else process.env.GITHUB_WEBHOOK_SECRET = previousSecret;
+    for (const [modulePath, cachedModule] of previous) {
+      if (cachedModule) require.cache[modulePath] = cachedModule;
+      else delete require.cache[modulePath];
+    }
+  }
+});
+
 test("extractTicketId checks branch, then title, then body, in that order", () => {
   const { extractTicketId } = loadTs(
     "src/app/api/webhooks/github/github-webhook-helpers.ts"

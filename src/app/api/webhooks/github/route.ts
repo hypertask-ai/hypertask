@@ -82,6 +82,10 @@ type WebhookTask = {
   riskLevel: "Low" | "Medium" | "High" | null;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function repositoryParts(fullName: unknown) {
   if (typeof fullName !== "string") return null;
   const [owner, repository, ...extra] = fullName.toLowerCase().split("/");
@@ -226,16 +230,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let payload: GithubPullRequestPayload | GithubCheckSuitePayload;
+    let parsedPayload: unknown;
     try {
-      payload = JSON.parse(rawBody) as
-        | GithubPullRequestPayload
-        | GithubCheckSuitePayload;
+      parsedPayload = JSON.parse(rawBody);
     } catch {
       return invalidPayload("Invalid JSON payload");
     }
+    if (!isRecord(parsedPayload) || !isRecord(parsedPayload.repository)) {
+      return invalidPayload("Invalid webhook payload");
+    }
 
-    const repositoryFullName = payload.repository?.full_name;
+    const payload = parsedPayload as unknown as
+      | GithubPullRequestPayload
+      | GithubCheckSuitePayload;
+    const repositoryFullName = payload.repository.full_name;
     const boardId = boardForGithubRepository({
       fullName: repositoryFullName,
       isPrivate: payload.repository?.private,
@@ -247,6 +255,55 @@ export async function POST(request: NextRequest) {
         success: true,
         ignored: "Repository is not configured for a board",
       });
+    }
+
+    if (event === "check_suite") {
+      const rawSuite = parsedPayload.check_suite;
+      if (
+        !isRecord(rawSuite) ||
+        !isRecord(rawSuite.app) ||
+        typeof rawSuite.app.id !== "number" ||
+        typeof rawSuite.app.name !== "string" ||
+        typeof rawSuite.head_sha !== "string" ||
+        typeof rawSuite.status !== "string" ||
+        (rawSuite.conclusion !== null &&
+          typeof rawSuite.conclusion !== "string") ||
+        typeof rawSuite.updated_at !== "string" ||
+        !Array.isArray(rawSuite.pull_requests) ||
+        !rawSuite.pull_requests.every(
+          (pullRequest) =>
+            isRecord(pullRequest) &&
+            Number.isInteger(pullRequest.number) &&
+            isRecord(pullRequest.base) &&
+            isRecord(pullRequest.base.repo) &&
+            typeof pullRequest.base.repo.full_name === "string",
+        )
+      ) {
+        return invalidPayload("Invalid check suite payload");
+      }
+    } else {
+      const rawPullRequest = parsedPayload.pull_request;
+      if (
+        !isRecord(rawPullRequest) ||
+        !Number.isInteger(rawPullRequest.id) ||
+        !Number.isInteger(rawPullRequest.number) ||
+        typeof rawPullRequest.title !== "string" ||
+        (rawPullRequest.body !== null &&
+          typeof rawPullRequest.body !== "string") ||
+        typeof rawPullRequest.html_url !== "string" ||
+        typeof rawPullRequest.merged !== "boolean" ||
+        typeof rawPullRequest.state !== "string" ||
+        typeof rawPullRequest.updated_at !== "string" ||
+        !isRecord(rawPullRequest.head) ||
+        typeof rawPullRequest.head.ref !== "string" ||
+        typeof rawPullRequest.head.sha !== "string" ||
+        !isRecord(rawPullRequest.base) ||
+        !isRecord(rawPullRequest.base.repo) ||
+        !Number.isInteger(rawPullRequest.base.repo.id) ||
+        typeof rawPullRequest.base.repo.full_name !== "string"
+      ) {
+        return invalidPayload("Invalid pull request payload");
+      }
     }
 
     if (event === "check_suite") {
