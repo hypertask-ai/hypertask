@@ -160,6 +160,8 @@ test("late dictation, AI, and upload completion cannot mutate a closed edit", ()
   assert.match(actions, /audioTiptapCallback && toggleRecording && !hideComposerDictation/);
   assert.match(actions, /if \(result === false\)[\s\S]*?toast\.error/);
   assert.match(actions, /catch \(error\)[\s\S]*?handleMobileAttachmentBridgeFailure/);
+  assert.match(actions, /handleMobileAttachmentBridgeFailure[\s\S]*?rejectedIds/);
+  assert.match(actions, /\.map\(\(\{ id \}\) => id\)/);
   assert.match(actions, /handleMobileAttachmentBridgeFailure[\s\S]*?setFileItems/);
   assert.match(actions, /onClick=\{async \(event\)[\s\S]*?Could not save editor content/);
   assert.match(upload, /const hasCompleted = useRef\(false\)/);

@@ -160,7 +160,10 @@ const AttachmentsUpload = (props: IProps) => {
   };
 
   const handleMobileAttachmentBridgeFailure = (
-    uploadedAttachments: Array<{ file: File & { source?: string } }>,
+    uploadedAttachments: Array<{
+      id: number;
+      file: File & { source?: string };
+    }>,
     error?: unknown,
   ) => {
     if (error) console.error("Could not add attachment", error);
@@ -170,7 +173,7 @@ const AttachmentsUpload = (props: IProps) => {
         .map(({ file }) => (file as File & { source?: string }).source)
         .filter(Boolean),
     );
-    const rejectedKeys = new Set(
+    const rejectedIds = new Set(
       uploadedAttachments
         .filter(
           ({ file }) =>
@@ -178,13 +181,11 @@ const AttachmentsUpload = (props: IProps) => {
               (file as File & { source?: string }).source,
             ),
         )
-        .map(({ file }) => `${file.name}:${file.size}`),
+        .map(({ id }) => id),
     );
-    if (rejectedKeys.size > 0) {
+    if (rejectedIds.size > 0) {
       setFileItems((prevItems) =>
-        prevItems.filter(
-          ({ file }) => !rejectedKeys.has(`${file.name}:${file.size}`),
-        ),
+        prevItems.filter(({ id }) => !rejectedIds.has(id)),
       );
     }
     toast.error("Could not add attachment. Your changes are still here.");
@@ -287,7 +288,7 @@ const AttachmentsUpload = (props: IProps) => {
                 shouldUpload={true}
                 mode="others"
                 callbackAttachments={async (
-                  uploadedAttachments: Array<{ file: File }>,
+                  uploadedAttachments: Array<{ id: number; file: File }>,
                 ) => {
                   try {
                     const result = await callback(
