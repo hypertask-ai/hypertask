@@ -189,7 +189,8 @@ test("description and comment failures leave edit mode open", () => {
 });
 
 test("comment updates authorize against stored ownership and sync attachments atomically", () => {
-  assert.match(tiptap, /mode === "read-edit-comments" && attachments === undefined/);
+  assert.match(tiptap, /const hasAttachmentSnapshot = attachments !== undefined/);
+  assert.match(tiptap, /mode === "read-edit-comments" && !hasAttachmentSnapshot/);
   assert.match(tiptap, /currentAttachmentFiles\.length === 0[\s\S]*?\? undefined/);
   assert.match(tiptap, /carouselAttachments \?\? \[\]/);
   assert.match(tiptap, /attachments_: attachmentFilesForSave/);

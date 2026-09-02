@@ -560,7 +560,11 @@ const Tiptap = ({
     );
     let attachmentFilesForSave: IEditorAttachmentFile[] | undefined =
       currentAttachmentFiles;
-    if (mode === "read-edit-comments" && attachments === undefined) {
+    // An undefined attachment list means this editor has no replacement
+    // snapshot (desktop comments); preserve stored files in that case. Mobile
+    // editing passes [] when the user intentionally removes every file.
+    const hasAttachmentSnapshot = attachments !== undefined;
+    if (mode === "read-edit-comments" && !hasAttachmentSnapshot) {
       attachmentFilesForSave =
         currentAttachmentFiles.length === 0
           ? undefined

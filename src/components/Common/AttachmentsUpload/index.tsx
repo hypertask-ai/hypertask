@@ -454,7 +454,7 @@ const AttachmentsUpload = (props: IProps) => {
             <button
               type="button"
               aria-label="Done editing"
-              disabled={mobileEditSaving}
+              disabled={mobileEditSaving || !sendOnClick}
               onClick={async (event) => {
                 event.stopPropagation();
                 try {
