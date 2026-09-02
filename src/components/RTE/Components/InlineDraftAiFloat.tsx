@@ -148,9 +148,10 @@ function insertSanitizedEditableTransfer(
     | ReactDragEvent<HTMLDivElement>,
 ) {
   const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
-  const html = sanitizeAiHtml(transfer.getData("text/html"));
+  const rawHtml = transfer.getData("text/html");
+  const html = sanitizeAiHtml(rawHtml);
   const text = transfer.getData("text/plain");
-  if (!html && !text) return;
+  if (!rawHtml && !text) return;
 
   // Prevent the browser from inserting unsanitized clipboard/drop markup into the live editor.
   event.preventDefault();
