@@ -45,7 +45,11 @@ export interface ITaskGlobalStates{
     currentTask: ITask | undefined;
     setCurrentTask: Dispatch<SetStateAction<ITask | undefined>>;
     closeHandler: (save?:boolean) => void;
-    CreateTaskAndDescription: (descriptionOverride?: string, titleOverride?: string) => Promise<string | undefined>;
+    CreateTaskAndDescription: (
+      descriptionOverride?: string,
+      titleOverride?: string,
+      formValuesOverride?: IForm,
+    ) => Promise<string | undefined>;
     applyTaskWriterTitle: (title: string) => void;
     enableAutoTitleGeneration: () => void;
     scheduleTitleGeneration: (description: string) => void;

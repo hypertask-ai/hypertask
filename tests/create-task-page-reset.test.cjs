@@ -19,7 +19,7 @@ test("successful creation clears every in-memory part of the task composer", () 
 test("the standard save resets the creator before navigating away", () => {
   assert.match(
     source,
-    /const createTask = CreateTaskAndDescription\(descriptionAtSave, titleAtSave\);[\s\S]*?const taskUrl = await createTask;[\s\S]*?if \(taskUrl\) \{[\s\S]*?resetComposerAfterCreate\(\);[\s\S]*?await asyncPush\(taskUrl\);/,
+    /const createTask = CreateTaskAndDescription\(\s*descriptionAtSave,\s*titleAtSave,[\s\S]*?\);[\s\S]*?const taskUrl = await createTask;[\s\S]*?if \(taskUrl\) \{[\s\S]*?resetComposerAfterCreate\(\);[\s\S]*?await asyncPush\(taskUrl\);/,
   );
   assert.match(
     source,

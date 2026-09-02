@@ -32,7 +32,7 @@ const assignees = read(
 const startDate = read("src/components/Modals/StartDate/index.tsx");
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 global.DOMParser = dom.window.DOMParser;
-const { extractTaskProperties } = jiti(
+const { extractTaskProperties, mergeMobileCreateTaskWriterResult } = jiti(
   path.join(root, "src/utils/aiWriterUtils.ts"),
 );
 const { MOBILE_AI_TASK_WRITER_FOCUS } = jiti(
@@ -66,13 +66,19 @@ test("mobile create writer matches the approved stripped-down hierarchy", () => 
   assert.ok(introStart >= 0 && introEnd > introStart);
   assert.doesNotMatch(intro, />AI task writer</);
   assert.doesNotMatch(intro, />\s*Classic form\s*</);
-  assert.equal((intro.match(/rounded-full border border-border-light-gray-thin/g) || []).length, 3);
+  assert.equal((intro.match(/rounded-\[4px\] bg-cardBackground/g) || []).length, 3);
+  assert.doesNotMatch(intro, /rounded-full|border-border-light-gray-thin/);
   assert.match(
     writerContainer,
     /detent=\{isMobileCreateFlow \? "content-height" : "full-height"\}/,
   );
+  assert.match(
+    writerContainer,
+    /isMobileCreateFlow[\s\S]*?"rounded-t-\[5px\] bg-modalBackground shadow-md"/,
+  );
   assert.match(composer, /data-mobile-task-writer-field/);
-  assert.match(composer, /rounded-\[12px\] border border-border-light-gray-thin/);
+  assert.match(composer, /rounded-lg bg-newcomment-well/);
+  assert.doesNotMatch(composer, /data-mobile-task-writer-field[\s\S]{0,180}?\bborder\b/);
   assert.match(composer, /Skip AI, use the classic form/);
   assert.match(composer, /onClick=\{mobileCreateTask!\.onClassicForm\}/);
   assert.match(
@@ -120,6 +126,87 @@ test("mobile create submit stays trimmed and single-flight", () => {
     writerContainer,
     /appliedCreateResponseRef\.current === currentResponseItem\.id/,
   );
+});
+
+test("mobile AI result merges into one direct-create snapshot", () => {
+  const existingPriority = { priority_index: 2, Priority_Value: "High" };
+  const generatedPriority = { priority_index: 3, Priority_Value: "Low" };
+  const generatedSection = {
+    sectionId: 99,
+    sectionTitle: "In Progress",
+    position: "top",
+  };
+  const generatedAssignee = { id: 7, displayName: "QA Agent" };
+  const current = {
+    title: "",
+    description: "<p></p>",
+    assignees: [],
+    attachments: [],
+    status: { sectionId: 12, sectionTitle: "Backlog", position: "top" },
+    priority: existingPriority,
+  };
+
+  const merged = mergeMobileCreateTaskWriterResult(
+    current,
+    {
+      title: "Generated task",
+      description: "<p>Generated description</p>",
+      priority: generatedPriority,
+      status: generatedSection,
+      assignees: [generatedAssignee],
+    },
+    [
+      {
+        id: "generated-file",
+        file: { name: "proof.png", size: 12, type: "image/png" },
+        preview: "https://files.hypertask.app/proof.png",
+      },
+    ],
+    12,
+  );
+
+  assert.equal(merged.title, "Generated task");
+  assert.equal(merged.description, "<p>Generated description</p>");
+  assert.equal(merged.priority, existingPriority, "an explicit form value wins");
+  assert.deepEqual(merged.status, generatedSection, "AI may replace the opening section");
+  assert.deepEqual(merged.assignees, [generatedAssignee]);
+  assert.equal(merged.attachments[0].file.source, "https://files.hypertask.app/proof.png");
+  assert.match(
+    createTaskModal,
+    /CtrlEnterHandler\("Save", mergedFormValues\)/,
+    "the merged snapshot must enter the existing create-and-navigate path",
+  );
+  assert.doesNotMatch(
+    createTaskModal,
+    /setTaskWriterFilled\(changed\);\s*showClassicForm\(\)/,
+  );
+});
+
+test("mobile AI result preserves edits made in the classic form", () => {
+  const current = {
+    title: "Keep my title",
+    description: "<p>Keep my description</p>",
+    assignees: [{ id: 6, displayName: "Valentin" }],
+    attachments: [{ id: 1, file: { source: "existing" } }],
+    status: { sectionId: 77, sectionTitle: "Doing", position: "top" },
+  };
+  const merged = mergeMobileCreateTaskWriterResult(
+    current,
+    {
+      title: "Generated title",
+      description: "<p>Generated description</p>",
+      status: { sectionId: 99, sectionTitle: "Done", position: "top" },
+      assignees: [{ id: 7, displayName: "QA Agent" }],
+    },
+    undefined,
+    12,
+  );
+
+  assert.equal(merged.title, current.title);
+  assert.equal(merged.description, current.description);
+  assert.equal(merged.status, current.status);
+  assert.equal(merged.assignees, current.assignees);
+  assert.equal(merged.attachments, current.attachments);
 });
 
 test("mobile board section plus and C shortcut open the AI task writer", async () => {
@@ -283,21 +370,17 @@ test("mobile create uses the shared writer and applies its response before save"
     createTaskModal,
     /applyCreateTaskResult=\{applyCreateTaskResult\}/,
   );
-  assert.match(
-    createTaskModal,
-    /if \(!formValues\.title\.trim\(\) && result\.title/,
-  );
-  assert.match(
-    createTaskModal,
-    /if \(!formValues\.priority && result\.priority/,
-  );
-  assert.match(createTaskModal, /if \(!formValues\.dueDate && result\.dueDate/);
-  assert.match(
-    createTaskModal,
-    /if \(!formValues\.startDate && result\.startDate/,
-  );
+  assert.match(createTaskModal, /mergeMobileCreateTaskWriterResult\(/);
   assert.match(createTaskModal, /responseProjectId !== currentProjectId/);
-  assert.match(createTaskModal, /setTaskWriterFilled\(changed\)/);
+  assert.match(createTaskModal, /setTaskWriterFilled\(true\)/);
+  assert.match(
+    createTaskModal,
+    /return \(await CtrlEnterHandler\("Save", mergedFormValues\)\) === true/,
+  );
+  assert.match(
+    writerContainer,
+    /applyCreateTaskResult\([\s\S]*?\.then\(\(handled\) => \{[\s\S]*?if \(handled\) clearHistory\(\)/,
+  );
   assert.match(
     writerContainer,
     /!isMobileCreateFlow && !isLoading && currentDisplayResponse/,

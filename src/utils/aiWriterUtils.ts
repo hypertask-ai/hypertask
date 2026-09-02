@@ -5,7 +5,11 @@ import {
   PriorityConstants,
 } from "@/lib/constants/constants";
 import { IAgent, ILabel, IUser } from "@/models/model";
-import type { TSectionPayload } from "@/models/CreateTaskModalModels/model";
+import type {
+  IForm,
+  TSectionPayload,
+} from "@/models/CreateTaskModalModels/model";
+import type { ITaskWriterAttachment } from "@/models/AI_Task_writer_model";
 
 export interface IExtractedTaskProperties {
   title: string | null;
@@ -17,6 +21,61 @@ export interface IExtractedTaskProperties {
   assignees?: (IUser | IAgent)[];
   dueDate?: Date;
   startDate?: Date;
+}
+
+const hasDescriptionContent = (value: string) => {
+  if (/<(?:audio|embed|iframe|img|object|video)\b/i.test(value)) return true;
+  return Boolean(
+    value
+      .replace(/<br\s*\/?>(?=.)/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&(?:nbsp|#160|#xA0);/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+};
+
+export function mergeMobileCreateTaskWriterResult(
+  current: IForm,
+  result: IExtractedTaskProperties,
+  attachments: ITaskWriterAttachment[] | undefined,
+  openingSectionId: number | undefined,
+): IForm {
+  const canReplaceSection =
+    current.status?.sectionId === undefined ||
+    current.status.sectionId === openingSectionId;
+  const mappedAttachments = attachments?.map((attachment, index) => ({
+    id: index,
+    file: {
+      name: attachment.file.name,
+      size: attachment.file.size,
+      type: attachment.file.type,
+      source: attachment.preview,
+    },
+  }));
+
+  return {
+    ...current,
+    title: current.title.trim() ? current.title : result.title?.trim() ?? "",
+    description: hasDescriptionContent(current.description)
+      ? current.description
+      : result.description,
+    priority: current.priority ?? result.priority,
+    estimate: current.estimate ?? result.estimate,
+    tags: current.tags?.length ? current.tags : result.tags,
+    status:
+      canReplaceSection && result.status
+        ? { ...result.status, position: result.status.position ?? "top" }
+        : current.status,
+    assignees: current.assignees.length
+      ? current.assignees
+      : result.assignees ?? [],
+    dueDate: current.dueDate ?? result.dueDate,
+    startDate: current.startDate ?? result.startDate,
+    attachments: current.attachments.length
+      ? current.attachments
+      : mappedAttachments ?? [],
+  };
 }
 
 /**

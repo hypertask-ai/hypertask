@@ -518,26 +518,28 @@ const useCreateTaskModalGlobalStates = () => {
       processed: IProccessed,
       titleOverride?: string,
       traceScope?: TaskCreateTraceScope | null,
+      formValuesOverride?: IForm,
     ) => {
-      if (!currentUser?.id || !formValues.currentProject) return;
+      const formValuesAtSave = formValuesOverride ?? formValues;
+      if (!currentUser?.id || !formValuesAtSave.currentProject) return;
       // const inViewObjectId = inViewObject.taskProjectId
       const res = await createNewTaskGloballyAPIHandler(
         {
           userId: currentUser.id,
-          projectId: formValues.currentProject?.id!,
+          projectId: formValuesAtSave.currentProject.id,
           projectIdentifier:
-            formValues.currentProject?.uniqueIdentifier ?? "TASK",
-          title: titleOverride ?? formValues.title ?? "",
-          ranking: formValues.status?.ranking,
-          sectionId: formValues.status?.sectionId!,
-          section_title: formValues.status?.sectionTitle!,
-          priority: formValues.priority,
-          estimate: formValues.estimate,
-          dueDate: formValues.dueDate,
-          startDate: formValues.startDate,
-          tags: formValues.tags,
+            formValuesAtSave.currentProject.uniqueIdentifier ?? "TASK",
+          title: titleOverride ?? formValuesAtSave.title ?? "",
+          ranking: formValuesAtSave.status?.ranking,
+          sectionId: formValuesAtSave.status?.sectionId!,
+          section_title: formValuesAtSave.status?.sectionTitle!,
+          priority: formValuesAtSave.priority,
+          estimate: formValuesAtSave.estimate,
+          dueDate: formValuesAtSave.dueDate,
+          startDate: formValuesAtSave.startDate,
+          tags: formValuesAtSave.tags,
           parentTask: parentTaskInfo,
-          assignees: formValues.assignees,
+          assignees: formValuesAtSave.assignees,
           createTaskFromComment,
           ...processed,
         },
@@ -563,12 +565,17 @@ const useCreateTaskModalGlobalStates = () => {
   );
 
   /** Function for creating a new task @type {*} */
-  const CreateTaskAndDescription = useCallback(async (descriptionOverride?: string, titleOverride?: string) => {
+  const CreateTaskAndDescription = useCallback(async (
+    descriptionOverride?: string,
+    titleOverride?: string,
+    formValuesOverride?: IForm,
+  ) => {
+    const formValuesAtSave = formValuesOverride ?? formValues;
     const traceScope =
-      currentUser?.id && formValues.currentProject?.id
+      currentUser?.id && formValuesAtSave.currentProject?.id
         ? beginTaskCreatePerformanceTrace({
             accountId: currentUser.id,
-            projectId: formValues.currentProject.id,
+            projectId: formValuesAtSave.currentProject.id,
           })
         : null;
     //Why do we have a seperate processHTML for create task modal when we can use the same one from useSaveContent.ts?
@@ -577,10 +584,10 @@ const useCreateTaskModalGlobalStates = () => {
     // [Reply]
     // - Because the one in useSaveContent is where the task already exists, the taskId is already present as well, here its not,
     // - it would be better yeah to combine them both, it is technical debt indeed, good catch.
-    const descriptionAtSave = descriptionOverride ?? formValues.description;
+    const descriptionAtSave = descriptionOverride ?? formValuesAtSave.description;
     const result = await processHtmlForTaskId(descriptionAtSave);
     const { AttachmentUrls } = uploadAttachmentsDescription(
-      formValues.attachments
+      formValuesAtSave.attachments
     );
     const updatedURLs = result.urls.map((url: any) => ({
       ...url,
@@ -596,22 +603,23 @@ const useCreateTaskModalGlobalStates = () => {
       processedPayload,
       titleOverride,
       traceScope,
+      formValuesAtSave,
     );
     // Reject missing task results so every save mode uses its error path and
     // keeps the typed form instead of reporting a false success.
     if (!task) throw new Error("Task could not be created");
-    const savedTitle = (titleOverride ?? formValues.title).trim();
+    const savedTitle = (titleOverride ?? formValuesAtSave.title).trim();
     const titleEditSignal =
       generatedTitleTrackerRef.current.takeSignal(savedTitle);
     if (titleEditSignal) {
       void recordBoardMemorySignal(
-        formValues.currentProject?.id,
+        formValuesAtSave.currentProject?.id,
         titleEditSignal
       );
     }
     localStorage.setItem(
       "MENTION_PROJECT_ID",
-      (formValues.currentProject?.id ?? "").toString()
+      (formValuesAtSave.currentProject?.id ?? "").toString()
     );
 
     if (result.hyperMention)
@@ -635,16 +643,16 @@ const useCreateTaskModalGlobalStates = () => {
           result.hyperMention.modelOptionId ?? improveWritingModel,
         modelOptionId: result.hyperMention.modelOptionId,
         modelMentionLabel: result.hyperMention.modelLabel,
-        attachments: formValues.attachments,
+        attachments: formValuesAtSave.attachments,
         taskDescription: result.html,
         taskTitle: task.title,
       });
 
     setNewTaskCreated(task);
     setCreateTaskFromComment(undefined);
-    const taskUrl = `/detail/project-${formValues.currentProject?.id}/${task.uniqueIndex}`;
+    const taskUrl = `/detail/project-${formValuesAtSave.currentProject?.id}/${task.uniqueIndex}`;
     router.prefetch(taskUrl);
-    processFollowers(result, task);
+    processFollowers(result, task, formValuesAtSave.assignees);
     if (result.agentMentions && result.agentMentions.length > 0) {
       result.agentMentions.forEach((agentId: string) => {
         handleAgentMention(agentId, task.id);
@@ -669,7 +677,11 @@ const useCreateTaskModalGlobalStates = () => {
     improveWritingSource,
   ]);
 
-  const processFollowers = (result: any, task: ITask) => {
+  const processFollowers = (
+    result: any,
+    task: ITask,
+    assignees: IForm["assignees"] = formValues.assignees,
+  ) => {
     //remove duplicates
     const uniquePostFollowerBody = result.PostFollowerBody.filter(
       (x: any, index: number, self: any[]) =>
@@ -680,7 +692,7 @@ const useCreateTaskModalGlobalStates = () => {
       (follower: any) => ({ ...follower, currentTaskId: task.id })
     );
     updatedPostFollowerBody.forEach((x: any) => {
-      const userIdExists = formValues.assignees.some(
+      const userIdExists = assignees.some(
         (assignee: any) => assignee.id === x.userId
       );
       if (!userIdExists) {
@@ -702,7 +714,7 @@ const useCreateTaskModalGlobalStates = () => {
   }
 
   const PostFollower = async (userId: number, task: ITask) => {
-    const path = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${formValues.currentProject?.id}/${task.uniqueIndex}`;
+    const path = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
     const taskOwnerId = parseInt(task.userId as string);
     console.log("already exist not", taskOwnerId === userId);

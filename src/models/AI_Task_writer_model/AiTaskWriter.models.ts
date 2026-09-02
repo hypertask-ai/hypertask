@@ -70,7 +70,7 @@ export interface IAITaskWriterContainerProps {
     result: ITaskWriterResult,
     attachments: ITaskWriterAttachment[] | undefined,
     projectId: number | undefined,
-  ) => boolean;
+  ) => Promise<boolean>;
   mobileCreateTask?: IMobileCreateTaskWriter;
   returnUserInputHandler?: (input: string) => void;
   triggerAIWriterConfirm?: boolean;
