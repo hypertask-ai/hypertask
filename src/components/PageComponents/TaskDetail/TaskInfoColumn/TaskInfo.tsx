@@ -421,7 +421,8 @@ const TaskInfo = (props: ITaskInfoContainer) => {
 
       {pullRequests.length > 0 && (
         <TaskInfoRow alignTop>
-          <TaskInfoValue className="flex flex-col gap-1">
+          <TaskInfoLabel>Pull requests</TaskInfoLabel>
+          <TaskInfoValue className="flex min-w-0 flex-col gap-1 overflow-hidden">
             {pullRequests.map((pullRequest) => {
               const displayState = derivePullRequestDisplayState(
                 pullRequest.lifecycle,
@@ -436,7 +437,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
                   href={pullRequest.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex min-w-0 items-center gap-1.5 py-0.5"
+                  className="flex w-full max-w-full min-w-0 items-center gap-1.5 overflow-hidden py-0.5"
                   title={pullRequest.title}
                 >
                   <PullRequestIcon
@@ -445,7 +446,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
                     className="shrink-0"
                     style={{ color: badge.color }}
                   />
-                  <span className="min-w-0 truncate text-white-black hover:underline">
+                  <span className="min-w-0 flex-1 truncate text-white-black hover:underline">
                     #{pullRequest.number} {pullRequest.repositoryName}
                   </span>
                   <span
