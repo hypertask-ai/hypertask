@@ -329,7 +329,7 @@ export default function AgentWebhookPanel({ agent }: { agent: IAgent }) {
             rel="noreferrer"
             className="inline-flex items-center gap-1 font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
-            Setup guide and receiver examples
+            How webhooks work
             <ExternalLink className="h-3 w-3" aria-hidden />
           </a>
         </div>
