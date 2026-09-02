@@ -130,7 +130,7 @@ async function githubWebhookActor(): Promise<IUser> {
     stripe_customer_id: "",
     joinedAt: new Date(),
     UserSettingId: "",
-    UserSetting: {} as any,
+    UserSetting: {} as IUser["UserSetting"],
   };
 }
 
@@ -221,7 +221,7 @@ async function reconcileMergedPullRequestAssignees(
   task: WebhookTask,
   moveResult: PullRequestMoveResult,
 ): Promise<boolean> {
-  if (!moveResult.targetReached || moveResult.targetSectionId == null) {
+  if (!moveResult.targetReached || moveResult.targetSectionId === null) {
     return false;
   }
 

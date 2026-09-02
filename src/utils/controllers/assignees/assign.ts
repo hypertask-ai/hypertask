@@ -341,8 +341,10 @@ const createAssignee = async ({
       if (
         !currentTask ||
         currentTask.status !== "Normal" ||
-        currentTask.projectId !== expectedProjectId ||
-        currentTask.sectionId !== expectedSectionId
+        (expectedProjectId !== undefined &&
+          currentTask.projectId !== expectedProjectId) ||
+        (expectedSectionId !== undefined &&
+          currentTask.sectionId !== expectedSectionId)
       ) {
         return {
           assign: null,
@@ -588,8 +590,10 @@ const removeAssignee = async ({
       if (
         !currentTask ||
         currentTask.status !== "Normal" ||
-        currentTask.projectId !== expectedProjectId ||
-        currentTask.sectionId !== expectedSectionId
+        (expectedProjectId !== undefined &&
+          currentTask.projectId !== expectedProjectId) ||
+        (expectedSectionId !== undefined &&
+          currentTask.sectionId !== expectedSectionId)
       ) {
         return {
           removed: false,

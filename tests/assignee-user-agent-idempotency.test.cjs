@@ -282,4 +282,34 @@ test("a human assignment coexists with an agent owned by the same user", async (
   );
   assert.equal(calls.cancellations, 4);
   assert.deepEqual(calls.fenceOptions.at(-1), { allowHumanOverride: false });
+
+  const projectOnly = await assign(
+    owner,
+    owner.id,
+    task.id,
+    agentAssignment.agentId,
+    undefined,
+    {
+      intent: "unassign",
+      expectedProjectId: task.projectId,
+      allowHumanOverride: false,
+    },
+  );
+  assert.equal(projectOnly.status, 200);
+
+  rows.push(agentAssignment);
+  const sectionOnly = await assign(
+    owner,
+    owner.id,
+    task.id,
+    agentAssignment.agentId,
+    undefined,
+    {
+      intent: "unassign",
+      expectedSectionId: task.sectionId,
+      allowHumanOverride: false,
+    },
+  );
+  assert.equal(sectionOnly.status, 200);
+  assert.equal(rows.length, 0);
 });
