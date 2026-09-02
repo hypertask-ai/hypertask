@@ -148,7 +148,7 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
       currentFocusedElement: null,
       editMode: "title",
       setEditMode: noop,
-      formValues: { title: "Typed title" },
+      formValues: { title: "", description: "<p></p>" },
       handleChange: noop,
       appendDictationToTitle: noop,
       dictationCoordinator: coordinator,
@@ -175,6 +175,34 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
     assert.equal(titleMics[0].getAttribute("aria-label"), "Dictate task title");
     assert.equal(titleMics[0].getAttribute("aria-disabled"), "false");
     assert.match(titleMics[0].className, /h-11 w-11/);
+    assert.match(titleMics[0].className, /bg-shadcn-primary/);
+    assert.match(titleMics[0].className, /text-primary-foreground/);
+    assert.match(
+      titleMics[0].querySelector("svg").className.baseVal,
+      /text-primary-foreground/,
+    );
+
+    createTaskModalValue = {
+      ...createTaskModalValue,
+      formValues: { title: "Typed title", description: "<p></p>" },
+    };
+    await act(async () => reactRoot.render(renderTitle(true)));
+    const populatedMic = container.querySelector("#create-task-title-audio-button");
+    assert.doesNotMatch(populatedMic.className, /bg-shadcn-primary/);
+    assert.match(
+      populatedMic.querySelector("svg").className.baseVal,
+      /text-icon-dark-gray/,
+    );
+
+    createTaskModalValue = {
+      ...createTaskModalValue,
+      formValues: { title: "", description: "<p>Dictated details</p>" },
+    };
+    await act(async () => reactRoot.render(renderTitle(true)));
+    assert.doesNotMatch(
+      container.querySelector("#create-task-title-audio-button").className,
+      /bg-shadcn-primary/,
+    );
 
     createTaskModalValue = {
       ...createTaskModalValue,

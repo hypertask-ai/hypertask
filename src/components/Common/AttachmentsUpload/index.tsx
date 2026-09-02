@@ -998,9 +998,8 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           onProcessingChange={onProcessingChange}
           dictationCoordinator={dictationCoordinator}
           ariaLabel="Dictate description"
-          mobilePresentation="compact"
-          // This field-level mic stays a bare secondary action. Flex order moves
-          // the one mounted recorder without losing an in-flight MediaRecorder.
+          mobilePresentation="prominent"
+          mobilePrimaryTone="primary"
           className={isDictating ? undefined : MOBILE_TARGET}
           // order lives on the wrapper: only the .audio-recorder root is a
           // direct child of this flex row, so order on className is a no-op.

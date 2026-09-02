@@ -48,7 +48,7 @@ interface IProp {
   ariaLabel?: string;
   /** Explicit mobile hierarchy for field-level mics that must not become a primary CTA. */
   mobilePresentation?: MobileMicPresentation;
-  /** Optional accent for a surface whose approved primary action uses the AI brand color. */
+  /** Optional color for the filled mobile recorder action. */
   mobilePrimaryTone?: MobileMicPrimaryTone;
   /** Serializes recorder instances that write into the same draft. */
   dictationCoordinator?: DictationCoordinator;
@@ -646,6 +646,9 @@ export const AudioButton = ({
       "h-11 w-12 bg-white-black text-white-black-inverted";
     if (mobilePrimaryTone === "ai") {
       recordingSubmitClassName = "h-11 w-12 bg-hypertasks-ai-purple text-white";
+    } else if (mobilePrimaryTone === "primary") {
+      recordingSubmitClassName =
+        "h-11 w-12 bg-shadcn-primary text-primary-foreground";
     }
   }
 
@@ -690,10 +693,12 @@ export const AudioButton = ({
             if (prominent) {
               micColorClassName = "text-icon-dark-gray";
               if (!hasText) {
-                micColorClassName =
-                  mobilePrimaryTone === "ai"
-                    ? "text-white"
-                    : "text-white-black-inverted";
+                micColorClassName = "text-white-black-inverted";
+                if (mobilePrimaryTone === "ai") {
+                  micColorClassName = "text-white";
+                } else if (mobilePrimaryTone === "primary") {
+                  micColorClassName = "text-primary-foreground";
+                }
               }
             }
             return (

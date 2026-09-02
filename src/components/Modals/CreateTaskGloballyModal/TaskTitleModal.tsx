@@ -9,6 +9,7 @@ import { DIV_ID_CONSTANTS } from '@/lib/configs/general.config';
 import { useTourContext } from '@/lib/tours/context/TourContext';
 import { X } from 'lucide-react';
 import { AudioButton } from '@/components/RTE/Components/AudioButton';
+import { hasDescriptionContent } from '@/lib/ai/autoDescriptionSuggestion';
 
 const TaskTitleModal = () => {
     const _mbl = useContext(MobileViewContext);
@@ -17,6 +18,7 @@ const TaskTitleModal = () => {
     const isApple = useDeviceContext()
     const { endTour } = useTourContext();
     const { currentFocusedElement, editMode, setEditMode, formValues, handleChange, appendDictationToTitle, dictationCoordinator, setCurrentFocusedElement, focusOn, isRecording, toggleRecording, closeHandler, isGeneratingTitle, titleGenerationError } = useContextCreateTaskModal()
+    const hasSavableContent = formValues.title.trim().length > 0 || hasDescriptionContent(formValues.description);
     useAutosizeTextArea(textAreaRef.current, formValues.title);
     const outsideClickHandler = () => {
         if (editMode!=="title") return
@@ -174,10 +176,12 @@ const TaskTitleModal = () => {
                                         id="create-task-title-audio-button"
                                         toggleRecording={toggleRecording}
                                         globalRecording={isRecording}
+                                        hasText={hasSavableContent}
                                         dictationCoordinator={dictationCoordinator}
                                         disabled={isGeneratingTitle}
                                         ariaLabel="Dictate task title"
-                                        mobilePresentation="compact"
+                                        mobilePresentation="prominent"
+                                        mobilePrimaryTone="primary"
                                         className="h-11 w-11 shrink-0 justify-center"
                                         wrapperClassName="shrink-0"
                                     />
