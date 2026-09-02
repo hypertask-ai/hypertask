@@ -2,11 +2,13 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
 }
 
-export function GET(request: Request): Response {
-  const host = request.headers.get('host') ?? new URL(request.url).host
+const MCP_RESOURCE_URL =
+  process.env.NEXT_PUBLIC_MCP_SERVER_URL || 'https://mcp.hypertask.ai/mcp'
+
+export function GET(): Response {
   return Response.json(
     {
-      resource: `https://${host}`,
+      resource: MCP_RESOURCE_URL,
       authorization_servers: ['https://app.hypertask.ai'],
       scopes_supported: ['mcp:full'],
       bearer_methods_supported: ['header'],
