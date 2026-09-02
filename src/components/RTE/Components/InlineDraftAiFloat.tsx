@@ -564,6 +564,11 @@ const InlineDraftAiFloat = ({
 
   if (!editor || !scope) return null;
 
+  const handleMobileEditableKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+  ) => {
+    event.stopPropagation();
+  };
   const handleMobileEditableDragStart = () => {
     mobileInternalDragRef.current = true;
   };
@@ -1157,6 +1162,7 @@ const InlineDraftAiFloat = ({
                     contentEditable={!mobileReview.showOriginal}
                     suppressContentEditableWarning
                     onBlur={handleMobileEditableBlur}
+                    onKeyDown={handleMobileEditableKeyDown}
                     onDragStart={handleMobileEditableDragStart}
                     onDragEnd={handleMobileEditableDragEnd}
                     onDrop={handleMobileEditableDrop}
@@ -1251,6 +1257,7 @@ const InlineDraftAiFloat = ({
                       contentEditable={!isLoading}
                       suppressContentEditableWarning
                       onBlur={handleMobileEditableBlur}
+                      onKeyDown={handleMobileEditableKeyDown}
                       onDragStart={handleMobileEditableDragStart}
                       onDragEnd={handleMobileEditableDragEnd}
                       onDrop={handleMobileEditableDrop}

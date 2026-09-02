@@ -344,6 +344,40 @@ test("mobile Write with AI does not replace newer typing with an older render", 
   assert.equal(hasPendingNewerMobileInput(null, completeInput), false);
 });
 
+test("mobile Write with AI keeps every key from the rendered draft editor", async () => {
+  await withRenderedSheet("Starting draft.", async ({ container, dom }) => {
+    const source = container.querySelector('[contenteditable="true"]');
+    source.focus();
+
+    const reactionShortcut = (event) => {
+      if (event.key === "r") event.preventDefault();
+    };
+    document.addEventListener("keydown", reactionShortcut);
+
+    let value = "Starting draft.";
+    for (const character of " Keyboard works.") {
+      await act(async () => {
+        const accepted = source.dispatchEvent(
+          new dom.window.KeyboardEvent("keydown", {
+            bubbles: true,
+            cancelable: true,
+            key: character,
+          }),
+        );
+        if (accepted) {
+          value += character;
+          source.innerHTML = `<p>${value}</p>`;
+          source.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true }));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      });
+    }
+
+    document.removeEventListener("keydown", reactionShortcut);
+    assert.equal(source.textContent, "Starting draft. Keyboard works.");
+  });
+});
+
 test("mobile Write with AI keeps an edited existing draft as the rewrite source", async () => {
   await withRenderedSheet("Original draft", async ({ container, dom, editor }) => {
     const requests = [];
