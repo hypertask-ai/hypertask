@@ -532,7 +532,7 @@ const TiptapCreateTaskModal = () => {
       attachments: any[] | undefined,
       responseProjectId: number | undefined,
     ) => {
-      const currentProjectId = formValues.currentProject?.id;
+      const currentProjectId = projectForContext?.id;
       // The provider's request scope identifies the board used by the model.
       // Never apply a response after the user has switched boards.
       if (
@@ -623,6 +623,7 @@ const TiptapCreateTaskModal = () => {
       editor,
       formValues,
       handleChange,
+      projectForContext,
       showClassicForm,
     ],
   );

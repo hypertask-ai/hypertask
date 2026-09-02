@@ -206,7 +206,7 @@ test("mobile new-task fields follow writing order without remounting a second tr
 test("mobile new-task properties do not collapse beneath a long description", () => {
   assert.match(
     createTaskBodySource,
-    /<TaskInfoColumnContainer[\s\S]*?heightVariant="fit"[\s\S]*?className="shrink-0"/,
+    /<TaskInfoColumnContainer\s+heightVariant="fit"\s+className="shrink-0"\s*>/,
     "the mobile properties card must keep its natural height while the modal scrolls",
   );
 });

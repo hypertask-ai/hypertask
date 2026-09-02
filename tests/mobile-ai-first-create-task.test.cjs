@@ -71,6 +71,12 @@ test("mobile create uses the shared writer and applies its response before save"
     writerContainer,
     /const aiOptionsEl[\s\S]*?!isMobileCreateFlow && !isLoading && currentDisplayResponse/,
   );
+  assert.match(writerContainer, /!isMobileCreateFlow \|\|/);
+  assert.match(
+    writerContainer,
+    /appliedCreateResponseRef\.current === currentResponseItem\.id/,
+  );
+  assert.match(createTaskModal, /const currentProjectId = projectForContext\?\.id/);
 });
 
 test("classic form carries content back into the shared writer", () => {

@@ -395,13 +395,11 @@ const AITaskWriterContainer: React.FC<
 
   useEffect(() => {
     if (
-      !isMobile ||
-      !createTask ||
+      !isMobileCreateFlow ||
       !applyCreateTaskResult ||
       isLoading ||
       hasError ||
-      !currentDisplayResponse ||
-      appliedCreateResponseRef.current === currentDisplayResponse
+      !currentDisplayResponse
     ) {
       return;
     }
@@ -409,9 +407,14 @@ const AITaskWriterContainer: React.FC<
     const currentResponseItem = getCurrentResponseItem();
     // The provider adds a completed response to history in its own effect. Wait
     // for that item so automatic create also carries the response attachments.
-    if (!currentResponseItem) return;
+    if (
+      !currentResponseItem ||
+      appliedCreateResponseRef.current === currentResponseItem.id
+    ) {
+      return;
+    }
 
-    appliedCreateResponseRef.current = currentDisplayResponse;
+    appliedCreateResponseRef.current = currentResponseItem.id;
     const result = extractTaskProperties(
       currentDisplayResponse,
       projectLabels,
@@ -429,12 +432,11 @@ const AITaskWriterContainer: React.FC<
   }, [
     applyCreateTaskResult,
     clearHistory,
-    createTask,
     currentDisplayResponse,
     getCurrentResponseItem,
     hasError,
     isLoading,
-    isMobile,
+    isMobileCreateFlow,
     projectAssignees,
     projectId,
     projectLabels,
@@ -551,6 +553,13 @@ const AITaskWriterContainer: React.FC<
     </>
   ) : null;
 
+  let mobileWriterPlaceholder: string | undefined;
+  if (isMobileCreateFlow) {
+    mobileWriterPlaceholder = mobileCreateTask?.formSummary
+      ? "Say what is missing, or just hit the mic…"
+      : "Tap to type, or hit the mic and just talk…";
+  }
+
   const inputAndToolbarEl = (
     <>
       <AITaskWriterInputArea
@@ -569,13 +578,7 @@ const AITaskWriterContainer: React.FC<
         toggleRecording={toggleRecording}
         isUploadingAttachments={isUploadingAttachments}
         uploadProgress={uploadProgress}
-        placeholder={
-          isMobileCreateFlow
-            ? mobileCreateTask?.formSummary
-              ? "Say what is missing, or just hit the mic…"
-              : "Tap to type, or hit the mic and just talk…"
-            : undefined
-        }
+        placeholder={mobileWriterPlaceholder}
       />
       <hr className="w-full text-white-black my-1 h-[0.2px] opacity-10" />
       <div className="flex justify-between items-center w-full">
