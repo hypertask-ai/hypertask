@@ -89,6 +89,7 @@ const calendarTask = ({ id, projectId, title, dueDate, ...overrides }) => ({
   deletedAt: null,
   waitingOnUserId: null,
   waitingOnUser: null,
+  blockingTasks: [],
   agentId: null,
   updatedByUserIds: [],
   project:
@@ -203,6 +204,8 @@ test("calendar snapshots are account, schema, timezone, range, and expiry scoped
     savedAt: "2026-08-09T10:00:00.000Z",
   });
   assert.ok(snapshot);
+  assert.equal(Object.hasOwn(snapshot, "tasks"), false);
+  assert.equal(Object.hasOwn(snapshot, "projects"), false);
   assert.deepEqual(snapshot.taskOrder, [100, 101, 104]);
   assert.equal(
     isCalendarReadModelSnapshotV1(snapshot, {
@@ -222,7 +225,7 @@ test("calendar snapshots are account, schema, timezone, range, and expiry scoped
   );
   assert.equal(
     isCalendarReadModelSnapshotV1(
-      { ...snapshot, schemaVersion: 1 },
+      { ...snapshot, schemaVersion: 3 },
       { accountId: 6, range, nowMs: Date.parse("2026-08-09T11:00:00.000Z") },
     ),
     false,
@@ -282,6 +285,50 @@ test("calendar snapshots are account, schema, timezone, range, and expiry scoped
         tasks: blockedPayload.tasks.map((task, index) =>
           index === 0
             ? { ...task, waitingOnUser: { ...task.waitingOnUser, id: 43 } }
+            : task,
+        ),
+      },
+    }),
+    null,
+  );
+
+  const taskBlockedPayload = payloadFor(range);
+  taskBlockedPayload.tasks[0] = {
+    ...taskBlockedPayload.tasks[0],
+    blockingTasks: [
+      {
+        id: 1606,
+        projectId: 16,
+        uniqueIndex: 1606,
+        ticketNumber: "INNE-1606",
+        title: "Blocking task",
+        status: "Normal",
+        section: "In Progress",
+      },
+    ],
+  };
+  const taskBlockedSnapshot = createCalendarReadModelSnapshot({
+    payload: taskBlockedPayload,
+  });
+  assert.ok(taskBlockedSnapshot);
+  assert.equal(
+    materializeCalendarReadModelSnapshot(taskBlockedSnapshot).tasks[0]
+      .blockingTasks[0].ticketNumber,
+    "INNE-1606",
+  );
+  assert.equal(
+    createCalendarReadModelSnapshot({
+      payload: {
+        ...taskBlockedPayload,
+        tasks: taskBlockedPayload.tasks.map((task, index) =>
+          index === 0
+            ? {
+                ...task,
+                blockingTasks: task.blockingTasks.map((blockingTask) => ({
+                  ...blockingTask,
+                  projectId: 999,
+                })),
+              }
             : task,
         ),
       },
@@ -567,8 +614,29 @@ test("cache hydration requires current access and failed cold loads settle to re
     view: "week",
     weekStartsOn: "monday",
   });
+  const cachedPayload = payloadFor(range);
+  cachedPayload.tasks[0].blockingTasks = [
+    {
+      id: 200,
+      projectId: 15,
+      uniqueIndex: 200,
+      ticketNumber: "HTPR-200",
+      title: "Same-board blocker",
+      status: "Normal",
+      section: "In Progress",
+    },
+    {
+      id: 201,
+      projectId: 16,
+      uniqueIndex: 201,
+      ticketNumber: "HTPR-201",
+      title: "Revoked-board blocker",
+      status: "Normal",
+      section: "In Progress",
+    },
+  ];
   const cached = materializeCalendarReadModelSnapshot(
-    createCalendarReadModelSnapshot({ payload: payloadFor(range) }),
+    createCalendarReadModelSnapshot({ payload: cachedPayload }),
   );
   assert.equal(
     intersectAuthorizedCalendarPayload(cached, {
@@ -592,6 +660,12 @@ test("cache hydration requires current access and failed cold loads settle to re
     defenseInDepth.tasks.map((item) => item.id),
     [100, 104],
   );
+  assert.deepEqual(
+    defenseInDepth.tasks.find((item) => item.id === 100).blockingTasks.map(
+      (blockingTask) => blockingTask.projectId,
+    ),
+    [15],
+  );
 
   const revokedDuringReconciliation = restrictCalendarPayloadToAccess(cached, {
     accountId: 6,
@@ -607,6 +681,11 @@ test("cache hydration requires current access and failed cold loads settle to re
   assert.deepEqual(
     revokedDuringReconciliation.tasks.map((item) => item.id),
     [100, 104],
+  );
+  assert.deepEqual(
+    revokedDuringReconciliation.tasks.find((item) => item.id === 100)
+      .blockingTasks.map((blockingTask) => blockingTask.projectId),
+    [15],
   );
 
   assert.deepEqual(
@@ -998,7 +1077,8 @@ test("Calendar integrates cache-first hydration, authoritative reconciliation, r
     controller,
     /calendarTaskOverlapsRange\(task, start, endExclusive\)/,
   );
-  assert.match(controller, /attachWaitingOnUsers\(authorizedTasks\)/);
+  assert.match(controller, /attachOpenBlockingTasks\(authorizedTasks\)/);
+  assert.match(controller, /attachWaitingOnUsers\(tasksWithOpenBlockers\)/);
   assert.match(
     controller,
     /members:\s*\{\s*some:\s*\{\s*userId, status: "Accepted"/,

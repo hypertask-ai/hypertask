@@ -1,6 +1,7 @@
 "use client";
 import {
   IAgent,
+  IBlockingTask,
   IEstimate,
   IPriority,
   ITask,
@@ -21,7 +22,7 @@ import EstimateLabelComponent from "@/components/Modals/TaskEstimate/EstimateLab
 import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelComponent";
 import { renderAssigneeAvatars } from "@/components/PageComponents/Kanban/TableView/TableView";
 import { useCalendarContext } from "@/lib/contexts/Calendar/calendar.context";
-import BlockerChip from "@/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip";
+import BlockerChip, { BlockerTaskChip } from "@/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip";
 import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
 
 // Day view renders tasks as table rows matching the board table view
@@ -29,7 +30,8 @@ import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
 const DAY_TABLE_COLUMNS = "90px minmax(200px,1fr) 140px 64px 100px 80px";
 const DAY_TABLE_LABEL_CLASS = "border-border-labelComponent text-label-component";
 const isTaskBlocked = (task: ITask) =>
-  task.waitingOnUserId !== null && task.waitingOnUserId !== undefined;
+  (task.waitingOnUserId !== null && task.waitingOnUserId !== undefined) ||
+  (task.blockingTasks?.length ?? 0) > 0;
 
 export function TaskCard({
   task,
@@ -163,6 +165,7 @@ export function TaskCard({
             </div>
             <TaskTagsRow
               blockingUser={blockingUser}
+              blockingTasks={task.blockingTasks}
               estimate={task.estimate ?? undefined}
               priority={task.priority ?? undefined}
               taskLabels={task.taskLabels ?? []}
@@ -177,23 +180,28 @@ export function TaskCard({
 
 const TaskTagsRow = ({
   blockingUser,
+  blockingTasks = [],
   priority,
   estimate,
   taskLabels = [],
   view,
 }: {
   blockingUser: CalendarUserSummary | undefined;
+  blockingTasks?: IBlockingTask[];
   priority: IPriority | undefined;
   estimate: IEstimate | undefined;
   taskLabels: ITaskLabel[];
   view: "month" | "week";
 }) => {
-  if (!blockingUser && !priority && !estimate && taskLabels.length === 0) {
+  if (!blockingUser && blockingTasks.length === 0 && !priority && !estimate && taskLabels.length === 0) {
     return <></>;
   }
   return (
     <div className={`basis-full flex gap-1 flex-wrap`}>
       {blockingUser && <BlockerChip user={blockingUser} />}
+      {blockingTasks.map((blockingTask) => (
+        <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+      ))}
       {/* {dueDate && (
         <DueDateLabel
           stopPropogation={true}
@@ -417,6 +425,9 @@ export function DaySection({
                         <BlockerChip user={blockingUser} />
                       </span>
                     )}
+                    {task.blockingTasks?.map((blockingTask) => (
+                      <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+                    ))}
                   </span>
                   <span className="min-w-0 flex items-center text-[11px] text-text-light-gray truncate">
                     {project ? project.title ?? project.name : ""}

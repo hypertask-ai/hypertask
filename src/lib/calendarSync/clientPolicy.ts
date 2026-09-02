@@ -96,7 +96,14 @@ export const intersectAuthorizedCalendarPayload = (
     projects: payload.projects.filter((project) =>
       authorizedIds.has(project.id),
     ),
-    tasks: payload.tasks.filter((task) => authorizedIds.has(task.projectId)),
+    tasks: payload.tasks
+      .filter((task) => authorizedIds.has(task.projectId))
+      .map((task) => ({
+        ...task,
+        blockingTasks: task.blockingTasks?.filter((blockingTask) =>
+          authorizedIds.has(blockingTask.projectId),
+        ),
+      })),
   };
 };
 
@@ -116,9 +123,14 @@ export const restrictCalendarPayloadToAccess = (
       projects.map((project) => project.id),
     ),
     projects,
-    tasks: payload.tasks.filter((task) =>
-      retainedProjectIds.has(task.projectId),
-    ),
+    tasks: payload.tasks
+      .filter((task) => retainedProjectIds.has(task.projectId))
+      .map((task) => ({
+        ...task,
+        blockingTasks: task.blockingTasks?.filter((blockingTask) =>
+          retainedProjectIds.has(blockingTask.projectId),
+        ),
+      })),
   };
 };
 

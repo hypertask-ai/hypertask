@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { CustomFieldType } from '@prisma/client';
 import axios from 'axios';
 import React from 'react'
-import BlockerChip, { type BlockerUser } from './BlockerChip';
+import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 
 interface ITaskTopRow {
     task:ITask;
@@ -69,7 +69,7 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
 
   return (
 
-    agents.length>0||blockingUser||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
+    agents.length>0||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
     <div className={`basis-full flex gap-1 flex-wrap`}>
     {agents.map((agent) => (
       <AgentChip
@@ -79,6 +79,9 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
       />
     ))}
     {blockingUser && <BlockerChip user={blockingUser} />}
+    {task.blockingTasks?.map((blockingTask) => (
+      <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
+    ))}
     {(runningTimer || (showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)) && (
       <TaskTimeBadge
         startedAt={runningTimer?.startedAt}

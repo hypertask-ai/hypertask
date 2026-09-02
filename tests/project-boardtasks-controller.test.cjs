@@ -53,6 +53,12 @@ function loadController(prisma, calls) {
         return tasks.map((task) => ({ ...task, waitingOnUser: null }));
       },
     },
+    "@/utils/controllers/tasks/attachOpenBlockingTasks": {
+      attachOpenBlockingTasks: async (tasks) => {
+        calls.push(["open-blockers", tasks]);
+        return tasks.map((task) => ({ ...task, blockingTasks: [] }));
+      },
+    },
   };
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(
@@ -105,8 +111,11 @@ test("board payload checks access before querying task content", async () => {
     userDbId: 6,
     currentUserId: 6,
   });
-  assert.deepEqual(calls.find(([name]) => name === "waiting-on-users")[1], [
+  assert.deepEqual(calls.find(([name]) => name === "open-blockers")[1], [
     { id: 101 },
+  ]);
+  assert.deepEqual(calls.find(([name]) => name === "waiting-on-users")[1], [
+    { id: 101, blockingTasks: [] },
   ]);
   assert.deepEqual(result, {
     status: 200,
@@ -119,7 +128,7 @@ test("board payload checks access before querying task content", async () => {
         },
         sanitized: true,
       },
-      tasks: [{ id: 101, waitingOnUser: null }],
+      tasks: [{ id: 101, blockingTasks: [], waitingOnUser: null }],
       allViews: ["my-view"],
     },
   });
