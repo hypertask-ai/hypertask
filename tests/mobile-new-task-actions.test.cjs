@@ -108,24 +108,31 @@ test("recent mobile waveform, dictation, and touch-target fixes remain", () => {
   );
 });
 
-test("description dictation uses an explicit compact mobile presentation", () => {
-  assert.match(mobileBar, /mobilePresentation="compact"/);
+test("description dictation is a white button until Save becomes primary", () => {
+  assert.match(mobileBar, /mobilePresentation="prominent"/);
   assert.match(mobileBar, /ariaLabel="Dictate description"/);
   assert.match(
     audioButtonSource,
     /mobilePresentation,[\s\S]*?mobileMicPresentation\(\{[\s\S]*?mobilePresentation,/,
   );
 
-  const presentation = mobileMicPresentation({
+  const base = {
     isMobileCreateComment: false,
     isMobileTaskWriter: false,
     isMobileNewTask: true,
     isMobileAiChat: false,
     isProcessing: false,
-    mobilePresentation: "compact",
-  });
-  assert.equal(presentation.prominent, false);
-  assert.doesNotMatch(presentation.className, /bg-shadcn-primary/);
+    mobilePresentation: "prominent",
+  };
+  const empty = mobileMicPresentation(base);
+  const typed = mobileMicPresentation({ ...base, hasText: true });
+
+  assert.equal(empty.prominent, true);
+  assert.match(empty.className, /bg-white-black/);
+  assert.match(empty.className, /text-white-black-inverted/);
+  assert.equal(typed.prominent, true);
+  assert.doesNotMatch(typed.className, /bg-white-black/);
+  assert.match(typed.className, /text-icon-dark-gray/);
 });
 
 test("transcription keeps the mobile action row in its recording layout", () => {

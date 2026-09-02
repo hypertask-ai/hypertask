@@ -175,6 +175,12 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
     assert.equal(titleMics[0].getAttribute("aria-label"), "Dictate task title");
     assert.equal(titleMics[0].getAttribute("aria-disabled"), "false");
     assert.match(titleMics[0].className, /h-11 w-11/);
+    assert.match(titleMics[0].className, /bg-white-black/);
+    assert.match(titleMics[0].className, /text-white-black-inverted/);
+    assert.match(
+      titleMics[0].querySelector("svg").className.baseVal,
+      /text-white-black-inverted/,
+    );
 
     createTaskModalValue = {
       ...createTaskModalValue,
