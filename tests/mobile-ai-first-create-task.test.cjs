@@ -108,8 +108,10 @@ test("start-date selection is local to create mode and is persisted in task crea
   assert.match(startDate, /mode === "Update" && inViewObject\.taskId/);
   assert.match(createRoute, /startDate,/);
   assert.match(createRoute, /startDate,\n\s+\/\/ Explicit/);
-  assert.match(createRoute, /id: normalizedSectionId,[\s\S]*?projectId,/);
+  assert.match(createRoute, /sectionId: sectionRow\.id,/);
+  assert.match(createRoute, /requestedSectionTitle/);
   assert.match(createRoute, /Section does not belong to this project/);
+  assert.match(createRoute, /No active section found/);
 });
 
 test("malformed and foreign AI markers never escape the loaded board allowlists", () => {

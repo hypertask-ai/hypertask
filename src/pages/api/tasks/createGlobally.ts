@@ -317,21 +317,30 @@ const handler: NextApiHandler = async (
     ) {
       return res.status(400).json({ message: "Invalid section" });
     }
-    const sectionRow =
-      normalizedSectionId === null
-        ? null
-        : await prisma.section.findFirst({
-            where: {
-              id: normalizedSectionId,
-              projectId,
-              visibility: true,
-              deleted: false,
-            },
-            select: { section_title: true },
-          });
-    if (normalizedSectionId !== null && !sectionRow) {
+    const requestedSectionTitle =
+      typeof section_title === "string" ? section_title.trim() : "";
+    const sectionRow = await prisma.section.findFirst({
+      where: {
+        ...(normalizedSectionId !== null
+          ? { id: normalizedSectionId }
+          : requestedSectionTitle
+            ? { section_title: requestedSectionTitle }
+            : {}),
+        projectId,
+        visibility: true,
+        deleted: false,
+      },
+      ...(normalizedSectionId === null && !requestedSectionTitle
+        ? { orderBy: { ranking: "asc" as const } }
+        : {}),
+      select: { id: true, section_title: true },
+    });
+    if (!sectionRow) {
       return res.status(400).json({
-        message: "Section does not belong to this project",
+        message:
+          normalizedSectionId === null && !requestedSectionTitle
+            ? "No active section found"
+            : "Section does not belong to this project",
       });
     }
 
@@ -352,13 +361,13 @@ const handler: NextApiHandler = async (
         const body = {
           title: title,
           description: "",
-          section: sectionRow?.section_title ?? section_title,
+          section: sectionRow.section_title,
           userId,
           uniqueIndex: nextUniqueIndex,
           ticketNumber: projectIdentifier + "-" + nextUniqueIndex.toString(),
           ranking,
           projectId,
-          sectionId: normalizedSectionId,
+          sectionId: sectionRow.id,
           dueDate,
           startDate,
           // Explicit for parity with setDueDate.ts's reset-on-change (see invokeDueDate.ts).
