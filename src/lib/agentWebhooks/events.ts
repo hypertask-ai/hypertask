@@ -5,6 +5,7 @@ export const AGENT_WEBHOOK_EVENTS = [
   "comment.created",
   "task.updated",
   "task.created",
+  "chat.message",
 ] as const;
 
 export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {
@@ -49,6 +50,14 @@ export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {
       assignees: "Final task assignees at creation time.",
       labels: "Labels attached at creation time.",
       labelsRedacted: "True when inconsistent label rows were omitted.",
+    },
+  },
+  "chat.message": {
+    subscribable: true,
+    label: "Chat message",
+    description: "A user sent this agent a message in Agent Chat.",
+    payload: {
+      chat: "Chat object with sessionId, messageId, text, and userName.",
     },
   },
   "webhook.test": {
@@ -131,14 +140,24 @@ export type AgentWebhookTaskChanges = {
   labelsRedacted?: boolean;
 };
 
+/** Board-free chat context, present only on chat.message deliveries. */
+export type AgentWebhookChat = {
+  sessionId: string;
+  messageId: string;
+  text: string;
+  userName: string | null;
+};
+
 export type AgentWebhookEventInput = {
   event: AgentWebhookEventType;
   agentId: string;
-  projectId: number;
-  taskId: number;
+  // A chat.message is not board scoped, so its board and task fields are null.
+  projectId: number | null;
+  taskId: number | null;
   ticketNumber: string | null;
-  taskTitle: string;
+  taskTitle: string | null;
   actor: AgentWebhookActor;
+  chat?: AgentWebhookChat;
   commentId?: number;
   commentHtml?: string;
   changes?: AgentWebhookTaskChanges;

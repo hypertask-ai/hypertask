@@ -3,6 +3,7 @@ export const BOARD_EVENT = "board:changed"; // a task on a board changed
 export const TASK_EVENT = "task:changed"; // task detail changed
 export const COMMENT_EVENT = "comment:changed"; // a comment/activity on a task changed
 export const INBOX_EVENT = "inbox:changed"; // a user's inbox/notifications changed
+export const AGENT_CHAT_EVENT = "agent-chat:changed"; // a user's agent chat changed
 export const TIME_EVENT = "time:changed"; // a timer on a task started/stopped
 
 // Channel name builders (server and client must agree). All private.

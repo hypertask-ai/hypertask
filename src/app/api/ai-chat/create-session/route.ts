@@ -41,14 +41,13 @@ export async function POST(request: NextRequest) {
         where: {
           id: parsed.data.agentId,
           userId: user.id,
-          runtimeType: "NATIVE",
           revokedAt: null,
         },
         select: { id: true, displayName: true },
       });
       if (!agent) {
         return NextResponse.json(
-          { error: "Native agent not found" },
+          { error: "Agent not found" },
           { status: 404 }
         );
       }

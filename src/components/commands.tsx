@@ -1262,6 +1262,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         boardCloseHandler();
         router.push("/agents");
         return;
+      case CommandMode.GoToAgentChat:
+        boardCloseHandler();
+        router.push("/agents/chat");
+        return;
       case CommandMode.DisabledAgents:
         boardCloseHandler();
         router.push("/agents?active=off");

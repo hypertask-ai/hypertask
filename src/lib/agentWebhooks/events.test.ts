@@ -15,9 +15,11 @@ test("agent webhook discovery describes events, signing, and retries", () => {
     "comment.created",
     "task.updated",
     "task.created",
+    "chat.message",
     "webhook.test",
   ]);
   assert.equal(AGENT_WEBHOOK_EVENT_DEFINITIONS["webhook.test"].subscribable, false);
+  assert.equal(AGENT_WEBHOOK_EVENT_DEFINITIONS["chat.message"].subscribable, true);
   assert.equal(
     AGENT_WEBHOOK_DELIVERY_CONTRACT.signing.algorithm,
     "HMAC-SHA256",

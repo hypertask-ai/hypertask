@@ -321,12 +321,17 @@ function RecentActionsCard({
 interface IProp {
   agentId: string;
   currentUser: IUser;
+  // Embedded inside another surface (Agent Chat details pane): the fixed
+  // global rail would overlay the host layout there, and the screen-height
+  // root would fight the host's scrolling container.
+  embedded?: boolean;
 }
 
 const AgentDetail = (props: IProp) => {
-  const { agentId, currentUser } = props;
+  const { agentId, currentUser, embedded } = props;
   const isMbl = useContext(MobileViewContext);
-  const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
+  const railEnabled = useRecoilValue(appShellRailAtom);
+  const appShellRailOn = !embedded && railEnabled && !isMbl;
   const router = useRouter();
 
   const [agent, setAgent] = useState<TDetailAgent | null>(null);
@@ -1122,7 +1127,12 @@ const AgentDetail = (props: IProp) => {
       : healthDotClass[operationsHealth];
 
   const content = (
-    <div className="min-h-screen bg-pageBackground text-white-black text-[14px]">
+    <div
+      className={cn(
+        "bg-pageBackground text-white-black text-[14px]",
+        !embedded && "min-h-screen",
+      )}
+    >
       <div className="max-w-[1120px] mx-auto px-6 py-7">
         <Link
           href="/agents"

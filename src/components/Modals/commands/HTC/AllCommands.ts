@@ -135,6 +135,12 @@ const getNavigateCommands = (commandOptions: IAllCommands): CommandGroup => ({
         "agents agent bots dashboard manage automation coordinator instructions model",
     },
     {
+      key: "GoToAgentChat",
+      name: "Agent Chat",
+      commandMode: CommandMode.GoToAgentChat,
+      keywords: "agents chat talk message",
+    },
+    {
       key: "GotoReminders",
       name: "Go to reminders",
       keyboard: ["G", null, "H"],
