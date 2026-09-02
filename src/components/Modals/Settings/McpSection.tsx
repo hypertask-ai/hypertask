@@ -10,6 +10,7 @@ import {
   type IntegrationId,
 } from "@/components/Modals/McpToken/utils";
 import McpTokenControls, { useSettingsMcpToken } from "./McpTokenControls";
+import ConnectYourAiSection from "./ConnectYourAiSection";
 import SettingsCard from "./SettingsCard";
 import SettingsCodeRow from "./SettingsCodeRow";
 import SettingsSectionShell from "./SettingsSectionShell";
@@ -30,6 +31,8 @@ const McpSection = () => {
 
   return (
     <SettingsSectionShell title="MCP">
+      <ConnectYourAiSection />
+
       <SettingsCard title="Token">
         <p className="px-2 text-dense font-medium leading-relaxed text-text-light-gray">
           Connect AI assistants to Hypertask with a bearer token. Renewing or

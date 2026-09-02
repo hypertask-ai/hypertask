@@ -13,27 +13,23 @@ export function isValidRedirectUri(uri: string): boolean {
     return false
   }
 
-  // Check for custom URI schemes (cursor://, claude://, vscode://, etc.)
-  // Custom URI schemes follow the pattern: scheme://path
-  // Scheme must start with a letter and can contain letters, numbers, +, -, and .
-  const customSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//
-  if (customSchemePattern.test(uri.toLowerCase())) {
-    // Additional validation: ensure it's a well-formed custom URI
-    // Must have at least scheme://path
-    const parts = uri.split('://')
-    if (parts.length === 2 && parts[0].length > 0 && parts[1].length > 0) {
-      return true
-    }
-    return false
-  }
-
-  // For standard URLs, use URL constructor
   try {
     const url = new URL(uri)
-    const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1'
+    if (url.hash || url.username || url.password || !url.hostname) {
+      return false
+    }
+
+    const isLocalhost =
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+      url.protocol === 'http:'
     const isHttps = url.protocol === 'https:'
-    
-    return isLocalhost || isHttps
+    const isCustomScheme =
+      /^[a-z][a-z0-9+.-]*:$/.test(url.protocol) &&
+      !new Set(['http:', 'https:', 'javascript:', 'data:', 'file:', 'blob:']).has(
+        url.protocol,
+      )
+
+    return isLocalhost || isHttps || isCustomScheme
   } catch {
     // Invalid URL format
     return false

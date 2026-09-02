@@ -51,6 +51,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (
+      body.client_name !== undefined &&
+      body.client_name !== null &&
+      (typeof body.client_name !== 'string' || body.client_name.length > 200)
+    ) {
+      return NextResponse.json(
+        { error: 'invalid_client_metadata', error_description: 'client_name must be a string of 200 characters or fewer' },
+        { status: 400 }
+      )
+    }
+
+    if (
+      body.token_endpoint_auth_method !== undefined &&
+      body.token_endpoint_auth_method !== 'none'
+    ) {
+      return NextResponse.json(
+        { error: 'invalid_client_metadata', error_description: 'Only public clients using token_endpoint_auth_method "none" are supported' },
+        { status: 400 }
+      )
+    }
+
     // Validate grant_types (if provided)
     const allowedGrantTypes = new Set(['authorization_code', 'refresh_token'])
     if (
