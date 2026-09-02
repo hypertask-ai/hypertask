@@ -157,8 +157,9 @@ async function setEditableHtml(element, html) {
     key.startsWith("__reactProps$"),
   );
   assert.ok(propsKey);
+  element.innerHTML = html;
   await act(async () => {
-    element[propsKey].onInput({ currentTarget: { innerHTML: html } });
+    element[propsKey].onInput({ currentTarget: element });
   });
 }
 
@@ -261,6 +262,9 @@ test("mobile Write with AI accepts edits made directly to the isolated proposal"
     });
 
     await click(dom, buttonWithText(container, "Improve readability"));
+    const proposal = container.querySelector('[contenteditable="true"]');
+    await setEditableHtml(proposal, "");
+    assert.ok(container.querySelector('[contenteditable="true"]'));
     await setEditableHtml(
       container.querySelector('[contenteditable="true"]'),
       "<p>Edited proposal</p>",

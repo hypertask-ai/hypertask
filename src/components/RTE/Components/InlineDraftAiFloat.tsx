@@ -99,6 +99,18 @@ function focusablesIn(root: HTMLElement) {
   ).filter((el) => el.offsetParent !== null || el === document.activeElement);
 }
 
+// Empty paragraphs are browser placeholders; media-only drafts still count as content.
+function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
+  const html = sanitizeAiHtml(event.currentTarget.innerHTML);
+  const hasText = Boolean(event.currentTarget.textContent?.trim());
+  const hasMedia = Boolean(
+    event.currentTarget.querySelector(
+      "img, video, audio, iframe, table, [data-type]",
+    ),
+  );
+  return hasText || hasMedia ? html : "";
+}
+
 const InlineDraftAiFloat = ({
   editor,
   onClose,
@@ -447,17 +459,20 @@ const InlineDraftAiFloat = ({
     const range = { ...scope };
     const selectionPresent = range.to > range.from;
     const refiningProposal = isMobileAiSheet && mobileReview.isRefining;
-    const content =
-      action.sourceContent ??
-      (isMobileAiSheet
-        ? refiningProposal
-          ? mobileReview.proposal
-          : mobileSourceDraft
-        : selectionPresent
-          ? selectedHtml(editor, range)
-          : "");
-    const sourceKind =
-      action.sourceKind ?? (refiningProposal ? "proposal" : "source");
+    let content = "";
+    if (action.sourceContent !== undefined) {
+      content = action.sourceContent;
+    } else if (isMobileAiSheet) {
+      content = refiningProposal ? mobileReview.proposal : mobileSourceDraft;
+    } else if (selectionPresent) {
+      content = selectedHtml(editor, range);
+    }
+    let sourceKind: "source" | "proposal" = "source";
+    if (action.sourceKind) {
+      sourceKind = action.sourceKind;
+    } else if (refiningProposal) {
+      sourceKind = "proposal";
+    }
     const sourceRevision =
       action.sourceRevision ??
       (sourceKind === "proposal"
@@ -731,7 +746,7 @@ const InlineDraftAiFloat = ({
   };
 
   const handleMobileSourceInput = (event: FormEvent<HTMLDivElement>) => {
-    setMobileSourceDraft(sanitizeAiHtml(event.currentTarget.innerHTML));
+    setMobileSourceDraft(sanitizedEditableHtml(event));
     mobileSourceRevisionRef.current += 1;
   };
 
@@ -739,7 +754,7 @@ const InlineDraftAiFloat = ({
     mobileProposalRevisionRef.current += 1;
     dispatchMobileReview({
       type: "edit-proposal",
-      proposal: sanitizeAiHtml(event.currentTarget.innerHTML),
+      proposal: sanitizedEditableHtml(event),
     });
   };
 
@@ -848,25 +863,24 @@ const InlineDraftAiFloat = ({
                       ? "Your original"
                       : `AI proposal · ${mobileReview.lastRequest?.label ?? "Rewrite"}`}
                   </p>
-                  {reviewContent ? (
-                    <div
-                      className={cn(
-                        styles.editorContainer,
-                        !mobileReview.showOriginal &&
-                          "min-h-11 outline-none",
-                      )}
-                      contentEditable={!mobileReview.showOriginal}
-                      suppressContentEditableWarning
-                      onInput={
-                        mobileReview.showOriginal
-                          ? undefined
-                          : handleMobileProposalInput
-                      }
-                      dangerouslySetInnerHTML={{ __html: reviewContent }}
-                    />
-                  ) : (
-                    <p className="text-text-light-gray">Nothing written yet.</p>
-                  )}
+                  <div
+                    className={cn(
+                      styles.editorContainer,
+                      !mobileReview.showOriginal && "min-h-11 outline-none",
+                    )}
+                    contentEditable={!mobileReview.showOriginal}
+                    suppressContentEditableWarning
+                    onInput={
+                      mobileReview.showOriginal
+                        ? undefined
+                        : handleMobileProposalInput
+                    }
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        reviewContent ||
+                        `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet."></p>`,
+                    }}
+                  />
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -920,25 +934,22 @@ const InlineDraftAiFloat = ({
                   <p className="mb-2 text-micro font-medium uppercase tracking-wide text-text-light-gray">
                     {mobileInputLabel}
                   </p>
-                  {inputSource ? (
-                    <div
-                      className={cn(styles.editorContainer, "min-h-11 outline-none")}
-                      contentEditable
-                      suppressContentEditableWarning
-                      onInput={
-                        mobileReview.isRefining
-                          ? handleMobileProposalInput
-                          : handleMobileSourceInput
-                      }
-                      dangerouslySetInnerHTML={{
-                        __html: sanitizeAiHtml(inputSource),
-                      }}
-                    />
-                  ) : (
-                    <p className="text-text-light-gray">
-                      Nothing written yet. Describe it and AI will draft the comment.
-                    </p>
-                  )}
+                  <div
+                    className={cn(styles.editorContainer, "min-h-11 outline-none")}
+                    contentEditable={!isLoading}
+                    suppressContentEditableWarning
+                    onInput={
+                      mobileReview.isRefining
+                        ? handleMobileProposalInput
+                        : handleMobileSourceInput
+                    }
+                    dangerouslySetInnerHTML={{
+                      __html:
+                        inputSource
+                          ? sanitizeAiHtml(inputSource)
+                          : `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet. Describe it and AI will draft the comment."></p>`,
+                    }}
+                  />
                 </div>
 
                 {mobileReview.phase === "loading" ? (
