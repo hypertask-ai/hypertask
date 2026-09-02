@@ -97,6 +97,11 @@ const nextConfig = {
   async redirects() {
     return [
       {
+        source: "/connect",
+        destination: "/settings/mcp",
+        permanent: false,
+      },
+      {
         // /timers is a pure alias for the running-timers view. It used to be a
         // page that threw redirect() during render. Next cannot answer with a
         // 307 once the response has started streaming, so it shipped the

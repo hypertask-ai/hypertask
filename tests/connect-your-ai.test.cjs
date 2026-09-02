@@ -27,3 +27,17 @@ test("the fallback chat sentence contains the canonical MCP server URL", () => {
     "Connect to Hypertask at https://mcp.hypertask.ai/mcp.",
   );
 });
+
+test("/connect opens the Connect-your-AI settings", async () => {
+  const nextConfig = require(path.join(root, "next.config.js"));
+  const redirects = await nextConfig.redirects();
+
+  assert.deepEqual(
+    redirects.find(({ source }) => source === "/connect"),
+    {
+      source: "/connect",
+      destination: "/settings/mcp",
+      permanent: false,
+    },
+  );
+});
