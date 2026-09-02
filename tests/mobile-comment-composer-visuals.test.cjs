@@ -97,6 +97,21 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
   assert.doesNotMatch(button[1], /(?:^|\s)text-white(?:\s|$)/);
 });
 
+test("an unfocused saved mobile draft keeps the editor beside its toolbar", () => {
+  const mobileBranch = mainContainer.slice(
+    mainContainer.indexOf("// FOR: New comment on mobile"),
+    mainContainer.indexOf("// FOR: Description and old comment."),
+  );
+  assert.match(
+    mobileBranch,
+    /isComposerExpanded \? "w-full min-w-0" : "min-w-0 flex-1"/,
+  );
+  assert.match(
+    mobileBranch,
+    /isComposerExpanded \? "w-full shrink-0" : "shrink-0"/,
+  );
+});
+
 test("mobile create-comment uses AppSheet for both refine and compose", () => {
   const mobileBranch = mainContainer.slice(
     mainContainer.indexOf("// FOR: New comment on mobile"),

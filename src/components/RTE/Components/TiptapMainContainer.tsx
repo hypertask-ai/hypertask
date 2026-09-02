@@ -185,11 +185,17 @@ const TiptapMainContainer = ({
           }}
         >
           <CreatedInfoTiptap />
-          <div className="w-full min-w-0">
+          <div
+            className={
+              isComposerExpanded ? "w-full min-w-0" : "min-w-0 flex-1"
+            }
+          >
             {!aiRefineOpen && !aiComposeOpen && <TiptapEditor />}
           </div>
           {/* ================== attachment button ============= */}
-          <div className="w-full shrink-0">
+          <div
+            className={isComposerExpanded ? "w-full shrink-0" : "shrink-0"}
+          >
             <AttachmentsUpload
               filesFromParent={[]}
               trigger={trigger}
