@@ -102,6 +102,14 @@ function focusablesIn(root: HTMLElement) {
   ).filter((el) => el.offsetParent !== null || el === document.activeElement);
 }
 
+function stripEditablePlaceholderMetadata(root: ParentNode) {
+  root.querySelectorAll<HTMLElement>("[data-placeholder]").forEach((node) => {
+    node.classList.remove(styles.is_editor_empty);
+    node.removeAttribute("data-placeholder");
+    if (!node.className) node.removeAttribute("class");
+  });
+}
+
 // Empty paragraphs are browser placeholders; media-only drafts still count as content.
 function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
   const hasText = Boolean(event.currentTarget.textContent?.trim());
@@ -113,11 +121,7 @@ function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
   if (!hasText && !hasMedia) return "";
 
   const clone = event.currentTarget.cloneNode(true) as HTMLDivElement;
-  clone.querySelectorAll<HTMLElement>("[data-placeholder]").forEach((node) => {
-    node.classList.remove(styles.is_editor_empty);
-    node.removeAttribute("data-placeholder");
-    if (!node.className) node.removeAttribute("class");
-  });
+  stripEditablePlaceholderMetadata(clone);
   return sanitizeAiHtml(clone.innerHTML);
 }
 
@@ -885,11 +889,7 @@ const InlineDraftAiFloat = ({
     element: HTMLDivElement,
     html: string,
   ) => {
-    element.querySelectorAll<HTMLElement>("[data-placeholder]").forEach((node) => {
-      node.classList.remove(styles.is_editor_empty);
-      node.removeAttribute("data-placeholder");
-      if (!node.className) node.removeAttribute("class");
-    });
+    stripEditablePlaceholderMetadata(element);
     if (!html) {
       element.innerHTML = `<p class="${styles.is_editor_empty}" data-placeholder="${mobileEditableEmptyPlaceholder}"></p>`;
     }
