@@ -591,6 +591,7 @@ export default function useSaveContent() {
         if (saved) setEditMode(null);
       }
     } else {
+      toast.error("Could not prepare description. Your changes are still here.");
       setUploadingDescription(undefined);
       completeDescriptionSave?.(false);
     }
@@ -734,6 +735,7 @@ export default function useSaveContent() {
           return true;
         } else {
           console.error("Error updating comment:", data.error); // You might want to handle the error in a better way
+          toast.error("Could not update comment. Your changes are still here.");
         }
       } catch (error) {
         console.error(error);
