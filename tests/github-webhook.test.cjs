@@ -303,19 +303,18 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
         },
         task: {
           findMany: async () => [],
-          findFirst: async ({ where }) => {
-            if (!where.ticketNumber) return null;
-            ticketLookup = where;
-            return {
-              id: 36637,
-              projectId: 15,
-              userId: 6,
-              sectionId: 4309,
-              uniqueIndex: 5952,
-              ticketNumber: "HTPR-5952",
-              riskLevel: "Low",
-            };
-          },
+          findFirst: async ({ where }) =>
+            where.ticketNumber
+              ? {
+                  id: 36637,
+                  projectId: 15,
+                  userId: 6,
+                  sectionId: 4309,
+                  uniqueIndex: 5952,
+                  ticketNumber: "HTPR-5952",
+                  riskLevel: "Low",
+                }
+              : null,
         },
         user: {
           findUnique: async () => ({
@@ -326,6 +325,11 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
           }),
         },
         comment: { findFirst: async () => null },
+      };
+      const findTask = prisma.task.findFirst;
+      prisma.task.findFirst = async (input) => {
+        if (input.where.ticketNumber) ticketLookup = input.where;
+        return findTask(input);
       };
 
       const result = await runScenario(prisma, {
