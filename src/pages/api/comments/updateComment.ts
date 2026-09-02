@@ -29,6 +29,11 @@ const handler: NextApiHandler = async (
     ) {
       return res.status(400).json({ message: "Invalid attachment replacement flag" });
     }
+    if (replaceAttachments === true && attachments === undefined) {
+      return res.status(400).json({
+        message: "Attachments are required when replacing attachments",
+      });
+    }
     if (
       attachments !== undefined &&
       (!Array.isArray(attachments) ||
