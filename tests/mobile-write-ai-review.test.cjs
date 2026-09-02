@@ -239,7 +239,8 @@ test("mobile Write with AI matches the empty mobile composer state", async () =>
     const heading = [...container.querySelectorAll("h2")].find(
       (element) => element.textContent.trim() === "Write with AI",
     );
-    assert.ok(heading?.parentElement.querySelector(".lucide-pencil-sparkles"));
+    const icon = heading?.parentElement.querySelector(".lucide-pencil-sparkles");
+    assert.equal(icon?.getAttribute("stroke-width"), "1.5");
     assert.equal(container.querySelector('[contenteditable="true"]'), null);
 
     const prompt = container.querySelector("input");
@@ -251,7 +252,8 @@ test("mobile Write with AI matches the empty mobile composer state", async () =>
 
     await setInput(null, prompt, "Draft a reply");
     const send = container.querySelector('[aria-label="Send AI instruction"]');
-    assert.match(send.className, /bg-white-black/);
+    assert.match(send.className, /bg-shadcn-primary/);
+    assert.match(send.className, /text-primary-foreground/);
     assert.match(send.className, /rounded-\[4px\]/);
   });
 });

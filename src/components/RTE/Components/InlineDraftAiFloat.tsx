@@ -1016,7 +1016,7 @@ const InlineDraftAiFloat = ({
             aria-label="Send AI instruction"
             disabled={isLoading || audioProcessing}
             onClick={submitPrompt}
-            className="ml-auto flex h-11 w-12 shrink-0 items-center justify-center rounded-[4px] bg-white-black text-white-black-inverted disabled:opacity-50"
+            className="ml-auto flex h-11 w-12 shrink-0 items-center justify-center rounded-[4px] bg-shadcn-primary text-primary-foreground disabled:opacity-50"
           >
             <SendArrow size={18} />
           </button>
@@ -1075,6 +1075,7 @@ const InlineDraftAiFloat = ({
             <div className="flex min-w-0 items-center gap-2">
               <PencilSparkles
                 size={20}
+                strokeWidth={1.5}
                 className="shrink-0 text-hypertasks-ai-purple"
                 aria-hidden
               />
