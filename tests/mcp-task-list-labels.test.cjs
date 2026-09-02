@@ -30,6 +30,9 @@ function loadMappers() {
     "@/lib/staleness": {
       taskStaleness: () => ({}),
     },
+    "@/lib/pullRequests/githubPullRequests": {
+      derivePullRequestDisplayState: () => "open",
+    },
   };
   const loaded = new Module(mapperPath);
   loaded.filename = mapperPath;
