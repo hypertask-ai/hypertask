@@ -29,11 +29,7 @@ import { useRecoilState } from "@/lib/state";
 import { currentUserAtom, inViewObjectAtom, showSetLinkModalAtom } from "@/store";
 import useDebounceWithCancel from "@/hooks/General/useDebounceWithCancel";
 import { USER_DRAFTS_QUERY_KEY } from "@/hooks/General/useGetUserDrafts";
-import {
-  USER_PREFERENCES_QUERY_KEY,
-  useGetUserPreferences,
-  type IUserPreferences,
-} from "@/hooks/General/useGetUserPreferences";
+import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import toast from "react-hot-toast";
 import TiptapProvider from "@/lib/contexts/TaskDetail/TiptapProvider";
 import TiptapBubbleMenu from "./Components/TiptapBubbleMenu";
@@ -49,7 +45,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useDescriptionAndCommentsContext } from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import axios from "axios";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
-import { userPreferencesRoute } from "@/lib/constants/APIRouteConstants";
 import { AI_TASK_WRITER_EVENT, AITaskWriterEventDetail } from "../PageComponents/TaskDetail/TopRow/CreateSummaryButton";
 import {
   AI_SUGGEST_REPLY_ENDPOINT,
@@ -81,15 +76,7 @@ import {
   resolveTaskWriterDescription,
 } from "@/lib/ai/taskWriterAutoDraft";
 import {
-  AUTO_DESCRIPTION_SUGGESTION_DELAY_MS,
-  canTakeOverDescription,
-  canUndoDescriptionTakeover,
-  dismissDescriptionSuggestion,
-  hasDescriptionContent,
-  type AutoDescriptionTakeover,
-  isDescriptionSuggestionDismissed,
   mergeDescriptionTakeoverAttachments,
-  shouldSuggestDescription,
   snapshotDescriptionAttachments,
 } from "@/lib/ai/autoDescriptionSuggestion";
 import { shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
@@ -153,7 +140,6 @@ interface TiptapProps {
   currentTask?: any;
   createNewComment?: boolean;
   handleTaskOptions?: (val: boolean) => void;
-  autoDescriptionSlotId?: string;
 }
 
 interface PendingDraftUpdate {
@@ -183,7 +169,6 @@ const Tiptap = ({
   setLoading,
   createNewComment = false,
   handleTaskOptions,
-  autoDescriptionSlotId,
 }: TiptapProps) => {
   // Context and state setup
   const {
@@ -203,7 +188,6 @@ const Tiptap = ({
     toggleRecording,
     scrollVirtualize,
     draftsFromTQ,
-    draftsHydrated,
     setCarousalItems,
   } = useTaskContext();
   
@@ -223,12 +207,7 @@ const Tiptap = ({
   const isReadEditMode =
     mode === "read-edit-description" || mode === "read-edit-comments";
   const isReadOnlyContent = isReadEditMode && !allowEdit;
-  const {
-    data: userPreferences,
-    isFetched: preferencesFetched,
-    isSuccess: preferencesFetchSucceeded,
-  } = useGetUserPreferences();
-  const preferencesHydrated = preferencesFetched && preferencesFetchSucceeded;
+  const { data: userPreferences } = useGetUserPreferences();
   const advanceOnSend = userPreferences.inboxAdvanceOnSend ?? true;
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
   
@@ -240,11 +219,6 @@ const Tiptap = ({
   const [trigger, setTrigger] = useState(false);
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
   const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
-  const [autoDescriptionVisible, setAutoDescriptionVisible] = useState(false);
-  const [autoDescriptionDismissed, setAutoDescriptionDismissed] = useState(false);
-  const [autoDescriptionTakeover, setAutoDescriptionTakeover] =
-    useState<AutoDescriptionTakeover | null>(null);
-  const autoDescriptionVisitRef = useRef({ taskId: currentTask?.id, started: false });
   const [aiTriggerData, setAiTriggerData] = useState({
     autoTrigger: false,
     initialPrompt: ''
@@ -292,9 +266,6 @@ const Tiptap = ({
       },
     }))
   );
-  const autoDescriptionAttachmentsBeforeRef = useRef(newCommentAttachments);
-  const autoDescriptionAttachmentsAfterSnapshotRef = useRef("");
-
   // Debug: Log initial attachments format
   // Commented this out. Too many console logs when I am typing
   // console.log("🚀 ~ Initial newCommentAttachments format:", newCommentAttachments);
@@ -307,97 +278,6 @@ const Tiptap = ({
     editorId: id,
     popoverTriggerButtonId: "popover-button-" + id,
   };
-
-  const descriptionDraft = draftsFromTQ?.find(
-    (draft: IDraft) => draft.type === "Description",
-  )?.content;
-  useEffect(() => {
-    autoDescriptionVisitRef.current = {
-      taskId: currentTask?.id,
-      started: false,
-    };
-    setAutoDescriptionVisible(false);
-    setAutoDescriptionTakeover(null);
-    if (!currentTask?.id || !currentUser?.id) {
-      setAutoDescriptionDismissed(true);
-      return;
-    }
-    setAutoDescriptionDismissed(
-      isDescriptionSuggestionDismissed(
-        window.localStorage,
-        currentUser.id,
-        currentTask.id,
-      ),
-    );
-  }, [currentTask?.id, currentUser?.id]);
-
-  useEffect(() => {
-    if (mode !== "read-edit-description" || !editor || !currentTask?.id) return;
-    if (shouldShowAiTaskWriter) {
-      autoDescriptionVisitRef.current.started = true;
-      setAutoDescriptionVisible(false);
-      return;
-    }
-    const eligible = shouldSuggestDescription({
-      enabled: userPreferences.autoDescriptionSuggestions ?? true,
-      isDesktop: !isMbl,
-      title: currentTask.title,
-      savedDescription: currentTask.description_?.content,
-      draftDescription: descriptionDraft,
-      draftsHydrated,
-      preferencesHydrated,
-      dismissed: autoDescriptionDismissed,
-    });
-    if (!eligible) {
-      setAutoDescriptionVisible(false);
-      return;
-    }
-    if (autoDescriptionVisitRef.current.started) return;
-
-    const taskId = currentTask.id;
-    const timeout = window.setTimeout(() => {
-      if (
-        autoDescriptionVisitRef.current.taskId !== taskId ||
-        hasDescriptionContent(editor.getHTML())
-      ) {
-        return;
-      }
-      autoDescriptionVisitRef.current.started = true;
-      setAutoDescriptionVisible(true);
-    }, AUTO_DESCRIPTION_SUGGESTION_DELAY_MS);
-    return () => window.clearTimeout(timeout);
-  }, [
-    autoDescriptionDismissed,
-    currentTask?.description_?.content,
-    currentTask?.id,
-    currentTask?.title,
-    descriptionDraft,
-    draftsHydrated,
-    editor,
-    isMbl,
-    mode,
-    preferencesHydrated,
-    shouldShowAiTaskWriter,
-    userPreferences.autoDescriptionSuggestions,
-  ]);
-
-  useEffect(() => {
-    if (!editor || mode !== "read-edit-description") return;
-    const onUpdate = () => {
-      const html = editor.getHTML();
-      if (autoDescriptionVisible && hasDescriptionContent(html)) {
-        autoDescriptionVisitRef.current.started = true;
-        setAutoDescriptionVisible(false);
-      }
-      if (autoDescriptionTakeover && html !== autoDescriptionTakeover.inserted) {
-        setAutoDescriptionTakeover(null);
-      }
-    };
-    editor.on("update", onUpdate);
-    return () => {
-      editor.off("update", onUpdate);
-    };
-  }, [autoDescriptionTakeover, autoDescriptionVisible, editor, mode]);
 
   // Draft management
   const invalidateUserDrafts = () => {
@@ -1044,76 +924,6 @@ const Tiptap = ({
     return attachmentsToSave;
   };
 
-  const handleAutoDescriptionTakeover = (
-    content: Node | Content | Fragment,
-    generatedAttachments?: AIGeneratedAttachment[],
-  ) => {
-    if (!editor || !canTakeOverDescription(editor.getHTML())) {
-      setAutoDescriptionVisible(false);
-      toast("Your description changed, so the AI draft was not inserted.");
-      return;
-    }
-    const before = editor.getHTML();
-    autoDescriptionAttachmentsBeforeRef.current = [...newCommentAttachments];
-    setEditMode("description");
-    const insertedAttachments = handleAISave(
-      content,
-      generatedAttachments,
-      true,
-    );
-    autoDescriptionAttachmentsAfterSnapshotRef.current =
-      snapshotDescriptionAttachments(insertedAttachments);
-    setAutoDescriptionVisible(false);
-    setAutoDescriptionTakeover({ before, inserted: editor.getHTML() });
-  };
-
-  const undoAutoDescriptionTakeover = () => {
-    if (!editor || !autoDescriptionTakeover) return;
-    if (
-      !canUndoDescriptionTakeover(editor.getHTML(), autoDescriptionTakeover) ||
-      snapshotDescriptionAttachments(newCommentAttachments) !==
-        autoDescriptionAttachmentsAfterSnapshotRef.current
-    ) {
-      setAutoDescriptionTakeover(null);
-      return;
-    }
-    editor.commands.setContent(autoDescriptionTakeover.before, { emitUpdate: true });
-    setNewCommentAttachments(autoDescriptionAttachmentsBeforeRef.current);
-    setTrigger((previous) => !previous);
-    setAutoDescriptionTakeover(null);
-  };
-
-  const turnOffAutoDescriptionForTask = () => {
-    if (currentUser?.id && currentTask?.id) {
-      dismissDescriptionSuggestion(
-        window.localStorage,
-        currentUser.id,
-        currentTask.id,
-      );
-    }
-    setAutoDescriptionDismissed(true);
-    setAutoDescriptionVisible(false);
-  };
-
-  const turnOffAutoDescriptionsPermanently = async () => {
-    try {
-      const response = await axios.post(userPreferencesRoute, {
-        autoDescriptionSuggestions: false,
-      });
-      if (response.status !== 200) throw new Error("Preference update failed");
-      queryClient.setQueryData<IUserPreferences>(
-        USER_PREFERENCES_QUERY_KEY,
-        (previous) => ({
-          ...(previous ?? userPreferences),
-          autoDescriptionSuggestions: false,
-        }),
-      );
-      setAutoDescriptionVisible(false);
-    } catch {
-      toast.error("Could not turn off description suggestions");
-    }
-  };
-
   const handleTitleAndDescriptionReturn = (title: string, description: string) => {
     updateTaskTitleDescription(title, description);
   };
@@ -1577,57 +1387,6 @@ const Tiptap = ({
   useClickOutside(null, handleOutsideClickDescription, "description-container");
   useClickOutside(null, handleOutsideClickComment, "comment-input");
 
-  const autoDescriptionSlot =
-    autoDescriptionSlotId && typeof document !== "undefined"
-      ? document.getElementById(autoDescriptionSlotId)
-      : null;
-  const autoDescriptionStateMatchesTask =
-    autoDescriptionVisitRef.current.taskId === currentTask?.id;
-  let autoDescriptionContent: React.ReactNode = null;
-  if (
-    autoDescriptionStateMatchesTask &&
-    autoDescriptionVisible &&
-    autoDraftPrompt
-  ) {
-    autoDescriptionContent = (
-      <AITaskWriterContainer
-        key={`auto-description-${currentTask.id}-${autoDraftPrompt}`}
-        id={`auto-description-writer-${currentTask.id}`}
-        backgroundContent=""
-        EscapeHandler={() => setAutoDescriptionVisible(false)}
-        AISaveHandler={handleAutoDescriptionTakeover}
-        returnTitleAndDescription={() => undefined}
-        defaultMode="AiTaskWriter"
-        autoTrigger
-        initialPrompt={autoDraftPrompt}
-        currentTask={currentTask}
-        editMode={editMode}
-        presentation="description-suggestion"
-        requestKind="auto-description"
-        onTurnOffTask={turnOffAutoDescriptionForTask}
-        onTurnOffPermanently={turnOffAutoDescriptionsPermanently}
-        toggleRecording={toggleRecording}
-        isRecording={isRecording}
-      />
-    );
-  } else if (autoDescriptionStateMatchesTask && autoDescriptionTakeover) {
-    autoDescriptionContent = (
-      <div className="mt-3 flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense text-text-light-gray">
-        <span>Draft moved into the description.</span>
-        <button
-          type="button"
-          className="font-semibold text-hypertasks-ai-purple"
-          onClick={undoAutoDescriptionTakeover}
-        >
-          Undo
-        </button>
-      </div>
-    );
-  }
-  const autoDescriptionPortal = autoDescriptionSlot
-    ? createPortal(autoDescriptionContent, autoDescriptionSlot)
-    : null;
-
   return (
     <>
     <div
@@ -1751,7 +1510,6 @@ const Tiptap = ({
           />
         </TiptapProvider>
       </div>
-      {autoDescriptionPortal}
       {showSetLinkModal && (
         <SetLinkModal
           closeHandler={() => setShowSetLinkModal(false)}

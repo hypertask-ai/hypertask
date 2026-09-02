@@ -57,7 +57,6 @@ const DescriptonBody = ({ draftTQ }: any) => {
         defaultContent={content}
         isMbl={isMbl}
         descriptionClass="pb-1 flex justify-start gap-[6px]"
-        autoDescriptionSlotId="auto-description-suggestion-slot"
       />
 
       {!isEditing && task.user && (

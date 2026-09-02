@@ -1,35 +1,24 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   buildTaskWriterPrompt,
-  canTakeOverDescription,
+  canApplyCreateDescriptionSuggestion,
   canUndoDescriptionTakeover,
-  dismissDescriptionSuggestion,
   hasDescriptionContent,
-  isDescriptionSuggestionDismissed,
+  hasMeaningfulDescriptionSuggestionTitle,
   mergeDescriptionTakeoverAttachments,
   resolveTaskWriterSubmitPrompt,
-  shouldSuggestDescription,
+  shouldSuggestCreateDescription,
   snapshotDescriptionAttachments,
 } from "../src/lib/ai/autoDescriptionSuggestion";
-
-class MemoryStorage implements Storage {
-  private values = new Map<string, string>();
-  get length() { return this.values.size; }
-  clear() { this.values.clear(); }
-  getItem(key: string) { return this.values.get(key) ?? null; }
-  key(index: number) { return [...this.values.keys()][index] ?? null; }
-  removeItem(key: string) { this.values.delete(key); }
-  setItem(key: string, value: string) { this.values.set(key, value); }
-}
 
 const eligible = {
   enabled: true,
   isDesktop: true,
   title: "Draft onboarding checklist",
-  savedDescription: "<p></p>",
-  draftDescription: "",
-  draftsHydrated: true,
+  description: "<p></p>",
   preferencesHydrated: true,
   dismissed: false,
 };
@@ -55,25 +44,94 @@ test("task-writer prompts preserve user text and add title context once", () => 
   );
 });
 
-test("description suggestions require a hydrated desktop title-only task", () => {
-  assert.equal(shouldSuggestDescription(eligible), true);
-  assert.equal(shouldSuggestDescription({ ...eligible, isDesktop: false }), false);
-  assert.equal(shouldSuggestDescription({ ...eligible, draftsHydrated: false }), false);
+test("new-task description suggestions require a hydrated desktop form with a meaningful title", () => {
+  assert.equal(shouldSuggestCreateDescription(eligible), true);
   assert.equal(
-    shouldSuggestDescription({ ...eligible, preferencesHydrated: false }),
-    false,
-  );
-  assert.equal(shouldSuggestDescription({ ...eligible, title: " " }), false);
-  assert.equal(
-    shouldSuggestDescription({ ...eligible, savedDescription: "<p>Saved</p>" }),
+    shouldSuggestCreateDescription({ ...eligible, isDesktop: false }),
     false,
   );
   assert.equal(
-    shouldSuggestDescription({ ...eligible, draftDescription: "<p>Draft</p>" }),
+    shouldSuggestCreateDescription({ ...eligible, preferencesHydrated: false }),
     false,
   );
-  assert.equal(shouldSuggestDescription({ ...eligible, enabled: false }), false);
-  assert.equal(shouldSuggestDescription({ ...eligible, dismissed: true }), false);
+  assert.equal(
+    shouldSuggestCreateDescription({ ...eligible, title: "new task" }),
+    false,
+  );
+  assert.equal(
+    shouldSuggestCreateDescription({ ...eligible, title: "Fix login" }),
+    false,
+  );
+  assert.equal(
+    shouldSuggestCreateDescription({ ...eligible, title: "Fix --- login failure" }),
+    true,
+  );
+  assert.equal(
+    shouldSuggestCreateDescription({ ...eligible, description: "<p>Details</p>" }),
+    false,
+  );
+  assert.equal(shouldSuggestCreateDescription({ ...eligible, enabled: false }), false);
+  assert.equal(shouldSuggestCreateDescription({ ...eligible, dismissed: true }), false);
+});
+
+test("meaningful title detection normalizes punctuation, whitespace, case, and non-English words", () => {
+  assert.equal(hasMeaningfulDescriptionSuggestionTitle("  FIX   LOGIN   FAILURE  "), true);
+  assert.equal(hasMeaningfulDescriptionSuggestionTitle("Plan, launch, review"), true);
+  assert.equal(hasMeaningfulDescriptionSuggestionTitle("修复 登录 问题"), true);
+  assert.equal(hasMeaningfulDescriptionSuggestionTitle("... !!!"), false);
+});
+
+test("stale or unsafe create-form drafts cannot take over the description", () => {
+  assert.equal(
+    canApplyCreateDescriptionSuggestion(
+      "Draft onboarding checklist",
+      "Draft onboarding checklist",
+      "<p></p>",
+      true,
+      false,
+    ),
+    true,
+  );
+  assert.equal(
+    canApplyCreateDescriptionSuggestion(
+      "Draft onboarding checklist",
+      "Draft a different checklist",
+      "<p></p>",
+      true,
+      false,
+    ),
+    false,
+  );
+  assert.equal(
+    canApplyCreateDescriptionSuggestion(
+      "Draft onboarding checklist",
+      "Draft onboarding checklist",
+      "<p>User details</p>",
+      true,
+      false,
+    ),
+    false,
+  );
+  assert.equal(
+    canApplyCreateDescriptionSuggestion(
+      "Draft onboarding checklist",
+      "Draft onboarding checklist",
+      "<p></p>",
+      false,
+      false,
+    ),
+    false,
+  );
+  assert.equal(
+    canApplyCreateDescriptionSuggestion(
+      "Draft onboarding checklist",
+      "Draft onboarding checklist",
+      "<p></p>",
+      true,
+      true,
+    ),
+    false,
+  );
 });
 
 test("empty markup stays eligible while text and media count as descriptions", () => {
@@ -84,11 +142,8 @@ test("empty markup stays eligible while text and media count as descriptions", (
   assert.equal(hasDescriptionContent('<p><img src="example.png"></p>'), true);
 });
 
-test("takeover requires an empty editor and Undo requires unchanged generated content", () => {
-  const takeover = {
-    before: "<p></p>",
-    inserted: "<p>AI draft</p>",
-  };
+test("Undo requires unchanged generated content and attachment snapshots remain stable", () => {
+  const takeover = { before: "<p></p>", inserted: "<p>AI draft</p>" };
   const generatedFile = {
     id: "ai-0",
     name: "draft.png",
@@ -97,8 +152,6 @@ test("takeover requires an empty editor and Undo requires unchanged generated co
     source: "https://example.com/draft.png",
   };
 
-  assert.equal(canTakeOverDescription(takeover.before), true);
-  assert.equal(canTakeOverDescription("<p>User text</p>"), false);
   assert.equal(canUndoDescriptionTakeover(takeover.inserted, takeover), true);
   assert.equal(
     canUndoDescriptionTakeover("<p>AI draft with user edit</p>", takeover),
@@ -115,39 +168,36 @@ test("takeover requires an empty editor and Undo requires unchanged generated co
     snapshotDescriptionAttachments([{ id: 0, file: generatedFile }]),
     snapshotDescriptionAttachments([generatedFile]),
   );
-  assert.notEqual(
-    snapshotDescriptionAttachments([generatedFile, { name: "user.png" }]),
-    snapshotDescriptionAttachments([generatedFile]),
+});
+
+test("automatic description UI exists only in the new-task form", () => {
+  const root = resolve(import.meta.dirname, "..");
+  const createForm = readFileSync(
+    resolve(root, "src/components/RTE/TiptapCreateTaskModal.tsx"),
+    "utf8",
   );
-});
+  const taskDetail = readFileSync(
+    resolve(root, "src/components/RTE/TipTapTaskDetail.tsx"),
+    "utf8",
+  );
 
-test("task dismissals are user-scoped, deduplicated, and bounded", () => {
-  const storage = new MemoryStorage();
-  assert.equal(dismissDescriptionSuggestion(storage, 6, 42), true);
-  assert.equal(dismissDescriptionSuggestion(storage, 6, 42), true);
-  assert.equal(isDescriptionSuggestionDismissed(storage, 6, 42), true);
-  assert.equal(isDescriptionSuggestionDismissed(storage, 7, 42), false);
+  const takeoverHandler = createForm.slice(
+    createForm.indexOf("const handleAutoDescriptionTakeover"),
+    createForm.indexOf("const undoAutoDescriptionTakeover"),
+  );
 
-  for (let taskId = 1; taskId <= 110; taskId += 1) {
-    dismissDescriptionSuggestion(storage, 6, taskId);
-  }
-  assert.equal(isDescriptionSuggestionDismissed(storage, 6, 1), false);
-  assert.equal(isDescriptionSuggestionDismissed(storage, 6, 110), true);
-});
-
-test("corrupt storage self-heals while unavailable storage fails closed", () => {
-  const storage = new MemoryStorage();
-  const key = "hypertask:auto-description-dismissed:6";
-  storage.setItem(key, "not json");
-  assert.equal(isDescriptionSuggestionDismissed(storage, 6, 42), false);
-  assert.equal(storage.getItem(key), null);
-
-  storage.setItem(key, JSON.stringify({ taskId: 42 }));
-  assert.equal(dismissDescriptionSuggestion(storage, 6, 42), true);
-  assert.equal(isDescriptionSuggestionDismissed(storage, 6, 42), true);
-
-  const unavailable = new MemoryStorage();
-  unavailable.getItem = () => { throw new Error("blocked"); };
-  assert.equal(isDescriptionSuggestionDismissed(unavailable, 6, 42), true);
-  assert.equal(dismissDescriptionSuggestion(unavailable, 6, 42), false);
+  assert.match(createForm, /id="create-task-auto-description-writer"/);
+  assert.match(createForm, /requestKind="auto-description"/);
+  assert.match(createForm, /CreateTaskAndDescription\(descriptionAtSave, titleAtSave\)/);
+  assert.match(
+    createForm,
+    /if \(takeover && description !== takeover\.inserted\) \{[\s\S]*?setAutoDescriptionTakeover\(null\)/,
+  );
+  assert.doesNotMatch(
+    takeoverHandler,
+    /setNewCommentAttachments|callbackAttachments/,
+    "taking over a text suggestion must leave selected attachments unchanged",
+  );
+  assert.doesNotMatch(taskDetail, /requestKind="auto-description"/);
+  assert.match(taskDetail, /shouldTriggerAiTaskWriter/);
 });
