@@ -38,13 +38,12 @@ const { MOBILE_AI_TASK_WRITER_FOCUS } = jiti(
   path.join(root, "src/models/CreateTaskModalModels/model.ts"),
 );
 
-test("mobile plus opens the create modal in AI task-writer mode", () => {
-  assert.match(mobileButton, /defaultEditMode: "Description-ai"/);
-  assert.match(mobileButton, /defaultFocus: "Description"/);
-  assert.deepEqual(MOBILE_AI_TASK_WRITER_FOCUS, {
-    defaultEditMode: "Description-ai",
-    defaultFocus: "Description",
-  });
+test("mobile plus opens the classic create form", () => {
+  assert.match(
+    mobileButton,
+    /onClick=\{\(\) => setCreateTaskModal\(\{ show: true \}\)\}/,
+  );
+  assert.doesNotMatch(mobileButton, /defaultEditMode: "Description-ai"/);
 });
 
 test("mobile board section plus and C shortcut open the AI task writer", async () => {
