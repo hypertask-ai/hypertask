@@ -1,6 +1,3 @@
-const STORAGE_KEY_PREFIX = "hypertask:auto-description-dismissed";
-const MAX_DISMISSED_TASKS = 100;
-
 export const AUTO_DESCRIPTION_SUGGESTION_DELAY_MS = 5_000;
 
 export function buildTaskWriterPrompt(
@@ -26,13 +23,11 @@ export interface AutoDescriptionTakeover {
   inserted: string;
 }
 
-export interface AutoDescriptionEligibility {
+export interface CreateAutoDescriptionEligibility {
   enabled: boolean;
   isDesktop: boolean;
   title?: string | null;
-  savedDescription?: string | null;
-  draftDescription?: string | null;
-  draftsHydrated: boolean;
+  description?: string | null;
   preferencesHydrated: boolean;
   dismissed: boolean;
 }
@@ -53,10 +48,6 @@ export function hasDescriptionContent(value?: string | null) {
       .replace(/\s+/g, " ")
       .trim(),
   );
-}
-
-export function canTakeOverDescription(currentHtml: string) {
-  return !hasDescriptionContent(currentHtml);
 }
 
 export function canUndoDescriptionTakeover(
@@ -89,67 +80,42 @@ export function snapshotDescriptionAttachments(attachments: readonly unknown[]) 
   );
 }
 
-export function shouldSuggestDescription(input: AutoDescriptionEligibility) {
+export function hasMeaningfulDescriptionSuggestionTitle(
+  title?: string | null,
+) {
+  const words = title?.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return words.length >= 3 && words.join(" ") !== "new task";
+}
+
+export function shouldSuggestCreateDescription(
+  input: CreateAutoDescriptionEligibility,
+) {
   return (
     input.enabled &&
     input.isDesktop &&
-    input.draftsHydrated &&
     input.preferencesHydrated &&
     !input.dismissed &&
-    Boolean(input.title?.trim()) &&
-    !hasDescriptionContent(input.savedDescription) &&
-    !hasDescriptionContent(input.draftDescription)
+    hasMeaningfulDescriptionSuggestionTitle(input.title) &&
+    !hasDescriptionContent(input.description)
   );
 }
 
-function storageKey(userId: number) {
-  return `${STORAGE_KEY_PREFIX}:${userId}`;
-}
-
-function readDismissed(storage: Storage, userId: number) {
-  const key = storageKey(userId);
-  const stored = storage.getItem(key);
-  let value: unknown;
-  try {
-    value = JSON.parse(stored ?? "[]");
-  } catch {
-    storage.removeItem(key);
-    return [];
-  }
-  if (!Array.isArray(value)) {
-    storage.removeItem(key);
-    return [];
-  }
-  return value.filter(
-    (taskId): taskId is number => Number.isInteger(taskId) && taskId > 0,
-  ).slice(-MAX_DISMISSED_TASKS);
-}
-
-export function isDescriptionSuggestionDismissed(
-  storage: Storage,
-  userId: number,
-  taskId: number,
+export function canApplyCreateDescriptionSuggestion(
+  expectedTitle: string,
+  currentTitle: string,
+  currentDescription: string,
+  enabled: boolean,
+  dismissed: boolean,
 ) {
-  try {
-    return readDismissed(storage, userId).includes(taskId);
-  } catch {
-    return true;
-  }
-}
-
-export function dismissDescriptionSuggestion(
-  storage: Storage,
-  userId: number,
-  taskId: number,
-) {
-  try {
-    const previous = readDismissed(storage, userId).filter((id) => id !== taskId);
-    storage.setItem(
-      storageKey(userId),
-      JSON.stringify([...previous, taskId].slice(-MAX_DISMISSED_TASKS)),
-    );
-    return true;
-  } catch {
-    return false;
-  }
+  return (
+    expectedTitle === currentTitle.trim() &&
+    shouldSuggestCreateDescription({
+      enabled,
+      isDesktop: true,
+      title: currentTitle,
+      description: currentDescription,
+      preferencesHydrated: true,
+      dismissed,
+    })
+  );
 }

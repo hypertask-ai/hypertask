@@ -51,10 +51,25 @@ import type {
 import type { IAgent, IUser } from "@/models/model";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
+  USER_PREFERENCES_QUERY_KEY,
+  useGetUserPreferences,
+  type IUserPreferences,
+} from "@/hooks/General/useGetUserPreferences";
+import { useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { userPreferencesRoute } from "@/lib/constants/APIRouteConstants";
+import {
   buildTaskWriterAutoDraftPrompt,
   resolveCreateTaskWriterOpening,
   resolveTaskWriterDescription,
 } from "@/lib/ai/taskWriterAutoDraft";
+import {
+  AUTO_DESCRIPTION_SUGGESTION_DELAY_MS,
+  canApplyCreateDescriptionSuggestion,
+  canUndoDescriptionTakeover,
+  shouldSuggestCreateDescription,
+  type AutoDescriptionTakeover,
+} from "@/lib/ai/autoDescriptionSuggestion";
 import {
   completeTaskCreatePerformanceTrace,
   completeTaskCreatePerformanceTraceAfterElementRemoved,
@@ -130,6 +145,11 @@ const TiptapCreateTaskModal = () => {
   const [shouldShowAiTaskWriter, setShouldShowAITaskWriter] = useState(
     editMode === "Description-ai" ? true : false
   );
+  const [autoDescriptionVisible, setAutoDescriptionVisible] = useState(false);
+  const [autoDescriptionDismissed, setAutoDescriptionDismissed] = useState(false);
+  const [autoDescriptionTakeover, setAutoDescriptionTakeover] =
+    useState<AutoDescriptionTakeover | null>(null);
+  const autoDescriptionTitleRef = useRef("");
   const [hasOpenedClassicForm, setHasOpenedClassicForm] = useState(false);
   const openingSectionIdRef = useRef<number | undefined>(
     formValues.status?.sectionId,
@@ -183,6 +203,13 @@ const TiptapCreateTaskModal = () => {
     seedPrompt,
     autoDraftPrompt,
   );
+  const queryClient = useQueryClient();
+  const {
+    data: userPreferences,
+    isFetched: preferencesFetched,
+    isSuccess: preferencesFetchSucceeded,
+  } = useGetUserPreferences();
+  const preferencesHydrated = preferencesFetched && preferencesFetchSucceeded;
   useEffect(() => {
     if (!shouldShowAiTaskWriter) return;
     enableAutoTitleGeneration();
@@ -328,6 +355,123 @@ const TiptapCreateTaskModal = () => {
     editor?.on("update", onChangeHandler);
   }, [editor, scheduleTitleGeneration]);
 
+  const autoDescriptionTitle = formValues.title.trim();
+  const autoDescriptionEligible = shouldSuggestCreateDescription({
+    enabled: userPreferences.autoDescriptionSuggestions ?? true,
+    isDesktop: !isMbl,
+    title: autoDescriptionTitle,
+    description: taskWriterDescription,
+    preferencesHydrated,
+    dismissed: autoDescriptionDismissed,
+  });
+
+  useEffect(() => {
+    setAutoDescriptionVisible(false);
+    autoDescriptionTitleRef.current = "";
+    if (
+      !autoDescriptionEligible ||
+      shouldShowAiTaskWriter ||
+      autoDescriptionTakeover
+    ) {
+      return;
+    }
+
+    const expectedTitle = autoDescriptionTitle;
+    const timeout = window.setTimeout(() => {
+      const currentDescription = editor?.getHTML() ?? formValues.description;
+      if (
+        !canApplyCreateDescriptionSuggestion(
+          expectedTitle,
+          formValues.title,
+          currentDescription,
+          userPreferences.autoDescriptionSuggestions ?? true,
+          autoDescriptionDismissed,
+        )
+      ) {
+        return;
+      }
+      autoDescriptionTitleRef.current = expectedTitle;
+      setAutoDescriptionVisible(true);
+    }, AUTO_DESCRIPTION_SUGGESTION_DELAY_MS);
+
+    return () => window.clearTimeout(timeout);
+  }, [
+    autoDescriptionDismissed,
+    autoDescriptionEligible,
+    autoDescriptionTakeover,
+    autoDescriptionTitle,
+    editor,
+    formValues.currentProject?.id,
+    formValues.description,
+    shouldShowAiTaskWriter,
+    userPreferences.autoDescriptionSuggestions,
+  ]);
+
+  const handleAutoDescriptionTakeover = (content: string) => {
+    const currentDescription = editor?.getHTML() ?? formValues.description;
+    if (
+      !editor ||
+      !canApplyCreateDescriptionSuggestion(
+        autoDescriptionTitleRef.current,
+        formValues.title,
+        currentDescription,
+        userPreferences.autoDescriptionSuggestions ?? true,
+        autoDescriptionDismissed,
+      )
+    ) {
+      setAutoDescriptionVisible(false);
+      toast("Your description changed, so the AI draft was not inserted.");
+      return;
+    }
+
+    const before = editor.getHTML();
+    editor.commands.setContent(content, { emitUpdate: true });
+    const inserted = editor.getHTML();
+    handleChange("description", inserted);
+    setAutoDescriptionVisible(false);
+    setAutoDescriptionTakeover({ before, inserted });
+  };
+
+  const undoAutoDescriptionTakeover = () => {
+    if (
+      !editor ||
+      !autoDescriptionTakeover ||
+      !canUndoDescriptionTakeover(editor.getHTML(), autoDescriptionTakeover)
+    ) {
+      setAutoDescriptionTakeover(null);
+      return;
+    }
+    editor.commands.setContent(autoDescriptionTakeover.before, {
+      emitUpdate: true,
+    });
+    handleChange("description", autoDescriptionTakeover.before);
+    setAutoDescriptionTakeover(null);
+    setAutoDescriptionDismissed(true);
+  };
+
+  const turnOffAutoDescriptionsPermanently = async () => {
+    const previous =
+      queryClient.getQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY) ??
+      userPreferences;
+    queryClient.setQueryData<IUserPreferences>(
+      USER_PREFERENCES_QUERY_KEY,
+      (current) => ({
+        ...(current ?? userPreferences),
+        autoDescriptionSuggestions: false,
+      }),
+    );
+    setAutoDescriptionVisible(false);
+    try {
+      const response = await axios.post(userPreferencesRoute, {
+        autoDescriptionSuggestions: false,
+      });
+      if (response.status !== 200) throw new Error("Preference update failed");
+    } catch {
+      queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, previous);
+      toast.error("Could not turn off description suggestions");
+    }
+  };
+
   const resetComposerAfterCreate = () => {
     resetFormValues();
     setEditMode("title");
@@ -338,6 +482,10 @@ const TiptapCreateTaskModal = () => {
     setTrigger((current) => !current);
     handleSetUserInput("");
     aiPromptRef.current = undefined;
+    autoDescriptionTitleRef.current = "";
+    setAutoDescriptionVisible(false);
+    setAutoDescriptionDismissed(false);
+    setAutoDescriptionTakeover(null);
     setHasOpenedClassicForm(false);
     setShouldShowAITaskWriter(false);
     editor?.chain().unsetHighlight().clearContent().run();
@@ -997,6 +1145,45 @@ const TiptapCreateTaskModal = () => {
               </div>
             ) : (
               <div className="h-[21px]"></div>
+            )}
+            {autoDescriptionVisible &&
+              autoDescriptionEligible &&
+              autoDescriptionTitleRef.current === autoDescriptionTitle &&
+              autoDraftPrompt &&
+              !shouldShowAiTaskWriter && (
+                <AITaskWriterContainer
+                  key={`create-auto-description-${projectId}-${autoDescriptionTitle}`}
+                  id="create-task-auto-description-writer"
+                  backgroundContent=""
+                  EscapeHandler={() => setAutoDescriptionVisible(false)}
+                  AISaveHandler={handleAutoDescriptionTakeover}
+                  returnTitleAndDescription={() => undefined}
+                  defaultMode="AiTaskWriter"
+                  autoTrigger
+                  initialPrompt={autoDraftPrompt}
+                  project={projectForContext}
+                  presentation="description-suggestion"
+                  requestKind="auto-description"
+                  onTurnOffTask={() => {
+                    setAutoDescriptionDismissed(true);
+                    setAutoDescriptionVisible(false);
+                  }}
+                  onTurnOffPermanently={turnOffAutoDescriptionsPermanently}
+                  toggleRecording={toggleRecording}
+                  isRecording={isRecording}
+                />
+              )}
+            {!autoDescriptionVisible && autoDescriptionTakeover && (
+              <div className="mt-3 flex items-center gap-2 rounded-[4px] bg-cardBackground px-3 py-2 text-dense text-text-light-gray">
+                <span>Draft moved into the description.</span>
+                <button
+                  type="button"
+                  className="font-semibold text-hypertasks-ai-purple"
+                  onClick={undoAutoDescriptionTakeover}
+                >
+                  Undo
+                </button>
+              </div>
             )}
             <AttachmentsUpload
               hasTitle={formValues.title.trim().length > 0}
