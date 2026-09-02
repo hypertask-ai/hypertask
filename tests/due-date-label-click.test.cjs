@@ -134,6 +134,20 @@ test("mobile task detail exposes its existing due date exactly once", async () =
     await React.act(async () => button.click());
     assert.equal(clickCount, 1);
 
+    await React.act(async () =>
+      button.querySelector("svg").dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+      ),
+    );
+    assert.equal(clickCount, 2);
+
+    await React.act(async () =>
+      button.querySelector("span").dispatchEvent(
+        new dom.window.MouseEvent("click", { bubbles: true, cancelable: true }),
+      ),
+    );
+    assert.equal(clickCount, 3);
+
     await renderControl({
       dueDate: "2026-09-02T08:00:00.000Z",
       isMobile: false,
