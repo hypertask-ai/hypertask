@@ -31,6 +31,7 @@ test("rapid description preference toggles preserve the latest value and persist
   const secondRequest = deferred();
   const posts = [];
   const toastErrors = [];
+  let cancellations = 0;
   let invalidations = 0;
   let preferenceToggle;
   let cachedPreferences = {
@@ -46,6 +47,9 @@ test("rapid description preference toggles preserve the latest value and persist
     inboxAdvanceOnSend: true,
   };
   const queryClient = {
+    cancelQueries: async () => {
+      cancellations += 1;
+    },
     setQueryData: (_key, updater) => {
       cachedPreferences = updater(cachedPreferences);
     },
@@ -128,6 +132,7 @@ test("rapid description preference toggles preserve the latest value and persist
     preferenceToggle();
     preferenceToggle();
 
+    assert.equal(cancellations, 2);
     assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(posts, [{ autoDescriptionSuggestions: false }]);
@@ -150,6 +155,7 @@ test("rapid description preference toggles preserve the latest value and persist
 
     preferenceToggle();
     await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(cancellations, 3);
     assert.deepEqual(posts, [
       { autoDescriptionSuggestions: false },
       { autoDescriptionSuggestions: true },

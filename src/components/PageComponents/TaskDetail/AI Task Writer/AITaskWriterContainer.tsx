@@ -42,7 +42,10 @@ import Tooltip from "@/components/Common/Tooltip";
 import { DIV_ID_CONSTANTS, MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { sanitizeAiHtml } from "@/utils/helperFunctions/sanitizeHtml";
-import { buildTaskWriterPrompt } from "@/lib/ai/autoDescriptionSuggestion";
+import {
+  buildTaskWriterPrompt,
+  resolveTaskWriterSubmitPrompt,
+} from "@/lib/ai/autoDescriptionSuggestion";
 import {
   recordBoardMemorySignal,
   shouldLearnBoardMemoryFromAiMode,
@@ -227,7 +230,12 @@ const AITaskWriterContainer: React.FC<
 
   const onClickHandler = useCallback(() => {
     if (isByokBlocked) return;
-    const promptToUse = autoTrigger ? initialPrompt : userPrompt;
+    const promptToUse = resolveTaskWriterSubmitPrompt(
+      autoTrigger,
+      presentation,
+      initialPrompt,
+      userPrompt,
+    );
     if (!promptToUse.trim()) return;
 
     // Don't send if attachments are still uploading
@@ -246,6 +254,7 @@ const AITaskWriterContainer: React.FC<
     autoTrigger,
     initialPrompt,
     isByokBlocked,
+    presentation,
     userPrompt,
     sendAIRequest,
     isUploadingAttachments,

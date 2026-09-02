@@ -131,6 +131,7 @@ const UserPreferenceSidebar = ({
   const handleAutoDescriptionSuggestionsSetting = () => {
     const updateVersion = ++autoDescriptionUpdateVersion.current;
     autoDescriptionUpdatesPending.current += 1;
+    void queryClient.cancelQueries({ queryKey: USER_PREFERENCES_QUERY_KEY });
     let nextValue = true;
     queryClient.setQueryData<IUserPreferences>(
       USER_PREFERENCES_QUERY_KEY,
@@ -150,10 +151,7 @@ const UserPreferenceSidebar = ({
       .catch(() => undefined)
       .then(async () => {
         try {
-          const updated = await updateUserPreferences(
-            { autoDescriptionSuggestions: nextValue },
-            false,
-          );
+          const updated = await saveAutoDescriptionPreference(nextValue);
           if (updated) {
             autoDescriptionConfirmedValue.current = nextValue;
             if (updateVersion === autoDescriptionUpdateVersion.current) {
@@ -203,23 +201,31 @@ const UserPreferenceSidebar = ({
     updateUserPreferences({ shareReadReceipts: nextShareReadReceipts });
   };
 
+  const saveAutoDescriptionPreference = async (value: boolean) => {
+    try {
+      const response = await axios.post(userPreferencesRoute, {
+        autoDescriptionSuggestions: value,
+      });
+      return response.status === 200 && Boolean(response.data.settings);
+    } catch (error) {
+      console.log("🚀 ~ saveAutoDescriptionPreference ~ error:", error);
+      return false;
+    }
+  };
+
   const updateUserPreferences = async (
     toUpdate: Partial<IUserPreferences>,
-    reconcileResponse = true,
   ) => {
     try {
       const response = await axios.post(userPreferencesRoute, toUpdate);
-      if (response.status !== 200 || !response.data.settings) return false;
-      if (reconcileResponse) {
+      if (response.status === 200 && response.data.settings) {
         queryClient.setQueryData(USER_PREFERENCES_QUERY_KEY, (prev) => ({
           ...(prev ?? data),
           ...response.data.settings,
         }));
       }
-      return true;
     } catch (error) {
       console.log("🚀 ~ updateUserPreferences ~ error:", error);
-      return false;
     }
   };
 

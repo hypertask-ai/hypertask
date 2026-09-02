@@ -12,6 +12,15 @@ export function buildTaskWriterPrompt(
     : prompt;
 }
 
+export function resolveTaskWriterSubmitPrompt(
+  autoTrigger: boolean,
+  presentation: "overlay" | "description-suggestion",
+  initialPrompt: string,
+  userPrompt: string,
+) {
+  return autoTrigger && presentation === "overlay" ? initialPrompt : userPrompt;
+}
+
 export interface AutoDescriptionTakeover {
   before: string;
   inserted: string;

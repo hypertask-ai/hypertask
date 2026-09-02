@@ -8,6 +8,7 @@ import {
   hasDescriptionContent,
   isDescriptionSuggestionDismissed,
   mergeDescriptionTakeoverAttachments,
+  resolveTaskWriterSubmitPrompt,
   shouldSuggestDescription,
   snapshotDescriptionAttachments,
 } from "../src/lib/ai/autoDescriptionSuggestion";
@@ -38,6 +39,19 @@ test("task-writer prompts preserve user text and add title context once", () => 
   assert.equal(
     buildTaskWriterPrompt("Draft details", "Prepare launch"),
     "This task has title: Prepare launch. Keep this in major consideration when creating title and description, improve it rather than just copy pasting\nDraft details",
+  );
+  assert.equal(
+    resolveTaskWriterSubmitPrompt(true, "overlay", "Initial", "Follow-up"),
+    "Initial",
+  );
+  assert.equal(
+    resolveTaskWriterSubmitPrompt(
+      true,
+      "description-suggestion",
+      "Initial",
+      "Follow-up",
+    ),
+    "Follow-up",
   );
 });
 

@@ -867,7 +867,7 @@ const Tiptap = ({
 
   const handleAISave = (
     content: Node | Content | Fragment,
-    attachments?: any[],
+    attachments?: AIGeneratedAttachment[],
     preserveExistingAttachments = false,
   ) => {
     editor?.commands.setContent(content);
