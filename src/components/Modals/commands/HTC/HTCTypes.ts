@@ -6,7 +6,7 @@ export interface CommandListProps {
     commandLists: ICommandList[];
     selectedCommand: ICommandList | null;
     handleMouseLeave: () => void;
-    handleMouseEnter: (index: number, groupIndex:number) => void;
+    handleMouseEnter: (command: ICommandList, index: number, groupIndex:number) => void;
     commandRef: RefObject<HTMLDivElement | null>;
     onClickHandler:any
     isMobile?: boolean;
@@ -37,7 +37,7 @@ export interface CommandGroupsProps {
     selectedCommand: ICommandList | null;
     handleMouseMove:()=>void
     handleMouseLeave: () => void;
-    handleMouseEnter: (index: number, groupIndex:number) => void;
+    handleMouseEnter: (command: ICommandList, index: number, groupIndex:number) => void;
     commandRef: RefObject<HTMLDivElement | null>;
     onClickHandler:any
     isMobile?: boolean;

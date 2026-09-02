@@ -37,6 +37,8 @@ import TutorialTooltip from "@/components/PageComponents/Interactive-Onboarding/
 import { IAllCommands, IProject } from "@/models/model";
 import { useTourContext } from "@/lib/contexts/TourContext";
 import { getHTCFrecencyScore } from "./htcFrecency";
+import { findCommandPosition } from "./commandSelection";
+import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
@@ -243,10 +245,10 @@ const Commands = (props: Props) => {
     onKeyChange,
     selectedCommand,
     filterCommands,
-    handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex, currentCommandIndex,
+    handleCommandSelect, hoveredGroup, setHoveredGroupIndex, setCurrentCommandIndex,
     setSelectedCommand,
   } = useHTC(allCommands_, emptyQueryCommands, !isMobile);
-  const currentHoveredDiv = useRef<number | null>(null);
+  const hoveredCommand = useRef<CommandIdentity | null>(null);
   // const blurTimeout = useRef<NodeJS.Timeout | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const commandRef = useRef<HTMLDivElement>(null);
@@ -289,50 +291,37 @@ const Commands = (props: Props) => {
       e.preventDefault();
       return;
     }
+
+    const selectedPosition = findCommandPosition(
+      filterCommands,
+      selectedCommand,
+      hoveredGroup,
+    );
+    if (!selectedPosition) return;
+
+    const {
+      groupIndex: selectedGroupIndex,
+      commandIndex: selectedCommandIndex,
+    } = selectedPosition;
+    const selectedGroup = filterCommands[selectedGroupIndex];
+
     if (e.key === "j" || e.key === "ArrowDown") {
-      if (selectedCommand && filterCommands) {
-
-        const currentCommandIndex = filterCommands[
-          hoveredGroup
-        ].commandLists.findIndex(
-          (commandList) => commandList.key === selectedCommand.key
-        );
-
-        if (
-          currentCommandIndex <
-          filterCommands[hoveredGroup].commandLists.length - 1
-        ) {
-          handleCommandSelect(hoveredGroup, currentCommandIndex + 1);
-        } else if (hoveredGroup < filterCommands.length - 1) {
-          // If there is no next command in the same group, move to the first command of the next group
-          const nextGroup = filterCommands[hoveredGroup + 1];
-          handleCommandSelect(hoveredGroup + 1, 0);
-        } else {
-        }
+      if (selectedCommandIndex < selectedGroup.commandLists.length - 1) {
+        handleCommandSelect(selectedGroupIndex, selectedCommandIndex + 1);
+      } else if (selectedGroupIndex < filterCommands.length - 1) {
+        handleCommandSelect(selectedGroupIndex + 1, 0);
       }
     }
 
     if (e.key === "k" || e.key === "ArrowUp") {
-      if (selectedCommand && filterCommands) {
-
-        const currentCommandIndex = filterCommands[
-          hoveredGroup
-        ].commandLists.findIndex(
-          (commandList) => commandList.key === selectedCommand.key
+      if (selectedCommandIndex > 0) {
+        handleCommandSelect(selectedGroupIndex, selectedCommandIndex - 1);
+      } else if (selectedGroupIndex > 0) {
+        const previousGroup = filterCommands[selectedGroupIndex - 1];
+        handleCommandSelect(
+          selectedGroupIndex - 1,
+          previousGroup.commandLists.length - 1
         );
-
-        if (currentCommandIndex > 0) {
-          // If there is a previous command in the same group, select it
-          handleCommandSelect(hoveredGroup, currentCommandIndex - 1);
-        } else if (hoveredGroup > 0) {
-          // If there is no previous command in the same group, move to the last command of the previous group
-          const previousGroup = filterCommands[hoveredGroup - 1];
-          handleCommandSelect(
-            hoveredGroup - 1,
-            previousGroup.commandLists.length - 1
-          );
-        } else {
-        }
       }
     }
   };
@@ -345,61 +334,56 @@ const Commands = (props: Props) => {
     lastgClick.current,
     selectedCommand,
     filterCommands,
+    hoveredGroup,
   ]);
 
-  const handleMouseEnter = (index: number, groupIndex: number) => {
-    currentHoveredDiv.current = index;
+  const handleMouseEnter = (
+    command: ICommandList,
+    index: number,
+    groupIndex: number,
+  ) => {
+    hoveredCommand.current = { key: command.key, name: command.name };
+    setCurrentCommandIndex(index);
     setHoveredGroupIndex(groupIndex);
+    setSelectedCommand(command);
   };
 
   const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
-      if (currentHoveredDiv.current !== null && commandRef.current) {
+      if (hoveredCommand.current && commandRef.current) {
         (commandRef.current as HTMLDivElement)?.blur();
-        currentHoveredDiv.current = null;
+        hoveredCommand.current = null;
       }
     }, 100);
   };
 
   const handleMouseMove = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Set the selectedCommand based on the currentHoveredDiv index
-    // Assuming currentHoveredDiv is a ref that holds the index of the currently hovered div
-    // and filterCommands is an array of CommandGroup objects
-    if (
-      currentHoveredDiv.current !== null &&
-      currentHoveredDiv.current !== undefined &&
-      filterCommands
-    ) {
-      // Find the group that contains the command at the currentHoveredDiv index
+    if (!hoveredCommand.current) return;
 
-      if (hoveredGroup !== -1) {
-        // Assuming you want to set the selectedCommand to the command at the currentHoveredDiv index
-        // within the found group
-        const commandIndex = filterCommands[
-          hoveredGroup
-        ].commandLists.findIndex(
-          (commandList, index) => index === currentHoveredDiv.current
-        );
-        if (commandIndex !== -1) {
-          setSelectedCommand(
-            filterCommands[hoveredGroup].commandLists[commandIndex]
-          );
-        }
-      }
+    const position = findCommandPosition(
+      filterCommands,
+      hoveredCommand.current,
+      hoveredGroup,
+    );
+    if (!position) {
+      hoveredCommand.current = null;
+      setSelectedCommand(null);
+      return;
     }
+
+    setCurrentCommandIndex(position.commandIndex);
+    setHoveredGroupIndex(position.groupIndex);
+    setSelectedCommand(position.command);
   };
 
   useEffect(() => {
@@ -413,6 +397,7 @@ const Commands = (props: Props) => {
     
     // Function to update the command frequency map with the selected command
     function updateCommandFrequency(command: ICommandList) {
+      if (!findCommandPosition(filterCommands, command)) return;
       if (isDemo) return callback()
       if(isInteractive) return callback(command)
       //Added this return statement below because Task/Comment Options has dynamic wordings that will make no sense if theyre saved in frequent.
