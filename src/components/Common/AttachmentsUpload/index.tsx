@@ -135,6 +135,19 @@ const AttachmentsUpload = (props: IProps) => {
   } = useFileUpload(props.filesFromParent);
   const mobileCommentActionsRef = useRef<HTMLDetailsElement>(null);
   const mobileCommentActionsTriggerRef = useRef<HTMLElement>(null);
+  const mobileEditWasOpenRef = useRef(false);
+  const mobileEditPersistedSourcesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (mobileExistingEdit && !mobileEditWasOpenRef.current) {
+      mobileEditPersistedSourcesRef.current = new Set(
+        props.filesFromParent
+          .map(({ file }) => (file as File & { source?: string }).source)
+          .filter((source): source is string => Boolean(source)),
+      );
+    }
+    mobileEditWasOpenRef.current = mobileExistingEdit;
+  }, [mobileExistingEdit, props.filesFromParent]);
 
   const closeMobileCommentActions = () => {
     if (mobileCommentActionsRef.current) {
@@ -168,19 +181,12 @@ const AttachmentsUpload = (props: IProps) => {
   ) => {
     if (error) console.error("Could not add attachment", error);
 
-    const persistedSources = new Set(
-      fileItems
-        .map(({ file }) => (file as File & { source?: string }).source)
-        .filter(Boolean),
-    );
     const rejectedIds = new Set(
       uploadedAttachments
-        .filter(
-          ({ file }) =>
-            !persistedSources.has(
-              (file as File & { source?: string }).source,
-            ),
-        )
+        .filter(({ file }) => {
+          const source = (file as File & { source?: string }).source;
+          return !source || !mobileEditPersistedSourcesRef.current.has(source);
+        })
         .map(({ id }) => id),
     );
     if (rejectedIds.size > 0) {
