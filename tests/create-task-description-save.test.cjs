@@ -13,12 +13,12 @@ test("every global create save mode snapshots the current TipTap description", (
 
   assert.match(
     source,
-    /let descriptionAtSave = editor\?\.getHTML\(\) \?\? formValues\.description;/,
+    /let descriptionAtSave =\s*formValuesOverride\?\.description \?\? editor\?\.getHTML\(\) \?\? formValues\.description;/,
   );
   assert.equal(
-    source.match(/CreateTaskAndDescription\(descriptionAtSave, titleAtSave\)/g)?.length,
+    source.match(/CreateTaskAndDescription\(\s*descriptionAtSave,\s*titleAtSave/g)?.length,
     3,
-    "Save, Save & close, and Save & new must all use the editor snapshot",
+    "Save, Save & close, and Save & new must all use the save snapshot",
   );
 });
 
@@ -31,7 +31,7 @@ test("a missing or stale generated title is refreshed from the save-time descrip
   assert.match(stateSource, /taskDescription: description,[\s\S]*?extractTitleAndDescription\(generatedHtml\)\.title/);
   assert.match(
     stateSource,
-    /CreateNewTask\(\s*processedPayload,\s*titleOverride,\s*traceScope,?\s*\)/,
+    /CreateNewTask\(\s*processedPayload,\s*titleOverride,\s*traceScope,\s*formValuesAtSave,?\s*\)/,
     "the generated title must be passed directly into creation without waiting for React state",
   );
   assert.match(titleSource, /Generating…/);
@@ -46,9 +46,20 @@ test("global task creation processes the save-time description override", () => 
 
   assert.match(
     source,
-    /const descriptionAtSave = descriptionOverride \?\? formValues\.description;/,
+    /const descriptionAtSave = descriptionOverride \?\? formValuesAtSave\.description;/,
   );
   assert.match(source, /processHtmlForTaskId\(descriptionAtSave\)/);
+});
+
+test("follower links use the created task board snapshot", () => {
+  const source = read(
+    "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts",
+  );
+
+  assert.match(
+    source,
+    /detail\/project-\$\{task\.projectId\}\/\$\{task\.uniqueIndex\}/,
+  );
 });
 
 test("the create route persists the request description atomically", () => {
@@ -97,7 +108,7 @@ test("edits made while a title generates are still saved", () => {
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   assert.match(
     modal,
-    /descriptionAtSave = editor\?\.getHTML\(\) \?\? descriptionAtSave;/,
+    /descriptionAtSave =\s*formValuesOverride\?\.description \?\? editor\?\.getHTML\(\) \?\? descriptionAtSave;/,
   );
 });
 

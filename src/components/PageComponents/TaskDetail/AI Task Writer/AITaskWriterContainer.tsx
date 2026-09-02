@@ -437,14 +437,15 @@ const AITaskWriterContainer: React.FC<
       projectSections,
       projectAssignees,
     );
-    applyCreateTaskResult(
+    void applyCreateTaskResult(
       result,
       currentResponseItem.attachments,
       projectId ?? undefined,
-    );
-    // Mobile create has no result sheet. Whether the response was applied or
-    // rejected as stale, consume it and return to the form.
-    clearHistory();
+    ).then((handled) => {
+      // Mobile create has no result sheet. Consume the response only after the
+      // task was created or a stale-board result was safely discarded.
+      if (handled) clearHistory();
+    });
   }, [
     applyCreateTaskResult,
     clearHistory,
@@ -765,13 +766,11 @@ const AITaskWriterContainer: React.FC<
         Say it like you’d explain it to a colleague. The more context, the better
         the task.
       </p>
-      {/* The owner-approved HTPR-5860 wireframe deliberately uses outlined
-          pills here; keep this exception scoped to mobile task creation. */}
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={mobileCreateTask.onBoardClick}
-          className="min-h-11 rounded-full border border-border-light-gray-thin px-3 text-content text-white-black hover:bg-hover-active"
+          className="min-h-11 rounded-[4px] bg-cardBackground px-3 text-content text-white-black hover:bg-hover-active"
         >
           <span className="text-text-light-gray">Board:</span>{" "}
           <strong>{mobileCreateTask.boardLabel}</strong>
@@ -780,7 +779,7 @@ const AITaskWriterContainer: React.FC<
         <button
           type="button"
           onClick={mobileCreateTask.onPriorityClick}
-          className="min-h-11 rounded-full border border-border-light-gray-thin px-3 text-content text-white-black hover:bg-hover-active"
+          className="min-h-11 rounded-[4px] bg-cardBackground px-3 text-content text-white-black hover:bg-hover-active"
         >
           Priority: {mobileCreateTask.priorityLabel}
           <ChevronDown className="ml-1 inline" size={14} strokeWidth={1.75} />
@@ -788,7 +787,7 @@ const AITaskWriterContainer: React.FC<
         <button
           type="button"
           onClick={mobileCreateTask.onAssigneeClick}
-          className="min-h-11 rounded-full border border-border-light-gray-thin px-3 text-content text-white-black hover:bg-hover-active"
+          className="min-h-11 rounded-[4px] bg-cardBackground px-3 text-content text-white-black hover:bg-hover-active"
         >
           Assignee: {mobileCreateTask.assigneeLabel}
           <ChevronDown className="ml-1 inline" size={14} strokeWidth={1.75} />
@@ -1010,13 +1009,11 @@ const AITaskWriterContainer: React.FC<
           disableScrollLocking
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           ariaLabel="AI task writer"
-          // The approved mobile create wireframe specifies a 16px sheet radius;
-          // other writer modes retain the standard 5px treatment below.
           panelClassName={cn(
             "ai-task-writer-panel text-white-black",
             styles.hellow,
             isMobileCreateFlow
-              ? "rounded-t-[16px] bg-modalBackground shadow-md"
+              ? "rounded-t-[5px] bg-modalBackground shadow-md"
               : "rounded-t-[5px] border-x border-t border-thin border-hypertasks-ai-purple/70 bg-comment-description shadow-customshadow-1",
           )}
           bodyClassName={cn(
@@ -1044,11 +1041,9 @@ const AITaskWriterContainer: React.FC<
               data-mobile-task-writer-composer
               className="mt-4 flex flex-shrink-0 flex-col"
             >
-              {/* The same approved wireframe requires this outlined 12px field;
-                  the exception does not affect shared or desktop inputs. */}
               <div
                 data-mobile-task-writer-field
-                className="min-h-[76px] rounded-[12px] border border-border-light-gray-thin px-3"
+                className="min-h-[76px] rounded-lg bg-newcomment-well px-3"
               >
                 {inputAreaEl}
               </div>

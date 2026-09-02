@@ -16,6 +16,7 @@ import { useContextCreateTaskModal } from "@/lib/contexts/Multipages/CreateTaskG
 import { useContextCreateTaskInfoColumn } from "@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskGloballyInfoColumn";
 import AttachmentsUpload from "../Common/AttachmentsUpload";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import type { IForm } from "@/models/CreateTaskModalModels/model";
 import { TSendBackButtonParam } from "@/models/CreateTaskModalModels/model";
 import toast from "react-hot-toast";
 import {
@@ -49,6 +50,7 @@ import type {
   ITaskWriterResult,
 } from "@/models/AI_Task_writer_model";
 import type { IAgent, IUser } from "@/models/model";
+import { mergeMobileCreateTaskWriterResult } from "@/utils/aiWriterUtils";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   USER_PREFERENCES_QUERY_KEY,
@@ -78,19 +80,6 @@ import {
   type TaskCreateTraceScope,
 } from "@/lib/analytics/productPerformance";
 const attachmentButtonId = "create-task-modal-attachmentUpload";
-
-const hasTaskDescriptionContent = (value: string | null | undefined) => {
-  if (!value) return false;
-  if (/<(?:audio|embed|iframe|img|object|video)\b/i.test(value)) return true;
-  return Boolean(
-    value
-      .replace(/<br\s*\/?>(?=.)/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&(?:nbsp|#160|#xA0);/gi, " ")
-      .replace(/\s+/g, " ")
-      .trim(),
-  );
-};
 
 const TiptapCreateTaskModal = () => {
   const isMbl = useContext(MobileViewContext);
@@ -522,7 +511,10 @@ const TiptapCreateTaskModal = () => {
   //   if (editMode==="Description") handleFocus()
   //   else editor?.commands.blur()
   // }, [editMode])
-  const CtrlEnterHandler = async (param?: TSendBackButtonParam) => {
+  const CtrlEnterHandler = async (
+    param?: TSendBackButtonParam,
+    formValuesOverride?: IForm,
+  ) => {
     console.log("🚀 ~ CtrlEnterHandler ~ canSave:", canSave);
     if (isRecording) return;
     // Without a save mode none of the branches below run, so bail out before
@@ -537,8 +529,9 @@ const TiptapCreateTaskModal = () => {
     // TipTap owns the freshest editor document. React state can still contain
     // the previous render when someone types and immediately saves, so every
     // save mode snapshots the editor instead of risking an empty description.
-    let descriptionAtSave = editor?.getHTML() ?? formValues.description;
-    let titleAtSave = getCurrentTitle();
+    let descriptionAtSave =
+      formValuesOverride?.description ?? editor?.getHTML() ?? formValues.description;
+    let titleAtSave = formValuesOverride?.title ?? getCurrentTitle();
     const epochAtSave = saveEpochRef.current;
     if (shouldGenerateTitleForSave(titleAtSave, descriptionAtSave)) {
       if (titleGenerationForSaveRef.current) return;
@@ -554,7 +547,8 @@ const TiptapCreateTaskModal = () => {
             setUploadInProgress(false);
             return;
           }
-          descriptionAtSave = editor?.getHTML() ?? descriptionAtSave;
+          descriptionAtSave =
+            formValuesOverride?.description ?? editor?.getHTML() ?? descriptionAtSave;
           if (generatedTitle === null) {
             titleAtSave = getCurrentTitle();
             continue;
@@ -584,7 +578,11 @@ const TiptapCreateTaskModal = () => {
       setUploadInProgress(true);
       let traceScope: TaskCreateTraceScope | null = null;
       try {
-        const createTask = CreateTaskAndDescription(descriptionAtSave, titleAtSave);
+        const createTask = CreateTaskAndDescription(
+          descriptionAtSave,
+          titleAtSave,
+          formValuesOverride,
+        );
         traceScope = getTaskCreatePerformanceTraceScope();
         const taskUrl = await createTask;
         if (taskUrl) {
@@ -606,6 +604,7 @@ const TiptapCreateTaskModal = () => {
             "task_detail",
             traceScope,
           );
+          return true;
         }
       } catch (error) {
         completeTaskCreatePerformanceTrace("error", traceScope);
@@ -690,7 +689,7 @@ const TiptapCreateTaskModal = () => {
   }, [closeAiTaskWriter, editor, setCurrentFocusedElement, setEditMode]);
 
   const applyCreateTaskResult = useCallback(
-    (
+    async (
       result: ITaskWriterResult,
       attachments: ITaskWriterAttachment[] | undefined,
       responseProjectId: number | undefined,
@@ -706,79 +705,43 @@ const TiptapCreateTaskModal = () => {
         // Do not leave the user behind in a writer whose response belongs to a
         // board they just left. The response is discarded by the caller.
         showClassicForm();
-        return false;
+        return true;
       }
 
       const currentDescription = editor?.getHTML() ?? formValues.description;
-      const hasDescription = hasTaskDescriptionContent(currentDescription);
-      let changed = false;
+      const mergedFormValues = mergeMobileCreateTaskWriterResult(
+        { ...formValues, description: currentDescription },
+        result,
+        attachments,
+        openingSectionIdRef.current,
+      );
 
-      if (!formValues.title.trim() && result.title?.trim()) {
-        applyTaskWriterTitle(result.title.trim());
-        changed = true;
+      if (mergedFormValues.title !== formValues.title) {
+        applyTaskWriterTitle(mergedFormValues.title);
       }
-      if (!hasDescription && hasTaskDescriptionContent(result.description)) {
-        const description = result.description;
-        editor?.commands.setContent(description);
-        handleChange("description", description);
-        changed = true;
+      if (mergedFormValues.description !== currentDescription) {
+        editor?.commands.setContent(mergedFormValues.description);
+        handleChange("description", mergedFormValues.description);
       }
-      if (!formValues.priority && result.priority) {
-        handleChange("priority", result.priority);
-        changed = true;
+      for (const key of [
+        "priority",
+        "estimate",
+        "tags",
+        "assignees",
+        "dueDate",
+        "startDate",
+        "status",
+      ] as const) {
+        if (mergedFormValues[key] !== formValues[key]) {
+          handleChange(key, mergedFormValues[key]);
+        }
       }
-      if (!formValues.estimate && result.estimate) {
-        handleChange("estimate", result.estimate);
-        changed = true;
-      }
-      if (
-        (!formValues.tags || formValues.tags.length === 0) &&
-        result.tags?.length
-      ) {
-        handleChange("tags", result.tags);
-        changed = true;
-      }
-      if (formValues.assignees.length === 0 && result.assignees?.length) {
-        handleChange("assignees", result.assignees);
-        changed = true;
-      }
-      if (!formValues.dueDate && result.dueDate) {
-        handleChange("dueDate", result.dueDate);
-        changed = true;
-      }
-      if (!formValues.startDate && result.startDate) {
-        handleChange("startDate", result.startDate);
-        changed = true;
-      }
-      const currentSectionId = formValues.status?.sectionId;
-      if (
-        result.status &&
-        (currentSectionId === undefined ||
-          currentSectionId === openingSectionIdRef.current)
-      ) {
-        handleChange("status", {
-          ...result.status,
-          position: result.status.position ?? "top",
-        });
-        changed = true;
-      }
-      if (formValues.attachments.length === 0 && attachments?.length) {
-        const mappedAttachments = attachments.map((attachment, index) => ({
-          id: index,
-          file: {
-            name: attachment.file.name,
-            size: attachment.file.size,
-            type: attachment.file.type,
-            source: attachment.preview,
-          },
-        }));
-        callbackAttachments(mappedAttachments);
-        changed = true;
+      if (mergedFormValues.attachments !== formValues.attachments) {
+        void callbackAttachments(mergedFormValues.attachments);
       }
 
-      setTaskWriterFilled(changed);
-      showClassicForm();
-      return changed;
+      setTaskWriterFilled(true);
+      return (await CtrlEnterHandler("Save", mergedFormValues)) === true;
     },
     [
       applyTaskWriterTitle,
