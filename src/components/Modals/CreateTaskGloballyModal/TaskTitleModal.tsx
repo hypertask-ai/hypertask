@@ -145,7 +145,7 @@ const TaskTitleModal = () => {
                                     tabIndex={0}
                                     id={DIV_ID_CONSTANTS.titleInputModal}
                                     autoComplete='off'
-                                    value={isGeneratingTitle ? "Generating title from description…" : (formValues.title ?? "")}
+                                    value={isGeneratingTitle ? "Generating…" : (formValues.title ?? "")}
                                     onFocus={(e) => {
                                         // Use setTimeout to delay selectionStart adjustment slightly
                                         setTimeout(() => {

@@ -34,7 +34,8 @@ test("a missing or stale generated title is refreshed from the save-time descrip
     /CreateNewTask\(\s*processedPayload,\s*titleOverride,\s*traceScope,?\s*\)/,
     "the generated title must be passed directly into creation without waiting for React state",
   );
-  assert.match(titleSource, /Generating title from description…/);
+  assert.match(titleSource, /Generating…/);
+  assert.doesNotMatch(titleSource, /Generating title from description…/);
   assert.match(titleSource, /role="alert"/);
 });
 
