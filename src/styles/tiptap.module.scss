@@ -226,7 +226,9 @@
       font-weight: 500;
     }
     ol {
-      padding: 0 1rem;
+      list-style-type: decimal !important;
+      list-style-position: outside;
+      padding: 0 1.25rem;
       margin-top: 4px;
       ::marker {
         font-size: 14px;
