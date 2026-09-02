@@ -11,9 +11,14 @@ type TaskWriterEstimate =
 export interface TaskWriterAutoDraftSource {
   title?: string | null;
   description?: string | null;
+  board?: string | null;
+  status?: { sectionTitle?: string | null } | null;
+  assignees?: ({ displayName?: string | null } | null)[] | null;
   tags?: TaskWriterTag[] | null;
   priority?: TaskWriterPriority;
   estimate?: TaskWriterEstimate;
+  dueDate?: Date | string | null;
+  startDate?: Date | string | null;
 }
 
 const DESCRIPTION_MEDIA_RE = /<(?:audio|embed|iframe|img|object|video)\b/i;
@@ -85,11 +90,35 @@ export function buildTaskWriterAutoDraftPrompt(
   const estimate =
     source.estimate?.estimate_value?.trim() ||
     source.estimate?.estimate_full_value?.trim();
+  const assignees = (source.assignees ?? [])
+    .map((assignee) => assignee?.displayName?.trim())
+    .filter((value): value is string => Boolean(value));
+  const dateLabel = (value: Date | string | null | undefined) => {
+    if (!value) return undefined;
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+      return value.slice(0, 10);
+    }
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return undefined;
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0"),
+    ].join("-");
+  };
 
   if (title) contextLines.push(`Title: ${title}`);
+  if (source.board?.trim()) contextLines.push(`Board: ${source.board.trim()}`);
+  if (source.status?.sectionTitle?.trim())
+    contextLines.push(`Section: ${source.status.sectionTitle.trim()}`);
+  if (assignees.length) contextLines.push(`Assignees: ${assignees.join(", ")}`);
   if (tags.length) contextLines.push(`Tags: ${tags.join(", ")}`);
   if (priority) contextLines.push(`Priority: ${priority}`);
   if (estimate) contextLines.push(`Size: ${estimate}`);
+  if (dateLabel(source.dueDate))
+    contextLines.push(`Due date: ${dateLabel(source.dueDate)}`);
+  if (dateLabel(source.startDate))
+    contextLines.push(`Start date: ${dateLabel(source.startDate)}`);
 
   const instruction =
     "Draft this task now from the ticket's existing content. Treat the user's wording as source material, and preserve specific repro steps, requirements, and decisions.";

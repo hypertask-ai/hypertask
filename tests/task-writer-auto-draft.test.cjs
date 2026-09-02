@@ -29,16 +29,26 @@ test("a title immediately drafts with the ticket properties as context", () => {
   const prompt = buildTaskWriterAutoDraftPrompt({
     title: "Fix the export timeout",
     description: "<p></p>",
+    board: "Hypertask Product",
+    status: { sectionTitle: "Triage" },
+    assignees: [{ displayName: "Valentin Yeo" }],
     tags: [{ value: "Backend" }, { value: "Bug" }],
     priority: { Priority_Value: "Urgent" },
     estimate: { estimate_value: "M" },
+    dueDate: "2026-09-12T23:00:00.000Z",
+    startDate: "2026-09-05",
   });
 
   assert.match(prompt, /Draft this task now from the ticket's existing content/);
   assert.match(prompt, /Title: Fix the export timeout/);
+  assert.match(prompt, /Board: Hypertask Product/);
+  assert.match(prompt, /Section: Triage/);
+  assert.match(prompt, /Assignees: Valentin Yeo/);
   assert.match(prompt, /Tags: Backend, Bug/);
   assert.match(prompt, /Priority: Urgent/);
   assert.match(prompt, /Size: M/);
+  assert.match(prompt, /Due date: 2026-09-12/);
+  assert.match(prompt, /Start date: 2026-09-05/);
 });
 
 test("text or media in the description starts a draft without a title", () => {

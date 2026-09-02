@@ -142,6 +142,7 @@ const handler: NextApiHandler = async (
       priority,
       estimate,
       dueDate,
+      startDate,
       tags,
       parentTask,
       parentTaskId,
@@ -306,17 +307,33 @@ const handler: NextApiHandler = async (
       }
     }
 
-    // HTPR-5928 review: section_title is client-supplied (destructured from
-    // req.body above), not DB truth — a stale/renamed value must not leak into
-    // the task.created webhook payload. Fetched here, outside the transaction's
-    // advisory lock, so it costs nothing extra inside the locked section below.
+    // HTPR-5922: validate the final section against the selected board. The
+    // writer may suggest a section, but a stale or foreign section must never
+    // be written into a task on the current board.
+    const normalizedSectionId = sectionId == null ? null : Number(sectionId);
+    if (
+      normalizedSectionId !== null &&
+      (!Number.isInteger(normalizedSectionId) || normalizedSectionId <= 0)
+    ) {
+      return res.status(400).json({ message: "Invalid section" });
+    }
     const sectionRow =
-      sectionId == null
+      normalizedSectionId === null
         ? null
-        : await prisma.section.findUnique({
-            where: { id: sectionId },
+        : await prisma.section.findFirst({
+            where: {
+              id: normalizedSectionId,
+              projectId,
+              visibility: true,
+              deleted: false,
+            },
             select: { section_title: true },
           });
+    if (normalizedSectionId !== null && !sectionRow) {
+      return res.status(400).json({
+        message: "Section does not belong to this project",
+      });
+    }
 
     const validationFinishedAt = performance.now();
     let newTask: TaskCreatedGlobally;
@@ -335,14 +352,15 @@ const handler: NextApiHandler = async (
         const body = {
           title: title,
           description: "",
-          section: section_title,
+          section: sectionRow?.section_title ?? section_title,
           userId,
           uniqueIndex: nextUniqueIndex,
           ticketNumber: projectIdentifier + "-" + nextUniqueIndex.toString(),
           ranking,
           projectId,
-          sectionId: sectionId,
+          sectionId: normalizedSectionId,
           dueDate,
+          startDate,
           // Explicit for parity with setDueDate.ts's reset-on-change (see invokeDueDate.ts).
           dueDateNotifiedAt: null,
           updatedAt: currentDate,

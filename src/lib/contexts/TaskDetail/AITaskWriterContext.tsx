@@ -133,6 +133,8 @@ interface AITaskWriterProviderProps {
   projectLabels?: import("@/models/model").ILabel[];
   /** Project sections/columns for Task Writer - injected into prompt so AI knows available statuses (Task Writer only) */
   projectSections?: { id?: number; section_title?: string }[];
+  /** Assignable people/agents; only IDs and display names are sent to the model. */
+  projectAssignees?: (import("@/models/model").IUser | import("@/models/model").IAgent)[];
   /** Destination board for global task creation. Defaults to the open board. */
   project?: IProject;
   requestKind?: "manual" | "auto-description";
@@ -180,6 +182,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
   currentTask,
   projectLabels,
   projectSections,
+  projectAssignees,
   project,
   requestKind = "manual",
 }) => {
@@ -627,6 +630,9 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
 - span#ai-generated-task-estimate: estimate_index 0-7 (0=None, 2=XS, 3=S, 4=M, 5=L, 6=XL)
 - span#ai-generated-task-tags: comma-separated label IDs that clearly apply to this task based on its content. Be conservative: include a tag only when you are confident it genuinely fits, omit anything only loosely or topically related, and prefer fewer high-confidence tags. Usually one or two is enough; rarely more than three. When unsure about a tag, leave it off.
 - span#ai-generated-task-status: section_id (number) when user specifies status/column
+- span#ai-generated-task-assignees: comma-separated assignee IDs only when the user clearly names an available assignee
+- span#ai-generated-task-due-date: due date as YYYY-MM-DD only when the user specifies one
+- span#ai-generated-task-start-date: start date as YYYY-MM-DD only when the user specifies one
 - Put every inferred property into ONE combined "Proposed properties: ..." paragraph that is the LAST element of the entire output (e.g. <p>Proposed properties: Priority <strong>High</strong>, Size <strong>S</strong><span id="ai-generated-task-priority" style="display:none">2</span><span id="ai-generated-task-estimate" style="display:none">3</span></p>). Never print a property line anywhere else in the body.`
       );
       if (projectLabels && projectLabels.length > 0) {
@@ -645,10 +651,25 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
           `Available status/columns for this project (use these exact id values in ai-generated-task-status): [${sectionsStr}]`
         );
       }
+      if (projectAssignees && projectAssignees.length > 0) {
+        const assignees = projectAssignees.map((assignee) => ({
+          id: assignee.id,
+          displayName: assignee.displayName ?? "",
+        }));
+        parts.push(
+          `Available assignees for this project (use these exact id values in ai-generated-task-assignees): ${JSON.stringify(assignees)}`
+        );
+      }
     }
     if (additionalContext) parts.push(additionalContext);
     return parts.length > 0 ? parts.join("\n\n") : undefined;
-  }, [aiMode, projectLabels, projectSections, additionalContext]);
+  }, [
+    aiMode,
+    projectLabels,
+    projectSections,
+    projectAssignees,
+    additionalContext,
+  ]);
 
   // --------------------------------------------------------------------------
   // AI TASK WRITER HOOK

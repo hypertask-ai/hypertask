@@ -728,12 +728,13 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
             e.stopPropagation();
             toggleAiTaskWriter();
           }}
+          aria-label="Write with AI"
           className={cn(
             MOBILE_TARGET,
-            "order-3 ml-auto min-w-0 shrink-0 rounded-sm px-3 border-thin border-icon-dark-gray cursor-pointer whitespace-nowrap"
+            "order-3 ml-auto inline-flex min-w-0 shrink-0 cursor-pointer items-center justify-center rounded-sm text-hypertasks-ai-purple"
           )}
         >
-          Ai Task Writer
+          <PencilSparkles size={20} strokeWidth={1.75} aria-hidden="true" />
         </span>
       )}
       {/* Dictation is how tasks get created on a phone: it went missing when this

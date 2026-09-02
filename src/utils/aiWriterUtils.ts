@@ -4,7 +4,7 @@ import {
   IPrioritiesConstants,
   PriorityConstants,
 } from "@/lib/constants/constants";
-import { ILabel } from "@/models/model";
+import { IAgent, ILabel, IUser } from "@/models/model";
 import type { TSectionPayload } from "@/models/CreateTaskModalModels/model";
 
 export interface IExtractedTaskProperties {
@@ -14,6 +14,9 @@ export interface IExtractedTaskProperties {
   estimate?: IEstimateConstants;
   tags?: ILabel[];
   status?: TSectionPayload;
+  assignees?: (IUser | IAgent)[];
+  dueDate?: Date;
+  startDate?: Date;
 }
 
 /**
@@ -37,11 +40,14 @@ interface ISectionLike {
 }
 
 const PROPERTY_LINE_REGEX =
-  /^(Priority|Size|Status|Tags|Assignee|Assignees|Task size|Proposed properties):\s*.+$/i;
+  /^(Priority|Size|Status|Tags|Assignee|Assignees|Due|Due date|Start|Start date|Task size|Proposed properties):\s*.+$/i;
 
 function isPropertyOnlyContent(text: string): boolean {
   if (!text.trim()) return true;
-  const lines = text.split(/\s*[\n\r]\s*/).map((l) => l.trim()).filter(Boolean);
+  const lines = text
+    .split(/\s*[\n\r]\s*/)
+    .map((l) => l.trim())
+    .filter(Boolean);
   return lines.every((line) => PROPERTY_LINE_REGEX.test(line));
 }
 
@@ -123,7 +129,8 @@ function stripPropertyMetadataFromDescription(html: string): string {
 export function extractTaskProperties(
   htmlString: string,
   projectLabels?: ILabel[],
-  projectSections?: ISectionLike[]
+  projectSections?: ISectionLike[],
+  projectAssignees?: (IUser | IAgent)[],
 ): IExtractedTaskProperties {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlString, "text/html");
@@ -132,17 +139,14 @@ export function extractTaskProperties(
   const title = titleEl?.textContent?.trim() || null;
   titleEl?.remove();
 
-  const priorityEl = doc.getElementById("ai-generated-task-priority");
-  const priorityIndex = priorityEl
-    ? parseInt(priorityEl.textContent?.trim() ?? "", 10)
-    : undefined;
-  priorityEl?.remove();
-
-  const estimateEl = doc.getElementById("ai-generated-task-estimate");
-  const estimateIndex = estimateEl
-    ? parseInt(estimateEl.textContent?.trim() ?? "", 10)
-    : undefined;
-  estimateEl?.remove();
+  const integerMarker = (id: string) => {
+    const element = doc.getElementById(id);
+    const value = element?.textContent?.trim() ?? "";
+    element?.remove();
+    return /^\d+$/.test(value) ? Number(value) : undefined;
+  };
+  const priorityIndex = integerMarker("ai-generated-task-priority");
+  const estimateIndex = integerMarker("ai-generated-task-estimate");
 
   const tagsEl = doc.getElementById("ai-generated-task-tags");
   const tagIds = tagsEl?.textContent
@@ -151,11 +155,30 @@ export function extractTaskProperties(
     .filter(Boolean);
   tagsEl?.remove();
 
-  const statusEl = doc.getElementById("ai-generated-task-status");
-  const sectionId = statusEl
-    ? parseInt(statusEl.textContent?.trim() ?? "", 10)
-    : undefined;
-  statusEl?.remove();
+  const sectionId = integerMarker("ai-generated-task-status");
+
+  const assigneesEl = doc.getElementById("ai-generated-task-assignees");
+  const assigneeIds = assigneesEl?.textContent
+    ?.split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  assigneesEl?.remove();
+
+  const dateFromMarker = (id: string) => {
+    const element = doc.getElementById(id);
+    const value = element?.textContent?.trim() ?? "";
+    element?.remove();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ||
+      date.getFullYear() !== Number(value.slice(0, 4)) ||
+      date.getMonth() + 1 !== Number(value.slice(5, 7)) ||
+      date.getDate() !== Number(value.slice(8, 10))
+      ? undefined
+      : date;
+  };
+  const dueDate = dateFromMarker("ai-generated-task-due-date");
+  const startDate = dateFromMarker("ai-generated-task-start-date");
 
   let description = doc.body.innerHTML;
   description = stripPropertyMetadataFromDescription(description);
@@ -166,7 +189,7 @@ export function extractTaskProperties(
     projectSections?.length
       ? (() => {
           const section = projectSections.find(
-            (s) => s.id === sectionId || Number(s.id) === sectionId
+            (s) => s.id === sectionId || Number(s.id) === sectionId,
           );
           return section
             ? {
@@ -195,6 +218,15 @@ export function extractTaskProperties(
           .filter((l): l is ILabel => !!l)
       : undefined;
 
+  const assignees =
+    assigneeIds?.length && projectAssignees?.length
+      ? assigneeIds
+          .map((id) =>
+            projectAssignees.find((assignee) => String(assignee.id) === id),
+          )
+          .filter((assignee): assignee is IUser | IAgent => !!assignee)
+      : undefined;
+
   return {
     title,
     description,
@@ -202,6 +234,8 @@ export function extractTaskProperties(
     estimate,
     tags: tags && tags.length > 0 ? tags : undefined,
     status,
+    assignees: assignees && assignees.length > 0 ? assignees : undefined,
+    dueDate,
+    startDate,
   };
 }
-  

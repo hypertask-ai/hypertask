@@ -21,14 +21,24 @@ import useGetTimeOptions from "@/hooks/General/useGetTimeOptions";
 // modal (Sugar parsing + presets), minus the custom-calendar second screen —
 // a start date is nearly always "today"/"monday", not a far-off exact day.
 
+type StartDateMode = "Create" | "Update";
+
 interface Props {
   closeHandler: (date: Date | null, reset?: boolean) => void;
+  startDate?: Date;
+  mode?: StartDateMode;
 }
 
-const StartDateModal: React.FC<Props> = ({ closeHandler }) => {
+const StartDateModal: React.FC<Props> = ({
+  closeHandler,
+  startDate,
+  mode = "Update",
+}) => {
   const [inViewObject] = useRecoilState(inViewObjectAtom);
-  const { data: task } = useGetSingleTask(inViewObject.taskId);
-  const currentStartDate = task?.startDate ?? null;
+  const taskId = mode === "Update" ? inViewObject.taskId : null;
+  const { data: task } = useGetSingleTask(taskId);
+  const currentStartDate =
+    mode === "Create" ? (startDate ?? null) : (task?.startDate ?? null);
 
   const { getDefaultOptions } = useGetTimeOptions();
   const [keyword, setKeyword] = useState("");
@@ -45,7 +55,7 @@ const StartDateModal: React.FC<Props> = ({ closeHandler }) => {
         currentStartDate ? { display: "Reset", date: undefined } : null,
         ...getDefaultOptions(),
       ].filter(Boolean),
-    [currentStartDate]
+    [currentStartDate],
   );
   const [filteredOptions, setFilteredOptions] = useState<any[]>(defaultOptions);
 
@@ -66,7 +76,9 @@ const StartDateModal: React.FC<Props> = ({ closeHandler }) => {
     const selected = filteredOptions[index];
     if (!selected) return;
     const date = selected.date ? new Date(selected.date) : undefined;
-    if (inViewObject.taskId) setStartDateApiHandler(date, inViewObject.taskId);
+    if (mode === "Update" && inViewObject.taskId) {
+      void setStartDateApiHandler(date, inViewObject.taskId);
+    }
     setTimeout(() => {
       if (date) closeHandler(date);
       else closeHandler(null, true);
@@ -110,7 +122,9 @@ const StartDateModal: React.FC<Props> = ({ closeHandler }) => {
     <ModalContainerCustom
       id="start-date-picker"
       isOpen={true}
-      toggle={() => closeHandler(currentStartDate ? new Date(currentStartDate) : null)}
+      toggle={() =>
+        closeHandler(currentStartDate ? new Date(currentStartDate) : null)
+      }
       keyboard={false}
       shouldCloseOnClickOutside={true}
       backdrop="static"

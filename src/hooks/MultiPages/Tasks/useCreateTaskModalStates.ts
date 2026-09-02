@@ -111,6 +111,7 @@ const useCreateTaskModalGlobalStates = () => {
   const [allProjects, setAllProjects] = useState<IProject[]>([]);
   const [_, setNewTaskCreated] = useRecoilState(newTaskCreatedAtom);
   const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [taskWriterFilled, setTaskWriterFilled] = useState(false);
   const dictationCoordinatorRef = useRef<ReturnType<typeof createDictationCoordinator> | null>(null);
   if (!dictationCoordinatorRef.current) {
     dictationCoordinatorRef.current = createDictationCoordinator(setIsRecording);
@@ -191,6 +192,7 @@ const useCreateTaskModalGlobalStates = () => {
         createTaskModal.column_payload?.priority,
       estimate: createTaskModal.duplicate?.estimate ?? undefined,
       dueDate: createTaskModal.column_payload?.prefilledDueDate ?? undefined,
+      startDate: undefined,
       tags:
         createTaskModal.duplicate?.taskLabels.map(
           (taskLabel: any) => taskLabel.label
@@ -243,6 +245,7 @@ const useCreateTaskModalGlobalStates = () => {
     lastDescriptionTextRef.current = descriptionText(defaultFormValues.description);
     formValuesRef.current = defaultFormValues;
     setIsGeneratingTitle(false);
+    setTaskWriterFilled(false);
     setFormValues(defaultFormValues);
   };
 
@@ -250,8 +253,8 @@ const useCreateTaskModalGlobalStates = () => {
     if (key === "title") {
       autoTitleCoordinator.manualTitleChanged();
       if (String(value).trim()) setTitleGenerationError(null);
-      formValuesRef.current = { ...formValuesRef.current, title: String(value) };
     }
+    formValuesRef.current = { ...formValuesRef.current, [key]: value };
     setFormValues((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -456,6 +459,7 @@ const useCreateTaskModalGlobalStates = () => {
       formValues.description?.replace(/(<p><\/p>)+/g, "") === "" &&
       formValues.title.trim().length === 0 &&
       !formValues.dueDate &&
+      !formValues.startDate &&
       !formValues.priority?.priority_index &&
       !formValues.estimate &&
       (!formValues.tags || formValues.tags.length === 0) &&
@@ -520,6 +524,7 @@ const useCreateTaskModalGlobalStates = () => {
           priority: formValues.priority,
           estimate: formValues.estimate,
           dueDate: formValues.dueDate,
+          startDate: formValues.startDate,
           tags: formValues.tags,
           parentTask: parentTaskInfo,
           assignees: formValues.assignees,
@@ -541,6 +546,7 @@ const useCreateTaskModalGlobalStates = () => {
       formValues.tags,
       formValues.estimate,
       formValues.dueDate,
+      formValues.startDate,
       formValues.assignees,
       createTaskModal,
     ]
@@ -851,6 +857,8 @@ const useCreateTaskModalGlobalStates = () => {
     toggleRecording,
     isRecording,
     hasUnsavedChanges,
+    taskWriterFilled,
+    setTaskWriterFilled,
   };
 };
 

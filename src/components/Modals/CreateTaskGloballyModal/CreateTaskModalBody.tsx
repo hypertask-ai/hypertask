@@ -314,20 +314,26 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                     }}
                 >
 
+                    {/* Mobile properties sit above the description in the AI-first
+                        classic-form layout. Desktop keeps its existing column. */}
+                    {_mbl && (
+                        <TaskInfoColumnContainer
+                            heightVariant="fit"
+                            className="shrink-0"
+                        >
+                            <TaskInfoColumnGloballyCreate />
+                        </TaskInfoColumnContainer>
+                    )}
                     {/* ======================= Left half ================= */}
                     <DescriptionCreateTaskModal />
                     {/* ======================= Right half ================= */}
 
                     {/* ======================== task status ================== */}
-                    <TaskInfoColumnContainer
-                        heightVariant="fit"
-                        // Keep the property rows at their natural height on mobile. The
-                        // flex column scrolls; shrinking this card instead made it look
-                        // like a divider once the description/keyboard grew.
-                        className={_mbl ? "shrink-0" : undefined}
-                    >
-                        <TaskInfoColumnGloballyCreate />
-                    </TaskInfoColumnContainer>
+                    {!_mbl && (
+                        <TaskInfoColumnContainer heightVariant="fit">
+                            <TaskInfoColumnGloballyCreate />
+                        </TaskInfoColumnContainer>
+                    )}
 
                 </div>
                 {/* <SaveChanges/> */}

@@ -23,6 +23,7 @@ interface AITaskWriterInputAreaProps {
     uploaded: number;
     total: number;
   };
+  placeholder?: string;
 
   toggleRecording?: (val: boolean) => void;
 }
@@ -42,6 +43,7 @@ const  AITaskWriterInputArea: React.FC<AITaskWriterInputAreaProps> = ({
   isMobile = false,
   isUploadingAttachments = false,
   uploadProgress = { uploaded: 0, total: 0 },
+  placeholder,
   toggleRecording,
 }) => {
   // Get all file upload functionality from context
@@ -280,9 +282,10 @@ const  AITaskWriterInputArea: React.FC<AITaskWriterInputAreaProps> = ({
                 );
               }}
               placeholder={
-                aiMode === "AiTaskWriter"
+                placeholder ??
+                (aiMode === "AiTaskWriter"
                   ? "What is this task about? You can attach files or paste images..."
-                  : "What do you want to write about? You can attach files or paste images..."
+                  : "What do you want to write about? You can attach files or paste images...")
               }
               // No visible scrollbar: the wrapping placeholder used to overflow
               // the box and summon one. Placeholder truncates to a single line

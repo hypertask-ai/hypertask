@@ -172,18 +172,21 @@ test("mobile new-task flow keeps the Back pill removed", () => {
 });
 
 test("mobile new-task fields follow writing order without remounting a second tree", () => {
-  assert.equal((createTaskBodySource.match(/<TaskTitleModal \/>/g) || []).length, 1);
+  assert.equal(
+    (createTaskBodySource.match(/<TaskTitleModal \/>/g) || []).length,
+    1,
+  );
   assert.equal(
     (createTaskBodySource.match(/<DescriptionCreateTaskModal \/>/g) || []).length,
     1,
   );
   assert.equal(
     (createTaskBodySource.match(/<TaskInfoColumnContainer(?:\s|>)/g) || []).length,
-    1,
+    2,
   );
   assert.match(
     createTaskBodySource,
-    /<TaskTitleModal \/>[\s\S]*?<DescriptionCreateTaskModal \/>[\s\S]*?<TaskInfoColumnContainer/,
+    /<TaskTitleModal \/>[\s\S]*?<TaskInfoColumnContainer[\s\S]*?<DescriptionCreateTaskModal \/>/,
   );
   assert.match(createTaskBodySource, /_mbl \?[\s\S]*?"flex-col gap-2/);
   assert.doesNotMatch(createTaskBodySource, /flex-col-reverse/);
@@ -192,7 +195,7 @@ test("mobile new-task fields follow writing order without remounting a second tr
 test("mobile new-task properties do not collapse beneath a long description", () => {
   assert.match(
     createTaskBodySource,
-    /<TaskInfoColumnContainer[\s\S]*?heightVariant="fit"[\s\S]*?className=\{_mbl \? "shrink-0" : undefined\}/,
+    /<TaskInfoColumnContainer[\s\S]*?heightVariant="fit"[\s\S]*?className="shrink-0"/,
     "the mobile properties card must keep its natural height while the modal scrolls",
   );
 });

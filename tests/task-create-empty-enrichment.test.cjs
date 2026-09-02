@@ -100,7 +100,10 @@ function loadCreateRoute() {
       }),
     },
     project: { findFirst: async () => ({ id: 15 }) },
-    section: { findUnique: async () => ({ section_title: "Backlog" }) },
+    section: {
+      findUnique: async () => ({ section_title: "Backlog" }),
+      findFirst: async () => ({ section_title: "Backlog" }),
+    },
     agent: { findFirst: async () => null },
     team_Activity: { update: async () => undefined },
     drafts: { createMany: async () => undefined },

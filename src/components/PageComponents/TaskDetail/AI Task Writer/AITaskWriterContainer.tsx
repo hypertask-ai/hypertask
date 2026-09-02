@@ -17,7 +17,15 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
 // Components
 import AILogo from "@/assets/AILogo.png";
-import { ArrowUp, ChevronDown, Paperclip, RotateCw } from "lucide-react";
+import {
+  ArrowUp,
+  ChevronDown,
+  Paperclip,
+  PenLine,
+  RotateCw,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { SendArrow } from "@/components/Common/SendArrow";
 import ConfirmModal from "@/components/Modals/Common Modals/ConfirmActionModal";
 import AudioButton from "@/components/RTE/Components/AudioButton";
@@ -57,15 +65,22 @@ const AITaskWriterContainer: React.FC<
     autoTrigger?: boolean;
     initialPrompt?: string;
     projectLabels?: import("@/models/model").ILabel[];
-  projectSections?: { id?: number; section_title?: string }[];
+    projectSections?: { id?: number; section_title?: string }[];
+    projectAssignees?: (
+      | import("@/models/model").IUser
+      | import("@/models/model").IAgent
+    )[];
   }
 > = ({
   id,
   AISaveHandler,
   EscapeHandler,
   returnTitleAndDescription,
+  applyCreateTaskResult,
+  mobileCreateTask,
   projectLabels,
   projectSections,
+  projectAssignees,
   returnUserInputHandler,
   triggerAIWriterConfirm: triggerConfirmModal,
   createTask,
@@ -116,6 +131,7 @@ const AITaskWriterContainer: React.FC<
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoTriggered = useRef(false);
   const hasSeededPrompt = useRef(false);
+  const appliedCreateResponseRef = useRef("");
   const hasFocusedMobilePrompt = useRef(false);
   const mobilePromptVisibilityObserver = useRef<MutationObserver | null>(null);
   const mobilePromptCanFocus = useRef(true);
@@ -124,6 +140,7 @@ const AITaskWriterContainer: React.FC<
   // Hooks
   const isApple = useDeviceContext();
   const isMobile = useContext(MobileViewContext);
+  const isMobileCreateFlow = Boolean(isMobile && createTask && mobileCreateTask);
   const writerViewport = useMobileVisualViewport(isMobile);
   const mobilePromptMaxHeight =
     isMobile && writerViewport
@@ -333,7 +350,8 @@ const AITaskWriterContainer: React.FC<
           const result = extractTaskProperties(
             currentDisplayResponse,
             projectLabels,
-            projectSections
+            projectSections,
+            projectAssignees,
           );
           AISaveHandler(result.description, currentItem?.attachments);
           returnTitleAndDescription?.(result.title ?? "", result.description, {
@@ -341,6 +359,9 @@ const AITaskWriterContainer: React.FC<
             estimate: result.estimate,
             tags: result.tags,
             status: result.status,
+            assignees: result.assignees,
+            dueDate: result.dueDate,
+            startDate: result.startDate,
           });
           clearHistory();
           break;
@@ -368,8 +389,57 @@ const AITaskWriterContainer: React.FC<
       projectId,
       projectLabels,
       projectSections,
+      projectAssignees,
     ]
   );
+
+  useEffect(() => {
+    if (
+      !isMobile ||
+      !createTask ||
+      !applyCreateTaskResult ||
+      isLoading ||
+      hasError ||
+      !currentDisplayResponse ||
+      appliedCreateResponseRef.current === currentDisplayResponse
+    ) {
+      return;
+    }
+
+    const currentResponseItem = getCurrentResponseItem();
+    // The provider adds a completed response to history in its own effect. Wait
+    // for that item so automatic create also carries the response attachments.
+    if (!currentResponseItem) return;
+
+    appliedCreateResponseRef.current = currentDisplayResponse;
+    const result = extractTaskProperties(
+      currentDisplayResponse,
+      projectLabels,
+      projectSections,
+      projectAssignees,
+    );
+    applyCreateTaskResult(
+      result,
+      currentResponseItem.attachments,
+      projectId ?? undefined,
+    );
+    // Mobile create has no result sheet. Whether the response was applied or
+    // rejected as stale, consume it and return to the form.
+    clearHistory();
+  }, [
+    applyCreateTaskResult,
+    clearHistory,
+    createTask,
+    currentDisplayResponse,
+    getCurrentResponseItem,
+    hasError,
+    isLoading,
+    isMobile,
+    projectAssignees,
+    projectId,
+    projectLabels,
+    projectSections,
+  ]);
 
   // Event Handlers
   const handleInputKeydown = useCallback(
@@ -499,6 +569,13 @@ const AITaskWriterContainer: React.FC<
         toggleRecording={toggleRecording}
         isUploadingAttachments={isUploadingAttachments}
         uploadProgress={uploadProgress}
+        placeholder={
+          isMobileCreateFlow
+            ? mobileCreateTask?.formSummary
+              ? "Say what is missing, or just hit the mic…"
+              : "Tap to type, or hit the mic and just talk…"
+            : undefined
+        }
       />
       <hr className="w-full text-white-black my-1 h-[0.2px] opacity-10" />
       <div className="flex justify-between items-center w-full">
@@ -593,7 +670,7 @@ const AITaskWriterContainer: React.FC<
               className={cn(
                 "relative group",
                 isMobile &&
-                  `${MOBILE_TARGET} ml-auto justify-center rounded-sm px-2 cursor-pointer bg-shadcn-primary text-primary-foreground`
+                  "ml-auto flex h-11 w-12 cursor-pointer items-center justify-center rounded-[4px] bg-white-black text-white-black-inverted"
               )}
             >
               <span
@@ -625,7 +702,7 @@ const AITaskWriterContainer: React.FC<
   );
 
   const aiOptionsEl =
-    !isLoading && currentDisplayResponse ? (
+    !isMobileCreateFlow && !isLoading && currentDisplayResponse ? (
       <div className="animate-fadeIn mt-1">
         <AI_Options
           mode={aiMode}
@@ -640,6 +717,103 @@ const AITaskWriterContainer: React.FC<
         />
       </div>
     ) : null;
+
+  const mobileCreateHeaderEl = mobileCreateTask ? (
+    <>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-subheading font-semibold text-hypertasks-ai-purple">
+          <span className="relative flex h-6 w-6 items-center justify-center">
+            <PenLine size={22} strokeWidth={1.75} />
+            <Sparkles
+              size={10}
+              strokeWidth={1.75}
+              className="absolute -right-1 -top-0.5"
+            />
+          </span>
+          <span>AI task writer</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={mobileCreateTask.onClassicForm}
+            className="min-h-11 rounded-sm border-thin border-border-light-gray-thin bg-cardBackground px-3 text-content font-semibold text-white-black"
+          >
+            Classic form
+          </button>
+          <button
+            type="button"
+            onClick={mobileCreateTask.onClose}
+            aria-label="Close new task"
+            className={`${MOBILE_TARGET} rounded-sm text-text-light-gray hover:bg-hover-active hover:text-white-black`}
+          >
+            <X size={20} strokeWidth={1.75} />
+          </button>
+        </div>
+      </div>
+      <h2 className="mt-5 text-heading font-semibold leading-tight text-white-black">
+        {mobileCreateTask.formSummary
+          ? "What should the writer add or change?"
+          : "What is this task about?"}
+      </h2>
+      <p className="mt-2 text-content leading-5 text-text-light-gray">
+        Say it like you’d explain it to a colleague. The more context, the better
+        the task.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={mobileCreateTask.onBoardClick}
+          className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+        >
+          <span className="text-text-light-gray">Board:</span>{" "}
+          <strong>{mobileCreateTask.boardLabel}</strong>
+        </button>
+        <button
+          type="button"
+          onClick={mobileCreateTask.onPriorityClick}
+          className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+        >
+          Priority: {mobileCreateTask.priorityLabel}
+        </button>
+        <button
+          type="button"
+          onClick={mobileCreateTask.onAssigneeClick}
+          className="min-h-11 rounded-sm bg-cardBackground px-3 text-content text-white-black"
+        >
+          Assignee: {mobileCreateTask.assigneeLabel}
+        </button>
+      </div>
+      {mobileCreateTask.formSummary && (
+        <div className="mt-4 rounded-[5px] bg-cardBackground px-3 py-3 text-content leading-5 text-white-black">
+          <p className="text-micro font-semibold uppercase tracking-wider text-text-light-gray">
+            Already in the form · the writer keeps this and fills in the rest
+          </p>
+          {mobileCreateTask.formSummary.title && (
+            <p className="mt-2 font-semibold">
+              {mobileCreateTask.formSummary.title}
+            </p>
+          )}
+          {mobileCreateTask.formSummary.description && (
+            <p className="mt-1 line-clamp-3 text-text-light-gray">
+              {mobileCreateTask.formSummary.description}
+            </p>
+          )}
+          {mobileCreateTask.formSummary.properties.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {mobileCreateTask.formSummary.properties.map((property) => (
+                <span
+                  key={property}
+                  className="rounded-sm bg-modalBackground px-2 py-1 text-meta text-white-black"
+                >
+                  {property}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  ) : null;
 
   useEffect(() => {
     if (!isMobile) return;
@@ -747,7 +921,9 @@ const AITaskWriterContainer: React.FC<
         <AppSheet
           id={id}
           isOpen={true}
-          onClose={handleEscape}
+          onClose={
+            isMobileCreateFlow ? mobileCreateTask!.onClose : handleEscape
+          }
           // Reduced-motion sheets skip their opening animation and therefore
           // do not emit onOpenEnd; onOpenStart is their final focus handoff.
           onOpenStart={() => {
@@ -826,13 +1002,23 @@ const AITaskWriterContainer: React.FC<
           disableScrollLocking
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           ariaLabel="AI task writer"
-          panelClassName={`ai-task-writer-panel bg-comment-description shadow-customshadow-1 border-t border-x border-thin border-hypertasks-ai-purple/70 rounded-t-xl text-white-black ${styles.hellow}`}
-          bodyClassName={`flex flex-col overflow-hidden px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] ${
-            writerViewport ? "max-h-full" : "max-h-[min(88dvh,920px)]"
-          }`}
+          panelClassName={cn(
+            "ai-task-writer-panel text-white-black",
+            styles.hellow,
+            isMobileCreateFlow
+              ? "rounded-none bg-pageBackground shadow-none"
+              : "rounded-t-[5px] border-x border-t border-thin border-hypertasks-ai-purple/70 bg-comment-description shadow-customshadow-1",
+          )}
+          bodyClassName={cn(
+            "flex flex-col overflow-hidden pb-[max(0.5rem,env(safe-area-inset-bottom))]",
+            isMobileCreateFlow ? "px-4 pt-3" : "px-2",
+            writerViewport ? "max-h-full" : "max-h-[min(88dvh,920px)]",
+          )}
         >
-          <div className="flex-shrink-0 pt-2 pb-1">{headlineEl}</div>
-          {currentDisplayResponse ? (
+          <div className="flex-shrink-0 pb-1 pt-2">
+            {isMobileCreateFlow ? mobileCreateHeaderEl : headlineEl}
+          </div>
+          {!isMobileCreateFlow && currentDisplayResponse ? (
             <SheetScroller
               draggableAt="top"
               className="flex-1 min-h-0 scrollbar-thin scrollbar-track-white-black-inverted scrollbar-thumb-white-black"
