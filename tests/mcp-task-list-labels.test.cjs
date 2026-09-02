@@ -31,7 +31,12 @@ function loadMappers() {
       taskStaleness: () => ({}),
     },
     "@/lib/pullRequests/githubPullRequests": {
-      derivePullRequestDisplayState: () => "open",
+      derivePullRequestDisplayState: (lifecycle, checkState) =>
+        lifecycle === "merged"
+          ? "merged"
+          : checkState === "failing"
+            ? "checks_red"
+            : "open",
     },
   };
   const loaded = new Module(mapperPath);
@@ -90,5 +95,83 @@ test("list and detail labels share the exact id/name mapping", () => {
     { id: "label-2", name: "" },
   ]);
   assert.deepEqual(detail.labels, listLabels);
+  assert.deepEqual(detail.pullRequests, []);
   assert.deepEqual(Object.keys(listLabels[0]).sort(), ["id", "name"]);
+});
+
+test("task get returns linked pull requests in selected order", () => {
+  const { mapTaskToMcpGetResponse } = loadMappers();
+  const updatedAt = new Date("2026-09-02T03:28:24.064Z");
+  const detail = mapTaskToMcpGetResponse({
+    id: 36202,
+    uniqueIndex: 5899,
+    projectId: 15,
+    title: "Linked pull requests",
+    section: "QA",
+    status: "Normal",
+    project: { title: "Hypertask Product" },
+    taskLabels: [],
+    assignees: [],
+    followers: [],
+    attachments: [],
+    customFieldValues: [],
+    savedContent: [],
+    subTasks: [],
+    pullRequests: [
+      {
+        id: "pr-first",
+        repositoryOwner: "hypertask-ai",
+        repositoryName: "hypertask",
+        number: 144,
+        url: "https://github.com/hypertask-ai/hypertask/pull/144",
+        title: "First PR",
+        lifecycle: "open",
+        checkState: "failing",
+        headSha: "abc123",
+        updatedAt,
+      },
+      {
+        id: "pr-second",
+        repositoryOwner: "hypertask-ai",
+        repositoryName: "hypertask",
+        number: 145,
+        url: "https://github.com/hypertask-ai/hypertask/pull/145",
+        title: "Second PR",
+        lifecycle: "merged",
+        checkState: "pending",
+        headSha: null,
+        updatedAt,
+      },
+    ],
+    _count: { comments: 0 },
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    updatedAt,
+  });
+
+  assert.deepEqual(
+    detail.pullRequests.map(({ number, displayState, headSha, updatedAt: value }) => ({
+      number,
+      displayState,
+      headSha,
+      updatedAt: value,
+    })),
+    [
+      {
+        number: 144,
+        displayState: "checks_red",
+        headSha: "abc123",
+        updatedAt: "2026-09-02T03:28:24.064Z",
+      },
+      {
+        number: 145,
+        displayState: "merged",
+        headSha: null,
+        updatedAt: "2026-09-02T03:28:24.064Z",
+      },
+    ],
+  );
+  assert.match(
+    mapperSource,
+    /pullRequests:\s*{\s*orderBy:\s*{\s*createdAt:\s*['"]asc['"] as const\s*}/,
+  );
 });
