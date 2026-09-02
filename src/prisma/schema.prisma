@@ -1063,6 +1063,7 @@ model TaskPullRequest {
   checkSuites         TaskPullRequestCheckSuite[]
 
   @@unique([taskId, repositoryOwner, repositoryName, number], map: "TaskPullRequest_task_repo_pr_key")
+  @@unique([repositoryOwner, repositoryName, number], map: "TaskPullRequest_repo_pr_key")
   @@index([repositoryOwner, repositoryName, number])
 }
 

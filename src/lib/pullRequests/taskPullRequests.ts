@@ -385,6 +385,24 @@ export async function linkTaskPullRequest({
       if (existing) {
         return { created: false, pullRequest: toPublicTaskPullRequest(existing) };
       }
+
+      const linkedElsewhere = await db.taskPullRequest.findUnique({
+        where: {
+          repositoryOwner_repositoryName_number: {
+            repositoryOwner: parsed.owner,
+            repositoryName: parsed.repository,
+            number: parsed.number,
+          },
+        },
+        select: { id: true },
+      });
+      if (linkedElsewhere) {
+        throw new PullRequestLinkError(
+          "Pull request is already linked to a task",
+          409,
+          "pr_already_linked",
+        );
+      }
     }
     throw error;
   }

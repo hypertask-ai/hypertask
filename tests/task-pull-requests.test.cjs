@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { Prisma } = require("@prisma/client");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
@@ -209,6 +210,8 @@ test("fetchGithubPullRequest rejects malformed GitHub JSON", async () => {
 function fakeLinkDb({
   authorized = true,
   existing = null,
+  globalExisting = null,
+  createError = null,
   updatedByUserIds = [],
 } = {}) {
   const calls = {
@@ -232,8 +235,12 @@ function fakeLinkDb({
       },
     },
     taskPullRequest: {
-      findUnique: async () => existing,
+      findUnique: async ({ where }) =>
+        where.repositoryOwner_repositoryName_number
+          ? globalExisting
+          : existing,
       create: async ({ data }) => {
+        if (createError) throw createError;
         calls.pullRequestCreates.push(data);
         return {
           id: "linked-pr-id",
@@ -327,6 +334,31 @@ test("linkTaskPullRequest rejects an inaccessible task without writing", async (
   );
   assert.equal(calls.pullRequestCreates.length, 0);
   assert.equal(calls.activities.length, 0);
+});
+
+test("linkTaskPullRequest rejects a pull request already linked to another task", async () => {
+  const createError = new Prisma.PrismaClientKnownRequestError("unique", {
+    code: "P2002",
+    clientVersion: "7.9.1",
+  });
+  const { db, calls } = fakeLinkDb({
+    globalExisting: { id: "linked-elsewhere" },
+    createError,
+  });
+  await assert.rejects(
+    linkTaskPullRequest({
+      taskId: 36202,
+      userId: 6,
+      url: canonicalPullRequestUrl,
+      fetchMetadata: async () => githubMetadata,
+      db,
+    }),
+    (error) =>
+      error instanceof PullRequestLinkError &&
+      error.status === 409 &&
+      error.code === "pr_already_linked",
+  );
+  assert.equal(calls.pullRequestCreates.length, 0);
 });
 
 test("linkTaskPullRequest is idempotent and does not duplicate activity", async () => {

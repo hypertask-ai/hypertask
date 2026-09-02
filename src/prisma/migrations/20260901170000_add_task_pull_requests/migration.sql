@@ -36,6 +36,9 @@ CREATE TABLE "TaskPullRequestCheckSuite" (
 CREATE UNIQUE INDEX "TaskPullRequest_task_repo_pr_key"
 ON "TaskPullRequest"("taskId", "repositoryOwner", "repositoryName", "number");
 
+CREATE UNIQUE INDEX "TaskPullRequest_repo_pr_key"
+ON "TaskPullRequest"("repositoryOwner", "repositoryName", "number");
+
 CREATE INDEX "TaskPullRequest_repositoryOwner_repositoryName_number_idx"
 ON "TaskPullRequest"("repositoryOwner", "repositoryName", "number");
 
