@@ -1509,6 +1509,11 @@ model Follower {
   user                  User     @relation("FollowersUser", fields: [userId], references: [id])
   agentId               String?   //Mentioned agent
   agent                 Agent?   @relation(fields: [agentId], references: [id])
+
+  // HTPR-6000: the minute-ly hard-delete sweep (src/pages/api/queues/sweep.ts)
+  // deletes Follower rows by taskId with no supporting index, forcing a full
+  // table scan per task deleted. The migration builds this concurrently.
+  @@index([taskId])
 }
 
 model Comment {
@@ -1579,6 +1584,9 @@ model Reaction {
   Notification Notification[]
 
   @@index([commentId, isDeleted, emoji, unified])
+  // HTPR-6000: the minute-ly hard-delete sweep deletes Reaction rows by taskId
+  // with no supporting index, forcing a full table scan per task deleted.
+  @@index([taskId])
 }
 
 // model Comment_Reactions {
@@ -1634,6 +1642,9 @@ model Attachment {
   task   Task? @relation(fields: [taskId], references: [id])
 
   @@index([commentId])
+  // HTPR-6000: the minute-ly hard-delete sweep deletes Attachment rows by
+  // taskId with no supporting index, forcing a full table scan per task deleted.
+  @@index([taskId])
 }
 
 model Notification_Invite {
@@ -1786,6 +1797,10 @@ model TaskSharing {
   projectId Int
   expired   Boolean       @default(false)
   shareType TaskShareType @default(Anyone)
+
+  // HTPR-6000: the minute-ly hard-delete sweep deletes TaskSharing rows by
+  // taskId with no supporting index, forcing a full table scan per task deleted.
+  @@index([taskId])
 }
 
 model SavedContent {
