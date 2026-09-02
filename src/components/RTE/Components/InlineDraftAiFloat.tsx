@@ -458,9 +458,13 @@ const InlineDraftAiFloat = ({
   } else {
     mobileEditableHtml = mobileSourceDraft;
   }
+  const mobileEditableEmptyPlaceholder =
+    mobileReview.phase === "review"
+      ? "Nothing written yet."
+      : "Nothing written yet. Describe it and AI will draft the comment.";
   const mobileEditableSurfaceHtml =
     sanitizeAiHtml(mobileEditableHtml) ||
-    `<p class="${styles.is_editor_empty}" data-placeholder="Nothing written yet."></p>`;
+    `<p class="${styles.is_editor_empty}" data-placeholder="${mobileEditableEmptyPlaceholder}"></p>`;
 
   useLayoutEffect(() => {
     if (!isMobileAiSheet) return;
