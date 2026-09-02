@@ -618,7 +618,10 @@ export default function useSaveContent() {
         const result = await processHtml(content);
         // console.log("🚀 ~ file: TaskDetailComp.tsx:1616 ~ updateCommentHandler ~ result:", result)
         const comment = comments.find((comment) => comment.id === id);
-        if (!comment) return false;
+        if (!comment) {
+          toast.error("This comment no longer exists. Refresh the task and try again.");
+          return false;
+        }
 
         const shouldSyncAttachments = attachments !== undefined;
         let attachmentObjectsToPush = comment.attachments ?? [];

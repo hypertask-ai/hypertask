@@ -171,6 +171,7 @@ test("late dictation, AI, and upload completion cannot mutate a closed edit", ()
 });
 
 test("description and comment failures leave edit mode open", () => {
+  assert.match(save, /if \(!comment\)[\s\S]*?This comment no longer exists/);
   assert.match(save, /if \(saved\) setEditMode\(null\)/);
   assert.match(save, /setEditState\(null\);[\s\S]*?setEditMode\(null\);[\s\S]*?return true/);
   assert.match(save, /return false;[\s\S]*?\};[\s\S]*?\/\/ ---------------------- CREATE COMMENT/);
