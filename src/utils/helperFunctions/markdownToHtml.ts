@@ -22,10 +22,15 @@ marked.use({
 })
 
 const STRUCTURAL_MARKDOWN_TOKEN_TYPES = new Set([
+  'blockquote',
   'codespan',
+  'del',
   'em',
+  'heading',
+  'image',
   'list',
   'strong',
+  'table',
 ])
 
 type MarkdownTokenLike = {

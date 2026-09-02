@@ -71,9 +71,14 @@ test("auto-detects structural markdown without changing HTML or plain prose", ()
     ["*italic*", "<em>italic</em>"],
     ["`inline`", "<code>inline</code>"],
     ["```js\nrun()\n```", "<pre><code"],
+    ["# Heading", "<h1>Heading</h1>"],
+    ["> quoted", "<blockquote>"],
     ["1. first\n2. second", "<ol>"],
     ["- first\n- second", "<ul>"],
     ["[safe](https://example.com)", '<a href="https://example.com">safe</a>'],
+    ["![alt](https://example.com/image.png)", '<a href="https://example.com/image.png"'],
+    ["~~removed~~", "<p>removed</p>"],
+    ["| A | B |\n|---|---|\n| 1 | 2 |", "<table>"],
   ];
 
   for (const [input, expectedHtml] of examples) {
