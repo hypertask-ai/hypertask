@@ -143,9 +143,16 @@ function placeCaretAtDropPoint(event: ReactDragEvent<HTMLDivElement>) {
         return nextRange;
       })();
   const selection = documentWithCaret.getSelection();
-  if (!range || !selection) return;
+  if (
+    !range ||
+    !selection ||
+    !event.currentTarget.contains(range.startContainer)
+  ) {
+    return false;
+  }
   selection.removeAllRanges();
   selection.addRange(range);
+  return true;
 }
 
 function insertSanitizedEditableTransfer(
@@ -161,7 +168,7 @@ function insertSanitizedEditableTransfer(
   const text = transfer.getData("text/plain");
   if (!rawHtml && !text) return;
 
-  if ("dataTransfer" in event) placeCaretAtDropPoint(event);
+  if ("dataTransfer" in event && !placeCaretAtDropPoint(event)) return;
   if (html) {
     document.execCommand("insertHTML", false, html);
   } else {
