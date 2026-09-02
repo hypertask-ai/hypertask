@@ -12,6 +12,7 @@ export interface InlineDraftAiRequestDescriptor {
   readonly instruction?: string;
   readonly label: string;
   readonly sourceContent: string;
+  readonly sourceRevision?: number;
 }
 
 export interface InlineDraftAiReviewState {
@@ -31,6 +32,7 @@ export type InlineDraftAiReviewEvent =
     }
   | { type: "resolve"; requestId: number; proposal: string }
   | { type: "reject"; requestId: number }
+  | { type: "edit-proposal"; proposal: string }
   | { type: "refine" }
   | { type: "toggle-original" }
   | { type: "reset" };
@@ -75,6 +77,14 @@ export function inlineDraftAiReviewReducer(
         phase: state.proposal ? "review" : "input",
         isRefining: false,
       };
+    case "edit-proposal":
+      if (
+        (!state.isRefining && state.phase !== "review") ||
+        state.showOriginal
+      ) {
+        return state;
+      }
+      return { ...state, proposal: event.proposal };
     case "refine":
       if (!state.proposal) return state;
       return {

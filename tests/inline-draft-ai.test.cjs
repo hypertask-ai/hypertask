@@ -299,6 +299,46 @@ test("mobile Write with AI keeps a generated proposal isolated until review", ()
   assert.equal(review.lastRequest.sourceContent, "<p>rough draft</p>");
 });
 
+test("mobile Write with AI keeps proposal edits in review state", () => {
+  const requested = inlineDraftAiReviewReducer(initialInlineDraftAiReviewState, {
+    type: "request",
+    requestId: 1,
+    descriptor: {
+      command: "ImproveReadability",
+      label: "Improve readability",
+      sourceContent: "<p>Original</p>",
+    },
+  });
+  const review = inlineDraftAiReviewReducer(requested, {
+    type: "resolve",
+    requestId: 1,
+    proposal: "<p>Proposal</p>",
+  });
+  const edited = inlineDraftAiReviewReducer(review, {
+    type: "edit-proposal",
+    proposal: "<p>Edited proposal</p>",
+  });
+
+  assert.equal(edited.proposal, "<p>Edited proposal</p>");
+  assert.equal(edited.phase, "review");
+
+  const refining = inlineDraftAiReviewReducer(review, { type: "refine" });
+  assert.equal(
+    inlineDraftAiReviewReducer(refining, {
+      type: "edit-proposal",
+      proposal: "<p>Edited while refining</p>",
+    }).proposal,
+    "<p>Edited while refining</p>",
+  );
+  assert.equal(
+    inlineDraftAiReviewReducer(
+      { ...review, showOriginal: true },
+      { type: "edit-proposal", proposal: "<p>Should stay hidden</p>" },
+    ).proposal,
+    "<p>Proposal</p>",
+  );
+});
+
 test("mobile Write with AI ignores late responses and replays immutable request descriptors", () => {
   const first = {
     command: "WriteContent",

@@ -152,6 +152,16 @@ async function setInput(_dom, input, value) {
   });
 }
 
+async function setEditableHtml(element, html) {
+  const propsKey = Object.keys(element).find((key) =>
+    key.startsWith("__reactProps$"),
+  );
+  assert.ok(propsKey);
+  await act(async () => {
+    element[propsKey].onInput({ currentTarget: { innerHTML: html } });
+  });
+}
+
 async function click(dom, element) {
   assert.ok(element);
   await act(async () => {
@@ -220,6 +230,47 @@ async function withRenderedSheet(text, callback) {
     }
   }
 }
+
+test("mobile Write with AI keeps an edited existing draft as the rewrite source", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom, editor }) => {
+    const requests = [];
+    global.fetch = async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Proposal</p>" }),
+      };
+    };
+
+    await setEditableHtml(
+      container.querySelector('[contenteditable="true"]'),
+      "<p>Edited draft</p>",
+    );
+    await click(dom, buttonWithText(container, "Improve readability"));
+
+    assert.equal(requests[0].content, "<p>Edited draft</p>");
+    assert.equal(editor.setContentCalls.length, 0);
+  });
+});
+
+test("mobile Write with AI accepts edits made directly to the isolated proposal", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom, editor, getCloseCalls }) => {
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({ corrected_html: "<p>AI proposal</p>" }),
+    });
+
+    await click(dom, buttonWithText(container, "Improve readability"));
+    await setEditableHtml(
+      container.querySelector('[contenteditable="true"]'),
+      "<p>Edited proposal</p>",
+    );
+    await click(dom, buttonWithText(container, "Use this text"));
+
+    assert.deepEqual(editor.setContentCalls, ["<p>Edited proposal</p>"]);
+    assert.equal(getCloseCalls(), 1);
+  });
+});
 
 test("mobile Write with AI renders submit, retry, refine, and discard without replacing the composer", async () => {
   await withRenderedSheet("", async ({ container, dom, editor, getCloseCalls }) => {

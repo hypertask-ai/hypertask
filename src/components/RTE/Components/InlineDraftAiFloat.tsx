@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { DOMSerializer } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
 
@@ -118,6 +126,7 @@ const InlineDraftAiFloat = ({
   const [audioProcessing, setAudioProcessing] = useState(false);
   const [mobileOpeningSource, setMobileOpeningSource] =
     useState<MobileOpeningSource | null>(null);
+  const [mobileSourceDraft, setMobileSourceDraft] = useState("");
   const [mobileReview, dispatchMobileReview] = useReducer(
     inlineDraftAiReviewReducer,
     initialInlineDraftAiReviewState,
@@ -133,6 +142,8 @@ const InlineDraftAiFloat = ({
   const allowSuggestReplyRef = useRef(allowSuggestReply);
   const promptRef = useRef(prompt);
   const mobilePromptInputRef = useRef<HTMLInputElement>(null);
+  const mobileSourceRevisionRef = useRef(0);
+  const mobileProposalRevisionRef = useRef(0);
 
   useEffect(() => {
     allowSuggestReplyRef.current = allowSuggestReply;
@@ -222,13 +233,18 @@ const InlineDraftAiFloat = ({
     }
     setScope(initial);
     if (isMobileAiSheet) {
+      const openingHtml = selectedHtml(editor, initial);
       dispatchMobileReview({ type: "reset" });
       setMobileOpeningSource({
-        html: selectedHtml(editor, initial),
+        html: openingHtml,
         snapshot: createInlineDraftAiSourceSnapshot(editor.state.doc, initial),
       });
+      setMobileSourceDraft(openingHtml);
+      mobileSourceRevisionRef.current = 0;
+      mobileProposalRevisionRef.current = 0;
     } else {
       setMobileOpeningSource(null);
+      setMobileSourceDraft("");
     }
 
     // Only adopt non-collapsed selections. Focusing the prompt blurs the
@@ -428,9 +444,19 @@ const InlineDraftAiFloat = ({
 
     const range = { ...scope };
     const selectionPresent = range.to > range.from;
+    const refiningProposal = isMobileAiSheet && mobileReview.isRefining;
     const content =
       action.sourceContent ??
-      (selectionPresent ? selectedHtml(editor, range) : "");
+      (isMobileAiSheet
+        ? refiningProposal
+          ? mobileReview.proposal
+          : mobileSourceDraft
+        : selectionPresent
+          ? selectedHtml(editor, range)
+          : "");
+    const sourceRevision = refiningProposal
+      ? mobileProposalRevisionRef.current
+      : mobileSourceRevisionRef.current;
     // Media-only / text drafts require content for edits. True empty docs may
     // WriteContent. The mobile refine path intentionally edits its proposal,
     // while the opening editor remains untouched.
@@ -453,6 +479,7 @@ const InlineDraftAiFloat = ({
             instruction: action.instruction,
             label: action.label ?? "AI edit",
             sourceContent: content,
+            sourceRevision,
           }
         : null;
     toastIdRef.current = toastId;
@@ -516,8 +543,20 @@ const InlineDraftAiFloat = ({
         { id: toastId },
       );
       if (requestId !== requestIdRef.current) return;
+      if (
+        isMobileAiSheet &&
+        mobileDescriptor?.sourceRevision !== undefined &&
+        mobileDescriptor.sourceRevision !==
+          (mobileReview.isRefining
+            ? mobileProposalRevisionRef.current
+            : mobileSourceRevisionRef.current)
+      ) {
+        dispatchMobileReview({ type: "reject", requestId });
+        return;
+      }
       setPrompt("");
       if (isMobileAiSheet) {
+        mobileProposalRevisionRef.current += 1;
         dispatchMobileReview({ type: "resolve", requestId, proposal: html });
         return;
       }
@@ -543,7 +582,7 @@ const InlineDraftAiFloat = ({
     if (isMobileAiSheet) {
       const sourceContent = mobileReview.isRefining
         ? mobileReview.proposal
-        : mobileOpeningSource?.html ?? "";
+        : mobileSourceDraft;
       let label = "Write comment";
       if (mobileReview.isRefining) label = "Refine";
       else if (hasOpeningDraft) label = "Custom instruction";
@@ -684,6 +723,19 @@ const InlineDraftAiFloat = ({
     dispatchMobileReview({ type: "refine" });
   };
 
+  const handleMobileSourceInput = (event: FormEvent<HTMLDivElement>) => {
+    setMobileSourceDraft(sanitizeAiHtml(event.currentTarget.innerHTML));
+    mobileSourceRevisionRef.current += 1;
+  };
+
+  const handleMobileProposalInput = (event: FormEvent<HTMLDivElement>) => {
+    mobileProposalRevisionRef.current += 1;
+    dispatchMobileReview({
+      type: "edit-proposal",
+      proposal: sanitizeAiHtml(event.currentTarget.innerHTML),
+    });
+  };
+
   let mobilePromptPlaceholder = "Describe the comment you want to write…";
   if (mobileReview.isRefining) {
     mobilePromptPlaceholder = "Tell AI how to refine this proposal…";
@@ -791,7 +843,18 @@ const InlineDraftAiFloat = ({
                   </p>
                   {reviewContent ? (
                     <div
-                      className={styles.editorContainer}
+                      className={cn(
+                        styles.editorContainer,
+                        !mobileReview.showOriginal &&
+                          "min-h-11 outline-none",
+                      )}
+                      contentEditable={!mobileReview.showOriginal}
+                      suppressContentEditableWarning
+                      onInput={
+                        mobileReview.showOriginal
+                          ? undefined
+                          : handleMobileProposalInput
+                      }
                       dangerouslySetInnerHTML={{ __html: reviewContent }}
                     />
                   ) : (
@@ -852,7 +915,14 @@ const InlineDraftAiFloat = ({
                   </p>
                   {inputSource ? (
                     <div
-                      className={styles.editorContainer}
+                      className={cn(styles.editorContainer, "min-h-11 outline-none")}
+                      contentEditable
+                      suppressContentEditableWarning
+                      onInput={
+                        mobileReview.isRefining
+                          ? handleMobileProposalInput
+                          : handleMobileSourceInput
+                      }
                       dangerouslySetInnerHTML={{
                         __html: sanitizeAiHtml(inputSource),
                       }}
@@ -881,12 +951,12 @@ const InlineDraftAiFloat = ({
                 ) : (
                   <>
                     {hasOpeningDraft && !mobileReview.isRefining ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="scrollbar-none mt-3 flex min-w-0 flex-nowrap items-center gap-0.5 overflow-x-auto pb-1">
                         {EDIT_ACTIONS.map(([label, command]) => (
                           <button
                             key={command}
                             type="button"
-                            className={CHIP_SHEET_ROW_CLASS}
+                            className={CHIP_LINK_CLASS}
                             onClick={() =>
                               void runAction({
                                 command,
@@ -894,7 +964,6 @@ const InlineDraftAiFloat = ({
                                   command === "FixSpellingAndGrammar"
                                     ? "Fix spelling"
                                     : label,
-                                sourceContent: mobileOpeningSource?.html ?? "",
                               })
                             }
                           >
