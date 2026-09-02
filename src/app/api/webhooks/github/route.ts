@@ -18,6 +18,8 @@ import {
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
+import assigneesAssign from "@/utils/controllers/assignees/assign";
+import type { IUser } from "@/models/model";
 import {
   chooseReviewSectionName,
   extractTicketId,
@@ -183,6 +185,130 @@ async function moveTaskForPullRequest(
   }
   if (moveResult.status !== 200) throw new Error("Task move failed");
   return true;
+}
+
+async function githubWebhookActor(): Promise<IUser> {
+  const botUser = await prisma.user.findUnique({
+    where: { id: generalConfig.hyperAiId },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      photoURL: true,
+    },
+  });
+  if (!botUser) throw new Error("HyperAI user not found");
+
+  return {
+    id: botUser.id,
+    email: botUser.email ?? "",
+    displayName: botUser.displayName ?? undefined,
+    photoURL: botUser.photoURL ?? undefined,
+    uid: "",
+    stripe_customer_id: "",
+    joinedAt: new Date(),
+    UserSettingId: "",
+    UserSetting: {} as IUser["UserSetting"],
+  };
+}
+
+async function reconcileMergedPullRequestAssignees(
+  task: WebhookTask,
+): Promise<boolean> {
+  const currentTask = await prisma.task.findUnique({
+    where: { id: task.id },
+    select: { projectId: true, sectionId: true, status: true },
+  });
+  if (
+    !currentTask ||
+    currentTask.status !== "Normal" ||
+    currentTask.projectId !== task.projectId ||
+    currentTask.sectionId === null
+  ) {
+    return false;
+  }
+
+  const qaSection = await prisma.section.findUnique({
+    where: { id: currentTask.sectionId },
+    select: {
+      id: true,
+      projectId: true,
+      deleted: true,
+      section_title: true,
+      autoAssignAgentId: true,
+    },
+  });
+  if (
+    !qaSection ||
+    qaSection.deleted ||
+    qaSection.projectId !== task.projectId ||
+    qaSection.section_title.toLowerCase() !==
+      MERGED_PULL_REQUEST_SECTION.toLowerCase()
+  ) {
+    return false;
+  }
+
+  const qaAgentId = qaSection.autoAssignAgentId;
+  if (!qaAgentId) {
+    console.warn(
+      `[GitHub webhook] QA section ${qaSection.section_title} has no agent auto-assignee; task ${task.id} assignments were not changed.`,
+    );
+    return false;
+  }
+
+  const actor = await githubWebhookActor();
+  const mutationOptions = {
+    expectedProjectId: task.projectId,
+    expectedSectionId: qaSection.id,
+    allowHumanOverride: false,
+  };
+  const qaAssignment = await assigneesAssign(
+    actor,
+    null,
+    task.id,
+    qaAgentId,
+    undefined,
+    { ...mutationOptions, intent: "assign" },
+  );
+  if (qaAssignment.status === 409) {
+    console.warn(
+      `[GitHub webhook] Task ${task.id} has an active write; its QA assignment cleanup was skipped.`,
+    );
+    return false;
+  }
+  if (qaAssignment.status !== 200) {
+    throw new Error("QA agent assignment failed");
+  }
+
+  const outgoingAgentAssignments = await prisma.assignees.findMany({
+    where: { taskId: task.id, agentId: { not: null } },
+    select: { userId: true, agentId: true },
+  });
+  let changed =
+    "assignmentOutcome" in qaAssignment.json &&
+    qaAssignment.json.assignmentOutcome === "created";
+  for (const assignment of outgoingAgentAssignments) {
+    if (!assignment.agentId || assignment.agentId === qaAgentId) continue;
+    const removal = await assigneesAssign(
+      actor,
+      assignment.userId,
+      task.id,
+      assignment.agentId,
+      undefined,
+      { ...mutationOptions, intent: "unassign" },
+    );
+    if (removal.status === 409) {
+      console.warn(
+        `[GitHub webhook] Task ${task.id} changed during QA assignment cleanup; remaining agent assignments were preserved.`,
+      );
+      return changed;
+    }
+    if (removal.status !== 200) {
+      throw new Error("Outgoing agent unassignment failed");
+    }
+    changed = true;
+  }
+  return changed;
 }
 
 function invalidPayload(message: string) {
@@ -474,6 +600,7 @@ export async function POST(request: NextRequest) {
         },
       });
       let moved = 0;
+      let assignmentsChanged = false;
       for (const task of tasks) {
         let targetSectionName: PullRequestTargetSection = null;
         if (
@@ -485,6 +612,19 @@ export async function POST(request: NextRequest) {
           targetSectionName = MERGED_PULL_REQUEST_SECTION;
         }
         if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
+        if (pullRequest.merged) {
+          assignmentsChanged =
+            (await reconcileMergedPullRequestAssignees(task)) ||
+            assignmentsChanged;
+        }
+      }
+      if (
+        assignmentsChanged &&
+        syncResult.linked === 0 &&
+        syncResult.updated === 0 &&
+        moved === 0
+      ) {
+        await broadcastPullRequestChanges(boardId, syncResult.taskIds);
       }
       if (syncResult.linked > 0 || syncResult.updated > 0 || moved > 0) {
         await broadcastPullRequestChanges(boardId, syncResult.taskIds);
@@ -695,6 +835,22 @@ export async function POST(request: NextRequest) {
             error,
           );
         }
+      }
+    }
+
+    const assignmentsChanged = pullRequest.merged
+      ? await reconcileMergedPullRequestAssignees(task)
+      : false;
+    if (assignmentsChanged && !moved) {
+      try {
+        await broadcastBoardChange(task.projectId, {
+          originUserId: generalConfig.hyperAiId,
+        });
+      } catch (error) {
+        console.warn(
+          `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
+          error,
+        );
       }
     }
 

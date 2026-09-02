@@ -62,6 +62,7 @@ test("a human assignment coexists with an agent owned by the same user", async (
     cancellations: 0,
     creates: 0,
     fences: 0,
+    fenceOptions: [],
     notificationDeletes: [],
     transactions: 0,
     validations: 0,
@@ -70,6 +71,7 @@ test("a human assignment coexists with an agent owned by the same user", async (
   const findAssignment = (where) => rows.find((row) => matches(row, where)) ?? null;
   const prisma = {
     task: { findUnique: async () => task },
+    agent: { findFirst: async () => ({ userId: owner.id }) },
     assignees: {
       findFirst: async ({ where }) => findAssignment(where),
       findMany: async () => [...rows],
@@ -164,8 +166,15 @@ test("a human assignment coexists with an agent owned by the same user", async (
     },
     "@/lib/mcp/tasks/agentMutationFence": {
       AgentMutationLeaseConflictError: class extends Error {},
-      assertAgentAssignmentChangeAllowed: async () => {
+      assertAgentAssignmentChangeAllowed: async (
+        _transaction,
+        _taskId,
+        _agentId,
+        _userId,
+        options,
+      ) => {
         calls.fences += 1;
+        calls.fenceOptions.push(options);
       },
       cancelAgentMutationLeaseForHumanOverride: async () => {
         calls.cancellations += 1;
@@ -251,4 +260,73 @@ test("a human assignment coexists with an agent owned by the same user", async (
     { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
     { type: "Assigned", taskId: task.id, userId: owner.id, agentId: null },
   ]);
+
+  const staleUnassignment = await assign(
+    owner,
+    owner.id,
+    task.id,
+    agentAssignment.agentId,
+    undefined,
+    {
+      intent: "unassign",
+      expectedProjectId: task.projectId,
+      expectedSectionId: 5511,
+      allowHumanOverride: false,
+    },
+  );
+  assert.equal(staleUnassignment.status, 409);
+  assert.equal(staleUnassignment.json.assignmentOutcome, "stale-task");
+  assert.deepEqual(
+    rows.map(({ userId, agentId }) => ({ userId, agentId })),
+    [{ userId: owner.id, agentId: agentAssignment.agentId }],
+  );
+  assert.equal(calls.cancellations, 4);
+  assert.deepEqual(calls.fenceOptions.at(-1), { allowHumanOverride: false });
+
+  const staleToggle = await assign(
+    owner,
+    owner.id,
+    task.id,
+    agentAssignment.agentId,
+    undefined,
+    {
+      intent: "toggle",
+      expectedProjectId: task.projectId,
+      expectedSectionId: 5511,
+      allowHumanOverride: false,
+    },
+  );
+  assert.equal(staleToggle.status, 409);
+  assert.equal(staleToggle.json.assignmentOutcome, "stale-task");
+  assert.equal(rows.length, 1);
+
+  const projectOnly = await assign(
+    owner,
+    owner.id,
+    task.id,
+    agentAssignment.agentId,
+    undefined,
+    {
+      intent: "unassign",
+      expectedProjectId: task.projectId,
+      allowHumanOverride: false,
+    },
+  );
+  assert.equal(projectOnly.status, 200);
+
+  rows.push(agentAssignment);
+  const sectionOnly = await assign(
+    owner,
+    owner.id,
+    task.id,
+    agentAssignment.agentId,
+    undefined,
+    {
+      intent: "unassign",
+      expectedSectionId: task.sectionId,
+      allowHumanOverride: false,
+    },
+  );
+  assert.equal(sectionOnly.status, 200);
+  assert.equal(rows.length, 0);
 });
