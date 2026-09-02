@@ -171,6 +171,7 @@ test("late dictation, AI, and upload completion cannot mutate a closed edit", ()
   assert.match(actions, /uploadedAttachments\.forEach[\s\S]*?mobileEditPersistedSourcesRef\.current\.add/);
   assert.match(actions, /handleMobileAttachmentBridgeFailure[\s\S]*?setFileItems/);
   assert.match(actions, /onUploadPendingChange=\{setMobileUploadPending\}/);
+  assert.match(actions, /onUploadFailed=\{removeFile\}/);
   assert.match(actions, /setMobileAttachmentBridgePending\(\(pending\) => pending \+ 1\)/);
   assert.match(actions, /mobileUploadPending[\s\S]*?mobileAttachmentBridgePending > 0[\s\S]*?!sendOnClick/);
   assert.match(imageGallery, /return \(\) => onUploadPendingChange\(false\)/);

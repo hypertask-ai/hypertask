@@ -29,7 +29,7 @@ interface IProps {
   callbackAttachments?: (
     attachments: GalleryAttachment[],
   ) => void | Promise<void>;
-  onUploadFailed?: () => void;
+  onUploadFailed?: (fileName: string) => void;
   onUploadPendingChange?: (pending: boolean) => void;
   variant?: "default" | "chat";
 }

@@ -16,7 +16,7 @@ interface ISingleFile {
     allowDelete?: boolean;
     handleRemove: any;
     callback?:(attachmentReturned: any) => void;
-    onUploadFailed?: () => void;
+    onUploadFailed?: (fileName: string) => void;
     variant?: "default" | "chat";
   }
   const SingleFileInputPreview: React.FC<ISingleFile> = ({
@@ -81,7 +81,7 @@ interface ISingleFile {
           : `Could not upload "${file.name}". Please try again.`;
       toast.error(message);
       handleRemove?.(file.name);
-      reportUploadFailure?.();
+      reportUploadFailure?.(file.name);
     };
 
     useEffect(()=>{

@@ -309,6 +309,7 @@ const AttachmentsUpload = (props: IProps) => {
                 shouldUpload={true}
                 mode="others"
                 onUploadPendingChange={setMobileUploadPending}
+                onUploadFailed={removeFile}
                 callbackAttachments={async (
                   uploadedAttachments: Array<{ id: number; file: File }>,
                 ) => {
