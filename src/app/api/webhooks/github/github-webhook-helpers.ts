@@ -27,11 +27,13 @@ export function verifyGithubSignature(
 }
 
 export function extractTicketId(input: {
+  boardPrefix: string;
   title?: string | null;
   headRef?: string | null;
   body?: string | null;
 }): string | null {
-  const ticketPattern = /\b([A-Za-z][A-Za-z0-9]{1,9})-(\d+)\b/;
+  const ticketPattern = /\b([A-Za-z][A-Za-z0-9]{1,9})-(\d+)\b/g;
+  const boardPrefix = input.boardPrefix.trim().toUpperCase();
 
   // Branch name first: this repo generates branches directly from the ticket
   // (e.g. htpr-4437-github-pr-link), so it's the most reliable signal. Title
@@ -39,9 +41,10 @@ export function extractTicketId(input: {
   // HTPR-1234", "follow-up to INNE-99") — trusting it first would resolve to
   // the wrong ticket, and possibly move a task on an unrelated board.
   for (const value of [input.headRef, input.title, input.body]) {
-    const match = value?.match(ticketPattern);
-    if (match) {
-      return `${match[1]}-${match[2]}`.toUpperCase();
+    for (const match of value?.matchAll(ticketPattern) ?? []) {
+      if (match[1].toUpperCase() === boardPrefix) {
+        return `${boardPrefix}-${match[2]}`;
+      }
     }
   }
 
