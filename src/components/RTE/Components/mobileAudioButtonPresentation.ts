@@ -1,4 +1,5 @@
 export type MobileMicPresentation = "compact" | "prominent";
+export type MobileMicPrimaryTone = "default" | "ai";
 
 type MobileMicPresentationState = {
   isMobileCreateComment: boolean;
@@ -9,6 +10,7 @@ type MobileMicPresentationState = {
   hasText?: boolean;
   isProcessing: boolean;
   mobilePresentation?: MobileMicPresentation;
+  primaryTone?: MobileMicPrimaryTone;
 };
 
 export function mobileMicPresentation({
@@ -20,6 +22,7 @@ export function mobileMicPresentation({
   hasText,
   isProcessing,
   mobilePresentation,
+  primaryTone = "default",
 }: MobileMicPresentationState) {
   if (mobilePresentation === "compact") {
     return { prominent: false, className: "h-[32px]" };
@@ -40,7 +43,9 @@ export function mobileMicPresentation({
     className += " text-icon-dark-gray";
   } else {
     className =
-      "h-11 w-12 justify-center rounded-[4px] bg-white-black text-white-black-inverted";
+      primaryTone === "ai"
+        ? "h-11 w-12 justify-center rounded-[4px] bg-hypertasks-ai-purple text-white"
+        : "h-11 w-12 justify-center rounded-[4px] bg-white-black text-white-black-inverted";
   }
 
   return { prominent, className };
