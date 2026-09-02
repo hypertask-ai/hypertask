@@ -22,15 +22,12 @@ const jiti = jitiModule.createJiti
 const DueDateLabel = jiti(
   path.join(root, "src/components/Labels/DueDateLabel.tsx"),
 ).default;
-const {
-  default: TaskDueDateActivityLabel,
-  isCurrentDueDate,
-} = jiti(
+const MobileTaskDueDate = jiti(
   path.join(
     root,
-    "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/TaskDueDateActivityLabel.tsx",
+    "src/components/PageComponents/TaskDetail/TopRow/MobileTaskDueDate.tsx",
   ),
-);
+).default;
 
 test("due-date labels are safe with and without a click action", async () => {
   const previousWindow = global.window;
@@ -100,7 +97,7 @@ test("due-date labels are safe with and without a click action", async () => {
   }
 });
 
-test("only the current mobile due-date activity opens the existing picker", async () => {
+test("mobile task detail exposes its existing due date exactly once", async () => {
   const previousWindow = global.window;
   const previousDocument = global.document;
   const previousNavigator = global.navigator;
@@ -117,42 +114,37 @@ test("only the current mobile due-date activity opens the existing picker", asyn
 
     const container = document.getElementById("root");
     reactRoot = require("react-dom/client").createRoot(container);
-    const renderLabel = async (props) => {
+    const renderControl = async (props) => {
       await React.act(async () => {
-        reactRoot.render(React.createElement(TaskDueDateActivityLabel, props));
+        reactRoot.render(React.createElement(MobileTaskDueDate, props));
       });
     };
-    const currentDate = "2026-09-02T08:00:00.000Z";
 
-    assert.equal(isCurrentDueDate(currentDate, new Date(currentDate)), true);
-    assert.equal(isCurrentDueDate(currentDate, "not-a-date"), false);
-
-    await renderLabel({
-      dueDate: currentDate,
-      currentDueDate: currentDate,
+    await renderControl({
+      dueDate: "2026-09-02T08:00:00.000Z",
       isMobile: true,
       onClick: () => clickCount++,
     });
-    await React.act(async () => container.querySelector(".label-pill").click());
+    const button = container.querySelector('button[aria-label="Change due date"]');
+    assert.ok(button);
+    assert.match(button.textContent, /Sep 02/);
+
+    await React.act(async () => button.click());
     assert.equal(clickCount, 1);
 
-    await renderLabel({
-      dueDate: "2026-08-31T08:00:00.000Z",
-      currentDueDate: currentDate,
-      isMobile: true,
-      onClick: () => clickCount++,
-    });
-    await React.act(async () => container.querySelector(".label-pill").click());
-    assert.equal(clickCount, 1);
-
-    await renderLabel({
-      dueDate: currentDate,
-      currentDueDate: currentDate,
+    await renderControl({
+      dueDate: "2026-09-02T08:00:00.000Z",
       isMobile: false,
       onClick: () => clickCount++,
     });
-    await React.act(async () => container.querySelector(".label-pill").click());
-    assert.equal(clickCount, 1);
+    assert.equal(container.querySelector("button"), null);
+
+    await renderControl({
+      dueDate: null,
+      isMobile: true,
+      onClick: () => clickCount++,
+    });
+    assert.equal(container.querySelector("button"), null);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     dom.window.close();
