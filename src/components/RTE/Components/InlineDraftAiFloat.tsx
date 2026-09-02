@@ -714,7 +714,6 @@ const InlineDraftAiFloat = ({
       setPrompt("");
       if (isMobileAiSheet) {
         mobileProposalDraftRef.current = html;
-        mobileProposalRevisionRef.current += 1;
         dispatchMobileReview({ type: "resolve", requestId, proposal: html });
         return;
       }
@@ -761,11 +760,17 @@ const InlineDraftAiFloat = ({
   const retry = () => {
     if (isMobileAiSheet) {
       if (!mobileReview.lastRequest) return;
-      const sourceRevision =
+      const currentSourceRevision =
         mobileReview.lastRequest.sourceKind === "proposal"
           ? mobileProposalRevisionRef.current
           : mobileSourceRevisionRef.current;
-      void runAction({ ...mobileReview.lastRequest, sourceRevision });
+      if (
+        mobileReview.lastRequest.sourceRevision !== undefined &&
+        mobileReview.lastRequest.sourceRevision !== currentSourceRevision
+      ) {
+        return;
+      }
+      void runAction(mobileReview.lastRequest);
       return;
     }
     if (!lastAction) return;

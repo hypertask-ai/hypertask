@@ -318,6 +318,14 @@ test("mobile Write with AI renders submit, retry, refine, and discard without re
     assert.deepEqual(requests[3], requests[2]);
     assert.match(container.textContent, /Proposal 4/);
 
+    await setEditableHtml(
+      container.querySelector('[contenteditable="true"]'),
+      "<p>Edited after refinement</p>",
+    );
+    await click(dom, buttonWithText(container, "Try again"));
+    assert.equal(requests.length, 4);
+    assert.match(container.textContent, /Edited after refinement/);
+
     await click(dom, buttonWithText(container, "Discard"));
     assert.equal(getCloseCalls(), 1);
     assert.equal(editor.setContentCalls.length, 0);
