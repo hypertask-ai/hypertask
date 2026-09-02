@@ -249,7 +249,8 @@ const AITaskWriterContainer: React.FC<
     if (
       isLoading ||
       isByokBlocked ||
-      (isMobileCreateFlow && mobileCreateRequestPendingRef.current)
+      (isMobileCreateFlow &&
+        (mobileCreateRequestPendingRef.current || currentDisplayResponse))
     ) return;
     const promptToUse = resolveTaskWriterSubmitPrompt(
       autoTrigger,
@@ -287,6 +288,7 @@ const AITaskWriterContainer: React.FC<
     isByokBlocked,
     isLoading,
     isMobileCreateFlow,
+    currentDisplayResponse,
     presentation,
     userPrompt,
     sendAIRequest,

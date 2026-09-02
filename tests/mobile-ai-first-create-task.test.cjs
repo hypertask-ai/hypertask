@@ -115,7 +115,7 @@ test("mobile create dictation keeps one recorder and uses the approved purple pr
 test("mobile create submit stays trimmed and single-flight", () => {
   assert.match(
     writerContainer,
-    /isLoading \|\|[\s\S]*?isByokBlocked \|\|[\s\S]*?isMobileCreateFlow && mobileCreateRequestPendingRef\.current/,
+    /isLoading \|\|[\s\S]*?isByokBlocked \|\|[\s\S]*?isMobileCreateFlow &&[\s\S]*?mobileCreateRequestPendingRef\.current \|\|[\s\S]*?currentDisplayResponse/,
   );
   assert.match(writerContainer, /if \(!promptToUse\.trim\(\)\) return;/);
   assert.match(
