@@ -423,6 +423,12 @@ export async function POST(request: NextRequest) {
     // transaction can consume the code and return a token.
     try {
       session = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw<Array<{ client_id: string }>>`
+          SELECT "client_id"
+          FROM "OAuthClient"
+          WHERE "client_id" = ${authCode.client_id}
+          FOR UPDATE
+        `
         const consumed = await tx.oAuthAuthorizationCode.updateMany({
           where: { code: code as string, used: false },
           data: { used: true }

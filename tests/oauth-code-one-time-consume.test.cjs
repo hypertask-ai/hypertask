@@ -39,6 +39,7 @@ const baseAuthCode = {
 
 const calls = {
   readSnapshots: [],
+  clientLocks: [],
   consumeAttempts: [],
   ownerClaims: [],
   mintAttempts: [],
@@ -69,6 +70,7 @@ function resetState(overrides = {}) {
   readBarrier = null
   transactionTail = Promise.resolve()
   calls.readSnapshots.length = 0
+  calls.clientLocks.length = 0
   calls.consumeAttempts.length = 0
   calls.ownerClaims.length = 0
   calls.mintAttempts.length = 0
@@ -101,6 +103,10 @@ stubModule('src/lib/prisma.ts', {
       let transactionConsumed = consumed
       let transactionOwnerId = ownerId
       const tx = {
+        $queryRaw: async (strings, ...values) => {
+          calls.clientLocks.push({ sql: strings.join('?'), values })
+          return client ? [{ client_id: client.client_id }] : []
+        },
         oAuthClient: {
           updateMany: async (args) => {
             calls.ownerClaims.push(args)
@@ -220,6 +226,11 @@ test('two requests that read the same unused code can mint only one token', asyn
     error_description: 'Authorization code has already been used',
   })
   assert.equal(calls.mintedTokens.length, 1)
+  assert.equal(calls.clientLocks.length, 2)
+  for (const lock of calls.clientLocks) {
+    assert.match(lock.sql, /WHERE "client_id" = \?\s+FOR UPDATE/)
+    assert.deepEqual(lock.values, [baseAuthCode.client_id])
+  }
   assert.equal(calls.consumeAttempts.length, 2)
   assert.deepEqual(calls.ownerClaims, [{
     where: { client_id: baseAuthCode.client_id, owner_id: null },

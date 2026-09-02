@@ -66,15 +66,33 @@ function loadRoute({
       let queryIndex = 0;
       const tx = {
         $queryRaw: async (strings, ...values) => {
-          calls.queries.push({ sql: strings.join("?"), values });
+          const sql = strings.join("?");
+          calls.queries.push({ sql, values });
           queryIndex += 1;
+          assert.deepEqual(values, ["owned-client"]);
           if (queryIndex === 1) {
+            assert.match(
+              sql,
+              /FROM "OAuthClient"\s+WHERE "client_id" = \?\s+FOR UPDATE/,
+            );
             return clientExists
               ? [{ client_id: values[0], owner_id: ownerUserId }]
               : [];
           }
-          if (queryIndex === 2) return authorizationCodes;
-          if (queryIndex === 3) return refreshTokens;
+          if (queryIndex === 2) {
+            assert.match(
+              sql,
+              /FROM "OAuthAuthorizationCode"\s+WHERE "client_id" = \?\s+FOR UPDATE/,
+            );
+            return authorizationCodes;
+          }
+          if (queryIndex === 3) {
+            assert.match(
+              sql,
+              /FROM "OAuthRefreshToken"\s+WHERE "clientId" = \?\s+FOR UPDATE/,
+            );
+            return refreshTokens;
+          }
           throw new Error("Unexpected query");
         },
         revokedToken: {
@@ -190,9 +208,17 @@ test("a different user cannot remove an OAuth client or learn whether it exists"
 });
 
 test("authorization history cannot remove an unowned registration", async () => {
+  const migration = fs.readFileSync(
+    path.join(
+      root,
+      "src/prisma/migrations/20260902210000_add_oauth_client_owner/migration.sql",
+    ),
+    "utf8",
+  );
   const { DELETE, calls } = loadRoute({ ownerUserId: null });
   const response = await remove(DELETE);
 
+  assert.doesNotMatch(migration, /OAuthAuthorizationCode|OAuthRefreshToken/);
   assert.equal(response.status, 404);
   assert.deepEqual(calls.revokedTokenUpserts, []);
   assert.deepEqual(calls.clientDeletes, []);

@@ -27,7 +27,12 @@ const owner = {
 }
 const verifier = 'oauth-route-code-verifier-with-sufficient-length'
 const challenge = crypto.createHash('sha256').update(verifier).digest('base64url')
-const calls = { agentLookups: [], ownerUpdates: [], usedUpdates: [] }
+const calls = {
+  agentLookups: [],
+  clientLocks: [],
+  ownerUpdates: [],
+  usedUpdates: [],
+}
 let currentAgent = null
 
 const authCode = {
@@ -45,6 +50,10 @@ const authCode = {
 stubModule('src/lib/prisma.ts', {
   default: {
     $transaction: async (callback) => callback({
+      $queryRaw: async (strings, ...values) => {
+        calls.clientLocks.push({ sql: strings.join('?'), values })
+        return [{ client_id: authCode.client_id }]
+      },
       oAuthClient: {
         updateMany: async (args) => {
           calls.ownerUpdates.push(args)
@@ -147,6 +156,7 @@ async function expectInvalidAgentGrant(agent) {
   currentAgent = agent
   const tokenMaterial = agent?.mcpTokenJti
   calls.agentLookups.length = 0
+  calls.clientLocks.length = 0
   calls.ownerUpdates.length = 0
   calls.usedUpdates.length = 0
 
@@ -158,6 +168,7 @@ async function expectInvalidAgentGrant(agent) {
     error: 'invalid_grant',
     error_description: 'The selected agent does not have an active token.',
   })
+  assert.equal(calls.clientLocks.length, 0)
   assert.equal(calls.ownerUpdates.length, 0)
   assert.equal(calls.usedUpdates.length, 0)
   assert.equal(JSON.stringify(body).includes('managed-generation'), false)
@@ -170,6 +181,7 @@ async function expectInvalidAgentGrant(agent) {
 test('OAuth exchange binds a unique credential to the stored managed generation', async () => {
   currentAgent = storedCredential(managedToken())
   calls.agentLookups.length = 0
+  calls.clientLocks.length = 0
   calls.ownerUpdates.length = 0
   calls.usedUpdates.length = 0
 
@@ -189,6 +201,9 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
     where: { id: agentId, userId: owner.id, revokedAt: null },
     select: { mcpTokenJti: true },
   })
+  assert.equal(calls.clientLocks.length, 1)
+  assert.match(calls.clientLocks[0].sql, /WHERE "client_id" = \?\s+FOR UPDATE/)
+  assert.deepEqual(calls.clientLocks[0].values, [authCode.client_id])
   assert.deepEqual(calls.ownerUpdates, [{
     where: { client_id: authCode.client_id, owner_id: null },
     data: { owner_id: owner.id },

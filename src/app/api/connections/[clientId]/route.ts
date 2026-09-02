@@ -78,9 +78,9 @@ export async function DELETE(
           }
 
           const authorizationCodes = await tx.$queryRaw<
-            Array<{ user_id: number; used: boolean }>
+            Array<{ user_id: number }>
           >`
-            SELECT "user_id", "used"
+            SELECT "user_id"
             FROM "OAuthAuthorizationCode"
             WHERE "client_id" = ${clientId}
             FOR UPDATE
@@ -107,12 +107,7 @@ export async function DELETE(
 
           const now = new Date();
           for (const token of refreshTokens) {
-            if (
-              token.userId !== session.userId ||
-              token.accessTokenExpiresAt <= now
-            ) {
-              continue;
-            }
+            if (token.accessTokenExpiresAt <= now) continue;
             await tx.revokedToken.upsert({
               where: { jti: token.accessTokenJti },
               create: {
