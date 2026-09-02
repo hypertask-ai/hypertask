@@ -114,7 +114,7 @@ test("mobile create submit stays trimmed and single-flight", () => {
   assert.match(writerContainer, /if \(!promptToUse\.trim\(\)\) return;/);
   assert.match(
     writerContainer,
-    /if \(isMobileCreateFlow\) mobileCreateRequestPendingRef\.current = true;[\s\S]*?sendAIRequest\([\s\S]*?\.catch\(\(error\) => \{[\s\S]*?\.finally\(\(\) => \{[\s\S]*?mobileCreateRequestPendingRef\.current = false;/,
+    /if \(isMobileCreateFlow\) mobileCreateRequestPendingRef\.current = true;[\s\S]*?try \{[\s\S]*?await sendAIRequest\([\s\S]*?catch \(error\) \{[\s\S]*?toast\.error\("Could not create the task\. Try again\."\);[\s\S]*?finally \{[\s\S]*?mobileCreateRequestPendingRef\.current = false;/,
   );
   assert.match(
     writerContainer,

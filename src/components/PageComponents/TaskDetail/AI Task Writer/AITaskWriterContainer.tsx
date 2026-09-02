@@ -56,6 +56,7 @@ import {
   recordBoardMemorySignal,
   shouldLearnBoardMemoryFromAiMode,
 } from "@/lib/ai/boardMemoryClient";
+import toast from "react-hot-toast";
 
 // Main Component
 const AITaskWriterContainer: React.FC<
@@ -267,16 +268,19 @@ const AITaskWriterContainer: React.FC<
     const taskTitle = document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.innerHTML;
 
     if (isMobileCreateFlow) mobileCreateRequestPendingRef.current = true;
-    void sendAIRequest(
-      buildTaskWriterPrompt(promptToUse, taskTitle),
-      "Thinking...",
-    )
-      .catch((error) => {
+    void (async () => {
+      try {
+        await sendAIRequest(
+          buildTaskWriterPrompt(promptToUse, taskTitle),
+          "Thinking...",
+        );
+      } catch (error) {
         console.error("AI task writer request failed:", error);
-      })
-      .finally(() => {
+        toast.error("Could not create the task. Try again.");
+      } finally {
         mobileCreateRequestPendingRef.current = false;
-      });
+      }
+    })();
   }, [
     autoTrigger,
     initialPrompt,
