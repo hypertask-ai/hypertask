@@ -63,6 +63,7 @@ function responseHarness() {
 function loadCreateRoute() {
   const calls = { relations: 0, urls: 0 };
   const createdTaskData = [];
+  const sectionLookupCalls = [];
   const background = [];
   const task = {
     id: 41,
@@ -84,6 +85,14 @@ function loadCreateRoute() {
   };
   const tx = {
     $executeRaw: async () => undefined,
+    section: {
+      findFirst: async ({ where }) => {
+        sectionLookupCalls.push(where);
+        if (where.section_title && where.section_title !== "Backlog") return null;
+        if (where.id && where.id !== 9) return null;
+        return { id: 9, section_title: "Backlog" };
+      },
+    },
     task: {
       create: async ({ data }) => {
         createdTaskData.push(data);
@@ -197,6 +206,7 @@ function loadCreateRoute() {
     calls,
     background,
     createdTaskData,
+    sectionLookupCalls,
   };
 }
 
@@ -262,25 +272,28 @@ test("task creation still persists requested relations and URLs", async () => {
 });
 
 test("section fallback stays board-scoped and persists start dates", async () => {
-  const { handler, background, createdTaskData } = loadCreateRoute();
+  const { handler, background, createdTaskData, sectionLookupCalls } = loadCreateRoute();
   const response = responseHarness();
   const startDate = new Date("2026-09-05T00:00:00.000Z");
 
   await createTask(
     handler,
-    taskCreateBody({ sectionId: undefined, startDate }),
+    taskCreateBody({ sectionId: undefined, section_title: undefined, startDate }),
     response,
   );
   await Promise.all(background);
 
   assert.equal(response.result().status, 200);
+  assert.deepEqual(sectionLookupCalls, [
+    { projectId: 15, visibility: true, deleted: false },
+  ]);
   assert.equal(createdTaskData[0].section, "Backlog");
   assert.equal(createdTaskData[0].sectionId, 9);
   assert.equal(createdTaskData[0].startDate, startDate);
 });
 
 test("section fallback rejects a foreign section title", async () => {
-  const { handler, background, createdTaskData } = loadCreateRoute();
+  const { handler, background, createdTaskData, sectionLookupCalls } = loadCreateRoute();
   const response = responseHarness();
 
   await createTask(
@@ -291,6 +304,14 @@ test("section fallback rejects a foreign section title", async () => {
   await Promise.all(background);
 
   assert.equal(response.result().status, 400);
+  assert.deepEqual(sectionLookupCalls, [
+    {
+      projectId: 15,
+      visibility: true,
+      deleted: false,
+      section_title: "Foreign",
+    },
+  ]);
   assert.match(response.result().body.message, /does not belong/);
   assert.equal(createdTaskData.length, 0);
 });

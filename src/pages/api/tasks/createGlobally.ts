@@ -20,6 +20,8 @@ import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllInclude
 /** First argument to `pg_advisory_xact_lock`; pairs with `projectId` for uniqueIndex allocation. */
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 
+class TaskSectionValidationError extends Error {}
+
 type TaskCreatedGlobally = Prisma.TaskGetPayload<{
   include: { project: true; parentTask: true; description_: true };
 }>;
@@ -319,30 +321,24 @@ const handler: NextApiHandler = async (
     }
     const requestedSectionTitle =
       typeof section_title === "string" ? section_title.trim() : "";
-    const sectionRow = await prisma.section.findFirst({
-      where: {
-        ...(normalizedSectionId !== null
-          ? { id: normalizedSectionId }
-          : requestedSectionTitle
-            ? { section_title: requestedSectionTitle }
-            : {}),
-        projectId,
-        visibility: true,
-        deleted: false,
-      },
-      ...(normalizedSectionId === null && !requestedSectionTitle
-        ? { orderBy: { ranking: "asc" as const } }
-        : {}),
-      select: { id: true, section_title: true },
-    });
-    if (!sectionRow) {
-      return res.status(400).json({
-        message:
-          normalizedSectionId === null && !requestedSectionTitle
-            ? "No active section found"
-            : "Section does not belong to this project",
-      });
+    const sectionWhere: Prisma.SectionWhereInput = {
+      projectId,
+      visibility: true,
+      deleted: false,
+    };
+    if (normalizedSectionId !== null) {
+      sectionWhere.id = normalizedSectionId;
+    } else if (requestedSectionTitle) {
+      sectionWhere.section_title = requestedSectionTitle;
     }
+    const sectionOrderBy =
+      normalizedSectionId === null && !requestedSectionTitle
+        ? { ranking: "asc" as const }
+        : undefined;
+    const sectionErrorMessage =
+      normalizedSectionId === null && !requestedSectionTitle
+        ? "No active section found"
+        : "Section does not belong to this project";
 
     const validationFinishedAt = performance.now();
     let newTask: TaskCreatedGlobally;
@@ -356,6 +352,13 @@ const handler: NextApiHandler = async (
     try {
       const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+        const sectionRow = await tx.section.findFirst({
+          where: sectionWhere,
+          ...(sectionOrderBy ? { orderBy: sectionOrderBy } : {}),
+          select: { id: true, section_title: true },
+        });
+        if (!sectionRow) throw new TaskSectionValidationError(sectionErrorMessage);
+
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
         const body = {
@@ -476,6 +479,9 @@ const handler: NextApiHandler = async (
       tagsCreated = created.result.taskLabels;
       assignmentsCreated = created.result.assignments;
     } catch (e) {
+      if (e instanceof TaskSectionValidationError) {
+        return res.status(400).json({ message: e.message });
+      }
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === "P2002"

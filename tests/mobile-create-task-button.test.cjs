@@ -72,7 +72,7 @@ test("the shared mobile stack exposes icon-only create and AI actions", () => {
   assert.match(button, /<Sparkles[^>]*aria-hidden="true"/);
   assert.match(
     button,
-    /onClick=\{\(\) =>\s*setCreateTaskModal\(\{[\s\S]*?defaultEditMode: "Description-ai"/,
+    /onClick=\{\(\) =>\s*setCreateTaskModal\(\{\s*show:\s*true,\s*defaultEditFocus:\s*\{\s*defaultEditMode:\s*"Description-ai",\s*defaultFocus:\s*"Description",\s*\},\s*\}\)\s*\}/,
   );
   assert.match(button, /onClick=\{openAIChatInterface\}/);
 });

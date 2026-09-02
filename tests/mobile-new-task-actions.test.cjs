@@ -23,9 +23,21 @@ const { mobileMicPresentation } = jiti(
   ),
 );
 
-const mobileBar = attachmentSource.match(
-  /const MobileBottomBar:[\s\S]*?\/\/ ====================================/,
-)?.[0];
+const mobileBarStart = attachmentSource.indexOf("const MobileBottomBar");
+const mobileBarEnd = attachmentSource.indexOf(
+  "// ====================================",
+  mobileBarStart,
+);
+const mobileBar =
+  mobileBarStart >= 0 && mobileBarEnd >= 0
+    ? attachmentSource.slice(mobileBarStart, mobileBarEnd)
+    : undefined;
+const mobileBottomBarStart = attachmentSource.indexOf("<MobileBottomBar");
+const mobileBottomBarEnd = attachmentSource.indexOf("/>", mobileBottomBarStart);
+const mobileBottomBarUsage =
+  mobileBottomBarStart >= 0 && mobileBottomBarEnd >= 0
+    ? attachmentSource.slice(mobileBottomBarStart, mobileBottomBarEnd + 2)
+    : undefined;
 
 test("Task Writer and Save stay fixed ahead of secondary actions", () => {
   assert.ok(mobileBar, "MobileBottomBar source should be present");
@@ -121,10 +133,9 @@ test("description dictation uses an explicit compact mobile presentation", () =>
 });
 
 test("transcription keeps the mobile action row in its recording layout", () => {
-  assert.match(
-    attachmentSource,
-    /<MobileBottomBar[\s\S]*?isProcessing=\{audioProcessing\}[\s\S]*?onProcessingChange=\{setAudioProcessing\}/,
-  );
+  assert.ok(mobileBottomBarUsage, "MobileBottomBar usage should be present");
+  assert.match(mobileBottomBarUsage, /isProcessing=\{audioProcessing\}/);
+  assert.match(mobileBottomBarUsage, /onProcessingChange=\{setAudioProcessing\}/);
   assert.match(
     mobileBar,
     /const isDictating = Boolean\(isRecording \|\| isProcessing\);/,

@@ -16,6 +16,7 @@ import { inViewObjectAtom } from "@/store";
 import { useGetSingleTask } from "@/hooks/MultiPages/Tasks/useGetTask";
 import { setStartDateApiHandler } from "@/utils/api/Task Detail";
 import useGetTimeOptions from "@/hooks/General/useGetTimeOptions";
+import toast from "react-hot-toast";
 
 // HTPR-4884: start-date picker. Same natural-language flow as the due-date
 // modal (Sugar parsing + presets), minus the custom-calendar second screen —
@@ -72,12 +73,21 @@ const StartDateModal: React.FC<Props> = ({
     setFilteredOptions(input.length === 0 ? defaultOptions : parsed);
   };
 
-  const enterHandler = (index: number) => {
+  const enterHandler = async (index: number) => {
     const selected = filteredOptions[index];
     if (!selected) return;
     const date = selected.date ? new Date(selected.date) : undefined;
     if (mode === "Update" && inViewObject.taskId) {
-      void setStartDateApiHandler(date, inViewObject.taskId);
+      try {
+        const result = await setStartDateApiHandler(date, inViewObject.taskId);
+        if (result === undefined) {
+          toast.error("Could not update the start date. Try again.");
+          return;
+        }
+      } catch {
+        toast.error("Could not update the start date. Try again.");
+        return;
+      }
     }
     setTimeout(() => {
       if (date) closeHandler(date);
