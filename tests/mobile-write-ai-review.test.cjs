@@ -54,6 +54,7 @@ stubSourceModule("src/lib/mobileCommentViewport.ts", {
 });
 stubSourceModule("src/styles/tiptap.module.scss", {
   editorContainer: "editor-container",
+  is_editor_empty: "is-editor-empty",
 });
 stubSourceModule("src/utils/helperFunctions/sanitizeHtml.ts", {
   sanitizeAiHtml: (html) => html,
@@ -152,6 +153,18 @@ async function setInput(_dom, input, value) {
   });
 }
 
+async function setEditableHtml(element, html) {
+  assert.ok(element);
+  const propsKey = Object.keys(element).find((key) =>
+    key.startsWith("__reactProps$"),
+  );
+  assert.ok(propsKey);
+  element.innerHTML = html;
+  await act(async () => {
+    element[propsKey].onInput({ currentTarget: element });
+  });
+}
+
 async function click(dom, element) {
   assert.ok(element);
   await act(async () => {
@@ -221,6 +234,74 @@ async function withRenderedSheet(text, callback) {
   }
 }
 
+test("mobile Write with AI keeps an edited existing draft as the rewrite source", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom, editor }) => {
+    const requests = [];
+    global.fetch = async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Proposal</p>" }),
+      };
+    };
+
+    const source = container.querySelector('[contenteditable="true"]');
+    await setEditableHtml(
+      source,
+      '<p class="is-editor-empty" data-placeholder="Nothing written yet.">Edited draft</p>',
+    );
+    source.focus();
+    assert.equal(document.activeElement, source);
+    await click(dom, buttonWithText(container, "Improve readability"));
+
+    assert.equal(requests[0].content, "<p>Edited draft</p>");
+    assert.match(container.textContent, /Proposal/);
+    assert.doesNotMatch(container.textContent, /Edited draft/);
+    assert.equal(editor.setContentCalls.length, 0);
+  });
+});
+
+test("mobile Write with AI preserves atomic rich-text draft content", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom }) => {
+    const requests = [];
+    global.fetch = async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      return {
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Proposal</p>" }),
+      };
+    };
+
+    await setEditableHtml(
+      container.querySelector('[contenteditable="true"]'),
+      "<hr>",
+    );
+    await click(dom, buttonWithText(container, "Simplify"));
+
+    assert.equal(requests[0].content, "<hr>");
+  });
+});
+
+test("mobile Write with AI accepts edits made directly to the isolated proposal", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom, editor, getCloseCalls }) => {
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({ corrected_html: "<p>AI proposal</p>" }),
+    });
+
+    await click(dom, buttonWithText(container, "Improve readability"));
+    const proposal = container.querySelector('[contenteditable="true"]');
+    await setEditableHtml(proposal, "");
+    assert.ok(proposal.querySelector('[data-placeholder="Nothing written yet."]'));
+    await setEditableHtml(proposal, "<p>Edited proposal</p>");
+    assert.equal(proposal.querySelector("[data-placeholder]"), null);
+    await click(dom, buttonWithText(container, "Use this text"));
+
+    assert.deepEqual(editor.setContentCalls, ["<p>Edited proposal</p>"]);
+    assert.equal(getCloseCalls(), 1);
+  });
+});
+
 test("mobile Write with AI renders submit, retry, refine, and discard without replacing the composer", async () => {
   await withRenderedSheet("", async ({ container, dom, editor, getCloseCalls }) => {
     const requests = [];
@@ -253,6 +334,21 @@ test("mobile Write with AI renders submit, retry, refine, and discard without re
     assert.equal(requests[2].content, "<p>Proposal 2</p>");
     assert.equal(requests[2].instruction, "Make it warmer");
     assert.equal(editor.setContentCalls.length, 0);
+
+    await click(dom, buttonWithText(container, "Try again"));
+    assert.deepEqual(requests[3], requests[2]);
+    assert.match(container.textContent, /Proposal 4/);
+
+    await setEditableHtml(
+      container.querySelector('[contenteditable="true"]'),
+      "<p>Edited after refinement</p>",
+    );
+    const staleRetry = buttonWithText(container, "Try again");
+    assert.equal(staleRetry.disabled, true);
+    assert.match(staleRetry.title, /proposal changed/i);
+    await click(dom, staleRetry);
+    assert.equal(requests.length, 4);
+    assert.match(container.textContent, /Edited after refinement/);
 
     await click(dom, buttonWithText(container, "Discard"));
     assert.equal(getCloseCalls(), 1);
