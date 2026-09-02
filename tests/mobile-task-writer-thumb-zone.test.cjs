@@ -88,10 +88,22 @@ test("mobile controls sit in a left-aligned row with the primary pushed right", 
     audio,
     /import \{ mobileMicPresentation \} from "\.\/mobileAudioButtonPresentation"/,
   );
-  assert.match(
-    audio,
-    /mobileMicPresentation\(\{[\s\S]*?isMobileCreateComment,[\s\S]*?isMobileTaskWriter,[\s\S]*?isMobileNewTask,[\s\S]*?isMobileAiChat,[\s\S]*?globalRecording,[\s\S]*?hasText,[\s\S]*?isProcessing,[\s\S]*?primaryTone: mobilePrimaryTone,[\s\S]*?\}\)/,
-  );
+  const presentationStart = audio.indexOf("mobileMicPresentation({");
+  const presentationEnd = audio.indexOf("});", presentationStart);
+  const presentationCall = audio.slice(presentationStart, presentationEnd);
+  assert.ok(presentationStart >= 0 && presentationEnd > presentationStart);
+  for (const argument of [
+    "isMobileCreateComment,",
+    "isMobileTaskWriter,",
+    "isMobileNewTask,",
+    "isMobileAiChat,",
+    "globalRecording,",
+    "hasText,",
+    "isProcessing,",
+    "primaryTone: mobilePrimaryTone,",
+  ]) {
+    assert.match(presentationCall, new RegExp(argument));
+  }
   assert.match(audio, /prominent \? prominentClassName : "h-\[32px\]"/);
   for (const mode of ["isMobileTaskWriter", "isMobileNewTask", "isMobileAiChat"]) {
     const presentation = mobileMicPresentation({

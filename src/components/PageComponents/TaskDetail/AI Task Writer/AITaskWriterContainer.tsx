@@ -276,7 +276,7 @@ const AITaskWriterContainer: React.FC<
         );
       } catch (error) {
         console.error("AI task writer request failed:", error);
-        toast.error("Could not create the task. Try again.");
+        toast.error("Could not send the request. Try again.");
       } finally {
         mobileCreateRequestPendingRef.current = false;
       }

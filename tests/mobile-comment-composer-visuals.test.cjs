@@ -167,17 +167,22 @@ test("empty-state mobile comment microphone is a 48 by 44 inverted-theme action"
 });
 
 test("mobile recording confirmation uses the same 48 by 44 action", () => {
+  const classesStart = audioButton.indexOf("let recordingSubmitClassName");
+  const classesEnd = audioButton.indexOf("\n\n  return (", classesStart);
+  const recordingClasses = audioButton.slice(classesStart, classesEnd);
   const recordingBranch = audioButton.slice(
     audioButton.indexOf('aria-label="Cancel"'),
     audioButton.indexOf('text={"Send recording"}'),
   );
+  assert.ok(classesStart >= 0 && classesEnd > classesStart);
   assert.match(
-    audioButton,
-    /if \(isMobileView\) \{[\s\S]*?recordingSubmitClassName =\s*"h-11 w-12 bg-white-black text-white-black-inverted";/,
+    recordingClasses,
+    /recordingSubmitClassName =\s*"h-11 w-12 bg-white-black text-white-black-inverted";/,
   );
+  assert.match(recordingClasses, /if \(mobilePrimaryTone === "ai"\)/);
   assert.match(
-    audioButton,
-    /if \(mobilePrimaryTone === "ai"\) \{[\s\S]*?recordingSubmitClassName = "h-11 w-12 bg-hypertasks-ai-purple text-white";/,
+    recordingClasses,
+    /recordingSubmitClassName = "h-11 w-12 bg-hypertasks-ai-purple text-white";/,
   );
   assert.match(recordingBranch, /recordingSubmitClassName/);
 });
