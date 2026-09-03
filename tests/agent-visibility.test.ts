@@ -327,7 +327,17 @@ async function main() {
     taskDetailLoad,
     /agentId: visibleAgent \? task\.agentId : null,[\s\S]*agent: visibleAgent/,
   );
-  assert.match(taskDetailLoad, /hiddenCommentAgent\(userId\)/);
+  assert.doesNotMatch(taskDetailLoad, /hiddenCommentAgent\(userId\)/);
+  assert.equal(
+    taskDetailLoad.match(
+      /hiddenCommentAgent\(userId, Prisma\.sql`comment_task\."projectId"`\)/g,
+    )?.length,
+    2,
+  );
+  assert.match(
+    taskDetailLoad,
+    /hiddenCommentAgent\(userId, Prisma\.sql`ti\."projectId"`\)/,
+  );
   assert.match(
     taskDetailLoad,
     /agent\.id IS NULL AND c\."agentDisplayName" IS NOT NULL/,
@@ -339,12 +349,16 @@ async function main() {
   );
   assert.match(
     taskDetailLoad,
-    /visibility_agent_member\."projectId" = comment_task\."projectId"/,
+    /visibility_agent_member\."projectId" = \$\{projectId\}/,
   );
   assert.match(taskDetailLoad, /visibility_project\.status = 'Normal'/);
   assert.match(
     taskDetailLoad,
-    /agent\.visibility = 'TEAM'::"AgentVisibility"[\s\S]*?AND \(\$\{hasAccessibleAgentProject\(userId\)\}\)/,
+    /agent\.visibility = 'TEAM'::"AgentVisibility"[\s\S]*?AND \(\$\{hasAccessibleAgentProject\(userId, projectId\)\}\)/,
+  );
+  assert.match(
+    taskDetailLoad,
+    /SELECT t\.id, t\."projectId" FROM "Task" t[\s\S]*?task_row AS \(SELECT id AS "taskId", "projectId" FROM authorized_task\)/,
   );
   assert.match(createSessionRoute, /\.\.\.accessibleAgentWhere\(userId\)/);
   for (const existingSessionSurface of [
