@@ -350,18 +350,25 @@ export async function setTaskLabels(
 export async function mutateTaskLabels(
     taskId: number,
     projectId: number,
-    changes: { add?: (string | number)[]; remove?: (string | number)[] },
+    changes: {
+        add?: (string | number)[];
+        remove?: (string | number)[];
+        skipIfPresent?: (string | number)[];
+    },
     userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null }
 ): Promise<void> {
     const addIds = await resolveLabelIds(projectId, changes.add ?? []);
     const removeIds = await resolveLabelIds(projectId, changes.remove ?? []);
+    const skipIfPresentIds = await resolveLabelIds(projectId, changes.skipIfPresent ?? []);
     const deliveryIds = await prisma.$transaction(async (tx) => {
+        // This task-row lock is the shared mutex used by both MCP and UI label writers.
         await assertTaskBelongsToProject(tx, taskId, projectId);
         const existing = await tx.taskLabel.findMany({
             where: { taskId },
             include: { label: true },
         });
         const existingIds = new Set(existing.map(row => row.labelId));
+        if (skipIfPresentIds.some(labelId => existingIds.has(labelId))) return [];
         let changed = false;
 
         for (const labelId of removeIds) {
