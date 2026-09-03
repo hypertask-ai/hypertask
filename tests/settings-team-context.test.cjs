@@ -1,8 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
+const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const jiti = require("jiti")(
   path.join(root, "tests/settings-team-context-entry.cjs"),
   {
@@ -41,6 +43,14 @@ test("direct settings loads initialize from the previous accessible board", () =
       "3",
     ),
     "team-b",
+  );
+});
+
+test("the selected settings team survives a full page reload", () => {
+  const store = read("src/store/index.ts");
+  assert.match(
+    store,
+    /selectedSettingsTeamIdAtom = atom<string \| null>\(\{\s*key: "selectedSettingsTeamId",\s*default: null,\s*effects_UNSTABLE: \[persistAtom\],/,
   );
 });
 

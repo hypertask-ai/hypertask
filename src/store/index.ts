@@ -492,6 +492,7 @@ export const currentProjectAtom = atom<IProject | null>({
 export const selectedSettingsTeamIdAtom = atom<string | null>({
     key: "selectedSettingsTeamId",
     default: null,
+    effects_UNSTABLE: [persistAtom],
 });
 
 export const kanbanRunningOnlyAtom = atom<boolean>({
