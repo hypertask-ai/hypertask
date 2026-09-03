@@ -5,9 +5,11 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename);
-const { displayedBoardTimeSeconds, legacyBoardTimeTotal } = jiti(
-  path.join(root, "src/lib/boardTimeTotals.ts"),
-);
+const {
+  displayedBoardTimeSeconds,
+  legacyBoardTimeTotal,
+  resolveBoardTimeProjectSettings,
+} = jiti(path.join(root, "src/lib/boardTimeTotals.ts"));
 
 const calculatedAt = "2026-08-18T10:00:00.000Z";
 const tenSecondsLater = new Date(calculatedAt).getTime() + 10_000;
@@ -94,4 +96,52 @@ test("converts a legacy running timer into a live total snapshot", () => {
 
   assert.equal(total.totalSeconds, 5);
   assert.equal(displayedBoardTimeSeconds(total, tenSecondsLater), 15);
+});
+
+test("uses the rendered board settings instead of a stale shared board", () => {
+  assert.deepEqual(
+    resolveBoardTimeProjectSettings(
+      15,
+      { id: 15, timeTrackingEnabled: false, showTimeTotals: false },
+      { id: 15, timeTrackingEnabled: true, showTimeTotals: true },
+    ),
+    { enabled: true, showTimeTotals: true },
+  );
+});
+
+test("keeps explicit false rendered settings authoritative", () => {
+  assert.deepEqual(
+    resolveBoardTimeProjectSettings(
+      15,
+      { id: 15, timeTrackingEnabled: true, showTimeTotals: true },
+      { id: 15, timeTrackingEnabled: false, showTimeTotals: false },
+    ),
+    { enabled: false, showTimeTotals: false },
+  );
+});
+
+test("fails closed for a mismatched rendered board", () => {
+  assert.deepEqual(
+    resolveBoardTimeProjectSettings(
+      15,
+      { id: 15, timeTrackingEnabled: true, showTimeTotals: true },
+      { id: 16, timeTrackingEnabled: true, showTimeTotals: true },
+    ),
+    { enabled: false, showTimeTotals: false },
+  );
+});
+
+test("falls back to the matching shared board when no context is supplied", () => {
+  assert.deepEqual(
+    resolveBoardTimeProjectSettings(15, {
+      id: 15,
+      timeTrackingEnabled: true,
+      showTimeTotals: true,
+    }),
+    { enabled: true, showTimeTotals: true },
+  );
+  assert.deepEqual(resolveBoardTimeProjectSettings(15, null), {
+    enabled: false,
+    showTimeTotals: false,
+  });
 });

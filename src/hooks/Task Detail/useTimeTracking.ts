@@ -9,6 +9,8 @@ import { TIME_EVENT, timeBoardChannel, timeTaskChannel } from "@/lib/realtime/sh
 import { currentProjectAtom } from "@/store";
 import {
   legacyBoardTimeTotal,
+  resolveBoardTimeProjectSettings,
+  type BoardTimeProjectSettings,
   type BoardTimeTotal,
 } from "@/lib/boardTimeTotals";
 import { timeEntryCreatedInvalidationKeys } from "@/lib/timeTrackingInvalidation";
@@ -282,13 +284,18 @@ export function useRunningTimers() {
 
 export function useBoardRunningTimers(
   projectId: number | null,
-  options?: { enabled?: boolean },
+  options?: {
+    enabled?: boolean;
+    project?: BoardTimeProjectSettings;
+  },
 ) {
   const currentProject = useRecoilValue(currentProjectAtom);
-  const projectEligible =
-    projectId !== null &&
-    currentProject?.id === projectId &&
-    currentProject.timeTrackingEnabled;
+  const settings = resolveBoardTimeProjectSettings(
+    projectId,
+    currentProject,
+    options?.project,
+  );
+  const projectEligible = projectId !== null && settings.enabled;
   const enabled = (options?.enabled ?? true) && projectEligible;
   const queryClient = useQueryClient();
   useTimeChannel(
@@ -391,7 +398,7 @@ export function useBoardRunningTimers(
 
   return {
     ...query,
-    showTimeTotals: Boolean(currentProject?.showTimeTotals),
+    showTimeTotals: settings.showTimeTotals,
     timers,
     timeTotals,
     timerDataReady,

@@ -9,6 +9,32 @@ export type BoardTimeTotal = {
   totalSeconds: number;
 };
 
+export type BoardTimeProjectSettings = {
+  id: number;
+  showTimeTotals?: boolean;
+  timeTrackingEnabled?: boolean;
+};
+
+export function resolveBoardTimeProjectSettings(
+  projectId: number | null,
+  currentProject: BoardTimeProjectSettings | null,
+  renderedProject?: BoardTimeProjectSettings,
+) {
+  let project: BoardTimeProjectSettings | null = null;
+  if (renderedProject) {
+    if (renderedProject.id === projectId) project = renderedProject;
+  } else if (currentProject?.id === projectId) {
+    project = currentProject;
+  }
+
+  return {
+    enabled: Boolean(project?.timeTrackingEnabled),
+    showTimeTotals: Boolean(
+      project?.timeTrackingEnabled && project.showTimeTotals,
+    ),
+  };
+}
+
 export function legacyBoardTimeTotal(
   timer: BoardRunningTimer,
   calculatedAt = new Date(),

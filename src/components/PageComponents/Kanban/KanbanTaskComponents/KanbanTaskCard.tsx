@@ -173,6 +173,7 @@ const KanbanTaskCard = ({
       <TaskTitle title={task.title} />
       <TaskTagsRow
         task={task}
+        project={project}
         setShowEstimateModal={setShowEstimateModal}
         setShowPriorityModal={setShowPriorityModal}
         setShowCreateLabelModal={setShowCreateLabelModal}
