@@ -28,11 +28,11 @@ case "$1" in
   rev-parse)
     case "$2" in
       agent-origin/production) printf '%s\\n' base-sha ;;
-      refs/ocr-advisory/230) printf '%s\\n' head-sha ;;
+      refs/ocr-advisory/230|refs/ocr-advisory/232) printf '%s\\n' head-sha ;;
       *) printf 'unexpected rev-parse ref: %s\\n' "$2" >&2; exit 1 ;;
     esac
     ;;
-  update-ref) [[ "$2" == -d && "$3" == refs/ocr-advisory/230 ]] || exit 1 ;;
+  update-ref) [[ "$2" == -d && "$3" =~ ^refs/ocr-advisory/(230|232)$ ]] || exit 1 ;;
   *) printf 'unexpected git call: %s\\n' "$*" >&2; exit 1 ;;
 esac
 printf '%s\\n' "$*" >> "$HOME/git.log"
@@ -41,6 +41,7 @@ printf '%s\\n' "$*" >> "$HOME/git.log"
 if [[ "$1 $2" == "pr list" ]]; then
   [[ " $* " == *" --limit 1000 "* ]] || exit 1
   printf '%s\\n' '230 feature head-sha false' '231 draft draft-sha true'
+  if [[ "\${DUPLICATE_HEAD:-}" == 1 ]]; then printf '%s\\n' '232 duplicate head-sha false'; fi
 else
   printf '%s\\n' "$*" >> "$HOME/gh.log"
 fi
@@ -62,42 +63,50 @@ function run({ home, fakeBin }, extraEnv = {}) {
 
 test('reviews public production PRs from the public checkout', async (t) => {
   const fixtureData = await fixture(t)
-  const result = run(fixtureData)
+  const result = run(fixtureData, { DUPLICATE_HEAD: '1' })
 
   assert.equal(result.status, 0, result.stderr)
   const gitCalls = await readFile(join(fixtureData.home, 'git.log'), 'utf8')
   assert.match(gitCalls, /fetch -q agent-origin production/)
   assert.match(gitCalls, /fetch -q agent-origin pull\/230\/head:refs\/ocr-advisory\/230/)
+  assert.match(gitCalls, /fetch -q agent-origin pull\/232\/head:refs\/ocr-advisory\/232/)
   const reviewCalls = await readFile(join(fixtureData.home, 'review.log'), 'utf8')
   assert.match(reviewCalls, /--from base-sha --to head-sha --repo .*projects\/hypertask-oss/)
   const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
   assert.match(ghCalls, /pr comment 230 --repo hypertask-ai\/hypertask/)
+  assert.match(ghCalls, /pr comment 232 --repo hypertask-ai\/hypertask/)
   assert.match(ghCalls, /MEDIUM.*src\/example\.ts:4.*Fix this/)
   assert.doesNotMatch(ghCalls, /No findings/)
-  await stat(join(fixtureData.home, '.local/state/ocr-advisory/head-sha'))
+  await stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha'))
+  await stat(join(fixtureData.home, '.local/state/ocr-advisory/232-head-sha'))
 })
 
 test('retains old markers for ready and draft heads, then removes closed-head markers', async (t) => {
   const fixtureData = await fixture(t)
   const state = join(fixtureData.home, '.local/state/ocr-advisory')
   await mkdir(state, { recursive: true })
-  const openMarker = join(state, 'head-sha')
-  const draftMarker = join(state, 'draft-sha')
-  const closedMarker = join(state, 'closed-sha')
-  await writeFile(openMarker, '')
-  await writeFile(draftMarker, '')
+  const legacyOpenMarker = join(state, 'head-sha')
+  const legacyDraftMarker = join(state, 'draft-sha')
+  const openMarker = join(state, '230-head-sha')
+  const draftMarker = join(state, '231-draft-sha')
+  const closedMarker = join(state, '999-closed-sha')
+  await writeFile(legacyOpenMarker, '')
+  await writeFile(legacyDraftMarker, '')
   await writeFile(closedMarker, '')
   const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
-  await utimes(openMarker, old, old)
-  await utimes(draftMarker, old, old)
+  await utimes(legacyOpenMarker, old, old)
+  await utimes(legacyDraftMarker, old, old)
   await utimes(closedMarker, old, old)
-  const before = await stat(openMarker)
+  const openBefore = await stat(legacyOpenMarker)
+  const draftBefore = await stat(legacyDraftMarker)
 
   const result = run(fixtureData)
 
   assert.equal(result.status, 0, result.stderr)
-  assert.equal((await stat(openMarker)).ino, before.ino)
-  await stat(draftMarker)
+  assert.equal((await stat(openMarker)).ino, openBefore.ino)
+  assert.equal((await stat(draftMarker)).ino, draftBefore.ino)
+  await assert.rejects(stat(legacyOpenMarker), { code: 'ENOENT' })
+  await assert.rejects(stat(legacyDraftMarker), { code: 'ENOENT' })
   await assert.rejects(stat(closedMarker), { code: 'ENOENT' })
   await assert.rejects(readFile(join(fixtureData.home, 'review.log')), { code: 'ENOENT' })
 })

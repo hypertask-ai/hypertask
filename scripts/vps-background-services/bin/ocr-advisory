@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Advisory second-opinion reviews via open-code-review (ocr) on open production PRs.
-# Non-gating by design: posts one clearly labeled comment per head SHA and is
+# Non-gating by design: posts one clearly labeled comment per PR head SHA and is
 # never read by automerge (no APPROVE/CONCERNS prefix, no reviewed-commit marker).
 #
 # Runs on the Codex subscription by default (OCR delegation mode: ocr picks the
@@ -31,8 +31,12 @@ open_prs=$(gh pr list --repo "$REPO" --base production --state open --limit 1000
   --jq '.[] | "\(.number) \(.headRefName) \(.headRefOid) \(.isDraft)"')
 while read -r pr branch sha is_draft; do
   [ -n "$sha" ] || continue
+  marker_file="$STATE/$pr-$sha"
+  legacy_marker="$STATE/$sha"
+  if [ -e "$legacy_marker" ] && [ ! -e "$marker_file" ]; then
+    mv -- "$legacy_marker" "$marker_file"
+  fi
   [ "$is_draft" = false ] || continue
-  marker_file="$STATE/$sha"
   [ -e "$marker_file" ] && continue
   review_ref="refs/ocr-advisory/$pr"
   git fetch -q "$REMOTE" "pull/$pr/head:$review_ref" || continue
@@ -76,10 +80,10 @@ EOF
   rm -f "$out"
   git update-ref -d "$review_ref"
 done <<< "$open_prs"
-# Age out markers only after their PR closes, preserving one comment per head SHA.
+# Age out markers only after their PR closes, preserving one comment per PR head SHA.
 while IFS= read -r -d '' marker_file; do
-  sha=${marker_file##*/}
-  if ! awk -v sha="$sha" '$3 == sha { found=1 } END { exit !found }' <<< "$open_prs"; then
+  marker=${marker_file##*/}
+  if ! awk -v marker="$marker" '$1 "-" $3 == marker { found=1 } END { exit !found }' <<< "$open_prs"; then
     rm -f -- "$marker_file"
   fi
 done < <(find "$STATE" -type f -mtime +30 -print0)
