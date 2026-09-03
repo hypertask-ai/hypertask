@@ -6,16 +6,10 @@ import {
   createBoardWebhookTestDelivery,
   retryBoardWebhookDelivery,
 } from './outbox'
-import { parseWebhookEventSelection } from './events'
-
-export const WORKSPACE_WEBHOOK_EVENTS = [
-  'task.created',
-  'task.updated',
-  'task.assigned',
-  'task.unassigned',
-  'comment.created',
-  'comment.mention',
-] as const
+import {
+  WORKSPACE_WEBHOOK_EVENTS,
+  parseWebhookEventSelection,
+} from './events'
 
 const MAX_ENDPOINTS_PER_TEAM = 20
 
@@ -375,10 +369,19 @@ export async function createWorkspaceWebhook(input: {
   await assertWorkspaceWebhookOwner(input.userId, input.teamId)
   const url = await validatedUrl(input.url)
   const events = validatedEvents(input.events)
-  const projectId =
-    input.projectId == null || input.projectId === ''
-      ? null
-      : Number(input.projectId)
+  let projectId: number | null = null
+  if (input.projectId != null && input.projectId !== '') {
+    if (typeof input.projectId === 'number') {
+      projectId = input.projectId
+    } else if (
+      typeof input.projectId === 'string' &&
+      /^[1-9]\d*$/.test(input.projectId)
+    ) {
+      projectId = Number(input.projectId)
+    } else {
+      throw new WorkspaceWebhookError('Select a valid board', 400, 'projectId')
+    }
+  }
   if (projectId != null && (!Number.isSafeInteger(projectId) || projectId <= 0)) {
     throw new WorkspaceWebhookError('Select a valid board', 400, 'projectId')
   }
@@ -542,7 +545,7 @@ export async function retryWorkspaceWebhook(input: {
   const retriedId = await retryBoardWebhookDelivery({
     deliveryId,
     subscriptionId: subscription.id,
-    idempotencyKey: `${subscription.id}:${idempotencyKey}`,
+    idempotencyKey: `${subscription.id}:${deliveryId}:${idempotencyKey}`,
   })
   if (!retriedId) throw new WorkspaceWebhookError('Delivery not found', 404)
   return { success: true, deliveryId: retriedId }

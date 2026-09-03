@@ -1,8 +1,9 @@
 import prisma from '@/lib/prisma'
 import { postSignedWebhook } from './delivery'
+import { BOARD_WEBHOOK_MAX_ATTEMPTS } from './events'
 import { queueBoardWebhookDelivery } from './queue'
 
-export const BOARD_WEBHOOK_MAX_ATTEMPTS = 6
+export { BOARD_WEBHOOK_MAX_ATTEMPTS } from './events'
 // Sixty times the sender's own 5s AbortSignal.timeout in delivery.ts, so a slow
 // POST cannot outlive its claim and let a second worker send the same delivery.
 // Keep this above DELIVERY_TIMEOUT_MS if that timeout is ever raised.

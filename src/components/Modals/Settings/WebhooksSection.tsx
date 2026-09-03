@@ -10,6 +10,10 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import {
+  BOARD_WEBHOOK_MAX_ATTEMPTS,
+  WORKSPACE_WEBHOOK_EVENTS,
+} from "@/lib/mcp/webhooks/events";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import SettingsCard from "./SettingsCard";
 import { settingsActionButtonClass } from "./SettingsBillingRow";
@@ -18,14 +22,7 @@ import SettingsSectionShell from "./SettingsSectionShell";
 import { useSettingsTeam } from "./useSettingsTeam";
 
 const API_URL = "/api/settings/webhooks";
-const EVENTS = [
-  "task.created",
-  "task.updated",
-  "task.assigned",
-  "task.unassigned",
-  "comment.created",
-  "comment.mention",
-] as const;
+const EVENTS = WORKSPACE_WEBHOOK_EVENTS;
 
 const inputClass =
   "h-10 w-full rounded-lg border-0 bg-comment-description px-3 text-dense font-medium text-white-black outline-none transition placeholder:text-text-light-gray focus:bg-modalBackground";
@@ -90,7 +87,7 @@ const relativeTime = (value: string | null) => {
 };
 
 const statusText = (statusCode: number | null, status: string) => {
-  if (statusCode == null) return status;
+  if (statusCode === null) return status;
   const labels: Record<number, string> = {
     200: "OK",
     201: "Created",
@@ -117,6 +114,44 @@ const endpointName = (endpoint: Endpoint) => {
   }
 };
 
+const endpointStatusClass = (endpoint: Endpoint) => {
+  if (endpoint.lastDeliveryOk === false) return "bg-red-400";
+  if (endpoint.lastDeliveryOk === true) return "bg-green-500";
+  return "bg-text-light-gray";
+};
+
+const endpointDescription = (endpoint: Endpoint) => {
+  if (endpoint.kind === "agent") return " · Edit it from the agent's Manage panel";
+  const creator = endpoint.createdBy ? ` · Added by ${endpoint.createdBy}` : "";
+  return ` · Secret ${endpoint.secretHint}${creator}`;
+};
+
+const deliveryStatusClass = (delivery: Delivery) => {
+  if (
+    delivery.statusCode !== null &&
+    delivery.statusCode >= 200 &&
+    delivery.statusCode < 300
+  ) {
+    return "bg-green-500";
+  }
+  if (delivery.status === "pending" || delivery.status === "processing") {
+    return "bg-text-light-gray";
+  }
+  return "bg-red-400";
+};
+
+const deliveryDuration = (durationMs: number | null) => {
+  if (durationMs === null) return "";
+  if (durationMs < 1000) return ` · ${durationMs} ms`;
+  return ` · ${(durationMs / 1000).toFixed(1)} s`;
+};
+
+const workspaceSuccessMessages = {
+  test: "Signed test queued",
+  rotate: "Signing secret rotated",
+  retry: "Delivery queued again",
+} as const;
+
 export default function WebhooksSection() {
   const { projects, teamId } = useSettingsTeam();
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
@@ -124,10 +159,15 @@ export default function WebhooksSection() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [url, setUrl] = useState("");
   const [projectId, setProjectId] = useState("");
   const [events, setEvents] = useState<string[]>([...EVENTS]);
-  const [revealedSecret, setRevealedSecret] = useState<string | null>(null);
+  const [revealedSecret, setRevealedSecret] = useState<{
+    endpointId: string;
+    endpointName: string;
+    value: string;
+  } | null>(null);
   const [visiblePayload, setVisiblePayload] = useState<string | null>(null);
 
   const boards = useMemo(
@@ -143,7 +183,7 @@ export default function WebhooksSection() {
   );
   const selected = endpoints.find(({ id }) => id === selectedId) ?? null;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!teamId) {
       setEndpoints([]);
       setDeliveries([]);
@@ -157,11 +197,13 @@ export default function WebhooksSection() {
       const response = await fetch(`${API_URL}?${params}`, {
         credentials: "include",
         cache: "no-store",
+        signal,
       });
       const data = (await response.json()) as WebhooksResponse;
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Could not load webhooks");
       }
+      if (signal?.aborted) return;
       const nextEndpoints = data.endpoints ?? [];
       setEndpoints(nextEndpoints);
       setDeliveries(data.deliveries ?? []);
@@ -171,29 +213,41 @@ export default function WebhooksSection() {
         setSelectedId(nextEndpoints[0].id);
       }
     } catch (error) {
+      if (signal?.aborted) return;
       setEndpoints([]);
       setDeliveries([]);
       toast.error(error instanceof Error ? error.message : "Could not load webhooks");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, [selectedId, teamId]);
 
   useEffect(() => {
     setSelectedId(null);
+    setProjectId("");
     setRevealedSecret(null);
+    setVisiblePayload(null);
   }, [teamId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const controller = new AbortController();
+    setDeliveries([]);
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load, refreshVersion]);
+
+  const selectEndpoint = (id: string) => {
+    setDeliveries([]);
+    setVisiblePayload(null);
+    setSelectedId(id);
+  };
 
   const workspaceAction = async (
     action: "test" | "rotate" | "retry",
     endpoint: WorkspaceEndpoint,
     extra: Record<string, unknown> = {},
   ) => {
-    if (!teamId) return;
+    if (!teamId || busy) return;
     setBusy(`${action}:${endpoint.id}`);
     try {
       const response = await fetch(API_URL, {
@@ -210,15 +264,15 @@ export default function WebhooksSection() {
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? `Could not ${action} webhook`);
       }
-      if (data.secret) setRevealedSecret(data.secret);
-      toast.success(
-        action === "test"
-          ? "Signed test queued"
-          : action === "rotate"
-            ? "Signing secret rotated"
-            : "Delivery queued again",
-      );
-      await load();
+      if (data.secret) {
+        setRevealedSecret({
+          endpointId: endpoint.id,
+          endpointName: endpointName(endpoint),
+          value: data.secret,
+        });
+      }
+      toast.success(workspaceSuccessMessages[action]);
+      setRefreshVersion((current) => current + 1);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Webhook action failed");
     } finally {
@@ -231,6 +285,7 @@ export default function WebhooksSection() {
     endpoint: AgentEndpoint,
     deliveryId?: string,
   ) => {
+    if (busy) return;
     setBusy(`${action}:${endpoint.id}`);
     try {
       const response = await fetch(`/api/agents/${endpoint.agent.id}/webhook`, {
@@ -243,7 +298,7 @@ export default function WebhooksSection() {
         throw new Error(data.error ?? "Could not queue delivery");
       }
       toast.success(action === "test" ? "Signed test queued" : "Delivery queued again");
-      await load();
+      setRefreshVersion((current) => current + 1);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Webhook action failed");
     } finally {
@@ -253,7 +308,7 @@ export default function WebhooksSection() {
 
   const addEndpoint = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!teamId || !url.trim() || events.length === 0) return;
+    if (busy || !teamId || !url.trim() || events.length === 0) return;
     setBusy("create");
     try {
       const response = await fetch(API_URL, {
@@ -277,8 +332,12 @@ export default function WebhooksSection() {
       if (!response.ok || !data.success || !data.endpoint || !data.secret) {
         throw new Error(data.error ?? "Could not add endpoint");
       }
-      setRevealedSecret(data.secret);
-      setSelectedId(data.endpoint.id);
+      setRevealedSecret({
+        endpointId: data.endpoint.id,
+        endpointName: endpointName(data.endpoint),
+        value: data.secret,
+      });
+      selectEndpoint(data.endpoint.id);
       setUrl("");
       toast.success("Webhook endpoint added");
     } catch (error) {
@@ -302,7 +361,7 @@ export default function WebhooksSection() {
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Could not update endpoint");
       }
-      await load();
+      setRefreshVersion((current) => current + 1);
       toast.success(active ? "Webhook enabled" : "Webhook paused");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not update endpoint");
@@ -325,8 +384,11 @@ export default function WebhooksSection() {
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Could not delete endpoint");
       }
-      setSelectedId(null);
-      setRevealedSecret(null);
+      setEndpoints((current) => current.filter(({ id }) => id !== endpoint.id));
+      if (selectedId === endpoint.id) setSelectedId(null);
+      setRevealedSecret((current) =>
+        current?.endpointId === endpoint.id ? null : current,
+      );
       toast.success("Webhook endpoint deleted");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete endpoint");
@@ -369,21 +431,23 @@ export default function WebhooksSection() {
       </SettingsCard>
 
       {revealedSecret && (
-        <SettingsCard title="New signing secret">
+        <SettingsCard title={`New signing secret · ${revealedSecret.endpointName}`}>
           <p className="px-2 font-semibold">
             Copy it now, it won&apos;t be shown again. Use it to verify the
             X-Hypertask-Signature header.
           </p>
-          <SettingsCodeRow value={revealedSecret} />
+          <SettingsCodeRow value={revealedSecret.value} />
         </SettingsCard>
       )}
 
       <SettingsCard title="Endpoints">
-        {loading && endpoints.length === 0 ? (
+        {loading && endpoints.length === 0 && (
           <p className="px-2 text-text-light-gray">Loading webhooks</p>
-        ) : endpoints.length === 0 ? (
+        )}
+        {!loading && endpoints.length === 0 && (
           <p className="px-2 text-text-light-gray">No endpoints yet</p>
-        ) : (
+        )}
+        {endpoints.length > 0 && (
           <div className="flex flex-col">
             {endpoints.map((endpoint) => {
               const active = endpoint.id === selectedId;
@@ -394,13 +458,13 @@ export default function WebhooksSection() {
                     active && "rounded-[5px] bg-hover-active",
                   )}
                   key={`${endpoint.kind}:${endpoint.id}`}
-                  onClick={() => setSelectedId(endpoint.id)}
+                  onClick={() => selectEndpoint(endpoint.id)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      setSelectedId(endpoint.id);
+                      selectEndpoint(endpoint.id);
                     }
                   }}
                 >
@@ -411,11 +475,7 @@ export default function WebhooksSection() {
                           aria-label={endpoint.lastDeliveryOk === false ? "Delivery failed" : "Endpoint active"}
                           className={cn(
                             "h-2 w-2 rounded-full",
-                            endpoint.lastDeliveryOk === false
-                              ? "bg-red-400"
-                              : endpoint.lastDeliveryOk === true
-                                ? "bg-green-500"
-                                : "bg-text-light-gray",
+                            endpointStatusClass(endpoint),
                           )}
                         />
                         <p className="font-semibold">{endpointName(endpoint)}</p>
@@ -440,9 +500,7 @@ export default function WebhooksSection() {
                         {endpoint.lastDeliveryAt
                           ? `Last delivery ${relativeTime(endpoint.lastDeliveryAt)}`
                           : "No deliveries yet"}
-                        {endpoint.kind === "workspace"
-                          ? ` · Secret ${endpoint.secretHint}${endpoint.createdBy ? ` · Added by ${endpoint.createdBy}` : ""}`
-                          : " · Edit it from the agent's Manage panel"}
+                        {endpointDescription(endpoint)}
                       </p>
                     </div>
                     <div
@@ -533,11 +591,7 @@ export default function WebhooksSection() {
                           <span
                             className={cn(
                               "h-2 w-2 rounded-full",
-                              delivery.statusCode != null && delivery.statusCode >= 200 && delivery.statusCode < 300
-                                ? "bg-green-500"
-                                : delivery.status === "pending" || delivery.status === "processing"
-                                  ? "bg-text-light-gray"
-                                  : "bg-red-400",
+                              deliveryStatusClass(delivery),
                             )}
                           />
                           <span className="font-semibold">{delivery.event}</span>
@@ -547,11 +601,9 @@ export default function WebhooksSection() {
                         </div>
                         <p className="mt-1 text-micro text-text-light-gray">
                           {new Date(delivery.attemptedAt).toLocaleString()}
-                          {delivery.durationMs != null
-                            ? ` · ${delivery.durationMs < 1000 ? `${delivery.durationMs} ms` : `${(delivery.durationMs / 1000).toFixed(1)} s`}`
-                            : ""}
+                          {deliveryDuration(delivery.durationMs)}
                           {delivery.attemptNumber > 0
-                            ? ` · attempt ${delivery.attemptNumber} of 6`
+                            ? ` · attempt ${delivery.attemptNumber} of ${BOARD_WEBHOOK_MAX_ATTEMPTS}`
                             : ""}
                           {delivery.payloadHash
                             ? ` · payload ${delivery.payloadHash.slice(0, 4)}…${delivery.payloadHash.slice(-4)}`
@@ -595,7 +647,7 @@ export default function WebhooksSection() {
           )}
           <p className="px-2 text-micro text-text-light-gray">
             Retry queues the event with a fresh delivery ID. Automatic retries
-            back off across 6 attempts over about 1 hour.
+            back off across {BOARD_WEBHOOK_MAX_ATTEMPTS} attempts over about 1 hour.
           </p>
         </SettingsCard>
       )}
@@ -671,13 +723,13 @@ export default function WebhooksSection() {
             </div>
             <span className="text-micro text-text-light-gray">
               {events.length === EVENTS.length
-                ? "All six selected. Tap to switch one off."
+                ? `All ${EVENTS.length} selected. Tap to switch one off.`
                 : `${events.length} of ${EVENTS.length} selected.`}
             </span>
           </fieldset>
           <button
             className="ml-2 inline-flex w-fit items-center gap-2 rounded-lg bg-active-modal-element px-4 py-2 font-semibold transition hover:brightness-110 disabled:cursor-not-allowed disabled:text-text-light-gray"
-            disabled={busy === "create" || !teamId || !url.trim() || events.length === 0}
+            disabled={Boolean(busy) || !teamId || !url.trim() || events.length === 0}
             type="submit"
           >
             {busy === "create" ? (

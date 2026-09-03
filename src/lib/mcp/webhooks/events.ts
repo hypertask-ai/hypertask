@@ -17,6 +17,17 @@ export const WEBHOOK_EVENTS = [
   'task.updated',
 ] as const
 
+export const WORKSPACE_WEBHOOK_EVENTS = [
+  'task.created',
+  'task.updated',
+  'task.assigned',
+  'task.unassigned',
+  'comment.created',
+  'comment.mention',
+] as const
+
+export const BOARD_WEBHOOK_MAX_ATTEMPTS = 6
+
 export type WebhookEventType = (typeof WEBHOOK_EVENTS)[number]
 
 export type WebhookActor = {

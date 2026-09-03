@@ -2,9 +2,87 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
+let jitiEntryId = 0;
+
+function stubModule(relativePath, exports) {
+  const filename = path.join(root, relativePath);
+  require.cache[filename] = {
+    id: filename,
+    filename,
+    loaded: true,
+    exports,
+  };
+}
+
+function loadSettingsRoute(session) {
+  const modulePaths = [
+    "src/app/api/settings/webhooks/route.ts",
+    "src/lib/auth/getSessionUser.ts",
+    "src/lib/mcp/webhooks/workspaceManagement.ts",
+  ];
+  for (const relativePath of modulePaths) {
+    delete require.cache[path.join(root, relativePath)];
+  }
+
+  const calls = [];
+  class WorkspaceWebhookError extends Error {
+    constructor(message, status = 400, field) {
+      super(message);
+      this.status = status;
+      this.field = field;
+    }
+  }
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => session,
+  });
+  const operation = (name) => async () => {
+    calls.push(name);
+    return { success: true };
+  };
+  stubModule("src/lib/mcp/webhooks/workspaceManagement.ts", {
+    WorkspaceWebhookError,
+    createWorkspaceWebhook: operation("create"),
+    deleteWorkspaceWebhook: operation("delete"),
+    listWorkspaceWebhooks: operation("list"),
+    retryWorkspaceWebhook: operation("retry"),
+    rotateWorkspaceWebhookSecret: operation("rotate"),
+    setWorkspaceWebhookActive: operation("active"),
+    testWorkspaceWebhook: operation("test"),
+  });
+  const jiti = require("jiti")(
+    path.join(root, `tests/jiti-workspace-webhooks-${++jitiEntryId}.cjs`),
+    {
+      alias: { "@": path.join(root, "src") },
+      cache: false,
+      interopDefault: true,
+    },
+  );
+  return {
+    ...jiti(path.join(root, "src/app/api/settings/webhooks/route.ts")),
+    calls,
+  };
+}
+
+function mutationRequest(method, origin) {
+  return new NextRequest("https://app.hypertask.ai/api/settings/webhooks", {
+    method,
+    body: JSON.stringify({
+      active: true,
+      events: ["task.created"],
+      id: "endpoint-1",
+      teamId: "team-1",
+      url: "https://example.test/webhook",
+    }),
+    headers: {
+      "content-type": "application/json",
+      ...(origin ? { origin } : {}),
+    },
+  });
+}
 
 test("workspace webhook scope is exclusive and delivery attempts are durable", () => {
   const schema = read("src/prisma/schema.prisma");
@@ -37,12 +115,39 @@ test("settings mutations require session and same-origin checks", () => {
   assert.match(route, /Cache-Control', 'private, no-store'/);
 });
 
+test("settings mutations reject missing sessions before calling the service", async () => {
+  for (const method of ["POST", "PATCH", "DELETE"]) {
+    const route = loadSettingsRoute(null);
+    const response = await route[method](
+      mutationRequest(method, "https://app.hypertask.ai"),
+    );
+    assert.equal(response.status, 401, method);
+    assert.deepEqual(route.calls, [], method);
+  }
+});
+
+test("settings mutations reject cross-origin requests before calling the service", async () => {
+  for (const method of ["POST", "PATCH", "DELETE"]) {
+    const route = loadSettingsRoute({ userId: 6 });
+    const response = await route[method](
+      mutationRequest(method, "https://attacker.example"),
+    );
+    assert.equal(response.status, 403, method);
+    assert.deepEqual(route.calls, [], method);
+  }
+});
+
 test("workspace management is owner-scoped and agent rows have no mutation path", () => {
   const service = read("src/lib/mcp/webhooks/workspaceManagement.ts");
 
   assert.match(service, /where: \{ id: teamId, googleAccount: \{ userId \} \}/);
   assert.match(service, /OR: \[\{ teamId, projectId: null \}, \{ project: \{ teamId \} \}\]/);
   assert.match(service, /where: \{ id: projectId, teamId: input\.teamId \}/);
+  assert.match(service, /\^\[1-9\]\\d\*\$\/\.test\(input\.projectId\)/);
+  assert.match(
+    service,
+    /idempotencyKey: `\$\{subscription\.id\}:\$\{deliveryId\}:\$\{idempotencyKey\}`/,
+  );
   assert.match(service, /agent:[\s\S]*?userId: input\.userId[\s\S]*?members:/);
   assert.match(service, /kind: 'agent' as const/);
   assert.match(
@@ -56,6 +161,7 @@ test("accepted Settings surface exposes six filters and read-only agent controls
   const navigation = read("src/components/Modals/Settings/settingsNavigation.ts");
   const shell = read("src/components/Modals/Settings/SettingsShell.tsx");
   const section = read("src/components/Modals/Settings/WebhooksSection.tsx");
+  const eventContract = read("src/lib/mcp/webhooks/events.ts");
 
   assert.ok(
     navigation.indexOf('{ id: "webhooks", label: "Webhooks" }') >
@@ -70,8 +176,9 @@ test("accepted Settings surface exposes six filters and read-only agent controls
     "comment.created",
     "comment.mention",
   ]) {
-    assert.match(section, new RegExp(`"${event.replace(".", "\\.")}"`));
+    assert.match(eventContract, new RegExp(`'${event.replace(".", "\\.")}'`));
   }
+  assert.match(section, /const EVENTS = WORKSPACE_WEBHOOK_EVENTS/);
   assert.match(section, /How webhooks work/);
   assert.match(section, /Send test/);
   assert.match(section, /Rotate secret/);
