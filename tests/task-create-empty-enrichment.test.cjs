@@ -115,6 +115,7 @@ function loadCreateRoute() {
       }),
     },
     project: { findFirst: async () => ({ id: 15 }) },
+    task: { findFirst: async () => ({ ranking: "rank" }) },
     section: {
       findUnique: async () => ({ section_title: "Backlog" }),
       findFirst: async ({ where }) =>
@@ -237,6 +238,49 @@ async function createTask(handler, body, response) {
   );
 }
 
+function loadNotificationRoute() {
+  return execute(
+    compile("src/pages/api/notifications/getAll.ts"),
+    {
+      "@/utils/controllers/notifications/getAll": {
+        __esModule: true,
+        default: async () => ({ status: 200, json: [] }),
+      },
+      "@/lib/auth/getSessionUser": {
+        getSessionUser: async () => ({ userId: 6 }),
+      },
+    },
+  ).default;
+}
+
+test("latency probe GET routes report handler timing", async () => {
+  const createResponse = responseHarness();
+  await loadCreateRoute().handler(
+    {
+      method: "GET",
+      headers: {},
+      query: { projectId: "15", position: "bottom" },
+    },
+    createResponse.response,
+  );
+  assert.equal(createResponse.result().status, 200);
+  assert.match(
+    createResponse.result().headers["Server-Timing"],
+    /^total;dur=\d+\.\d$/,
+  );
+
+  const inboxResponse = responseHarness();
+  await loadNotificationRoute()(
+    { method: "GET", headers: {} },
+    inboxResponse.response,
+  );
+  assert.equal(inboxResponse.result().status, 200);
+  assert.match(
+    inboxResponse.result().headers["Server-Timing"],
+    /^total;dur=\d+\.\d$/,
+  );
+});
+
 test("plain task creation skips empty relation and URL enrichment", async () => {
   const { handler, calls, background } = loadCreateRoute();
   const response = responseHarness();
@@ -246,6 +290,10 @@ test("plain task creation skips empty relation and URL enrichment", async () => 
 
   const result = response.result();
   assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.match(
+    result.headers["Server-Timing"],
+    /^validate;dur=\d+\.\d, task-create;dur=\d+\.\d, enrich;dur=\d+\.\d, total;dur=\d+\.\d$/,
+  );
   assert.deepEqual(calls, { relations: 0, urls: 0 });
   assert.deepEqual(result.body.newTask.relatedTasks, {
     status: 200,
