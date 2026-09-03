@@ -164,9 +164,19 @@ const handler: NextApiHandler = async (
           newTask?.title !== undefined ||
           newTask?.status !== undefined
         ) {
-          void broadcastTaskChange((response.json as any)?.id ?? newTask?.id, {
-            originUserId: currentUser?.id,
-          });
+          try {
+            await broadcastTaskChange(
+              (response.json as any)?.id ?? newTask?.id,
+              {
+                originUserId: currentUser?.id,
+              },
+            );
+          } catch (error) {
+            console.warn(
+              "[tasks/single] task realtime broadcast failed",
+              error,
+            );
+          }
         }
 
         // HTPR-3916: a ticket mentioned in the DESCRIPTION never became a

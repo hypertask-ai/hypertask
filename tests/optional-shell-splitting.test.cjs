@@ -37,6 +37,17 @@ test("closed optional shell features stay behind dynamic imports", () => {
   }
 });
 
+test("task detail starts both required chat chunks without a serial waterfall", () => {
+  assert.match(provider, /const AIChatLayout = lazy\(loadAIChatLayout\)/);
+  assert.match(provider, /const ChatProvider = lazy\(loadChatProvider\)/);
+  assert.match(
+    provider,
+    /if \(isTaskDetailPage\) \{[\s\S]*?Promise\.all\(\[loadChatProvider\(\), loadAIChatLayout\(\)\]\)/,
+  );
+  assert.doesNotMatch(provider, /import AIChatLayout from/);
+  assert.doesNotMatch(provider, /import \{ ChatProvider \} from/);
+});
+
 test("global task creation does not request its chunk while closed", () => {
   assert.match(
     provider,

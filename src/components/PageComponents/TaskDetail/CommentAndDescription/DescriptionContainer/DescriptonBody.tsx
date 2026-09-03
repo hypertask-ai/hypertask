@@ -7,12 +7,10 @@ import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { IDraft } from "@/models/model";
 import { isMeaningfulDescriptionDraft } from "@/hooks/General/useHasDrafts";
-import dynamic from "next/dynamic";
 import { useContext, useMemo } from "react";
 import { HighlightMenu } from "../ContextMenu";
 import QuoteButton from "../ContextMenu/QuoteButton";
-
-const Tiptap = dynamic(() => import("@/components/RTE/TipTapTaskDetail"));
+import Tiptap from "@/components/RTE/TipTapTaskDetail";
 
 const DescriptonBody = ({ draftTQ }: any) => {
   const isMbl = useContext(MobileViewContext);

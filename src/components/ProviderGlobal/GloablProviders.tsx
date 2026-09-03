@@ -184,12 +184,21 @@ import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShor
 // React.lazy is intentional here. next/dynamic emits route preload hints for
 // rendered boundaries, which fetched these chunks while the chat was closed.
 // The chat runtime should not be requested until an open intent or /chat route.
-const AIChatLayout = lazy(() => import("../AI_CHAT/AI_Chat_Layout"));
-const ChatProvider = lazy(() =>
-  import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context").then(
-    (module) => ({ default: module.ChatProvider }),
-  ),
-);
+type AIChatLayoutModule = typeof import("../AI_CHAT/AI_Chat_Layout");
+type ChatProviderModule = {
+  default: (typeof import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"))["ChatProvider"];
+};
+let aiChatLayoutPromise: Promise<AIChatLayoutModule> | null = null;
+let chatProviderPromise: Promise<ChatProviderModule> | null = null;
+const loadAIChatLayout = () =>
+  (aiChatLayoutPromise ??= import("../AI_CHAT/AI_Chat_Layout"));
+const loadChatProvider = () =>
+  (chatProviderPromise ??=
+    import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context").then(
+      (module) => ({ default: module.ChatProvider }),
+    ));
+const AIChatLayout = lazy(loadAIChatLayout);
+const ChatProvider = lazy(loadChatProvider);
 import {
   prefixUseGetAnnouncements,
   useGetAnnouncements,
@@ -384,6 +393,11 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
     isFullScreenChat ||
     isTaskDetailPage ||
     showAiChatInterface;
+  if (isTaskDetailPage) {
+    // This provider wraps the task itself, so starting its sibling layout now
+    // prevents a provider -> layout -> editor download waterfall.
+    void Promise.all([loadChatProvider(), loadAIChatLayout()]).catch(() => {});
+  }
   // https://app.hypertask.ai/detail/project-15/5424: clear both legacy and
   // user-scoped tutorial state without ever loading the disabled runtime. This
   // prevents a returning tab from reviving the overlay after the entry points
