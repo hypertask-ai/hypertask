@@ -375,6 +375,9 @@ const AgentChatClient = (props: IProp) => {
   // Same definition as the route's `awaiting`: the last message is ours, so
   // the ball is in the agent's court.
   const awaiting = lastMessage?.role === "human";
+  // A failed delivery (deliveryNotice) leaves the ball with us: the composer
+  // must reopen so the user can send again, and the poll must stay stopped.
+  const composerLocked = awaiting && !deliveryNotice;
 
   // Record when the current wait began so the poll below can time out; a new
   // wait for the same session (a fresh send) restarts the clock.
@@ -576,7 +579,7 @@ const AgentChatClient = (props: IProp) => {
     <aside
       className={cn(
         "flex flex-col min-h-0",
-        isNarrow ? "flex-1" : "w-[300px] shrink-0 border-r-[1.3px] border-light-black-border-1",
+        isNarrow ? "flex-1" : "w-[300px] shrink-0 border-r border-comment-description-border",
       )}
     >
       <div className="px-3 pt-4 pb-2">
@@ -625,7 +628,7 @@ const AgentChatClient = (props: IProp) => {
 
   const chatPane = selectedAgent ? (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex shrink-0 items-center gap-2.5 border-b-[1.3px] border-light-black-border-1 px-4 py-3">
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-comment-description-border px-4 py-3">
         {isNarrow && (
           <button
             type="button"
@@ -723,9 +726,9 @@ const AgentChatClient = (props: IProp) => {
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleComposerKeyDown}
                 rows={2}
-                disabled={awaiting}
+                disabled={composerLocked}
                 placeholder={
-                  awaiting
+                  composerLocked
                     ? `${selectedAgent.displayName} is working on a reply`
                     : `Message ${selectedAgent.displayName}`
                 }
@@ -735,8 +738,8 @@ const AgentChatClient = (props: IProp) => {
               <button
                 type="button"
                 onClick={() => void handleSend()}
-                disabled={awaiting || !draft.trim() || sending}
-                className="rounded-[4px] bg-hypertasks-purple px-3 py-2 text-[13px] font-medium text-white disabled:opacity-50"
+                disabled={composerLocked || !draft.trim() || sending}
+                className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-[13px] font-medium"
               >
                 Send
               </button>
@@ -762,7 +765,7 @@ const AgentChatClient = (props: IProp) => {
           onClick={() => setDetailsSheetOpen(false)}
           className="absolute inset-0 bg-black/60"
         />
-        <div className="absolute right-0 top-0 h-full w-[85%] max-w-[380px] overflow-y-auto bg-pageBackground shadow-2xl">
+        <div className="absolute right-0 top-0 h-full w-[85%] max-w-[380px] overflow-y-auto bg-pageBackground shadow-md">
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-[13px] font-medium text-text-light-gray">
               Agent details
@@ -795,7 +798,7 @@ const AgentChatClient = (props: IProp) => {
       {rosterPane}
       {chatPane}
       {selectedAgent && !detailsCollapsed && (
-        <aside className="min-h-0 w-[380px] shrink-0 overflow-y-auto border-l-[1.3px] border-light-black-border-1">
+        <aside className="min-h-0 w-[380px] shrink-0 overflow-y-auto border-l border-comment-description-border">
           {detailsContent}
         </aside>
       )}
