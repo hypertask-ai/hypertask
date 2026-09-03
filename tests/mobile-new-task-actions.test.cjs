@@ -108,9 +108,9 @@ test("recent mobile waveform, dictation, and touch-target fixes remain", () => {
   );
 });
 
-test("description dictation uses the primary button until Save becomes primary", () => {
+test("description dictation uses the white button until Save becomes primary", () => {
   assert.match(mobileBar, /mobilePresentation="prominent"/);
-  assert.match(mobileBar, /mobilePrimaryTone="primary"/);
+  assert.doesNotMatch(mobileBar, /mobilePrimaryTone=/);
   assert.match(mobileBar, /ariaLabel="Dictate description"/);
   assert.match(
     audioButtonSource,
@@ -124,16 +124,15 @@ test("description dictation uses the primary button until Save becomes primary",
     isMobileAiChat: false,
     isProcessing: false,
     mobilePresentation: "prominent",
-    primaryTone: "primary",
   };
   const empty = mobileMicPresentation(base);
   const typed = mobileMicPresentation({ ...base, hasText: true });
 
   assert.equal(empty.prominent, true);
-  assert.match(empty.className, /bg-shadcn-primary/);
-  assert.match(empty.className, /text-primary-foreground/);
+  assert.match(empty.className, /bg-white-black/);
+  assert.match(empty.className, /text-white-black-inverted/);
   assert.equal(typed.prominent, true);
-  assert.doesNotMatch(typed.className, /bg-shadcn-primary/);
+  assert.doesNotMatch(typed.className, /bg-white-black/);
   assert.match(typed.className, /text-icon-dark-gray/);
 });
 

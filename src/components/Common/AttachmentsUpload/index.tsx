@@ -999,7 +999,6 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           dictationCoordinator={dictationCoordinator}
           ariaLabel="Dictate description"
           mobilePresentation="prominent"
-          mobilePrimaryTone="primary"
           className={isDictating ? undefined : MOBILE_TARGET}
           // order lives on the wrapper: only the .audio-recorder root is a
           // direct child of this flex row, so order on className is a no-op.
