@@ -124,12 +124,15 @@ G-chords (`G` then second key): `I` inbox, `B` task board, `C` calendar, `A` all
 
 | Key | Action | Handler |
 |---|---|---|
-| `Mod+TAB` / `Mod+Shift+TAB` (fallback `Alt+ArrowDown` / `Alt+ArrowUp`) | Cycle the filtered agent roster, wraps around. No-ops while the composer is focused with an unsent draft. | `AgentChatClient.tsx` window keydown |
-| `Mod+ENTER` | Send (plain `ENTER` already sends; `Shift+ENTER` newline) | `AgentChatClient.tsx` composer keydown |
-| `Ctrl+O` | Open every link (URL or ticket id) in the latest message that has one, up to 5 tabs | `AgentChatClient.tsx` window keydown |
+| `Mod+TAB` / `Mod+Shift+TAB` (fallback `Alt+ArrowDown` / `Alt+ArrowUp`) | Cycle the filtered agent roster, wraps around. No-ops while the composer is focused with an unsent draft. | `AgentChatClient.tsx` window keydown; also `AllCommands.ts` "Next/Previous agent" (Ctrl+K, only while this page is open) |
+| `Mod+ENTER` | Send (plain `ENTER` already sends; `Shift+ENTER` newline) | `AgentChatClient.tsx` composer keydown; also `AllCommands.ts` "Send message" |
+| `Ctrl+O` | Open every link (URL or ticket id) in the latest message that has one, up to 5 tabs | `AgentChatClient.tsx` window keydown; also `AllCommands.ts` "Open all links in latest reply" |
 | `@` in composer | Task-search popover (arrows move, Enter/Tab picks, Esc closes) | `AgentChatClient.tsx` composer keydown |
+| (palette only, no key) | Add agent | `AllCommands.ts` "Add agent" |
 
 `Mod+TAB` is advertised on the cheatsheet, but browsers (and the OS on Mac) reserve Ctrl/Cmd+Tab for switching tabs/apps before it reaches the page, so `Alt+ArrowDown`/`Alt+ArrowUp` is the binding actually guaranteed to work; the cheatsheet labels both.
+
+The four bindings above are also registered in `AllCommands.ts` as a page-scoped "Agent Chat" command group (`agentChatOn`, gated on `pathname.startsWith("/agents/chat")` the same way `onCalendar` gates calendar-only entries). Each entry dispatches a `window` CustomEvent (`src/lib/agents/chatPaletteCommands.ts`, `AGENT_CHAT_COMMAND_EVENT`) rather than duplicating the roster/composer state the actions need; `AgentChatClient.tsx` listens for it and calls the same handlers the keydown listener uses. `@` in the composer stays handler-only below: it isn't a discrete action, it's a live-typing popover with no equivalent "do this once" command to expose.
 
 ## Handler-only bindings (easy to miss — NOT in the palette)
 
@@ -143,6 +146,6 @@ These fire from raw keydown listeners and will NOT show up when scanning `AllCom
 - `C` / `W` in TableView (`TableView.tsx`)
 - `1-7` app shell surfaces + `]` AI chat synonym + `[` sidebar collapse/expand (`useAppShellSurfaceShortcuts.ts`)
 - `;` snippets (TaskDetailComp)
-- Agent Chat's whole keyboard map above (`AgentChatClient.tsx`) — none of it is in `AllCommands.ts`; it's cheatsheet + docs only, same as the other handler-only rows on this list. These bindings are side effects of a component-local keydown listener (roster cycling, send, open-links, the `@` popover), not palette-invokable actions, so there's no `CommandMode` for the palette to dispatch them through — same reason every other row in this section is absent from `AllCommands.ts` too. The public `docs.hypertask.ai` shortcuts page lives in a separate repo and isn't reachable from here; this file is the source of truth this repo can update.
+- Agent Chat's `@` mention popover (`AgentChatClient.tsx` composer keydown) — a live-typing autocomplete, not a discrete action, so there's no `CommandMode` for it. The rest of Agent Chat's keyboard map (roster cycle, send, open-links, add agent) IS in `AllCommands.ts` now, via a page-scoped command group that dispatches a `window` CustomEvent back into the component (see Agent Chat above).
 
 When auditing whether a key is free, grep for the letter in ALL of: `src/app`, `src/components`, `src/hooks`, `src/lib/contexts` — the palette alone is not the truth.

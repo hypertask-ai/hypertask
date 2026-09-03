@@ -27,6 +27,7 @@ import {
   type IShowHypertaskHTC,
 } from "@/store";
 import { CommandMode } from "@/models/enums";
+import { dispatchAgentChatCommand } from "@/lib/agents/chatPaletteCommands";
 import { toggleProjectBoardZoom } from "@/hooks/Kanban/mobileBoardGestures";
 import {
   IAgent,
@@ -1265,6 +1266,30 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       case CommandMode.GoToAgentChat:
         boardCloseHandler();
         router.push("/agents/chat");
+        return;
+      // Agent Chat is already open when these fire (the palette entries only
+      // show while onAgentChat is true); AgentChatClient owns the roster,
+      // composer, and mention state these actually need, so this just hands
+      // the request off via CustomEvent instead of duplicating that state.
+      case CommandMode.AgentChatNextAgent:
+        boardCloseHandler();
+        dispatchAgentChatCommand("next-agent");
+        return;
+      case CommandMode.AgentChatPreviousAgent:
+        boardCloseHandler();
+        dispatchAgentChatCommand("previous-agent");
+        return;
+      case CommandMode.AgentChatSendMessage:
+        boardCloseHandler();
+        dispatchAgentChatCommand("send-message");
+        return;
+      case CommandMode.AgentChatOpenLinks:
+        boardCloseHandler();
+        dispatchAgentChatCommand("open-links");
+        return;
+      case CommandMode.AgentChatAddAgent:
+        boardCloseHandler();
+        dispatchAgentChatCommand("add-agent");
         return;
       case CommandMode.DisabledAgents:
         boardCloseHandler();

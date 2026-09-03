@@ -82,6 +82,7 @@ const Commands = (props: Props) => {
   // Applying these off the calendar is a no-op: the calendar hydrates its
   // settings from the applied saved view on mount and overwrites them.
   const onCalendar = !!pathname?.startsWith("/calendar");
+  const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -116,6 +117,7 @@ const Commands = (props: Props) => {
       context: "Others",
       ...contextOptions,
       appShellRailOn,
+      agentChatOn: onAgentChat,
       projectOptions: {
         stalenessEnabled: !!currentProject?.stalenessEnabled,
         stalenessViewEnabled: getActiveStalenessFromProject(currentProject),
@@ -233,6 +235,7 @@ const Commands = (props: Props) => {
     currentProject,
     frequentlyUsed,
     isMobile,
+    onAgentChat,
     onCalendar,
     projects,
     showByokApiKeys,

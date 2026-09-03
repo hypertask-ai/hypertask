@@ -3,6 +3,10 @@
 
 import { AGENT_CHAT_EVENT } from "@/lib/realtime/shared";
 import {
+  AGENT_CHAT_COMMAND_EVENT,
+  type TAgentChatCommand,
+} from "@/lib/agents/chatPaletteCommands";
+import {
   useCallback,
   useContext,
   useEffect,
@@ -652,6 +656,10 @@ const AgentChatClient = (props: IProp) => {
       setSending(false);
     }
   };
+  // Stable reference for the palette-command listener below, which shouldn't
+  // re-subscribe on every render just because handleSend is a new closure.
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
 
   // Ctrl+Tab / Ctrl+Shift+Tab (and the Alt+ArrowDown/Up fallback, since
   // browsers reserve Ctrl+Tab for switching tabs) step through the currently
@@ -668,6 +676,21 @@ const AgentChatClient = (props: IProp) => {
     },
     [roster, selectedId, selectAgent],
   );
+
+  // Ctrl+O and the palette's "Open all links in latest reply" both need this.
+  const openLatestReplyLinks = useCallback(() => {
+    const latestWithLinks = [...(messages ?? [])]
+      .reverse()
+      .find(
+        (m) => extractMessageLinks(m.content, projectIdForPrefix).length > 0,
+      );
+    if (!latestWithLinks) return;
+    const links = extractMessageLinks(
+      latestWithLinks.content,
+      projectIdForPrefix,
+    ).slice(0, 5);
+    for (const href of links) window.open(href, "_blank", "noopener");
+  }, [messages, projectIdForPrefix]);
 
   const dismissMention = () => {
     setMentionQuery(null);
@@ -918,22 +941,41 @@ const AgentChatClient = (props: IProp) => {
       // Ctrl+O otherwise opens the browser's file picker.
       if (e.ctrlKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
-        const latestWithLinks = [...(messages ?? [])]
-          .reverse()
-          .find(
-            (m) => extractMessageLinks(m.content, projectIdForPrefix).length > 0,
-          );
-        if (!latestWithLinks) return;
-        const links = extractMessageLinks(
-          latestWithLinks.content,
-          projectIdForPrefix,
-        ).slice(0, 5);
-        for (const href of links) window.open(href, "_blank", "noopener");
+        openLatestReplyLinks();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [overlayOpen, cycleAgent, messages, projectIdForPrefix]);
+  }, [overlayOpen, cycleAgent, openLatestReplyLinks]);
+
+  // Ctrl+K palette bridge: the "Agent Chat" command group (AllCommands.ts,
+  // only shown while this page is open) dispatches these instead of trying
+  // to reach into this component's state from the palette's dispatcher.
+  useEffect(() => {
+    const onPaletteCommand = (e: Event) => {
+      const detail = (e as CustomEvent<TAgentChatCommand>).detail;
+      switch (detail) {
+        case "next-agent":
+          cycleAgent(1);
+          return;
+        case "previous-agent":
+          cycleAgent(-1);
+          return;
+        case "send-message":
+          void handleSendRef.current();
+          return;
+        case "open-links":
+          openLatestReplyLinks();
+          return;
+        case "add-agent":
+          setShowCreateAgent(true);
+          return;
+      }
+    };
+    window.addEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
+    return () =>
+      window.removeEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
+  }, [cycleAgent, openLatestReplyLinks]);
 
   // Put the cursor in the composer the moment it becomes usable: on initial
   // load (deep link or roster click) and again after a message sends, so
