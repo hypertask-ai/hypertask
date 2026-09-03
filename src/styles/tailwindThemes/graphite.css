@@ -184,14 +184,17 @@ html.graphite {
   background: transparent;
 }
 
+/* Tiles sit on the comment card, so they use the card surface token instead of
+   the modal surface — otherwise each thumbnail reads as a separate block
+   (HTPR-5978). Hover steps one rung up the elevation ladder for feedback. */
 .graphite .attachment-tile {
-  background: #2c2f36 !important;
+  background: var(--bg-comment-description) !important;
   border: 1px solid #363b44;
   color: #ffffff;
 }
 
 .graphite .attachment-tile:hover {
-  background: #33373e !important;
+  background: var(--bg-modalBackground) !important;
 }
 
 .graphite .attachment-tile-name {
