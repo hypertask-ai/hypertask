@@ -200,19 +200,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           );
         })}
       </div>
-      {/* HTPR-6037: pin the composer to the bottom of the pane instead of
-          letting it float mid-page after a short description/comment thread.
-          `mt-auto` pushes it down to the bottom of this flex column when the
-          content above is shorter than the pane; `sticky bottom-0` then keeps
-          it pinned while that content scrolls past on a long thread. Works
-          for both the window-scrolled page and the embedded (side panel)
-          scroll container, since sticky resolves against whichever ancestor
-          is actually scrollable. */}
-      {!_mbl && (
-        <div className="sticky bottom-0 z-[2100] mt-auto w-full shrink-0 bg-cardBackground">
-          <NewCommentComponent />
-        </div>
-      )}
+      {!_mbl && <NewCommentComponent />}
       {/* HTPR-5513: trailing space below the composer lives INSIDE this column
           so the properties rail's containing block (the column + rail row)
           reaches the end of the page. Put it on the page wrapper instead and
