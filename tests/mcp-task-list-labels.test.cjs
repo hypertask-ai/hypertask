@@ -71,6 +71,17 @@ test("the MCP task list selects labels in the paginated task query", () => {
   );
 });
 
+test("task list counts only assignees visible to the viewer", () => {
+  const listQueryStart = routeSource.indexOf("// Get tasks");
+  const listQueryEnd = routeSource.indexOf("// Get metadata counts");
+  const listQuery = routeSource.slice(listQueryStart, listQueryEnd);
+
+  assert.match(
+    listQuery,
+    /_count:\s*{\s*select:\s*{\s*assignees:\s*{\s*where:\s*{\s*OR:\s*\[\s*{ agentId: null },\s*{ agent: accessibleAgentWhere\(user\.id\) }/,
+  );
+});
+
 test("list and detail labels share the exact id/name mapping", () => {
   const { mapMcpTaskLabel, mapTaskToMcpGetResponse } = loadMappers();
   const taskLabels = [

@@ -75,6 +75,7 @@ import {
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
+import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import {
   listOwnedAgents,
   type AgentManagementDatabase,
@@ -4259,7 +4260,14 @@ function buildTools(
               agent: { select: mcpVisibleAgentSelect(user.id) },
               _count: {
                 select: {
-                  assignees: true,
+                  assignees: {
+                    where: {
+                      OR: [
+                        { agentId: null },
+                        { agent: accessibleAgentWhere(user.id) },
+                      ],
+                    },
+                  },
                   taskLabels: true,
                   comments: mcpTaskUserCommentCount,
                 },
