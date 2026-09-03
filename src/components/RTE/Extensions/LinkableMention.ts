@@ -12,7 +12,11 @@ export const LinkableMention = Mention.extend({
       ...parentAttributes,
       uniqueIndex: { default: "" },
       projectId: { default: "" },
-      text: { default: "" },
+      text: {
+        default: "",
+        parseHTML: (element) =>
+          element.getAttribute("text") || element.textContent || "",
+      },
     };
   },
 
