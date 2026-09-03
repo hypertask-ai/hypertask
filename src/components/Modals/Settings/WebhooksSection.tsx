@@ -34,9 +34,8 @@ const API_URL = "/api/settings/webhooks";
 const EVENTS = WORKSPACE_WEBHOOK_EVENTS;
 
 const inputClass =
-  "h-10 w-full rounded-lg border-0 bg-comment-description px-3 text-dense font-medium text-white-black outline-none transition placeholder:text-text-light-gray focus:bg-modalBackground";
-const chipClass =
-  "rounded-[4px] bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray";
+  "h-10 w-full rounded-[4px] border-0 bg-comment-description px-3 text-dense font-medium text-white-black outline-none transition placeholder:text-text-light-gray focus:bg-modalBackground";
+const metadataClass = "text-micro font-medium text-text-light-gray";
 
 type ProjectRef = { id: number; name: string } | null;
 type WorkspaceEndpoint = {
@@ -531,13 +530,13 @@ export default function WebhooksSection() {
                         <p className="font-semibold">{endpointName(endpoint)}</p>
                         {endpoint.kind === "agent" ? (
                           <>
-                            <span className={chipClass}>Owned by agent {endpoint.agent.displayName}</span>
-                            <span className={chipClass}>{endpoint.events.length} events</span>
+                            <span className={metadataClass}>Owned by agent {endpoint.agent.displayName}</span>
+                            <span className={metadataClass}>{endpoint.events.length} events</span>
                           </>
                         ) : (
                           <>
-                            <span className={chipClass}>{endpoint.events.length} events</span>
-                            <span className={chipClass}>
+                            <span className={metadataClass}>{endpoint.events.length} events</span>
+                            <span className={metadataClass}>
                               {endpoint.project?.name ?? "All boards"}
                             </span>
                           </>
@@ -635,7 +634,7 @@ export default function WebhooksSection() {
                             )}
                           />
                           <span className="font-semibold">{delivery.event}</span>
-                          <span className={chipClass}>
+                          <span className={metadataClass}>
                             {statusText(delivery.statusCode, delivery.status)}
                           </span>
                         </div>
@@ -778,7 +777,7 @@ export default function WebhooksSection() {
             </span>
           </fieldset>
           <button
-            className="ml-2 inline-flex w-fit items-center gap-2 rounded-lg bg-active-modal-element px-4 py-2 font-semibold transition hover:brightness-110 disabled:cursor-not-allowed disabled:text-text-light-gray"
+            className="ml-2 inline-flex w-fit items-center gap-2 rounded-[4px] bg-active-modal-element px-4 py-2 font-semibold transition hover:brightness-110 disabled:cursor-not-allowed disabled:text-text-light-gray"
             disabled={Boolean(busy) || !teamId || !url.trim() || events.length === 0}
             type="submit"
           >

@@ -308,6 +308,12 @@ test("accepted Settings surface exposes six filters and read-only agent controls
     assert.match(eventContract, new RegExp(`'${event.replace(".", "\\.")}'`));
   }
   assert.match(section, /const EVENTS = WORKSPACE_WEBHOOK_EVENTS/);
+  assert.match(section, /const inputClass =\s*"h-10 w-full rounded-\[4px\]/);
+  assert.match(
+    section,
+    /const metadataClass = "text-micro font-medium text-text-light-gray"/,
+  );
+  assert.doesNotMatch(section, /const chipClass|className=\{chipClass\}/);
   assert.match(section, /How webhooks work/);
   assert.match(section, /Send test/);
   assert.match(section, /Rotate secret/);
