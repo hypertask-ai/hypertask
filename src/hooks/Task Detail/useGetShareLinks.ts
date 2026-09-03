@@ -6,12 +6,14 @@ export const useGetTaskShareLinks = (
   taskId: number,
   projectId: number,
   userId: number,
-  initialData?: any
+  initialData?: any,
+  enabled = true
 ) => {
   return useQuery({
     queryKey: ["task-share-links", taskId, userId, projectId],
     queryFn: () => getTaskShareLink(taskId, projectId, userId),
     gcTime: 60 * MINUTE,
     refetchOnMount: true,
+    enabled,
   });
 };

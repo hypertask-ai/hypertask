@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { currentProjectAtom, inViewObjectAtom } from "@/store"
+import { currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
@@ -91,6 +91,12 @@ export const WelcomeScreen = () => {
   const ticketRef = taskId
     ? inViewObject.taskTicketNumber || "this ticket"
     : null;
+  // Off the task-detail page this atom is always false, so only gate on it
+  // there - a board/inbox-opened chat isn't waiting on anything (HTPR-6047).
+  const taskDetailNonEssentialReady = useRecoilValue(
+    taskDetailNonEssentialReadyAtom
+  );
+  const taskDetailDataReady = !isDetailPage || taskDetailNonEssentialReady;
   const taskQuestions = useQuery({
     queryKey: ["task-questions", taskId],
     queryFn: async (): Promise<{ questions: string[] }> => {
@@ -107,7 +113,7 @@ export const WelcomeScreen = () => {
     },
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: Boolean(taskId),
+    enabled: Boolean(taskId) && taskDetailDataReady,
   });
   const taskSessions = useQuery({
     queryKey: ["task-sessions", taskId],
@@ -124,7 +130,7 @@ export const WelcomeScreen = () => {
       };
       return data.sessions;
     },
-    enabled: Boolean(taskId),
+    enabled: Boolean(taskId) && taskDetailDataReady,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
   });

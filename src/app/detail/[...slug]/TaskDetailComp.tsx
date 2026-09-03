@@ -32,6 +32,7 @@ import {
   showCreateTaskModalAtom,
   appShellRailAtom,
   tasksPlayListAtom,
+  taskDetailNonEssentialReadyAtom,
 } from "@/store";
 import axios from "axios";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
@@ -180,6 +181,9 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const { undoData, undoAction } = useUndoContext();
   const [currentProject, setCurrentProject] =
     useRecoilState(currentProjectAtom);
+  const [nonEssentialReady, setNonEssentialReady] = useRecoilState(
+    taskDetailNonEssentialReadyAtom
+  );
 
   const {
     currentId,
@@ -295,9 +299,14 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   // A second useGetAllComments call here used to fire its own request on
   // every task-detail open (HTPR-6047); the refetch below reaches that same
   // query instance instead of holding a redundant observer.
+  // Only prefetches the Move-task dropdown, which can't open before ready
+  // anyway; moveToColumn.tsx fetches its own copy (same query key) the moment
+  // it's actually opened, so deferring this prefetch drops nothing (HTPR-6047).
   const { data: sectionsForProjectTQ = [] } = useGetSectionsMoveTask(
     [taskDetailConfig.queryKeys.moveTaskModal, currentProject?.id],
-    currentProject?.id!
+    currentProject?.id!,
+    undefined,
+    nonEssentialReady
   );
   const { data: priorityForTaskTQ } = useGetPriorityForTask(
     [taskDetailConfig.queryKeys.priority, _parsedTask.id],
@@ -309,10 +318,15 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     _parsedTask.id,
     _parsedTask?.estimate
   );
+  // ShareTaskButton (inside the primary-actions readiness marker) only opens
+  // the share modal on click; it doesn't need the link pre-created. The write
+  // that creates it can wait until ready (HTPR-6047).
   const { data: sharedLink } = useGetTaskShareLinks(
     _parsedTask.id,
     _parsedTask.projectId,
-    currentUser?.id!
+    currentUser?.id!,
+    undefined,
+    nonEssentialReady
   );
 
   const { data: labelsFromTQ, isRefetching } = useGetAllTaskLabels(
@@ -2168,7 +2182,15 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
   useEffect(() => {
     const readinessTask = `${_parsedTask.projectId}:${_parsedTask.id}`;
-    if (embedded || readinessTaskRef.current === readinessTask) return;
+    // Embedded views (swipe-unread) don't run this readiness tracking at all,
+    // so non-essential requests there have nothing to wait on - let them fire
+    // immediately rather than never.
+    if (embedded) {
+      setNonEssentialReady(true);
+      return;
+    }
+    if (readinessTaskRef.current === readinessTask) return;
+    setNonEssentialReady(false);
 
     let frame = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -2213,6 +2235,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
         },
         currentUser.id!,
       );
+      setNonEssentialReady(true);
       cleanup();
     };
     const checkReady = () => {
@@ -2228,7 +2251,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     timer = setTimeout(() => publish(true), TASK_DETAIL_READINESS_MAX_MS);
     scheduleCheck();
     return cleanup;
-  }, [currentUser.id, embedded, _parsedTask.id, _parsedTask.projectId]);
+  }, [currentUser.id, embedded, _parsedTask.id, _parsedTask.projectId, setNonEssentialReady]);
 
   useLayoutEffect(() => {
     updateActiveItemAndItemInView(currentTask?.id ?? null);
