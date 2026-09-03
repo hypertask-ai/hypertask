@@ -284,11 +284,19 @@ export async function executeTaskUpdate({
     const hasLabelMutation =
         Array.isArray(requestBody.add_labels) || Array.isArray(requestBody.remove_labels);
     const hasLabelPrecondition = requestBody.skip_if_labels_present !== undefined;
+    const hasInvalidLabelPreconditionEntry =
+        Array.isArray(requestBody.skip_if_labels_present) &&
+        requestBody.skip_if_labels_present.some(
+            label =>
+                (typeof label !== 'string' && typeof label !== 'number') ||
+                (typeof label === 'number' && !Number.isFinite(label))
+        );
     if (
         hasLabelPrecondition &&
         (!Array.isArray(requestBody.skip_if_labels_present) ||
             requestBody.skip_if_labels_present.length === 0 ||
             requestBody.skip_if_labels_present.length > 50 ||
+            hasInvalidLabelPreconditionEntry ||
             !hasLabelMutation)
     ) {
         return NextResponse.json(
@@ -296,7 +304,7 @@ export async function executeTaskUpdate({
                 ...buildFieldError(
                     'invalid_field',
                     'skip_if_labels_present',
-                    'skip_if_labels_present must contain 1-50 labels and accompany add_labels or remove_labels'
+                    'skip_if_labels_present must contain 1-50 string or number labels and accompany add_labels or remove_labels'
                 ),
                 ...(dryRun && { valid: false })
             },

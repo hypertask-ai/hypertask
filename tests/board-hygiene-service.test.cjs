@@ -41,6 +41,7 @@ test('board hygiene pages, binds model output, and emits an atomic additive upda
   const page1 = join(fixtures, 'page1.json')
   const page2 = join(fixtures, 'page2.json')
   const latest = join(fixtures, 'latest.json')
+  const latestFailure = join(fixtures, 'latest-failure.json')
   await Promise.all([
     writeFile(join(config, 'INSTRUCTIONS.md'), 'Classify this ticket.\n'),
     writeFile(
@@ -56,14 +57,19 @@ test('board hygiene pages, binds model output, and emits an atomic additive upda
       JSON.stringify({
         success: true,
         tasks: [
-          task('HTPR-7002', 'Injected second output'),
+          task('HTPR-7002', 'Classifier failure'),
           task(7000, 'Malformed ticket number'),
+          task('HTPR-7004', 'Update failure'),
           task('HTPR-7003', 'Valid candidate'),
         ],
         nextCursor: null,
       }),
     ),
     writeFile(latest, JSON.stringify({ success: true, tasks: [task('HTPR-7003', 'Valid candidate')] })),
+    writeFile(
+      latestFailure,
+      JSON.stringify({ success: true, tasks: [task('HTPR-7004', 'Update failure')] }),
+    ),
   ])
 
   const fakeHt = join(bin, 'ht')
@@ -79,9 +85,15 @@ elif [[ "$method" == GET && "$path" == *"cursor="* ]]; then
   cat "$PAGE2"
 elif [[ "$method" == GET && "$path" == *"ticket_number=HTPR-7003"* ]]; then
   cat "$LATEST"
+elif [[ "$method" == GET && "$path" == *"ticket_number=HTPR-7004"* ]]; then
+  cat "$LATEST_FAILURE"
 elif [[ "$method" == POST && "$path" == /mcp/tasks/update ]]; then
   printf '%s\\n' "$3" >> "$MUTATION_LOG"
-  printf '%s\\n' '{"success":true}'
+  if [[ "$3" == *'HTPR-7004'* ]]; then
+    printf '%s\\n' '{"success":false,"error":"rejected"}'
+  else
+    printf '%s\\n' '{"success":true}'
+  fi
 else
   printf 'unexpected ht call: %s %s\\n' "$method" "$path" >&2
   exit 1
@@ -99,6 +111,8 @@ if [[ "$prompt" == *'"ticket": "HTPR-7001"'* ]]; then
   printf '%s\\n' 'HTPR-7002=Bug'
 elif [[ "$prompt" == *'"ticket": "HTPR-7002"'* ]]; then
   exit 1
+elif [[ "$prompt" == *'"ticket": "HTPR-7004"'* ]]; then
+  printf '%s\\n' 'HTPR-7004=Bug'
 elif [[ "$prompt" == *'"ticket": "HTPR-7003"'* ]]; then
   printf '%s\\n' 'HTPR-7003=IMPROVEMENT'
 else
@@ -108,40 +122,55 @@ fi
   )
   await Promise.all([chmod(fakeHt, 0o755), chmod(fakeHax, 0o755)])
 
-  const { stdout, stderr } = await execFileAsync('bash', [executable], {
-    env: {
-      ...process.env,
-      HOME: home,
-      PAGE1: page1,
-      PAGE2: page2,
-      LATEST: latest,
-      PROMPT_LOG: promptLog,
-      MUTATION_LOG: mutationLog,
-    },
-  })
+  let failure
+  try {
+    await execFileAsync('bash', [executable], {
+      env: {
+        ...process.env,
+        HOME: home,
+        PAGE1: page1,
+        PAGE2: page2,
+        LATEST: latest,
+        LATEST_FAILURE: latestFailure,
+        PROMPT_LOG: promptLog,
+        MUTATION_LOG: mutationLog,
+      },
+    })
+  } catch (error) {
+    failure = error
+  }
 
-  assert.match(stdout, /labelled 1 of 4 unlabelled tickets/)
-  assert.match(stderr, /classification failed for HTPR-7002/)
-  assert.match(stderr, /skipped malformed ticket record/)
+  assert.equal(failure?.code, 1)
+  assert.match(failure.stdout, /labelled 1 of 5 unlabelled tickets/)
+  assert.match(failure.stderr, /classification failed for HTPR-7002/)
+  assert.match(failure.stderr, /skipped malformed ticket record/)
+  assert.match(failure.stderr, /label update failed for HTPR-7004/)
+  assert.match(failure.stderr, /4 ticket\(s\) failed/)
   const prompts = await readFile(promptLog, 'utf8')
-  for (const ticket of ['HTPR-7001', 'HTPR-7002', 'HTPR-7003']) {
+  for (const ticket of ['HTPR-7001', 'HTPR-7002', 'HTPR-7003', 'HTPR-7004']) {
     assert.match(prompts, new RegExp(ticket))
   }
   const mutations = (await readFile(mutationLog, 'utf8'))
     .trim()
     .split('\n')
     .map(JSON.parse)
+  const skipIfPresent = [
+    'FEATURE 💎',
+    'IMPROVEMENT ⚒️',
+    'Bug',
+    'SPEED OPTIMIZATION ⏩',
+    'Infra',
+  ]
   assert.deepEqual(mutations, [
+    {
+      ticket_number: 'HTPR-7004',
+      add_labels: ['Bug'],
+      skip_if_labels_present: skipIfPresent,
+    },
     {
       ticket_number: 'HTPR-7003',
       add_labels: ['IMPROVEMENT ⚒️'],
-      skip_if_labels_present: [
-        'FEATURE 💎',
-        'IMPROVEMENT ⚒️',
-        'Bug',
-        'SPEED OPTIMIZATION ⏩',
-        'Infra',
-      ],
+      skip_if_labels_present: skipIfPresent,
     },
   ])
   await assert.rejects(access(marker))
