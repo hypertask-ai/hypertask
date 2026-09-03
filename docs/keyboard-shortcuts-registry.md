@@ -138,6 +138,8 @@ Agent Chat's team filter also defaults to whichever team's board you last opened
 
 All of the bindings above except `@` are also registered in `AllCommands.ts` as a page-scoped "Agent Chat" command group (`agentChatOn`, gated on `pathname.startsWith("/agents/chat")` the same way `onCalendar` gates calendar-only entries). Each entry dispatches a `window` CustomEvent (`src/lib/agents/chatPaletteCommands.ts`, `AGENT_CHAT_COMMAND_EVENT`) rather than duplicating the roster/composer/team state the actions need; `AgentChatClient.tsx` listens for it and calls the same handlers the keydown listeners already call. `@` in the composer stays handler-only below: it isn't a discrete action, it's a live-typing popover with no equivalent "do this once" command to expose.
 
+Public docs (`docs.hypertask.ai` `features/keyboard-shortcuts.mdx`) not updated in this PR: that site lives in a separate repo this codebase can't reach. Someone with access needs to add the team-cycle row (`Alt+Shift+ArrowDown`/`Alt+Shift+ArrowUp`) there to close out the fourth registration.
+
 ## Handler-only bindings (easy to miss — NOT in the palette)
 
 These fire from raw keydown listeners and will NOT show up when scanning `AllCommands.ts`:

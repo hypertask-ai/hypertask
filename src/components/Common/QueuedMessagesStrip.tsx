@@ -23,13 +23,13 @@ export function QueuedMessagesStrip({
         {items.map((item, index) => (
           <li
             key={item.id}
-            className="flex items-center gap-2 rounded-md bg-newcomment-well px-2 py-1.5 text-meta text-white-black"
+            className="flex items-center gap-2 rounded-[4px] bg-newcomment-well px-2 py-1.5 text-meta text-white-black"
           >
             <span
-              className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-hover-active text-[10px] font-bold text-text-light-gray"
+              className="shrink-0 text-[10px] font-bold text-text-light-gray"
               aria-hidden="true"
             >
-              {index + 1}
+              {index + 1}.
             </span>
             <span className="min-w-0 flex-1 truncate">{item.content}</span>
             <button

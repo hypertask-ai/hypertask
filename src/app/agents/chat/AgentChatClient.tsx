@@ -254,6 +254,12 @@ const AgentChatClient = (props: IProp) => {
     { id: string; content: string }[]
   >([]);
   const messageQueueRef = useRef<{ id: string; content: string }[]>([]);
+  // Set to a queued item's id when its drained send fails, so the item goes
+  // back to the front of the queue instead of vanishing into the draft, and
+  // draining stops until that same item is removed (the failure would
+  // otherwise flip `awaiting` back to false and fire the next item out of
+  // order).
+  const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
   // When the current wait for this session's reply began (last send, or first
   // noticed); the awaiting poll stops 15 minutes after it.
@@ -568,14 +574,25 @@ const AgentChatClient = (props: IProp) => {
     setShowScrollToBottom(scrollTop + clientHeight < scrollHeight - 4);
   }, []);
 
-  // Jump to the bottom on a new message (own send, poll, or realtime nudge)
-  // and whenever a different chat mounts.
+  // Jump to the bottom on a new message (own send, poll, or realtime nudge),
+  // but not on every poll: a poll can hand back the same-length or reordered
+  // array with nothing new in it, and if the user has scrolled up to read
+  // older content that must not yank them back down.
+  const prevMessagesLengthRef = useRef(0);
   useLayoutEffect(() => {
-    scrollMessagesToBottom("smooth");
+    const length = messages?.length ?? 0;
+    const grew = length > prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = length;
+    // showScrollToBottom is false when the user was already at (or near) the
+    // bottom as of the last scroll read, so it's safe to follow new content.
+    if (grew || !showScrollToBottom) scrollMessagesToBottom("smooth");
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
   useLayoutEffect(() => {
+    // A different chat's message count has nothing to do with this one's;
+    // don't let it suppress the next genuine-growth scroll.
+    prevMessagesLengthRef.current = 0;
     scrollMessagesToBottom("auto");
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -706,13 +723,17 @@ const AgentChatClient = (props: IProp) => {
   );
   useEffect(() => {
     if (!teamCycle || teamCycle.seq === teamCycleSeenRef.current) return;
+    // The roster (and so `teams`) isn't loaded yet: stepTeamCycle's stops
+    // array would be just [null], silently losing the cycle. Leave the seq
+    // unacknowledged so this effect re-runs and replays it once agents load.
+    if (agents === null) return;
     teamCycleSeenRef.current = teamCycle.seq;
     stepTeamCycle(teamCycle.direction);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stepTeamCycle
     // intentionally excluded: it closes over teamId, and re-running this on
     // every teamId change (including the ones it causes itself) would fight
     // the cycle. Only a new atom event should trigger a step.
-  }, [teamCycle, teams]);
+  }, [teamCycle, teams, agents]);
 
   const roster = useMemo(() => {
     const visible = (agents ?? []).filter(
@@ -744,7 +765,7 @@ const AgentChatClient = (props: IProp) => {
   // Reads the target session off sessionIdRef (not the `session` state
   // closure) so a queued send drained after the user switched agents can
   // still be safely dropped by the same staleness check a direct send uses.
-  const sendMessageText = useCallback(async (text: string) => {
+  const sendMessageText = useCallback(async (text: string, queuedId?: string) => {
     const targetSessionId = sessionIdRef.current;
     if (!targetSessionId) return;
     const optimistic: TChatMessage = {
@@ -789,9 +810,18 @@ const AgentChatClient = (props: IProp) => {
       if (data.delivered === false) setDeliveryNotice(true);
     } catch (e) {
       if (sessionIdRef.current !== targetSessionId) return;
-      // Roll the optimistic bubble back and hand the text back to the user.
+      // Roll the optimistic bubble back.
       setMessages((prev) => (prev ?? []).filter((m) => m.id !== optimistic.id));
-      setDraft(text);
+      if (queuedId) {
+        // A drained queue item failing must not free up the next item to
+        // fire out of order: put it back at the front and block draining
+        // until it's removed.
+        blockedQueueIdRef.current = queuedId;
+        messageQueueRef.current = [{ id: queuedId, content: text }, ...messageQueueRef.current];
+        setQueuedMessages(messageQueueRef.current);
+      } else {
+        setDraft(text);
+      }
       toast.error(e instanceof Error ? e.message : "Failed to send message");
     } finally {
       sendingRef.current = false;
@@ -807,6 +837,9 @@ const AgentChatClient = (props: IProp) => {
       (item) => item.id !== id,
     );
     setQueuedMessages(messageQueueRef.current);
+    // Removing the item that blocked draining clears the block; anything
+    // still behind it in the queue is free to send again.
+    if (blockedQueueIdRef.current === id) blockedQueueIdRef.current = null;
   }, []);
 
   const drainQueuedMessage = useCallback(() => {
@@ -818,9 +851,13 @@ const AgentChatClient = (props: IProp) => {
     // fire a second message before the first got a reply.
     if (awaitingRef.current) return;
     const [next, ...rest] = queue;
+    // A previously failed item stays at the front and blocks draining until
+    // it's removed, so a later reply landing doesn't fire the next item out
+    // of order.
+    if (blockedQueueIdRef.current === next.id) return;
     messageQueueRef.current = rest;
     setQueuedMessages(rest);
-    void sendMessageText(next.content);
+    void sendMessageText(next.content, next.id);
   }, [sendMessageText]);
 
   const drainQueuedMessageRef = useRef(drainQueuedMessage);
@@ -1445,7 +1482,10 @@ const AgentChatClient = (props: IProp) => {
                 onClick={() => void handleSend()}
                 disabled={!draft.trim() || sending || isRecording || isDictationProcessing}
                 aria-label={composerLocked ? "Queue message" : "Send message"}
-                className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-dense font-medium"
+                className={cn(
+                  MOBILE_TARGET,
+                  "rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 text-dense font-medium",
+                )}
               >
                 {composerLocked ? "Queue" : "Send"}
               </button>
