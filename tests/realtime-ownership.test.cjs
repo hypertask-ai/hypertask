@@ -66,6 +66,7 @@ function loadPusherAuth({
   allowedProjects = [15],
   tasks = { 42: { projectId: 15 } },
   realtimeConfigured = true,
+  sessionError = null,
 } = {}) {
   const calls = {
     authorize: [],
@@ -99,7 +100,10 @@ function loadPusherAuth({
       featureFlagsChannel: () => "private-feature-flags",
     },
     "@/lib/auth/getSessionUser": {
-      getSessionUser: async () => (user ? { userId: Number(user.id) } : null),
+      getSessionUser: async () => {
+        if (sessionError) throw sessionError;
+        return user ? { userId: Number(user.id) } : null;
+      },
     },
     "@/lib/prisma": {
       __esModule: true,
@@ -157,6 +161,15 @@ test("feature flag events require a signed session", async () => {
   );
   assert.equal(anonymousResult.status, 403);
   assert.deepEqual(anonymous.calls.authorize, []);
+});
+
+test("feature flag auth failures return a structured error", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const failed = loadPusherAuth({ sessionError: new Error("auth unavailable") });
+  const result = await invoke(failed.handler, request("private-feature-flags"));
+  assert.equal(result.status, 500);
+  assert.deepEqual(result.body, { error: "Unable to authorize realtime channel" });
+  assert.deepEqual(failed.calls.authorize, []);
 });
 
 test("board channels require access for the signed-in user", async () => {

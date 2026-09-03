@@ -59,29 +59,34 @@ export default async function handler(
     return res.status(400).json({ error: "Missing socket_id or channel_name" });
   }
 
-  let userId: number | null = null;
-  if (channel === featureFlagsChannel()) {
-    const headers = new Headers();
-    if (req.headers.cookie) headers.set("cookie", req.headers.cookie);
-    userId = (await getSessionUser(headers))?.userId ?? null;
-  } else {
-    const { user, isValid } = isValidUser(req.cookies.nookies_user);
-    if (isValid && user) userId = Number(user.id);
-  }
-  if (userId === null) {
-    return res.status(403).json({ error: "Not authenticated" });
-  }
+  try {
+    let userId: number | null = null;
+    if (channel === featureFlagsChannel()) {
+      const headers = new Headers();
+      if (req.headers.cookie) headers.set("cookie", req.headers.cookie);
+      userId = (await getSessionUser(headers))?.userId ?? null;
+    } else {
+      const { user, isValid } = isValidUser(req.cookies.nookies_user);
+      if (isValid && user) userId = Number(user.id);
+    }
+    if (userId === null) {
+      return res.status(403).json({ error: "Not authenticated" });
+    }
 
-  const allowed = await userMayAccess(channel, userId);
-  if (!allowed) {
-    return res.status(403).json({ error: "No access to this channel" });
-  }
+    const allowed = await userMayAccess(channel, userId);
+    if (!allowed) {
+      return res.status(403).json({ error: "No access to this channel" });
+    }
 
-  const server = getRealtimeServer();
-  if (!server) {
-    return res.status(503).json({ error: "Realtime not configured" });
-  }
+    const server = getRealtimeServer();
+    if (!server) {
+      return res.status(503).json({ error: "Realtime not configured" });
+    }
 
-  const authResponse = server.authorizeChannel(socketId, channel);
-  return res.status(200).json(authResponse);
+    const authResponse = server.authorizeChannel(socketId, channel);
+    return res.status(200).json(authResponse);
+  } catch (error) {
+    console.error("[realtime] channel authorization failed", error);
+    return res.status(500).json({ error: "Unable to authorize realtime channel" });
+  }
 }
