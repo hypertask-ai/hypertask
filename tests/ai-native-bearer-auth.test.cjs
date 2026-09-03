@@ -254,7 +254,7 @@ test("an account-wide revocation invalidates tokens issued before it", async () 
 });
 
 test("a token for a deleted account is refused", async () => {
-  const userJwt = createOAuthToken("firebase-ghost", 99, "ghost@example.test", "ghost-client");
+  const userJwt = createOAuthToken("firebase-ghost", 99, "ghost@example.test", "owner-client");
 
   assert.equal(await getAiRequestUser(requestWith(userJwt)), null);
 });
