@@ -68,7 +68,10 @@ fi
 # the one thing worth a model; everything else here is plain code.
 applied=0
 while read -r record; do
-  t=$(jq -er '.ticket | select(type == "string" and test("^HTPR-[0-9]+$"))' <<<"$record")
+  if ! t=$(jq -er '.ticket | select(type == "string" and test("^HTPR-[0-9]+$"))' <<<"$record"); then
+    echo "board-hygiene: skipped malformed ticket record" >&2
+    continue
+  fi
   if ! out=$(HAX_PRESET= hax --provider=codex --model=gpt-5.6-sol --effort=low \
           --no-session --raw -p "$(cat "$INSTRUCTIONS")
 

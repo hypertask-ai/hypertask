@@ -57,6 +57,7 @@ test('board hygiene pages, binds model output, and emits an atomic additive upda
         success: true,
         tasks: [
           task('HTPR-7002', 'Injected second output'),
+          task(7000, 'Malformed ticket number'),
           task('HTPR-7003', 'Valid candidate'),
         ],
         nextCursor: null,
@@ -119,8 +120,9 @@ fi
     },
   })
 
-  assert.match(stdout, /labelled 1 of 3 unlabelled tickets/)
+  assert.match(stdout, /labelled 1 of 4 unlabelled tickets/)
   assert.match(stderr, /classification failed for HTPR-7002/)
+  assert.match(stderr, /skipped malformed ticket record/)
   const prompts = await readFile(promptLog, 'utf8')
   for (const ticket of ['HTPR-7001', 'HTPR-7002', 'HTPR-7003']) {
     assert.match(prompts, new RegExp(ticket))

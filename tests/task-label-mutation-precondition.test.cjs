@@ -21,12 +21,23 @@ function loadMutateTaskLabels(existing, resolveLabelIds = async (_projectId, lab
   ).outputText
 
   const creates = []
-  let transaction = Promise.resolve()
+  let taskLock = Promise.resolve()
   const prisma = {
     $transaction: async (callback) => {
-      const result = transaction.then(() => callback(prisma))
-      transaction = result.then(() => undefined, () => undefined)
-      return result
+      let releaseTaskLock
+      const previousTaskLock = taskLock
+      taskLock = new Promise((resolve) => {
+        releaseTaskLock = resolve
+      })
+      const tx = {
+        taskLabel: prisma.taskLabel,
+        acquireTaskLock: () => previousTaskLock,
+      }
+      try {
+        return await callback(tx)
+      } finally {
+        releaseTaskLock()
+      }
     },
     taskLabel: {
       findMany: async () => existing.map((row) => ({ ...row })),
@@ -43,7 +54,7 @@ function loadMutateTaskLabels(existing, resolveLabelIds = async (_projectId, lab
       },
     },
   }
-  const assertTaskBelongsToProject = async () => undefined
+  const assertTaskBelongsToProject = async (tx) => tx.acquireTaskLock()
   const createLabelActivity = async () => undefined
   const emitAgentLabelChangeWebhook = async () => []
   const publishAgentWebhookDeliveries = async () => undefined
