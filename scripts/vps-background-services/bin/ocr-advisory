@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# Advisory second-opinion reviews via open-code-review (ocr) on open production PRs.
+# Non-gating by design: posts one clearly labeled comment per PR head SHA and is
+# never read by automerge (no APPROVE/CONCERNS prefix, no reviewed-commit marker).
+#
+# Runs on the Codex subscription by default (OCR delegation mode: ocr picks the
+# files and rules with no LLM call, codex does the reasoning). Set
+# OCR_ADVISORY_MODE=metered to fall back to `ocr review` against the Vercel AI
+# Gateway key in ~/.opencodereview/config.json.
+# Disable with: systemctl --user disable --now ocr-advisory.timer
+set -euo pipefail
+REPO=hypertask-ai/hypertask
+WORKDIR="$HOME/projects/hypertask-oss"
+REMOTE=agent-origin
+EXPECTED_REMOTE=https://github.com/hypertask-ai/hypertask.git
+STATE="$HOME/.local/state/ocr-advisory"
+MODE="${OCR_ADVISORY_MODE:-delegate}"
+MAX_ATTEMPTS=3
+RETRY_BACKOFF_SECONDS=3600
+mkdir -p "$STATE"
+exec 9>"$STATE/run.lock"
+flock -n 9 || exit 0
+cd "$WORKDIR"
+
+actual_remote=$(git remote get-url "$REMOTE")
+if [[ "$actual_remote" != "$EXPECTED_REMOTE" ]]; then
+  echo "ocr-advisory: $REMOTE points at an unexpected repository" >&2
+  exit 1
+fi
+comment_author=$(gh api user --jq .login)
+if [[ ! "$comment_author" =~ ^[A-Za-z0-9-]+$ ]]; then
+  echo "ocr-advisory: GitHub returned an invalid authenticated login" >&2
+  exit 1
+fi
+git fetch -q "$REMOTE" production
+base_sha=$(git rev-parse "$REMOTE/production")
+
+open_prs=$(gh pr list --repo "$REPO" --base production --state open --limit 1000 \
+  --json number,headRefName,headRefOid,isDraft \
+  --jq '.[] | "\(.number) \(.headRefName) \(.headRefOid) \(.isDraft)"')
+while read -r pr branch sha is_draft; do
+  [ -n "$sha" ] || continue
+  marker_file="$STATE/$pr-$sha"
+  legacy_marker="$STATE/$sha"
+  if [ -e "$legacy_marker" ] && [ ! -e "$marker_file" ]; then
+    mv -- "$legacy_marker" "$marker_file"
+  fi
+  [ "$is_draft" = false ] || continue
+  attempt_file="$STATE/$pr-$sha.attempts"
+  if [ -e "$marker_file" ]; then
+    rm -f -- "$attempt_file"
+    continue
+  fi
+  comment_marker="<!-- ocr-advisory:$pr:$sha -->"
+  existing_comments=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
+    --jq ".[] | select(.user.login == \"$comment_author\") | .body") || continue
+  if grep -Fq -- "$comment_marker" <<< "$existing_comments"; then
+    touch "$marker_file"
+    rm -f -- "$attempt_file"
+    continue
+  fi
+  attempts=0
+  last_attempt=0
+  if [ -e "$attempt_file" ]; then
+    if ! read -r attempts last_attempt < "$attempt_file" ||
+      [[ ! "$attempts" =~ ^[0-9]+$ || ! "$last_attempt" =~ ^[0-9]+$ ]]; then
+      echo "ocr-advisory: invalid attempt state for PR $pr at $sha" >&2
+      continue
+    fi
+  fi
+  [ "$attempts" -lt "$MAX_ATTEMPTS" ] || continue
+  now=$(date +%s)
+  retry_delay=$((RETRY_BACKOFF_SECONDS * attempts))
+  if [ "$attempts" -gt 0 ] && [ "$((now - last_attempt))" -lt "$retry_delay" ]; then
+    continue
+  fi
+  record_failure() {
+    attempts=$((attempts + 1))
+    printf '%s %s\n' "$attempts" "$(date +%s)" > "$attempt_file.tmp"
+    mv -- "$attempt_file.tmp" "$attempt_file"
+    if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
+      echo "ocr-advisory: giving up on PR $pr at $sha after $attempts failures: $1" >&2
+    else
+      echo "ocr-advisory: PR $pr at $sha failed ($attempts/$MAX_ATTEMPTS): $1" >&2
+    fi
+  }
+  review_ref="refs/ocr-advisory/$pr"
+  git fetch -q "$REMOTE" "+pull/$pr/head:$review_ref" || continue
+  if [[ "$(git rev-parse "$review_ref")" != "$sha" ]]; then
+    git update-ref -d "$review_ref"
+    continue
+  fi
+  if ! merge_base=$(git merge-base "$base_sha" "$sha"); then
+    git update-ref -d "$review_ref"
+    continue
+  fi
+  out=$(mktemp)
+  if [ "$MODE" = metered ]; then
+    review_cmd=(ocr review --from "$merge_base" --to "$sha" --format json)
+  else
+    review_cmd=(ocr-delegate-review --from "$merge_base" --to "$sha" --repo "$WORKDIR")
+  fi
+  if ! timeout --kill-after=30s 1500s "${review_cmd[@]}" >"$out" 2>"$STATE/last-error.log"; then
+    record_failure "review command failed"
+    rm -f "$out"
+    git update-ref -d "$review_ref"
+    continue
+  fi
+  if ! body=$(python3 - "$out" "$sha" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+comments = d.get("comments") or d.get("findings") or []
+
+def inert(value, limit=None):
+    text = " ".join(str(value).split())
+    if limit is not None:
+        text = text[:limit]
+    unsafe = "\\`*_{}[]()#+-.!|<>@"
+    return "".join(f"&#{ord(char)};" if char in unsafe else char for char in text)
+
+engine = inert((d.get("summary") or {}).get("engine", "open-code-review"), 80)
+lines = [f"<strong>OCR advisory (non-gating)</strong> for <code>{sys.argv[2][:12]}</code> "
+         f"via open-code-review delegation ({engine}). {len(comments)} finding(s); "
+         "the required AI review stays authoritative.", ""]
+rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+for c in sorted(comments, key=lambda c: rank.get(str(c.get("severity")), 3))[:8]:
+    sev = inert(str(c.get("severity", "?")).upper(), 16)
+    path = inert(c.get("file") or c.get("path") or "?", 240)
+    text = inert(c.get("title") or c.get("content") or c.get("body") or "", 300)
+    try:
+        line = int(c.get("start_line") or 0)
+    except (TypeError, ValueError):
+        line = 0
+    loc = f":{line}" if line > 0 else ""
+    lines.append(f"- <strong>{sev}</strong> <code>{path}{loc}</code>: {text}")
+if len(comments) > 8:
+    session = inert(d.get("session_id", "?"), 8)
+    lines.append(f"- ...and {len(comments) - 8} more (session {session} on the VPS)")
+if not comments:
+    lines.append("No findings.")
+body = "\n".join(lines)
+if len(body) > 60000:
+    body = lines[0] + "\n\nFinding details omitted because formatted output exceeded the safety limit."
+print(body)
+EOF
+); then
+    record_failure "review output was invalid"
+    rm -f "$out"
+    git update-ref -d "$review_ref"
+    continue
+  fi
+  body="$body"$'\n\n'"$comment_marker"
+  if ! live_sha=$(gh pr view "$pr" --repo "$REPO" --json headRefOid --jq .headRefOid); then
+    record_failure "could not verify the live PR head"
+  elif [ "$live_sha" != "$sha" ]; then
+    rm -f -- "$attempt_file"
+  elif gh pr comment "$pr" --repo "$REPO" --body "$body" >/dev/null; then
+    touch "$marker_file"
+    rm -f -- "$attempt_file"
+  else
+    record_failure "could not post the advisory comment"
+  fi
+  rm -f "$out"
+  git update-ref -d "$review_ref"
+done <<< "$open_prs"
+# Age out markers only after their PR closes, preserving one comment per PR head SHA.
+while IFS= read -r -d '' marker_file; do
+  marker=${marker_file##*/}
+  pr=${marker%%-*}
+  if ! awk -v pr="$pr" '$1 == pr { found=1 } END { exit !found }' <<< "$open_prs"; then
+    rm -f -- "$marker_file"
+  fi
+done < <(find "$STATE" -type f -mtime +30 -print0)
