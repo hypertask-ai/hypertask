@@ -2,11 +2,11 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import notificationGetAll from "@/utils/controllers/notifications/getAll";
 
-import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
+    const requestStartedAt = performance.now();
     if (req.method === "GET") {
         try {
             // HTPR-4772: ignore the query userId and use the signed session.
@@ -17,6 +17,10 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             
             
             const response = await notificationGetAll(String(session.userId))
+            res.setHeader(
+                "Server-Timing",
+                `total;dur=${(performance.now() - requestStartedAt).toFixed(1)}`,
+            );
             res.status(response.status).json(response.json);
         } catch (error) {
             console.log(error);

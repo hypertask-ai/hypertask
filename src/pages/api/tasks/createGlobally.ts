@@ -48,6 +48,7 @@ const handler: NextApiHandler = async (
 ) => {
   // ========== we also get some relevant info in the GET request.
   if (req.method === "GET") {
+    const requestStartedAt = performance.now();
     try {
       const { sectionId, projectId, position } = req.query;
 
@@ -124,6 +125,10 @@ const handler: NextApiHandler = async (
         sectionId: section.id,
       };
       console.log("🚀 ~ consthandler:NextApiHandler= ~ body:", body);
+      res.setHeader(
+        "Server-Timing",
+        `total;dur=${(performance.now() - requestStartedAt).toFixed(1)}`,
+      );
       res.status(200).json(body);
     } catch (error) {
       console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
