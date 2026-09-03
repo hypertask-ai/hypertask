@@ -54,7 +54,7 @@ while read -r pr branch sha is_draft; do
   else
     review_cmd=(ocr-delegate-review --from "$merge_base" --to "$sha" --repo "$WORKDIR")
   fi
-  if ! timeout 1500 "${review_cmd[@]}" >"$out" 2>"$STATE/last-error.log"; then
+  if ! timeout --kill-after=30s 1500s "${review_cmd[@]}" >"$out" 2>"$STATE/last-error.log"; then
     rm -f "$out"
     git update-ref -d "$review_ref"
     continue  # transient failure: retry on the next timer run

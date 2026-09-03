@@ -47,6 +47,12 @@ else
   printf '%s\\n' "$*" >> "$HOME/gh.log"
 fi
 `)
+  await executable(join(fakeBin, 'timeout'), `
+printf '%s\\n' "$*" >> "$HOME/timeout.log"
+[[ "$1 $2" == "--kill-after=30s 1500s" ]] || exit 1
+shift 2
+exec "$@"
+`)
   await executable(join(fakeBin, 'ocr-delegate-review'), `
 printf '%s\\n' "$*" >> "$HOME/review.log"
 if [[ "\${MALFORMED_REVIEW:-}" == 1 ]]; then
@@ -84,6 +90,8 @@ test('reviews public production PRs from the public checkout', async (t) => {
   assert.match(gitCalls, /merge-base base-sha head-sha/)
   const reviewCalls = await readFile(join(fixtureData.home, 'review.log'), 'utf8')
   assert.match(reviewCalls, /--from merge-sha --to head-sha --repo .*projects\/hypertask-oss/)
+  const timeoutCalls = await readFile(join(fixtureData.home, 'timeout.log'), 'utf8')
+  assert.match(timeoutCalls, /--kill-after=30s 1500s ocr-delegate-review/)
   const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
   assert.match(ghCalls, /pr comment 230 --repo hypertask-ai\/hypertask/)
   assert.match(ghCalls, /pr comment 232 --repo hypertask-ai\/hypertask/)
