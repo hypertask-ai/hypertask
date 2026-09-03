@@ -1,6 +1,5 @@
 import { Prisma, PrismaClient, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
 import { CYCLE_WINDOW_SIZE } from "@/lib/cycles";
@@ -337,60 +336,6 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
     },
     customFieldValues: {
       select: { fieldId: true, value: true, numericValue: true },
-    },
-  };
-}
-
-/** Benchmark baseline — pre-optimization getTask.ts */
-export function legacyTaskInclude(userId: number): Prisma.TaskInclude {
-  return {
-    project: {
-      include: {
-        section: { where: { deleted: false }, orderBy: { ranking: "asc" } },
-        team: { include: { googleAccount: true } },
-        ai_custom_instructions: true,
-        project_view: getProjectViewInclude({ currentUserId: userId }),
-      },
-    },
-    user: true,
-    description_: { include: { attachments: true, reactions: true } },
-    priority: true,
-    estimate: true,
-    drafts: { where: { userId, saved: false } },
-    notifications: {
-      where: {
-        status: Status.Normal,
-        userId,
-        task: { Reminders: { every: { status: { not: Status.Normal } } } },
-      },
-      take: 1,
-      orderBy: { createdAt: "desc" },
-    },
-    Task_Summary: { take: 1, orderBy: { createdAt: "desc" } },
-    _count: {
-      select: {
-        notifications: { where: { status: Status.Normal, userId } },
-      },
-    },
-    subTasks: {
-      where: { status: { not: Status.Deleted } },
-      orderBy: { createdAt: "asc" },
-    },
-    parentTask: {
-      include: { subTasks: { where: { status: { not: Status.Deleted } } } },
-    },
-    savedContent: { where: { commentId: null, userId } },
-    relatedToTasks: { include: { sourceTask: true } },
-    relatedFromTasks: { include: { targetTask: true } },
-    agent: { select: publicAgentSelect },
-    assignees: {
-      where: {
-        OR: [
-          { agentId: null },
-          { agent: boardAgentVisibilityWhere(userId) },
-        ],
-      },
-      include: { user: true, agent: { select: publicAgentSelect } },
     },
   };
 }
