@@ -12,10 +12,32 @@ export function isAgentVisibility(value: unknown): value is AgentVisibility {
 }
 
 export function isAgentVisibleToUser(
-  agent: { userId: number; visibility: AgentVisibility },
+  agent: {
+    userId: number;
+    visibility: AgentVisibility;
+    members: readonly unknown[];
+  },
   userId: number,
 ): boolean {
-  return agent.userId === userId || agent.visibility === "TEAM";
+  return (
+    agent.userId === userId ||
+    (agent.visibility === "TEAM" && agent.members.length > 0)
+  );
+}
+
+/** Projects shared by an agent and the requesting human. */
+export function accessibleAgentMembershipWhere(
+  userId: number,
+): Prisma.MemberWhereInput {
+  return {
+    project: {
+      status: "Normal",
+      OR: [
+        { ownerId: userId },
+        { members: { some: { userId, agentId: null } } },
+      ],
+    },
+  };
 }
 
 /** Visibility inside a board/team query whose human access is already proven. */
@@ -32,17 +54,7 @@ export function accessibleAgentWhere(userId: number): Prisma.AgentWhereInput {
       { userId },
       {
         visibility: "TEAM",
-        members: {
-          some: {
-            project: {
-              status: "Normal",
-              OR: [
-                { ownerId: userId },
-                { members: { some: { userId, agentId: null } } },
-              ],
-            },
-          },
-        },
+        members: { some: accessibleAgentMembershipWhere(userId) },
       },
     ],
   };

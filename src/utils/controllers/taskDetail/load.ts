@@ -10,6 +10,7 @@ import {
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
 import {
+  accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
   isAgentVisibleToUser,
   type AgentVisibility,
@@ -35,11 +36,35 @@ const publicCommentCreator = Prisma.sql`
   ) END
 `;
 
+const hasAccessibleAgentProject = (userId: number) => Prisma.sql`
+  EXISTS (
+    SELECT 1
+    FROM "Member" visibility_agent_member
+    INNER JOIN "Project" visibility_project
+      ON visibility_project.id = visibility_agent_member."projectId"
+    WHERE visibility_agent_member."agentId" = agent.id
+      AND visibility_project.status = 'Normal'::"Status"
+      AND (
+        visibility_project."ownerId" = ${userId}
+        OR EXISTS (
+          SELECT 1
+          FROM "Member" visibility_user_member
+          WHERE visibility_user_member."projectId" = visibility_project.id
+            AND visibility_user_member."userId" = ${userId}
+            AND visibility_user_member."agentId" IS NULL
+        )
+      )
+  )
+`;
+
 const hiddenCommentAgent = (userId: number) => Prisma.sql`
   (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
   OR (
     agent."userId" <> ${userId}
-    AND agent.visibility = 'PRIVATE'::"AgentVisibility"
+    AND (
+      agent.visibility = 'PRIVATE'::"AgentVisibility"
+      OR NOT (${hasAccessibleAgentProject(userId)})
+    )
   )
 `;
 
@@ -87,7 +112,12 @@ const userSelect = {
 } satisfies Prisma.UserSelect;
 
 export function projectVisibleTaskAgent(
-  agent: (PublicAgent & { visibility: AgentVisibility }) | null,
+  agent:
+    | (PublicAgent & {
+        visibility: AgentVisibility;
+        members: readonly { id: number }[];
+      })
+    | null,
   userId: number,
 ): PublicAgent | null {
   if (!agent || !isAgentVisibleToUser(agent, userId)) return null;
@@ -132,7 +162,7 @@ export function taskWhere(
 }
 
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
-export function taskDetailInclude(userId: number): Prisma.TaskInclude {
+export function taskDetailInclude(userId: number) {
   return {
     user: { select: userSelect },
     description_: {
@@ -320,7 +350,17 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
         },
       },
     },
-    agent: { select: { ...publicAgentSelect, visibility: true } },
+    agent: {
+      select: {
+        ...publicAgentSelect,
+        visibility: true,
+        members: {
+          where: accessibleAgentMembershipWhere(userId),
+          select: { id: true },
+          take: 1,
+        },
+      },
+    },
     pullRequests: {
       orderBy: { createdAt: "asc" },
       select: {
@@ -339,7 +379,7 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
     customFieldValues: {
       select: { fieldId: true, value: true, numericValue: true },
     },
-  };
+  } satisfies Prisma.TaskInclude;
 }
 
 export async function fetchDescriptionReactions(descriptionId: string) {

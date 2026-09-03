@@ -66,15 +66,12 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
 })
 
 test('comment agent identities are filtered for the requesting user', () => {
+  assert.match(routeSource, /select: mcpVisibleAgentSelect\(userId\)/)
   assert.match(
     routeSource,
-    /select: \{ \.\.\.mcpAgentSelect, userId: true, visibility: true \}/
+    /mapVisibleMcpAgent\(comment\.agent, userId\)/
   )
-  assert.match(
-    routeSource,
-    /isAgentVisibleToUser\(comment\.agent, userId\)/
-  )
-  assert.match(routeSource, /: !comment\.agentDisplayName/)
+  assert.match(routeSource, /!comment\.agent \? !comment\.agentDisplayName/)
   assert.match(routeSource, /mapCommentToResponse\(comment, user\.id, includeActivity\)/)
 })
 

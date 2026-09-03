@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/lib/mcp/auth'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
-import { getMcpSessionAgentSummary, mapMcpAgent, mcpAgentSelect } from '@/lib/mcp/agents'
+import {
+  getMcpSessionAgentSummary,
+  mapVisibleMcpAgent,
+  mcpVisibleAgentSelect,
+} from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import {
   buildMcpImageUrls,
@@ -33,7 +37,6 @@ import {
   mapMcpCommentReaction,
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
-import { isAgentVisibleToUser } from '@/lib/agents/visibility'
 
 export interface CommentItem {
   id: number
@@ -119,7 +122,7 @@ export interface AddCommentResponse {
 }
 
 // Shared comment include structure
-const commentInclude = {
+const commentInclude = (userId: number) => ({
   creator: {
     select: {
       id: true,
@@ -128,7 +131,7 @@ const commentInclude = {
     }
   },
   agent: {
-    select: { ...mcpAgentSelect, userId: true, visibility: true },
+    select: mcpVisibleAgentSelect(userId),
   },
   attachments: {
     select: {
@@ -140,7 +143,7 @@ const commentInclude = {
     }
   },
   reactions: commentReactionInclude
-}
+})
 
 // Helper function to map comment to response format. Activity-inclusive responses
 // retain the app endpoint's raw activity payload and add an explicit row type.
@@ -149,10 +152,8 @@ function mapCommentToResponse(
   userId: number,
   includeActivity = false
 ): CommentItem {
-  const agentVisible = comment.agent
-    ? isAgentVisibleToUser(comment.agent, userId)
-    : !comment.agentDisplayName
-  const agent = mapMcpAgent(agentVisible ? comment.agent : null)
+  const agent = mapVisibleMcpAgent(comment.agent, userId)
+  const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
   const agentDisplayName = agentVisible
     ? comment.agentDisplayName
     : 'Private agent'
@@ -266,7 +267,7 @@ export async function GET(request: NextRequest) {
       includeActivity && !requestedSortOrder ? 'asc' : (sortOrder as 'asc' | 'desc')
     const comments = await prisma.comment.findMany({
       where: commentWhere,
-      include: commentInclude,
+      include: commentInclude(user.id),
       orderBy: {
         createdAt: effectiveSortOrder
       },
@@ -779,7 +780,7 @@ export async function POST(request: NextRequest) {
         // Fetch comment with attachments for response
         const commentWithAttachments = await prisma.comment.findUnique({
           where: { id: comment.id },
-          include: commentInclude
+          include: commentInclude(user.id)
         })
 
         const mappedComment = commentWithAttachments

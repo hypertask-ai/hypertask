@@ -69,7 +69,10 @@ test("task-detail SQL selects public actors and sanitizes historical activity", 
   assert.match(source, /'displayName', agent\."displayName"/);
   assert.doesNotMatch(source, /to_jsonb\(agent\)/);
   assert.match(source, /sanitizeAgentCredentials\(comments\)/);
-  assert.match(source, /agent: \{ select: \{ \.\.\.publicAgentSelect, visibility: true \} \}/);
+  assert.match(
+    source,
+    /agent: \{[\s\S]{0,80}select: \{[\s\S]{0,80}\.\.\.publicAgentSelect,[\s\S]{0,80}visibility: true,[\s\S]{0,120}accessibleAgentMembershipWhere\(userId\)/,
+  );
 });
 
 test("new activity rows are sanitized before Prisma persistence", () => {
