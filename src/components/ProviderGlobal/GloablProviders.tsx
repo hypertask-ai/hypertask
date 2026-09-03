@@ -190,13 +190,27 @@ type ChatProviderModule = {
 };
 let aiChatLayoutPromise: Promise<AIChatLayoutModule> | null = null;
 let chatProviderPromise: Promise<ChatProviderModule> | null = null;
-const loadAIChatLayout = () =>
-  (aiChatLayoutPromise ??= import("../AI_CHAT/AI_Chat_Layout"));
-const loadChatProvider = () =>
-  (chatProviderPromise ??=
-    import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context").then(
-      (module) => ({ default: module.ChatProvider }),
-    ));
+const loadAIChatLayout = () => {
+  if (!aiChatLayoutPromise) {
+    aiChatLayoutPromise = import("../AI_CHAT/AI_Chat_Layout").catch((error) => {
+      aiChatLayoutPromise = null;
+      throw error;
+    });
+  }
+  return aiChatLayoutPromise;
+};
+const loadChatProvider = () => {
+  if (!chatProviderPromise) {
+    chatProviderPromise =
+      import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context")
+        .then((module) => ({ default: module.ChatProvider }))
+        .catch((error) => {
+          chatProviderPromise = null;
+          throw error;
+        });
+  }
+  return chatProviderPromise;
+};
 const AIChatLayout = lazy(loadAIChatLayout);
 const ChatProvider = lazy(loadChatProvider);
 import {

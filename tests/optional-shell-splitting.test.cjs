@@ -48,6 +48,21 @@ test("task detail starts both required chat chunks without a serial waterfall", 
   assert.doesNotMatch(provider, /import \{ ChatProvider \} from/);
 });
 
+test("failed chat chunk loads can be retried", () => {
+  for (const [loader, promise] of [
+    ["loadAIChatLayout", "aiChatLayoutPromise"],
+    ["loadChatProvider", "chatProviderPromise"],
+  ]) {
+    assert.match(
+      provider,
+      new RegExp(
+        `const ${loader} = \\(\\) => \\{[\\s\\S]*?\\.catch\\(\\(error\\) => \\{\\s*${promise} = null;\\s*throw error;`,
+      ),
+      `${loader} must clear its rejected cached promise`,
+    );
+  }
+});
+
 test("global task creation does not request its chunk while closed", () => {
   assert.match(
     provider,
