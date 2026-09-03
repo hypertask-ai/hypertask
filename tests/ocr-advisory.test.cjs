@@ -52,7 +52,7 @@ printf '%s\\n' "$*" >> "$HOME/review.log"
 if [[ "\${MALFORMED_REVIEW:-}" == 1 ]]; then
   printf '%s\\n' 'not json'
 else
-  printf '%s\\n' '{"findings":[{"severity":"medium","path":"src/example.ts","start_line":4,"content":"Fix this"}],"summary":{"engine":"test"}}'
+  printf '%s\\n' '{"findings":[{"severity":"medium","path":"src/\`@team.ts","start_line":4,"content":"Fix @team *now*"}],"summary":{"engine":"test"}}'
 fi
 `)
   return { home, fakeBin }
@@ -81,8 +81,8 @@ test('reviews public production PRs from the public checkout', async (t) => {
   const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
   assert.match(ghCalls, /pr comment 230 --repo hypertask-ai\/hypertask/)
   assert.match(ghCalls, /pr comment 232 --repo hypertask-ai\/hypertask/)
-  assert.match(ghCalls, /MEDIUM.*src\/example\.ts:4.*Fix this/)
-  assert.doesNotMatch(ghCalls, /No findings/)
+  assert.match(ghCalls, /<strong>MEDIUM<\/strong>.*src\/&#96;&#64;team&#46;ts:4.*Fix &#64;team &#42;now&#42;/)
+  assert.doesNotMatch(ghCalls, /@team|No findings/)
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha'))
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/232-head-sha'))
 })
@@ -94,14 +94,17 @@ test('retains old markers for ready and draft heads, then removes closed-head ma
   const legacyOpenMarker = join(state, 'head-sha')
   const legacyDraftMarker = join(state, 'draft-sha')
   const openMarker = join(state, '230-head-sha')
+  const previousOpenMarker = join(state, '230-previous-sha')
   const draftMarker = join(state, '231-draft-sha')
   const closedMarker = join(state, '999-closed-sha')
   await writeFile(legacyOpenMarker, '')
   await writeFile(legacyDraftMarker, '')
+  await writeFile(previousOpenMarker, '')
   await writeFile(closedMarker, '')
   const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
   await utimes(legacyOpenMarker, old, old)
   await utimes(legacyDraftMarker, old, old)
+  await utimes(previousOpenMarker, old, old)
   await utimes(closedMarker, old, old)
   const openBefore = await stat(legacyOpenMarker)
   const draftBefore = await stat(legacyDraftMarker)
@@ -110,6 +113,7 @@ test('retains old markers for ready and draft heads, then removes closed-head ma
 
   assert.equal(result.status, 0, result.stderr)
   assert.equal((await stat(openMarker)).ino, openBefore.ino)
+  await stat(previousOpenMarker)
   assert.equal((await stat(draftMarker)).ino, draftBefore.ino)
   await assert.rejects(stat(legacyOpenMarker), { code: 'ENOENT' })
   await assert.rejects(stat(legacyDraftMarker), { code: 'ENOENT' })

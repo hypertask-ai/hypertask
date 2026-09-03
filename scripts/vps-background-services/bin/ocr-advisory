@@ -63,18 +63,32 @@ while read -r pr branch sha is_draft; do
 import json, sys
 d = json.load(open(sys.argv[1]))
 comments = d.get("comments") or d.get("findings") or []
-engine = (d.get("summary") or {}).get("engine", "open-code-review")
-lines = [f"**OCR advisory (non-gating)** for `{sys.argv[2][:12]}` via open-code-review delegation ({engine}). "
-         f"{len(comments)} finding(s); the required AI review stays authoritative.", ""]
+
+def inert(value, limit=None):
+    text = " ".join(str(value).split())
+    if limit is not None:
+        text = text[:limit]
+    unsafe = "\\`*_{}[]()#+-.!|<>@"
+    return "".join(f"&#{ord(char)};" if char in unsafe else char for char in text)
+
+engine = inert((d.get("summary") or {}).get("engine", "open-code-review"))
+lines = [f"<strong>OCR advisory (non-gating)</strong> for <code>{sys.argv[2][:12]}</code> "
+         f"via open-code-review delegation ({engine}). {len(comments)} finding(s); "
+         "the required AI review stays authoritative.", ""]
 rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 for c in sorted(comments, key=lambda c: rank.get(str(c.get("severity")), 3))[:8]:
-    sev = str(c.get("severity", "?")).upper()
-    path = str(c.get("file") or c.get("path") or "?")
-    text = " ".join(str(c.get("title") or c.get("content") or c.get("body") or "").split())[:300]
-    loc = f":{c['start_line']}" if c.get("start_line") else ""
-    lines.append(f"- **{sev}** `{path}{loc}`: {text}")
+    sev = inert(str(c.get("severity", "?")).upper())
+    path = inert(c.get("file") or c.get("path") or "?")
+    text = inert(c.get("title") or c.get("content") or c.get("body") or "", 300)
+    try:
+        line = int(c.get("start_line") or 0)
+    except (TypeError, ValueError):
+        line = 0
+    loc = f":{line}" if line > 0 else ""
+    lines.append(f"- <strong>{sev}</strong> <code>{path}{loc}</code>: {text}")
 if len(comments) > 8:
-    lines.append(f"- ...and {len(comments) - 8} more (session {d.get('session_id', '?')[:8]} on the VPS)")
+    session = inert(d.get("session_id", "?"), 8)
+    lines.append(f"- ...and {len(comments) - 8} more (session {session} on the VPS)")
 if not comments:
     lines.append("No findings.")
 print("\n".join(lines))
@@ -91,7 +105,8 @@ done <<< "$open_prs"
 # Age out markers only after their PR closes, preserving one comment per PR head SHA.
 while IFS= read -r -d '' marker_file; do
   marker=${marker_file##*/}
-  if ! awk -v marker="$marker" '$1 "-" $3 == marker { found=1 } END { exit !found }' <<< "$open_prs"; then
+  pr=${marker%%-*}
+  if ! awk -v pr="$pr" '$1 == pr { found=1 } END { exit !found }' <<< "$open_prs"; then
     rm -f -- "$marker_file"
   fi
 done < <(find "$STATE" -type f -mtime +30 -print0)
