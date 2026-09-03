@@ -3,6 +3,9 @@ type CommandCenterKeyboardEvent = Pick<
   "altKey" | "code" | "ctrlKey" | "metaKey" | "shiftKey"
 >;
 
+export const isAgentsRoute = (pathname: string | null | undefined) =>
+  pathname === "/agents" || Boolean(pathname?.startsWith("/agents/"));
+
 export const isCommandCenterShortcut = (
   event: CommandCenterKeyboardEvent,
   isApple: boolean,
@@ -15,6 +18,6 @@ export const isCommandCenterShortcut = (
   Boolean(
     pathname?.startsWith("/project") ||
       pathname?.startsWith("/detail/") ||
-      pathname?.startsWith("/agents") ||
+      isAgentsRoute(pathname) ||
       pathname?.startsWith("/settings"),
   );

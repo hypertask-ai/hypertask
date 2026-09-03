@@ -1,9 +1,10 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const jiti = require("jiti")(__filename);
 
-const { isCommandCenterShortcut } = jiti(
+const { isAgentsRoute, isCommandCenterShortcut } = jiti(
   path.join(__dirname, "../src/lib/constants/commandCenterShortcut.ts"),
 );
 
@@ -31,10 +32,37 @@ test("Ctrl+K stays global on agent and settings pages", () => {
     isCommandCenterShortcut(shortcut(), false, "/agents/ht-bug-fixer"),
     true,
   );
+  assert.equal(
+    isCommandCenterShortcut(shortcut(), false, "/agents/chat"),
+    true,
+  );
   assert.equal(isCommandCenterShortcut(shortcut(), false, "/settings"), true);
   assert.equal(
     isCommandCenterShortcut(shortcut(), false, "/settings/shortcuts"),
     true,
+  );
+});
+
+test("the signed-in shell renders the Command Center only on agent routes", () => {
+  assert.equal(isAgentsRoute("/agents"), true);
+  assert.equal(isAgentsRoute("/agents/chat"), true);
+  assert.equal(isAgentsRoute("/agents/ht-bug-fixer"), true);
+  assert.equal(isAgentsRoute("/agents-old"), false);
+  assert.equal(
+    isCommandCenterShortcut(shortcut(), false, "/agents-old"),
+    false,
+  );
+
+  const provider = fs.readFileSync(
+    path.join(
+      __dirname,
+      "../src/components/ProviderGlobal/GloablProviders.tsx",
+    ),
+    "utf8",
+  );
+  assert.match(
+    provider,
+    /showCommands\.show && isAgentsRoute\(pathname\) && <HypertasksCommands \/>/,
   );
 });
 

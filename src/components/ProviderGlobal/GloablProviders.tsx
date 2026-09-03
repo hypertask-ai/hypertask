@@ -97,6 +97,9 @@ const MobilePullDownCommand = dynamic(
 const MobileTopBar = dynamic(() => import("../Global/MobileTopBar"), {
   ssr: false,
 });
+const HypertasksCommands = dynamic(() => import("../commands"), {
+  ssr: false,
+});
 const BottomSettingsQuickTips = dynamic(
   () => import("../Global/BottomSettings_QuickTips"),
   { ssr: false },
@@ -115,7 +118,10 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
-import { isCommandCenterShortcut } from "@/lib/constants/commandCenterShortcut";
+import {
+  isAgentsRoute,
+  isCommandCenterShortcut,
+} from "@/lib/constants/commandCenterShortcut";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useGlobalUIState } from "./useGlobalUIState";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
@@ -1346,6 +1352,8 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
           toggleSidebar={closeAnnouncements}
         />
       )}
+
+      {showCommands.show && isAgentsRoute(pathname) && <HypertasksCommands />}
 
       <BoardStartupContext.Provider
         value={{
