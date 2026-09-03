@@ -1,5 +1,6 @@
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
 import { normalizeAssistantHtml } from './normalizeAssistantHtml'
+import { sanitizeRichHtml } from './sanitizeRichHtml'
 
 // Every rich-text value the AI chat persists (comments, drafts, task descriptions) goes
 // through here first. Asking the model for HTML is not enough: it drifts back to markdown
@@ -11,12 +12,8 @@ import { normalizeAssistantHtml } from './normalizeAssistantHtml'
 // earlier version called sanitizeAiHtml, which reaches isomorphic-dompurify and jsdom;
 // that had only ever been imported client-side, and it killed the chat route at module
 // load in production while every local check (tsc, unit tests under jiti, the build)
-// stayed green. sanitizeRichHtml is server-safe but escapes the <code> inside a <pre> into
-// visible text and drops task-list checkboxes, which would reintroduce the bug this fixes.
-//
-// So sanitizing happens inside normalizeAssistantHtml instead, at the one place this
-// change actually creates exposure: markdown link syntax becoming a live anchor. Raw HTML
-// the model writes remains unsanitized; only its rich-text structure is normalized here.
+// stayed green. sanitizeRichHtml is server-safe and keeps the editor's code-block and
+// task-list structures while stripping executable markup from model output.
 export function toStoredHtml(text: string): string {
-  return normalizeBlockHtml(normalizeAssistantHtml(text))
+  return sanitizeRichHtml(normalizeBlockHtml(normalizeAssistantHtml(text)))
 }

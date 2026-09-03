@@ -19,6 +19,7 @@ const ALLOWED_TAGS = new Set([
   "i",
   "img",
   "iframe",
+  "input",
   "li",
   "ol",
   "p",
@@ -45,7 +46,7 @@ const DROP_WITH_CONTENT = new Set([
   "math",
 ]);
 
-const VOID_TAGS = new Set(["br", "hr", "img"]);
+const VOID_TAGS = new Set(["br", "hr", "img", "input"]);
 
 const GLOBAL_ATTRIBUTES = new Set(["class"]);
 
@@ -70,6 +71,7 @@ const TAG_ATTRIBUTES: Record<string, Set<string>> = {
   div: new Set(["data-html-block", "data-html"]),
   img: new Set(["src", "alt", "title", "width", "height"]),
   iframe: new Set(["src", "width", "height", "allowfullscreen", "title"]),
+  input: new Set(["checked", "disabled", "type"]),
   li: new Set(["data-checked", "data-type"]),
   ol: new Set(["start"]),
   span: new Set([
@@ -197,6 +199,12 @@ function sanitizeAttributes(tag: string, attributes: Record<string, string>) {
   if (tag === "a" && attributes.target === "_blank" && !attributes.rel) {
     safeAttributes.push('rel="noopener noreferrer nofollow"');
   }
+  if (
+    tag === "input" &&
+    !Object.keys(attributes).some((name) => name.toLowerCase() === "disabled")
+  ) {
+    safeAttributes.push('disabled=""');
+  }
 
   return safeAttributes.length > 0 ? ` ${safeAttributes.join(" ")}` : "";
 }
@@ -214,6 +222,9 @@ function renderNode(node: any, preSentinel: string): string {
   const tag = parsedTag === preSentinel ? "pre" : parsedTag;
   const nodeAttributes = node.attributes ?? {};
   if (tag === "iframe" && !isAllowedIframeUrl(getAttributeValue(nodeAttributes, "src"))) {
+    return "";
+  }
+  if (tag === "input" && getAttributeValue(nodeAttributes, "type").toLowerCase() !== "checkbox") {
     return "";
   }
 

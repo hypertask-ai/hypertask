@@ -34,10 +34,16 @@ test("a javascript: markdown link cannot become a live href", () => {
   assert.ok(!html.includes("javascript:"), `javascript: URL survived: ${html}`);
 });
 
-// Raw HTML the model writes is stored as-is, unchanged from before this feature existed.
-// This module must not import a sanitizer: isomorphic-dompurify reaches jsdom, and pulling
-// that into the chat route killed it at module load in production while every local check
-// passed. The guard is the import graph itself, asserted below.
+test("raw model HTML is sanitized before storage", () => {
+  const html = toStoredHtml(
+    '<p onclick="alert(1)">Safe<script>alert(2)</script><a href="javascript:alert(3)">link</a></p>'
+  );
+  assert.equal(html, "<p>Safe<a>link</a></p>");
+});
+
+// This server route must use only the server-safe sanitizer. isomorphic-dompurify reaches
+// jsdom, and pulling that into the chat route killed it at module load in production while
+// every local check passed. The guard is the import graph itself, asserted below.
 test("no browser-only dependency reaches the server route", () => {
   const fs = require("node:fs");
   const importsOf = (file) =>
@@ -62,9 +68,7 @@ test("ordinary links still work", () => {
   assert.match(toStoredHtml("[docs](https://example.com)"), /href="https:\/\/example\.com"/);
 });
 
-// sanitizeRichHtml would be the obvious server-safe choice, but it escapes the <code>
-// inside a <pre> into text the user can read and drops task-list checkboxes, either of
-// which reintroduces the bug this whole change exists to fix. Guard both.
+// Sanitizing must preserve both structures produced by the markdown converter.
 test("code blocks are not escaped into visible tags", () => {
   const html = toStoredHtml("```bash\nnpm i\n```");
   assert.match(html, /<pre><code class="language-bash">npm i/);
