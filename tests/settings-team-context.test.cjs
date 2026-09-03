@@ -1,8 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { createStore } = require("jotai/vanilla");
 
 const root = path.resolve(__dirname, "..");
+let jitiEntryId = 0;
 const jiti = require("jiti")(
   path.join(root, "tests/settings-team-context-entry.cjs"),
   {
@@ -42,6 +44,58 @@ test("direct settings loads initialize from the previous accessible board", () =
     ),
     "team-b",
   );
+});
+
+test("the selected settings team survives a full page reload", () => {
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const storageValues = new Map();
+  const pagehideListeners = [];
+  const storage = {
+    getItem: (key) => storageValues.get(key) ?? null,
+    setItem: (key, value) => storageValues.set(key, String(value)),
+    removeItem: (key) => storageValues.delete(key),
+  };
+
+  global.window = {
+    localStorage: storage,
+    sessionStorage: storage,
+    addEventListener: (type, listener) => {
+      if (type === "pagehide") pagehideListeners.push(listener);
+    },
+  };
+  global.document = {
+    visibilityState: "visible",
+    addEventListener: () => {},
+  };
+
+  const loadSelectedTeamAtom = () => {
+    const freshJiti = require("jiti")(
+      path.join(root, `tests/settings-team-reload-${++jitiEntryId}.cjs`),
+      {
+        interopDefault: true,
+        alias: { "@": path.join(root, "src") },
+        moduleCache: false,
+        jsx: true,
+      },
+    );
+    return freshJiti(path.join(root, "src/store/index.ts"))
+      .selectedSettingsTeamIdAtom;
+  };
+
+  try {
+    const beforeReload = createStore();
+    beforeReload.set(loadSelectedTeamAtom(), "team-b");
+    pagehideListeners.splice(0).forEach((listener) => listener());
+
+    const afterReload = createStore();
+    assert.equal(afterReload.get(loadSelectedTeamAtom()), "team-b");
+  } finally {
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+  }
 });
 
 test("settings billing derives a paid plan without a current board", () => {
