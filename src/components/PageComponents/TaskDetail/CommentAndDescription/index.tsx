@@ -200,7 +200,16 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           );
         })}
       </div>
-      {!_mbl && <NewCommentComponent />}
+      {/* HTPR-6037: sticky footer so the composer sits at the bottom of the pane
+          instead of floating mid-page after a short description/comment thread.
+          Works for both the window-scrolled page and the embedded (side panel)
+          scroll container, since sticky resolves against whichever ancestor is
+          actually scrollable. */}
+      {!_mbl && (
+        <div className="sticky bottom-0 z-[2100] w-full shrink-0 bg-cardBackground">
+          <NewCommentComponent />
+        </div>
+      )}
       {/* HTPR-5513: trailing space below the composer lives INSIDE this column
           so the properties rail's containing block (the column + rail row)
           reaches the end of the page. Put it on the page wrapper instead and
