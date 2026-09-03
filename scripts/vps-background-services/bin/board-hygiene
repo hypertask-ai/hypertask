@@ -101,17 +101,28 @@ Return exactly one line for $t and no other ticket." 2>/dev/null); then
   # Never relabel a ticket a human already corrected.
   grep -qx "$t" "$STATE/manual-override" 2>/dev/null && continue
   latest=$(ht GET "/mcp/tasks?ticket_number=$t&project_id=$BOARD")
-  if ! python3 -c '
+  if python3 -c '
 import sys,json,os
 open_ids={int(x) for x in os.environ["OPEN_SECTIONS"].split(",")}
 kinds={"FEATURE 💎","IMPROVEMENT ⚒️","Bug","SPEED OPTIMIZATION ⏩","Infra"}
 d=json.load(sys.stdin)
-tasks=d.get("tasks") or []
-eligible=(d.get("success") is True and len(tasks)==1 and
-          tasks[0].get("sectionId") in open_ids and
+if d.get("success") is not True or not isinstance(d.get("tasks"), list):
+    sys.exit(1)
+tasks=d["tasks"]
+if len(tasks) != 1:
+    sys.exit(2)
+eligible=(tasks[0].get("sectionId") in open_ids and
           not (kinds & {label.get("name") for label in tasks[0].get("labels") or []}))
-sys.exit(0 if eligible else 1)
+sys.exit(0 if eligible else 2)
 ' <<<"$latest"; then
+    :
+  else
+    revalidation_status=$?
+    if [ "$revalidation_status" -eq 2 ]; then
+      continue
+    fi
+    echo "board-hygiene: eligibility check failed for $t" >&2
+    failures=$((failures+1))
     continue
   fi
   payload=$(jq -cn --arg ticket "$t" --arg label "$label" \
