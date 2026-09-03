@@ -1,7 +1,7 @@
 import { getAllSubTasks } from "@/app/[...boardURL]/serverActions";
 import { ITask } from "@/models/model";
 import { boardSearchAtom, currentProjectAtom } from "@/store";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 
 export interface ITaskDeleteInfo {
@@ -26,6 +26,18 @@ const useKanbanModalStates = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [tasksToDelete, setTasksToDelete] = useState<number[]|undefined>([])
   const toggleSaveViewsModal = () => setShowSaveModal((prev) => !prev);
+
+  // HTPR-6072: the board tree no longer remounts on a board switch, so these
+  // modals must close explicitly instead of getting torn down for free.
+  useEffect(() => {
+    setShowMoveModal(false);
+    setShowViewsModal(false);
+    setManageViewsModal(false);
+    setShowDeleteTaskModal(false);
+    setTaskInfo(undefined);
+    setTasksToDelete(undefined);
+    setShowSaveModal(false);
+  }, [currentProject?.id]);
 
   const toggleViewsModal = (switchToManage?: boolean) => {
     if (switchToManage) {

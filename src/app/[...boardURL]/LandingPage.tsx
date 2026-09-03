@@ -1047,8 +1047,7 @@ return (
         projectIndex >= 0 && // Only render if project index is valid
         data.updatedProjects[projectIndex] &&
         isBoardPayloadHydrated(data.updatedProjects[projectIndex]) ? (
-           <SectionComp 
-            key={readinessRouteEntryId}
+           <SectionComp
             _allProjects={projectsForSection}
             _projectCount={data.updatedProjects.length}
             _currentUser={user}
@@ -1296,12 +1295,17 @@ useEffect(() => {
   setProjects(_allProjects)
   setCurrentProject(_allProjects[_projectIndex])
   setRecoilCurrentProject(_allProjects[_projectIndex])
-  // setCurrentIndex(_projectIndex)
+  // HTPR-6072: SectionComp no longer remounts on a board switch, so this
+  // effect is the only thing that re-syncs local state to the newly
+  // selected project - it must also fire on _projectIndex changing alone
+  // (_allProjects, the full project list, often doesn't change reference
+  // between two boards in the same list).
+  setCurrentIndex(_projectIndex)
 
   setSections(_allProjects[_projectIndex].sections)
 
   // queryClient.refetchQueries({queryKey:["getAllTeamsMinimal"]})
-}, [_allProjects])
+}, [_allProjects, _projectIndex])
 
 // ================= detect horizontal scrollbar
 useEffect(() => {
