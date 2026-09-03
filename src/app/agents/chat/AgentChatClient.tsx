@@ -42,6 +42,8 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
+import { AudioButton } from "@/components/RTE/Components/AudioButton";
+import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -197,6 +199,10 @@ const AgentChatClient = (props: IProp) => {
   const [messages, setMessages] = useState<TChatMessage[] | null>(null);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  // Mic dictation (AudioButton), same component and editor={null} pattern as
+  // the plain-text title field in TaskTitleModal.tsx.
+  const [isRecording, setIsRecording] = useState(false);
+  const [isDictationProcessing, setIsDictationProcessing] = useState(false);
   const [sending, setSending] = useState(false);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
   // When the current wait for this session's reply began (last send, or first
@@ -695,6 +701,14 @@ const AgentChatClient = (props: IProp) => {
     setMentionIndex(0);
   };
 
+  // AudioButton's dictation callback. There is no Tiptap editor here, so this
+  // mirrors appendDictationToTitle (TaskTitleModal.tsx): append transcript
+  // text to the plain-string draft, same append helper.
+  const insertDictation = useCallback((transcript: string) => {
+    setDraft((current) => appendTitleDictation(current, transcript));
+    composerRef.current?.focus();
+  }, []);
+
   // Detects an in-progress "@mention" ending at the cursor (must start at the
   // beginning of the text or after whitespace, same rule as the composer's
   // other autocomplete-style features).
@@ -1182,10 +1196,22 @@ const AgentChatClient = (props: IProp) => {
                 aria-label={`Message ${selectedAgent.displayName}`}
                 className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-[13px] outline-none placeholder:text-text-light-gray disabled:opacity-50"
               />
+              <AudioButton
+                id="agent-chat-audio-button"
+                editor={null}
+                callbackHandler={insertDictation}
+                toggleRecording={setIsRecording}
+                globalRecording={isRecording}
+                hasText={draft.trim().length > 0}
+                onProcessingChange={setIsDictationProcessing}
+                disabled={composerLocked}
+                ariaLabel="Dictate message"
+                className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"
+              />
               <button
                 type="button"
                 onClick={() => void handleSend()}
-                disabled={composerLocked || !draft.trim() || sending}
+                disabled={composerLocked || !draft.trim() || sending || isRecording || isDictationProcessing}
                 className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-[13px] font-medium"
               >
                 Send
