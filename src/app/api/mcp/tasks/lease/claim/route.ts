@@ -124,7 +124,9 @@ export async function POST(request: NextRequest) {
         where: { id: task.id },
         select: { status: true },
       });
-      if (liveTask?.status !== 'Normal') return [];
+      // Archived tasks may still be leased so an agent can restore them to
+      // Normal; only deletion closes the lifecycle for good.
+      if (liveTask?.status === 'Deleted') return [];
 
       if (require_assignment) {
         const assignments = await tx.assignees.findMany({
@@ -173,12 +175,12 @@ export async function POST(request: NextRequest) {
         where: { id: task.id },
         select: { status: true },
       });
-      if (liveTask?.status !== 'Normal') {
+      if (liveTask?.status === 'Deleted') {
         return NextResponse.json(
           {
             success: false,
             error: 'Task lifecycle precondition failed',
-            message: 'Archived or deleted tasks cannot acquire an agent mutation lease.',
+            message: 'Deleted tasks cannot acquire an agent mutation lease.',
           },
           { status: 409 }
         );
