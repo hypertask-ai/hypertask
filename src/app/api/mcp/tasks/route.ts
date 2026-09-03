@@ -581,7 +581,14 @@ export async function GET(request: NextRequest) {
         },
         _count: {
           select: {
-            assignees: true,
+            assignees: {
+              where: {
+                OR: [
+                  { agentId: null },
+                  { agent: accessibleAgentWhere(user.id) },
+                ],
+              },
+            },
             taskLabels: true,
             comments: mcpTaskUserCommentCount,
           },
