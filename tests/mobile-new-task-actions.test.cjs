@@ -110,7 +110,7 @@ test("recent mobile waveform, dictation, and touch-target fixes remain", () => {
 
 test("description dictation uses the white button until Save becomes primary", () => {
   assert.match(mobileBar, /mobilePresentation="prominent"/);
-  assert.doesNotMatch(mobileBar, /mobilePrimaryTone=/);
+  assert.match(mobileBar, /mobilePrimaryTone="default"/);
   assert.match(mobileBar, /ariaLabel="Dictate description"/);
   assert.match(
     audioButtonSource,
