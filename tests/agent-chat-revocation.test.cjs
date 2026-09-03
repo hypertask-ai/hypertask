@@ -17,9 +17,15 @@ function sessionLookup() {
 }
 
 test("message sends require the linked agent to remain active", () => {
+  const lookup = sessionLookup();
   assert.match(
-    sessionLookup(),
+    lookup,
     /agent:\s*\{[^}]*\brevokedAt:\s*null\b/,
     "an existing session must not remain writable after its agent is revoked",
+  );
+  assert.match(
+    lookup,
+    /\.\.\.accessibleAgentWhere\(userId\)/,
+    "message sends must retain the agent access filter",
   );
 });
