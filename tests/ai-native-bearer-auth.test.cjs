@@ -37,6 +37,10 @@ const state = {
     [owner.id, { ...owner, mcpTokensRevokedAt: null }],
     [stranger.id, { ...stranger, mcpTokensRevokedAt: null }],
   ]),
+  oauthClients: new Map([
+    ["owner-client", owner.id],
+    ["stranger-client", stranger.id],
+  ]),
   revokedJtis: new Map(),
   agent: null,
 };
@@ -51,6 +55,12 @@ stubModule("src/lib/prisma.ts", {
       findUnique: async ({ where }) => state.users.get(where.id) ?? null,
       findFirst: async ({ where }) =>
         [...state.users.values()].find((u) => u.email === where.email) ?? null,
+    },
+    oAuthClient: {
+      findUnique: async ({ where }) =>
+        state.oauthClients.has(where.client_id)
+          ? { client_id: where.client_id }
+          : null,
     },
     revokedToken: {
       // HTPR-5381: revocations belong to an account. Answering on the jti alone
@@ -109,6 +119,7 @@ function agentCredentials(generation = "managed-generation-1") {
       "firebase-owner",
       owner.id,
       owner.email,
+      "owner-client",
       3600,
       agentId,
       generation
@@ -138,7 +149,8 @@ test("a bearer token never overrides the signed-in cookie user", async () => {
   const strangerJwt = createOAuthToken(
     "firebase-stranger",
     stranger.id,
-    stranger.email
+    stranger.email,
+    "stranger-client"
   );
 
   const resolved = await getAiRequestUser(requestWith(strangerJwt));
@@ -146,7 +158,7 @@ test("a bearer token never overrides the signed-in cookie user", async () => {
 });
 
 test("a valid user OAuth access token authenticates native AI requests", async () => {
-  const userJwt = createOAuthToken("firebase-owner", owner.id, owner.email);
+  const userJwt = createOAuthToken("firebase-owner", owner.id, owner.email, "owner-client");
 
   assert.deepEqual(await getAiRequestUser(requestWith(userJwt)), {
     id: owner.id,
@@ -225,7 +237,7 @@ test("a foreign-signed OAuth token is refused even with the right claims", async
 });
 
 test("a revoked OAuth token stops authenticating", async () => {
-  const userJwt = createOAuthToken("firebase-owner", owner.id, owner.email);
+  const userJwt = createOAuthToken("firebase-owner", owner.id, owner.email, "owner-client");
   const { jti } = jwt.decode(userJwt);
   assert.ok(jti);
 
@@ -235,14 +247,14 @@ test("a revoked OAuth token stops authenticating", async () => {
 });
 
 test("an account-wide revocation invalidates tokens issued before it", async () => {
-  const userJwt = createOAuthToken("firebase-owner", owner.id, owner.email);
+  const userJwt = createOAuthToken("firebase-owner", owner.id, owner.email, "owner-client");
   state.users.get(owner.id).mcpTokensRevokedAt = new Date(Date.now() + 60_000);
 
   assert.equal(await getAiRequestUser(requestWith(userJwt)), null);
 });
 
 test("a token for a deleted account is refused", async () => {
-  const userJwt = createOAuthToken("firebase-ghost", 99, "ghost@example.test");
+  const userJwt = createOAuthToken("firebase-ghost", 99, "ghost@example.test", "ghost-client");
 
   assert.equal(await getAiRequestUser(requestWith(userJwt)), null);
 });

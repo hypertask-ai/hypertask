@@ -10,8 +10,12 @@ import { hashApiKey } from '@/lib/apiKeys'
 import { auth } from '@/lib/auth/betterAuth'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import {
+  isOAuthAccessTokenPayload,
   JWT_OAUTH_AUDIENCE,
   JWT_OAUTH_ISSUER,
+  oauthClientIdFromPayload,
+  OAUTH_CLIENT_ID_CLAIM,
+  oauthLegacyRevocationJti,
 } from '@/lib/mcp/oauthTokenContract'
 import {
   hasAnyManagementPermission,
@@ -678,6 +682,11 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
   const decoded = verifyMcpJwtToken(token)
   if (!decoded) return null
 
+  const isOAuthAccessToken = isOAuthAccessTokenPayload(decoded)
+  const oauthClientId = isOAuthAccessToken
+    ? oauthClientIdFromPayload(decoded)
+    : undefined
+
   try {
     // Extract user identifier from token
     let userId: number | null = null
@@ -721,10 +730,28 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
       return null
     }
 
+    if (isOAuthAccessToken) {
+      if (oauthClientId === null) return null
+      if (oauthClientId !== undefined) {
+        const client = await prisma.oAuthClient.findUnique({
+          where: { client_id: oauthClientId },
+          select: { client_id: true },
+        })
+        if (!client) {
+          console.log('[MCP Auth] OAuth client was removed')
+          return null
+        }
+      }
+    }
+
+    const revocationJtis = tokenRevocationJtis(user.id, token, decoded)
+    if (isOAuthAccessToken && oauthClientId === undefined) {
+      revocationJtis.push(oauthLegacyRevocationJti(user.id))
+    }
     const revokedToken = await prisma.revokedToken.findFirst({
       where: {
         user_id: user.id,
-        jti: { in: tokenRevocationJtis(user.id, token, decoded) },
+        jti: { in: revocationJtis },
       },
     })
 
@@ -890,6 +917,7 @@ export function createMcpToken(
  * @param firebaseUid Firebase user UID (used as 'sub')
  * @param userId Database user ID
  * @param email User email
+ * @param clientId OAuth client registration bound to this credential
  * @param expiresIn Expiration in seconds (default: 90 days). Ignored when agentId is set (no JWT exp).
  * @param agentId Optional agent UUID; when set, token has no expiry.
  * @returns JWT token string
@@ -900,12 +928,16 @@ export function createOAuthToken(
   firebaseUid: string,
   userId: number,
   email: string,
+  clientId: string,
   expiresIn: number = MCP_OAUTH_TOKEN_EXPIRY,
   agentId?: string | null,
   agentTokenJti?: string | null
 ): string {
   if (!JWT_SECRET) {
     throw new Error('JWT_SECRET not configured')
+  }
+  if (!clientId || clientId.length > 64) {
+    throw new Error('OAuth tokens require a valid client id')
   }
 
   const oauthIssuer = JWT_OAUTH_ISSUER
@@ -917,6 +949,7 @@ export function createOAuthToken(
     sub: firebaseUid,
     userId: userId,
     email: email,
+    [OAUTH_CLIENT_ID_CLAIM]: clientId,
     jti: randomUUID(),
     iat: Math.floor(issuedAt / 1000),
     [MCP_TOKEN_ISSUED_AT_MS_CLAIM]: issuedAt,
@@ -1013,6 +1046,9 @@ export type McpAuthFailureLookup = {
     findUnique: (args: unknown) => Promise<{ id: number; mcpTokensRevokedAt: Date | null } | null>
     findFirst: (args: unknown) => Promise<{ id: number; mcpTokensRevokedAt: Date | null } | null>
   }
+  oAuthClient: {
+    findUnique: (args: unknown) => Promise<{ client_id: string } | null>
+  }
   revokedToken: {
     findFirst: (args: unknown) => Promise<{ jti: string } | null>
   }
@@ -1088,14 +1124,32 @@ export async function classifyMcpAuthFailure(
     }
     if (!user) return 'invalid_token'
 
+    const isOAuthAccessToken = isOAuthAccessTokenPayload(verified)
+    const oauthClientId = isOAuthAccessToken
+      ? oauthClientIdFromPayload(verified)
+      : undefined
+    if (oauthClientId === null) return 'invalid_token'
+
+    const revocationJtis = tokenRevocationJtis(user.id, token, verified)
+    if (isOAuthAccessToken && oauthClientId === undefined) {
+      revocationJtis.push(oauthLegacyRevocationJti(user.id))
+    }
     const revoked = await db.revokedToken.findFirst({
       where: {
         user_id: user.id,
-        jti: { in: tokenRevocationJtis(user.id, token, verified) },
+        jti: { in: revocationJtis },
       },
       select: { jti: true },
     })
     if (revoked) return 'token_revoked'
+
+    if (oauthClientId !== undefined) {
+      const client = await db.oAuthClient.findUnique({
+        where: { client_id: oauthClientId },
+        select: { client_id: true },
+      })
+      if (!client) return 'token_revoked'
+    }
 
     // "Revoke every token" is recorded on the user, not per token, so a token
     // minted before that moment is revoked even with no row of its own.

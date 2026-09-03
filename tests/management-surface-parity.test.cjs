@@ -41,12 +41,15 @@ test("management-only keys can authenticate the MCP transport without gaining da
   const handler = read("src/lib/mcp-server/handler.ts");
   const auth = read("src/lib/mcp/auth.ts");
 
-  assert.match(handler, /bearerToken\.startsWith\(["']htmk_["']\)/);
+  assert.match(handler, /const ctx = await validateMcpAuth\(request,/);
+  assert.match(handler, /if \(ctx\.management\)/);
   assert.match(
     handler,
     /hasAnyManagementPermission\(ctx\.management\.permissions\)/,
   );
   assert.match(handler, /scopes: \[["']mcp:management["']\]/);
+  assert.doesNotMatch(handler, /jwt\.verify/);
+  assert.match(handler, /expiresAt,/);
   assert.match(auth, /export const isManagementKeyToken/);
   assert.match(auth, /isManagementKeyToken\(token\)/);
   assert.match(auth, /!hasDataPermission/);
