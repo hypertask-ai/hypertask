@@ -75,7 +75,6 @@ import {
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
-import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import {
   listOwnedAgents,
   type AgentManagementDatabase,
@@ -761,7 +760,7 @@ const writeToolNames = new Set([
   "hypertask_set_custom_field_value",
 ]);
 
-const commentInclude = (userId: number) => ({
+const commentInclude = (userId: number, projectId: number) => ({
   creator: {
     select: {
       id: true,
@@ -770,7 +769,7 @@ const commentInclude = (userId: number) => ({
     },
   },
   agent: {
-    select: mcpVisibleAgentSelect(userId),
+    select: mcpVisibleAgentSelect(userId, projectId),
   },
   attachments: {
     select: {
@@ -1837,7 +1836,7 @@ function mapTaskToDetail(task: any, userId: number) {
 }
 
 function mapTaskSearchItem(task: any, userId: number) {
-  const agent = mapVisibleMcpAgent(task.agent, userId);
+  const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
   return {
     id: task.id,
     task_id: task.id,
@@ -1869,8 +1868,8 @@ const stripInlineDataUris = (html: string) =>
     ? html.replace(/\bdata:[^;,\s"')]+;base64,[A-Za-z0-9+/=]+/g, "[inline image]")
     : html;
 
-function mapCommentToResponse(comment: any, userId: number) {
-  const agent = mapVisibleMcpAgent(comment.agent, userId);
+function mapCommentToResponse(comment: any, userId: number, projectId: number) {
+  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId);
   const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
   const text = stripInlineDataUris(comment.text);
   return {
@@ -4258,16 +4257,13 @@ function buildTools(
               createdAt: true,
               updatedAt: true,
               agent: { select: mcpVisibleAgentSelect(user.id) },
+              assignees: {
+                select: {
+                  agent: { select: mcpVisibleAgentSelect(user.id) },
+                },
+              },
               _count: {
                 select: {
-                  assignees: {
-                    where: {
-                      OR: [
-                        { agentId: null },
-                        { agent: accessibleAgentWhere(user.id) },
-                      ],
-                    },
-                  },
                   taskLabels: true,
                   comments: mcpTaskUserCommentCount,
                 },
@@ -4287,7 +4283,14 @@ function buildTools(
         return sanitizeForJson({
           success: true,
           tasks: tasks.map((task) => {
-            const agent = mapVisibleMcpAgent(task.agent, user.id);
+            const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId);
+            const assigneeCount = task.assignees.filter(
+              (assignee) =>
+                !assignee.agent ||
+                Boolean(
+                  mapVisibleMcpAgent(assignee.agent, user.id, task.projectId)
+                )
+            ).length;
             return {
               id: task.id,
               task_id: task.id,
@@ -4322,7 +4325,7 @@ function buildTools(
               status: task.status,
               priority: task.priority?.Priority_Value || undefined,
               dueDate: task.dueDate?.toISOString() || undefined,
-              assigneeCount: task._count.assignees,
+              assigneeCount,
               labelCount: task._count.taskLabels,
               commentCount: task._count.comments,
               createdAt: task.createdAt.toISOString(),
@@ -4647,7 +4650,9 @@ function buildTools(
                 creator: {
                   select: { email: true, displayName: true },
                 },
-                agent: { select: mcpVisibleAgentSelect(user.id) },
+                agent: {
+                  select: mcpVisibleAgentSelect(user.id, input.project_id),
+                },
               },
               orderBy: { createdAt: "desc" },
               take: commentLimit,
@@ -4688,7 +4693,11 @@ function buildTools(
 
         const mappedTask = mapTaskToMcpGetResponse(task, user.id);
         const comments = recentComments.reverse().map((comment) => {
-          const agent = mapVisibleMcpAgent(comment.agent, user.id);
+          const agent = mapVisibleMcpAgent(
+            comment.agent,
+            user.id,
+            input.project_id
+          );
           return {
             id: comment.id,
             author:
@@ -5177,7 +5186,7 @@ function buildTools(
           prisma.comment.count({ where: commentWhere }),
           prisma.comment.findMany({
             where: commentWhere,
-            include: commentInclude(user.id),
+            include: commentInclude(user.id, task.projectId),
             orderBy: { createdAt: input.sort_order },
             take: input.limit,
             skip: input.offset,
@@ -5188,8 +5197,11 @@ function buildTools(
           success: true,
           comments: comments.map((comment) =>
             input.include_activity
-              ? withActivityMetadata(mapCommentToResponse(comment, user.id), comment.activity)
-              : mapCommentToResponse(comment, user.id)
+              ? withActivityMetadata(
+                  mapCommentToResponse(comment, user.id, task.projectId),
+                  comment.activity
+                )
+              : mapCommentToResponse(comment, user.id, task.projectId)
           ),
           total,
           limit: input.limit,
@@ -7108,7 +7120,7 @@ function buildTools(
 
         const commentWithAttachments = await prisma.comment.findUnique({
           where: { id: comment.id },
-          include: commentInclude(user.id),
+          include: commentInclude(user.id, taskWithOwner.projectId),
         });
 
         void broadcastTaskComment(task.id, { originUserId: user.id });
@@ -7121,7 +7133,11 @@ function buildTools(
             url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           },
           comment: commentWithAttachments
-            ? mapCommentToResponse(commentWithAttachments, user.id)
+            ? mapCommentToResponse(
+                commentWithAttachments,
+                user.id,
+                taskWithOwner.projectId
+              )
             : { id: comment.id, text: sanitizedText },
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
         });
@@ -7641,7 +7657,7 @@ function buildTools(
 
         const updatedComment = await prisma.comment.findUnique({
           where: { id: input.comment_id },
-          include: commentInclude(user.id),
+          include: commentInclude(user.id, comment.task.projectId),
         });
 
         void broadcastTaskComment(comment.task.id, { originUserId: user.id });
@@ -7649,7 +7665,11 @@ function buildTools(
         return sanitizeForJson({
           success: true,
           comment: updatedComment
-            ? mapCommentToResponse(updatedComment, user.id)
+            ? mapCommentToResponse(
+                updatedComment,
+                user.id,
+                comment.task.projectId
+              )
             : { id: input.comment_id, text: sanitizedText },
         });
       }),

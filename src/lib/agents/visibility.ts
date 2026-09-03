@@ -15,22 +15,29 @@ export function isAgentVisibleToUser(
   agent: {
     userId: number;
     visibility: AgentVisibility;
-    members: readonly unknown[];
+    members: readonly { projectId?: number }[];
   },
   userId: number,
+  projectId?: number,
 ): boolean {
   return (
     agent.userId === userId ||
-    (agent.visibility === "TEAM" && agent.members.length > 0)
+    (agent.visibility === "TEAM" &&
+      agent.members.some(
+        (membership) =>
+          projectId === undefined || membership.projectId === projectId,
+      ))
   );
 }
 
 /** Projects shared by an agent and the requesting human. */
 export function accessibleAgentMembershipWhere(
   userId: number,
+  projectId?: number,
 ): Prisma.MemberWhereInput {
   return {
     project: {
+      ...(projectId === undefined ? {} : { id: projectId }),
       status: "Normal",
       OR: [
         { ownerId: userId },

@@ -47,7 +47,7 @@ async function main() {
   );
   assert.equal(
     isAgentVisibleToUser(
-      { userId: 7, visibility: "PRIVATE", members: [{ id: 1 }] },
+      { userId: 7, visibility: "PRIVATE", members: [{ projectId: 15 }] },
       42,
     ),
     false,
@@ -61,7 +61,7 @@ async function main() {
   );
   assert.equal(
     isAgentVisibleToUser(
-      { userId: 7, visibility: "TEAM", members: [{ id: 1 }] },
+      { userId: 7, visibility: "TEAM", members: [{ projectId: 15 }] },
       42,
     ),
     true,
@@ -72,7 +72,13 @@ async function main() {
   );
   assert.deepEqual(mcpVisibleAgentSelect(42).members, {
     where: accessibleMembership,
-    select: { id: true },
+    select: { projectId: true },
+  });
+  assert.deepEqual(mcpVisibleAgentSelect(42, 15).members, {
+    where: {
+      project: { ...accessibleMembership.project, id: 15 },
+    },
+    select: { projectId: true },
     take: 1,
   });
   const privateMcpAgent = {
@@ -83,21 +89,39 @@ async function main() {
     visibility: "PRIVATE" as const,
     members: [],
   };
-  assert.equal(mapVisibleMcpAgent(privateMcpAgent, 42), undefined);
-  assert.equal(mapVisibleMcpAgent(privateMcpAgent, 7)?.id, "private-agent");
+  assert.equal(mapVisibleMcpAgent(privateMcpAgent, 42, 15), undefined);
+  assert.equal(mapVisibleMcpAgent(privateMcpAgent, 7, 15)?.id, "private-agent");
   assert.equal(
     mapVisibleMcpAgent(
       { ...privateMcpAgent, visibility: "TEAM", members: [] },
       42,
+      15,
     ),
     undefined,
   );
   assert.equal(
     mapVisibleMcpAgent(
-      { ...privateMcpAgent, visibility: "TEAM", members: [{ id: 1 }] },
+      {
+        ...privateMcpAgent,
+        visibility: "TEAM",
+        members: [{ projectId: 15 }],
+      },
       42,
+      15,
     )?.id,
     "private-agent",
+  );
+  assert.equal(
+    mapVisibleMcpAgent(
+      {
+        ...privateMcpAgent,
+        visibility: "TEAM",
+        members: [{ projectId: 99 }],
+      },
+      42,
+      15,
+    ),
+    undefined,
   );
 
   const { projectVisibleTaskAgent } = await import(
@@ -116,23 +140,33 @@ async function main() {
     visibility: "PRIVATE" as const,
     members: [],
   };
-  assert.equal(projectVisibleTaskAgent(taskAgent, 42), null);
-  const ownerTaskAgent = projectVisibleTaskAgent(taskAgent, 7);
+  assert.equal(projectVisibleTaskAgent(taskAgent, 42, 15), null);
+  const ownerTaskAgent = projectVisibleTaskAgent(taskAgent, 7, 15);
   assert.equal(ownerTaskAgent?.id, taskAgent.id);
   assert.equal("visibility" in (ownerTaskAgent ?? {}), false);
   assert.equal(
     projectVisibleTaskAgent(
       { ...taskAgent, visibility: "TEAM", members: [] },
       42,
+      15,
     ),
     null,
   );
   assert.equal(
     projectVisibleTaskAgent(
-      { ...taskAgent, visibility: "TEAM", members: [{ id: 1 }] },
+      { ...taskAgent, visibility: "TEAM", members: [{ projectId: 15 }] },
       42,
+      15,
     )?.id,
     taskAgent.id,
+  );
+  assert.equal(
+    projectVisibleTaskAgent(
+      { ...taskAgent, visibility: "TEAM", members: [{ projectId: 99 }] },
+      42,
+      15,
+    ),
+    null,
   );
 
   let updateCount = 0;
@@ -262,6 +296,8 @@ async function main() {
     inboxPage,
     taskDetailLoad,
     createSessionRoute,
+    existingSessionRoute,
+    existingSessionMessagesRoute,
     assignRoute,
   ] = await Promise.all([
     readFile("src/app/agents/[agentId]/AgentDetail.tsx", "utf8"),
@@ -273,6 +309,8 @@ async function main() {
     readFile("src/app/inbox/agent/[agentId]/page.tsx", "utf8"),
     readFile("src/utils/controllers/taskDetail/load.ts", "utf8"),
     readFile("src/app/api/ai-chat/create-session/route.ts", "utf8"),
+    readFile("src/app/api/agent-chat/[sessionId]/route.ts", "utf8"),
+    readFile("src/app/api/agent-chat/[sessionId]/messages/route.ts", "utf8"),
     readFile("src/app/api/mcp/assignees/assign/route.ts", "utf8"),
   ]);
   assert.match(detail, /<InfoRow label="Visibility">/);
@@ -295,16 +333,30 @@ async function main() {
     /agent\.id IS NULL AND c\."agentDisplayName" IS NOT NULL/,
   );
   assert.match(taskDetailLoad, /visibility_agent_member\."agentId" = agent\.id/);
+  assert.match(
+    taskDetailLoad,
+    /visibility_agent_member\."projectId" = \([\s\S]*?WHERE comment_task\.id = c\."taskId"/,
+  );
   assert.match(taskDetailLoad, /visibility_project\.status = 'Normal'/);
   assert.match(createSessionRoute, /\.\.\.accessibleAgentWhere\(userId\)/);
+  for (const existingSessionSurface of [
+    existingSessionRoute,
+    existingSessionMessagesRoute,
+  ]) {
+    assert.match(
+      existingSessionSurface,
+      /agent: \{[\s\S]*?revokedAt: null,[\s\S]*?\.\.\.accessibleAgentWhere\(userId\)/,
+    );
+  }
   assert.match(
     assignRoute,
-    /agentAssigner: \{ select: mcpVisibleAgentSelect\(ctx\.user\.id\) \}/,
+    /agentAssigner: \{[\s\S]*?select: mcpVisibleAgentSelect\(ctx\.user\.id, task\.projectId\)/,
   );
   assert.match(
     assignRoute,
-    /mapVisibleMcpAgent\(row\.agentAssigner, ctx\.user\.id\)/,
+    /mapVisibleMcpAgent\([\s\S]*?row\.agentAssigner,[\s\S]*?ctx\.user\.id,[\s\S]*?task\.projectId/,
   );
+  assert.match(assignRoute, /if \(row\.agent && !agent\) return \[\]/);
   for (const ownerSurface of [
     agentRoute,
     activityRoute,

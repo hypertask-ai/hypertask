@@ -29,7 +29,7 @@ const routeJavascript = ts.transpileModule(routeSource, {
 
 function loadCommentsRoute({
   authContext = { user: { id: 6 }, agentId: null },
-  task = { id: 42 },
+  task = { id: 42, projectId: 15 },
   taskResolver = null,
 } = {}) {
   const queryCalls = []
@@ -172,9 +172,10 @@ function loadCommentsRoute({
     },
     '@/lib/mcp/agents': {
       getMcpSessionAgentSummary: async () => null,
-      mapVisibleMcpAgent: (agent, userId) =>
+      mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent && (agent.userId === userId ||
-          (agent.visibility === 'TEAM' && agent.members.length > 0))
+          (agent.visibility === 'TEAM' &&
+            agent.members.some((member) => member.projectId === projectId)))
           ? { id: agent.id, displayName: agent.displayName }
           : undefined,
       mcpVisibleAgentSelect: () => ({}),
@@ -315,7 +316,7 @@ test('MCP comments only exposes a team agent when the caller shares a board', as
   assert.equal(response.body.comments[1].agent, undefined)
   assert.equal(response.body.comments[1].agent_display_name, 'Private agent')
 
-  route.commentsFixture[1].agent.members = [{ id: 1 }]
+  route.commentsFixture[1].agent.members = [{ projectId: 15 }]
   response = await route.GET({
     nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
   })

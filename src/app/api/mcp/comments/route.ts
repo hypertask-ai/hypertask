@@ -122,7 +122,7 @@ export interface AddCommentResponse {
 }
 
 // Shared comment include structure
-const commentInclude = (userId: number) => ({
+const commentInclude = (userId: number, projectId: number) => ({
   creator: {
     select: {
       id: true,
@@ -131,7 +131,7 @@ const commentInclude = (userId: number) => ({
     }
   },
   agent: {
-    select: mcpVisibleAgentSelect(userId),
+    select: mcpVisibleAgentSelect(userId, projectId),
   },
   attachments: {
     select: {
@@ -150,9 +150,10 @@ const commentInclude = (userId: number) => ({
 function mapCommentToResponse(
   comment: any,
   userId: number,
+  projectId: number,
   includeActivity = false
 ): CommentItem {
-  const agent = mapVisibleMcpAgent(comment.agent, userId)
+  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
   const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
   const agentDisplayName = agentVisible
     ? comment.agentDisplayName
@@ -267,7 +268,7 @@ export async function GET(request: NextRequest) {
       includeActivity && !requestedSortOrder ? 'asc' : (sortOrder as 'asc' | 'desc')
     const comments = await prisma.comment.findMany({
       where: commentWhere,
-      include: commentInclude(user.id),
+      include: commentInclude(user.id, task.projectId),
       orderBy: {
         createdAt: effectiveSortOrder
       },
@@ -277,7 +278,7 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
-      mapCommentToResponse(comment, user.id, includeActivity)
+      mapCommentToResponse(comment, user.id, task.projectId, includeActivity)
     )
 
     const response: ListCommentsResponse = {
@@ -780,11 +781,11 @@ export async function POST(request: NextRequest) {
         // Fetch comment with attachments for response
         const commentWithAttachments = await prisma.comment.findUnique({
           where: { id: comment.id },
-          include: commentInclude(user.id)
+          include: commentInclude(user.id, task.projectId)
         })
 
         const mappedComment = commentWithAttachments
-          ? mapCommentToResponse(commentWithAttachments, user.id)
+          ? mapCommentToResponse(commentWithAttachments, user.id, task.projectId)
           : null
 
         const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);

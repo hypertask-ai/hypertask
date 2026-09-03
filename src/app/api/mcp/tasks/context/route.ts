@@ -171,7 +171,7 @@ export async function GET(request: NextRequest) {
             createdAt: true,
             agentDisplayName: true,
             agent: {
-              select: mcpVisibleAgentSelect(ctx.user.id),
+              select: mcpVisibleAgentSelect(ctx.user.id, projectId),
             },
             creator: {
               select: {
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest) {
 
     const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
     const comments = recentComments.reverse().map((comment) => {
-      const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id);
+      const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
       const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
       return {
         id: comment.id,

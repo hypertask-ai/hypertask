@@ -296,10 +296,16 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       where: { id: commentId },
       select: {
         agentDisplayName: true,
-        agent: { select: mcpVisibleAgentSelect(user.id) },
+        agent: {
+          select: mcpVisibleAgentSelect(user.id, comment.task.projectId),
+        },
       },
     })
-    const agent = mapVisibleMcpAgent(commentWithAgent?.agent, user.id)
+    const agent = mapVisibleMcpAgent(
+      commentWithAgent?.agent,
+      user.id,
+      comment.task.projectId
+    )
     const hasAgentAttribution = Boolean(
       commentWithAgent?.agent || commentWithAgent?.agentDisplayName
     )

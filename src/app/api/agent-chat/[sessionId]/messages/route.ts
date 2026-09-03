@@ -44,7 +44,10 @@ export async function POST(
         id: sessionId,
         userId: userId,
         agentId: { not: null },
-        agent: accessibleAgentWhere(userId),
+        agent: {
+          revokedAt: null,
+          ...accessibleAgentWhere(userId),
+        },
       },
       select: {
         id: true,

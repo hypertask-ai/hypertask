@@ -43,6 +43,11 @@ const hasAccessibleAgentProject = (userId: number) => Prisma.sql`
     INNER JOIN "Project" visibility_project
       ON visibility_project.id = visibility_agent_member."projectId"
     WHERE visibility_agent_member."agentId" = agent.id
+      AND visibility_agent_member."projectId" = (
+        SELECT comment_task."projectId"
+        FROM "Task" comment_task
+        WHERE comment_task.id = c."taskId"
+      )
       AND visibility_project.status = 'Normal'::"Status"
       AND (
         visibility_project."ownerId" = ${userId}
@@ -115,12 +120,13 @@ export function projectVisibleTaskAgent(
   agent:
     | (PublicAgent & {
         visibility: AgentVisibility;
-        members: readonly { id: number }[];
+        members: readonly { projectId: number }[];
       })
     | null,
   userId: number,
+  projectId: number,
 ): PublicAgent | null {
-  if (!agent || !isAgentVisibleToUser(agent, userId)) return null;
+  if (!agent || !isAgentVisibleToUser(agent, userId, projectId)) return null;
   return projectPublicAgent(agent) as PublicAgent;
 }
 
@@ -162,7 +168,7 @@ export function taskWhere(
 }
 
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
-export function taskDetailInclude(userId: number) {
+export function taskDetailInclude(userId: number, projectId: number) {
   return {
     user: { select: userSelect },
     description_: {
@@ -355,8 +361,8 @@ export function taskDetailInclude(userId: number) {
         ...publicAgentSelect,
         visibility: true,
         members: {
-          where: accessibleAgentMembershipWhere(userId),
-          select: { id: true },
+          where: accessibleAgentMembershipWhere(userId, projectId),
+          select: { projectId: true },
           take: 1,
         },
       },
@@ -398,13 +404,13 @@ export async function fetchTaskDetail(
 
   const task = await prisma.task.findFirst({
     where: taskWhere(slug, userId),
-    include: taskDetailInclude(userId),
+    include: taskDetailInclude(userId, slug.projectId),
   });
 
   if (!task) return null;
 
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
-  const visibleAgent = projectVisibleTaskAgent(task.agent, userId);
+  const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
   return {
     ...task,
     agentId: visibleAgent ? task.agentId : null,
