@@ -137,6 +137,7 @@ function mutationRequest(method, origin) {
     }),
     headers: {
       "content-type": "application/json",
+      host: "app.hypertask.ai",
       ...(origin ? { origin } : {}),
     },
   });
@@ -189,6 +190,22 @@ test("settings mutations reject missing sessions before calling the service", as
     );
     assert.equal(response.status, 401, method);
     assert.deepEqual(route.calls, [], method);
+  }
+});
+
+test("settings mutations allow authenticated same-origin requests", async () => {
+  for (const [method, operation, status] of [
+    ["POST", "create", 201],
+    ["PATCH", "active", 200],
+    ["DELETE", "delete", 200],
+  ]) {
+    const route = loadSettingsRoute({ userId: 6 });
+    const response = await route[method](
+      mutationRequest(method, "https://app.hypertask.ai"),
+    );
+    assert.equal(response.status, status, method);
+    assert.deepEqual(await response.json(), { success: true }, method);
+    assert.deepEqual(route.calls, [operation], method);
   }
 });
 
