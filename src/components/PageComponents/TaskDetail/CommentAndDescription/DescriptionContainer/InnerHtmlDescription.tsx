@@ -87,7 +87,7 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
         }
         else if (target && target.tagName === 'A') {
       
-            var href = target.getAttribute('href');
+            const href = target.getAttribute('href');
             
             if (href && isInternalTaskDetailHref(href)) {
                 if (shouldFollowLinkNatively(event)) return;

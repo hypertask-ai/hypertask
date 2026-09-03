@@ -113,6 +113,7 @@ test("modified and non-primary link clicks keep native browser behavior", () => 
     shiftKey: false,
   };
   assert.equal(shouldFollowLinkNatively(ordinary), false);
+  assert.equal(shouldFollowLinkNatively({ ...ordinary, altKey: true }), true);
   assert.equal(shouldFollowLinkNatively({ ...ordinary, ctrlKey: true }), true);
   assert.equal(shouldFollowLinkNatively({ ...ordinary, metaKey: true }), true);
   assert.equal(shouldFollowLinkNatively({ ...ordinary, shiftKey: true }), true);

@@ -104,7 +104,7 @@ const InnerHTMLComment = memo(
           currentIndex: clickedImageIndex,
         });
       } else if (target && target.tagName === "A") {
-        var href = target.getAttribute("href");
+        const href = target.getAttribute("href");
 
         if (href && isInternalTaskDetailHref(href)) {
           if (shouldFollowLinkNatively(event)) return;

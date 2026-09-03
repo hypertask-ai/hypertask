@@ -1,4 +1,4 @@
-import { parse } from "node-html-parser";
+import { HTMLElement, Node, parse } from "node-html-parser";
 
 import { escapeHtml } from "./escapeHtml";
 import { buildRichTextMentionHref } from "./richTextMention";
@@ -29,18 +29,18 @@ const MENTION_ATTRIBUTES = new Set([
   "uniqueindex",
 ]);
 
-function isInlineNode(node: any) {
+function isInlineNode(node: Node) {
   if (node.nodeType === 3) return true;
   return node.nodeType === 1 && INLINE_TAGS.has(String(node.rawTagName).toLowerCase());
 }
 
-function normalizeListItems(root: any) {
+function normalizeListItems(root: HTMLElement) {
   const items = root.querySelectorAll("li");
   for (let itemIndex = items.length - 1; itemIndex >= 0; itemIndex -= 1) {
     const item = items[itemIndex];
     const children = item.childNodes ?? [];
     const firstContentIndex = children.findIndex(
-      (node: any) => node.nodeType !== 3 || String(node.text ?? "").trim().length > 0,
+      (node) => node.nodeType !== 3 || String(node.text ?? "").trim().length > 0,
     );
     if (firstContentIndex < 0 || !isInlineNode(children[firstContentIndex])) continue;
 
@@ -51,17 +51,17 @@ function normalizeListItems(root: any) {
 
     const inlineContent = children
       .slice(0, inlineEnd)
-      .map((node: any) => node.toString())
+      .map((node) => node.toString())
       .join("");
     const remainingContent = children
       .slice(inlineEnd)
-      .map((node: any) => node.toString())
+      .map((node) => node.toString())
       .join("");
     item.set_content(`<p>${inlineContent}</p>${remainingContent}`);
   }
 }
 
-function normalizeMentionLinks(root: any) {
+function normalizeMentionLinks(root: HTMLElement) {
   for (const mention of root.querySelectorAll('[data-type="mention"]')) {
     const tag = String(mention.rawTagName ?? "").toLowerCase();
     if (tag !== "span" && tag !== "a") continue;
