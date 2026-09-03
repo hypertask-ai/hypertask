@@ -335,7 +335,11 @@ async function main() {
   assert.match(taskDetailLoad, /visibility_agent_member\."agentId" = agent\.id/);
   assert.match(
     taskDetailLoad,
-    /visibility_agent_member\."projectId" = \([\s\S]*?WHERE comment_task\.id = c\."taskId"/,
+    /INNER JOIN "Task" comment_task ON comment_task\.id = c\."taskId"/,
+  );
+  assert.match(
+    taskDetailLoad,
+    /visibility_agent_member\."projectId" = comment_task\."projectId"/,
   );
   assert.match(taskDetailLoad, /visibility_project\.status = 'Normal'/);
   assert.match(

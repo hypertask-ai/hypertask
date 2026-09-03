@@ -43,11 +43,7 @@ const hasAccessibleAgentProject = (userId: number) => Prisma.sql`
     INNER JOIN "Project" visibility_project
       ON visibility_project.id = visibility_agent_member."projectId"
     WHERE visibility_agent_member."agentId" = agent.id
-      AND visibility_agent_member."projectId" = (
-        SELECT comment_task."projectId"
-        FROM "Task" comment_task
-        WHERE comment_task.id = c."taskId"
-      )
+      AND visibility_agent_member."projectId" = comment_task."projectId"
       AND visibility_project.status = 'Normal'::"Status"
       AND (
         visibility_project."ownerId" = ${userId}
@@ -434,6 +430,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
         ${publicCommentCreator} AS creator,
         ${publicCommentAgent} AS agent
       FROM "Comment" c
+      INNER JOIN "Task" comment_task ON comment_task.id = c."taskId"
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
