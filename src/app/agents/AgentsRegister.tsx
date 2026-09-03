@@ -328,7 +328,7 @@ export function AgentCard({
           )}
         </InfoRow>
       </div>
-      {webhookOpen && (
+      {agent.runtimeType === "EXTERNAL" && webhookOpen && (
         <div className="relative z-20 -mx-4 -mb-4 mt-4">
           <AgentWebhookPanel agent={agent} />
         </div>

@@ -205,6 +205,10 @@ test("external agent cards open webhook settings only when requested", async () 
     assert.equal(webhookRequests, 1);
     assert.equal(dom.window.location.pathname, "/agents");
 
+    await React.act(async () => plug.click());
+    assert.equal(webhookRequests, 2);
+    assert.match(container.textContent, /Wake this agent without polling/);
+
     await React.act(async () => {
       reactRoot.render(
         React.createElement(AgentCard, {
@@ -215,6 +219,8 @@ test("external agent cards open webhook settings only when requested", async () 
       );
     });
     assert.equal(container.querySelector('button[aria-label^="Configure webhook"]'), null);
+    assert.doesNotMatch(container.textContent, /Wake this agent without polling/);
+    assert.equal(webhookRequests, 2);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     dom.window.close();
