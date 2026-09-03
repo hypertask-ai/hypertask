@@ -48,6 +48,14 @@ export async function GET(
       })
     ).reverse();
 
+    const subscription = await prisma.agentWebhookSubscription.findUnique({
+      where: { agentId: session.agentId! },
+      select: { active: true, events: true },
+    });
+    const chatEnabled = Boolean(
+      subscription?.active && subscription.events.includes("chat.message")
+    );
+
     return NextResponse.json({
       success: true,
       session: { id: session.id, agentId: session.agentId },
@@ -58,6 +66,7 @@ export async function GET(
         createdAt,
       })),
       awaiting: messages[messages.length - 1]?.role === "human",
+      chatEnabled,
     });
   } catch (error: any) {
     console.error("🚀 ~ GET ~ Error loading agent chat session", error);
