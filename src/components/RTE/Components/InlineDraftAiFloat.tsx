@@ -1331,7 +1331,10 @@ const InlineDraftAiFloat = ({
                           type="button"
                           disabled={isLoading}
                           className={MOBILE_CHIP_CLASS}
-                          onPointerDown={(event) => event.preventDefault()}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            mobilePromptInputRef.current?.focus();
+                          }}
                           onClick={() =>
                             void runAction({
                               command,

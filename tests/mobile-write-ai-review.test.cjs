@@ -340,7 +340,9 @@ test("mobile Write with AI keeps the keyboard target and chip strip in place whi
     const prompt = container.querySelector("input");
     const strip = container.querySelector(".overflow-x-auto");
     const chip = buttonWithText(container, "Improve readability");
-    prompt.focus();
+    const draft = container.querySelector('[contenteditable="true"]');
+    draft.focus();
+    assert.equal(document.activeElement, draft);
 
     let pointerDownAccepted;
     await act(async () => {
@@ -352,6 +354,7 @@ test("mobile Write with AI keeps the keyboard target and chip strip in place whi
       );
     });
     assert.equal(pointerDownAccepted, false);
+    assert.equal(document.activeElement, prompt);
 
     await click(dom, chip);
 
