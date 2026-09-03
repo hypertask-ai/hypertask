@@ -49,7 +49,7 @@ test("management-only keys can authenticate the MCP transport without gaining da
   );
   assert.match(handler, /scopes: \[["']mcp:management["']\]/);
   assert.doesNotMatch(handler, /jwt\.verify/);
-  assert.match(handler, /expiresAt,/);
+  assert.match(handler, /scopes: \[["']mcp:full["']\],\s+expiresAt,/);
   assert.match(auth, /export const isManagementKeyToken/);
   assert.match(auth, /isManagementKeyToken\(token\)/);
   assert.match(auth, /!hasDataPermission/);
