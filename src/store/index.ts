@@ -336,6 +336,17 @@ export const showAnnouncementsAtom = atom<boolean>({
     default: false,
 });
 
+// True once the open task detail's description editor and primary action
+// buttons exist in the DOM (the same condition app_task_detail_readiness
+// waits on). Non-essential task-detail requests - AI chat suggestions/
+// sessions, the share link prefetch, the move-task sections prefetch - gate
+// on this so they fire after the page is usable instead of racing it
+// (HTPR-6047). Not persisted: reset per task-detail open by TaskDetailComp.
+export const taskDetailNonEssentialReadyAtom = atom<boolean>({
+    key: "taskDetailNonEssentialReady",
+    default: false,
+});
+
 // True while the mobile comment composer is in active comment mode (editor
 // focused, keyboard up). Transient — not persisted. Read by GloablProviders to
 // hide the bottom MobileTabBar so the composer sits directly on the keyboard.
