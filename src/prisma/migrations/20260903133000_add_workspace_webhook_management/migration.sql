@@ -18,8 +18,8 @@ ALTER TABLE "BoardWebhookDelivery" ADD COLUMN "payloadHash" VARCHAR(64);
 ALTER TABLE "BoardWebhookDelivery" ADD COLUMN "sourceDeliveryId" TEXT;
 ALTER TABLE "BoardWebhookDelivery" ADD COLUMN "manualRetryKey" TEXT;
 
-CREATE UNIQUE INDEX "BoardWebhookDelivery_manualRetryKey_key"
-  ON "BoardWebhookDelivery"("manualRetryKey");
+CREATE UNIQUE INDEX "BoardWebhookDelivery_subscriptionId_sourceDeliveryId_manualRetryKey_key"
+  ON "BoardWebhookDelivery"("subscriptionId", "sourceDeliveryId", "manualRetryKey");
 
 CREATE TABLE "BoardWebhookAttempt" (
   "id" TEXT NOT NULL,

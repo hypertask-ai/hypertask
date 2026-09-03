@@ -67,6 +67,64 @@ function loadSettingsRoute(session) {
   };
 }
 
+function loadDeniedWorkspaceService() {
+  const modulePaths = [
+    "src/lib/prisma.ts",
+    "src/lib/mcp/webhooks/outbox.ts",
+    "src/lib/mcp/webhooks/ssrfGuard.ts",
+    "src/lib/mcp/webhooks/workspaceManagement.ts",
+  ];
+  for (const relativePath of modulePaths) {
+    delete require.cache[path.join(root, relativePath)];
+  }
+
+  let ownerLookups = 0;
+  let prisma;
+  prisma = new Proxy(
+    {
+      team: {
+        findFirst: async () => {
+          ownerLookups += 1;
+          return null;
+        },
+      },
+    },
+    {
+      get(target, property) {
+        if (property === "default") return prisma;
+        if (property in target) return target[property];
+        throw new Error(`Unexpected database access: ${String(property)}`);
+      },
+    },
+  );
+  stubModule("src/lib/prisma.ts", { default: prisma });
+  stubModule("src/lib/mcp/webhooks/outbox.ts", {
+    createBoardWebhookTestDelivery: async () => {
+      throw new Error("Unexpected delivery creation");
+    },
+    retryBoardWebhookDelivery: async () => {
+      throw new Error("Unexpected delivery retry");
+    },
+  });
+  stubModule("src/lib/mcp/webhooks/ssrfGuard.ts", {
+    assertSafeWebhookTarget: async () => {
+      throw new Error("Unexpected URL validation");
+    },
+  });
+  const jiti = require("jiti")(
+    path.join(root, `tests/jiti-workspace-webhooks-${++jitiEntryId}.cjs`),
+    {
+      alias: { "@": path.join(root, "src") },
+      cache: false,
+      interopDefault: true,
+    },
+  );
+  return {
+    module: jiti(path.join(root, "src/lib/mcp/webhooks/workspaceManagement.ts")),
+    ownerLookups: () => ownerLookups,
+  };
+}
+
 function mutationRequest(method, origin) {
   return new NextRequest("https://app.hypertask.ai/api/settings/webhooks", {
     method,
@@ -98,6 +156,10 @@ test("workspace webhook scope is exclusive and delivery attempts are durable", (
   assert.match(schema, /model BoardWebhookAttempt[\s\S]*?durationMs\s+Int/);
   assert.match(schema, /@@unique\(\[deliveryId, attemptNumber\]\)/);
   assert.match(schema, /payloadBody\s+String\?[\s\S]*?payloadHash\s+String\?/);
+  assert.match(
+    schema,
+    /@@unique\(\[subscriptionId, sourceDeliveryId, manualRetryKey\]\)/,
+  );
 });
 
 test("settings mutations require session and same-origin checks", () => {
@@ -137,6 +199,39 @@ test("settings mutations reject cross-origin requests before calling the service
   }
 });
 
+test("every workspace operation stops at the owner boundary", async () => {
+  const denied = loadDeniedWorkspaceService();
+  const base = { userId: 9, teamId: "another-team", id: "endpoint-1" };
+  const operations = [
+    () => denied.module.listWorkspaceWebhooks(base),
+    () =>
+      denied.module.createWorkspaceWebhook({
+        ...base,
+        events: ["task.created"],
+        projectId: null,
+        url: "https://example.test/webhook",
+      }),
+    () => denied.module.setWorkspaceWebhookActive({ ...base, active: true }),
+    () => denied.module.rotateWorkspaceWebhookSecret(base),
+    () => denied.module.testWorkspaceWebhook(base),
+    () =>
+      denied.module.retryWorkspaceWebhook({
+        ...base,
+        deliveryId: "delivery-1",
+        idempotencyKey: "retry-1",
+      }),
+    () => denied.module.deleteWorkspaceWebhook(base),
+  ];
+
+  for (const operation of operations) {
+    await assert.rejects(operation, (error) => {
+      assert.equal(error.status, 403);
+      return true;
+    });
+  }
+  assert.equal(denied.ownerLookups(), operations.length);
+});
+
 test("workspace management is owner-scoped and agent rows have no mutation path", () => {
   const service = read("src/lib/mcp/webhooks/workspaceManagement.ts");
 
@@ -144,10 +239,7 @@ test("workspace management is owner-scoped and agent rows have no mutation path"
   assert.match(service, /OR: \[\{ teamId, projectId: null \}, \{ project: \{ teamId \} \}\]/);
   assert.match(service, /where: \{ id: projectId, teamId: input\.teamId \}/);
   assert.match(service, /\^\[1-9\]\\d\*\$\/\.test\(input\.projectId\)/);
-  assert.match(
-    service,
-    /idempotencyKey: `\$\{subscription\.id\}:\$\{deliveryId\}:\$\{idempotencyKey\}`/,
-  );
+  assert.match(service, /subscriptionId: subscription\.id,[\s\S]*?idempotencyKey,/);
   assert.match(service, /agent:[\s\S]*?userId: input\.userId[\s\S]*?members:/);
   assert.match(service, /kind: 'agent' as const/);
   assert.match(

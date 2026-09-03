@@ -545,7 +545,7 @@ export async function retryWorkspaceWebhook(input: {
   const retriedId = await retryBoardWebhookDelivery({
     deliveryId,
     subscriptionId: subscription.id,
-    idempotencyKey: `${subscription.id}:${deliveryId}:${idempotencyKey}`,
+    idempotencyKey,
   })
   if (!retriedId) throw new WorkspaceWebhookError('Delivery not found', 404)
   return { success: true, deliveryId: retriedId }

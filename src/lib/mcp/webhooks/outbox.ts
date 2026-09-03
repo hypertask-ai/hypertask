@@ -185,8 +185,12 @@ export async function retryBoardWebhookDelivery(input: {
   idempotencyKey: string
 }): Promise<string | null> {
   const { default: prisma } = await import('@/lib/prisma')
-  const existing = await prisma.boardWebhookDelivery.findUnique({
-    where: { manualRetryKey: input.idempotencyKey },
+  const existing = await prisma.boardWebhookDelivery.findFirst({
+    where: {
+      manualRetryKey: input.idempotencyKey,
+      subscriptionId: input.subscriptionId,
+      sourceDeliveryId: input.deliveryId,
+    },
     select: { id: true },
   })
   if (existing) return existing.id
@@ -227,8 +231,12 @@ export async function retryBoardWebhookDelivery(input: {
     ) {
       throw error
     }
-    const raced = await prisma.boardWebhookDelivery.findUnique({
-      where: { manualRetryKey: input.idempotencyKey },
+    const raced = await prisma.boardWebhookDelivery.findFirst({
+      where: {
+        manualRetryKey: input.idempotencyKey,
+        subscriptionId: input.subscriptionId,
+        sourceDeliveryId: input.deliveryId,
+      },
       select: { id: true },
     })
     if (!raced) throw error

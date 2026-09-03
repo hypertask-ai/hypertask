@@ -223,6 +223,8 @@ export default function WebhooksSection() {
   }, [selectedId, teamId]);
 
   useEffect(() => {
+    setEndpoints([]);
+    setDeliveries([]);
     setSelectedId(null);
     setProjectId("");
     setRevealedSecret(null);
@@ -462,7 +464,10 @@ export default function WebhooksSection() {
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
+                    if (
+                      event.target === event.currentTarget &&
+                      (event.key === "Enter" || event.key === " ")
+                    ) {
                       event.preventDefault();
                       selectEndpoint(endpoint.id);
                     }
