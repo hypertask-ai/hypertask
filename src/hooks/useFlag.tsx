@@ -17,10 +17,14 @@ import {
 } from "@/lib/realtime/shared";
 
 const FeatureFlagsContext = createContext<Record<string, boolean>>({});
-export const featureFlagsQueryKey = (userId: number) => ["feature-flags", userId] as const;
+const FLAGS_ROUTE = "/api/flags";
+const FLAGS_REFRESH_MS = 5_000;
+export const FEATURE_FLAGS_QUERY_PREFIX = ["feature-flags"] as const;
+export const ADMIN_FEATURE_FLAGS_QUERY_KEY = ["admin-feature-flags"] as const;
+export const featureFlagsQueryKey = (userId: number) => [...FEATURE_FLAGS_QUERY_PREFIX, userId] as const;
 
 async function fetchFeatureFlags(): Promise<Record<string, boolean>> {
-  const response = await fetch("/api/flags", { cache: "no-store" });
+  const response = await fetch(FLAGS_ROUTE, { cache: "no-store" });
   if (!response.ok) throw new Error("Unable to load feature flags");
   const body = (await response.json()) as { flags?: Record<string, boolean> };
   return body.flags ?? {};
@@ -37,19 +41,19 @@ export function FeatureFlagProvider({
   const query = useQuery({
     queryKey: featureFlagsQueryKey(userId ?? 0),
     queryFn: fetchFeatureFlags,
-    enabled: userId != null,
-    refetchInterval: 5_000,
+    enabled: userId !== null,
+    refetchInterval: FLAGS_REFRESH_MS,
     refetchIntervalInBackground: true,
     retry: false,
   });
 
   useEffect(() => {
-    if (userId == null) return;
+    if (userId === null) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: featureFlagsQueryKey(userId) });
-      void queryClient.invalidateQueries({ queryKey: ["admin-feature-flags"] });
+      void queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY });
     };
 
     void (async () => {
@@ -61,15 +65,19 @@ export function FeatureFlagProvider({
       }
       const channelName = featureFlagsChannel();
       const channel = client.subscribe(channelName);
-      channel.bind(FEATURE_FLAGS_EVENT, refresh);
-      client.connection.bind("connected", refresh);
       unsubscribe = () => {
         channel.unbind(FEATURE_FLAGS_EVENT, refresh);
         client.connection.unbind("connected", refresh);
         client.unsubscribe(channelName);
         releaseRealtimeClientIfIdle(client);
       };
-    })();
+      channel.bind(FEATURE_FLAGS_EVENT, refresh);
+      client.connection.bind("connected", refresh);
+    })().catch((error) => {
+      unsubscribe?.();
+      unsubscribe = undefined;
+      console.warn("[feature-flags] realtime setup failed", error);
+    });
 
     return () => {
       cancelled = true;

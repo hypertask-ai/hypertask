@@ -68,7 +68,7 @@ export default async function handler(
     const { user, isValid } = isValidUser(req.cookies.nookies_user);
     if (isValid && user) userId = Number(user.id);
   }
-  if (userId == null) {
+  if (userId === null) {
     return res.status(403).json({ error: "Not authenticated" });
   }
 

@@ -1,9 +1,13 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { featureFlagsQueryKey } from "@/hooks/useFlag";
+import {
+  ADMIN_FEATURE_FLAGS_QUERY_KEY,
+  FEATURE_FLAGS_QUERY_PREFIX,
+} from "@/hooks/useFlag";
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 
+const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
 const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "OWNER_ONLY", label: "Only me" },
   { mode: "EVERYONE", label: "Everyone" },
@@ -11,13 +15,13 @@ const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
 ];
 
 async function loadFlags(): Promise<FeatureFlagRow[]> {
-  const response = await fetch("/api/admin/flags", { cache: "no-store" });
+  const response = await fetch(ADMIN_FLAGS_ROUTE, { cache: "no-store" });
   if (!response.ok) throw new Error("Could not load feature flags");
   return ((await response.json()) as { flags: FeatureFlagRow[] }).flags;
 }
 
 async function updateFlag(input: { key: string; mode: FeatureFlagMode }) {
-  const response = await fetch("/api/admin/flags", {
+  const response = await fetch(ADMIN_FLAGS_ROUTE, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -30,30 +34,30 @@ async function updateFlag(input: { key: string; mode: FeatureFlagMode }) {
 export default function FeatureFlagsAdmin() {
   const queryClient = useQueryClient();
   const flags = useQuery({
-    queryKey: ["admin-feature-flags"],
+    queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY,
     queryFn: loadFlags,
     refetchOnWindowFocus: true,
   });
   const update = useMutation({
     mutationFn: updateFlag,
     onMutate: async (next) => {
-      await queryClient.cancelQueries({ queryKey: ["admin-feature-flags"] });
-      const previous = queryClient.getQueryData<FeatureFlagRow[]>(["admin-feature-flags"]);
-      queryClient.setQueryData<FeatureFlagRow[]>(["admin-feature-flags"], (rows = []) =>
+      await queryClient.cancelQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY });
+      const previous = queryClient.getQueryData<FeatureFlagRow[]>(ADMIN_FEATURE_FLAGS_QUERY_KEY);
+      queryClient.setQueryData<FeatureFlagRow[]>(ADMIN_FEATURE_FLAGS_QUERY_KEY, (rows = []) =>
         rows.map((row) => (row.key === next.key ? { ...row, mode: next.mode } : row)),
       );
       return { previous };
     },
     onError: (_error, _next, context) => {
-      if (context?.previous) queryClient.setQueryData(["admin-feature-flags"], context.previous);
+      if (context?.previous) queryClient.setQueryData(ADMIN_FEATURE_FLAGS_QUERY_KEY, context.previous);
     },
     onSuccess: (flag) => {
-      queryClient.setQueryData<FeatureFlagRow[]>(["admin-feature-flags"], (rows = []) =>
+      queryClient.setQueryData<FeatureFlagRow[]>(ADMIN_FEATURE_FLAGS_QUERY_KEY, (rows = []) =>
         rows.map((row) => (row.key === flag.key ? flag : row)),
       );
-      void queryClient.invalidateQueries({ queryKey: featureFlagsQueryKey(6) });
+      void queryClient.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_PREFIX });
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin-feature-flags"] }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY }),
   });
 
   return (
@@ -80,7 +84,7 @@ export default function FeatureFlagsAdmin() {
               >
                 {OPTIONS.map((option) => {
                   const active = flag.mode === option.mode;
-                  const pending = update.isPending && update.variables.key === flag.key;
+                  const pending = update.isPending;
                   return (
                     <button
                       key={option.mode}

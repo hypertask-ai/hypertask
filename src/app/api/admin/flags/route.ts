@@ -65,7 +65,9 @@ export async function PATCH(request: NextRequest) {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode);
-    await broadcastFeatureFlagsChange();
+    void broadcastFeatureFlagsChange().catch((error) =>
+      console.warn("[feature-flags] realtime broadcast failed", error),
+    );
     return noStore({ flag });
   } catch (error) {
     if (error instanceof SyntaxError || error instanceof FeatureFlagInputError) {
