@@ -61,6 +61,7 @@
       "matches": {
         "api": [
           "^(GET|POST|DELETE|PATCH) /api/mcp/(admin/(keys|team-gateway-keys)|agents/(create|revoke|rotate-token)|agents/\\[agentId\\])$",
+          "^POST /api/mcp/agents/\\[agentId\\]/archive$",
           "^GET /api/mcp/admin/agents$",
           "^POST /api/mcp/admin/agents$",
           "^DELETE /api/mcp/admin/agents$",
@@ -72,6 +73,8 @@
         "mcp": [
           "^hypertask_create_agent$",
           "^hypertask_revoke_agent$",
+          "^hypertask_archive_agent$",
+          "^hypertask_delete_agent$",
           "^hypertask_mint_token$",
           "^hypertask_revoke_token$",
           "^hypertask_list_connections$"
@@ -99,12 +102,29 @@
         "hyperai": [
           "^hypertask_create_agent$",
           "^hypertask_revoke_agent$",
+          "^hypertask_archive_agent$",
+          "^hypertask_delete_agent$",
           "^hypertask_mint_token$",
           "^hypertask_revoke_token$",
           "^hypertask_list_connections$"
         ]
       },
       "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/6007",
+          "expires": "2026-09-30",
+          "entries": ["POST /api/mcp/agents/[agentId]/archive"]
+        },
+        "mcp": {
+          "issue": "https://app.hypertask.ai/detail/project-15/6007",
+          "expires": "2026-09-30",
+          "entries": ["hypertask_archive_agent", "hypertask_delete_agent"]
+        },
+        "hyperai": {
+          "issue": "https://app.hypertask.ai/detail/project-15/6007",
+          "expires": "2026-09-30",
+          "entries": ["hypertask_archive_agent", "hypertask_delete_agent"]
+        },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/5896",
           "expires": "2026-09-15",
