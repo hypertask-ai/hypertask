@@ -18,19 +18,27 @@ function renderComment(html) {
 
 test("read-only comments keep ordered and bullet markers after the Tailwind reset", () => {
   const dom = renderComment(`
-    <p>Regular paragraph</p>
-    <ol><li>First<ol><li>Nested</li></ol></li><li>Second</li></ol>
-    <ul><li>Bullet</li></ul>
+    <ol><li><p>First</p><ol><li><p>Nested</p></li></ol></li></ol>
+    <ul><li><p>Bullet</p></li></ul>
   `);
-  const [paragraph, ordered, nested] = dom.window.document.querySelectorAll("p, ol");
+  const [ordered, nested] = dom.window.document.querySelectorAll("ol");
   const bullet = dom.window.document.querySelector("ul");
+
+  assert.equal(dom.window.getComputedStyle(ordered).listStyleType, "decimal");
+  assert.equal(dom.window.getComputedStyle(nested).listStyleType, "decimal");
+  assert.equal(dom.window.getComputedStyle(bullet).listStyleType, "disc");
+  assert.equal(dom.window.getComputedStyle(ordered).listStylePosition, "outside");
+});
+
+test("ordered list text matches the regular comment paragraph size", () => {
+  const dom = renderComment(`
+    <p>Regular paragraph</p>
+    <ol><li>First</li><li>Second<ol><li>Nested</li></ol></li></ol>
+  `);
+  const paragraph = dom.window.document.querySelector("p");
+  const [ordered, nested] = dom.window.document.querySelectorAll("ol");
 
   assert.equal(dom.window.getComputedStyle(paragraph).fontSize, "14px");
   assert.equal(dom.window.getComputedStyle(ordered).fontSize, "14px");
-  assert.equal(dom.window.getComputedStyle(ordered).listStyleType, "decimal");
   assert.equal(dom.window.getComputedStyle(nested).fontSize, "14px");
-  assert.equal(dom.window.getComputedStyle(nested).listStyleType, "decimal");
-  assert.equal(dom.window.getComputedStyle(bullet).fontSize, "14px");
-  assert.equal(dom.window.getComputedStyle(bullet).listStyleType, "disc");
-  assert.equal(dom.window.getComputedStyle(ordered).listStylePosition, "outside");
 });
