@@ -338,6 +338,10 @@ async function main() {
     /visibility_agent_member\."projectId" = \([\s\S]*?WHERE comment_task\.id = c\."taskId"/,
   );
   assert.match(taskDetailLoad, /visibility_project\.status = 'Normal'/);
+  assert.match(
+    taskDetailLoad,
+    /agent\.visibility = 'TEAM'::"AgentVisibility"[\s\S]*?AND \(\$\{hasAccessibleAgentProject\(userId\)\}\)/,
+  );
   assert.match(createSessionRoute, /\.\.\.accessibleAgentWhere\(userId\)/);
   for (const existingSessionSurface of [
     existingSessionRoute,

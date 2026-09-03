@@ -65,10 +65,11 @@ const hasAccessibleAgentProject = (userId: number) => Prisma.sql`
 const hiddenCommentAgent = (userId: number) => Prisma.sql`
   (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
   OR (
-    agent."userId" <> ${userId}
-    AND (
-      agent.visibility = 'PRIVATE'::"AgentVisibility"
-      OR NOT (${hasAccessibleAgentProject(userId)})
+    agent.id IS NOT NULL
+    AND agent."userId" <> ${userId}
+    AND NOT (
+      agent.visibility = 'TEAM'::"AgentVisibility"
+      AND (${hasAccessibleAgentProject(userId)})
     )
   )
 `;
