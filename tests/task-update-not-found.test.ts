@@ -45,6 +45,30 @@ async function main() {
       tasks: [],
       error: 'Task not found or access denied',
     })
+
+    prismaMock.task.findMany = async () => [
+      { id: 5834, sectionId: 12, projectId: 15, status: 'Archive' },
+    ]
+
+    const archivedResult = await executeTaskUpdate({
+      request: new NextRequest('http://localhost/api/mcp/tasks/update', {
+        method: 'POST',
+      }),
+      ctx: {
+        user: { id: 6, email: 'valentin@example.com' },
+        agentId: null,
+      },
+      requestBody: { task_id: 5834, sectionId: 13 },
+    })
+    const archivedBody = await archivedResult.response.json()
+
+    assert.equal(archivedResult.outcome, 'error')
+    assert.equal(archivedResult.response.status, 409)
+    assert.deepEqual(archivedBody, {
+      success: false,
+      error:
+        'Archived tasks cannot move sections or change assignees. Unarchive them first.',
+    })
   } finally {
     prismaMock.task.findMany = originalTaskFindMany
   }
