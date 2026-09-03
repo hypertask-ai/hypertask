@@ -67,3 +67,8 @@ test("does not rewrite pre-like text in allowed attributes", () => {
 test("still recognizes pre tags after a literal less-than character", () => {
   assert.equal(sanitizeRichHtml("2 < 3<pre>code</pre>"), "2 &lt; 3<pre>code</pre>");
 });
+
+test("preserves the attributes that make mention anchors editable", () => {
+  const mention = '<a href="https://app.hypertask.ai/detail/project-15/6009" data-type="mention" class="mention" data-id="HTPR-6009" data-label="task" data-mention-suggestion-char="@" projectid="15" uniqueindex="6009" text="">HTPR-6009</a>';
+  assert.equal(sanitizeRichHtml(mention), mention);
+});

@@ -10,6 +10,7 @@ import { processMentionsFromCommentText } from './processMentions'
 import { omitCommentSeen } from './readReceipts'
 import { invalidateHyperAiCommentOrigin } from '@/lib/ai/hyperAiConfirmation'
 import { publicAgentSelect } from '@/lib/agents/publicAgent'
+import { normalizeRichTextStructure } from '@/utils/helperFunctions/normalizeRichTextStructure'
 
 export interface UpdateCommentParams {
   commentId: number
@@ -31,7 +32,8 @@ export interface UpdateCommentParams {
  * The authenticated user must own the stored comment.
  */
 export async function updateCommentService(params: UpdateCommentParams) {
-  const { commentId, text, userId, agentId, attachments, replaceAttachments } = params
+  const { commentId, text: inputText, userId, agentId, attachments, replaceAttachments } = params
+  const text = normalizeRichTextStructure(inputText)
 
   const comment = await prisma.comment.findFirst({
     where: { id: commentId, creatorId: userId },

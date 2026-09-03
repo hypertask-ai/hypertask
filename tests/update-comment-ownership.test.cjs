@@ -238,7 +238,7 @@ test("an owner updates text and attachments in one transaction", async () => {
   assert.equal(calls.attachmentCreates[0].data[0].taskId, 91);
   assert.equal(calls.attachmentCreates[0].data[0].commentId, 44);
   assert.equal(calls.attachmentCreates[0].data[0].id, undefined);
-  assert.equal(calls.commentUpdates[0].data.text, "<p>line one</p><ul><li>line two</li></ul>");
+  assert.equal(calls.commentUpdates[0].data.text, "<p>line one</p><ul><li><p>line two</p></li></ul>");
   assert.equal("seen" in updated, false);
 });
 

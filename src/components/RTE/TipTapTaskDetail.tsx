@@ -84,6 +84,7 @@ import {
   isInternalTaskDetailHref,
   preserveInboxFlowOnTaskHref,
   resolveCommentEnterShortcutAction,
+  shouldFollowLinkNatively,
 } from "@/lib/taskDetailInboxFlow";
 import { armBackDismiss } from "@/lib/mobile/backDismiss";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
@@ -996,6 +997,7 @@ const Tiptap = ({
     const link = target.closest("a");
     const href = link?.getAttribute("href");
     if (href && isInternalTaskDetailHref(href)) {
+      if (shouldFollowLinkNatively(event)) return;
       event.preventDefault();
       router.push(preserveInboxFlowOnTaskHref(href, inboxFlow));
     }

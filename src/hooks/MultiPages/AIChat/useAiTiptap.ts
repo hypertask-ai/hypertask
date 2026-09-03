@@ -8,8 +8,8 @@ import Placeholder from "@tiptap/extension-placeholder";
 import styles from "@/styles/tiptap.module.scss";
 import Underline from "@tiptap/extension-underline";
 import Gapcursor from "@tiptap/extension-gapcursor";
-import Mention from "@tiptap/extension-mention";
 import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionData";
+import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
 import SlashCommands from "@/components/RTE/Extensions/SlashCommands/SlashCommands";
 import { useContext, useRef } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -20,27 +20,6 @@ const DisableEnter = Extension.create({
     return {
       "Control-Enter": () => true,
       "Mod-Enter": () => true,
-    };
-  },
-});
-
-const CustomMention = Mention.extend({
-  addAttributes() {
-    // Check if parent is a function before invoking it
-    const parentAttributes =
-      typeof this.parent === "function" ? this.parent() : {};
-
-    return {
-      ...parentAttributes, // Spread the result of parent() or an empty object if parent is undefined
-      uniqueIndex: {
-        default: "",
-      },
-      projectId: {
-        default: "",
-      },
-      text: {
-        default: "",
-      },
     };
   },
 });
@@ -106,7 +85,7 @@ const useTiptapForAI = ({
       //     },
       //     // validate: href => /^https?:\/\//.test(href),
       //   }),
-      CustomMention.configure({
+      LinkableMention.configure({
         HTMLAttributes: {
           class: "mention",
         },
@@ -114,9 +93,6 @@ const useTiptapForAI = ({
           contextCallback,
           () => projectIdRef.current
         ),
-        renderLabel({ options, node }) {
-          return `${node.attrs.text ?? node.attrs.text}`;
-        },
       }),
       // "/" opens a skills picker (board + personal). Selecting one inserts
       // "/slug ", which the chat stream route resolves server-side.

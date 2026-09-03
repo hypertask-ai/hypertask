@@ -73,6 +73,7 @@
   --border-self-comment: 0, 0, 0;
   --border-light-gray-thin:rgb(35, 37, 42);
   --color-mention-highlight:#d29f02;
+  --color-rich-text-link: #5896f1;
   --color-horizontal-scrollbar-track:#4F5766;
   --color-archived-state: #86efac;
   --color-pull-request-open: #3fb950;

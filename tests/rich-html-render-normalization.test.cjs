@@ -55,3 +55,12 @@ test("unterminated head content is discarded", () => {
     "",
   );
 });
+
+test("legacy list items and mention chips render with editor structure", () => {
+  assert.equal(
+    normalizeRichHtmlForRender(
+      '<ol><li>Open <span data-type="mention" class="mention" data-id="HTPR-6009" data-label="task" projectid="15" uniqueindex="6009">HTPR-6009</span></li></ol>',
+    ),
+    '<ol><li><p>Open <a href="https://app.hypertask.ai/detail/project-15/6009" data-type="mention" class="mention" data-id="HTPR-6009" data-label="task" projectid="15" uniqueindex="6009">HTPR-6009</a></p></li></ol>',
+  );
+});

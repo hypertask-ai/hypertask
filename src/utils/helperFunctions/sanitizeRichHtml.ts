@@ -19,6 +19,7 @@ const ALLOWED_TAGS = new Set([
   "i",
   "img",
   "iframe",
+  "input",
   "li",
   "ol",
   "p",
@@ -45,24 +46,39 @@ const DROP_WITH_CONTENT = new Set([
   "math",
 ]);
 
-const VOID_TAGS = new Set(["br", "hr", "img"]);
+const VOID_TAGS = new Set(["br", "hr", "img", "input"]);
 
 const GLOBAL_ATTRIBUTES = new Set(["class"]);
 
 const TAG_ATTRIBUTES: Record<string, Set<string>> = {
-  a: new Set(["href", "target", "rel", "title"]),
+  a: new Set([
+    "contenteditable",
+    "data-id",
+    "data-label",
+    "data-mention-suggestion-char",
+    "data-type",
+    "href",
+    "projectid",
+    "rel",
+    "target",
+    "text",
+    "title",
+    "uniqueindex",
+  ]),
   // HTML-block (Pages canvas): the raw HTML lives base64-encoded in data-html,
   // never as live child nodes, so it is only ever executed in the sandboxed
   // iframe NodeView. Base64 has no <>"'& chars, so it round-trips escapeHtml.
   div: new Set(["data-html-block", "data-html"]),
   img: new Set(["src", "alt", "title", "width", "height"]),
   iframe: new Set(["src", "width", "height", "allowfullscreen", "title"]),
+  input: new Set(["checked", "disabled", "type"]),
   li: new Set(["data-checked", "data-type"]),
   ol: new Set(["start"]),
   span: new Set([
     "contenteditable",
     "data-id",
     "data-label",
+    "data-mention-suggestion-char",
     "data-type",
     "projectid",
     "text",
@@ -183,6 +199,12 @@ function sanitizeAttributes(tag: string, attributes: Record<string, string>) {
   if (tag === "a" && attributes.target === "_blank" && !attributes.rel) {
     safeAttributes.push('rel="noopener noreferrer nofollow"');
   }
+  if (
+    tag === "input" &&
+    !Object.keys(attributes).some((name) => name.toLowerCase() === "disabled")
+  ) {
+    safeAttributes.push('disabled=""');
+  }
 
   return safeAttributes.length > 0 ? ` ${safeAttributes.join(" ")}` : "";
 }
@@ -200,6 +222,9 @@ function renderNode(node: any, preSentinel: string): string {
   const tag = parsedTag === preSentinel ? "pre" : parsedTag;
   const nodeAttributes = node.attributes ?? {};
   if (tag === "iframe" && !isAllowedIframeUrl(getAttributeValue(nodeAttributes, "src"))) {
+    return "";
+  }
+  if (tag === "input" && getAttributeValue(nodeAttributes, "type").toLowerCase() !== "checkbox") {
     return "";
   }
 

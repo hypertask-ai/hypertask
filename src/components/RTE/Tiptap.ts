@@ -28,7 +28,6 @@ import Snippets from "./Extensions/Snippets/Snippets";
 import Link from "@tiptap/extension-link";
 import Emoji, { emojis } from "@tiptap/extension-emoji";
 import suggestion from "./suggestion";
-import Mention from "@tiptap/extension-mention";
 import MentionData from "./MentionData";
 import { Figma } from "./Extensions/FigmaTiptap";
 import { Loom } from "./Extensions/LoomTiptap";
@@ -44,6 +43,7 @@ import {
 } from "@/lib/snippets";
 import { ReplyBlockquote } from "./Extensions/ReplyBlockquote";
 import { withMentionBackspaceDeletion } from "./Extensions/DeleteMentionOnBackspace";
+import { LinkableMention } from "./Extensions/LinkableMention";
 import { writingAssistanceEditorProps } from "./writingAssistance";
 
 const defaultScrollMargin = 5;
@@ -70,24 +70,6 @@ const DisableEnter = Extension.create({
     };
   },
 });
-const CustomMention = Mention.extend({
-  addAttributes() {
-    // Check if parent is a function before invoking it
-    const parentAttributes =
-      typeof this.parent === "function" ? this.parent() : {};
-
-    return {
-      ...parentAttributes, // Spread the result of parent() or an empty object if parent is undefined
-      uniqueIndex: {
-        default: "",
-      },
-      projectId: {
-        default: "",
-      },
-    };
-  },
-});
-
 interface IProps {
   defaultContent?: string;
   mode: any;
@@ -232,16 +214,11 @@ const useTiptap = ({
         suggestion: suggestion,
       }),
       ...withMentionBackspaceDeletion(
-        CustomMention.configure({
+        LinkableMention.configure({
           HTMLAttributes: {
             class: "mention",
           },
           suggestion: MentionData,
-          renderLabel({ options, node }) {
-            // const href = options.linkPrefix + node.attrs.id; // Assuming linkPrefix is a prefix for the URL
-
-            return `${node.attrs.id ?? node.attrs.id}`;
-          },
         })
       ),
       ResizableMedia.configure({

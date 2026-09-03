@@ -21,6 +21,7 @@ import { normalizeImageSourcesInHtml } from "@/utils/helperFunctions/normalizeIm
 import {
   isInternalTaskDetailHref,
   preserveInboxFlowOnTaskHref,
+  shouldFollowLinkNatively,
 } from "@/lib/taskDetailInboxFlow";
 
 export const generateAttachmentFromImgEl = (
@@ -103,9 +104,10 @@ const InnerHTMLComment = memo(
           currentIndex: clickedImageIndex,
         });
       } else if (target && target.tagName === "A") {
-        var href = target.getAttribute("href");
+        const href = target.getAttribute("href");
 
         if (href && isInternalTaskDetailHref(href)) {
+          if (shouldFollowLinkNatively(event)) return;
           event.preventDefault();
           // Call your custom function here
           router.push(preserveInboxFlowOnTaskHref(href, inboxFlow));

@@ -10,6 +10,7 @@ const {
   isInternalTaskDetailHref,
   preserveInboxFlowOnTaskHref,
   resolveCommentEnterShortcutAction,
+  shouldFollowLinkNatively,
 } = jiti(path.join(root, "src/lib/taskDetailInboxFlow.ts"));
 const { inboxConfig } = jiti(
   path.join(root, "src/lib/configs/inbox.config.ts"),
@@ -101,6 +102,22 @@ test("only canonical internal task-detail URLs use app navigation", () => {
       malformedHref,
     );
   }
+});
+
+test("modified and non-primary link clicks keep native browser behavior", () => {
+  const ordinary = {
+    button: 0,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+  };
+  assert.equal(shouldFollowLinkNatively(ordinary), false);
+  assert.equal(shouldFollowLinkNatively({ ...ordinary, altKey: true }), true);
+  assert.equal(shouldFollowLinkNatively({ ...ordinary, ctrlKey: true }), true);
+  assert.equal(shouldFollowLinkNatively({ ...ordinary, metaKey: true }), true);
+  assert.equal(shouldFollowLinkNatively({ ...ordinary, shiftKey: true }), true);
+  assert.equal(shouldFollowLinkNatively({ ...ordinary, button: 1 }), true);
 });
 
 test("comment Enter shortcut modifiers resolve to one action", () => {
