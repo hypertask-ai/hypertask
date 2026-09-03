@@ -90,7 +90,7 @@ function rosterDotClass(agent: TAgent): string {
 const MARKDOWN_CLASS =
   "break-words [&_p]:my-2 [&_p]:leading-relaxed [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 " +
   "[&_a]:text-hypertasks-purple [&_a]:underline [&_a]:break-all " +
-  "[&_code]:bg-hoverCardBackground [&_code]:rounded-[3px] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[12px] " +
+  "[&_code]:bg-hoverCardBackground [&_code]:rounded-[3px] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-meta " +
   "[&_pre]:bg-hoverCardBackground [&_pre]:rounded-[4px] [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto " +
   "[&_pre_code]:bg-transparent [&_pre_code]:p-0";
 
@@ -104,7 +104,7 @@ function MessageBubble({
   if (message.role === "human") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-[13px] text-primary-foreground whitespace-pre-wrap break-words">
+        <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground whitespace-pre-wrap break-words">
           {tokenizeMessageLinks(message.content, projectIdForPrefix).map(
             (segment, i) =>
               segment.type === "link" ? (
@@ -131,7 +131,7 @@ function MessageBubble({
     <div className="flex justify-start">
       <div
         className={cn(
-          "max-w-[80%] rounded-[4px] bg-cardBackground px-3 py-2 text-[13px]",
+          "max-w-[80%] rounded-[4px] bg-cardBackground px-3 py-2 text-dense",
           MARKDOWN_CLASS,
         )}
         dangerouslySetInnerHTML={{ __html: markdownToHtml(message.content) }}
@@ -164,7 +164,7 @@ function RosterRow({
         className={cn("w-2 h-2 rounded-full shrink-0", rosterDotClass(agent))}
       />
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-medium truncate">
+        <span className="block text-dense font-medium truncate">
           {agent.displayName}
         </span>
         <span className="block text-[11px] text-text-light-gray truncate">
@@ -272,7 +272,10 @@ const AgentChatClient = (props: IProp) => {
     const myGen = ++rosterGenRef.current;
     loadAgents()
       .then((loaded) => {
-        if (!cancelled && myGen === rosterGenRef.current) setAgents(loaded);
+        if (!cancelled && myGen === rosterGenRef.current) {
+          setAgents(loaded);
+          setRosterError(null);
+        }
       })
       .catch((e) => {
         if (!cancelled && myGen === rosterGenRef.current) {
@@ -1011,7 +1014,7 @@ const AgentChatClient = (props: IProp) => {
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search agents"
           aria-label="Search agents"
-          className="mt-2 w-full rounded-[4px] bg-cardBackground px-3 py-1.5 text-[13px] outline-none placeholder:text-text-light-gray"
+          className="mt-2 w-full rounded-[4px] bg-cardBackground px-3 py-1.5 text-dense outline-none placeholder:text-text-light-gray"
         />
         {teams.length > 0 && (
           <AgentSelect
@@ -1031,15 +1034,15 @@ const AgentChatClient = (props: IProp) => {
       </div>
       <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
         {rosterError && (
-          <p className="px-2 py-3 text-[12px] text-red-500">{rosterError}</p>
+          <p className="px-2 py-3 text-meta text-red-500">{rosterError}</p>
         )}
         {!rosterError && !agents && (
-          <p className="px-2 py-3 text-[12px] text-text-light-gray">
+          <p className="px-2 py-3 text-meta text-text-light-gray">
             Loading agents…
           </p>
         )}
         {agents && roster.length === 0 && (
-          <p className="px-2 py-3 text-[12px] text-text-light-gray">
+          <p className="px-2 py-3 text-meta text-text-light-gray">
             No agents match.
           </p>
         )}
@@ -1081,7 +1084,7 @@ const AgentChatClient = (props: IProp) => {
           <p className="truncate text-[14px] font-semibold">
             {selectedAgent.displayName}
           </p>
-          <p className="truncate text-[12px] text-text-light-gray">
+          <p className="truncate text-meta text-text-light-gray">
             {chatStatusText(selectedAgent)}
           </p>
         </div>
@@ -1110,7 +1113,7 @@ const AgentChatClient = (props: IProp) => {
 
       {!isExternal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-          <p className="max-w-[340px] text-[13px] text-text-light-gray">
+          <p className="max-w-[340px] text-dense text-text-light-gray">
             {selectedAgent.displayName} is a Hypertask native agent. Its chat
             lives in the full AI chat surface.
           </p>
@@ -1118,7 +1121,7 @@ const AgentChatClient = (props: IProp) => {
             type="button"
             disabled={openingFullChat}
             onClick={() => void handleOpenFullChat()}
-            className="text-[13px] text-hypertasks-purple disabled:opacity-50"
+            className="text-dense text-hypertasks-purple disabled:opacity-50"
           >
             {openingFullChat ? "Opening…" : "Open full chat"}
           </button>
@@ -1127,13 +1130,13 @@ const AgentChatClient = (props: IProp) => {
         <>
           <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
             {messagesError && (
-              <p className="text-[12px] text-red-500">{messagesError}</p>
+              <p className="text-meta text-red-500">{messagesError}</p>
             )}
             {(sessionLoading || (!messages && !messagesError)) && (
-              <p className="text-[12px] text-text-light-gray">Loading chat…</p>
+              <p className="text-meta text-text-light-gray">Loading chat…</p>
             )}
             {messages && messages.length === 0 && (
-              <p className="text-[12px] text-text-light-gray">
+              <p className="text-meta text-text-light-gray">
                 Send {selectedAgent.displayName} a message to start the
                 conversation.
               </p>
@@ -1147,7 +1150,7 @@ const AgentChatClient = (props: IProp) => {
             ))}
             {awaiting && !deliveryNotice && (
               <div
-                className="flex items-center gap-2 text-[12px] text-text-light-gray"
+                className="flex items-center gap-2 text-meta text-text-light-gray"
                 role="status"
               >
                 <TypingIndicator />
@@ -1158,7 +1161,7 @@ const AgentChatClient = (props: IProp) => {
           {/* Card surface under the well: the two tokens differ in every theme, so the box stays visible on AMOLED (well = page) and porcelain (card = page). */}
           <div className="shrink-0 bg-cardBackground px-4 pb-4 pt-1">
             {deliveryNotice && (
-              <p className="mb-2 text-[12px] text-text-light-gray">
+              <p className="mb-2 text-meta text-text-light-gray">
                 This agent&apos;s runtime has not enabled chat yet.
               </p>
             )}
@@ -1166,7 +1169,7 @@ const AgentChatClient = (props: IProp) => {
               {mentionOpen && (
                 <div className="absolute bottom-full left-0 mb-1 max-h-[220px] w-[320px] overflow-y-auto rounded-[4px] bg-modalBackground py-1 shadow-md">
                   {mentionResults.length === 0 ? (
-                    <p className="px-3 py-2 text-[12px] text-text-light-gray">
+                    <p className="px-3 py-2 text-meta text-text-light-gray">
                       {mentionQuery?.trim() ? "No matching tasks" : "Type to search tasks"}
                     </p>
                   ) : (
@@ -1177,7 +1180,7 @@ const AgentChatClient = (props: IProp) => {
                         onMouseEnter={() => setMentionIndex(i)}
                         onClick={() => pickMention(task)}
                         className={cn(
-                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px]",
+                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-dense",
                           i === mentionIndex ? "bg-hoverCardBackground" : "",
                         )}
                       >
@@ -1203,13 +1206,13 @@ const AgentChatClient = (props: IProp) => {
                     : `Message ${selectedAgent.displayName}`
                 }
                 aria-label={`Message ${selectedAgent.displayName}`}
-                className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-[13px] outline-none placeholder:text-text-light-gray disabled:opacity-50"
+                className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
               />
               <button
                 type="button"
                 onClick={() => void handleSend()}
                 disabled={composerLocked || !draft.trim() || sending}
-                className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-[13px] font-medium"
+                className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-dense font-medium"
               >
                 Send
               </button>
@@ -1220,7 +1223,7 @@ const AgentChatClient = (props: IProp) => {
     </section>
   ) : (
     <section className="flex flex-1 items-center justify-center">
-      <p className="text-[13px] text-text-light-gray">
+      <p className="text-dense text-text-light-gray">
         Select an agent to start chatting.
       </p>
     </section>
@@ -1237,7 +1240,7 @@ const AgentChatClient = (props: IProp) => {
         />
         <div className="absolute right-0 top-0 h-full w-[85%] max-w-[380px] overflow-y-auto bg-pageBackground shadow-md">
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-[13px] font-medium text-text-light-gray">
+            <span className="text-dense font-medium text-text-light-gray">
               Agent details
             </span>
             <button
@@ -1282,16 +1285,18 @@ const AgentChatClient = (props: IProp) => {
       isOpen={true}
       show={true}
       toggle={closeCreateAgent}
-      // Once the one-time token is showing, an accidental outside click must
-      // not discard it — force the explicit Done/copy affordance instead.
+      // Once the one-time token is showing, an accidental outside click or
+      // Escape press must not discard it: force the explicit Done/copy
+      // affordance instead.
       shouldCloseOnClickOutside={!newAgentToken}
+      keyboard={!newAgentToken}
       className="sm:min-w-[400px]"
     >
       <ModalHeaderComp header="Add agent" />
       <div className="px-6 pb-4">
         {newAgentToken ? (
           <>
-            <p className="text-[13px] text-white-black">
+            <p className="text-dense text-white-black">
               Agent created. Copy its token now, it will not be shown again.
             </p>
             <input
@@ -1299,20 +1304,20 @@ const AgentChatClient = (props: IProp) => {
               value={newAgentToken}
               onFocus={(e) => e.currentTarget.select()}
               aria-label="Agent token"
-              className="mt-2 w-full border-b border-light-black-border-1 bg-transparent px-0 py-1.5 text-[12px] text-white-black"
+              className="mt-2 w-full border-b border-light-black-border-1 bg-transparent px-0 py-1.5 text-meta text-white-black"
             />
             <div className="mt-3 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => void copyNewAgentToken()}
-                className="rounded-[4px] px-3 py-1.5 text-[13px] text-text-light-gray hover:bg-hoverCardBackground"
+                className="rounded-[4px] px-3 py-1.5 text-dense text-text-light-gray hover:bg-hoverCardBackground"
               >
                 {tokenCopied ? "Copied" : "Copy"}
               </button>
               <button
                 type="button"
                 onClick={closeCreateAgent}
-                className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-80"
+                className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80"
               >
                 Done
               </button>
@@ -1332,14 +1337,14 @@ const AgentChatClient = (props: IProp) => {
               className="border-b border-light-black-border-1 px-0"
             />
             {createAgentError && (
-              <p className="mt-2 text-[12px] text-red-500">{createAgentError}</p>
+              <p className="mt-2 text-meta text-red-500">{createAgentError}</p>
             )}
             <div className="mt-3 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={closeCreateAgent}
                 disabled={creatingAgent}
-                className="rounded-[4px] px-3 py-1.5 text-[13px] text-text-light-gray hover:bg-hoverCardBackground disabled:opacity-50"
+                className="rounded-[4px] px-3 py-1.5 text-dense text-text-light-gray hover:bg-hoverCardBackground disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -1347,7 +1352,7 @@ const AgentChatClient = (props: IProp) => {
                 type="button"
                 onClick={() => void createAgent()}
                 disabled={creatingAgent || !newAgentName.trim()}
-                className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {creatingAgent ? "Creating…" : "Create"}
               </button>
