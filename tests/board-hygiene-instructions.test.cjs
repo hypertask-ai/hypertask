@@ -28,9 +28,12 @@ HTPR-1235=FEATURE
 `))
 })
 
-test('board hygiene adds a kind without replacing existing labels', async () => {
+test('board hygiene safely adds a kind to every eligible ticket', async () => {
   const script = await readFile(executable, 'utf8')
 
+  assert.match(script, /cursor=\$encoded_cursor/)
+  assert.match(script, /grep -Fxq "\$t" <<<"\$candidates"/)
+  assert.match(script, /ticket_number=\$t&project_id=\$BOARD/)
   assert.match(script, /add_labels: \[\$label\]/)
-  assert.doesNotMatch(script, /hypertask tasks update .*--labels/)
+  assert.doesNotMatch(script, /--labels\b/)
 })
