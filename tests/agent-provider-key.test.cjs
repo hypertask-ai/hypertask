@@ -252,6 +252,8 @@ test("the agent page reads and writes the key through the owner-only route", () 
   assert.match(route, /maskByokSecret\(decryptByokSecret\(ciphertext\)\)/);
 
   assert.match(detail, /provider-key\?provider=openrouter/);
+  assert.match(detail, /res\.json\(\)\.catch\(\(\) => null\)/);
+  assert.match(detail, /data\?\.error \?\? "Could not remove provider key"/);
   assert.match(detail, /data-agent-provider-key/);
   assert.match(detail, /"Team key"/);
 });

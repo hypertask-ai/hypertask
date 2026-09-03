@@ -736,23 +736,23 @@ const AgentDetail = (props: IProp) => {
         `/api/agents/${agent.id}/provider-key?provider=openrouter`,
         { method: "DELETE" },
       );
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => null)) as {
         success?: boolean;
         error?: string;
         visibility?: "PRIVATE" | "TEAM";
         visibilityChanged?: boolean;
-      };
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "Could not remove provider key");
+      } | null;
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.error ?? "Could not remove provider key");
       }
       setProviderKey(null);
-      if (data.visibility) {
+      if (data?.visibility) {
         setAgent((current) =>
           current ? { ...current, visibility: data.visibility! } : current,
         );
       }
       setVisibilityNotice(
-        data.visibilityChanged
+        data?.visibilityChanged
           ? {
               kind: "success",
               text: "Provider key removed. This agent is now private.",

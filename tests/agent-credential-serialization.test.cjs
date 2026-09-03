@@ -64,8 +64,9 @@ test("historical activity JSON cannot serialize nested Agent credentials", () =>
 test("task-detail SQL selects public actors and sanitizes historical activity", () => {
   const source = read("src/utils/controllers/taskDetail/load.ts");
 
-  assert.match(source, /const publicCommentAgent = \(userId: number\) => Prisma\.sql/);
-  assert.match(source, /hiddenCommentAgent\(userId\)/);
+  assert.match(source, /const publicCommentAgent = Prisma\.sql/);
+  assert.match(source, /SELECT \(\$\{hiddenCommentAgent\(userId\)\}\) AS hidden/);
+  assert.match(source, /CASE WHEN agent_visibility\.hidden/);
   assert.match(source, /'displayName', agent\."displayName"/);
   assert.doesNotMatch(source, /to_jsonb\(agent\)/);
   assert.match(source, /sanitizeAgentCredentials\(comments\)/);
