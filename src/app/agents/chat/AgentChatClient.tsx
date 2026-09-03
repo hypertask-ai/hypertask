@@ -22,7 +22,8 @@ import toast from "react-hot-toast";
 import { ArrowLeft, ChevronLeft, ChevronRight, Info, X } from "lucide-react";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
-import { isWorking, statusOf } from "@/lib/agents/registerView";
+import { isWorking, statusOf, listTeams } from "@/lib/agents/registerView";
+import AgentSelect, { AgentOption } from "../AgentSelect";
 import {
   connectRealtimeClient,
   releaseRealtimeClientIfIdle,
@@ -40,6 +41,7 @@ const AWAITING_POLL_MS = 4000;
 const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 8000;
 const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
+const TEAM_FILTER_KEY = "agentChat.teamId";
 
 type TChatMessage = {
   id: string;
@@ -169,6 +171,7 @@ const AgentChatClient = (props: IProp) => {
   const [agents, setAgents] = useState<TAgent[] | null>(null);
   const [rosterError, setRosterError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [teamId, setTeamId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [session, setSession] = useState<TAgentChatSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -237,6 +240,25 @@ const AgentChatClient = (props: IProp) => {
     }
   }, []);
 
+  // The team filter is remembered per browser; default to "All teams".
+  useEffect(() => {
+    try {
+      setTeamId(window.localStorage.getItem(TEAM_FILTER_KEY) || null);
+    } catch {
+      // Private browsing and hardened policies can reject localStorage.
+    }
+  }, []);
+
+  const setTeamFilter = (next: string | null) => {
+    setTeamId(next);
+    try {
+      if (next) window.localStorage.setItem(TEAM_FILTER_KEY, next);
+      else window.localStorage.removeItem(TEAM_FILTER_KEY);
+    } catch {
+      // Private browsing and hardened policies can reject localStorage.
+    }
+  };
+
   // Below 900px the three panes stack: roster list, then chat, and the details
   // move behind an info button.
   useEffect(() => {
@@ -255,6 +277,7 @@ const AgentChatClient = (props: IProp) => {
         success?: boolean;
         messages?: TChatMessage[];
         error?: string;
+        chatEnabled?: boolean;
       };
       if (!res.ok || !data.success || !Array.isArray(data.messages)) {
         throw new Error(data.error ?? "Failed to load messages");
@@ -270,6 +293,9 @@ const AgentChatClient = (props: IProp) => {
         return;
       setMessages(data.messages);
       setMessagesError(null);
+      // Same signal a failed send sets: no live webhook subscribed to
+      // chat.message, so the human side of the notice must survive a reload.
+      if (data.chatEnabled === false) setDeliveryNotice(true);
     } catch (e) {
       if (
         sessionIdRef.current === loadSessionId &&
@@ -455,14 +481,24 @@ const AgentChatClient = (props: IProp) => {
   );
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
 
+  const teams = useMemo(() => listTeams(agents ?? []), [agents]);
+
   const roster = useMemo(() => {
     const visible = (agents ?? []).filter(
       (a) => a.revokedAt === null && a.archivedAt === null,
     );
+    // A remembered team that no longer exists must not empty the roster.
+    const activeTeam =
+      teamId && teams.some((team) => team.id === teamId) ? teamId : null;
+    const inTeam = activeTeam
+      ? visible.filter((a) =>
+          (a.boards ?? []).some((board) => board.teamId === activeTeam),
+        )
+      : visible;
     const needle = search.trim().toLowerCase();
     const matching = needle
-      ? visible.filter((a) => a.displayName.toLowerCase().includes(needle))
-      : visible;
+      ? inTeam.filter((a) => a.displayName.toLowerCase().includes(needle))
+      : inTeam;
     // Most recent post first; agents that never posted sink below the rest,
     // with a name tiebreak so the order is stable.
     return [...matching].sort((a, b) => {
@@ -471,7 +507,7 @@ const AgentChatClient = (props: IProp) => {
       if (at !== bt) return at < bt ? 1 : -1;
       return a.displayName.localeCompare(b.displayName);
     });
-  }, [agents, search]);
+  }, [agents, search, teamId, teams]);
 
   const handleSend = async () => {
     const text = draft.trim();
@@ -591,6 +627,21 @@ const AgentChatClient = (props: IProp) => {
           aria-label="Search agents"
           className="mt-2 w-full rounded-[4px] bg-cardBackground px-3 py-1.5 text-[13px] outline-none placeholder:text-text-light-gray"
         />
+        {teams.length > 0 && (
+          <AgentSelect
+            value={teamId ?? ""}
+            ariaLabel="Filter agents by team"
+            onChange={(next) => setTeamFilter(next || null)}
+            className="mt-2 w-full"
+          >
+            <AgentOption value="">All teams</AgentOption>
+            {teams.map((team) => (
+              <AgentOption key={team.id} value={team.id}>
+                {team.name}
+              </AgentOption>
+            ))}
+          </AgentSelect>
+        )}
       </div>
       <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
         {rosterError && (
@@ -704,7 +755,7 @@ const AgentChatClient = (props: IProp) => {
             {messages?.map((message) => (
               <MessageBubble key={message.id} message={message} />
             ))}
-            {awaiting && (
+            {awaiting && !deliveryNotice && (
               <div
                 className="flex items-center gap-2 text-[12px] text-text-light-gray"
                 role="status"

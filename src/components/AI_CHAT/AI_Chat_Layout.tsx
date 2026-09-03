@@ -127,7 +127,10 @@ const AI_Chat_Layout: React.FC<AI_Chat_LayoutProps> = ({
   }
   // Settings is a full-screen surface that overlays everything; the AI chat
   // panel must not sit beside it (Valentin, HTPR-4391 follow-up).
-  if (pathname?.startsWith("/settings")) return (<>{children}</>)
+  // /agents/chat has its own agent-detail pane with a chevron collapse toggle;
+  // the global AI chat panel would overlay it and double up the chevrons.
+  if (pathname?.startsWith("/settings") || pathname?.startsWith("/agents/chat"))
+    return (<>{children}</>)
   return (
     <div className={`flex ${!isDetailPage ? "h-screen" : ""}`}>
       <div
