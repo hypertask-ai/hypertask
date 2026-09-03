@@ -16,6 +16,10 @@ export async function createFollowerService(params: {
   try {
     const { taskId, mentionById, agentId, commentId, fromAgentId } = params;
     let { userId } = params;
+    if (!taskId) {
+      return { status: 400, body: { message: "Missing required information." } };
+    }
+
     const task = await prisma.task.findUnique({
       where: { id: taskId },
       select: { userId: true, projectId: true, agentId: true },
@@ -46,7 +50,7 @@ export async function createFollowerService(params: {
     }
     if (!userId && agent) userId = agent.userId;
 
-    if (!userId || !taskId) {
+    if (!userId) {
       return { status: 400, body: { message: "Missing required information." } };
     }
 
