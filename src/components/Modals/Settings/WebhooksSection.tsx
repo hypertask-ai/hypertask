@@ -170,7 +170,8 @@ const workspaceSuccessMessages = {
 export default function WebhooksSection() {
   const { projects, teamId } = useSettingsTeam();
   const teamIdRef = useRef(teamId);
-  const workspaceRequestRef = useRef(0);
+  const actionRequestRef = useRef(0);
+  const actionAbortRef = useRef<AbortController | null>(null);
   teamIdRef.current = teamId;
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -200,6 +201,21 @@ export default function WebhooksSection() {
     [projects, teamId],
   );
   const selected = endpoints.find(({ id }) => id === selectedId) ?? null;
+
+  const beginActionRequest = () => {
+    actionAbortRef.current?.abort();
+    const controller = new AbortController();
+    const token = ++actionRequestRef.current;
+    actionAbortRef.current = controller;
+    return { controller, token };
+  };
+  const actionRequestIsCurrent = (token: number, requestTeamId: string) =>
+    actionRequestRef.current === token && teamIdRef.current === requestTeamId;
+  const finishActionRequest = (token: number) => {
+    if (actionRequestRef.current !== token) return;
+    actionAbortRef.current = null;
+    setBusy(null);
+  };
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!teamId) {
@@ -241,13 +257,21 @@ export default function WebhooksSection() {
   }, [selectedId, teamId]);
 
   useEffect(() => {
-    workspaceRequestRef.current += 1;
+    actionRequestRef.current += 1;
+    actionAbortRef.current?.abort();
+    actionAbortRef.current = null;
     setEndpoints([]);
     setDeliveries([]);
     setSelectedId(null);
     setProjectId("");
+    setBusy(null);
     setRevealedSecret(null);
     setVisiblePayload(null);
+    return () => {
+      actionRequestRef.current += 1;
+      actionAbortRef.current?.abort();
+      actionAbortRef.current = null;
+    };
   }, [teamId]);
 
   useEffect(() => {
@@ -270,7 +294,7 @@ export default function WebhooksSection() {
   ) => {
     if (!teamId || busy) return;
     const requestTeamId = teamId;
-    const requestToken = ++workspaceRequestRef.current;
+    const { controller, token: requestToken } = beginActionRequest();
     setBusy(`${action}:${endpoint.id}`);
     try {
       const response = await fetch(API_URL, {
@@ -278,18 +302,14 @@ export default function WebhooksSection() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ teamId, id: endpoint.id, action, ...extra }),
+        signal: controller.signal,
       });
       const data = (await response.json()) as {
         success?: boolean;
         secret?: string;
         error?: string;
       };
-      if (
-        teamIdRef.current !== requestTeamId ||
-        workspaceRequestRef.current !== requestToken
-      ) {
-        return;
-      }
+      if (!actionRequestIsCurrent(requestToken, requestTeamId)) return;
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? `Could not ${action} webhook`);
       }
@@ -303,14 +323,11 @@ export default function WebhooksSection() {
       toast.success(workspaceSuccessMessages[action]);
       setRefreshVersion((current) => current + 1);
     } catch (error) {
-      if (
-        teamIdRef.current === requestTeamId &&
-        workspaceRequestRef.current === requestToken
-      ) {
+      if (actionRequestIsCurrent(requestToken, requestTeamId)) {
         toast.error(error instanceof Error ? error.message : "Webhook action failed");
       }
     } finally {
-      setBusy(null);
+      finishActionRequest(requestToken);
     }
   };
 
@@ -319,24 +336,30 @@ export default function WebhooksSection() {
     endpoint: AgentEndpoint,
     deliveryId?: string,
   ) => {
-    if (busy) return;
+    if (!teamId || busy) return;
+    const requestTeamId = teamId;
+    const { controller, token: requestToken } = beginActionRequest();
     setBusy(`${action}:${endpoint.id}`);
     try {
       const response = await fetch(`/api/agents/${endpoint.agent.id}/webhook`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...(deliveryId ? { deliveryId } : {}) }),
+        signal: controller.signal,
       });
       const data = (await response.json()) as { success?: boolean; error?: string };
+      if (!actionRequestIsCurrent(requestToken, requestTeamId)) return;
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Could not queue delivery");
       }
       toast.success(action === "test" ? "Signed test queued" : "Delivery queued again");
       setRefreshVersion((current) => current + 1);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Webhook action failed");
+      if (actionRequestIsCurrent(requestToken, requestTeamId)) {
+        toast.error(error instanceof Error ? error.message : "Webhook action failed");
+      }
     } finally {
-      setBusy(null);
+      finishActionRequest(requestToken);
     }
   };
 
@@ -344,7 +367,7 @@ export default function WebhooksSection() {
     event.preventDefault();
     if (busy || !teamId || !url.trim() || events.length === 0) return;
     const requestTeamId = teamId;
-    const requestToken = ++workspaceRequestRef.current;
+    const { controller, token: requestToken } = beginActionRequest();
     setBusy("create");
     try {
       const response = await fetch(API_URL, {
@@ -358,6 +381,7 @@ export default function WebhooksSection() {
           projectId: projectId ? Number(projectId) : null,
           events,
         }),
+        signal: controller.signal,
       });
       const data = (await response.json()) as {
         success?: boolean;
@@ -365,12 +389,7 @@ export default function WebhooksSection() {
         secret?: string;
         error?: string;
       };
-      if (
-        teamIdRef.current !== requestTeamId ||
-        workspaceRequestRef.current !== requestToken
-      ) {
-        return;
-      }
+      if (!actionRequestIsCurrent(requestToken, requestTeamId)) return;
       if (!response.ok || !data.success || !data.endpoint || !data.secret) {
         throw new Error(data.error ?? "Could not add endpoint");
       }
@@ -383,19 +402,18 @@ export default function WebhooksSection() {
       setUrl("");
       toast.success("Webhook endpoint added");
     } catch (error) {
-      if (
-        teamIdRef.current === requestTeamId &&
-        workspaceRequestRef.current === requestToken
-      ) {
+      if (actionRequestIsCurrent(requestToken, requestTeamId)) {
         toast.error(error instanceof Error ? error.message : "Could not add endpoint");
       }
     } finally {
-      setBusy(null);
+      finishActionRequest(requestToken);
     }
   };
 
   const setActive = async (endpoint: WorkspaceEndpoint, active: boolean) => {
-    if (!teamId) return;
+    if (!teamId || busy) return;
+    const requestTeamId = teamId;
+    const { controller, token: requestToken } = beginActionRequest();
     setBusy(`active:${endpoint.id}`);
     try {
       const response = await fetch(API_URL, {
@@ -403,22 +421,34 @@ export default function WebhooksSection() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ teamId, id: endpoint.id, active }),
+        signal: controller.signal,
       });
       const data = (await response.json()) as { success?: boolean; error?: string };
+      if (!actionRequestIsCurrent(requestToken, requestTeamId)) return;
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Could not update endpoint");
       }
       setRefreshVersion((current) => current + 1);
       toast.success(active ? "Webhook enabled" : "Webhook paused");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update endpoint");
+      if (actionRequestIsCurrent(requestToken, requestTeamId)) {
+        toast.error(error instanceof Error ? error.message : "Could not update endpoint");
+      }
     } finally {
-      setBusy(null);
+      finishActionRequest(requestToken);
     }
   };
 
   const remove = async (endpoint: WorkspaceEndpoint) => {
-    if (!teamId || !confirm("Delete this endpoint and its delivery history?")) return;
+    if (
+      !teamId ||
+      busy ||
+      !confirm("Delete this endpoint and its delivery history?")
+    ) {
+      return;
+    }
+    const requestTeamId = teamId;
+    const { controller, token: requestToken } = beginActionRequest();
     setBusy(`delete:${endpoint.id}`);
     try {
       const response = await fetch(API_URL, {
@@ -426,8 +456,10 @@ export default function WebhooksSection() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ teamId, id: endpoint.id }),
+        signal: controller.signal,
       });
       const data = (await response.json()) as { success?: boolean; error?: string };
+      if (!actionRequestIsCurrent(requestToken, requestTeamId)) return;
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? "Could not delete endpoint");
       }
@@ -438,9 +470,11 @@ export default function WebhooksSection() {
       );
       toast.success("Webhook endpoint deleted");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not delete endpoint");
+      if (actionRequestIsCurrent(requestToken, requestTeamId)) {
+        toast.error(error instanceof Error ? error.message : "Could not delete endpoint");
+      }
     } finally {
-      setBusy(null);
+      finishActionRequest(requestToken);
     }
   };
 

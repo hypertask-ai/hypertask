@@ -262,7 +262,10 @@ test("workspace management is owner-scoped and agent rows have no mutation path"
     service,
     /agentWebhookDelivery\.findMany[\s\S]*?payload: \{ path: \['projectId'\], equals: id \}/,
   );
-  assert.doesNotMatch(service, /agentWebhookSubscription\.(update|delete)/);
+  assert.doesNotMatch(
+    service,
+    /agentWebhookSubscription\.(create(?:Many)?|update(?:Many)?|upsert|delete(?:Many)?)/,
+  );
 });
 
 test("accepted Settings surface exposes six filters and read-only agent controls", () => {
@@ -271,10 +274,11 @@ test("accepted Settings surface exposes six filters and read-only agent controls
   const section = read("src/components/Modals/Settings/WebhooksSection.tsx");
   const eventContract = read("src/lib/mcp/webhooks/events.ts");
 
-  assert.ok(
-    navigation.indexOf('{ id: "webhooks", label: "Webhooks" }') >
-      navigation.indexOf('{ id: "slack", label: "Slack" }'),
-  );
+  const slackIndex = navigation.indexOf('{ id: "slack", label: "Slack" }');
+  const webhooksIndex = navigation.indexOf('{ id: "webhooks", label: "Webhooks" }');
+  assert.ok(slackIndex >= 0);
+  assert.ok(webhooksIndex >= 0);
+  assert.ok(webhooksIndex > slackIndex);
   assert.match(shell, /webhooks: WebhooksSection/);
   for (const event of [
     "task.created",
@@ -294,11 +298,13 @@ test("accepted Settings surface exposes six filters and read-only agent controls
   assert.match(section, /Retry/);
   assert.match(section, /Open agent/);
   assert.match(section, /endpoint\.kind === "workspace"/);
-  assert.match(section, /const workspaceRequestRef = useRef\(0\)/);
+  assert.match(section, /const actionRequestRef = useRef\(0\)/);
+  assert.match(section, /actionAbortRef\.current\?\.abort\(\)/);
   assert.match(
     section,
-    /teamIdRef\.current !== requestTeamId \|\|[\s\S]*?workspaceRequestRef\.current !== requestToken/,
+    /actionRequestRef\.current === token && teamIdRef\.current === requestTeamId/,
   );
+  assert.match(section, /signal: controller\.signal/);
 });
 
 test("new mention and unassignment events are persisted at their domain transactions", () => {
