@@ -14,6 +14,12 @@ test('board hygiene retains the canonical classification contract', async () => 
   for (const kind of ['Bug', 'FEATURE', 'IMPROVEMENT', 'SKIP']) {
     assert.match(prompt, new RegExp(`^${kind}$`, 'm'))
   }
-  assert.match(prompt, /exactly `TICKET=KIND`/)
-  assert.match(prompt, /^HTPR-1234=Bug$/m)
+  assert.ok(prompt.endsWith(`## Output
+
+One line per ticket, exactly \`TICKET=KIND\`, nothing else. No preamble, no
+explanation, no blank lines, no markdown.
+
+HTPR-1234=Bug
+HTPR-1235=FEATURE
+`))
 })
