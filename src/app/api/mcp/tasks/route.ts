@@ -51,6 +51,7 @@ export interface TaskListItem {
   savedContent: Array<{ id: string; type: string }>
   createdAt: string
   updatedAt?: string
+  permanentlyDeleteAt: string | null
   agent?: McpAgentSummary
 }
 
@@ -541,6 +542,7 @@ export async function GET(request: NextRequest) {
         dueDate: true,
         createdAt: true,
         updatedAt: true,
+        permanentlyDeleteAt: true,
         sectionChangedAt: true,
         lastCommentAt: true,
         agent: {
@@ -643,6 +645,7 @@ export async function GET(request: NextRequest) {
         savedContent: task.savedContent,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt?.toISOString() || undefined,
+        permanentlyDeleteAt: task.permanentlyDeleteAt?.toISOString() || null,
         ...(agent ? { agent } : {}),
       }
     })

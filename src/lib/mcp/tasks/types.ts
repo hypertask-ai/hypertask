@@ -71,6 +71,7 @@ export interface TaskDetail {
     totalComments: number;
     createdAt: string;
     updatedAt: string;
+    permanentlyDeleteAt: string | null;
     staleness: TaskStaleness;
     createdBy?: {
         id: number;

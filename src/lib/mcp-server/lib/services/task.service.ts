@@ -87,6 +87,7 @@ export interface TaskDetail {
   totalComments: number;
   createdAt: string;
   updatedAt: string;
+  permanentlyDeleteAt: string | null;
   createdBy?: {
     id: number;
     email: string;
@@ -134,6 +135,7 @@ export interface TaskListItem {
   commentCount: number;
   createdAt: string;
   updatedAt: string;
+  permanentlyDeleteAt: string | null;
   link?: {
     url: string;
     format: string;

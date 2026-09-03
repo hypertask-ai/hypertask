@@ -276,6 +276,7 @@ export function mapTaskToMcpGetResponse(task: any) {
         totalComments: task._count.comments,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt?.toISOString() || undefined,
+        permanentlyDeleteAt: task.permanentlyDeleteAt?.toISOString() || null,
         staleness: taskStaleness(task, {
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
@@ -361,6 +362,7 @@ export function mapTaskToDetail(task: any): TaskDetail {
         totalComments: task._count?.comments || 0,
         createdAt: task.createdAt.toISOString(),
         updatedAt: task.updatedAt?.toISOString() || task.createdAt.toISOString(),
+        permanentlyDeleteAt: task.permanentlyDeleteAt?.toISOString() || null,
         staleness: taskStaleness(task, {
             warnDays: task.project?.staleWarnDays,
             hotDays: task.project?.staleHotDays,
