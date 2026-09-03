@@ -13,6 +13,7 @@ let userId = 7;
 let reads = 0;
 let writes = 0;
 let broadcasts = 0;
+let broadcastFails = false;
 class FeatureFlagInputError extends Error {}
 
 stubModule("src/lib/flags.ts", {
@@ -35,6 +36,7 @@ stubModule("src/lib/auth/getSessionUser.ts", {
 stubModule("src/lib/realtime/server.ts", {
   broadcastFeatureFlagsChange: async () => {
     broadcasts += 1;
+    if (broadcastFails) throw new Error("realtime unavailable");
   },
 });
 
@@ -67,6 +69,7 @@ test.beforeEach(() => {
   reads = 0;
   writes = 0;
   broadcasts = 0;
+  broadcastFails = false;
 });
 
 test("non-owners receive 404 before flag data is read", async () => {
@@ -87,6 +90,18 @@ test("the owner can list and change a declared flag", async () => {
   );
   assert.equal(result.status, 200);
   assert.equal(result.body.flag.mode, "OFF");
+  assert.equal(writes, 1);
+  assert.equal(broadcasts, 1);
+});
+
+test("committed updates still succeed when realtime delivery fails", async (t) => {
+  t.mock.method(console, "warn", () => {});
+  userId = 6;
+  broadcastFails = true;
+  const result = await admin.PATCH(
+    request("PATCH", { key: "htpr-6091-feature-flags", mode: "EVERYONE" }),
+  );
+  assert.equal(result.status, 200);
   assert.equal(writes, 1);
   assert.equal(broadcasts, 1);
 });

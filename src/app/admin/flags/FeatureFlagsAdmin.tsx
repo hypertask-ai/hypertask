@@ -26,8 +26,11 @@ async function updateFlag(input: { key: string; mode: FeatureFlagMode }) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const body = (await response.json()) as { flag?: FeatureFlagRow; error?: string };
-  if (!response.ok || !body.flag) throw new Error(body.error ?? "Could not update feature flag");
+  const body = (await response.json().catch(() => null)) as {
+    flag?: FeatureFlagRow;
+    error?: string;
+  } | null;
+  if (!response.ok || !body?.flag) throw new Error(body?.error ?? "Could not update feature flag");
   return body.flag;
 }
 
