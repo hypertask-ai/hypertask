@@ -370,6 +370,7 @@ test("mobile Write with AI keeps the keyboard target and chip strip in place whi
     assert.strictEqual(container.querySelector("input"), prompt);
     assert.strictEqual(container.querySelector(".overflow-x-auto"), strip);
     assert.equal(document.activeElement, prompt);
+    assert.equal(draft.getAttribute("contenteditable"), "false");
     assert.equal(chip.disabled, true);
     assert.match(container.textContent, /Rewriting draft/);
     const loadingStatus = container.querySelector('[role="status"]');

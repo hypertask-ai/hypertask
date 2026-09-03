@@ -1277,7 +1277,7 @@ const InlineDraftAiFloat = ({
                         styles.editorContainer,
                         "min-h-0 flex-1 overflow-y-auto outline-none scrollbar-none",
                       )}
-                      contentEditable
+                      contentEditable={!isLoading}
                       suppressContentEditableWarning
                       onBlur={handleMobileEditableBlur}
                       onKeyDown={handleMobileEditableKeyDown}
