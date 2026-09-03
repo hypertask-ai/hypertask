@@ -32,6 +32,26 @@ export const INBOX_QUERY_KEY = ["inbox"] as const;
 export const INBOX_QUERY_STALE_TIME_MS = 30 * 1000;
 export const inboxDataQueryKey = (userId: number | null | undefined) =>
   [...INBOX_QUERY_KEY, "data", userId] as const;
+export const inboxAccessQueryKey = (userId: number | null | undefined) =>
+  [...INBOX_QUERY_KEY, "access", userId] as const;
+
+// HTPR-6063: useGetNotifications mounts independently in the app shell and
+// the inbox page, so each mount's own effect used to fire its own
+// /api/notifications/access request - 2-3x per load, competing for
+// connections in the window that gates the inbox GET's start time.
+// staleTime 0 means this never serves cached/stale access data - it only
+// collapses truly concurrent calls onto React Query's own in-flight promise
+// for this queryKey. A fresh mount after the prior call settles always hits
+// the server again, exactly as before.
+export const fetchInboxAccessibleProjectIds = (
+  queryClient: QueryClient,
+  userId: number,
+) =>
+  queryClient.fetchQuery({
+    queryKey: inboxAccessQueryKey(userId),
+    queryFn: () => getInboxAccessibleProjectIds(),
+    staleTime: 0,
+  });
 
 const localReadModelParameter = (): string | null => {
   if (typeof window === "undefined") return null;
@@ -324,7 +344,7 @@ const fetchInboxPayload = async (
           fallbackPersistedPayload.revision,
         ) < 0)
     ) {
-      const access = await getInboxAccessibleProjectIds();
+      const access = await fetchInboxAccessibleProjectIds(queryClient, userId);
       if (access.accountId !== userId) {
         throw new Error("Inbox access account does not match local account");
       }
@@ -480,7 +500,7 @@ export const useGetNotifications = (userId: number) => {
         // content is never rendered until current board access is confirmed.
         const [storedPayload, access] = await Promise.all([
           readInboxReadModel(userId),
-          getInboxAccessibleProjectIds(),
+          fetchInboxAccessibleProjectIds(queryClient, userId),
         ]);
         if (cancelled) return;
         if (access.accountId !== userId) {
