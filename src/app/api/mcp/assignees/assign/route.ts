@@ -9,6 +9,7 @@ import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { IUser } from "@/models/model";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ACTIVE_TASK_MUTATION_STATUS } from "@/lib/mcp/tasks/activeTaskMutation";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 export interface McpAssigneeResponseItem {
   userId: number;
@@ -380,7 +381,13 @@ export async function POST(request: NextRequest) {
     const assignStatus = lastAssignStatus;
 
     const assigneeRows = await prisma.assignees.findMany({
-      where: { taskId: task.id },
+      where: {
+        taskId: task.id,
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(ctx.user.id) },
+        ],
+      },
       select: {
         userId: true,
         agent: { select: mcpAgentSelect },

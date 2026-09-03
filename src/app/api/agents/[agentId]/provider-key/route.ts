@@ -7,6 +7,10 @@ import { resolveOwnedAgent } from "@/lib/agents/ownedSlugs";
 import { verifyCookieIdentity } from "@/lib/auth/cookieIdentity";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { SESSION_COOKIE } from "@/lib/auth/session";
+import {
+  deleteOwnedAgentProviderKey,
+  upsertOwnedAgentProviderKey,
+} from "@/lib/agents/visibility";
 
 /**
  * Per-agent provider keys (HTPR-5389). An agent with its own key runs on that
@@ -53,7 +57,7 @@ async function requireOwnedAgent(request: NextRequest, ref: string) {
   });
   if (!agent) return { error: "Agent does not exist" as const, status: 404 };
 
-  return { agentId: agent.id };
+  return { agentId: agent.id, userId };
 }
 
 export async function GET(
@@ -139,24 +143,27 @@ export async function PUT(
 
   const enabled = body.enabled === undefined ? true : body.enabled === true;
 
-  await prisma.agentByokApiKey.upsert({
-    where: {
-      agentId_provider: { agentId: access.agentId, provider: body.provider },
-    },
-    create: {
-      agentId: access.agentId,
-      provider: body.provider,
-      ciphertext: encryptByokSecret(apiKey),
-      enabled,
-    },
-    update: { ciphertext: encryptByokSecret(apiKey), enabled },
+  const result = await upsertOwnedAgentProviderKey({
+    agentId: access.agentId,
+    userId: access.userId,
+    provider: body.provider,
+    ciphertext: encryptByokSecret(apiKey),
+    enabled,
   });
+  if (!result.ok) {
+    return NextResponse.json(
+      { success: false, error: result.error },
+      { status: result.status },
+    );
+  }
 
   return NextResponse.json({
     success: true,
     provider: body.provider,
     enabled,
     maskedKey: maskByokSecret(apiKey),
+    visibility: result.visibility,
+    visibilityChanged: result.visibilityChanged,
   });
 }
 
@@ -181,9 +188,22 @@ export async function DELETE(
     );
   }
 
-  await prisma.agentByokApiKey.deleteMany({
-    where: { agentId: access.agentId, provider },
+  const result = await deleteOwnedAgentProviderKey({
+    agentId: access.agentId,
+    userId: access.userId,
+    provider,
   });
+  if (!result.ok) {
+    return NextResponse.json(
+      { success: false, error: result.error },
+      { status: result.status },
+    );
+  }
 
-  return NextResponse.json({ success: true, provider });
+  return NextResponse.json({
+    success: true,
+    provider,
+    visibility: result.visibility,
+    visibilityChanged: result.visibilityChanged,
+  });
 }

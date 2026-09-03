@@ -1,6 +1,7 @@
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { CYCLE_WINDOW_SIZE, utcDate } from "@/lib/cycles";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 export type GetAllIncludesOptions = {
   userId: number;
@@ -182,6 +183,12 @@ export const getTaskIncludeLayers = ({
   const count = { _count: getTaskCountSelect(userId) };
   const assignees = {
     assignees: {
+      where: {
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(userId) },
+        ],
+      },
       include: {
         user: {
           select: {
@@ -300,6 +307,12 @@ export const getBoardTaskInclude = (
     layers.count,
     {
       assignees: {
+        where: {
+          OR: [
+            { agentId: null },
+            { agent: boardAgentVisibilityWhere(options.userId) },
+          ],
+        },
         select: {
           id: true,
           userId: true,
@@ -517,6 +530,12 @@ export const getProjectIncludeWithoutTasks = (
   options: GetAllIncludesOptions
 ): Prisma.ProjectInclude => ({
   members: {
+    where: {
+      OR: [
+        { agentId: null },
+        { agent: boardAgentVisibilityWhere(options.userId) },
+      ],
+    },
     include: {
       user: { select: boardUserSelect },
       agent: { select: publicAgentSelect },

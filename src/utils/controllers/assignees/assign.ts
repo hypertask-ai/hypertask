@@ -67,7 +67,14 @@ const assigneesAssign = async (
       const isRemoval = intent === "unassign";
       const [agent, onBoard] = await Promise.all([
         prisma.agent.findFirst({
-          where: { id: agentId, ...(isRemoval ? {} : { revokedAt: null }) },
+          where: {
+            id: agentId,
+            ...(isRemoval ? {} : { revokedAt: null }),
+            OR: [
+              { userId: currentUser.id },
+              { visibility: "TEAM" },
+            ],
+          },
           select: { userId: true },
         }),
         isAgentOnBoard(task.projectId, agentId),
@@ -238,6 +245,17 @@ const assigneesAssign = async (
     const assignees = await prisma.assignees.findMany({
       where: {
         taskId: taskId,
+        OR: [
+          { agentId: null },
+          {
+            agent: {
+              OR: [
+                { userId: currentUser.id },
+                { visibility: "TEAM" },
+              ],
+            },
+          },
+        ],
       },
       include: {
         user: true,

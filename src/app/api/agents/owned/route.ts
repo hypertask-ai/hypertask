@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { workingOnByAgent } from "@/lib/agents/working";
 import { ownedAgentSlugs } from "@/lib/agents/ownedSlugs";
 import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
@@ -22,16 +22,8 @@ export const runtime = "nodejs";
  * out of the several a user belongs to. Ownership scoping here also matches
  * `/api/agents/[agentId]`, so a card and its detail page never disagree.
  */
-export async function GET() {
-  let userId: number | undefined;
-  try {
-    const userCookie = (await cookies()).get("nookies_user");
-    userId = userCookie?.value
-      ? (JSON.parse(userCookie.value) as { id?: number }).id
-      : undefined;
-  } catch {
-    userId = undefined;
-  }
+export async function GET(request: NextRequest) {
+  const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -46,6 +38,7 @@ export async function GET() {
     select: {
       id: true,
       displayName: true,
+      visibility: true,
       photoURL: true,
       createdAt: true,
       revokedAt: true,

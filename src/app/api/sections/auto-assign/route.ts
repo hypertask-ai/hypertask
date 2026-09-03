@@ -75,9 +75,23 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  const visibleAgent =
+    autoAssignAgentId === null
+      ? null
+      : await prisma.agent.findFirst({
+          where: {
+            id: autoAssignAgentId,
+            OR: [
+              { userId: session.userId },
+              { visibility: "TEAM" },
+            ],
+          },
+          select: { id: true },
+        });
   if (
     autoAssignAgentId !== null &&
-    !(await isAgentOnBoard(section.projectId, autoAssignAgentId))
+    (!(await isAgentOnBoard(section.projectId, autoAssignAgentId)) ||
+      !visibleAgent)
   ) {
     return NextResponse.json(
       { success: false, error: "Auto-assign agent must be active on this board" },

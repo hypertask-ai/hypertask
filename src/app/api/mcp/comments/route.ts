@@ -668,7 +668,11 @@ export async function POST(request: NextRequest) {
 
     // Resolve any remaining plain "@Name" / "@<id>" tokens against project
     // members so CLI/MCP callers don't have to hand-write mention spans (HTPR-3783).
-    sanitizedText = await resolveTextMentions(sanitizedText, taskWithOwner.projectId)
+    sanitizedText = await resolveTextMentions(
+      sanitizedText,
+      taskWithOwner.projectId,
+      user.id,
+    )
     sanitizedText = sanitizeRichHtml(sanitizedText)
     sanitizedText = normalizeBlockHtml(sanitizedText)
 

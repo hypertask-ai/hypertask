@@ -46,6 +46,7 @@ type TAgent = {
   // and the detail route cannot disagree about what a slug points at.
   slug?: string;
   displayName: string;
+  visibility: "PRIVATE" | "TEAM";
   photoURL: string | null;
   createdAt: string;
   revokedAt: string | null;
@@ -247,6 +248,9 @@ export function AgentCard({
       </p>
 
       <div className="mt-3 flex flex-col gap-1.5">
+        <InfoRow label="Visibility">
+          {agent.visibility === "TEAM" ? "Team" : "Private"}
+        </InfoRow>
         {working && (
           // Text, not a link: the whole card is already an anchor to the agent,
           // and a second anchor inside it would have to fight that overlay.

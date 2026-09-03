@@ -2,6 +2,7 @@ import {  PrismaClient } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 
 const tasksGetAll = async (projectId:number|string|string[], userId:number|string|string[]) => {
@@ -39,6 +40,16 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
                     sectionChangedAt: true,
                     lastCommentAt: true,
                     assignees: {
+                        where: {
+                            OR: [
+                                { agentId: null },
+                                {
+                                    agent: boardAgentVisibilityWhere(
+                                        parseInt(userId as string)
+                                    ),
+                                },
+                            ],
+                        },
                         select: {
                             user: true
                         }
