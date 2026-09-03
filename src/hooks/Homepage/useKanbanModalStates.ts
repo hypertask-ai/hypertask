@@ -63,8 +63,13 @@ const useKanbanModalStates = () => {
     if (state) {
         if(!task) return
         setTaskInfo(task)
+        // HTPR-6072: SectionComp stays mounted across a board switch, so this
+        // await can resolve after the user has already moved to another
+        // board. Ignore a stale lookup instead of reopening the delete flow
+        // on the wrong board.
+        const lookupProjectId = currentProject?.id
         const allTasks : number[] | undefined = await getAllSubTasks(task.id)
-        console.log("🚀 ~ toggleDeleteModal ~ tasksToDelete:", allTasks)
+        if (currentProject?.id !== lookupProjectId) return
         setTasksToDelete(allTasks)
         setShowDeleteTaskModal(true)
     }else{

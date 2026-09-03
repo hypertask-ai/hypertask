@@ -1202,6 +1202,7 @@ const readinessFrameRef = useRef<number | null>(null);
 const readinessPaintFrameRef = useRef<number | null>(null);
 const readinessEntryKey = `${_currentUser.id}:${_readinessProjectId}:${_readinessRouteEntryId}`;
 const readinessCompletionRef = useRef({
+  entryKey: readinessEntryKey,
   accountId: _currentUser.id,
   projectId: _readinessProjectId,
   authenticated: _authenticated,
@@ -1209,6 +1210,21 @@ const readinessCompletionRef = useRef({
   readinessSource: _readinessSource,
   viewSurface: boardLayout,
 });
+// HTPR-6072: SectionComp no longer remounts on a board switch, so this ref's
+// one-time useRef initializer would otherwise stay pinned to the first
+// board forever. Recreate it whenever the readiness entry changes, but
+// leave it untouched (frozen) for re-renders within the same entry.
+if (readinessCompletionRef.current.entryKey !== readinessEntryKey) {
+  readinessCompletionRef.current = {
+    entryKey: readinessEntryKey,
+    accountId: _currentUser.id,
+    projectId: _readinessProjectId,
+    authenticated: _authenticated,
+    localDatabasePilot: _localDatabasePilotEnabled,
+    readinessSource: _readinessSource,
+    viewSurface: boardLayout,
+  };
+}
 const boardReadinessTraceScope = useCommittedBoardReadinessTrace({
   accountId: _currentUser.id,
   projectId: _readinessProjectId,
