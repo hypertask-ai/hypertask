@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
-import { mapMcpAgent, mcpAgentSelect } from '@/lib/mcp/agents'
+import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 
@@ -187,7 +187,7 @@ export async function GET(request: NextRequest) {
         dueDate: true,
         createdAt: true,
         agent: {
-          select: mcpAgentSelect,
+          select: mcpVisibleAgentSelect(user.id),
         },
       },
       ...(turbopufferIds.length > 0
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
-      const agent = mapMcpAgent(task.agent)
+      const agent = mapVisibleMcpAgent(task.agent, user.id)
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
