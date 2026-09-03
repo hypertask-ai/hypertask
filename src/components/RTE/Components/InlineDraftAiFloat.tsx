@@ -1241,6 +1241,7 @@ const InlineDraftAiFloat = ({
                       <>
                         <LoaderCircle
                           size={18}
+                          strokeWidth={1.5}
                           className="animate-spin text-hypertasks-ai-purple"
                           aria-hidden
                         />
@@ -1298,6 +1299,7 @@ const InlineDraftAiFloat = ({
                       >
                         <LoaderCircle
                           size={18}
+                          strokeWidth={1.5}
                           className="animate-spin text-hypertasks-ai-purple"
                           aria-hidden
                         />

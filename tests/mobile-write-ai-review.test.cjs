@@ -255,7 +255,7 @@ async function withRenderedSheet(text, callback) {
 }
 
 test("mobile Write with AI matches the empty mobile composer state", async () => {
-  await withRenderedSheet("", async ({ container }) => {
+  await withRenderedSheet("", async ({ container, dom }) => {
     const heading = [...container.querySelectorAll("h2")].find(
       (element) => element.textContent.trim() === "Write with AI",
     );
@@ -280,6 +280,15 @@ test("mobile Write with AI matches the empty mobile composer state", async () =>
     assert.match(send.className, /bg-shadcn-primary/);
     assert.match(send.className, /text-primary-foreground/);
     assert.match(send.className, /rounded-\[4px\]/);
+
+    global.fetch = () => new Promise(() => {});
+    await click(dom, send);
+    assert.equal(
+      container
+        .querySelector('[role="status"] .lucide-loader-circle')
+        .getAttribute("stroke-width"),
+      "1.5",
+    );
   });
 });
 
@@ -363,15 +372,20 @@ test("mobile Write with AI keeps the keyboard target and chip strip in place whi
     assert.equal(document.activeElement, prompt);
     assert.equal(chip.disabled, true);
     assert.match(container.textContent, /Rewriting draft/);
+    const loadingStatus = container.querySelector('[role="status"]');
     assert.equal(
-      container
-        .querySelector('[role="status"]')
-        .dispatchEvent(
-          new dom.window.MouseEvent("pointerdown", {
-            bubbles: true,
-            cancelable: true,
-          }),
-        ),
+      loadingStatus
+        .querySelector(".lucide-loader-circle")
+        .getAttribute("stroke-width"),
+      "1.5",
+    );
+    assert.equal(
+      loadingStatus.dispatchEvent(
+        new dom.window.MouseEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
       false,
     );
     assert.equal(document.activeElement, prompt);
