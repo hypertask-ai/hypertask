@@ -146,12 +146,26 @@ test("task responses expose the permanent-delete deadline", () => {
 
 test("the paginated task list selects and serializes the permanent-delete deadline", () => {
   const listQueryStart = routeSource.indexOf("// Get tasks");
-  const listQueryEnd = routeSource.indexOf("// Get metadata counts");
+  const listQueryEnd = routeSource.indexOf("// Get metadata counts", listQueryStart);
+  const listResponseStart = routeSource.indexOf(
+    "// Transform to response format",
+    listQueryEnd,
+  );
+  const listResponseEnd = routeSource.indexOf(
+    "// A full page in cursor mode",
+    listResponseStart,
+  );
+  assert.notEqual(listQueryStart, -1);
+  assert.notEqual(listQueryEnd, -1);
+  assert.notEqual(listResponseStart, -1);
+  assert.notEqual(listResponseEnd, -1);
+
   const listQuery = routeSource.slice(listQueryStart, listQueryEnd);
+  const listResponse = routeSource.slice(listResponseStart, listResponseEnd);
 
   assert.match(listQuery, /permanentlyDeleteAt:\s*true/);
   assert.match(
-    routeSource,
+    listResponse,
     /permanentlyDeleteAt:\s*task\.permanentlyDeleteAt\?\.toISOString\(\) \|\| null/,
   );
 });
