@@ -619,10 +619,27 @@ export async function executeTaskUpdate({
 
     if (
         hasActiveTaskOnlyMutation(requestBody) &&
+        tasks.some((task) => task.status === 'Archive')
+    ) {
+        console.log(
+            '[MCP Update Task] Archived tasks cannot move sections or change assignees'
+        )
+        outcome = 'error'
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'Archived tasks cannot move sections or change assignees. Unarchive them first.'
+            },
+            { status: 409 }
+        )
+    }
+
+    if (
+        hasActiveTaskOnlyMutation(requestBody) &&
         tasks.some((task) => !isActiveTaskMutationTarget(task.status))
     ) {
         console.log(
-            '[MCP Update Task] Archived or deleted tasks cannot move sections or change assignees'
+            '[MCP Update Task] Deleted tasks cannot move sections or change assignees'
         )
         outcome = 'not_found'
         return NextResponse.json(
