@@ -10,8 +10,9 @@ import jwt from 'jsonwebtoken'
  */
 export const JWT_OAUTH_ISSUER =
   process.env.JWT_ISSUER || 'https://app.hypertask.ai'
+export const JWT_LEGACY_OAUTH_AUDIENCE = 'http://localhost:3001'
 export const JWT_OAUTH_AUDIENCE =
-  process.env.JWT_OAUTH_AUDIENCE || 'http://localhost:3001'
+  process.env.JWT_OAUTH_AUDIENCE || JWT_LEGACY_OAUTH_AUDIENCE
 export const OAUTH_CLIENT_ID_CLAIM = 'client_id'
 
 export const oauthLegacyRevocationJti = (userId: number) =>
@@ -27,7 +28,8 @@ export function isOAuthAccessTokenPayload(
       : []
   return (
     decoded.iss === JWT_OAUTH_ISSUER &&
-    audiences.includes(JWT_OAUTH_AUDIENCE)
+    (audiences.includes(JWT_OAUTH_AUDIENCE) ||
+      audiences.includes(JWT_LEGACY_OAUTH_AUDIENCE))
   )
 }
 

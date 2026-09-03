@@ -255,6 +255,27 @@ test("removing a client rejects legacy OAuth tokens without revoking direct MCP 
   assert.equal((await validateMcpAuth(requestWith(directToken)))?.agentId, agentId);
 });
 
+test("the legacy marker covers the historical OAuth audience", async () => {
+  const legacyOAuthToken = jwt.sign(
+    {
+      sub: "firebase-owner",
+      userId: owner.id,
+      email: owner.email,
+      jti: crypto.randomUUID(),
+    },
+    TEST_SIGNING_KEY,
+    {
+      issuer: process.env.JWT_ISSUER,
+      audience: "http://localhost:3001",
+      expiresIn: 3600,
+    },
+  );
+
+  assert.equal((await validateMcpAuth(requestWith(legacyOAuthToken)))?.user.id, owner.id);
+  state.oauthLegacyTokensRevoked = true;
+  assert.equal(await validateMcpAuth(requestWith(legacyOAuthToken)), null);
+});
+
 test("a malformed OAuth client claim fails closed", async () => {
   const malformed = jwt.sign(
     {
