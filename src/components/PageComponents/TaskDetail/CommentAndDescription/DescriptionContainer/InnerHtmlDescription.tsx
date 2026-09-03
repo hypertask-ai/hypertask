@@ -14,6 +14,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useGifPlayback } from "@/hooks/General/useGifPlayback";
 import { normalizeRichHtmlForRender } from "@/utils/helperFunctions/normalizeRichHtmlForRender";
 import { normalizeImageSourcesInHtml } from "@/utils/helperFunctions/normalizeImageSource";
+import { sanitizeRenderedRichHtml } from "@/utils/helperFunctions/sanitizeHtml";
 import {
   isInternalTaskDetailHref,
   preserveInboxFlowOnTaskHref,
@@ -28,12 +29,13 @@ interface IInnerHTMLDescription{
     className?: string;
     setCarousalItems?: React.Dispatch<React.SetStateAction<TCarousalItems>>
     taskCreator?: IUser
+    taskDetailContentReady?: boolean
     }
     const mobileDescriptionPlaceHolder = `<div class='text-[#AEB4BC]'><h2 class="text-subheading font-bold">Add Description</h2><p>Tip: Double tap to edit</p></div>`
     const desktopDescriptionPlaceHolder = `<div class='text-[#AEB4BC]'><h2>Add Description</h2><p>Tip: Hit ENTER to edit mode or CTRL+D to jump here</p></div>`
     
     // Corrected the placement of the closing parenthesis for the memo function call
-const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, allowQuote, className, setCarousalItems, taskCreator }:IInnerHTMLDescription) => {
+const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, allowQuote, className, setCarousalItems, taskCreator, taskDetailContentReady }:IInnerHTMLDescription) => {
     const emptyDescriptions = ["<html><head></head><body><p></p></body></html>", "<p></p>", "", "<html><head></head><body></body></html>"]
     // const isApple = useDeviceContext()
     const _mbl = useContext(MobileViewContext);
@@ -44,8 +46,10 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
         else return desktopDescriptionPlaceHolder
     },[_mbl])
     const normalizedDescription = useMemo(
-      () => normalizeImageSourcesInHtml(
-        normalizeRichHtmlForRender(descriptionText ?? ""),
+      () => sanitizeRenderedRichHtml(
+        normalizeImageSourcesInHtml(
+          normalizeRichHtmlForRender(descriptionText ?? ""),
+        ),
       ),
       [descriptionText],
     );
@@ -120,7 +124,7 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
                         max-w-[85cqw] @lg:max-w-[650px] break-words
                         ${styles.editorContainer} ${styles.customLineBreak}`, className)}
                       id={id}
-
+                      data-task-detail-content-ready={taskDetailContentReady ? "true" : undefined}
                       dangerouslySetInnerHTML={{__html:textToShow??""}}>
                     </div>
                     {gifPlaybackControl}
