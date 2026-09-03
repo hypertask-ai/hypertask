@@ -156,6 +156,9 @@ test("a human assignment coexists with an agent owned by the same user", async (
       },
     },
     "@/lib/agents/publicAgent": { publicAgentSelect: {} },
+    "@/lib/agents/visibility": {
+      boardAgentVisibilityWhere: (userId) => ({ OR: [{ userId }, { visibility: "TEAM" }] }),
+    },
     "@/lib/agentWebhooks/outbox": {
       persistAgentWebhookEvent: async () => null,
       publishAgentWebhookDeliveries: async () => {},
