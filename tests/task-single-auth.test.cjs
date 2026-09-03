@@ -36,7 +36,7 @@ const OWNED_AGENT = "agent-owned";
 const REVOKED_AGENT = "agent-revoked";
 const BORROWED_AGENT = "agent-someone-elses";
 
-function loadHandler(session = null) {
+function loadHandler(session = null, { taskBroadcastGate } = {}) {
   const deleted = [];
   const updated = [];
   const broadcasts = [];
@@ -139,7 +139,10 @@ function loadHandler(session = null) {
     },
     "@/lib/realtime/server": {
       broadcastBoardChange: (...args) => broadcasts.push(["board", ...args]),
-      broadcastTaskChange: (...args) => broadcasts.push(["task", ...args]),
+      broadcastTaskChange: async (...args) => {
+        broadcasts.push(["task", ...args]);
+        await taskBroadcastGate;
+      },
     },
     // The route imports these for PUT relation sync. This auth-focused harness
     // keeps references empty so it can exercise the route without alias loading.
@@ -280,7 +283,9 @@ test("PUT refuses a logged-in user who is not on the task's board", async () => 
 });
 
 test("PUT lets a board member edit and broadcasts only after persistence", async () => {
-  const { handler, updated, broadcasts } = loadHandler({ userId: MEMBER_USER_ID });
+  const { handler, updated, broadcasts } = loadHandler({
+    userId: MEMBER_USER_ID,
+  });
   const { status } = await call(handler, {
     method: "PUT",
     taskId: TASK_ON_MEMBER_BOARD,
@@ -289,6 +294,39 @@ test("PUT lets a board member edit and broadcasts only after persistence", async
   assert.equal(status, 200);
   assert.equal(updated.length, 1);
   assert.deepEqual(broadcasts.map(([kind]) => kind), ["board", "task"]);
+});
+
+test("PUT waits for description realtime delivery before responding", async () => {
+  let releaseBroadcast;
+  const taskBroadcastGate = new Promise((resolve) => {
+    releaseBroadcast = resolve;
+  });
+  const { handler, broadcasts } = loadHandler(
+    { userId: MEMBER_USER_ID },
+    { taskBroadcastGate },
+  );
+  let responded = false;
+  const request = call(handler, {
+    method: "PUT",
+    taskId: TASK_ON_MEMBER_BOARD,
+    body: {
+      newTask: {
+        id: TASK_ON_MEMBER_BOARD,
+        description: "<p>updated for everyone</p>",
+      },
+    },
+  }).then((result) => {
+    responded = true;
+    return result;
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(broadcasts.map(([kind]) => kind), ["board", "task"]);
+  assert.equal(responded, false);
+
+  releaseBroadcast();
+  const { status } = await request;
+  assert.equal(status, 200);
 });
 
 test("PUT broadcasts task detail changes when status is updated", async () => {

@@ -51,7 +51,7 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   );
   assert.match(
     globalProvider,
-    /const ChatProvider = lazy\([\s\S]*AI_Agent_Chat_Context/,
+    /const loadChatProvider = \(\) =>[\s\S]*AI_Agent_Chat_Context[\s\S]*const ChatProvider = lazy\(loadChatProvider\)/,
   );
   assert.match(
     globalProvider,

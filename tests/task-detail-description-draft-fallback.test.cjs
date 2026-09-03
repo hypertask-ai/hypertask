@@ -24,6 +24,21 @@ test("task detail ignores empty description drafts when choosing displayed conte
   );
 });
 
+test("task detail includes its always-mounted description editor in the route graph", () => {
+  const body = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
+  );
+
+  assert.match(
+    body,
+    /import Tiptap from "@\/components\/RTE\/TipTapTaskDetail"/,
+  );
+  assert.doesNotMatch(
+    body,
+    /dynamic\(\(\) => import\("@\/components\/RTE\/TipTapTaskDetail"\)\)/,
+  );
+});
+
 test("the meaningful-draft guard rejects the empty formats created for new tasks", () => {
   const hook = read("src/hooks/General/useHasDrafts.ts");
 
