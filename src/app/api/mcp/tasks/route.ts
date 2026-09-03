@@ -581,14 +581,6 @@ export async function GET(request: NextRequest) {
         },
         _count: {
           select: {
-            assignees: {
-              where: {
-                OR: [
-                  { agentId: null },
-                  { agent: accessibleAgentWhere(user.id) },
-                ],
-              },
-            },
             taskLabels: true,
             comments: mcpTaskUserCommentCount,
           },
@@ -622,7 +614,10 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const taskList: TaskListItem[] = tasks.map(task => {
-      const agent = mapVisibleMcpAgent(task.agent, user.id)
+      const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
+      const assignees = task.assignees
+        .map((assignee) => mapTaskAssignee(assignee, user.id, task.projectId))
+        .filter((assignee): assignee is McpTaskAssignee => Boolean(assignee))
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
@@ -651,10 +646,8 @@ export async function GET(request: NextRequest) {
         status: task.status,
         priority: task.priority?.Priority_Value || undefined,
         dueDate: task.dueDate?.toISOString() || undefined,
-        assignees: task.assignees.map((assignee) =>
-          mapTaskAssignee(assignee, user.id)
-        ),
-        assigneeCount: task._count.assignees,
+        assignees,
+        assigneeCount: assignees.length,
         labels: task.taskLabels.map(mapMcpTaskLabel),
         labelCount: task._count.taskLabels,
         commentCount: task._count.comments,

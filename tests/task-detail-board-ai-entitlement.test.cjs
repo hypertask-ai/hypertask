@@ -21,7 +21,7 @@ const { getDefaultAiModelOptionForPlan } = jiti(
   path.join(root, "src/lib/aiModelOptions.ts"),
 );
 
-const teamSelect = () => taskDetailInclude(6).project.select.team.include;
+const teamSelect = () => taskDetailInclude(6, 15).project.select.team.include;
 
 test("task detail SSR sends the board's subscription and BYOK state", () => {
   const team = teamSelect();

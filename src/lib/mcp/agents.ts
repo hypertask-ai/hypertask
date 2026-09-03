@@ -16,15 +16,15 @@ export const mcpAgentSelect = {
   photoURL: true,
 } as const;
 
-export function mcpVisibleAgentSelect(userId: number) {
+export function mcpVisibleAgentSelect(userId: number, projectId?: number) {
   return {
     ...mcpAgentSelect,
     userId: true,
     visibility: true,
     members: {
-      where: accessibleAgentMembershipWhere(userId),
-      select: { id: true },
-      take: 1,
+      where: accessibleAgentMembershipWhere(userId, projectId),
+      select: { projectId: true },
+      ...(projectId === undefined ? {} : { take: 1 }),
     },
   } as const;
 }
@@ -48,13 +48,14 @@ export function mapVisibleMcpAgent(
     | (NonNullable<AgentRow> & {
         userId: number;
         visibility: AgentVisibility;
-        members: readonly unknown[];
+        members: readonly { projectId: number }[];
       })
     | null
     | undefined,
   userId: number,
+  projectId: number,
 ): McpAgentSummary | undefined {
-  return agent && isAgentVisibleToUser(agent, userId)
+  return agent && isAgentVisibleToUser(agent, userId, projectId)
     ? mapMcpAgent(agent)
     : undefined;
 }

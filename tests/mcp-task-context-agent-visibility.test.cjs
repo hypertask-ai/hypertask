@@ -69,11 +69,12 @@ function loadRoute(comments) {
       findTaskByIdentifier: async () => ({ id: 42, projectId: 15 }),
     },
     "@/lib/mcp/agents": {
-      mcpVisibleAgentSelect: (userId) => ({ viewerId: userId }),
-      mapVisibleMcpAgent: (agent, userId) =>
+      mcpVisibleAgentSelect: (userId, projectId) => ({ viewerId: userId, projectId }),
+      mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&
         (agent.userId === userId ||
-          (agent.visibility === "TEAM" && agent.members.length > 0))
+          (agent.visibility === "TEAM" &&
+            agent.members.some((member) => member.projectId === projectId)))
           ? { id: agent.id, displayName: agent.displayName }
           : undefined,
     },
@@ -116,7 +117,12 @@ test("task context redacts deleted, private, and unshared team agent names", asy
     comment({
       id: 3,
       agentDisplayName: "Team helper",
-      agent: { ...privateAgent, id: "team-agent", visibility: "TEAM" },
+      agent: {
+        ...privateAgent,
+        id: "team-agent",
+        visibility: "TEAM",
+        members: [{ projectId: 99 }],
+      },
     }),
     comment({
       id: 4,
@@ -126,7 +132,7 @@ test("task context redacts deleted, private, and unshared team agent names", asy
         id: "shared-agent",
         displayName: "Shared helper",
         visibility: "TEAM",
-        members: [{ id: 1 }],
+        members: [{ projectId: 15 }],
       },
     }),
     comment({ id: 5, creator: { displayName: "Human", email: "human@test" } }),
@@ -143,5 +149,8 @@ test("task context redacts deleted, private, and unshared team agent names", asy
     response.body.comments.map(({ author }) => author),
     ["Human", "Shared helper", "Private agent", "Private agent", "Private agent"],
   );
-  assert.deepEqual(route.getCommentQuery().select.agent.select, { viewerId: 6 });
+  assert.deepEqual(route.getCommentQuery().select.agent.select, {
+    viewerId: 6,
+    projectId: 15,
+  });
 });

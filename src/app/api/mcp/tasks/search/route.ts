@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
-      const agent = mapVisibleMcpAgent(task.agent, user.id)
+      const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,

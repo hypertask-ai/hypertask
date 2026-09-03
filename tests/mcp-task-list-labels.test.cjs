@@ -24,10 +24,11 @@ function loadMappers() {
 
   const stubs = {
     "@/lib/mcp/agents": {
-      mapVisibleMcpAgent: (agent, userId) =>
+      mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&
         (agent.userId === userId ||
-          (agent.visibility === "TEAM" && agent.members.length > 0))
+          (agent.visibility === "TEAM" &&
+            agent.members.some((member) => member.projectId === projectId)))
           ? { id: agent.id, displayName: agent.displayName }
           : undefined,
       mcpVisibleAgentSelect: () => ({}),
@@ -71,14 +72,11 @@ test("the MCP task list selects labels in the paginated task query", () => {
   );
 });
 
-test("task list counts only assignees visible to the viewer", () => {
-  const listQueryStart = routeSource.indexOf("// Get tasks");
-  const listQueryEnd = routeSource.indexOf("// Get metadata counts");
-  const listQuery = routeSource.slice(listQueryStart, listQueryEnd);
-
+test("task list counts only assignees visible to the task board", () => {
+  assert.match(routeSource, /assigneeCount:\s*assignees\.length/);
   assert.match(
-    listQuery,
-    /_count:\s*{\s*select:\s*{\s*assignees:\s*{\s*where:\s*{\s*OR:\s*\[\s*{ agentId: null },\s*{ agent: accessibleAgentWhere\(user\.id\) }/,
+    routeSource,
+    /mapTaskAssignee\(assignee, user\.id, task\.projectId\)/,
   );
 });
 
@@ -153,8 +151,7 @@ test("task responses redact agents that are not visible to the viewer", () => {
 
   const hidden = mapTaskToMcpGetResponse(task, 6);
   assert.equal(hidden.agent, undefined);
-  assert.equal(hidden.assignees[0].agent, undefined);
-  assert.equal(hidden.assignees[0].agentAssigner, undefined);
+  assert.deepEqual(hidden.assignees, []);
 
   const owner = mapTaskToMcpGetResponse(task, 9);
   assert.equal(owner.agent.id, agent.id);
@@ -169,10 +166,17 @@ test("task responses redact agents that are not visible to the viewer", () => {
   );
   assert.equal(
     mapTaskToMcpGetResponse(
-      { ...task, agent: { ...agent, visibility: "TEAM", members: [{ id: 1 }] } },
+      { ...task, agent: { ...agent, visibility: "TEAM", members: [{ projectId: 15 }] } },
       6,
     ).agent.id,
     agent.id,
+  );
+  assert.equal(
+    mapTaskToMcpGetResponse(
+      { ...task, agent: { ...agent, visibility: "TEAM", members: [{ projectId: 99 }] } },
+      6,
+    ).agent,
+    undefined,
   );
   assert.deepEqual(taskDetailInclude(6).assignees.where, {
     OR: [{ agentId: null }, { agent: { userId: 6 } }],
