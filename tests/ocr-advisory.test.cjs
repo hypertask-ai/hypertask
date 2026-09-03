@@ -50,6 +50,16 @@ elif [[ "$1" == api ]]; then
   elif [[ "\${EXISTING_COMMENT:-}" == 1 && "$*" == *"/230/"* ]]; then
     printf '%s\\n' '<!-- ocr-advisory:230:head-sha -->'
   fi
+elif [[ "$1 $2" == "pr view" ]]; then
+  printf '%s\\n' "$*" >> "$HOME/gh.log"
+  if [[ "\${STALE_HEAD:-}" == 1 ]]; then
+    printf '%s\\n' changed-sha
+  else
+    printf '%s\\n' head-sha
+  fi
+elif [[ "$1 $2" == "pr comment" ]]; then
+  printf '%s\\n' "$*" >> "$HOME/gh.log"
+  [[ "\${POST_FAILURE:-}" != 1 ]]
 else
   printf '%s\\n' "$*" >> "$HOME/gh.log"
 fi
@@ -181,6 +191,53 @@ test('continues cleanly when a review returns malformed JSON', async (t) => {
     { code: 'ENOENT' },
   )
   assert.match(await readFile(join(fixtureData.home, 'git.log'), 'utf8'), /update-ref -d refs\/ocr-advisory\/230/)
+})
+
+test('backs off failed heads and stops after three attempts', async (t) => {
+  const fixtureData = await fixture(t)
+  const state = join(fixtureData.home, '.local/state/ocr-advisory')
+  const attemptFile = join(state, '230-head-sha.attempts')
+  await mkdir(state, { recursive: true })
+  await writeFile(attemptFile, `1 ${Math.floor(Date.now() / 1000)}\n`)
+
+  let result = run(fixtureData)
+
+  assert.equal(result.status, 0, result.stderr)
+  await assert.rejects(readFile(join(fixtureData.home, 'review.log')), { code: 'ENOENT' })
+
+  await writeFile(attemptFile, '2 0\n')
+  result = run(fixtureData, { POST_FAILURE: '1' })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stderr, /giving up .* after 3 failures/)
+  const reviewCalls = await readFile(join(fixtureData.home, 'review.log'), 'utf8')
+  assert.equal(reviewCalls.trim().split('\n').length, 1)
+  assert.match(await readFile(attemptFile, 'utf8'), /^3 \d+\n$/)
+
+  result = run(fixtureData, { POST_FAILURE: '1' })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(await readFile(join(fixtureData.home, 'review.log'), 'utf8'), reviewCalls)
+  await assert.rejects(
+    stat(join(state, '230-head-sha')),
+    { code: 'ENOENT' },
+  )
+})
+
+test('discards review output when the live PR head changed', async (t) => {
+  const fixtureData = await fixture(t)
+
+  const result = run(fixtureData, { STALE_HEAD: '1' })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(await readFile(join(fixtureData.home, 'review.log'), 'utf8'), /--to head-sha/)
+  const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
+  assert.match(ghCalls, /pr view 230 .*--json headRefOid/)
+  assert.doesNotMatch(ghCalls, /pr comment/)
+  await assert.rejects(
+    stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha')),
+    { code: 'ENOENT' },
+  )
 })
 
 test('fails closed when the advisory checkout is not the public repository', async (t) => {

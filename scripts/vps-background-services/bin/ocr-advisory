@@ -15,6 +15,8 @@ REMOTE=agent-origin
 EXPECTED_REMOTE=https://github.com/hypertask-ai/hypertask.git
 STATE="$HOME/.local/state/ocr-advisory"
 MODE="${OCR_ADVISORY_MODE:-delegate}"
+MAX_ATTEMPTS=3
+RETRY_BACKOFF_SECONDS=3600
 mkdir -p "$STATE"
 exec 9>"$STATE/run.lock"
 flock -n 9 || exit 0
@@ -44,14 +46,44 @@ while read -r pr branch sha is_draft; do
     mv -- "$legacy_marker" "$marker_file"
   fi
   [ "$is_draft" = false ] || continue
-  [ -e "$marker_file" ] && continue
+  attempt_file="$STATE/$pr-$sha.attempts"
+  if [ -e "$marker_file" ]; then
+    rm -f -- "$attempt_file"
+    continue
+  fi
   comment_marker="<!-- ocr-advisory:$pr:$sha -->"
   existing_comments=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
     --jq ".[] | select(.user.login == \"$comment_author\") | .body") || continue
   if grep -Fq -- "$comment_marker" <<< "$existing_comments"; then
     touch "$marker_file"
+    rm -f -- "$attempt_file"
     continue
   fi
+  attempts=0
+  last_attempt=0
+  if [ -e "$attempt_file" ]; then
+    if ! read -r attempts last_attempt < "$attempt_file" ||
+      [[ ! "$attempts" =~ ^[0-9]+$ || ! "$last_attempt" =~ ^[0-9]+$ ]]; then
+      echo "ocr-advisory: invalid attempt state for PR $pr at $sha" >&2
+      continue
+    fi
+  fi
+  [ "$attempts" -lt "$MAX_ATTEMPTS" ] || continue
+  now=$(date +%s)
+  retry_delay=$((RETRY_BACKOFF_SECONDS * attempts))
+  if [ "$attempts" -gt 0 ] && [ "$((now - last_attempt))" -lt "$retry_delay" ]; then
+    continue
+  fi
+  record_failure() {
+    attempts=$((attempts + 1))
+    printf '%s %s\n' "$attempts" "$(date +%s)" > "$attempt_file.tmp"
+    mv -- "$attempt_file.tmp" "$attempt_file"
+    if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
+      echo "ocr-advisory: giving up on PR $pr at $sha after $attempts failures: $1" >&2
+    else
+      echo "ocr-advisory: PR $pr at $sha failed ($attempts/$MAX_ATTEMPTS): $1" >&2
+    fi
+  }
   review_ref="refs/ocr-advisory/$pr"
   git fetch -q "$REMOTE" "+pull/$pr/head:$review_ref" || continue
   if [[ "$(git rev-parse "$review_ref")" != "$sha" ]]; then
@@ -69,9 +101,10 @@ while read -r pr branch sha is_draft; do
     review_cmd=(ocr-delegate-review --from "$merge_base" --to "$sha" --repo "$WORKDIR")
   fi
   if ! timeout --kill-after=30s 1500s "${review_cmd[@]}" >"$out" 2>"$STATE/last-error.log"; then
+    record_failure "review command failed"
     rm -f "$out"
     git update-ref -d "$review_ref"
-    continue  # transient failure: retry on the next timer run
+    continue
   fi
   if ! body=$(python3 - "$out" "$sha" <<'EOF'
 import json, sys
@@ -111,12 +144,22 @@ if len(body) > 60000:
 print(body)
 EOF
 ); then
+    record_failure "review output was invalid"
     rm -f "$out"
     git update-ref -d "$review_ref"
     continue
   fi
   body="$body"$'\n\n'"$comment_marker"
-  gh pr comment "$pr" --repo "$REPO" --body "$body" >/dev/null && touch "$marker_file"
+  if ! live_sha=$(gh pr view "$pr" --repo "$REPO" --json headRefOid --jq .headRefOid); then
+    record_failure "could not verify the live PR head"
+  elif [ "$live_sha" != "$sha" ]; then
+    rm -f -- "$attempt_file"
+  elif gh pr comment "$pr" --repo "$REPO" --body "$body" >/dev/null; then
+    touch "$marker_file"
+    rm -f -- "$attempt_file"
+  else
+    record_failure "could not post the advisory comment"
+  fi
   rm -f "$out"
   git update-ref -d "$review_ref"
 done <<< "$open_prs"
