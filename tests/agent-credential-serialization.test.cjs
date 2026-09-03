@@ -99,7 +99,7 @@ test("public task and board serializers never include whole Agent rows", () => {
     "src/utils/controllers/agents/boardMembers.ts",
     "src/utils/controllers/assignees/getAll.ts",
     "src/utils/controllers/tasks/recentTasks.ts",
-    "src/pages/api/favorites/getFavorites.ts",
+    "src/utils/controllers/favorites/getAll.ts",
     "src/utils/controllers/projects/getAllIncludes.ts",
     "src/utils/controllers/assignees/assign.ts",
   ];

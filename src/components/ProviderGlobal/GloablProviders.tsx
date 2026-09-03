@@ -285,7 +285,13 @@ const NO_CHAT_RESTORE_ROUTES = [
   "/verify-email",
 ];
 
-export default function GlobalProvider({ children }: { children: ReactNode }) {
+export default function GlobalProvider({
+  children,
+  authenticatedUserId,
+}: {
+  children: ReactNode;
+  authenticatedUserId: number | null;
+}) {
   // ------------------------ context & hooks
   useMobileToastAutoDismiss(); // PERT-92: resume stuck dismiss timers after a tap
   const isApple = useDeviceContext();
@@ -294,7 +300,9 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
   const projectRoute = pathname?.startsWith("/project") ?? false;
-  const startupAccountKey = startupUser?.id ?? "anonymous";
+  const startupUserMatchesSession =
+    authenticatedUserId !== null && startupUser?.id === authenticatedUserId;
+  const startupAccountKey = authenticatedUserId ?? "anonymous";
   const [releasedStartupAccountKey, setReleasedStartupAccountKey] = useState<
     number | "anonymous" | null
   >(null);
@@ -305,7 +313,7 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
     number | "anonymous" | null
   >(null);
   const secondaryStartupEnabled = shouldEnableSecondaryStartup({
-    hasAuthenticatedUser: Boolean(startupUser?.id),
+    hasAuthenticatedUser: startupUserMatchesSession,
     projectRoute,
     releasedForAccount: releasedStartupAccountKey === startupAccountKey,
   });

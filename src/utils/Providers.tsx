@@ -161,13 +161,15 @@ export default function Provider({
             <StateRoot>
               <UndoProvider>
                 <MobileBlockingProvider>
-                  <AuthProvider>
+                  <AuthProvider authenticatedUserId={authenticatedUserId}>
                     <TourProvider>
                       {publicShare ? (
                         <PublicShell>{children}</PublicShell>
                       ) : (
                         <FeatureFlagProvider userId={authenticatedUserId}>
-                          <GlobalProvider>{children}</GlobalProvider>
+                          <GlobalProvider authenticatedUserId={authenticatedUserId}>
+                            {children}
+                          </GlobalProvider>
                         </FeatureFlagProvider>
                       )}
                     </TourProvider>

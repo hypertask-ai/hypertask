@@ -46,6 +46,10 @@ import {
 } from "@/lib/auth/safeReturnTo";
 import { getUserProfileQueryOptions } from "@/lib/auth/userProfileQuery";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
+import {
+  consumeEarlyAppShellBootstrapSlice,
+  waitForEarlyAppShellBootstrap,
+} from "@/lib/appShellBootstrap/client";
 
 type TLoginWithEmail = {
   shouldSkipInteractive?: boolean;
@@ -101,9 +105,15 @@ const AuthContext = createContext<IAuth>({
  * @param {React.ReactNode} props.children - Child components
  * @returns {JSX.Element} AuthContext Provider with children
  */
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({
+  children,
+  authenticatedUserId,
+}: {
+  children: React.ReactNode;
+  authenticatedUserId: number | null;
+}) => {
   const [________, _setCurrentUser] = useRecoilState(currentUserAtom);
-  const currentUserCookie = useCurrentUser();
+  const currentUserCookie = useCurrentUser(authenticatedUserId);
   const [currentUser, __] = useState<HUser | null>(null);
   const [_, setError] = useState("");
   const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
@@ -114,6 +124,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const { showMobileOverlay } = useMobileBlocking();
   const hasBridgedBetterAuthSession = useRef(false);
   const hasReverseBridgedLegacySession = useRef(false);
+  const authenticatedAccountId = authenticatedUserId ?? currentUserCookie?.id;
   const isDevelopmentEnv =
     (typeof process !== "undefined" && process.env.development === "true") ||
     process.env.NODE_ENV !== "production";
@@ -122,7 +133,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
    * Query to fetch user data when user cookie is available
    */
   const { data } = useQuery({
-    ...getUserProfileQueryOptions(currentUserCookie?.id),
+    ...getUserProfileQueryOptions(authenticatedAccountId),
     queryFn: fetchUserById,
   });
 
@@ -242,20 +253,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (
       typeof window === 'undefined' ||
       process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED !== '1' ||
-      !currentUserCookie?.id ||
+      !authenticatedAccountId ||
       hasBridgedBetterAuthSession.current
     ) {
       return;
     }
 
     hasBridgedBetterAuthSession.current = true;
-    void fetch('/api/auth/bridge-session', {
-      method: 'POST',
-      credentials: 'include',
-    }).catch(() => {
-      // Bridge failures are swallowed so legacy ht_session/nookies_user auth keeps working.
-    });
-  }, [currentUserCookie?.id]);
+    void waitForEarlyAppShellBootstrap(authenticatedAccountId)
+      .then((joinedEarlyRequest) => {
+        if (joinedEarlyRequest) return;
+        return fetch('/api/auth/bridge-session', {
+          method: 'POST',
+          credentials: 'include',
+        });
+      })
+      .catch(() => {
+        // Bridge failures are swallowed so legacy ht_session/nookies_user auth keeps working.
+      });
+  }, [authenticatedAccountId]);
 
   // HTPR-4146: reverse of the bridge-session effect above — recovers legacy cookies after a Better Auth magic-link click lands the browser on a fresh page with only a BA session.
   useEffect(() => {
@@ -633,12 +649,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
    */
   async function fetchUserById() {
     try {
-      const response = await getCurrentUserById(currentUserCookie?.id);
-      if (response.status !== 200) {
-        throw new Error("Failed to fetch user data.");
+      const bootstrappedUser =
+        await consumeEarlyAppShellBootstrapSlice<IUser>(
+          "user",
+          authenticatedAccountId,
+        );
+      let userData = bootstrappedUser;
+      if (bootstrappedUser?.id !== authenticatedAccountId) {
+        const response = await getCurrentUserById(authenticatedAccountId);
+        if (response.status !== 200) {
+          throw new Error("Failed to fetch user data.");
+        }
+        userData = response.data;
       }
-
-      const userData = await response.data;
       const transformedUser = transformUserObject(userData);
       setUserCookieAndAtom(transformedUser);
       return transformedUser;
