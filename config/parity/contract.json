@@ -43,6 +43,19 @@
       }
     },
     {
+      "id": "agents.chat",
+      "title": "Agent Chat: an agent runtime reads and answers its owner's chat",
+      "matches": {
+        "api": ["^(GET|POST) /api/mcp/chat/sessions/\\[sessionId\\]/messages$"]
+      },
+      "exclusions": {
+        "mcp": "Only the chatted agent's runtime token may read or answer its session; MCP clients act as the human, not as the agent.",
+        "cli": "The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command.",
+        "ai_chat": "Agent Chat is the surface itself; native agents answer in-process without this route.",
+        "hyperai": "HyperAI inherits the human session and never speaks as an external agent."
+      }
+    },
+    {
       "id": "agents.manage",
       "title": "Create, revoke, and rotate managed agents or keys",
       "matches": {
