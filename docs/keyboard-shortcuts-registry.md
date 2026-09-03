@@ -120,6 +120,17 @@ G-chords (`G` then second key): `I` inbox, `B` task board, `C` calendar, `A` all
 
 `Mod+Shift+?` toggle, `Mod+Shift+O` reset session, `Ctrl+Q` focus input.
 
+## Agent Chat
+
+| Key | Action | Handler |
+|---|---|---|
+| `Mod+TAB` / `Mod+Shift+TAB` (fallback `Alt+ArrowDown` / `Alt+ArrowUp`) | Cycle the filtered agent roster, wraps around. No-ops while the composer is focused with an unsent draft. | `AgentChatClient.tsx` window keydown |
+| `Mod+ENTER` | Send (plain `ENTER` already sends; `Shift+ENTER` newline) | `AgentChatClient.tsx` composer keydown |
+| `Ctrl+O` | Open every link (URL or ticket id) in the latest message that has one, up to 5 tabs | `AgentChatClient.tsx` window keydown |
+| `@` in composer | Task-search popover (arrows move, Enter/Tab picks, Esc closes) | `AgentChatClient.tsx` composer keydown |
+
+`Mod+TAB` is advertised on the cheatsheet, but browsers (and the OS on Mac) reserve Ctrl/Cmd+Tab for switching tabs/apps before it reaches the page, so `Alt+ArrowDown`/`Alt+ArrowUp` is the binding actually guaranteed to work; the cheatsheet labels both.
+
 ## Handler-only bindings (easy to miss — NOT in the palette)
 
 These fire from raw keydown listeners and will NOT show up when scanning `AllCommands.ts`:
@@ -132,5 +143,6 @@ These fire from raw keydown listeners and will NOT show up when scanning `AllCom
 - `C` / `W` in TableView (`TableView.tsx`)
 - `1-7` app shell surfaces + `]` AI chat synonym + `[` sidebar collapse/expand (`useAppShellSurfaceShortcuts.ts`)
 - `;` snippets (TaskDetailComp)
+- Agent Chat's whole keyboard map above (`AgentChatClient.tsx`) — none of it is in `AllCommands.ts`; it's cheatsheet + docs only, same as the other handler-only rows on this list
 
 When auditing whether a key is free, grep for the letter in ALL of: `src/app`, `src/components`, `src/hooks`, `src/lib/contexts` — the palette alone is not the truth.
