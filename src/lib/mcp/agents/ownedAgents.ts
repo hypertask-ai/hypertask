@@ -121,7 +121,8 @@ type AgentManagementTransaction = {
       data: { agentId: null }
     }): Promise<WriteCount>
   }
-  oauthAuthorizationCode: {
+  // Prisma keeps the OAuth acronym casing: oAuthAuthorizationCode, not oauth…
+  oAuthAuthorizationCode: {
     updateMany(args: {
       where: { agent_id: string }
       data: { agent_id: null }
@@ -324,7 +325,7 @@ export async function deleteOwnedAgent(
             where: { agentId: agent.id },
             data: { agentId: null },
           })
-          await transaction.oauthAuthorizationCode.updateMany({
+          await transaction.oAuthAuthorizationCode.updateMany({
             where: { agent_id: agent.id },
             data: { agent_id: null },
           })
