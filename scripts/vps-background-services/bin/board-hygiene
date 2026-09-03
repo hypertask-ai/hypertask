@@ -87,12 +87,13 @@ Return exactly one line for $t and no other ticket." 2>/dev/null); then
     failures=$((failures+1))
     continue
   fi
-  if [[ ! "$out" =~ ^${t}=(Bug|FEATURE|IMPROVEMENT)$ ]]; then
+  if [[ ! "$out" =~ ^${t}=(Bug|FEATURE|IMPROVEMENT|SKIP)$ ]]; then
     echo "board-hygiene: rejected malformed classification for $t" >&2
     failures=$((failures+1))
     continue
   fi
   k="${BASH_REMATCH[1]}"
+  [ "$k" = SKIP ] && continue
   case "$k" in
     Bug)         label="Bug" ;;
     FEATURE)     label="FEATURE 💎" ;;
