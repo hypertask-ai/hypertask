@@ -1,6 +1,6 @@
 
 import { fetchCommentsHelper } from "@/utils/api/Task Detail";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const useGetAllComments = (
   queryKey: any,
@@ -9,9 +9,10 @@ export const useGetAllComments = (
   initialData?: any,
   options?: { enabled?: boolean }
 ) => {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey,
-    queryFn: () => fetchCommentsHelper(taskId, userId!),
+    queryFn: () => fetchCommentsHelper(taskId, userId!, queryClient),
     initialData: initialData ?? [],
     refetchOnWindowFocus: true,
     enabled: options?.enabled ?? !!userId,

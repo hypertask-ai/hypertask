@@ -1,4 +1,8 @@
-import { fetchUserPreference } from "@/hooks/General/useGetUserPreferences";
+import {
+  fetchUserPreference,
+  USER_PREFERENCES_QUERY_KEY,
+} from "@/hooks/General/useGetUserPreferences";
+import type { QueryClient } from "@tanstack/react-query";
 import { shareLinkRoute } from "@/lib/constants/APIRouteConstants";
 import { IAgent, IAssignees, IComment, IUser } from "@/models/model";
 import { TaskShareType } from "@prisma/client";
@@ -71,22 +75,22 @@ export const updateDraftHelper = async (projectId:number, taskId: number, userId
 };
 
 
-  // Preferences barely change but fetchCommentsHelper runs per comments
-  // (pre)fetch — this raw call bypassed the React Query cache and fired one
-  // /api/users/preferences per inbox keystroke (HTPR-3998). 5 min TTL memo,
-  // matching useGetUserPreferences' staleTime.
-  let prefMemo: { value: any; at: number } | null = null;
-  const fetchUserPreferenceMemo = async () => {
-    if (prefMemo && Date.now() - prefMemo.at < 5 * 60 * 1000) return prefMemo.value;
-    const value = await fetchUserPreference();
-    prefMemo = { value, at: Date.now() };
-    return value;
-  };
-
+  // Preferences barely change and are already the single React Query cache
+  // entry every other consumer reads (useGetUserPreferences, 5 min staleTime,
+  // HTPR-3998). fetchCommentsHelper used to keep its own separate memo, which
+  // meant every task-detail open fired /api/users/preferences twice: once for
+  // that cache, once for this one (HTPR-6047). Routing through the same
+  // QueryClient/query key makes it the same fetch.
   // ---------------------- FETCH COMMENTS ---------------
-  export const fetchCommentsHelper = async (taskId:number, userId:number) => {
+  export const fetchCommentsHelper = async (taskId:number, userId:number, queryClient?: QueryClient) => {
     const response = await fetch(`/api/comments/getByTask?taskId=${taskId}`);
-    const prefResponse = await fetchUserPreferenceMemo()
+    const prefResponse = queryClient
+      ? await queryClient.ensureQueryData({
+          queryKey: USER_PREFERENCES_QUERY_KEY,
+          queryFn: () => fetchUserPreference(),
+          staleTime: 5 * 60 * 1000,
+        })
+      : await fetchUserPreference();
     const stack = prefResponse?.commentsStacked || false
     const data = await response.json()
     const comments = Array.isArray(data) ? data : data?.comments ?? [];

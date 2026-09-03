@@ -138,9 +138,19 @@ export default async function Page(
         parsedTask={JSON.stringify(task)}
         scrollSetting={scrollSetting}
       >
-        <FollowersProvider>
-          <Suspense fallback={<>Loading...</>}>
-
+        {/*
+          FollowersProvider used to sit outside Suspense while TaskDetail sat
+          inside it. TaskDetail's own dynamic() imports (NewCommentComponent,
+          TaskMovement, etc.) suspend on their JS chunk, so TaskDetail's mount
+          — and its priority/estimate/labels hooks — landed a full commit
+          later than FollowersProvider's. That missed the one-tick same-commit
+          window getTaskDetailMeta relies on to coalesce all four fields into
+          one /api/tasks/detailMeta request (HTPR-3708), so followers'
+          request fired on its own (HTPR-6047). Both inside the same boundary
+          now mount together.
+        */}
+        <Suspense fallback={<>Loading...</>}>
+          <FollowersProvider>
             <TaskDetail
               key={`task-detail-page-container-${task.id}`}
               allowPerks={true}
@@ -150,8 +160,8 @@ export default async function Page(
               _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt })}
               _slugs={[params.slug[0], params.slug[1]]}
             />
-          </Suspense>
-        </FollowersProvider>
+          </FollowersProvider>
+        </Suspense>
       </TasksProvider>
     </>
   )
