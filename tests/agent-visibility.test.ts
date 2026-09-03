@@ -223,6 +223,10 @@ async function main() {
     /agentId: visibleAgent \? task\.agentId : null,[\s\S]*agent: visibleAgent/,
   );
   assert.match(taskDetailLoad, /hiddenCommentAgent\(userId\)/);
+  assert.match(
+    taskDetailLoad,
+    /agent\.id IS NULL AND c\."agentDisplayName" IS NOT NULL/,
+  );
   assert.match(createSessionRoute, /\.\.\.accessibleAgentWhere\(userId\)/);
   for (const ownerSurface of [
     agentRoute,
