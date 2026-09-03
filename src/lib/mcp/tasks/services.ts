@@ -361,6 +361,7 @@ export async function mutateTaskLabels(
     const removeIds = await resolveLabelIds(projectId, changes.remove ?? []);
     const skipIfPresentIds = await resolveLabelIds(projectId, changes.skipIfPresent ?? []);
     const deliveryIds = await prisma.$transaction(async (tx) => {
+        // This task-row lock is the shared mutex used by both MCP and UI label writers.
         await assertTaskBelongsToProject(tx, taskId, projectId);
         const existing = await tx.taskLabel.findMany({
             where: { taskId },

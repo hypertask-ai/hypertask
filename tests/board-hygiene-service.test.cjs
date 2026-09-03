@@ -97,7 +97,7 @@ printf '%s\\n---\\n' "$prompt" >> "$PROMPT_LOG"
 if [[ "$prompt" == *'"ticket": "HTPR-7001"'* ]]; then
   printf '%s\\n' 'HTPR-7002=Bug'
 elif [[ "$prompt" == *'"ticket": "HTPR-7002"'* ]]; then
-  printf '%s\\n%s\\n' 'HTPR-7002=FEATURE' 'HTPR-7001=Bug'
+  exit 1
 elif [[ "$prompt" == *'"ticket": "HTPR-7003"'* ]]; then
   printf '%s\\n' 'HTPR-7003=IMPROVEMENT'
 else
@@ -107,7 +107,7 @@ fi
   )
   await Promise.all([chmod(fakeHt, 0o755), chmod(fakeHax, 0o755)])
 
-  const { stdout } = await execFileAsync('bash', [executable], {
+  const { stdout, stderr } = await execFileAsync('bash', [executable], {
     env: {
       ...process.env,
       HOME: home,
@@ -120,6 +120,7 @@ fi
   })
 
   assert.match(stdout, /labelled 1 of 3 unlabelled tickets/)
+  assert.match(stderr, /classification failed for HTPR-7002/)
   const prompts = await readFile(promptLog, 'utf8')
   for (const ticket of ['HTPR-7001', 'HTPR-7002', 'HTPR-7003']) {
     assert.match(prompts, new RegExp(ticket))
