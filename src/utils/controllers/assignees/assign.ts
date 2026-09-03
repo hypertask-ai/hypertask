@@ -11,6 +11,7 @@ import { taskBaseUri } from "@/utils";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
@@ -70,10 +71,7 @@ const assigneesAssign = async (
           where: {
             id: agentId,
             ...(isRemoval ? {} : { revokedAt: null }),
-            OR: [
-              { userId: currentUser.id },
-              { visibility: "TEAM" },
-            ],
+            ...boardAgentVisibilityWhere(currentUser.id),
           },
           select: { userId: true },
         }),
@@ -247,14 +245,7 @@ const assigneesAssign = async (
         taskId: taskId,
         OR: [
           { agentId: null },
-          {
-            agent: {
-              OR: [
-                { userId: currentUser.id },
-                { visibility: "TEAM" },
-              ],
-            },
-          },
+          { agent: boardAgentVisibilityWhere(currentUser.id) },
         ],
       },
       include: {
