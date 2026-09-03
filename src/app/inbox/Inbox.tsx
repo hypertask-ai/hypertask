@@ -110,11 +110,12 @@ const Inbox = ({
     queryParams?.showAll === "true" ? "ShowAll" : undefined,
   );
   const lastgClick = useRef<number | null>(null);
-  const preselectedProjectProcessed = useRef<boolean>(false);
+  const preselectedSplitProcessed = useRef<boolean>(false);
   const initialResetToFirstDone = useRef<boolean>(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedProject = queryParams?.projectId;
+  const preselectedSplit = queryParams?.split;
   const notificationsQuery = useGetNotifications(currentUser.id);
   useWarmProjectsAllQuery({
     user: currentUser,
@@ -619,32 +620,37 @@ const Inbox = ({
     newCommentsHandler();
   }, [_notificationsTQ?.structuredData?.data, trigger]);
 
-  // Set active split on initial render when notifications first load: preselected project from URL, or first tab if currSplit is not 0
+  // Set active split on initial render when notifications first load: URL-selected split, or the first tab.
   useEffect(() => {
     const tabs = _notificationsTQ?.structuredData?.tabs;
     const hasTabs = tabs && tabs.length > 0;
     if (!hasTabs) return;
 
-    if (preselectedProject && !preselectedProjectProcessed.current) {
+    if (
+      (preselectedProject || preselectedSplit) &&
+      !preselectedSplitProcessed.current
+    ) {
       const preselectedIndex = tabs.findIndex(
-        (tab: { projectId: number | null }) =>
-          tab.projectId === parseInt(preselectedProject),
+        (tab: { project: string; projectId: number | null }) =>
+          preselectedProject
+            ? tab.projectId === parseInt(preselectedProject)
+            : tab.project === preselectedSplit,
       );
       if (preselectedIndex !== -1) {
-        preselectedProjectProcessed.current = true;
+        preselectedSplitProcessed.current = true;
         navigateTabs(preselectedIndex);
       }
       return;
     }
-    if (
-      !preselectedProject &&
-      !initialResetToFirstDone.current &&
-      !queryParams?.split
-    ) {
+    if (!initialResetToFirstDone.current) {
       initialResetToFirstDone.current = true;
       navigateTabs(0);
     }
-  }, [_notificationsTQ?.structuredData?.tabs, preselectedProject, queryParams]);
+  }, [
+    _notificationsTQ?.structuredData?.tabs,
+    preselectedProject,
+    preselectedSplit,
+  ]);
 
   const handleBulkArchive = async (selectedNotifications: INotification[]) => {
     await bulkArchiveNotifications(
