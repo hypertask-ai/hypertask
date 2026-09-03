@@ -7,6 +7,10 @@ const instructions = join(
   process.cwd(),
   'scripts/vps-background-services/config/board-hygiene/INSTRUCTIONS.md',
 )
+const executable = join(
+  process.cwd(),
+  'scripts/vps-background-services/bin/board-hygiene',
+)
 
 test('board hygiene retains the canonical classification contract', async () => {
   const prompt = await readFile(instructions, 'utf8')
@@ -22,4 +26,11 @@ explanation, no blank lines, no markdown.
 HTPR-1234=Bug
 HTPR-1235=FEATURE
 `))
+})
+
+test('board hygiene adds a kind without replacing existing labels', async () => {
+  const script = await readFile(executable, 'utf8')
+
+  assert.match(script, /add_labels: \[\$label\]/)
+  assert.doesNotMatch(script, /hypertask tasks update .*--labels/)
 })
