@@ -1,4 +1,5 @@
 import DOMPurify from "isomorphic-dompurify";
+import type { UponSanitizeElementHook } from "dompurify";
 
 // HTPR-4004: AI-streamed responses are HTML injected via dangerouslySetInnerHTML.
 // The model can echo user-controlled task/comment text, so an attacker who plants
@@ -42,13 +43,14 @@ const isAllowedEmbed = (value: string) => {
 
 export function sanitizeRenderedRichHtml(html: string): string {
   if (!html) return "";
-  const restrictIframes = (node: Element, data: { tagName: string }) => {
+  const restrictIframes: UponSanitizeElementHook = (node, data) => {
     if (data.tagName !== "iframe") return;
-    if (!isAllowedEmbed(node.getAttribute("src") ?? "")) {
-      node.remove();
+    const iframe = node as Element;
+    if (!isAllowedEmbed(iframe.getAttribute("src") ?? "")) {
+      iframe.remove();
       return;
     }
-    node.setAttribute(
+    iframe.setAttribute(
       "sandbox",
       "allow-scripts allow-same-origin allow-presentation",
     );
