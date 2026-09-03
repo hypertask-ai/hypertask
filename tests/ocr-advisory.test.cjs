@@ -51,6 +51,12 @@ fi
 printf '%s\\n' "$*" >> "$HOME/review.log"
 if [[ "\${MALFORMED_REVIEW:-}" == 1 ]]; then
   printf '%s\\n' 'not json'
+elif [[ "\${LONG_REVIEW:-}" == 1 ]]; then
+  python3 - <<'PY'
+import json
+print(json.dumps({"findings": [{"severity": "medium", "path": "@" * 100000,
+                                "start_line": 4, "content": "Fix this"}]}))
+PY
 else
   printf '%s\\n' '{"findings":[{"severity":"medium","path":"src/\`@team.ts","start_line":4,"content":"Fix @team *now*"}],"summary":{"engine":"test"}}'
 fi
@@ -85,6 +91,18 @@ test('reviews public production PRs from the public checkout', async (t) => {
   assert.doesNotMatch(ghCalls, /@team|No findings/)
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha'))
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/232-head-sha'))
+})
+
+test('bounds escaped finding paths before posting', async (t) => {
+  const fixtureData = await fixture(t)
+
+  const result = run(fixtureData, { LONG_REVIEW: '1' })
+
+  assert.equal(result.status, 0, result.stderr)
+  const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
+  assert.ok(ghCalls.length < 5000)
+  assert.match(ghCalls, /&#64;/)
+  assert.doesNotMatch(ghCalls, /@/)
 })
 
 test('retains old markers for ready and draft heads, then removes closed-head markers', async (t) => {

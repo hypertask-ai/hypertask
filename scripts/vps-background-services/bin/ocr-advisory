@@ -71,14 +71,14 @@ def inert(value, limit=None):
     unsafe = "\\`*_{}[]()#+-.!|<>@"
     return "".join(f"&#{ord(char)};" if char in unsafe else char for char in text)
 
-engine = inert((d.get("summary") or {}).get("engine", "open-code-review"))
+engine = inert((d.get("summary") or {}).get("engine", "open-code-review"), 80)
 lines = [f"<strong>OCR advisory (non-gating)</strong> for <code>{sys.argv[2][:12]}</code> "
          f"via open-code-review delegation ({engine}). {len(comments)} finding(s); "
          "the required AI review stays authoritative.", ""]
 rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 for c in sorted(comments, key=lambda c: rank.get(str(c.get("severity")), 3))[:8]:
-    sev = inert(str(c.get("severity", "?")).upper())
-    path = inert(c.get("file") or c.get("path") or "?")
+    sev = inert(str(c.get("severity", "?")).upper(), 16)
+    path = inert(c.get("file") or c.get("path") or "?", 240)
     text = inert(c.get("title") or c.get("content") or c.get("body") or "", 300)
     try:
         line = int(c.get("start_line") or 0)
@@ -91,7 +91,10 @@ if len(comments) > 8:
     lines.append(f"- ...and {len(comments) - 8} more (session {session} on the VPS)")
 if not comments:
     lines.append("No findings.")
-print("\n".join(lines))
+body = "\n".join(lines)
+if len(body) > 60000:
+    body = lines[0] + "\n\nFinding details omitted because formatted output exceeded the safety limit."
+print(body)
 EOF
 ); then
     rm -f "$out"
