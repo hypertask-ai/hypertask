@@ -34,6 +34,7 @@ import {
 } from "@/utils/helperFunctions/helperFunctions";
 import "@/styles/leftSidebarStyle.scss";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
+import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
 import BackDropContainer from "./BackDropContainer";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { CommandMode } from "@/models/enums";
@@ -447,28 +448,9 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     // to localStorage, so a value written by an older build (or hand-edited) used to
     // match neither branch and left the sidebar showing favorites and nothing else.
     if (boardSortMode !== "lastUsed") {
-      // Most-used teams first: a team ranks by its most recently opened board.
-      // Teams with nothing opened yet fall back to alphabetical, below the rest.
-      const teamUsage = (team: any) =>
-        (team.projects || []).reduce(
-          (latest: number, project: IProject) =>
-            Math.max(latest, lastUsedBoards[project.id] || 0),
-          0
-        );
-
-      teams = teams.sort((a: any, b: any) => {
-        const usageDiff = teamUsage(b) - teamUsage(a);
-        if (usageDiff !== 0) return usageDiff;
-        return (a.title || "").localeCompare(b.title || "");
-      });
-
-      // Sort projects within each team by ID
-      teams = teams.map((team: any) => ({
-        ...team,
-        projects: team.projects
-          ? [...team.projects].sort((a: IProject, b: IProject) => a.id - b.id)
-          : [],
-      }));
+      // Most-used team first, boards within it by id: same order the
+      // Alt+Shift+Arrow team-cycle shortcut walks (src/lib/teamSwitcherOrder.ts).
+      teams = orderTeamsForSwitcher(teams, lastUsedBoards);
 
       newState = [...newState, ...teams].filter(Boolean);
     } else {

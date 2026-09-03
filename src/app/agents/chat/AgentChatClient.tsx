@@ -18,7 +18,7 @@ import {
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
-import { appShellRailAtom } from "@/store";
+import { appShellRailAtom, agentChatTeamCycleAtom } from "@/store";
 import { IUser, IProject, ITask } from "@/models/model";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
@@ -45,6 +45,7 @@ import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -60,7 +61,6 @@ const AWAITING_POLL_MS = 4000;
 const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 8000;
 const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
-const TEAM_FILTER_KEY = "agentChat.teamId";
 
 type TChatMessage = {
   id: string;
@@ -317,23 +317,19 @@ const AgentChatClient = (props: IProp) => {
     }
   }, []);
 
-  // The team filter is remembered per browser; default to "All teams".
+  // Default the team filter to whatever team the user was last working in on
+  // a board (HTPR-6036), not a separately-remembered Agent Chat preference:
+  // switching boards to another team and then opening Agent Chat should show
+  // that team's agents. A manual change below only affects this component's
+  // own state, so it wins for the rest of this visit without being written
+  // back here (the keyboard team-cycle shortcut is the one thing that does
+  // update the shared last-board-team value from this page).
   useEffect(() => {
-    try {
-      setTeamId(window.localStorage.getItem(TEAM_FILTER_KEY) || null);
-    } catch {
-      // Private browsing and hardened policies can reject localStorage.
-    }
+    setTeamId(getLastBoardTeam());
   }, []);
 
   const setTeamFilter = (next: string | null) => {
     setTeamId(next);
-    try {
-      if (next) window.localStorage.setItem(TEAM_FILTER_KEY, next);
-      else window.localStorage.removeItem(TEAM_FILTER_KEY);
-    } catch {
-      // Private browsing and hardened policies can reject localStorage.
-    }
   };
 
   // Below 900px the three panes stack: roster list, then chat, and the details
@@ -569,6 +565,30 @@ const AgentChatClient = (props: IProp) => {
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
 
   const teams = useMemo(() => listTeams(agents ?? []), [agents]);
+
+  // Alt+Shift+Arrow team cycling (HTPR-6036): the app-wide keydown handler
+  // (GloablProviders.tsx, alongside Ctrl+B) bumps this atom's seq since it
+  // has no other way to reach this page's team filter state. "All teams"
+  // (null) is one of the stops, matching the dropdown below.
+  const teamCycle = useRecoilValue(agentChatTeamCycleAtom);
+  const teamCycleSeenRef = useRef(0);
+  useEffect(() => {
+    if (!teamCycle || teamCycle.seq === teamCycleSeenRef.current) return;
+    teamCycleSeenRef.current = teamCycle.seq;
+    const stops: (string | null)[] = [null, ...teams.map((t) => t.id)];
+    const currentIndex = stops.indexOf(teamId);
+    const nextIndex =
+      (((currentIndex === -1 ? 0 : currentIndex) + teamCycle.direction) %
+        stops.length +
+        stops.length) %
+      stops.length;
+    const next = stops[nextIndex];
+    setTeamId(next);
+    if (next) setLastBoardTeam(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- teamId is read
+    // intentionally without being a dep: re-running this on every teamId
+    // change (including the ones it causes itself) would fight the cycle.
+  }, [teamCycle, teams]);
 
   const roster = useMemo(() => {
     const visible = (agents ?? []).filter(
