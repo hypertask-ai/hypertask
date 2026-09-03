@@ -2195,9 +2195,20 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     let frame = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let observer: MutationObserver | undefined;
+    // The 30s timer below still publishes the real readiness event (a task
+    // that never reaches the DOM markers - share view, no description editor,
+    // permission-limited, an error state - is a genuine measurement failure
+    // worth keeping). But the non-essential gate has no reason to make AI
+    // suggestions, the share link and the move-task sections wait that long:
+    // fail it open after 3s regardless (HTPR-6047).
+    const nonEssentialFallback = setTimeout(
+      () => setNonEssentialReady(true),
+      3000,
+    );
     const cleanup = () => {
       if (frame) cancelAnimationFrame(frame);
       if (timer) clearTimeout(timer);
+      clearTimeout(nonEssentialFallback);
       observer?.disconnect();
     };
     const publish = (timedOut = false) => {
