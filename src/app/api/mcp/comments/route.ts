@@ -33,6 +33,7 @@ import {
   mapMcpCommentReaction,
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
+import { isAgentVisibleToUser } from '@/lib/agents/visibility'
 
 export interface CommentItem {
   id: number
@@ -127,7 +128,7 @@ const commentInclude = {
     }
   },
   agent: {
-    select: mcpAgentSelect,
+    select: { ...mcpAgentSelect, userId: true, visibility: true },
   },
   attachments: {
     select: {
@@ -143,8 +144,17 @@ const commentInclude = {
 
 // Helper function to map comment to response format. Activity-inclusive responses
 // retain the app endpoint's raw activity payload and add an explicit row type.
-function mapCommentToResponse(comment: any, includeActivity = false): CommentItem {
-  const agent = mapMcpAgent(comment.agent)
+function mapCommentToResponse(
+  comment: any,
+  userId: number,
+  includeActivity = false
+): CommentItem {
+  const agentVisible =
+    !comment.agent || isAgentVisibleToUser(comment.agent, userId)
+  const agent = mapMcpAgent(agentVisible ? comment.agent : null)
+  const agentDisplayName = agentVisible
+    ? comment.agentDisplayName
+    : 'Private agent'
   const mappedComment: CommentItem = {
     id: comment.id,
     text: comment.text,
@@ -157,8 +167,8 @@ function mapCommentToResponse(comment: any, includeActivity = false): CommentIte
       displayName: comment.creator.displayName || undefined
     } : undefined,
     ...(agent ? { agent } : {}),
-    ...(comment.agentDisplayName
-      ? { agent_display_name: comment.agentDisplayName }
+    ...(agentDisplayName
+      ? { agent_display_name: agentDisplayName }
       : {}),
     attachments: comment.attachments.map((a: any) => ({
       id: a.id,
@@ -265,7 +275,7 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
-      mapCommentToResponse(comment, includeActivity)
+      mapCommentToResponse(comment, user.id, includeActivity)
     )
 
     const response: ListCommentsResponse = {
@@ -772,7 +782,7 @@ export async function POST(request: NextRequest) {
         })
 
         const mappedComment = commentWithAttachments
-          ? mapCommentToResponse(commentWithAttachments)
+          ? mapCommentToResponse(commentWithAttachments, user.id)
           : null
 
         const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
