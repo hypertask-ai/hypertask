@@ -551,6 +551,7 @@ const ManageAgentsModal: React.FC<ManageModalProps> = ({
                           >
                             <div className="flex min-h-12 items-center gap-3 px-3 py-2.5">
                               <UserAvatar
+                                agentId={a.id}
                                 alt={a.displayName}
                                 name={a.displayName}
                                 photoURL={a.photoURL}

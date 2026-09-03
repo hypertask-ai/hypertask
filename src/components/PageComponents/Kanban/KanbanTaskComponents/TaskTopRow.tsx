@@ -165,6 +165,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
               )}
             {agentAssignees.slice(0, 5).map((agent, index) => (
               <UserAvatar
+                agentId={agent.id}
                 key={agent.id}
                 alt={`Assigned agent: ${agent.displayName}`}
                 className={`${

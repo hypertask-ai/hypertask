@@ -172,6 +172,7 @@ const DisabledAgentsModal: React.FC<DisabledAgentsModalProps> = ({
                 >
                   <div className="flex gap-3 px-3 pt-3 pb-3">
                     <UserAvatar
+                      agentId={a.id}
                       alt={a.displayName}
                       fallbackClassName={placeholderBgClass(a.id)}
                       name={a.displayName}

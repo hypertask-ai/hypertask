@@ -16,6 +16,7 @@ import { PlugZap } from "lucide-react";
 import AgentWebhookPanel from "@/components/Modals/Agent/AgentWebhookPanel";
 import AgentSelect, { AgentOption } from "./AgentSelect";
 import WorkingSpinner from "./WorkingSpinner";
+import AgentAvatar from "@/components/Agents/AgentAvatar";
 import {
   agentFiltersToQuery,
   viewAgents,
@@ -147,27 +148,6 @@ function AgentSwitch({
   );
 }
 
-function AgentAvatar({ agent, size }: { agent: TAgent; size: number }) {
-  if (agent.photoURL) {
-    return (
-      <img
-        src={agent.photoURL}
-        alt=""
-        style={{ width: size, height: size }}
-        className="rounded-full shrink-0 object-cover"
-      />
-    );
-  }
-  const initials = agent.displayName.slice(0, 2).toUpperCase();
-  return (
-    <div
-      style={{ width: size, height: size }}
-      className="rounded-full shrink-0 bg-hoverCardBackground flex items-center justify-center text-[11px] font-medium text-white-black"
-    >
-      {initials}
-    </div>
-  );
-}
 
 function InfoRow({
   label,
@@ -219,7 +199,7 @@ export function AgentCard({
         className="absolute inset-0 z-10 rounded-[4px]"
       />
       <div className="flex items-center gap-2">
-        <AgentAvatar agent={agent} size={28} />
+        <AgentAvatar agentId={agent.id} name={agent.displayName} photoURL={agent.photoURL} size={28} className="text-[11px]" />
         {working ? (
           <WorkingSpinner label={`${agent.displayName} is working now`} />
         ) : (

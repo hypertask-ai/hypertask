@@ -1,5 +1,7 @@
 import { generalConfig } from "@/lib/configs/general.config";
 import { collectGraphemes } from "unicode-segmenter/grapheme";
+import { createAvatar } from "@dicebear/core";
+import * as botttsNeutral from "@dicebear/bottts-neutral";
 
 const stripUrlSuffix = (value: string) => value.split(/[?#]/, 1)[0];
 
@@ -32,4 +34,12 @@ export function getAvatarInitials(name?: string | null): string {
 
   const lastWord = collectGraphemes(words[words.length - 1]);
   return uppercaseInitials([firstWord[0] ?? "", lastWord[0] ?? ""]);
+}
+
+/**
+ * Deterministic robot-face avatar (DiceBear bottts-neutral) for an agent, so
+ * every agent looks distinct instead of falling back to initials. HTPR-6034.
+ */
+export function getAgentAvatarDataUri(seed: string): string {
+  return createAvatar(botttsNeutral, { seed, size: 128 }).toDataUri();
 }

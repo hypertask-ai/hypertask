@@ -369,6 +369,7 @@ const AssignModal = ({
                 displayName={user.displayName}
                 isAssigned={user.assigned}
                 isAgent={isAgentOption(user)}
+                agentId={isAgentOption(user) ? String(user.id) : undefined}
                 isClearOption={user.id === 0}
               />
             </ModalRowElementContainer>
@@ -412,6 +413,7 @@ type TAssignee = {
   userAvatar?: string | null;
   displayName?: string;
   isAgent?: boolean;
+  agentId?: string;
   isClearOption?: boolean;
 };
 
@@ -420,6 +422,7 @@ const Assignee: React.FC<TAssignee> = ({
   displayName = "User",
   isAssigned = false,
   isAgent = false,
+  agentId,
   isClearOption = false,
 }) => {
   return (
@@ -429,6 +432,7 @@ const Assignee: React.FC<TAssignee> = ({
           <span className="w-4 sm:w-8 h-4 sm:h-8" />
         ) : (
           <UserAvatar
+            agentId={agentId}
             alt=""
             compactOnMobile
             name={displayName}

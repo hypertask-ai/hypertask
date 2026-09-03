@@ -30,6 +30,8 @@
     "@better-auth/api-key": "1.6.23",
     "@better-auth/infra": "^0.3.6",
     "@better-auth/passkey": "^1.6.23",
+    "@dicebear/bottts-neutral": "9.4.3",
+    "@dicebear/core": "9.4.3",
     "@emoji-mart/data": "^1.1.2",
     "@emoji-mart/react": "^1.1.1",
     "@floating-ui/react": "^0.26.18",

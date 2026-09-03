@@ -1,8 +1,8 @@
 "use client";
 
-import { getAvatarInitials, hasCustomAvatar } from "@/lib/avatar";
+import { getAgentAvatarDataUri, getAvatarInitials, hasCustomAvatar } from "@/lib/avatar";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 interface UserAvatarProps {
   alt?: string;
@@ -14,6 +14,8 @@ interface UserAvatarProps {
   photoURL?: string | null;
   size?: number;
   title?: string;
+  /** Set for agents: generates a distinct robot-face avatar when there is no custom photo. HTPR-6034. */
+  agentId?: string | null;
 }
 
 const UserAvatar: React.FC<UserAvatarProps> = ({
@@ -26,6 +28,7 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
   photoURL,
   size = 20,
   title,
+  agentId,
 }) => {
   const [failedPhotoURL, setFailedPhotoURL] = useState<string | null>(null);
   const accessibleName = alt ?? (name ? `${name} avatar` : "Profile avatar");
@@ -33,6 +36,10 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     "shrink-0 overflow-hidden rounded-full",
     compactOnMobile && "h-4 w-4 sm:h-8 sm:w-8",
     className,
+  );
+  const generatedAvatarUri = useMemo(
+    () => (agentId ? getAgentAvatarDataUri(agentId) : null),
+    [agentId],
   );
 
   if (hasCustomAvatar(photoURL) && failedPhotoURL !== photoURL) {
@@ -45,6 +52,19 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         loading="lazy"
         onError={() => setFailedPhotoURL(photoURL)}
         src={photoURL}
+        title={title}
+        width={size}
+      />
+    );
+  }
+
+  if (generatedAvatarUri) {
+    return (
+      <img
+        alt={accessibleName}
+        className={cn(sharedClassName, imageClassName)}
+        height={size}
+        src={generatedAvatarUri}
         title={title}
         width={size}
       />

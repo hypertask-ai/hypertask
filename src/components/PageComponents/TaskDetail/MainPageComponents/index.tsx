@@ -32,6 +32,7 @@ export const AssigneeCard = ({ user, i, _mbl, projectId }: { user: IUser | IAgen
     >
       <ParentPersonHovercard projectId={projectId} subject={subject} />
       <UserAvatar
+        agentId={subject.kind === "agent" ? subject.id : undefined}
         alt=""
         name={user.displayName}
         photoURL={user.photoURL}

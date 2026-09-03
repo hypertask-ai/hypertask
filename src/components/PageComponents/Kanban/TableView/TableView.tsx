@@ -224,6 +224,7 @@ export const renderAssigneeAvatars = (task: ITask) => {
         return (
           <UserAvatar
             key={assignee.id}
+            agentId={assignee.agent?.id}
             alt={label}
             className={`${stackClass} ring-1 ring-[var(--bg-containerBackground)]`}
             fallbackClassName="bg-active-elementBg text-text-light-gray"
