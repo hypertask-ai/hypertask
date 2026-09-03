@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
 const { generateHTML, generateJSON } = require("@tiptap/core");
@@ -52,4 +53,17 @@ test("page mentions render as links and person mentions remain spans", () => {
   );
   assert.match(person.html, /<span[^>]*data-type="mention"/);
   assert.ok(!person.html.includes("href="));
+});
+
+test("mention links use the shared token in every theme", () => {
+  const globals = fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8");
+  assert.match(globals, /color: var\(--color-rich-text-link\) !important/);
+
+  for (const theme of ["amoled", "dark", "dia", "graphite", "light", "porcelain"]) {
+    const css = fs.readFileSync(
+      path.join(root, `src/styles/tailwindThemes/${theme}.css`),
+      "utf8",
+    );
+    assert.match(css, /--color-rich-text-link:\s*#5896f1/);
+  }
 });
