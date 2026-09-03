@@ -81,7 +81,14 @@ function loadCommentsRoute({
         email: 'other@example.test',
         displayName: 'Other User',
       },
-      agent: null,
+      agent: {
+        id: 'private-agent',
+        displayName: 'Private helper',
+        photoURL: null,
+        userId: 9,
+        visibility: 'PRIVATE',
+      },
+      agentDisplayName: 'Private helper',
       attachments: [],
       reactions: [{
         id: 'reaction-7002',
@@ -161,7 +168,15 @@ function loadCommentsRoute({
         status: 401,
       }),
     },
-    '@/lib/mcp/agents': { getMcpSessionAgentSummary: async () => null, mapMcpAgent: () => null, mcpAgentSelect: {} },
+    '@/lib/mcp/agents': {
+      getMcpSessionAgentSummary: async () => null,
+      mapMcpAgent: (agent) => agent ? { id: agent.id, displayName: agent.displayName } : undefined,
+      mcpAgentSelect: {},
+    },
+    '@/lib/agents/visibility': {
+      isAgentVisibleToUser: (agent, userId) =>
+        agent.userId === userId || agent.visibility === 'TEAM',
+    },
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/lib/mcp/tasks/resolveTask': {
       findTaskByIdentifier: async (...args) => { resolverCalls.push(args); return resolveTask(...args) },
@@ -255,6 +270,8 @@ test('MCP comments response includes mapped active reactions', async () => {
     emoji: '👀',
     userId: 9,
   }])
+  assert.equal(response.body.comments[1].agent, undefined)
+  assert.equal(response.body.comments[1].agent_display_name, 'Private agent')
   assert.deepEqual(
     route.queryCalls[0].include.reactions,
     commentReactionInclude
@@ -264,6 +281,19 @@ test('MCP comments response includes mapped active reactions', async () => {
   assert.equal(route.queryCalls[0].orderBy.createdAt, 'desc')
   assert.equal(route.queryCalls[0].take, 50)
   assert.equal(route.queryCalls[0].skip, 0)
+})
+
+test('MCP comments keeps private agent identity for its owner', async () => {
+  const route = loadCommentsRoute({ authContext: { user: { id: 9 }, agentId: null } })
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
+  })
+
+  assert.deepEqual(response.body.comments[1].agent, {
+    id: 'private-agent',
+    displayName: 'Private helper',
+  })
+  assert.equal(response.body.comments[1].agent_display_name, 'Private helper')
 })
 
 test('MCP comments GET rejects unauthenticated callers', async () => {

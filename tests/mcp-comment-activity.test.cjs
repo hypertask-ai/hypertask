@@ -65,6 +65,18 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
   )
 })
 
+test('comment agent identities are filtered for the requesting user', () => {
+  assert.match(
+    routeSource,
+    /select: \{ \.\.\.mcpAgentSelect, userId: true, visibility: true \}/
+  )
+  assert.match(
+    routeSource,
+    /isAgentVisibleToUser\(comment\.agent, userId\)/
+  )
+  assert.match(routeSource, /mapCommentToResponse\(comment, user\.id, includeActivity\)/)
+})
+
 test('activity serialization preserves TaskLabel status and label payload', () => {
   assert.match(
     routeSource,
