@@ -86,6 +86,7 @@ import {
 import { canWarmPreviousBoardFromInbox } from "@/lib/inboxSync/warmPreviousBoard";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
 import { shouldPreserveNativeInboxTab } from "@/lib/inboxKeyboardNavigation";
+import { getInitialInboxSplitIndex } from "@/lib/inboxSplitSettings";
 
 const Inbox = ({
   currentUser,
@@ -110,11 +111,12 @@ const Inbox = ({
     queryParams?.showAll === "true" ? "ShowAll" : undefined,
   );
   const lastgClick = useRef<number | null>(null);
-  const preselectedProjectProcessed = useRef<boolean>(false);
+  const preselectedSplitProcessed = useRef<boolean>(false);
   const initialResetToFirstDone = useRef<boolean>(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedProject = queryParams?.projectId;
+  const preselectedSplit = queryParams?.split;
   const notificationsQuery = useGetNotifications(currentUser.id);
   useWarmProjectsAllQuery({
     user: currentUser,
@@ -619,32 +621,29 @@ const Inbox = ({
     newCommentsHandler();
   }, [_notificationsTQ?.structuredData?.data, trigger]);
 
-  // Set active split on initial render when notifications first load: preselected project from URL, or first tab if currSplit is not 0
+  // Set active split on initial render when notifications first load: URL-selected split, or the first tab.
   useEffect(() => {
-    const tabs = _notificationsTQ?.structuredData?.tabs;
-    const hasTabs = tabs && tabs.length > 0;
-    if (!hasTabs) return;
+    const tabs = _notificationsTQ?.structuredData?.tabs ?? [];
+    const initialSplitIndex = getInitialInboxSplitIndex({
+      tabs,
+      split: preselectedSplit,
+      projectId: preselectedProject,
+      urlSelectionProcessed: preselectedSplitProcessed.current,
+      defaultSelectionProcessed: initialResetToFirstDone.current,
+    });
+    if (initialSplitIndex === null) return;
 
-    if (preselectedProject && !preselectedProjectProcessed.current) {
-      const preselectedIndex = tabs.findIndex(
-        (tab: { projectId: number | null }) =>
-          tab.projectId === parseInt(preselectedProject),
-      );
-      if (preselectedIndex !== -1) {
-        preselectedProjectProcessed.current = true;
-        navigateTabs(preselectedIndex);
-      }
-      return;
-    }
-    if (
-      !preselectedProject &&
-      !initialResetToFirstDone.current &&
-      !queryParams?.split
-    ) {
+    if (preselectedProject || preselectedSplit) {
+      preselectedSplitProcessed.current = true;
+    } else {
       initialResetToFirstDone.current = true;
-      navigateTabs(0);
     }
-  }, [_notificationsTQ?.structuredData?.tabs, preselectedProject, queryParams]);
+    navigateTabs(initialSplitIndex);
+  }, [
+    _notificationsTQ?.structuredData?.tabs,
+    preselectedProject,
+    preselectedSplit,
+  ]);
 
   const handleBulkArchive = async (selectedNotifications: INotification[]) => {
     await bulkArchiveNotifications(

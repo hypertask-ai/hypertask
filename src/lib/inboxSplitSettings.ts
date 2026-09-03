@@ -11,6 +11,34 @@ export const getInboxSplitKey = ({
 }: InboxSplitIdentity): InboxSplitKey =>
   projectId != null ? `project:${projectId}` : `system:${project}`;
 
+export const getInitialInboxSplitIndex = ({
+  tabs,
+  split,
+  projectId,
+  urlSelectionProcessed,
+  defaultSelectionProcessed,
+}: {
+  tabs: readonly InboxSplitIdentity[];
+  split?: string;
+  projectId?: string;
+  urlSelectionProcessed: boolean;
+  defaultSelectionProcessed: boolean;
+}): number | null => {
+  if (tabs.length === 0) return null;
+
+  if (projectId || split) {
+    if (urlSelectionProcessed) return null;
+    const index = tabs.findIndex((tab) =>
+      projectId
+        ? tab.projectId === Number.parseInt(projectId, 10)
+        : tab.project === split,
+    );
+    return index === -1 ? null : index;
+  }
+
+  return defaultSelectionProcessed ? null : 0;
+};
+
 export const isInboxSplitKey = (value: unknown): value is InboxSplitKey => {
   if (typeof value !== "string" || value.length > 200) return false;
 
