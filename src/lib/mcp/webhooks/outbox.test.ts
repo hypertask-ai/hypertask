@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { persistBoardWebhookEvent } from './outbox'
+import { persistBoardWebhookEvent, webhookPayloadHash } from './outbox'
 import type { WebhookDelivery } from './events'
 import { WEBHOOK_EVENT_DEFINITIONS } from './events'
 import {
@@ -156,6 +156,13 @@ test('task.unassigned preserves legacy subscribers without duplicating new ones'
       team: { projects: { some: { id: 15 } } },
     },
   ])
+})
+
+test('webhook payload hashing rejects values without a JSON representation', () => {
+  assert.throws(
+    () => webhookPayloadHash(undefined),
+    /Webhook payload must be JSON-serializable/,
+  )
 })
 
 test('board webhook payload is the frozen public envelope', async () => {

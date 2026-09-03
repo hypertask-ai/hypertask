@@ -16,7 +16,11 @@ type BoardWebhookDb = {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
 export function webhookPayloadHash(payload: unknown): string {
-  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+  const serialized = JSON.stringify(payload)
+  if (serialized === undefined) {
+    throw new TypeError('Webhook payload must be JSON-serializable')
+  }
+  return crypto.createHash('sha256').update(serialized).digest('hex')
 }
 
 function persistedDelivery(input: {

@@ -12,6 +12,7 @@ import {
   FormEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -172,7 +173,6 @@ export default function WebhooksSection() {
   const teamIdRef = useRef(teamId);
   const actionRequestRef = useRef(0);
   const actionAbortRef = useRef<AbortController | null>(null);
-  teamIdRef.current = teamId;
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -256,7 +256,8 @@ export default function WebhooksSection() {
     }
   }, [selectedId, teamId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    teamIdRef.current = teamId;
     actionRequestRef.current += 1;
     actionAbortRef.current?.abort();
     actionAbortRef.current = null;
