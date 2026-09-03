@@ -49,6 +49,7 @@ async function main() {
   }
 
   let taskAccessible = true;
+  let taskStatus = "Normal";
   let conflictAgentId: string | null = AGENT_A;
   let claimSucceeds = false;
 
@@ -93,14 +94,14 @@ async function main() {
     prismaMock.logs.create = async () => ({ id: 1 });
     prismaMock.task.findFirst = async () =>
       taskAccessible ? { id: TASK_ID, projectId: 15 } : null;
-    prismaMock.task.findUnique = async () => ({ status: "Normal" });
+    prismaMock.task.findUnique = async () => ({ status: taskStatus });
     prismaMock.$queryRaw = async () => [
       { holder: USER_ID, agentId: conflictAgentId },
     ];
     prismaMock.$transaction = async (callback: (tx: any) => Promise<unknown>) =>
       callback({
         $executeRaw: async () => 1,
-        task: { findUnique: async () => ({ status: "Normal" }) },
+        task: { findUnique: async () => ({ status: taskStatus }) },
         assignees: {
           findMany: async () => [],
           findFirst: async () => null,
@@ -134,6 +135,7 @@ async function main() {
 
   test.beforeEach(() => {
     taskAccessible = true;
+    taskStatus = "Normal";
     conflictAgentId = AGENT_A;
     claimSucceeds = false;
   });
@@ -168,6 +170,25 @@ async function main() {
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.lease.agentId, AGENT_A);
+  });
+
+  test("an archived task can still acquire a lease so an agent can restore it", async () => {
+    taskStatus = "Archive";
+    claimSucceeds = true;
+    const response = await POST(request(AGENT_A));
+    const payload = await responseJson(response);
+    assert.equal(response.status, 200);
+    assert.equal(payload.success, true);
+    assert.equal(payload.lease.agentId, AGENT_A);
+  });
+
+  test("a deleted task refuses a lease with a lifecycle error", async () => {
+    taskStatus = "Deleted";
+    const response = await POST(request(AGENT_A));
+    const payload = await responseJson(response);
+    assert.equal(response.status, 409);
+    assert.equal(payload.error, "Task lifecycle precondition failed");
+    assert.match(payload.message, /Deleted tasks/);
   });
 
   test("an agent from another user cannot inspect an inaccessible lease", async () => {
