@@ -57,6 +57,7 @@ function request(channel, { method = "POST", socketId = "123.456" } = {}) {
     method,
     body: { socket_id: socketId, channel_name: channel },
     cookies: { nookies_user: "signed-cookie" },
+    headers: { cookie: "ht_session=signed-session" },
   };
 }
 
@@ -93,6 +94,12 @@ function loadPusherAuth({
     },
     "@/lib/realtime/server": {
       getRealtimeServer: () => server,
+    },
+    "@/lib/realtime/shared": {
+      featureFlagsChannel: () => "private-feature-flags",
+    },
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => (user ? { userId: Number(user.id) } : null),
     },
     "@/lib/prisma": {
       __esModule: true,
@@ -136,6 +143,20 @@ test("a user can subscribe to only their own notification channel", async () => 
     assert.equal(deniedResult.status, 403, channel);
     assert.deepEqual(denied.calls.authorize, [], channel);
   }
+});
+
+test("feature flag events require a signed session", async () => {
+  const signed = loadPusherAuth();
+  const signedResult = await invoke(signed.handler, request("private-feature-flags"));
+  assert.equal(signedResult.status, 200);
+
+  const anonymous = loadPusherAuth({ user: null });
+  const anonymousResult = await invoke(
+    anonymous.handler,
+    request("private-feature-flags"),
+  );
+  assert.equal(anonymousResult.status, 403);
+  assert.deepEqual(anonymous.calls.authorize, []);
 });
 
 test("board channels require access for the signed-in user", async () => {
@@ -277,7 +298,9 @@ function loadRealtimeServer({ configured = true, triggerError = null } = {}) {
         INBOX_EVENT: "inbox:changed",
         TASK_EVENT: "task:changed",
         TIME_EVENT: "time:changed",
+        FEATURE_FLAGS_EVENT: "feature-flags:changed",
         boardChannel: (id) => `private-project-${id}`,
+        featureFlagsChannel: () => "private-feature-flags",
         taskChannel: (id) => `private-task-${id}`,
         timeBoardChannel: (id) => `private-time-project-${id}`,
         timeTaskChannel: (id) => `private-time-task-${id}`,
@@ -311,6 +334,14 @@ test("notification broadcasts target one user's channel and exclude only the act
     ],
   ]);
   assert.equal(calls.waitUntil.length, 1);
+});
+
+test("feature flag broadcasts carry no privileged payload", async () => {
+  const { calls, realtime } = loadRealtimeServer();
+  await realtime.broadcastFeatureFlagsChange();
+  assert.deepEqual(calls.trigger, [
+    ["private-feature-flags", "feature-flags:changed", {}, undefined],
+  ]);
 });
 
 test("missing recipients and disabled realtime have no broadcast side effects", async () => {

@@ -15,6 +15,7 @@ import ThemeListener from "@/lib/contexts/ThemeListener";
 import { MobileBlockingProvider } from "@/lib/contexts/mobileBlockingContext";
 import { TourProvider } from "@/lib/contexts/TourContext";
 import { shouldDehydratePersistedQuery } from "@/utils/queryPersistence";
+import { FeatureFlagProvider } from "@/hooks/useFlag";
 import {
   createQueryPersister,
   type DisposableQueryPersister,
@@ -165,9 +166,9 @@ export default function Provider({
                       {publicShare ? (
                         <PublicShell>{children}</PublicShell>
                       ) : (
-                        <GlobalProvider>
-                          {children}
-                        </GlobalProvider>
+                        <FeatureFlagProvider userId={authenticatedUserId}>
+                          <GlobalProvider>{children}</GlobalProvider>
+                        </FeatureFlagProvider>
                       )}
                     </TourProvider>
                   </AuthProvider>

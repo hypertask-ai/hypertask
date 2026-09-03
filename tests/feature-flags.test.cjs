@@ -1,0 +1,88 @@
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const test = require("node:test");
+const { createJiti } = require("jiti");
+
+const root = path.resolve(__dirname, "..");
+let row = null;
+let readError = null;
+let sessionUserId = 6;
+let ownerExists = true;
+const prisma = {
+  user: { findUnique: async () => (ownerExists ? { id: 6 } : null) },
+  featureFlag: {
+    findUnique: async () => {
+      if (readError) throw readError;
+      return row;
+    },
+    findMany: async () => (row ? [{ key: "htpr-6091-feature-flags", ...row }] : []),
+    upsert: async ({ where, create, update }) => {
+      row = { mode: row ? update.mode : create.mode, updatedAt: new Date() };
+      return { key: where.key, ...row };
+    },
+  },
+};
+
+const prismaPath = path.join(root, "src/lib/prisma.ts");
+require.cache[prismaPath] = {
+  id: prismaPath,
+  filename: prismaPath,
+  loaded: true,
+  exports: { __esModule: true, default: prisma },
+};
+const authPath = path.join(root, "src/lib/auth/getSessionUser.ts");
+require.cache[authPath] = {
+  id: authPath,
+  filename: authPath,
+  loaded: true,
+  exports: { getSessionUser: async () => ({ userId: sessionUserId }) },
+};
+const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
+const flags = jiti(path.join(root, "src/lib/flags.ts"));
+
+test.beforeEach(() => {
+  row = null;
+  readError = null;
+  sessionUserId = 6;
+  ownerExists = true;
+});
+
+test("admin access requires the signed, active owner", async () => {
+  assert.equal(await flags.isFeatureFlagOwner(new Headers()), true);
+  sessionUserId = 7;
+  assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
+  sessionUserId = 6;
+  ownerExists = false;
+  assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
+});
+
+test("feature flag modes enforce owner-only, everyone, and off", () => {
+  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", 6), true);
+  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", 7), false);
+  assert.equal(flags.featureFlagModeEnabled("EVERYONE", 7), true);
+  assert.equal(flags.featureFlagModeEnabled("OFF", 6), false);
+});
+
+test("a missing row defaults to owner only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), false);
+});
+
+test("database failures fail closed instead of becoming the default", async () => {
+  readError = new Error("database unavailable");
+  await assert.rejects(flags.isFeatureEnabled("htpr-6091-feature-flags", 6), /database unavailable/);
+});
+
+test("declared flags remain listed without a row and can be changed", async () => {
+  assert.deepEqual(await flags.listFeatureFlagModes(), [
+    { key: "htpr-6091-feature-flags", mode: "OWNER_ONLY", updatedAt: null },
+  ]);
+  const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  assert.equal(changed.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), true);
+});
+
+test("unknown or malformed keys cannot create rows", async () => {
+  await assert.rejects(flags.setFeatureFlagMode("unknown-flag", "OFF"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagMode("Bad Flag", "OFF"), /Invalid feature flag/);
+});
