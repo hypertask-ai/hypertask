@@ -68,8 +68,8 @@ const hiddenCommentAgent = (userId: number) => Prisma.sql`
   )
 `;
 
-const publicCommentAgent = (userId: number) => Prisma.sql`
-  CASE WHEN agent.id IS NULL OR (${hiddenCommentAgent(userId)})
+const publicCommentAgent = Prisma.sql`
+  CASE WHEN agent.id IS NULL OR agent_visibility.hidden
   THEN 'null'::jsonb ELSE JSONB_BUILD_OBJECT(
     'id', agent.id,
     'userId', agent."userId",
@@ -421,14 +421,17 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
         ${assignmentActivityWithCurrentAvatars} AS activity,
         c."seen",
-        CASE WHEN (${hiddenCommentAgent(userId)}) THEN NULL ELSE c."agentId" END AS "agentId",
-        CASE WHEN (${hiddenCommentAgent(userId)}) THEN 'Private agent'
+        CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
+        CASE WHEN agent_visibility.hidden THEN 'Private agent'
           ELSE c."agentDisplayName" END AS "agentDisplayName",
         ${publicCommentCreator} AS creator,
-        ${publicCommentAgent(userId)} AS agent
+        ${publicCommentAgent} AS agent
       FROM "Comment" c
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
+      LEFT JOIN LATERAL (
+        SELECT (${hiddenCommentAgent(userId)}) AS hidden
+      ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
           THEN (c.activity #>> '{data,fromUser,userId}')::int END
@@ -532,15 +535,18 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
         ${assignmentActivityWithCurrentAvatars} AS activity,
         c."seen",
-        CASE WHEN (${hiddenCommentAgent(userId)}) THEN NULL ELSE c."agentId" END AS "agentId",
-        CASE WHEN (${hiddenCommentAgent(userId)}) THEN 'Private agent'
+        CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
+        CASE WHEN agent_visibility.hidden THEN 'Private agent'
           ELSE c."agentDisplayName" END AS "agentDisplayName",
         ${publicCommentCreator} AS creator,
-        ${publicCommentAgent(userId)} AS agent
+        ${publicCommentAgent} AS agent
       FROM "Comment" c
       INNER JOIN task_row ti ON c."taskId" = ti."taskId"
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
+      LEFT JOIN LATERAL (
+        SELECT (${hiddenCommentAgent(userId)}) AS hidden
+      ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
           THEN (c.activity #>> '{data,fromUser,userId}')::int END
@@ -606,8 +612,8 @@ export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw`
     SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
       c.activity, c."seen",
-      CASE WHEN (${hiddenCommentAgent(userId)}) THEN NULL ELSE c."agentId" END AS "agentId",
-      CASE WHEN (${hiddenCommentAgent(userId)}) THEN 'Private agent'
+      CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
+      CASE WHEN agent_visibility.hidden THEN 'Private agent'
         ELSE c."agentDisplayName" END AS "agentDisplayName",
       (
         SELECT JSONB_AGG(reaction_data) FROM (
@@ -627,13 +633,17 @@ export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
           AND ((sc."userId" = ${userId} AND sc."type" = 'Private') OR sc."type" = 'Public')
       ), '[]'::jsonb) AS "savedContent",
       ${publicCommentCreator} AS creator,
-      ${publicCommentAgent(userId)} AS agent
+      ${publicCommentAgent} AS agent
     FROM "Comment" c
     LEFT JOIN "User" creator ON c."creatorId" = creator."id"
     LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
+    LEFT JOIN LATERAL (
+      SELECT (${hiddenCommentAgent(userId)}) AS hidden
+    ) agent_visibility ON TRUE
     WHERE c."taskId" = ${taskId}
     GROUP BY c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-      c.seen, c.activity, c."agentId", c."agentDisplayName", creator."id", agent."id"
+      c.seen, c.activity, c."agentId", c."agentDisplayName", creator."id", agent."id",
+      agent_visibility.hidden
     ORDER BY c."createdAt" ASC
   `;
 }
