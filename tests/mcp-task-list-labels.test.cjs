@@ -99,6 +99,77 @@ test("list and detail labels share the exact id/name mapping", () => {
   assert.deepEqual(Object.keys(listLabels[0]).sort(), ["id", "name"]);
 });
 
+test("task responses expose the permanent-delete deadline", () => {
+  const { mapTaskToMcpGetResponse } = loadMappers();
+  const permanentlyDeleteAt = new Date("2026-09-10T12:00:00.000Z");
+  const detail = mapTaskToMcpGetResponse({
+    id: 5064,
+    uniqueIndex: 5064,
+    projectId: 15,
+    title: "Permanent-delete deadline",
+    section: "Trash",
+    status: "Deleted",
+    project: { title: "Hypertask Product" },
+    taskLabels: [],
+    assignees: [],
+    followers: [],
+    attachments: [],
+    customFieldValues: [],
+    subTasks: [],
+    _count: { comments: 0 },
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-02T00:00:00.000Z"),
+    permanentlyDeleteAt,
+  });
+
+  assert.equal(
+    detail.permanentlyDeleteAt,
+    "2026-09-10T12:00:00.000Z",
+  );
+
+  const withoutDeadline = mapTaskToMcpGetResponse({
+    ...detail,
+    permanentlyDeleteAt: null,
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-02T00:00:00.000Z"),
+    project: { title: "Hypertask Product" },
+    taskLabels: [],
+    assignees: [],
+    followers: [],
+    attachments: [],
+    customFieldValues: [],
+    subTasks: [],
+    _count: { comments: 0 },
+  });
+  assert.equal(withoutDeadline.permanentlyDeleteAt, null);
+});
+
+test("the paginated task list selects and serializes the permanent-delete deadline", () => {
+  const listQueryStart = routeSource.indexOf("// Get tasks");
+  const listQueryEnd = routeSource.indexOf("// Get metadata counts", listQueryStart);
+  const listResponseStart = routeSource.indexOf(
+    "// Transform to response format",
+    listQueryEnd,
+  );
+  const listResponseEnd = routeSource.indexOf(
+    "// A full page in cursor mode",
+    listResponseStart,
+  );
+  assert.notEqual(listQueryStart, -1);
+  assert.notEqual(listQueryEnd, -1);
+  assert.notEqual(listResponseStart, -1);
+  assert.notEqual(listResponseEnd, -1);
+
+  const listQuery = routeSource.slice(listQueryStart, listQueryEnd);
+  const listResponse = routeSource.slice(listResponseStart, listResponseEnd);
+
+  assert.match(listQuery, /permanentlyDeleteAt:\s*true/);
+  assert.match(
+    listResponse,
+    /permanentlyDeleteAt:\s*task\.permanentlyDeleteAt\?\.toISOString\(\) \|\| null/,
+  );
+});
+
 test("task get returns linked pull requests in selected order", () => {
   const { mapTaskToMcpGetResponse } = loadMappers();
   const updatedAt = new Date("2026-09-02T03:28:24.064Z");
