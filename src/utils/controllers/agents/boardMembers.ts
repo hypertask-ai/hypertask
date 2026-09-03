@@ -5,6 +5,7 @@ import {
   publicAgentSelect,
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 export async function getAccessibleAgentBoard(
   projectId: number,
@@ -42,13 +43,18 @@ export type BoardAgentMemberRow = Member & {
 };
 
 export async function getBoardAgentMembers(
-  projectId: number
+  projectId: number,
+  requestingUserId: number,
 ): Promise<BoardAgentMemberRow[]> {
   const rows = await prisma.member.findMany({
     where: {
       projectId,
       agentId: { not: null },
-      agent: { revokedAt: null, archivedAt: null },
+      agent: {
+        revokedAt: null,
+        archivedAt: null,
+        ...boardAgentVisibilityWhere(requestingUserId),
+      },
     },
     include: {
       agent: { select: publicAgentSelect },
@@ -320,7 +326,10 @@ export async function removeAgentFromBoard(
   }
 }
 
-export async function getBoardAgentIds(projectId: number): Promise<string[]> {
-  const rows = await getBoardAgentMembers(projectId);
+export async function getBoardAgentIds(
+  projectId: number,
+  requestingUserId: number,
+): Promise<string[]> {
+  const rows = await getBoardAgentMembers(projectId, requestingUserId);
   return rows.map((r) => r.agent.id);
 }

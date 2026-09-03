@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import type { McpAgentSummary } from "@/lib/mcp/agents";
-import { getMcpSessionAgentSummary, mapMcpAgent, mcpAgentSelect } from "@/lib/mcp/agents";
+import {
+  getMcpSessionAgentSummary,
+  mapVisibleMcpAgent,
+  mcpVisibleAgentSelect,
+} from "@/lib/mcp/agents";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
@@ -9,6 +13,7 @@ import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { IUser } from "@/models/model";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ACTIVE_TASK_MUTATION_STATUS } from "@/lib/mcp/tasks/activeTaskMutation";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 export interface McpAssigneeResponseItem {
   userId: number;
@@ -380,21 +385,35 @@ export async function POST(request: NextRequest) {
     const assignStatus = lastAssignStatus;
 
     const assigneeRows = await prisma.assignees.findMany({
-      where: { taskId: task.id },
+      where: {
+        taskId: task.id,
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(ctx.user.id) },
+        ],
+      },
       select: {
         userId: true,
-        agent: { select: mcpAgentSelect },
-        agentAssigner: { select: mcpAgentSelect },
+        agent: { select: mcpVisibleAgentSelect(ctx.user.id, task.projectId) },
+        agentAssigner: {
+          select: mcpVisibleAgentSelect(ctx.user.id, task.projectId),
+        },
       },
     });
 
-    const assignees: McpAssigneeResponseItem[] = assigneeRows.map((row) => {
+    const assignees: McpAssigneeResponseItem[] = assigneeRows.flatMap((row) => {
+      const agent = mapVisibleMcpAgent(row.agent, ctx.user.id, task.projectId);
+      if (row.agent && !agent) return [];
+
       const item: McpAssigneeResponseItem = { userId: row.userId };
-      const agent = mapMcpAgent(row.agent);
-      const agentAssigner = mapMcpAgent(row.agentAssigner);
+      const agentAssigner = mapVisibleMcpAgent(
+        row.agentAssigner,
+        ctx.user.id,
+        task.projectId
+      );
       if (agent) item.agent = agent;
       if (agentAssigner) item.agentAssigner = agentAssigner;
-      return item;
+      return [item];
     });
 
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);

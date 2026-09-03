@@ -2,6 +2,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -75,10 +76,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (
-    autoAssignAgentId !== null &&
-    !(await isAgentOnBoard(section.projectId, autoAssignAgentId))
-  ) {
+  const [visibleAgent, agentOnBoard] =
+    autoAssignAgentId === null
+      ? [null, true]
+      : await Promise.all([
+          prisma.agent.findFirst({
+            where: {
+              id: autoAssignAgentId,
+              ...boardAgentVisibilityWhere(session.userId),
+            },
+            select: { id: true },
+          }),
+          isAgentOnBoard(section.projectId, autoAssignAgentId),
+        ]);
+  if (autoAssignAgentId !== null && (!agentOnBoard || !visibleAgent)) {
     return NextResponse.json(
       { success: false, error: "Auto-assign agent must be active on this board" },
       { status: 400 },

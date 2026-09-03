@@ -623,7 +623,7 @@ export async function createTask(data: {
     // Fetch complete task with all relations for MCP response format
     const taskWithDescription = await prisma.task.findUnique({
         where: { id: result.newTask.id },
-        include: taskDetailInclude
+        include: taskDetailInclude(userId)
     });
 
     if (!taskWithDescription) {

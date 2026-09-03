@@ -1136,7 +1136,7 @@ export async function executeTaskUpdate({
     // Fetch complete tasks with all relations for MCP response format
     const updatedTasks = await prisma.task.findMany({
         where: { id: { in: updatedTaskIds } },
-        include: taskDetailInclude
+        include: taskDetailInclude(user.id)
     })
 
     if (updatedTasks.length === 0) {
@@ -1153,7 +1153,7 @@ export async function executeTaskUpdate({
     // serverless request can finish before external CLI/MCP changes are emitted.
     await broadcastTaskUpdates(updatedTasks, user.id)
 
-    const mappedTasks = updatedTasks.map(mapTaskToDetail)
+    const mappedTasks = updatedTasks.map((task) => mapTaskToDetail(task, user.id))
     
     let message = `${updatedTasks.length} task(s) updated successfully`
     if (failedTasks.length > 0) {

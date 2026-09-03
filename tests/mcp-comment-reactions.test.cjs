@@ -29,7 +29,7 @@ const routeJavascript = ts.transpileModule(routeSource, {
 
 function loadCommentsRoute({
   authContext = { user: { id: 6 }, agentId: null },
-  task = { id: 42 },
+  task = { id: 42, projectId: 15 },
   taskResolver = null,
 } = {}) {
   const queryCalls = []
@@ -65,6 +65,7 @@ function loadCommentsRoute({
         displayName: 'Valentin Yeo',
       },
       agent: null,
+      agentDisplayName: 'Deleted helper',
       attachments: [],
       reactions: allReactions,
     },
@@ -81,7 +82,15 @@ function loadCommentsRoute({
         email: 'other@example.test',
         displayName: 'Other User',
       },
-      agent: null,
+      agent: {
+        id: 'private-agent',
+        displayName: 'Private helper',
+        photoURL: null,
+        userId: 9,
+        visibility: 'PRIVATE',
+        members: [],
+      },
+      agentDisplayName: 'Private helper',
       attachments: [],
       reactions: [{
         id: 'reaction-7002',
@@ -161,7 +170,16 @@ function loadCommentsRoute({
         status: 401,
       }),
     },
-    '@/lib/mcp/agents': { getMcpSessionAgentSummary: async () => null, mapMcpAgent: () => null, mcpAgentSelect: {} },
+    '@/lib/mcp/agents': {
+      getMcpSessionAgentSummary: async () => null,
+      mapVisibleMcpAgent: (agent, userId, projectId) =>
+        agent && (agent.userId === userId ||
+          (agent.visibility === 'TEAM' &&
+            agent.members.some((member) => member.projectId === projectId)))
+          ? { id: agent.id, displayName: agent.displayName }
+          : undefined,
+      mcpVisibleAgentSelect: () => ({}),
+    },
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/lib/mcp/tasks/resolveTask': {
       findTaskByIdentifier: async (...args) => { resolverCalls.push(args); return resolveTask(...args) },
@@ -201,7 +219,12 @@ function loadCommentsRoute({
     mockRequire
   )
 
-  return { GET: routeModule.exports.GET, queryCalls, resolverCalls }
+  return {
+    GET: routeModule.exports.GET,
+    commentsFixture,
+    queryCalls,
+    resolverCalls,
+  }
 }
 
 test('comment reaction reads select active reactions and reactor identity', () => {
@@ -250,11 +273,15 @@ test('MCP comments response includes mapped active reactions', async () => {
     response.body.comments[0].reactions.some(({ id }) => id === 'deleted-7001'),
     false
   )
+  assert.equal(response.body.comments[0].agent, undefined)
+  assert.equal(response.body.comments[0].agent_display_name, 'Private agent')
   assert.deepEqual(response.body.comments[1].reactions, [{
     id: 'reaction-7002',
     emoji: '👀',
     userId: 9,
   }])
+  assert.equal(response.body.comments[1].agent, undefined)
+  assert.equal(response.body.comments[1].agent_display_name, 'Private agent')
   assert.deepEqual(
     route.queryCalls[0].include.reactions,
     commentReactionInclude
@@ -264,6 +291,40 @@ test('MCP comments response includes mapped active reactions', async () => {
   assert.equal(route.queryCalls[0].orderBy.createdAt, 'desc')
   assert.equal(route.queryCalls[0].take, 50)
   assert.equal(route.queryCalls[0].skip, 0)
+})
+
+test('MCP comments keeps private agent identity for its owner', async () => {
+  const route = loadCommentsRoute({ authContext: { user: { id: 9 }, agentId: null } })
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
+  })
+
+  assert.deepEqual(response.body.comments[1].agent, {
+    id: 'private-agent',
+    displayName: 'Private helper',
+  })
+  assert.equal(response.body.comments[1].agent_display_name, 'Private helper')
+})
+
+test('MCP comments only exposes a team agent when the caller shares a board', async () => {
+  const route = loadCommentsRoute()
+  route.commentsFixture[1].agent.visibility = 'TEAM'
+
+  let response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
+  })
+  assert.equal(response.body.comments[1].agent, undefined)
+  assert.equal(response.body.comments[1].agent_display_name, 'Private agent')
+
+  route.commentsFixture[1].agent.members = [{ projectId: 15 }]
+  response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
+  })
+  assert.deepEqual(response.body.comments[1].agent, {
+    id: 'private-agent',
+    displayName: 'Private helper',
+  })
+  assert.equal(response.body.comments[1].agent_display_name, 'Private helper')
 })
 
 test('MCP comments GET rejects unauthenticated callers', async () => {

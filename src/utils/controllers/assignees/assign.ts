@@ -11,6 +11,7 @@ import { taskBaseUri } from "@/utils";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
@@ -67,7 +68,11 @@ const assigneesAssign = async (
       const isRemoval = intent === "unassign";
       const [agent, onBoard] = await Promise.all([
         prisma.agent.findFirst({
-          where: { id: agentId, ...(isRemoval ? {} : { revokedAt: null }) },
+          where: {
+            id: agentId,
+            ...(isRemoval ? {} : { revokedAt: null }),
+            ...boardAgentVisibilityWhere(currentUser.id),
+          },
           select: { userId: true },
         }),
         isAgentOnBoard(task.projectId, agentId),
@@ -238,6 +243,10 @@ const assigneesAssign = async (
     const assignees = await prisma.assignees.findMany({
       where: {
         taskId: taskId,
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(currentUser.id) },
+        ],
       },
       include: {
         user: true,

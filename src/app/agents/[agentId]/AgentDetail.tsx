@@ -341,6 +341,11 @@ const AgentDetail = (props: IProp) => {
   const [editingProviderKey, setEditingProviderKey] = useState(false);
   const [providerKeyDraft, setProviderKeyDraft] = useState("");
   const [savingProviderKey, setSavingProviderKey] = useState(false);
+  const [savingVisibility, setSavingVisibility] = useState(false);
+  const [visibilityNotice, setVisibilityNotice] = useState<{
+    kind: "error" | "success";
+    text: string;
+  } | null>(null);
   const [openingChat, setOpeningChat] = useState(false);
   const [boardAccessOpen, setBoardAccessOpen] = useState(false);
   const [pendingBoardId, setPendingBoardId] = useState<number | null>(null);
@@ -692,7 +697,7 @@ const AgentDetail = (props: IProp) => {
 
   const handleSaveProviderKey = async () => {
     const next = providerKeyDraft.trim();
-    if (!agent || savingProviderKey) return;
+    if (!agent || savingProviderKey || savingVisibility) return;
     if (!next) {
       setEditingProviderKey(false);
       return;
@@ -715,6 +720,7 @@ const AgentDetail = (props: IProp) => {
       });
       setProviderKeyDraft("");
       setEditingProviderKey(false);
+      setVisibilityNotice(null);
     } catch {
       // leave the field open so the pasted key is not lost
     } finally {
@@ -723,16 +729,40 @@ const AgentDetail = (props: IProp) => {
   };
 
   const handleRemoveProviderKey = async () => {
-    if (!agent || savingProviderKey) return;
+    if (!agent || savingProviderKey || savingVisibility) return;
     setSavingProviderKey(true);
     try {
       const res = await fetch(
         `/api/agents/${agent.id}/provider-key?provider=openrouter`,
         { method: "DELETE" },
       );
-      if (res.ok) setProviderKey(null);
-    } catch {
-      // keep the current value; the next load re-reads the truth
+      const data = (await res.json().catch(() => null)) as {
+        success?: boolean;
+        error?: string;
+        visibility?: "PRIVATE" | "TEAM";
+        visibilityChanged?: boolean;
+      } | null;
+      if (!res.ok || data?.success === false) {
+        throw new Error(data?.error ?? "Could not remove provider key");
+      }
+      setProviderKey(null);
+      if (data?.visibility) {
+        setAgent((current) =>
+          current ? { ...current, visibility: data.visibility! } : current,
+        );
+      }
+      setVisibilityNotice(
+        data?.visibilityChanged
+          ? {
+              kind: "success",
+              text: "Provider key removed. This agent is now private.",
+            }
+          : null,
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not remove provider key",
+      );
     } finally {
       setSavingProviderKey(false);
     }
@@ -959,6 +989,38 @@ const AgentDetail = (props: IProp) => {
       );
     } finally {
       setSavingModel(false);
+    }
+  };
+
+  const handleVisibilityChange = async (value: string) => {
+    if (
+      !agent ||
+      savingVisibility ||
+      savingProviderKey ||
+      (value !== "PRIVATE" && value !== "TEAM") ||
+      value === agent.visibility
+    ) {
+      return;
+    }
+
+    setSavingVisibility(true);
+    setVisibilityNotice(null);
+    try {
+      const updated = await patchAgent({ visibility: value });
+      const visibility = updated.visibility === "TEAM" ? "TEAM" : "PRIVATE";
+      setAgent((current) =>
+        current ? { ...current, visibility } : current,
+      );
+    } catch (error) {
+      setVisibilityNotice({
+        kind: "error",
+        text:
+          error instanceof Error
+            ? error.message
+            : "Could not change visibility",
+      });
+    } finally {
+      setSavingVisibility(false);
     }
   };
 
@@ -1683,7 +1745,7 @@ const AgentDetail = (props: IProp) => {
                           setEditingProviderKey(false);
                         }
                       }}
-                      disabled={savingProviderKey}
+                      disabled={savingProviderKey || savingVisibility}
                       placeholder="Paste an OpenRouter key"
                       aria-label="OpenRouter key for this agent"
                       className="bg-transparent outline-none min-w-0 w-[220px]"
@@ -1705,7 +1767,7 @@ const AgentDetail = (props: IProp) => {
                       {providerKey?.maskedKey && (
                         <button
                           type="button"
-                          disabled={savingProviderKey}
+                          disabled={savingProviderKey || savingVisibility}
                           className="text-[12px] text-text-light-gray"
                           onClick={() => void handleRemoveProviderKey()}
                         >
@@ -1714,6 +1776,31 @@ const AgentDetail = (props: IProp) => {
                       )}
                     </span>
                   )}
+                </InfoRow>
+                <InfoRow label="Visibility">
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <AgentSelect
+                      value={agent.visibility}
+                      onChange={handleVisibilityChange}
+                      disabled={savingVisibility || savingProviderKey}
+                      ariaLabel="Who can use this agent"
+                    >
+                      <AgentOption value="PRIVATE">Private</AgentOption>
+                      <AgentOption value="TEAM">Team</AgentOption>
+                    </AgentSelect>
+                    {visibilityNotice && (
+                      <span
+                        className={cn(
+                          "text-[12px] leading-4",
+                          visibilityNotice.kind === "error"
+                            ? "text-red-500"
+                            : "text-hypertasks-green",
+                        )}
+                      >
+                        {visibilityNotice.text}
+                      </span>
+                    )}
+                  </span>
                 </InfoRow>
                 <InfoRow label="Important">
                   <span className="flex items-center gap-2">
