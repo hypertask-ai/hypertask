@@ -765,7 +765,8 @@ const AgentChatClient = (props: IProp) => {
               </div>
             )}
           </div>
-          <div className="shrink-0 px-4 pb-4 pt-1">
+          {/* Card surface under the well: the two tokens differ in every theme, so the box stays visible on AMOLED (well = page) and porcelain (card = page). */}
+          <div className="shrink-0 bg-cardBackground px-4 pb-4 pt-1">
             {deliveryNotice && (
               <p className="mb-2 text-[12px] text-text-light-gray">
                 This agent&apos;s runtime has not enabled chat yet.
