@@ -64,18 +64,12 @@ test("excludes missing and out-of-range starts instead of guessing", () => {
     ["calendar", false, "duration_out_of_range"],
   );
 });
-test("usable state accepts rendered read-only content only when actions are ready", () => {
-  const present = new Set([readiness.TASK_DETAIL_READ_ONLY_CONTENT_READY_SELECTOR]);
+test("usable state requires both task content and primary actions", () => {
+  const present = new Set();
   const fakeRoot = { querySelector: (selector) => present.has(selector) ? {} : null };
+  assert.equal(readiness.taskDetailUsableDomPresent(fakeRoot), false);
+  present.add(readiness.TASK_DETAIL_CONTENT_READY_SELECTOR);
   assert.equal(readiness.taskDetailUsableDomPresent(fakeRoot), false);
   present.add(readiness.TASK_DETAIL_ACTIONS_READY_SELECTOR);
-  assert.equal(readiness.taskDetailUsableDomPresent(fakeRoot), true);
-});
-
-test("usable state still waits for a mounted editor when description editing starts", () => {
-  const present = new Set([readiness.TASK_DETAIL_ACTIONS_READY_SELECTOR]);
-  const fakeRoot = { querySelector: (selector) => present.has(selector) ? {} : null };
-  assert.equal(readiness.taskDetailUsableDomPresent(fakeRoot), false);
-  present.add(readiness.TASK_DETAIL_EDITOR_CONTENT_READY_SELECTOR);
   assert.equal(readiness.taskDetailUsableDomPresent(fakeRoot), true);
 });

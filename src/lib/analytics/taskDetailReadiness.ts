@@ -1,9 +1,6 @@
 export const TASK_DETAIL_NAVIGATION_STORAGE_KEY = "ht-task-detail-navigation-start-v1";
 export const TASK_DETAIL_READINESS_MAX_MS = 30_000;
-export const TASK_DETAIL_READ_ONLY_CONTENT_READY_SELECTOR =
-  '[data-task-detail-content-ready="true"]';
-export const TASK_DETAIL_EDITOR_CONTENT_READY_SELECTOR = "#description-input .ProseMirror";
-export const TASK_DETAIL_CONTENT_READY_SELECTOR = `${TASK_DETAIL_READ_ONLY_CONTENT_READY_SELECTOR}, ${TASK_DETAIL_EDITOR_CONTENT_READY_SELECTOR}`;
+export const TASK_DETAIL_CONTENT_READY_SELECTOR = "#description-input .ProseMirror";
 export const TASK_DETAIL_ACTIONS_READY_SELECTOR = '[data-task-detail-primary-actions="true"]';
 export type TaskDetailMeasuredEntryPath = "board" | "inbox" | "calendar";
 type EntryPath = TaskDetailMeasuredEntryPath | "direct_route" | "unknown";
@@ -131,7 +128,6 @@ export const consumeTaskDetailReadinessSample = () => {
 
 export const taskDetailUsableDomPresent = (root: ParentNode) =>
   Boolean(
-    (root.querySelector(TASK_DETAIL_READ_ONLY_CONTENT_READY_SELECTOR) ||
-      root.querySelector(TASK_DETAIL_EDITOR_CONTENT_READY_SELECTOR)) &&
+    root.querySelector(TASK_DETAIL_CONTENT_READY_SELECTOR) &&
       root.querySelector(TASK_DETAIL_ACTIONS_READY_SELECTOR),
   );

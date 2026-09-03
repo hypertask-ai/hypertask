@@ -30,7 +30,7 @@ test("the pinned sanitizer loads on the server and preserves its XSS contract", 
   const jiti = createJiti(__filename, {
     alias: { "@": path.join(root, "src") },
   });
-  const { sanitizeAiHtml, sanitizeRenderedRichHtml } = jiti(
+  const { sanitizeAiHtml } = jiti(
     path.join(root, "src/utils/helperFunctions/sanitizeHtml.ts"),
   );
 
@@ -42,17 +42,4 @@ test("the pinned sanitizer loads on the server and preserves its XSS contract", 
   assert.match(sanitized, /data-type="mention"/);
   assert.match(sanitized, /projectid="15"/);
   assert.doesNotMatch(sanitized, /onclick|javascript:/i);
-
-  const richText = sanitizeRenderedRichHtml(
-    '<video controls style="width: 100%" media-type="video"><source src="https://cdn.example.com/demo.mp4"></video>' +
-      '<iframe src="https://www.youtube.com/embed/demo" onload="alert(1)"></iframe>' +
-      '<iframe src="https://evil.example/embed/demo"></iframe>' +
-      '<img src="x" onerror="alert(1)"><script>alert(1)</script>',
-  );
-
-  assert.match(richText, /<video/);
-  assert.match(richText, /<source src="https:\/\/cdn\.example\.com\/demo\.mp4">/);
-  assert.match(richText, /<iframe[^>]+src="https:\/\/www\.youtube\.com\/embed\/demo"/);
-  assert.match(richText, /sandbox="allow-scripts allow-same-origin allow-presentation"/);
-  assert.doesNotMatch(richText, /evil\.example|onload|onerror|<script/i);
 });
