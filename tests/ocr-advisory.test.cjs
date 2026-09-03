@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { chmod, mkdir, mkdtemp, readFile, stat, writeFile } = require('node:fs/promises')
+const { chmod, mkdir, mkdtemp, readFile, stat, utimes, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { spawnSync } = require('node:child_process')
@@ -45,7 +45,7 @@ fi
 `)
   await executable(join(fakeBin, 'ocr-delegate-review'), `
 printf '%s\\n' "$*" >> "$HOME/review.log"
-printf '%s\\n' '{"comments":[],"summary":{"engine":"test"}}'
+printf '%s\\n' '{"findings":[{"severity":"medium","path":"src/example.ts","start_line":4,"content":"Fix this"}],"summary":{"engine":"test"}}'
 `)
   return { home, fakeBin }
 }
@@ -70,8 +70,28 @@ test('reviews public production PRs from the public checkout', async () => {
   assert.match(reviewCalls, /--from base-sha --to head-sha --repo .*projects\/hypertask-oss/)
   const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
   assert.match(ghCalls, /pr comment 230 --repo hypertask-ai\/hypertask/)
-  assert.match(ghCalls, /No findings/)
+  assert.match(ghCalls, /MEDIUM.*src\/example\.ts:4.*Fix this/)
+  assert.doesNotMatch(ghCalls, /No findings/)
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/head-sha'))
+})
+
+test('retains old markers for open heads and removes closed-head markers', async () => {
+  const fixtureData = await fixture()
+  const state = join(fixtureData.home, '.local/state/ocr-advisory')
+  await mkdir(state, { recursive: true })
+  const openMarker = join(state, 'head-sha')
+  const closedMarker = join(state, 'closed-sha')
+  await writeFile(openMarker, '')
+  await writeFile(closedMarker, '')
+  const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
+  await utimes(openMarker, old, old)
+  await utimes(closedMarker, old, old)
+
+  const result = run(fixtureData)
+
+  assert.equal(result.status, 0, result.stderr)
+  await stat(openMarker)
+  await assert.rejects(stat(closedMarker), { code: 'ENOENT' })
 })
 
 test('fails closed when the advisory checkout is not the public repository', async () => {

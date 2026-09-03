@@ -26,9 +26,11 @@ fi
 git fetch -q "$REMOTE" production
 base_sha=$(git rev-parse "$REMOTE/production")
 
-gh pr list --repo "$REPO" --base production --state open --json number,headRefName,headRefOid,isDraft \
-  --jq '.[] | select(.isDraft|not) | "\(.number) \(.headRefName) \(.headRefOid)"' |
+open_prs=$(gh pr list --repo "$REPO" --base production --state open \
+  --json number,headRefName,headRefOid,isDraft \
+  --jq '.[] | select(.isDraft|not) | "\(.number) \(.headRefName) \(.headRefOid)"')
 while read -r pr branch sha; do
+  [ -n "$sha" ] || continue
   marker_file="$STATE/$sha"
   [ -e "$marker_file" ] && continue
   review_ref="refs/ocr-advisory/$pr"
@@ -51,7 +53,7 @@ while read -r pr branch sha; do
   body=$(python3 - "$out" "$sha" <<'EOF'
 import json, sys
 d = json.load(open(sys.argv[1]))
-comments = d.get("comments") or []
+comments = d.get("comments") or d.get("findings") or []
 engine = (d.get("summary") or {}).get("engine", "open-code-review")
 lines = [f"**OCR advisory (non-gating)** for `{sys.argv[2][:12]}` via open-code-review delegation ({engine}). "
          f"{len(comments)} finding(s); the required AI review stays authoritative.", ""]
@@ -72,6 +74,11 @@ EOF
   gh pr comment "$pr" --repo "$REPO" --body "$body" >/dev/null && touch "$marker_file"
   rm -f "$out"
   git update-ref -d "$review_ref"
-done
-# Age out markers so the state dir stays small.
-find "$STATE" -type f -mtime +30 -delete
+done <<< "$open_prs"
+# Age out markers only after their PR closes, preserving one comment per head SHA.
+while IFS= read -r -d '' marker_file; do
+  sha=${marker_file##*/}
+  if ! awk -v sha="$sha" '$3 == sha { found=1 } END { exit !found }' <<< "$open_prs"; then
+    rm -f -- "$marker_file"
+  fi
+done < <(find "$STATE" -type f -mtime +30 -print0)
