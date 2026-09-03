@@ -81,13 +81,7 @@ test('board webhook outbox writes one durable row per matching subscription', as
     tx.rows.map((row: Row) => row.payload.id),
     ids
   )
-  assert.deepEqual(tx.lastWhere.AND[1].OR, [
-    { projectId: 15 },
-    {
-      projectId: null,
-      team: { projects: { some: { id: 15 } } },
-    },
-  ])
+  assert.deepEqual(tx.lastWhere.AND[1].OR, [{ projectId: 15 }])
   assert.equal(tx.lastWhere.active, true)
   assert.equal(tx.rows[0].payloadBody, JSON.stringify(tx.rows[0].payload))
   assert.match(tx.rows[0].payloadHash, /^[a-f0-9]{64}$/)
@@ -124,6 +118,13 @@ test('task.unassigned preserves legacy subscribers without duplicating new ones'
     tx.rows.map((row: Row) => row.event),
     ['task.assigned', 'task.assigned', 'task.unassigned'],
   )
+  assert.deepEqual(tx.lastWhere.AND[1].OR, [
+    { projectId: 15 },
+    {
+      projectId: null,
+      team: { projects: { some: { id: 15 } } },
+    },
+  ])
 })
 
 test('board webhook payload is the frozen public envelope', async () => {

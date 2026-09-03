@@ -8,10 +8,18 @@ import {
   Send,
   Trash2,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import toast from "react-hot-toast";
 import {
   BOARD_WEBHOOK_MAX_ATTEMPTS,
+  BOARD_WEBHOOK_RETRY_WINDOW_MINUTES,
   WORKSPACE_WEBHOOK_EVENTS,
 } from "@/lib/mcp/webhooks/events";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -154,6 +162,8 @@ const workspaceSuccessMessages = {
 
 export default function WebhooksSection() {
   const { projects, teamId } = useSettingsTeam();
+  const teamIdRef = useRef(teamId);
+  teamIdRef.current = teamId;
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -250,6 +260,7 @@ export default function WebhooksSection() {
     extra: Record<string, unknown> = {},
   ) => {
     if (!teamId || busy) return;
+    const requestTeamId = teamId;
     setBusy(`${action}:${endpoint.id}`);
     try {
       const response = await fetch(API_URL, {
@@ -263,6 +274,7 @@ export default function WebhooksSection() {
         secret?: string;
         error?: string;
       };
+      if (teamIdRef.current !== requestTeamId) return;
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? `Could not ${action} webhook`);
       }
@@ -311,6 +323,7 @@ export default function WebhooksSection() {
   const addEndpoint = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy || !teamId || !url.trim() || events.length === 0) return;
+    const requestTeamId = teamId;
     setBusy("create");
     try {
       const response = await fetch(API_URL, {
@@ -331,6 +344,7 @@ export default function WebhooksSection() {
         secret?: string;
         error?: string;
       };
+      if (teamIdRef.current !== requestTeamId) return;
       if (!response.ok || !data.success || !data.endpoint || !data.secret) {
         throw new Error(data.error ?? "Could not add endpoint");
       }
@@ -652,7 +666,8 @@ export default function WebhooksSection() {
           )}
           <p className="px-2 text-micro text-text-light-gray">
             Retry queues the event with a fresh delivery ID. Automatic retries
-            back off across {BOARD_WEBHOOK_MAX_ATTEMPTS} attempts over about 1 hour.
+            back off across {BOARD_WEBHOOK_MAX_ATTEMPTS} attempts over about{" "}
+            {BOARD_WEBHOOK_RETRY_WINDOW_MINUTES} minutes.
           </p>
         </SettingsCard>
       )}

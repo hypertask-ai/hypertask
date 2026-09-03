@@ -1,6 +1,9 @@
 import prisma from '@/lib/prisma'
 import { postSignedWebhook } from './delivery'
-import { BOARD_WEBHOOK_MAX_ATTEMPTS } from './events'
+import {
+  BOARD_WEBHOOK_MAX_ATTEMPTS,
+  BOARD_WEBHOOK_RETRY_DELAYS_SECONDS,
+} from './events'
 import { queueBoardWebhookDelivery } from './queue'
 
 export { BOARD_WEBHOOK_MAX_ATTEMPTS } from './events'
@@ -8,14 +11,13 @@ export { BOARD_WEBHOOK_MAX_ATTEMPTS } from './events'
 // POST cannot outlive its claim and let a second worker send the same delivery.
 // Keep this above DELIVERY_TIMEOUT_MS if that timeout is ever raised.
 const PROCESSING_LEASE_MS = 5 * 60 * 1000
-const RETRY_DELAYS_SECONDS = [0, 30, 2 * 60, 5 * 60, 10 * 60, 30 * 60] as const
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 export function boardWebhookRetryDelaySeconds(
   attemptCount: number
 ): number | null {
   if (attemptCount >= BOARD_WEBHOOK_MAX_ATTEMPTS) return null
-  return RETRY_DELAYS_SECONDS[attemptCount] ?? null
+  return BOARD_WEBHOOK_RETRY_DELAYS_SECONDS[attemptCount] ?? null
 }
 
 export type BoardWebhookAttemptResult =

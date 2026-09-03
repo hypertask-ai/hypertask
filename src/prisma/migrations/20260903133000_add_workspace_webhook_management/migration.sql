@@ -19,7 +19,8 @@ ALTER TABLE "BoardWebhookDelivery" ADD COLUMN "sourceDeliveryId" TEXT;
 ALTER TABLE "BoardWebhookDelivery" ADD COLUMN "manualRetryKey" TEXT;
 
 CREATE UNIQUE INDEX "BoardWebhookDelivery_subscriptionId_sourceDeliveryId_manualRetryKey_key"
-  ON "BoardWebhookDelivery"("subscriptionId", "sourceDeliveryId", "manualRetryKey");
+  ON "BoardWebhookDelivery"("subscriptionId", "sourceDeliveryId", "manualRetryKey")
+  WHERE "sourceDeliveryId" IS NOT NULL AND "manualRetryKey" IS NOT NULL;
 
 CREATE TABLE "BoardWebhookAttempt" (
   "id" TEXT NOT NULL,

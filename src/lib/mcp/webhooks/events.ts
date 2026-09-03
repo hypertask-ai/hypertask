@@ -26,7 +26,20 @@ export const WORKSPACE_WEBHOOK_EVENTS = [
   'comment.mention',
 ] as const
 
-export const BOARD_WEBHOOK_MAX_ATTEMPTS = 6
+export const BOARD_WEBHOOK_RETRY_DELAYS_SECONDS = [
+  0,
+  30,
+  2 * 60,
+  5 * 60,
+  10 * 60,
+  30 * 60,
+] as const
+export const BOARD_WEBHOOK_MAX_ATTEMPTS =
+  BOARD_WEBHOOK_RETRY_DELAYS_SECONDS.length
+export const BOARD_WEBHOOK_RETRY_WINDOW_MINUTES = Math.ceil(
+  BOARD_WEBHOOK_RETRY_DELAYS_SECONDS.reduce((total, delay) => total + delay, 0) /
+    60,
+)
 
 export type WebhookEventType = (typeof WEBHOOK_EVENTS)[number]
 

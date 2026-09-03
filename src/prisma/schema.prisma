@@ -1906,7 +1906,7 @@ model BoardWebhookDelivery {
   updatedAt        DateTime            @updatedAt
   attempts         BoardWebhookAttempt[]
 
-  @@unique([subscriptionId, sourceDeliveryId, manualRetryKey])
+  // A partial unique index in the migration makes manual retries idempotent.
   @@index([subscriptionId, createdAt])
   @@index([status, nextAttemptAt])
   @@index([createdAt])

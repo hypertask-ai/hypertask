@@ -157,8 +157,8 @@ test("workspace webhook scope is exclusive and delivery attempts are durable", (
   assert.match(schema, /@@unique\(\[deliveryId, attemptNumber\]\)/);
   assert.match(schema, /payloadBody\s+String\?[\s\S]*?payloadHash\s+String\?/);
   assert.match(
-    schema,
-    /@@unique\(\[subscriptionId, sourceDeliveryId, manualRetryKey\]\)/,
+    migration,
+    /UNIQUE INDEX "BoardWebhookDelivery_subscriptionId_sourceDeliveryId_manualRetryKey_key"[\s\S]*?WHERE "sourceDeliveryId" IS NOT NULL AND "manualRetryKey" IS NOT NULL/,
   );
 });
 

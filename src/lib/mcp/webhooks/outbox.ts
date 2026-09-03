@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import type { Prisma } from '@prisma/client'
 import type { WebhookDelivery } from './events'
-import { createWebhookEnvelope } from './events'
+import { WORKSPACE_WEBHOOK_EVENTS, createWebhookEnvelope } from './events'
 import { queueBoardWebhookDelivery } from './queue'
 
 /**
@@ -72,22 +72,20 @@ export async function persistBoardWebhookEvent(
           { events: { isEmpty: true } },
           { events: { has: delivery.event } },
         ]
+  const scopes: Prisma.WebhookSubscriptionWhereInput[] = [{ projectId }]
+  if (
+    (WORKSPACE_WEBHOOK_EVENTS as readonly string[]).includes(delivery.event)
+  ) {
+    scopes.push({
+      projectId: null,
+      team: { projects: { some: { id: projectId } } },
+    })
+  }
   const subscriptions: Array<{ id: string; events: string[] }> =
     await tx.webhookSubscription.findMany({
       where: {
         active: true,
-        AND: [
-          { OR: eventSelection },
-          {
-            OR: [
-              { projectId },
-              {
-                projectId: null,
-                team: { projects: { some: { id: projectId } } },
-              },
-            ],
-          },
-        ],
+        AND: [{ OR: eventSelection }, { OR: scopes }],
       },
       select: { id: true, events: true },
     })

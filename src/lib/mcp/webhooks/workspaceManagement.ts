@@ -96,7 +96,7 @@ function serializeAgentSubscription(sub: {
   return {
     id: sub.id,
     kind: 'agent' as const,
-    scope: sub.projectId == null ? ('team' as const) : ('project' as const),
+    scope: sub.projectId === null ? ('team' as const) : ('project' as const),
     project: sub.project
       ? { id: sub.project.id, name: sub.project.title ?? sub.project.name }
       : null,
@@ -162,7 +162,7 @@ function boardDeliveryAttempts(deliveries: Array<{
       payload: delivery.payload,
       payloadHash: delivery.payloadHash,
       status:
-        attempt.statusCode != null &&
+        attempt.statusCode !== null &&
         attempt.statusCode >= 200 &&
         attempt.statusCode < 300
           ? 'delivered'
@@ -370,7 +370,11 @@ export async function createWorkspaceWebhook(input: {
   const url = await validatedUrl(input.url)
   const events = validatedEvents(input.events)
   let projectId: number | null = null
-  if (input.projectId != null && input.projectId !== '') {
+  if (
+    input.projectId !== null &&
+    input.projectId !== undefined &&
+    input.projectId !== ''
+  ) {
     if (typeof input.projectId === 'number') {
       projectId = input.projectId
     } else if (
@@ -382,7 +386,7 @@ export async function createWorkspaceWebhook(input: {
       throw new WorkspaceWebhookError('Select a valid board', 400, 'projectId')
     }
   }
-  if (projectId != null && (!Number.isSafeInteger(projectId) || projectId <= 0)) {
+  if (projectId !== null && (!Number.isSafeInteger(projectId) || projectId <= 0)) {
     throw new WorkspaceWebhookError('Select a valid board', 400, 'projectId')
   }
 
@@ -395,7 +399,7 @@ export async function createWorkspaceWebhook(input: {
     await tx.$executeRaw(
       Prisma.sql`SELECT pg_advisory_xact_lock(${lockId})`,
     )
-    if (projectId != null) {
+    if (projectId !== null) {
       const project = await tx.project.findFirst({
         where: { id: projectId, teamId: input.teamId },
         select: { id: true },
@@ -419,7 +423,7 @@ export async function createWorkspaceWebhook(input: {
     const secret = `whsec_${crypto.randomBytes(24).toString('hex')}`
     const subscription = await tx.webhookSubscription.create({
       data: {
-        ...(projectId == null
+        ...(projectId === null
           ? { teamId: input.teamId }
           : { projectId }),
         url,
