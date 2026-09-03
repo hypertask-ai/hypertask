@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
 
     const fullTask = await prisma.task.findUnique({
       where: { id: taskRef.id },
-      include: taskDetailInclude,
+      include: taskDetailInclude(user.id),
     });
 
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
@@ -289,7 +289,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: true,
-          task: mapTaskToDetail(result.task!),
+          task: mapTaskToDetail(result.task!, user.id),
           message: "Task moved successfully",
           ...agentField,
         },
@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
-        task: mapTaskToDetail(fullTask),
+        task: mapTaskToDetail(fullTask, user.id),
         message: "Task moved successfully",
         ...agentField,
       },
