@@ -316,6 +316,11 @@ async function main() {
   assert.match(detail, /<InfoRow label="Visibility">/);
   assert.match(detail, /<AgentOption value="PRIVATE">Private<\/AgentOption>/);
   assert.match(detail, /<AgentOption value="TEAM">Team<\/AgentOption>/);
+  assert.match(detail, /disabled=\{savingVisibility \|\| savingProviderKey\}/);
+  assert.equal(
+    detail.match(/savingProviderKey \|\| savingVisibility/g)?.length,
+    4,
+  );
   assert.match(
     detail,
     /Provider key removed\. This agent is now private\./,

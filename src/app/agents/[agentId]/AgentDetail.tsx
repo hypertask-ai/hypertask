@@ -697,7 +697,7 @@ const AgentDetail = (props: IProp) => {
 
   const handleSaveProviderKey = async () => {
     const next = providerKeyDraft.trim();
-    if (!agent || savingProviderKey) return;
+    if (!agent || savingProviderKey || savingVisibility) return;
     if (!next) {
       setEditingProviderKey(false);
       return;
@@ -729,7 +729,7 @@ const AgentDetail = (props: IProp) => {
   };
 
   const handleRemoveProviderKey = async () => {
-    if (!agent || savingProviderKey) return;
+    if (!agent || savingProviderKey || savingVisibility) return;
     setSavingProviderKey(true);
     try {
       const res = await fetch(
@@ -996,6 +996,7 @@ const AgentDetail = (props: IProp) => {
     if (
       !agent ||
       savingVisibility ||
+      savingProviderKey ||
       (value !== "PRIVATE" && value !== "TEAM") ||
       value === agent.visibility
     ) {
@@ -1744,7 +1745,7 @@ const AgentDetail = (props: IProp) => {
                           setEditingProviderKey(false);
                         }
                       }}
-                      disabled={savingProviderKey}
+                      disabled={savingProviderKey || savingVisibility}
                       placeholder="Paste an OpenRouter key"
                       aria-label="OpenRouter key for this agent"
                       className="bg-transparent outline-none min-w-0 w-[220px]"
@@ -1766,7 +1767,7 @@ const AgentDetail = (props: IProp) => {
                       {providerKey?.maskedKey && (
                         <button
                           type="button"
-                          disabled={savingProviderKey}
+                          disabled={savingProviderKey || savingVisibility}
                           className="text-[12px] text-text-light-gray"
                           onClick={() => void handleRemoveProviderKey()}
                         >
@@ -1781,7 +1782,7 @@ const AgentDetail = (props: IProp) => {
                     <AgentSelect
                       value={agent.visibility}
                       onChange={handleVisibilityChange}
-                      disabled={savingVisibility}
+                      disabled={savingVisibility || savingProviderKey}
                       ariaLabel="Who can use this agent"
                     >
                       <AgentOption value="PRIVATE">Private</AgentOption>
