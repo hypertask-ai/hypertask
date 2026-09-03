@@ -18,14 +18,19 @@ function renderComment(html) {
 
 test("read-only comments keep ordered and bullet markers after the Tailwind reset", () => {
   const dom = renderComment(`
-    <ol><li><p>First</p><ol><li><p>Nested</p></li></ol></li></ol>
-    <ul><li><p>Bullet</p></li></ul>
+    <p>Regular paragraph</p>
+    <ol><li>First<ol><li>Nested</li></ol></li><li>Second</li></ol>
+    <ul><li>Bullet</li></ul>
   `);
-  const [ordered, nested] = dom.window.document.querySelectorAll("ol");
+  const [paragraph, ordered, nested] = dom.window.document.querySelectorAll("p, ol");
   const bullet = dom.window.document.querySelector("ul");
 
+  assert.equal(dom.window.getComputedStyle(paragraph).fontSize, "14px");
+  assert.equal(dom.window.getComputedStyle(ordered).fontSize, "14px");
   assert.equal(dom.window.getComputedStyle(ordered).listStyleType, "decimal");
+  assert.equal(dom.window.getComputedStyle(nested).fontSize, "14px");
   assert.equal(dom.window.getComputedStyle(nested).listStyleType, "decimal");
+  assert.equal(dom.window.getComputedStyle(bullet).fontSize, "14px");
   assert.equal(dom.window.getComputedStyle(bullet).listStyleType, "disc");
   assert.equal(dom.window.getComputedStyle(ordered).listStylePosition, "outside");
 });
