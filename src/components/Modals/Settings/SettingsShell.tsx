@@ -194,6 +194,10 @@ const SlackSection = dynamic(() => import("./SlackSection"), {
   ssr: false,
   loading: () => <SettingsSectionLoading />,
 });
+const WebhooksSection = dynamic(() => import("./WebhooksSection"), {
+  ssr: false,
+  loading: () => <SettingsSectionLoading />,
+});
 const ManagementKeysSection = dynamic(
   () => import("./ManagementKeysSection"),
   {
@@ -251,6 +255,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
   "management-keys": ManagementKeysSection,
   mcp: McpSection,
   slack: SlackSection,
+  webhooks: WebhooksSection,
   "my-ai-usage": MyAiUsageSection,
   notifications: NotificationsSection,
   shortcuts: ShortcutsSection,

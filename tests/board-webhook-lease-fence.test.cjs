@@ -35,6 +35,7 @@ const load = ({ reclaimed, ok = true }) => {
           id: where.id,
           event: "task.created",
           payload: { event: "task.created" },
+          payloadBody: '{"event":"task.created"}',
           attemptCount: 0,
           subscriptionId: "sub-1",
           subscription: {
@@ -45,6 +46,12 @@ const load = ({ reclaimed, ok = true }) => {
         };
       },
       update: async () => ({}),
+    },
+    boardWebhookAttempt: {
+      create: async ({ data }) => {
+        writes.push(`attempt:${data.attemptNumber}:${data.durationMs}`);
+        return data;
+      },
     },
     webhookSubscription: {
       update: async ({ data }) => {
@@ -68,6 +75,7 @@ const load = ({ reclaimed, ok = true }) => {
       ok,
       statusCode: ok ? 200 : 500,
       error: ok ? null : "boom",
+      durationMs: 42,
     }),
   });
   stubModule("src/lib/mcp/webhooks/queue.ts", {
@@ -100,9 +108,17 @@ test("a reclaimed worker does not write subscription health", async () => {
 test("the owning worker records the outcome on both rows", async () => {
   const success = load({ reclaimed: false, ok: true });
   await success.module.deliverBoardWebhook("d1");
-  assert.deepEqual(success.writes, ["delivery:delivered", "subscription:true"]);
+  assert.deepEqual(success.writes, [
+    "delivery:delivered",
+    "attempt:1:42",
+    "subscription:true",
+  ]);
 
   const failure = load({ reclaimed: false, ok: false });
   await failure.module.deliverBoardWebhook("d1");
-  assert.deepEqual(failure.writes, ["delivery:retrying", "subscription:false"]);
+  assert.deepEqual(failure.writes, [
+    "delivery:retrying",
+    "attempt:1:42",
+    "subscription:false",
+  ]);
 });

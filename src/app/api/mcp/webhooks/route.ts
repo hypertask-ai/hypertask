@@ -38,7 +38,7 @@ function maskSecret(secret: string): string {
 
 function serialize(sub: {
   id: string
-  projectId: number
+  projectId: number | null
   url: string
   secret: string
   events: string[]

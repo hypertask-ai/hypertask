@@ -2,12 +2,12 @@ import prisma from '@/lib/prisma'
 import { postSignedWebhook } from './delivery'
 import { queueBoardWebhookDelivery } from './queue'
 
-export const BOARD_WEBHOOK_MAX_ATTEMPTS = 4
+export const BOARD_WEBHOOK_MAX_ATTEMPTS = 6
 // Sixty times the sender's own 5s AbortSignal.timeout in delivery.ts, so a slow
 // POST cannot outlive its claim and let a second worker send the same delivery.
 // Keep this above DELIVERY_TIMEOUT_MS if that timeout is ever raised.
 const PROCESSING_LEASE_MS = 5 * 60 * 1000
-const RETRY_DELAYS_SECONDS = [0, 30, 5 * 60, 30 * 60] as const
+const RETRY_DELAYS_SECONDS = [0, 30, 2 * 60, 5 * 60, 10 * 60, 30 * 60] as const
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
 export function boardWebhookRetryDelaySeconds(
@@ -73,7 +73,7 @@ export async function deliverBoardWebhook(
     secret: delivery.subscription.secret,
     event: delivery.event,
     deliveryId: delivery.id,
-    body: JSON.stringify(delivery.payload),
+    body: delivery.payloadBody ?? JSON.stringify(delivery.payload),
   })
   const attemptCount = delivery.attemptCount + 1
 
@@ -99,6 +99,14 @@ export async function deliverBoardWebhook(
       // reporting its own outcome would otherwise overwrite the result of the
       // attempt that actually owns the row.
       if (fenced.count === 0) return
+      await tx.boardWebhookAttempt.create({
+        data: {
+          deliveryId: delivery.id,
+          attemptNumber: attemptCount,
+          statusCode: result.statusCode,
+          durationMs: result.durationMs,
+        },
+      })
       await tx.webhookSubscription.update({
         where: { id: delivery.subscriptionId },
         data: { lastDeliveryAt: deliveredAt, lastDeliveryOk: true },
@@ -125,6 +133,15 @@ export async function deliverBoardWebhook(
       },
     })
     if (fenced.count === 0) return
+    await tx.boardWebhookAttempt.create({
+      data: {
+        deliveryId: delivery.id,
+        attemptNumber: attemptCount,
+        statusCode: result.statusCode,
+        durationMs: result.durationMs,
+        error: result.error,
+      },
+    })
     await tx.webhookSubscription.update({
       where: { id: delivery.subscriptionId },
       data: { lastDeliveryAt: failedAt, lastDeliveryOk: false },

@@ -682,10 +682,23 @@ export async function createCommentService(params: CreateCommentParams) {
           actor: { userId: creatorIdNum, agentId: agentId ?? null },
         },
       };
+      const boardEvents: WebhookDelivery[] = [
+        commentCreatedEvent,
+        ...extraBoardWebhookEvents,
+      ];
+      if (mentionedAgentIds.length > 0) {
+        boardEvents.push({
+          event: "comment.mention",
+          data: {
+            ...commentCreatedEvent.data,
+            mentions: { agentIds: [...new Set(mentionedAgentIds)] },
+          },
+        });
+      }
       const boardWebhookDeliveryIds = await persistBoardWebhookEvents(
         tx,
         currentTask.projectId,
-        [commentCreatedEvent, ...extraBoardWebhookEvents],
+        boardEvents,
       );
       const assignedAgentIds = (
         await tx.assignees.findMany({

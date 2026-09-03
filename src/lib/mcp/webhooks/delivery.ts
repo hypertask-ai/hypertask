@@ -14,6 +14,7 @@ export type SignedWebhookResult = {
   ok: boolean
   statusCode: number | null
   error: string | null
+  durationMs: number
 }
 
 /**
@@ -28,9 +29,15 @@ export async function postSignedWebhook(input: {
   deliveryId: string
   body: string
 }): Promise<SignedWebhookResult> {
+  const startedAt = Date.now()
   const safe = await resolveSafeAddresses(input.url)
   if (!safe.ok) {
-    return { ok: false, statusCode: null, error: safe.reason }
+    return {
+      ok: false,
+      statusCode: null,
+      error: safe.reason,
+      durationMs: Date.now() - startedAt,
+    }
   }
   const pinned = safe.addresses[0]
   const timestamp = Math.floor(Date.now() / 1000).toString()
@@ -68,10 +75,16 @@ export async function postSignedWebhook(input: {
       ok: statusCode >= 200 && statusCode < 300,
       statusCode,
       error: statusCode >= 200 && statusCode < 300 ? null : `Receiver returned HTTP ${statusCode}`,
+      durationMs: Date.now() - startedAt,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook request failed'
-    return { ok: false, statusCode: null, error: message.slice(0, 1000) }
+    return {
+      ok: false,
+      statusCode: null,
+      error: message.slice(0, 1000),
+      durationMs: Date.now() - startedAt,
+    }
   } finally {
     await agent.close().catch(() => {})
   }

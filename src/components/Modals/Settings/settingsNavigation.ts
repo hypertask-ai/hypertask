@@ -38,6 +38,7 @@ export type SettingsSectionId =
   | "plans"
   | "mcp"
   | "slack"
+  | "webhooks"
   | "developer-access"
   | "management-keys"
   | "cli"
@@ -185,6 +186,7 @@ export const SETTINGS_TABS: SettingsTab[] = [
         items: [
           { id: "developer-access", label: "Developer access" },
           { id: "slack", label: "Slack" },
+          { id: "webhooks", label: "Webhooks" },
           { id: "mcp", label: "MCP" },
           { id: "management-keys", label: "Management keys" },
           { id: "cli", label: "CLI" },
