@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Advisory second-opinion reviews via open-code-review (ocr) on open production PRs.
+# Non-gating by design: posts one clearly labeled comment per head SHA and is
+# never read by automerge (no APPROVE/CONCERNS prefix, no reviewed-commit marker).
+#
+# Runs on the Codex subscription by default (OCR delegation mode: ocr picks the
+# files and rules with no LLM call, codex does the reasoning). Set
+# OCR_ADVISORY_MODE=metered to fall back to `ocr review` against the Vercel AI
+# Gateway key in ~/.opencodereview/config.json.
+# Disable with: systemctl --user disable --now ocr-advisory.timer
+set -euo pipefail
+REPO=hypertask-ai/hypertask
+WORKDIR="$HOME/projects/hypertask-oss"
+REMOTE=agent-origin
+EXPECTED_REMOTE=https://github.com/hypertask-ai/hypertask.git
+STATE="$HOME/.local/state/ocr-advisory"
+MODE="${OCR_ADVISORY_MODE:-delegate}"
+mkdir -p "$STATE"
+cd "$WORKDIR"
+
+actual_remote=$(git remote get-url "$REMOTE")
+if [[ "$actual_remote" != "$EXPECTED_REMOTE" ]]; then
+  echo "ocr-advisory: $REMOTE points at an unexpected repository" >&2
+  exit 1
+fi
+git fetch -q "$REMOTE" production
+base_sha=$(git rev-parse "$REMOTE/production")
+
+gh pr list --repo "$REPO" --base production --state open --json number,headRefName,headRefOid,isDraft \
+  --jq '.[] | select(.isDraft|not) | "\(.number) \(.headRefName) \(.headRefOid)"' |
+while read -r pr branch sha; do
+  marker_file="$STATE/$sha"
+  [ -e "$marker_file" ] && continue
+  review_ref="refs/ocr-advisory/$pr"
+  git fetch -q "$REMOTE" "pull/$pr/head:$review_ref" || continue
+  if [[ "$(git rev-parse "$review_ref")" != "$sha" ]]; then
+    git update-ref -d "$review_ref"
+    continue
+  fi
+  out=$(mktemp)
+  if [ "$MODE" = metered ]; then
+    review_cmd=(ocr review --from "$base_sha" --to "$sha" --format json)
+  else
+    review_cmd=(ocr-delegate-review --from "$base_sha" --to "$sha" --repo "$WORKDIR")
+  fi
+  if ! timeout 1500 "${review_cmd[@]}" >"$out" 2>"$STATE/last-error.log"; then
+    rm -f "$out"
+    git update-ref -d "$review_ref"
+    continue  # transient failure: retry on the next timer run
+  fi
+  body=$(python3 - "$out" "$sha" <<'EOF'
+import json, sys
+d = json.load(open(sys.argv[1]))
+comments = d.get("comments") or []
+engine = (d.get("summary") or {}).get("engine", "open-code-review")
+lines = [f"**OCR advisory (non-gating)** for `{sys.argv[2][:12]}` via open-code-review delegation ({engine}). "
+         f"{len(comments)} finding(s); the required AI review stays authoritative.", ""]
+rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+for c in sorted(comments, key=lambda c: rank.get(str(c.get("severity")), 3))[:8]:
+    sev = str(c.get("severity", "?")).upper()
+    path = str(c.get("file") or c.get("path") or "?")
+    text = " ".join(str(c.get("title") or c.get("content") or c.get("body") or "").split())[:300]
+    loc = f":{c['start_line']}" if c.get("start_line") else ""
+    lines.append(f"- **{sev}** `{path}{loc}`: {text}")
+if len(comments) > 8:
+    lines.append(f"- ...and {len(comments) - 8} more (session {d.get('session_id', '?')[:8]} on the VPS)")
+if not comments:
+    lines.append("No findings.")
+print("\n".join(lines))
+EOF
+)
+  gh pr comment "$pr" --repo "$REPO" --body "$body" >/dev/null && touch "$marker_file"
+  rm -f "$out"
+  git update-ref -d "$review_ref"
+done
+# Age out markers so the state dir stays small.
+find "$STATE" -type f -mtime +30 -delete
