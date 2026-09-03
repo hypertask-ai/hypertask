@@ -73,12 +73,17 @@ test("Overdue matches Normal tasks with a due date in the past", () => {
   );
 });
 
-test("Blocked matches waiting-on state or an open BlockedBy relation count", () => {
+test("Blocked matches waiting-on state or an open blocking-task summary", () => {
   assert.equal(blockedPredicate({ waitingOnUserId: 6 }, {}), true);
-  assert.equal(blockedPredicate({ _count: { relatedFromTasks: 1 } }, {}), true);
+  assert.equal(blockedPredicate({ blockingTasks: [{ id: 1 }] }, {}), true);
   assert.equal(
-    blockedPredicate({ waitingOnUserId: null, _count: { relatedFromTasks: 0 } }, {}),
+    blockedPredicate({ waitingOnUserId: null, blockingTasks: [] }, {}),
     false,
+  );
+  assert.equal(
+    blockedPredicate({ _count: { relatedFromTasks: 1 }, blockingTasks: [] }, {}),
+    false,
+    "resolved relation history must not leave an unmarked card in Blocked",
   );
 });
 
