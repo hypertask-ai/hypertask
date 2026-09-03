@@ -237,10 +237,12 @@ function RecentActionsCard({
   activity,
   error,
   showTokenUsage,
+  embedded,
 }: {
   activity: TActivityItem[] | null;
   error: string | null;
   showTokenUsage: boolean;
+  embedded?: boolean;
 }) {
   return (
     <div className="mt-3 bg-cardBackground rounded-[4px] p-4 shadow-md overflow-x-auto">
@@ -253,7 +255,9 @@ function RecentActionsCard({
         <p className="text-[13px] text-text-light-gray">No activity yet.</p>
       )}
       {!error && activity && activity.length > 0 && (
-        <table className="w-full min-w-[560px] text-left">
+        <table
+          className={cn("w-full text-left", !embedded && "min-w-[560px]")}
+        >
           <thead>
             <tr>
               {["When", "Did", "Where"].map((heading) => (
@@ -1150,7 +1154,12 @@ const AgentDetail = (props: IProp) => {
 
         {!error && agent && (
           <>
-            <div className="mt-4 flex items-center gap-3">
+            <div
+              className={cn(
+                "mt-4 flex items-center gap-3",
+                embedded && "flex-wrap",
+              )}
+            >
               <AgentAvatar agent={agent} size={34} />
               {working ? (
                 <WorkingSpinner label={`${agent.displayName} is working now`} />
@@ -1229,7 +1238,12 @@ const AgentDetail = (props: IProp) => {
               />
             </div>
 
-            <div className="mt-6 grid grid-cols-1 lg:[grid-template-columns:1fr_300px] gap-5 items-start">
+            <div
+              className={cn(
+                "mt-6 grid grid-cols-1 gap-5 items-start",
+                !embedded && "lg:[grid-template-columns:1fr_300px]",
+              )}
+            >
               <div>
                 <section className="bg-cardBackground rounded-[4px] p-4 shadow-md mb-3">
                   <div className="flex items-center gap-3">
@@ -1265,7 +1279,12 @@ const AgentDetail = (props: IProp) => {
                         {agent.operations.source === "inferred" &&
                           " · inferred from board"}
                       </p>
-                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div
+                        className={cn(
+                          "mt-3 grid grid-cols-2 gap-2",
+                          !embedded && "sm:grid-cols-4",
+                        )}
+                      >
                         {[
                           [runtimeSnapshot?.runtime ?? "Unreported", "runtime"],
                           [runtimeSnapshot?.model ?? "Unreported", "model"],
@@ -1312,7 +1331,12 @@ const AgentDetail = (props: IProp) => {
                         : "inferred from board"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-comment-description-border rounded-[4px] overflow-hidden">
+                  <div
+                    className={cn(
+                      "grid grid-cols-2 gap-px bg-comment-description-border rounded-[4px] overflow-hidden",
+                      !embedded && "sm:grid-cols-3 lg:grid-cols-6",
+                    )}
+                  >
                     {[
                       [
                         agent.operations.counts.eligiblePool ?? "—",
@@ -1364,7 +1388,11 @@ const AgentDetail = (props: IProp) => {
                       {visiblePending.map((item, index) => (
                         <div
                           key={`${item.ticket}-${index}`}
-                          className="grid grid-cols-[22px_minmax(0,1fr)] md:grid-cols-[22px_minmax(0,1fr)_150px_80px] gap-x-2 gap-y-1 items-baseline py-2.5 border-t border-comment-description-border first:border-t-0"
+                          className={cn(
+                            "grid grid-cols-[22px_minmax(0,1fr)] gap-x-2 gap-y-1 items-baseline py-2.5 border-t border-comment-description-border first:border-t-0",
+                            !embedded &&
+                              "md:grid-cols-[22px_minmax(0,1fr)_150px_80px]",
+                          )}
                         >
                           <span className="text-text-light-gray">{index + 1}</span>
                           <Link href={item.url} className="min-w-0">
@@ -1373,12 +1401,22 @@ const AgentDetail = (props: IProp) => {
                             </span>{" "}
                             {item.title}
                           </Link>
-                          <span className="col-start-2 md:col-auto text-[12px] text-text-light-gray">
+                          <span
+                            className={cn(
+                              "col-start-2 text-[12px] text-text-light-gray",
+                              !embedded && "md:col-auto",
+                            )}
+                          >
                             {queueReasonLabel[item.reason]}
                             {item.dueAt &&
                               ` · due ${new Date(item.dueAt).toLocaleDateString()}`}
                           </span>
-                          <span className="col-start-2 md:col-auto md:text-right text-[12px]">
+                          <span
+                            className={cn(
+                              "col-start-2 text-[12px]",
+                              !embedded && "md:col-auto md:text-right",
+                            )}
+                          >
                             {item.priority ?? "Normal"}
                           </span>
                         </div>
@@ -1736,6 +1774,7 @@ const AgentDetail = (props: IProp) => {
               activity={activity}
               error={activityError}
               showTokenUsage={agent.runtimeType === "NATIVE"}
+              embedded={embedded}
             />
 
             <div className="mt-6 bg-cardBackground rounded-[4px] shadow-md">
