@@ -784,7 +784,7 @@ const AgentChatClient = (props: IProp) => {
                     : `Message ${selectedAgent.displayName}`
                 }
                 aria-label={`Message ${selectedAgent.displayName}`}
-                className="flex-1 resize-none rounded-[4px] bg-cardBackground px-3 py-2 text-[13px] outline-none placeholder:text-text-light-gray disabled:opacity-50"
+                className="flex-1 resize-none rounded-[4px] border border-border-light-gray-thin bg-cardBackground px-3 py-2 text-[13px] outline-none placeholder:text-text-light-gray disabled:opacity-50"
               />
               <button
                 type="button"
@@ -849,7 +849,7 @@ const AgentChatClient = (props: IProp) => {
       {rosterPane}
       {chatPane}
       {selectedAgent && !detailsCollapsed && (
-        <aside className="min-h-0 w-[380px] shrink-0 overflow-y-auto border-l border-comment-description-border">
+        <aside className="min-h-0 w-[380px] shrink-0 overflow-y-auto border-l border-comment-description-border xl:w-[560px] 2xl:w-[760px]">
           {detailsContent}
         </aside>
       )}
