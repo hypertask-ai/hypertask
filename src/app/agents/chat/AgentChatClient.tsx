@@ -687,22 +687,31 @@ const AgentChatClient = (props: IProp) => {
   // Chat after cycling teams elsewhere) must acknowledge that stale seq
   // instead of replaying it as a brand-new press.
   const teamCycleSeenRef = useRef(teamCycle?.seq ?? 0);
+  // Shared by the atom-driven effect below and the Ctrl+K palette's
+  // Next/Previous team entries (AllCommands.ts -> chatPaletteCommands.ts).
+  const stepTeamCycle = useCallback(
+    (direction: 1 | -1) => {
+      const stops: (string | null)[] = [null, ...teams.map((t) => t.id)];
+      const currentIndex = stops.indexOf(teamId);
+      const nextIndex =
+        (((currentIndex === -1 ? 0 : currentIndex) + direction) %
+          stops.length +
+          stops.length) %
+        stops.length;
+      const next = stops[nextIndex];
+      setTeamId(next);
+      if (next) setLastBoardTeam(next);
+    },
+    [teams, teamId],
+  );
   useEffect(() => {
     if (!teamCycle || teamCycle.seq === teamCycleSeenRef.current) return;
     teamCycleSeenRef.current = teamCycle.seq;
-    const stops: (string | null)[] = [null, ...teams.map((t) => t.id)];
-    const currentIndex = stops.indexOf(teamId);
-    const nextIndex =
-      (((currentIndex === -1 ? 0 : currentIndex) + teamCycle.direction) %
-        stops.length +
-        stops.length) %
-      stops.length;
-    const next = stops[nextIndex];
-    setTeamId(next);
-    if (next) setLastBoardTeam(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- teamId is read
-    // intentionally without being a dep: re-running this on every teamId
-    // change (including the ones it causes itself) would fight the cycle.
+    stepTeamCycle(teamCycle.direction);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stepTeamCycle
+    // intentionally excluded: it closes over teamId, and re-running this on
+    // every teamId change (including the ones it causes itself) would fight
+    // the cycle. Only a new atom event should trigger a step.
   }, [teamCycle, teams]);
 
   const roster = useMemo(() => {
@@ -1162,12 +1171,18 @@ const AgentChatClient = (props: IProp) => {
         case "add-agent":
           setShowCreateAgent(true);
           return;
+        case "next-team":
+          stepTeamCycle(1);
+          return;
+        case "previous-team":
+          stepTeamCycle(-1);
+          return;
       }
     };
     window.addEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
     return () =>
       window.removeEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
-  }, [cycleAgent, openLatestReplyLinks]);
+  }, [cycleAgent, openLatestReplyLinks, stepTeamCycle]);
 
   // Put the cursor in the composer the moment it becomes usable: on initial
   // load (deep link or roster click) and again after a message sends, so

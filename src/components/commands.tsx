@@ -1291,6 +1291,14 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         boardCloseHandler();
         dispatchAgentChatCommand("add-agent");
         return;
+      case CommandMode.AgentChatNextTeam:
+        boardCloseHandler();
+        dispatchAgentChatCommand("next-team");
+        return;
+      case CommandMode.AgentChatPreviousTeam:
+        boardCloseHandler();
+        dispatchAgentChatCommand("previous-team");
+        return;
       case CommandMode.DisabledAgents:
         boardCloseHandler();
         router.push("/agents?active=off");
