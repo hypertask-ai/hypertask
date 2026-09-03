@@ -149,8 +149,9 @@ function mapCommentToResponse(
   userId: number,
   includeActivity = false
 ): CommentItem {
-  const agentVisible =
-    !comment.agent || isAgentVisibleToUser(comment.agent, userId)
+  const agentVisible = comment.agent
+    ? isAgentVisibleToUser(comment.agent, userId)
+    : !comment.agentDisplayName
   const agent = mapMcpAgent(agentVisible ? comment.agent : null)
   const agentDisplayName = agentVisible
     ? comment.agentDisplayName

@@ -74,6 +74,7 @@ test('comment agent identities are filtered for the requesting user', () => {
     routeSource,
     /isAgentVisibleToUser\(comment\.agent, userId\)/
   )
+  assert.match(routeSource, /: !comment\.agentDisplayName/)
   assert.match(routeSource, /mapCommentToResponse\(comment, user\.id, includeActivity\)/)
 })
 

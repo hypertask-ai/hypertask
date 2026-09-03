@@ -36,9 +36,11 @@ const publicCommentCreator = Prisma.sql`
 `;
 
 const hiddenCommentAgent = (userId: number) => Prisma.sql`
-  agent.id IS NOT NULL
-  AND agent."userId" <> ${userId}
-  AND agent.visibility = 'PRIVATE'::"AgentVisibility"
+  (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
+  OR (
+    agent."userId" <> ${userId}
+    AND agent.visibility = 'PRIVATE'::"AgentVisibility"
+  )
 `;
 
 const publicCommentAgent = (userId: number) => Prisma.sql`

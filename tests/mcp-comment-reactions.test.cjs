@@ -65,6 +65,7 @@ function loadCommentsRoute({
         displayName: 'Valentin Yeo',
       },
       agent: null,
+      agentDisplayName: 'Deleted helper',
       attachments: [],
       reactions: allReactions,
     },
@@ -265,6 +266,8 @@ test('MCP comments response includes mapped active reactions', async () => {
     response.body.comments[0].reactions.some(({ id }) => id === 'deleted-7001'),
     false
   )
+  assert.equal(response.body.comments[0].agent, undefined)
+  assert.equal(response.body.comments[0].agent_display_name, 'Private agent')
   assert.deepEqual(response.body.comments[1].reactions, [{
     id: 'reaction-7002',
     emoji: '👀',
