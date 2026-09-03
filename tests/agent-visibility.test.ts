@@ -335,13 +335,9 @@ async function main() {
   assert.doesNotMatch(taskDetailLoad, /hiddenCommentAgent\(userId\)/);
   assert.equal(
     taskDetailLoad.match(
-      /hiddenCommentAgent\(userId, Prisma\.sql`comment_task\."projectId"`\)/g,
+      /hiddenCommentAgent\(userId, Prisma\.sql`c\."taskId"`\)/g,
     )?.length,
-    2,
-  );
-  assert.match(
-    taskDetailLoad,
-    /hiddenCommentAgent\(userId, Prisma\.sql`ti\."projectId"`\)/,
+    3,
   );
   assert.match(
     taskDetailLoad,
@@ -354,12 +350,12 @@ async function main() {
   );
   assert.match(
     taskDetailLoad,
-    /visibility_agent_member\."projectId" = \$\{projectId\}/,
+    /INNER JOIN "Task" visibility_task[\s\S]*?visibility_task\.id = \$\{taskId\}[\s\S]*?visibility_agent_member\."projectId" = visibility_task\."projectId"/,
   );
   assert.match(taskDetailLoad, /visibility_project\.status = 'Normal'/);
   assert.match(
     taskDetailLoad,
-    /agent\.visibility = 'TEAM'::"AgentVisibility"[\s\S]*?AND \(\$\{hasAccessibleAgentProject\(userId, projectId\)\}\)/,
+    /agent\.visibility = 'TEAM'::"AgentVisibility"[\s\S]*?AND \(\$\{hasAccessibleAgentProject\(userId, taskId\)\}\)/,
   );
   assert.match(
     taskDetailLoad,
