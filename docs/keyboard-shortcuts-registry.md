@@ -143,6 +143,6 @@ These fire from raw keydown listeners and will NOT show up when scanning `AllCom
 - `C` / `W` in TableView (`TableView.tsx`)
 - `1-7` app shell surfaces + `]` AI chat synonym + `[` sidebar collapse/expand (`useAppShellSurfaceShortcuts.ts`)
 - `;` snippets (TaskDetailComp)
-- Agent Chat's whole keyboard map above (`AgentChatClient.tsx`) — none of it is in `AllCommands.ts`; it's cheatsheet + docs only, same as the other handler-only rows on this list
+- Agent Chat's whole keyboard map above (`AgentChatClient.tsx`) — none of it is in `AllCommands.ts`; it's cheatsheet + docs only, same as the other handler-only rows on this list. These bindings are side effects of a component-local keydown listener (roster cycling, send, open-links, the `@` popover), not palette-invokable actions, so there's no `CommandMode` for the palette to dispatch them through — same reason every other row in this section is absent from `AllCommands.ts` too. The public `docs.hypertask.ai` shortcuts page lives in a separate repo and isn't reachable from here; this file is the source of truth this repo can update.
 
 When auditing whether a key is free, grep for the letter in ALL of: `src/app`, `src/components`, `src/hooks`, `src/lib/contexts` — the palette alone is not the truth.

@@ -852,6 +852,7 @@ const AgentChatClient = (props: IProp) => {
         const refreshed = await loadAgents();
         if (myGen === rosterGenRef.current) {
           setAgents(refreshed);
+          setRosterError(null);
           const created = refreshed.find((a) => a.id === createdId);
           if (created) selectAgent(created);
         }
@@ -1239,7 +1240,9 @@ const AgentChatClient = (props: IProp) => {
       isOpen={true}
       show={true}
       toggle={closeCreateAgent}
-      shouldCloseOnClickOutside={true}
+      // Once the one-time token is showing, an accidental outside click must
+      // not discard it — force the explicit Done/copy affordance instead.
+      shouldCloseOnClickOutside={!newAgentToken}
       className="sm:min-w-[400px]"
     >
       <ModalHeaderComp header="Add agent" />
