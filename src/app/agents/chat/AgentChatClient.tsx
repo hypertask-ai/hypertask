@@ -11,6 +11,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
@@ -179,6 +180,10 @@ const AgentChatClient = (props: IProp) => {
   // Monotonic request generation for loadMessages, so a late response can be
   // recognized as superseded by a newer one for the same session.
   const loadGenRef = useRef(0);
+  // Mobile keyboards only open for a focus() that lands synchronously inside
+  // the tap's event handler, so selectAgent needs the composer's DOM node
+  // before that handler returns (see the flushSync call there).
+  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   // The roster is owner-scoped and small; one fetch per visit is enough.
   useEffect(() => {
@@ -340,13 +345,21 @@ const AgentChatClient = (props: IProp) => {
     (agent: TAgent) => {
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
-      setSelectedId(agent.id);
-      setSession(null);
-      setSessionLoading(false);
-      setMessages(null);
-      setMessagesError(null);
-      setDeliveryNotice(false);
-      setDraft("");
+      // flushSync (rather than the normal batched update) commits the chat
+      // pane, composer included, before this handler returns, so the
+      // composerRef.focus() below still runs inside the tap's call stack --
+      // mobile browsers only open the keyboard for a focus() that happens
+      // synchronously in the user gesture (HTPR-6041 follow-up).
+      flushSync(() => {
+        setSelectedId(agent.id);
+        setSession(null);
+        setSessionLoading(false);
+        setMessages(null);
+        setMessagesError(null);
+        setDeliveryNotice(false);
+        setDraft("");
+      });
+      if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
       // The selection lives in the URL so a reload keeps the chat open.
       router.replace(
         `/agents/chat?agent=${encodeURIComponent(agent.slug ?? agent.id)}`,
@@ -357,7 +370,7 @@ const AgentChatClient = (props: IProp) => {
       if (agent.runtimeType !== "EXTERNAL") return;
       void openAgentSession(agent.id);
     },
-    [router, openAgentSession],
+    [router, openAgentSession, isMbl],
   );
 
   // Honor ?agent=<slug> once the roster is in (deep link, reload, palette).
@@ -754,6 +767,7 @@ const AgentChatClient = (props: IProp) => {
             )}
             <div className="flex items-end gap-2">
               <textarea
+                ref={composerRef}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={handleComposerKeyDown}
