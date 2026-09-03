@@ -65,7 +65,20 @@ test("task-detail SQL selects public actors and sanitizes historical activity", 
   const source = read("src/utils/controllers/taskDetail/load.ts");
 
   assert.match(source, /const publicCommentAgent = Prisma\.sql/);
-  assert.match(source, /SELECT \(\$\{hiddenCommentAgent\(userId\)\}\) AS hidden/);
+  const hiddenSelects = source.match(
+    /SELECT \(\$\{hiddenCommentAgent\([^)]*\)\}\) AS hidden/g,
+  );
+  assert.ok(
+    hiddenSelects && hiddenSelects.length > 0,
+    "comment queries must derive agent visibility from hiddenCommentAgent",
+  );
+  for (const hiddenSelect of hiddenSelects) {
+    assert.match(
+      hiddenSelect,
+      /hiddenCommentAgent\(userId, Prisma\.sql`c\."taskId"`\)/,
+      "every hidden-agent flag must be scoped to the viewer and the comment's own task",
+    );
+  }
   assert.match(source, /CASE WHEN agent_visibility\.hidden/);
   assert.match(source, /'displayName', agent\."displayName"/);
   assert.doesNotMatch(source, /to_jsonb\(agent\)/);
