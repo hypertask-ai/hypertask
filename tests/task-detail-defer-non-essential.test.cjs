@@ -58,6 +58,27 @@ test("HTPR-6047: deferrable hooks accept an enabled input that defaults true", (
   );
 });
 
+test("HTPR-6047: the non-essential gate fails open on a short timer, independent of the 30s readiness measurement", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailComp.tsx"),
+    "utf8",
+  );
+  // A share view, a task with no description editor, a permission-limited
+  // view, or an error state never satisfies taskDetailUsableDomPresent, so
+  // without this the gate would only flip on the 30s readiness timeout -
+  // stalling AI suggestions, the share link and move-task sections that long.
+  assert.ok(
+    /setTimeout\(\s*\(\)\s*=>\s*setNonEssentialReady\(true\),\s*3000,?\s*\)/.test(
+      src,
+    ),
+    "a setTimeout must flip the gate true after 3s, independent of publish()'s 30s readiness timer",
+  );
+  assert.ok(
+    /clearTimeout\(nonEssentialFallback\)/.test(src),
+    "the 3s fallback timer must be cleared in cleanup so it doesn't fire after the real readiness publish already ran",
+  );
+});
+
 test("HTPR-6047: WelcomeScreen gates AI task-questions/sessions on task-detail readiness", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/components/AI_CHAT/WelcomeScreen.tsx"),
