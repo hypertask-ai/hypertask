@@ -79,6 +79,26 @@ test("HTPR-6047: the non-essential gate fails open on a short timer, independent
   );
 });
 
+test("HTPR-6056: the emoji-finder data file is only imported once the non-essential gate is open", () => {
+  const src = fs.readFileSync(
+    path.join(
+      __dirname,
+      "..",
+      "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts",
+    ),
+    "utf8",
+  );
+  assert.ok(
+    !/^import\s.*constants\/emojiData/m.test(src),
+    "emojiData must stay a dynamic import(), not a static import, in this hook",
+  );
+  assert.ok(
+    /if \(!nonEssentialReady\) return;/.test(src) &&
+      /import\("@\/lib\/constants\/emojiData"\)/.test(src),
+    "the emojiData dynamic import must be gated behind nonEssentialReady",
+  );
+});
+
 test("HTPR-6047: WelcomeScreen gates AI task-questions/sessions on task-detail readiness", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/components/AI_CHAT/WelcomeScreen.tsx"),

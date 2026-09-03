@@ -19,10 +19,11 @@ import { useGetAllComments } from "../useGetComments";
 import globalConstants from "@/lib/constants";
 import { useTaskCommentsRealtime } from "@/hooks/realtime/useTaskCommentsRealtime";
 import { shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
-import { useRecoilState } from "@/lib/state";
+import { useRecoilState, useRecoilValue } from "@/lib/state";
 import {
   currentUserAtom,
   idToDeleteCommentAtom,
+  taskDetailNonEssentialReadyAtom,
   toggleAllCommentsSignalAtom,
 } from "@/store";
 import axios from "axios";
@@ -155,11 +156,15 @@ const useDescriptionAndCommentsStates = () => {
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();
   // const pathname = usePathname();
   // Lazy-load the 6k-line emoji data file: it only feeds hover-tooltip semantic
-  // labels, so keep it out of the initial bundle and fetch on demand (HTPR-3816).
+  // labels (the reaction glyph itself renders from the unified codepoint, no
+  // data needed), so wait for the non-essential gate instead of fetching on
+  // every task open (HTPR-3816, deferred further in HTPR-6056).
+  const nonEssentialReady = useRecoilValue(taskDetailNonEssentialReadyAtom);
   const [emojiFinder, setEmojiFinder] = useState<(unified: any) => string>(
     () => () => ""
   );
   useEffect(() => {
+    if (!nonEssentialReady) return;
     let active = true;
     import("@/lib/constants/emojiData").then(({ allEmojis }) => {
       if (active) setEmojiFinder(() => createEmojiFinder(allEmojis));
@@ -167,7 +172,7 @@ const useDescriptionAndCommentsStates = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [nonEssentialReady]);
   const queryClient = useQueryClient();
 
   const { data: commentsFromQueryTQ } = useGetAllComments(
