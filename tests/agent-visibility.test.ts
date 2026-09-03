@@ -389,6 +389,12 @@ async function main() {
     assert.match(ownerSurface, /getSessionUser\(/);
     assert.doesNotMatch(ownerSurface, /JSON\.parse\(userCookie\.value\)/);
   }
+  assert.equal(inboxPage.match(/!Number\.isInteger\(userObj\.id\)/g)?.length, 2);
+  assert.equal(inboxPage.match(/typeof userId !== "number"/g)?.length, 2);
+  assert.doesNotMatch(
+    inboxPage,
+    /where: \{ id: params\.agentId, userId: userObj\.id \}/,
+  );
 
   console.log("agent-visibility.test.ts: all assertions passed");
 }
