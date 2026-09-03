@@ -46,6 +46,7 @@ test("page mentions render as links and person mentions remain spans", () => {
   const page = roundTrip(
     '<p><a href="https://app.hypertask.ai/page/page_abc" data-type="mention" class="mention" data-id="page_abc" data-label="page">Roadmap</a></p>',
   );
+  assert.equal(page.json.content[0].content[0].type, "mention");
   assert.match(page.html, /<a href="https:\/\/app\.hypertask\.ai\/page\/page_abc"/);
 
   const person = roundTrip(

@@ -147,6 +147,12 @@ test("normalizes list items and rich-text mention links before storage", () => {
     ),
     '<p><a href="https://app.hypertask.ai/page/page_abc" data-type="mention" class="mention" data-id="page_abc" data-label="page">Roadmap</a></p>'
   );
+  assert.equal(
+    normalizeBlockHtml(
+      '<p><span data-type=mention data-id=page_abc data-label=page>Roadmap</span></p>'
+    ),
+    '<p><a href="https://app.hypertask.ai/page/page_abc" data-type="mention" data-id="page_abc" data-label="page">Roadmap</a></p>'
+  );
 
   const invalid = '<span data-type="mention" class="mention" data-id="HTPR-6009" data-label="task" projectid="15/evil" uniqueindex="6009">HTPR-6009</span>';
   assert.equal(normalizeBlockHtml(invalid), `<p>${invalid}</p>`);

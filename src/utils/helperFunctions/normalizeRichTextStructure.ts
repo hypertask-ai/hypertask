@@ -87,7 +87,7 @@ function normalizeMentionLinks(root: HTMLElement) {
 }
 
 export function normalizeRichTextStructure(html: string): string {
-  const hasMention = /<(?:a|span)\b[^>]*\bdata-type\s*=\s*["']mention["']/i.test(html);
+  const hasMention = /<(?:a|span)\b[^>]*\bdata-type\s*=\s*(?:["']mention["']|mention(?=[\s/>]))/i.test(html);
   if (!html || (!/<li\b/i.test(html) && !hasMention)) return html;
 
   const root = parse(html, { comment: false, lowerCaseTagName: true });
