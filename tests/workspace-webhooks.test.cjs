@@ -298,6 +298,26 @@ test("accepted Settings surface exposes six filters and read-only agent controls
   assert.match(section, /Retry/);
   assert.match(section, /Open agent/);
   assert.match(section, /endpoint\.kind === "workspace"/);
+  assert.match(
+    section,
+    /const selectEndpoint = \(id: string\) => \{\s*if \(id === selectedId\) return;\s*setDeliveries\(\[\]\)/,
+  );
+  assert.doesNotMatch(
+    section,
+    /agentAction|\/api\/agents\/\$\{endpoint\.agent\.id\}\/webhook/,
+  );
+  assert.match(
+    section,
+    /const retry = async \(delivery: Delivery\) => \{\s*if \(!selected \|\| selected\.kind !== "workspace"\) return;/,
+  );
+  assert.match(
+    section,
+    /\{selected\.kind === "workspace" && \([\s\S]*?<RefreshCw size=\{13\} \/> Retry[\s\S]*?\)\}/,
+  );
+  assert.match(
+    section,
+    /\{endpoint\.kind === "workspace" \? \([\s\S]*?workspaceAction\("test", endpoint\)[\s\S]*?\) : \(\s*<a[\s\S]*?Open agent[\s\S]*?<\/a>\s*\)\}/,
+  );
   assert.match(section, /const actionRequestRef = useRef\(0\)/);
   assert.match(section, /actionAbortRef\.current\?\.abort\(\)/);
   assert.match(

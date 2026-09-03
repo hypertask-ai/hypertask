@@ -283,6 +283,7 @@ export default function WebhooksSection() {
   }, [load, refreshVersion]);
 
   const selectEndpoint = (id: string) => {
+    if (id === selectedId) return;
     setDeliveries([]);
     setVisiblePayload(null);
     setSelectedId(id);
@@ -322,38 +323,6 @@ export default function WebhooksSection() {
         });
       }
       toast.success(workspaceSuccessMessages[action]);
-      setRefreshVersion((current) => current + 1);
-    } catch (error) {
-      if (actionRequestIsCurrent(requestToken, requestTeamId)) {
-        toast.error(error instanceof Error ? error.message : "Webhook action failed");
-      }
-    } finally {
-      finishActionRequest(requestToken);
-    }
-  };
-
-  const agentAction = async (
-    action: "test" | "replay",
-    endpoint: AgentEndpoint,
-    deliveryId?: string,
-  ) => {
-    if (!teamId || busy) return;
-    const requestTeamId = teamId;
-    const { controller, token: requestToken } = beginActionRequest();
-    setBusy(`${action}:${endpoint.id}`);
-    try {
-      const response = await fetch(`/api/agents/${endpoint.agent.id}/webhook`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...(deliveryId ? { deliveryId } : {}) }),
-        signal: controller.signal,
-      });
-      const data = (await response.json()) as { success?: boolean; error?: string };
-      if (!actionRequestIsCurrent(requestToken, requestTeamId)) return;
-      if (!response.ok || !data.success) {
-        throw new Error(data.error ?? "Could not queue delivery");
-      }
-      toast.success(action === "test" ? "Signed test queued" : "Delivery queued again");
       setRefreshVersion((current) => current + 1);
     } catch (error) {
       if (actionRequestIsCurrent(requestToken, requestTeamId)) {
@@ -480,11 +449,7 @@ export default function WebhooksSection() {
   };
 
   const retry = async (delivery: Delivery) => {
-    if (!selected) return;
-    if (selected.kind === "agent") {
-      await agentAction("replay", selected, delivery.deliveryId);
-      return;
-    }
+    if (!selected || selected.kind !== "workspace") return;
     await workspaceAction("retry", selected, {
       deliveryId: delivery.deliveryId,
       idempotencyKey: crypto.randomUUID(),
@@ -629,22 +594,12 @@ export default function WebhooksSection() {
                           </button>
                         </>
                       ) : (
-                        <>
-                          <button
-                            className={cn(settingsActionButtonClass, "gap-1")}
-                            disabled={Boolean(busy) || !endpoint.active}
-                            onClick={() => void agentAction("test", endpoint)}
-                            type="button"
-                          >
-                            <Send size={13} /> Send test
-                          </button>
-                          <a
-                            className={cn(settingsActionButtonClass, "gap-1")}
-                            href={`/agents/${endpoint.agent.id}`}
-                          >
-                            Open agent <ExternalLink size={13} />
-                          </a>
-                        </>
+                        <a
+                          className={cn(settingsActionButtonClass, "gap-1")}
+                          href={`/agents/${endpoint.agent.id}`}
+                        >
+                          Open agent <ExternalLink size={13} />
+                        </a>
                       )}
                     </div>
                   </div>
@@ -710,14 +665,16 @@ export default function WebhooksSection() {
                         >
                           Payload
                         </button>
-                        <button
-                          className={cn(settingsActionButtonClass, "gap-1")}
-                          disabled={Boolean(busy)}
-                          onClick={() => void retry(delivery)}
-                          type="button"
-                        >
-                          <RefreshCw size={13} /> Retry
-                        </button>
+                        {selected.kind === "workspace" && (
+                          <button
+                            className={cn(settingsActionButtonClass, "gap-1")}
+                            disabled={Boolean(busy)}
+                            onClick={() => void retry(delivery)}
+                            type="button"
+                          >
+                            <RefreshCw size={13} /> Retry
+                          </button>
+                        )}
                       </div>
                     </div>
                     {visiblePayload === payloadKey && (
@@ -730,11 +687,18 @@ export default function WebhooksSection() {
               })}
             </div>
           )}
-          <p className="px-2 text-micro text-text-light-gray">
-            Retry queues the event with a fresh delivery ID. Automatic retries
-            back off across {BOARD_WEBHOOK_MAX_ATTEMPTS} attempts over about{" "}
-            {BOARD_WEBHOOK_RETRY_WINDOW_MINUTES} minutes.
-          </p>
+          {selected.kind === "workspace" ? (
+            <p className="px-2 text-micro text-text-light-gray">
+              Retry queues the event with a fresh delivery ID. Automatic retries
+              back off across {BOARD_WEBHOOK_MAX_ATTEMPTS} attempts over about{" "}
+              {BOARD_WEBHOOK_RETRY_WINDOW_MINUTES} minutes.
+            </p>
+          ) : (
+            <p className="px-2 text-micro text-text-light-gray">
+              Agent-owned endpoints are read-only here. Manage delivery actions
+              from the agent&apos;s Manage panel.
+            </p>
+          )}
         </SettingsCard>
       )}
 
