@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const runtime = "nodejs";
 
@@ -52,15 +52,7 @@ export async function GET(
 ) {
   const params = await props.params;
 
-  let userId: number | undefined;
-  try {
-    const userCookie = (await cookies()).get("nookies_user");
-    userId = userCookie?.value
-      ? (JSON.parse(userCookie.value) as { id?: number }).id
-      : undefined;
-  } catch {
-    userId = undefined;
-  }
+  const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },

@@ -117,7 +117,7 @@ const taskSearchByParam = async (
             updatedAt: "desc",
           },
         }),
-        getBoardAgentMembers(projectId),
+        getBoardAgentMembers(projectId, userid),
       ]);
 
       const updatedtask = task?.map((item: any) => ({
@@ -218,7 +218,7 @@ const taskSearchByParam = async (
             ],
           },
         }),
-        getBoardAgentMembers(projectId),
+        getBoardAgentMembers(projectId, userid),
       ]);
 
       const updatedProjects = projects?.map((item: any) => ({

@@ -2106,9 +2106,15 @@ model ChatMessage {
   @@index([sessionId])
 }
 
+enum AgentVisibility {
+  PRIVATE
+  TEAM
+}
+
 model Agent {
   id                        String @id @default(uuid())
   displayName               String
+  visibility                AgentVisibility @default(PRIVATE)
   photoURL                  String? @default("https://files.hypertask.app/tasks/attachments/1757584422625image.png")
   createdAt                 DateTime @default(now())
   revokedAt                 DateTime?

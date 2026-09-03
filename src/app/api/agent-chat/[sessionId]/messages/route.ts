@@ -1,12 +1,12 @@
 import prisma from "@/lib/prisma";
-import { isValidUser } from "@/utils/edgeHelpers";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { accessibleAgentWhere } from "@/lib/agents/visibility";
 
 export const runtime = "nodejs";
 
@@ -21,16 +21,8 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const cookieStore = await cookies();
-    const userCookie = cookieStore.get("nookies_user");
-
-    if (!userCookie?.value) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { isValid, user } = isValidUser(userCookie.value);
-
-    if (!isValid || !user) {
+    const userId = (await getSessionUser(request.headers))?.userId;
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -48,7 +40,15 @@ export async function POST(
     }
 
     const session = await prisma.chatSession.findFirst({
-      where: { id: sessionId, userId: user.id, agentId: { not: null } },
+      where: {
+        id: sessionId,
+        userId: userId,
+        agentId: { not: null },
+        agent: {
+          revokedAt: null,
+          ...accessibleAgentWhere(userId),
+        },
+      },
       select: {
         id: true,
         agentId: true,
@@ -93,7 +93,7 @@ export async function POST(
         ticketNumber: null,
         taskTitle: null,
         actor: {
-          userId: user.id,
+          userId: userId,
           displayName: session.user.displayName || "Hypertask user",
         },
         chat: {
@@ -116,7 +116,7 @@ export async function POST(
     await publishAgentWebhookDeliveries([deliveryId]);
 
     // Other tabs of this user refetch the thread; fire and forget.
-    void broadcast(userChannel(user.id), AGENT_CHAT_EVENT, {
+    void broadcast(userChannel(userId), AGENT_CHAT_EVENT, {
       sessionId: session.id,
     });
 

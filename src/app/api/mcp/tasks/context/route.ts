@@ -14,6 +14,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 const FULL_COMMENT_LIMIT = 20;
@@ -139,7 +140,7 @@ export async function GET(request: NextRequest) {
             status: { not: 'Deleted' },
           },
           include: {
-            ...taskMcpGetInclude,
+            ...taskMcpGetInclude(ctx.user.id),
             pullRequests: {
               orderBy: { createdAt: 'asc' },
               select: {
@@ -170,7 +171,7 @@ export async function GET(request: NextRequest) {
             createdAt: true,
             agentDisplayName: true,
             agent: {
-              select: { displayName: true },
+              select: mcpVisibleAgentSelect(ctx.user.id, projectId),
             },
             creator: {
               select: {
@@ -224,18 +225,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const mappedTask = mapTaskToMcpGetResponse(task);
-    const comments = recentComments.reverse().map((comment) => ({
-      id: comment.id,
-      author:
-        comment.agent?.displayName ||
-        comment.agentDisplayName ||
-        comment.creator?.displayName ||
-        comment.creator?.email ||
-        'Unknown',
-      text: comment.text,
-      createdAt: comment.createdAt.toISOString(),
-    }));
+    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
+    const comments = recentComments.reverse().map((comment) => {
+      const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
+      const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
+      return {
+        id: comment.id,
+        author: hasAgentAttribution
+          ? agent?.displayName || 'Private agent'
+          : comment.creator?.displayName || comment.creator?.email || 'Unknown',
+        text: comment.text,
+        createdAt: comment.createdAt.toISOString(),
+      };
+    });
     const relatedTasks = relations.map((relation) => {
       const outgoing = relation.sourceTaskId === resolvedTask.id;
       const relatedTask = outgoing

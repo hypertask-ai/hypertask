@@ -65,10 +65,15 @@ test("task-detail SQL selects public actors and sanitizes historical activity", 
   const source = read("src/utils/controllers/taskDetail/load.ts");
 
   assert.match(source, /const publicCommentAgent = Prisma\.sql/);
+  assert.match(source, /SELECT \(\$\{hiddenCommentAgent\(userId\)\}\) AS hidden/);
+  assert.match(source, /CASE WHEN agent_visibility\.hidden/);
   assert.match(source, /'displayName', agent\."displayName"/);
   assert.doesNotMatch(source, /to_jsonb\(agent\)/);
   assert.match(source, /sanitizeAgentCredentials\(comments\)/);
-  assert.match(source, /agent: \{ select: publicAgentSelect \}/);
+  assert.match(
+    source,
+    /agent: \{[\s\S]{0,80}select: \{[\s\S]{0,80}\.\.\.publicAgentSelect,[\s\S]{0,80}visibility: true,[\s\S]{0,160}accessibleAgentMembershipWhere\(userId, projectId\)/,
+  );
 });
 
 test("new activity rows are sanitized before Prisma persistence", () => {
