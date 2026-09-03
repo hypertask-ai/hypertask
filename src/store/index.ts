@@ -751,6 +751,19 @@ export const lastUsedBoardsAtom = atom<{ [projectId: number]: number }>({
     effects_UNSTABLE: [persistAtom],
 });
 
+/**
+ * Bridges the Alt+Shift+Arrow team-cycle shortcut (registered once, in the
+ * app-wide keydown handler alongside Ctrl+B) into Agent Chat, whose team
+ * filter is page-local state the global handler has no other way to reach.
+ * Agent Chat watches this and applies the direction to its own team list;
+ * bumping `seq` on every press is what lets the same direction fire twice
+ * in a row register as two separate events.
+ */
+export const agentChatTeamCycleAtom = atom<{ direction: 1 | -1; seq: number } | null>({
+    key: "agentChatTeamCycle",
+    default: null,
+});
+
 export const calendarCheckedProjectsAtom = atom<Record<number, boolean>>({
     key: "calendarCheckedProjectsAtom",
     default: {},

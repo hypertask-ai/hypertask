@@ -19,7 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { IProject } from "@/models/model";
 
 // import { getAllProjectsMinimal, getAllTeamsForLSidebar } from "@/utils/api/Homepage";
-import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import {
   showBoardManagerAtom,
   showShortcutsAtom,
@@ -33,7 +33,11 @@ import {
   showAccountSwitcherAtom,
   appShellRailAtom,
   currentUserAtom,
+  lastUsedBoardsAtom,
+  agentChatTeamCycleAtom,
 } from "@/store";
+import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
+import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 
 const SwitchAccountModal = dynamic(
   () => import("@/components/Modals/commands/SwitchAccount/SwitchAccountModal"),
@@ -452,12 +456,17 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
 
   // ------------------------ refs
   const lastgClick = useRef<number | null>(null);
+  const teamCycleSeq = useRef(0);
   const autoInterruptedIds = useRef<Set<number>>(new Set());
 
   // ------------------------ data fetching
-  useGetAllTeamsMinimal(currentUser?.id ?? null, undefined, {
-    enabled: secondaryStartupEnabled,
-  });
+  const { data: allTeamsForCycle } = useGetAllTeamsMinimal(
+    currentUser?.id ?? null,
+    undefined,
+    { enabled: secondaryStartupEnabled },
+  );
+  const lastUsedBoardsForCycle = useRecoilValue(lastUsedBoardsAtom);
+  const setAgentChatTeamCycle = useSetRecoilState(agentChatTeamCycleAtom);
   useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, {
     enabled: secondaryStartupEnabled,
   });
@@ -955,6 +964,73 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
       if (cmdControl) {
         e.preventDefault();
         toggleLeftSidebar();
+      }
+    }
+
+    // [Alt+Shift+ArrowDown/Up] cycle teams (HTPR-6036). In Agent Chat it
+    // changes the roster's team filter; everywhere else with the app-shell
+    // rail (the same routes Ctrl+B applies to) it jumps to the first board
+    // of the next/previous team, in the exact order the Ctrl+B board
+    // switcher's "Teams" list uses.
+    if (
+      e.altKey &&
+      e.shiftKey &&
+      !cmdControl &&
+      (e.keyCode === KeyCodes.ARROW_DOWN || e.keyCode === KeyCodes.ARROW_UP) &&
+      (pathname?.startsWith("/search") ||
+        pathname?.startsWith("/archive") ||
+        pathname?.startsWith("/pricing") ||
+        pathname?.startsWith("/detail") ||
+        pathname?.startsWith("/project") ||
+        pathname?.startsWith("/trash") ||
+        pathname?.startsWith("/starred") ||
+        pathname?.startsWith("/drafts") ||
+        pathname?.startsWith("/inbox") ||
+        pathname?.startsWith("/calendar") ||
+        pathname?.startsWith("/all-tasks") ||
+        pathname?.startsWith("/time") ||
+        pathname?.startsWith("/report") ||
+        pathname?.startsWith("/page") ||
+        pathname?.startsWith("/agents") ||
+        pathname?.startsWith("/settings"))
+    ) {
+      const activeElement = document.activeElement as HTMLElement | null;
+      const tagName = activeElement?.tagName.toLowerCase();
+      const isTyping =
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        activeElement?.isContentEditable === true;
+      if (!isTyping) {
+        e.preventDefault();
+        const direction = e.keyCode === KeyCodes.ARROW_DOWN ? 1 : -1;
+        if (pathname?.startsWith("/agents/chat")) {
+          teamCycleSeq.current += 1;
+          setAgentChatTeamCycle({ direction, seq: teamCycleSeq.current });
+        } else {
+          const teams = orderTeamsForSwitcher(
+            allTeamsForCycle ?? [],
+            lastUsedBoardsForCycle,
+          );
+          if (teams.length > 0) {
+            const currentTeamId = _currentProject?.teamId ?? getLastBoardTeam();
+            const currentIndex = teams.findIndex((t) => t.id === currentTeamId);
+            const nextIndex =
+              currentIndex === -1
+                ? 0
+                : (currentIndex + direction + teams.length) % teams.length;
+            const nextTeam = teams[nextIndex];
+            const nextBoard = nextTeam.projects?.[0];
+            if (nextBoard) {
+              setLastBoardTeam(nextTeam.id);
+              markBoardSwitchIntent({
+                surface: "keyboard_shortcut",
+                projectId: nextBoard.id,
+              });
+              goToProjectShortcut(nextBoard.id, true);
+            }
+          }
+        }
       }
     }
 
