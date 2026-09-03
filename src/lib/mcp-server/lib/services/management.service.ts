@@ -1,6 +1,8 @@
 import type { IApiClient } from "../../types/index";
 import {
+  ArchiveAgentInputSchema,
   CreateAgentInputSchema,
+  DeleteAgentInputSchema,
   ListConnectionsInputSchema,
   MintTokenInputSchema,
   RevokeAgentInputSchema,
@@ -25,6 +27,24 @@ export class ManagementService {
     return this.apiClient.makeRequest(
       "/mcp/admin/agents",
       { method: "DELETE", body: JSON.stringify(input) },
+      generateCorrelationId(),
+    );
+  }
+
+  async archiveAgent(params: unknown) {
+    const input = ArchiveAgentInputSchema.parse(params);
+    return this.apiClient.makeRequest(
+      `/mcp/agents/${encodeURIComponent(input.agent_id)}/archive`,
+      { method: "POST" },
+      generateCorrelationId(),
+    );
+  }
+
+  async deleteAgent(params: unknown) {
+    const input = DeleteAgentInputSchema.parse(params);
+    return this.apiClient.makeRequest(
+      `/mcp/agents/${encodeURIComponent(input.agent_id)}`,
+      { method: "DELETE" },
       generateCorrelationId(),
     );
   }

@@ -36,6 +36,7 @@ export const turbopufferTaskInclude = {
 
 export const turbopufferCommentInclude = {
   creator: true,
+  agent: { select: { displayName: true } },
   task: {
     select: {
       id: true,
@@ -355,7 +356,11 @@ export function buildTurbopufferCommentRow(
     id: comment.id.toString(),
     taskId: comment.taskId.toString(),
     commentText,
-    creatorName: stringify(comment.creator?.displayName),
+    creatorName: stringify(
+      comment.agent?.displayName ??
+        comment.agentDisplayName ??
+        comment.creator?.displayName
+    ),
     projectId: task.projectId,
     createdAt: toIsoString(comment.createdAt),
     searchText: commentText,

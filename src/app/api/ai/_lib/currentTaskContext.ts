@@ -48,6 +48,8 @@ export async function loadCurrentTaskContext(
           text: true,
           activity: true,
           createdAt: true,
+          agentDisplayName: true,
+          agent: { select: { displayName: true } },
           creator: { select: { displayName: true, email: true } },
         },
       },
@@ -187,6 +189,8 @@ export function formatTaskContext(
       text: string | null;
       activity: unknown;
       createdAt: Date;
+      agentDisplayName: string | null;
+      agent: { displayName: string } | null;
       creator: { displayName: string | null; email: string | null } | null;
     }>;
   },
@@ -199,7 +203,12 @@ export function formatTaskContext(
         c.text || (c.activity ? JSON.stringify(c.activity) : "")
       );
       if (!text) return null;
-      const who = c.creator?.displayName || c.creator?.email || "Unknown";
+      const who =
+        c.agent?.displayName ||
+        c.agentDisplayName ||
+        c.creator?.displayName ||
+        c.creator?.email ||
+        "Unknown";
       return `- ${who}: ${text}`;
     })
     .filter((line): line is string => line !== null)

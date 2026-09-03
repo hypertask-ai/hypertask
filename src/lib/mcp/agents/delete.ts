@@ -5,6 +5,7 @@ import {
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
+import { clearAgentRuntimeSnapshot } from '@/lib/agents/runtimeState'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   deleteOwnedAgent,
@@ -64,7 +65,8 @@ export async function handleDeleteAgentRequest(
   const deletedAgent = await deleteOwnedAgent(
     prisma as unknown as AgentManagementDatabase,
     ctx.user.id,
-    agentId
+    agentId,
+    clearAgentRuntimeSnapshot
   )
   if (!deletedAgent) {
     return NextResponse.json(
@@ -79,6 +81,7 @@ export async function handleDeleteAgentRequest(
     cleanup: {
       board_memberships: deletedAgent.deleted_board_memberships,
       task_assignments: deletedAgent.deleted_task_assignments,
+      comment_tombstones: deletedAgent.comment_tombstones,
     },
   })
 }

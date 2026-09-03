@@ -14,6 +14,8 @@ import { listAgentsTool } from './list-agents.tool';
 import { agentWebhookTool } from './agent-webhook.tool';
 import { createAgentTool } from './create-agent.tool';
 import { revokeAgentTool } from './revoke-agent.tool';
+import { archiveAgentTool } from './archive-agent.tool';
+import { deleteAgentTool } from './delete-agent.tool';
 import { mintTokenTool } from './mint-token.tool';
 import { revokeTokenTool } from './revoke-token.tool';
 import { listConnectionsTool } from './list-connections.tool';
@@ -91,6 +93,8 @@ export const MCP_TOOLS = [
   agentWebhookTool,
   createAgentTool,
   revokeAgentTool,
+  archiveAgentTool,
+  deleteAgentTool,
   mintTokenTool,
   revokeTokenTool,
   listConnectionsTool,

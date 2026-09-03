@@ -110,21 +110,6 @@
         ]
       },
       "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/6007",
-          "expires": "2026-09-30",
-          "entries": ["POST /api/mcp/agents/[agentId]/archive"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/6007",
-          "expires": "2026-09-30",
-          "entries": ["hypertask_archive_agent", "hypertask_delete_agent"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/6007",
-          "expires": "2026-09-30",
-          "entries": ["hypertask_archive_agent", "hypertask_delete_agent"]
-        },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/5896",
           "expires": "2026-09-15",

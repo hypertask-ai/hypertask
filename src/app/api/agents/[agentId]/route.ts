@@ -719,6 +719,7 @@ export async function DELETE(
         prisma as unknown as AgentManagementDatabase,
         user.id,
         resolved.id,
+        clearAgentRuntimeSnapshot,
       )
     : null;
   if (!deleted) {
@@ -734,6 +735,7 @@ export async function DELETE(
     cleanup: {
       board_memberships: deleted.deleted_board_memberships,
       task_assignments: deleted.deleted_task_assignments,
+      comment_tombstones: deleted.comment_tombstones,
     },
   });
 }

@@ -58,6 +58,18 @@ export const TOOL_METADATA = {
       'Revokes an owned agent identity and invalidates its MCP token. This is an account-management write and requires an authenticated human or management-scoped key.',
   },
 
+  ARCHIVE_AGENT: {
+    name: buildToolName('archive_agent'),
+    description:
+      'Archives an owned managed agent from normal agent discovery without revoking its credential, memberships, or runtime. Requires an authenticated human or management-scoped key.',
+  },
+
+  DELETE_AGENT: {
+    name: buildToolName('delete_agent'),
+    description:
+      'Permanently deletes an owned managed agent and its operational state. Comments remain with the deleted agent display name as a tombstone. This cannot be undone and requires an authenticated human or management-scoped key.',
+  },
+
   MINT_TOKEN: {
     name: buildToolName('mint_token'),
     description:

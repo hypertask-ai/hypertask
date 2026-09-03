@@ -19,29 +19,50 @@ const { deleteOwnedAgent, listOwnedAgents } = jiti(
 const { ListAgentsInputSchema } = jiti(
   path.join(root, 'src/lib/mcp-server/validations/agent.validation.ts')
 )
+const {
+  ArchiveAgentInputSchema,
+  DeleteAgentInputSchema,
+} = jiti(path.join(root, 'src/lib/mcp-server/validations/management.validation.ts'))
+const { ManagementService } = jiti(
+  path.join(root, 'src/lib/mcp-server/lib/services/management.service.ts')
+)
 const { MCP_TOOLS } = jiti(
   path.join(root, 'src/lib/mcp-server/tools/index.ts')
 )
 
-function createDatabase({ agents, assignments = [], memberships = [] }) {
+function createDatabase({
+  agents,
+  assignments = [],
+  memberships = [],
+  comments = [],
+}) {
   const state = {
     agents: agents.map((agent) => ({ ...agent })),
     assignments: assignments.map((assignment) => ({ ...assignment })),
     memberships: memberships.map((membership) => ({ ...membership })),
+    comments: comments.map((comment) => ({ ...comment })),
   }
   const calls = {
     findMany: [],
     findFirst: [],
     assignmentDeletes: [],
+    assignmentUpdates: [],
     membershipDeletes: [],
     agentDeletes: [],
+    commentUpdates: [],
+    transactionOptions: [],
   }
 
   const transaction = {
     agent: {
       findMany: async (args) => {
         calls.findMany.push(args)
-        return state.agents.filter((agent) => agent.userId === args.where.userId)
+        return state.agents.filter(
+          (agent) =>
+            agent.userId === args.where.userId &&
+            (args.where.archivedAt === undefined ||
+              agent.archivedAt === args.where.archivedAt)
+        )
       },
       findFirst: async (args) => {
         calls.findFirst.push(args)
@@ -68,6 +89,18 @@ function createDatabase({ agents, assignments = [], memberships = [] }) {
         )
         return { count: before - state.assignments.length }
       },
+      updateMany: async (args) => {
+        calls.assignmentUpdates.push(args)
+        let count = 0
+        state.assignments = state.assignments.map((assignment) => {
+          if (assignment.agentAssignerId !== args.where.agentAssignerId) {
+            return assignment
+          }
+          count += 1
+          return { ...assignment, ...args.data }
+        })
+        return { count }
+      },
     },
     member: {
       deleteMany: async (args) => {
@@ -79,12 +112,56 @@ function createDatabase({ agents, assignments = [], memberships = [] }) {
         return { count: before - state.memberships.length }
       },
     },
+    comment: {
+      updateMany: async (args) => {
+        calls.commentUpdates.push(args)
+        let count = 0
+        state.comments = state.comments.map((comment) => {
+          if (comment.agentId !== args.where.agentId) return comment
+          count += 1
+          return { ...comment, ...args.data }
+        })
+        return { count }
+      },
+    },
+  }
+
+  const cleanupModels = [
+    ['follower', 'deleteMany'],
+    ['taskLease', 'deleteMany'],
+    ['section', 'updateMany'],
+    ['task', 'updateMany'],
+    ['page', 'updateMany'],
+    ['report', 'updateMany'],
+    ['taskEvidence', 'updateMany'],
+    ['taskSession', 'updateMany'],
+    ['decisionRequest', 'updateMany'],
+    ['description', 'updateMany'],
+    ['priority', 'updateMany'],
+    ['estimate', 'updateMany'],
+    ['notification', 'updateMany'],
+    ['webhookSubscription', 'updateMany'],
+    ['oauthAuthorizationCode', 'updateMany'],
+    ['chatSession', 'updateMany'],
+  ]
+  for (const [model, operation] of cleanupModels) {
+    const callName = `${model}${operation === 'deleteMany' ? 'Deletes' : 'Updates'}`
+    calls[callName] = []
+    transaction[model] = {
+      [operation]: async (args) => {
+        calls[callName].push(args)
+        return { count: 0 }
+      },
+    }
   }
 
   return {
     database: {
       ...transaction,
-      $transaction: async (callback) => callback(transaction),
+      $transaction: async (callback, options) => {
+        calls.transactionOptions.push(options)
+        return callback(transaction)
+      },
     },
     state,
     calls,
@@ -97,6 +174,8 @@ function agent(overrides = {}) {
     userId: 6,
     displayName: 'Build Agent',
     revokedAt: null,
+    archivedAt: null,
+    runtimeGeneration: 1,
     createdAt: new Date('2026-08-06T10:00:00.000Z'),
     mcpToken: 'must-never-leak',
     mcpTokenExpiresAt: new Date('2026-09-06T10:00:00.000Z'),
@@ -168,7 +247,21 @@ test('agent list returns only agents owned by the authenticated user', async () 
   const result = await listOwnedAgents(database, 6)
 
   assert.deepEqual(result.map(({ id }) => id), ['owned-agent'])
-  assert.deepEqual(calls.findMany[0].where, { userId: 6 })
+  assert.deepEqual(calls.findMany[0].where, { userId: 6, archivedAt: null })
+})
+
+test('agent list hides archived owned agents', async () => {
+  const { database, calls } = createDatabase({
+    agents: [
+      agent(),
+      agent({ id: 'archived-agent', archivedAt: new Date('2026-08-07T00:00:00.000Z') }),
+    ],
+  })
+
+  const result = await listOwnedAgents(database, 6)
+
+  assert.deepEqual(result.map(({ id }) => id), ['owned-agent'])
+  assert.deepEqual(calls.findMany[0].where, { userId: 6, archivedAt: null })
 })
 
 test('delete refuses an unowned agent without changing related rows', async () => {
@@ -196,16 +289,47 @@ test('delete refuses an unowned agent without changing related rows', async () =
   assert.match(route, /!deletedAgent[\s\S]*?'Agent not found'[\s\S]*?status: 404/)
 })
 
+test('delete stays successful when post-commit runtime cleanup fails', async () => {
+  const { database, state, calls } = createDatabase({ agents: [agent()] })
+  const fenceCalls = []
+  const originalWarn = console.warn
+  console.warn = () => {}
+
+  try {
+    const result = await deleteOwnedAgent(
+      database,
+      6,
+      'owned-agent',
+      async (...args) => {
+        fenceCalls.push(args)
+        throw new Error('Redis unavailable')
+      }
+    )
+
+    assert.equal(result.id, 'owned-agent')
+    assert.deepEqual(fenceCalls, [['owned-agent', 2]])
+    assert.deepEqual(state.agents, [])
+    assert.equal(calls.agentDeletes.length, 1)
+  } finally {
+    console.warn = originalWarn
+  }
+})
+
 test('delete clears task assignments and board memberships before the agent', async () => {
   const { database, state, calls } = createDatabase({
     agents: [agent()],
     assignments: [
       { id: 1, agentId: 'owned-agent' },
-      { id: 2, agentId: 'other-agent' },
+      { id: 2, agentId: 'other-agent', agentAssignerId: 'owned-agent' },
+      { id: 3, agentId: 'other-agent', agentAssignerId: 'other-agent' },
     ],
     memberships: [
       { id: 1, agentId: 'owned-agent' },
       { id: 2, agentId: 'other-agent' },
+    ],
+    comments: [
+      { id: 1, agentId: 'owned-agent', agentDisplayName: null },
+      { id: 2, agentId: 'other-agent', agentDisplayName: null },
     ],
   })
 
@@ -215,13 +339,75 @@ test('delete clears task assignments and board memberships before the agent', as
     id: 'owned-agent',
     deleted_board_memberships: 1,
     deleted_task_assignments: 1,
+    comment_tombstones: 1,
   })
-  assert.deepEqual(state.assignments, [{ id: 2, agentId: 'other-agent' }])
+  assert.deepEqual(state.assignments, [
+    { id: 2, agentId: 'other-agent', agentAssignerId: null },
+    { id: 3, agentId: 'other-agent', agentAssignerId: 'other-agent' },
+  ])
   assert.deepEqual(state.memberships, [{ id: 2, agentId: 'other-agent' }])
+  assert.deepEqual(state.comments, [
+    { id: 1, agentId: null, agentDisplayName: 'Build Agent' },
+    { id: 2, agentId: 'other-agent', agentDisplayName: null },
+  ])
   assert.deepEqual(state.agents, [])
   assert.deepEqual(calls.assignmentDeletes[0].where, {
     agentId: 'owned-agent',
   })
+  assert.deepEqual(calls.assignmentUpdates[0], {
+    where: { agentAssignerId: 'owned-agent' },
+    data: { agentAssignerId: null },
+  })
+  assert.deepEqual(calls.commentUpdates[0], {
+    where: { agentId: 'owned-agent' },
+    data: { agentId: null, agentDisplayName: 'Build Agent' },
+  })
+  assert.deepEqual(calls.notificationUpdates, [
+    { where: { agentId: 'owned-agent' }, data: { agentId: null } },
+    { where: { fromAgentId: 'owned-agent' }, data: { fromAgentId: null } },
+  ])
+  assert.deepEqual(calls.transactionOptions[0], {
+    isolationLevel: 'Serializable',
+  })
+})
+
+test('archive and delete schemas are strict and MCP tools call owned-agent routes', async () => {
+  assert.deepEqual(ArchiveAgentInputSchema.parse({ agent_id: '  agent/1  ' }), {
+    agent_id: 'agent/1',
+  })
+  assert.deepEqual(DeleteAgentInputSchema.parse({ agent_id: 'agent/1' }), {
+    agent_id: 'agent/1',
+  })
+  assert.equal(
+    ArchiveAgentInputSchema.safeParse({ agent_id: 'agent-1', extra: true })
+      .success,
+    false
+  )
+  assert.equal(
+    DeleteAgentInputSchema.safeParse({ agent_id: 'agent-1', extra: true })
+      .success,
+    false
+  )
+
+  const requests = []
+  const service = new ManagementService({
+    makeRequest: async (...args) => {
+      requests.push(args)
+      return { success: true }
+    },
+  })
+  await service.archiveAgent({ agent_id: ' agent/1 ' })
+  await service.deleteAgent({ agent_id: ' agent/1 ' })
+
+  assert.deepEqual(
+    requests.map(([path, options]) => [path, options.method]),
+    [
+      ['/mcp/agents/agent%2F1/archive', 'POST'],
+      ['/mcp/agents/agent%2F1', 'DELETE'],
+    ]
+  )
+  assert.ok(MCP_TOOLS.some((tool) => tool.name === 'hypertask_archive_agent'))
+  assert.ok(MCP_TOOLS.some((tool) => tool.name === 'hypertask_delete_agent'))
 })
 
 test('list_agents has a strict empty schema and is registered in MCP_TOOLS', () => {

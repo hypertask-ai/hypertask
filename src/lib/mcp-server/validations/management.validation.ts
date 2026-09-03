@@ -14,6 +14,18 @@ export const RevokeAgentInputSchema = z
   })
   .strict();
 
+export const ArchiveAgentInputSchema = z
+  .object({
+    agent_id: z.string().trim().min(1),
+  })
+  .strict();
+
+export const DeleteAgentInputSchema = z
+  .object({
+    agent_id: z.string().trim().min(1),
+  })
+  .strict();
+
 export const MintTokenInputSchema = z
   .object({
     expires_in_days: z.number().int().min(1).max(365).default(30),

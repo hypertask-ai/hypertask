@@ -35,7 +35,7 @@ const handler: NextApiHandler = async (
         where: {
           projectId: parseInt(projectId as string),
           agentId: { not: null },
-          agent: { revokedAt: null },
+          agent: { revokedAt: null, archivedAt: null },
         },
         include: {
           agent: { select: publicAgentSelect },

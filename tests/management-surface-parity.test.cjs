@@ -37,6 +37,26 @@ test("management operations are registered in MCP and AI Chat", () => {
   }
 });
 
+test("agent archive and delete are registered in MCP and blocked for native agents", () => {
+  const metadata = read("src/lib/mcp-server/config/tool-metadata.ts");
+  const registry = read("src/lib/mcp-server/tools/index.ts");
+  const hyperAi = read("src/app/api/ai/_lib/hyperAiTools.ts");
+
+  for (const name of ["archive_agent", "delete_agent"]) {
+    assert.match(metadata, new RegExp(`buildToolName\\(["']${name}["']\\)`));
+  }
+  for (const variable of ["archiveAgentTool", "deleteAgentTool"]) {
+    assert.match(registry, new RegExp(`\\b${variable},`));
+  }
+  const accountManagementTools = hyperAi.match(
+    /const ACCOUNT_MANAGEMENT_TOOLS = new Set<string>\(\[([\s\S]*?)\]\);/,
+  );
+  assert.ok(accountManagementTools);
+  assert.match(accountManagementTools[1], /TOOL_METADATA\.ARCHIVE_AGENT\.name/);
+  assert.match(accountManagementTools[1], /TOOL_METADATA\.DELETE_AGENT\.name/);
+  assert.match(hyperAi, /ACCOUNT_MANAGEMENT_TOOLS\.has\(mcpTool\.name\)/);
+});
+
 test("management-only keys can authenticate the MCP transport without gaining data scope", () => {
   const handler = read("src/lib/mcp-server/handler.ts");
   const auth = read("src/lib/mcp/auth.ts");
@@ -66,6 +86,7 @@ test("admin routes expose agents, tokens, rotation, and connection inventory", (
     "src/app/api/mcp/admin/agents/route.ts": ["GET", "POST", "DELETE"],
     "src/app/api/mcp/admin/agents/[agentId]/token/route.ts": ["POST"],
     "src/app/api/mcp/agents/[agentId]/route.ts": ["DELETE", "PATCH"],
+    "src/app/api/mcp/agents/[agentId]/archive/route.ts": ["POST"],
     "src/app/api/mcp/admin/tokens/route.ts": ["POST", "DELETE"],
     "src/app/api/mcp/admin/connections/route.ts": ["GET"],
   };

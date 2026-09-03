@@ -1522,6 +1522,8 @@ model Comment {
   //If provided comment is created by agent
   agentId             String?
   agent               Agent?          @relation(fields: [agentId], references: [id])
+  // Preserves an agent author after the managed identity is hard-deleted.
+  agentDisplayName    String?
 
   createdAt     DateTime       @default(now())
   notifications Notification[]

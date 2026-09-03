@@ -54,6 +54,8 @@ HARD RULES:
 
 type TaskComment = {
   creatorId: number | null;
+  agentDisplayName: string | null;
+  agent: { displayName: string } | null;
   creator: { displayName: string | null; email: string | null } | null;
   createdAt: Date;
   text: string;
@@ -102,6 +104,8 @@ export async function POST(request: NextRequest) {
             text: true,
             activity: true,
             createdAt: true,
+            agentDisplayName: true,
+            agent: { select: { displayName: true } },
             creator: { select: { displayName: true, email: true } },
           },
         },
@@ -121,6 +125,8 @@ export async function POST(request: NextRequest) {
         if (!text || isSessionNoise(text)) return null;
         return {
           creatorId: comment.creatorId,
+          agentDisplayName: comment.agentDisplayName,
+          agent: comment.agent,
           creator: comment.creator,
           createdAt: comment.createdAt,
           text,
@@ -145,6 +151,8 @@ export async function POST(request: NextRequest) {
           text: true,
           activity: true,
           createdAt: true,
+          agentDisplayName: true,
+          agent: { select: { displayName: true } },
           creator: { select: { displayName: true, email: true } },
         },
       });
@@ -185,6 +193,8 @@ export async function POST(request: NextRequest) {
       ? comments
           .map((comment, index) => {
             const creator =
+              comment.agent?.displayName ||
+              comment.agentDisplayName ||
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown";

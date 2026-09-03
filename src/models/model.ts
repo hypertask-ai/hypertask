@@ -467,6 +467,8 @@ export interface IComment {
   creator?: IUser;
   agentId?: string;
   agent?: IAgent;
+  /** Snapshot shown when the managed agent that authored the comment was deleted. */
+  agentDisplayName?: string | null;
   seen?: number[];
   project?: IProject;
   attachments?: IAttachment[];
