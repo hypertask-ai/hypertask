@@ -43,6 +43,11 @@ if [[ "$1 $2" == "pr list" ]]; then
   [[ " $* " == *" --limit 1000 "* ]] || exit 1
   printf '%s\\n' '230 feature head-sha false' '231 draft draft-sha true'
   if [[ "\${DUPLICATE_HEAD:-}" == 1 ]]; then printf '%s\\n' '232 duplicate head-sha false'; fi
+elif [[ "$1" == api ]]; then
+  printf '%s\\n' "$*" >> "$HOME/gh.log"
+  if [[ "\${EXISTING_COMMENT:-}" == 1 && "$*" == *"/230/"* ]]; then
+    printf '%s\\n' '<!-- ocr-advisory:230:head-sha -->'
+  fi
 else
   printf '%s\\n' "$*" >> "$HOME/gh.log"
 fi
@@ -96,9 +101,23 @@ test('reviews public production PRs from the public checkout', async (t) => {
   assert.match(ghCalls, /pr comment 230 --repo hypertask-ai\/hypertask/)
   assert.match(ghCalls, /pr comment 232 --repo hypertask-ai\/hypertask/)
   assert.match(ghCalls, /<strong>MEDIUM<\/strong>.*src\/&#96;&#64;team&#46;ts:4.*Fix &#64;team &#42;now&#42;/)
+  assert.match(ghCalls, /<!-- ocr-advisory:230:head-sha -->/)
   assert.doesNotMatch(ghCalls, /@team|No findings/)
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha'))
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/232-head-sha'))
+})
+
+test('recovers an accepted comment when its local marker is missing', async (t) => {
+  const fixtureData = await fixture(t)
+
+  const result = run(fixtureData, { EXISTING_COMMENT: '1' })
+
+  assert.equal(result.status, 0, result.stderr)
+  const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
+  assert.match(ghCalls, /api --paginate repos\/hypertask-ai\/hypertask\/issues\/230\/comments/)
+  assert.doesNotMatch(ghCalls, /pr comment/)
+  await assert.rejects(readFile(join(fixtureData.home, 'review.log')), { code: 'ENOENT' })
+  await stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha'))
 })
 
 test('bounds escaped finding paths before posting', async (t) => {
@@ -153,7 +172,7 @@ test('continues cleanly when a review returns malformed JSON', async (t) => {
   const result = run(fixtureData, { MALFORMED_REVIEW: '1' })
 
   assert.equal(result.status, 0, result.stderr)
-  await assert.rejects(readFile(join(fixtureData.home, 'gh.log')), { code: 'ENOENT' })
+  assert.doesNotMatch(await readFile(join(fixtureData.home, 'gh.log'), 'utf8'), /pr comment/)
   await assert.rejects(
     stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha')),
     { code: 'ENOENT' },
