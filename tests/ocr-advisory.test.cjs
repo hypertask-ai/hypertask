@@ -45,7 +45,9 @@ if [[ "$1 $2" == "pr list" ]]; then
   if [[ "\${DUPLICATE_HEAD:-}" == 1 ]]; then printf '%s\\n' '232 duplicate head-sha false'; fi
 elif [[ "$1" == api ]]; then
   printf '%s\\n' "$*" >> "$HOME/gh.log"
-  if [[ "\${EXISTING_COMMENT:-}" == 1 && "$*" == *"/230/"* ]]; then
+  if [[ "$2" == user ]]; then
+    printf '%s\\n' trusted-bot
+  elif [[ "\${EXISTING_COMMENT:-}" == 1 && "$*" == *"/230/"* ]]; then
     printf '%s\\n' '<!-- ocr-advisory:230:head-sha -->'
   fi
 else
@@ -115,6 +117,7 @@ test('recovers an accepted comment when its local marker is missing', async (t) 
   assert.equal(result.status, 0, result.stderr)
   const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
   assert.match(ghCalls, /api --paginate repos\/hypertask-ai\/hypertask\/issues\/230\/comments/)
+  assert.match(ghCalls, /select\(\.user\.login == "trusted-bot"\)/)
   assert.doesNotMatch(ghCalls, /pr comment/)
   await assert.rejects(readFile(join(fixtureData.home, 'review.log')), { code: 'ENOENT' })
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha'))

@@ -25,6 +25,11 @@ if [[ "$actual_remote" != "$EXPECTED_REMOTE" ]]; then
   echo "ocr-advisory: $REMOTE points at an unexpected repository" >&2
   exit 1
 fi
+comment_author=$(gh api user --jq .login)
+if [[ ! "$comment_author" =~ ^[A-Za-z0-9-]+$ ]]; then
+  echo "ocr-advisory: GitHub returned an invalid authenticated login" >&2
+  exit 1
+fi
 git fetch -q "$REMOTE" production
 base_sha=$(git rev-parse "$REMOTE/production")
 
@@ -42,7 +47,7 @@ while read -r pr branch sha is_draft; do
   [ -e "$marker_file" ] && continue
   comment_marker="<!-- ocr-advisory:$pr:$sha -->"
   existing_comments=$(gh api --paginate "repos/$REPO/issues/$pr/comments?per_page=100" \
-    --jq '.[].body') || continue
+    --jq ".[] | select(.user.login == \"$comment_author\") | .body") || continue
   if grep -Fq -- "$comment_marker" <<< "$existing_comments"; then
     touch "$marker_file"
     continue
