@@ -32,6 +32,7 @@ case "$1" in
       *) printf 'unexpected rev-parse ref: %s\\n' "$2" >&2; exit 1 ;;
     esac
     ;;
+  merge-base) [[ "$2 $3" == "base-sha head-sha" ]] || exit 1; printf '%s\\n' merge-sha ;;
   update-ref) [[ "$2" == -d && "$3" =~ ^refs/ocr-advisory/(230|232)$ ]] || exit 1 ;;
   *) printf 'unexpected git call: %s\\n' "$*" >&2; exit 1 ;;
 esac
@@ -48,7 +49,11 @@ fi
 `)
   await executable(join(fakeBin, 'ocr-delegate-review'), `
 printf '%s\\n' "$*" >> "$HOME/review.log"
-printf '%s\\n' '{"findings":[{"severity":"medium","path":"src/example.ts","start_line":4,"content":"Fix this"}],"summary":{"engine":"test"}}'
+if [[ "\${MALFORMED_REVIEW:-}" == 1 ]]; then
+  printf '%s\\n' 'not json'
+else
+  printf '%s\\n' '{"findings":[{"severity":"medium","path":"src/example.ts","start_line":4,"content":"Fix this"}],"summary":{"engine":"test"}}'
+fi
 `)
   return { home, fakeBin }
 }
@@ -68,10 +73,11 @@ test('reviews public production PRs from the public checkout', async (t) => {
   assert.equal(result.status, 0, result.stderr)
   const gitCalls = await readFile(join(fixtureData.home, 'git.log'), 'utf8')
   assert.match(gitCalls, /fetch -q agent-origin production/)
-  assert.match(gitCalls, /fetch -q agent-origin pull\/230\/head:refs\/ocr-advisory\/230/)
-  assert.match(gitCalls, /fetch -q agent-origin pull\/232\/head:refs\/ocr-advisory\/232/)
+  assert.match(gitCalls, /fetch -q agent-origin \+pull\/230\/head:refs\/ocr-advisory\/230/)
+  assert.match(gitCalls, /fetch -q agent-origin \+pull\/232\/head:refs\/ocr-advisory\/232/)
+  assert.match(gitCalls, /merge-base base-sha head-sha/)
   const reviewCalls = await readFile(join(fixtureData.home, 'review.log'), 'utf8')
-  assert.match(reviewCalls, /--from base-sha --to head-sha --repo .*projects\/hypertask-oss/)
+  assert.match(reviewCalls, /--from merge-sha --to head-sha --repo .*projects\/hypertask-oss/)
   const ghCalls = await readFile(join(fixtureData.home, 'gh.log'), 'utf8')
   assert.match(ghCalls, /pr comment 230 --repo hypertask-ai\/hypertask/)
   assert.match(ghCalls, /pr comment 232 --repo hypertask-ai\/hypertask/)
@@ -109,6 +115,20 @@ test('retains old markers for ready and draft heads, then removes closed-head ma
   await assert.rejects(stat(legacyDraftMarker), { code: 'ENOENT' })
   await assert.rejects(stat(closedMarker), { code: 'ENOENT' })
   await assert.rejects(readFile(join(fixtureData.home, 'review.log')), { code: 'ENOENT' })
+})
+
+test('continues cleanly when a review returns malformed JSON', async (t) => {
+  const fixtureData = await fixture(t)
+
+  const result = run(fixtureData, { MALFORMED_REVIEW: '1' })
+
+  assert.equal(result.status, 0, result.stderr)
+  await assert.rejects(readFile(join(fixtureData.home, 'gh.log')), { code: 'ENOENT' })
+  await assert.rejects(
+    stat(join(fixtureData.home, '.local/state/ocr-advisory/230-head-sha')),
+    { code: 'ENOENT' },
+  )
+  assert.match(await readFile(join(fixtureData.home, 'git.log'), 'utf8'), /update-ref -d refs\/ocr-advisory\/230/)
 })
 
 test('fails closed when the advisory checkout is not the public repository', async (t) => {
