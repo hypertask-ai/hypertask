@@ -99,8 +99,23 @@ Return exactly one line for $t and no other ticket." 2>/dev/null); then
     IMPROVEMENT) label="IMPROVEMENT ⚒️" ;;
   esac
   # Never relabel a ticket a human already corrected.
-  grep -qx "$t" "$STATE/manual-override" 2>/dev/null && continue
-  latest=$(ht GET "/mcp/tasks?ticket_number=$t&project_id=$BOARD")
+  if [ -e "$STATE/manual-override" ]; then
+    if grep -qx "$t" "$STATE/manual-override" 2>/dev/null; then
+      continue
+    else
+      override_status=$?
+      if [ "$override_status" -ne 1 ]; then
+        echo "board-hygiene: manual override check failed for $t" >&2
+        failures=$((failures+1))
+        continue
+      fi
+    fi
+  fi
+  if ! latest=$(ht GET "/mcp/tasks?ticket_number=$t&project_id=$BOARD"); then
+    echo "board-hygiene: eligibility request failed for $t" >&2
+    failures=$((failures+1))
+    continue
+  fi
   if python3 -c '
 import sys,json,os
 open_ids={int(x) for x in os.environ["OPEN_SECTIONS"].split(",")}

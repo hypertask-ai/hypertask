@@ -60,7 +60,8 @@ test('board hygiene pages, binds model output, and emits an atomic additive upda
           task('HTPR-7002', 'Classifier failure'),
           task(7000, 'Malformed ticket number'),
           task('HTPR-7004', 'Update failure'),
-          task('HTPR-7005', 'Eligibility read failure'),
+          task('HTPR-7005', 'Eligibility response failure'),
+          task('HTPR-7006', 'Eligibility transport failure'),
           task('HTPR-7003', 'Valid candidate'),
         ],
         nextCursor: null,
@@ -90,6 +91,8 @@ elif [[ "$method" == GET && "$path" == *"ticket_number=HTPR-7004"* ]]; then
   cat "$LATEST_FAILURE"
 elif [[ "$method" == GET && "$path" == *"ticket_number=HTPR-7005"* ]]; then
   printf '%s\\n' '{"success":false,"error":"unavailable"}'
+elif [[ "$method" == GET && "$path" == *"ticket_number=HTPR-7006"* ]]; then
+  exit 1
 elif [[ "$method" == POST && "$path" == /mcp/tasks/update ]]; then
   printf '%s\\n' "$3" >> "$MUTATION_LOG"
   if [[ "$3" == *'HTPR-7004'* ]]; then
@@ -118,6 +121,8 @@ elif [[ "$prompt" == *'"ticket": "HTPR-7004"'* ]]; then
   printf '%s\\n' 'HTPR-7004=Bug'
 elif [[ "$prompt" == *'"ticket": "HTPR-7005"'* ]]; then
   printf '%s\\n' 'HTPR-7005=FEATURE'
+elif [[ "$prompt" == *'"ticket": "HTPR-7006"'* ]]; then
+  printf '%s\\n' 'HTPR-7006=Bug'
 elif [[ "$prompt" == *'"ticket": "HTPR-7003"'* ]]; then
   printf '%s\\n' 'HTPR-7003=IMPROVEMENT'
 else
@@ -146,14 +151,15 @@ fi
   }
 
   assert.equal(failure?.code, 1)
-  assert.match(failure.stdout, /labelled 1 of 6 unlabelled tickets/)
+  assert.match(failure.stdout, /labelled 1 of 7 unlabelled tickets/)
   assert.match(failure.stderr, /classification failed for HTPR-7002/)
   assert.match(failure.stderr, /skipped malformed ticket record/)
   assert.match(failure.stderr, /label update failed for HTPR-7004/)
   assert.match(failure.stderr, /eligibility check failed for HTPR-7005/)
-  assert.match(failure.stderr, /5 ticket\(s\) failed/)
+  assert.match(failure.stderr, /eligibility request failed for HTPR-7006/)
+  assert.match(failure.stderr, /6 ticket\(s\) failed/)
   const prompts = await readFile(promptLog, 'utf8')
-  for (const ticket of ['HTPR-7001', 'HTPR-7002', 'HTPR-7003', 'HTPR-7004', 'HTPR-7005']) {
+  for (const ticket of ['HTPR-7001', 'HTPR-7002', 'HTPR-7003', 'HTPR-7004', 'HTPR-7005', 'HTPR-7006']) {
     assert.match(prompts, new RegExp(ticket))
   }
   const mutations = (await readFile(mutationLog, 'utf8'))
