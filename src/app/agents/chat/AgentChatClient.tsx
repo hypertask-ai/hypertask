@@ -115,7 +115,7 @@ function MessageBubble({
   const timestamp = (
     <div
       className={cn(
-        "mt-0.5 text-[10px] text-text-light-gray opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 max-md:opacity-100",
+        "mt-0.5 text-micro text-text-light-gray opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 max-md:opacity-100",
         isHuman ? "text-right" : "text-left",
       )}
     >
@@ -1475,7 +1475,10 @@ const AgentChatClient = (props: IProp) => {
                 onProcessingChange={setIsDictationProcessing}
                 disabled={sending}
                 ariaLabel="Dictate message"
-                className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"
+                className={cn(
+                  MOBILE_TARGET,
+                  "gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground",
+                )}
               />
               <button
                 type="button"
