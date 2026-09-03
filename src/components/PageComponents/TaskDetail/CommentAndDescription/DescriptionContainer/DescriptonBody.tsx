@@ -9,8 +9,8 @@ import { IDraft } from "@/models/model";
 import { isMeaningfulDescriptionDraft } from "@/hooks/General/useHasDrafts";
 import dynamic from "next/dynamic";
 import { useContext, useMemo } from "react";
-import InnerHTMLDescription from "./InnerHtmlDescription";
-import { shouldMountTaskDescriptionEditor } from "./descriptionRenderMode";
+import { HighlightMenu } from "../ContextMenu";
+import QuoteButton from "../ContextMenu/QuoteButton";
 
 const Tiptap = dynamic(() => import("@/components/RTE/TipTapTaskDetail"));
 
@@ -29,11 +29,11 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const { description, descriptionAttachments, uploadingDescription } =
     useDescriptionAndCommentsContext();
   const { redirectAPI } = useSaveContent();
-  const isEditing = shouldMountTaskDescriptionEditor({
-    editMode,
-    hasDraft,
-    hasDraftInit,
-  });
+  const isEditing =
+    editMode === "description" ||
+    editMode === "description-ai" ||
+    hasDraft ||
+    hasDraftInit;
   const content =
     uploadingDescription?.content ??
     draftTQ?.find((draft: IDraft) => isMeaningfulDescriptionDraft(draft))
@@ -42,32 +42,30 @@ const DescriptonBody = ({ draftTQ }: any) => {
 
   return (
     <>
-      {isEditing ? (
-        <Tiptap
-          key={task.id}
-          allowPerks={allowPerks}
-          attachments={descriptionAttachments}
-          mode="read-edit-description"
-          allowEdit={isEditing && !uploadingDescription}
-          handleSave={redirectAPI}
-          user={task.user}
-          shouldTriggerAiTaskWriter={editMode === "description-ai"}
-          creatorname={task.user?.displayName}
-          isSelected={currentId === "description"}
-          id="description"
-          defaultContent={content}
-          isMbl={isMbl}
-          descriptionClass="pb-1 flex justify-start gap-[6px]"
-        />
-      ) : (
-        <InnerHTMLDescription
-          descriptionText={content}
-          id="description-input"
-          attachmentsFromProps={descriptionAttachments}
-          allowQuote={Boolean(task.user)}
-          setCarousalItems={setCarousalItems}
-          taskCreator={task.user}
-          taskDetailContentReady
+      <Tiptap
+        key={task.id}
+        allowPerks={allowPerks}
+        attachments={descriptionAttachments}
+        mode="read-edit-description"
+        allowEdit={isEditing && !uploadingDescription}
+        handleSave={redirectAPI}
+        user={task.user}
+        shouldTriggerAiTaskWriter={editMode === "description-ai"}
+        creatorname={task.user?.displayName}
+        isSelected={currentId === "description"}
+        id="description"
+        defaultContent={content}
+        isMbl={isMbl}
+        descriptionClass="pb-1 flex justify-start gap-[6px]"
+      />
+
+      {!isEditing && task.user && (
+        <HighlightMenu
+          target="#description-input"
+          allowedPlacements={["top", "bottom"]}
+          menu={({ selectedHtml }) => (
+            <QuoteButton selection={selectedHtml ?? ""} creator={task.user} />
+          )}
         />
       )}
 
