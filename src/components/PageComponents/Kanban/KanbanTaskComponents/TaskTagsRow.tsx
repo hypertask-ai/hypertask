@@ -4,7 +4,7 @@ import { FaRobot } from 'react-icons/fa6';
 import TaskLabelComponent from '@/components/Modals/CreateLabel/TaskLabelComponent';
 import EstimateLabelComponent from '@/components/Modals/TaskEstimate/EstimateLabelComponent';
 import PriorityLabelComponent from '@/components/Modals/TaskPriority/PriorityLabelComponent';
-import { IAgent, IEstimate, IPriority, ITaskLabel, ITask } from '@/models/model';
+import { IAgent, IEstimate, IPriority, IProject, ITaskLabel, ITask } from '@/models/model';
 import { formatElapsed, useTimerNow } from '@/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime';
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking';
 import { displayedBoardTimeSeconds, type BoardTimeTotal } from '@/lib/boardTimeTotals';
@@ -16,6 +16,7 @@ import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 
 interface ITaskTopRow {
     task:ITask;
+    project?:IProject;
     setShowEstimateModal:React.Dispatch<React.SetStateAction<boolean>>;
     setShowPriorityModal:React.Dispatch<React.SetStateAction<boolean>>;
     setShowCreateLabelModal:React.Dispatch<React.SetStateAction<boolean>>;
@@ -32,6 +33,7 @@ interface ITaskTopRow {
 }
 const TaskTagsRow:React.FC<ITaskTopRow>  = ({
     task,
+    project,
     setShowEstimateModal,
     setShowPriorityModal,
     setShowCreateLabelModal,
@@ -44,7 +46,7 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
         showTimeTotals,
         timers: runningTimers,
         timeTotals,
-      } = useBoardRunningTimers(task.projectId)
+      } = useBoardRunningTimers(task.projectId, { project })
       const runningTimer = runningTimers.get(task.id)
       const timeTotal = timeTotals.get(task.id)
       // ponytail: ITask has no customFieldValues in the shared model yet (HTPR-3805 is
