@@ -188,6 +188,20 @@ const invokeTaskDelete = async (taskId: number, claim: HardDeleteClaim) => {
     deleteDescription,
     deleteShareTask,
     deleteRelations,
+    // HTPR-6040: every model below has a taskId FK to Task with no onDelete
+    // cascade in the schema and was never cleared here. A leftover row in
+    // any of them fails deleteTASK's final deleteMany with a foreign key
+    // violation, forever -- the claim releases and the sweep retries the
+    // same task every minute with no way to ever succeed. This list must
+    // match every non-cascading taskId relation in schema.prisma -- see
+    // tests/task-delete-fk-coverage.test.cjs, which derives the required
+    // set from the schema and fails if a future one is added here-less.
+    deleteTaskSummary,
+    deleteTaskReadState,
+    deleteSavedContent,
+    deleteTaskMute,
+    deleteCustomFieldValues,
+    deleteReadStatus,
   ];
 
   const results = await Promise.all(independentDeletes.map((fn) => fn(taskId)));
@@ -218,6 +232,96 @@ const deleteTASK = async (taskId: number, claim: HardDeleteClaim) => {
     return "success";
   } catch (error) {
     console.log("🚀 ~ deleteReactions ~ error:", error);
+    return "error";
+  }
+};
+
+const deleteTaskSummary = async (taskId: number) => {
+  console.log("------------ deleting Task_Summary ==");
+  try {
+    const summary = await prisma.task_Summary.deleteMany({
+      where: { taskId },
+    });
+    console.log("🚀 ~ Task_Summary deleted: ", summary);
+
+    return "success";
+  } catch (error) {
+    console.log("🚀 ~ deleteTaskSummary ~ error:", error);
+    return "error";
+  }
+};
+
+const deleteTaskReadState = async (taskId: number) => {
+  console.log("------------ deleting TaskReadState ==");
+  try {
+    const readState = await prisma.taskReadState.deleteMany({
+      where: { taskId },
+    });
+    console.log("🚀 ~ TaskReadState deleted: ", readState);
+
+    return "success";
+  } catch (error) {
+    console.log("🚀 ~ deleteTaskReadState ~ error:", error);
+    return "error";
+  }
+};
+
+const deleteSavedContent = async (taskId: number) => {
+  console.log("------------ deleting SavedContent ==");
+  try {
+    const savedContent = await prisma.savedContent.deleteMany({
+      where: { taskId },
+    });
+    console.log("🚀 ~ SavedContent deleted: ", savedContent);
+
+    return "success";
+  } catch (error) {
+    console.log("🚀 ~ deleteSavedContent ~ error:", error);
+    return "error";
+  }
+};
+
+const deleteTaskMute = async (taskId: number) => {
+  console.log("------------ deleting TaskMute ==");
+  try {
+    const taskMute = await prisma.taskMute.deleteMany({
+      where: { taskId },
+    });
+    console.log("🚀 ~ TaskMute deleted: ", taskMute);
+
+    return "success";
+  } catch (error) {
+    console.log("🚀 ~ deleteTaskMute ~ error:", error);
+    return "error";
+  }
+};
+
+const deleteCustomFieldValues = async (taskId: number) => {
+  console.log("------------ deleting CustomFieldValue ==");
+  try {
+    const customFieldValues = await prisma.customFieldValue.deleteMany({
+      where: { taskId },
+    });
+    console.log("🚀 ~ CustomFieldValue deleted: ", customFieldValues);
+
+    return "success";
+  } catch (error) {
+    console.log("🚀 ~ deleteCustomFieldValues ~ error:", error);
+    return "error";
+  }
+};
+
+const deleteReadStatus = async (taskId: number) => {
+  console.log("------------ deleting ReadStatus ==");
+  try {
+    const readStatus = await prisma.readStatus.deleteMany({
+      where: { taskId },
+    });
+    console.log("🚀 ~ ReadStatus deleted: ", readStatus);
+
+    return "success";
+  } catch (error) {
+    console.log("🚀 ~ deleteReadStatus ~ error:", error);
     return "error";
   }
 };
