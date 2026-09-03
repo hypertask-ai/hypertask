@@ -1,25 +1,48 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
 const path = require("node:path");
+const jiti = require("jiti")(path.join(process.cwd(), "tests/inbox-split-reload.test.cjs"), {
+  interopDefault: true,
+});
 
-const inboxSource = fs.readFileSync(
-  path.join(process.cwd(), "src/app/inbox/Inbox.tsx"),
-  "utf8",
+const { getInitialInboxSplitIndex } = jiti(
+  path.join(process.cwd(), "src/lib/inboxSplitSettings.ts"),
 );
 
+const tabs = [
+  { project: "Important", projectId: null },
+  { project: "Reactions", projectId: null },
+  { project: "Product", projectId: 15 },
+];
+
+const resolve = (overrides = {}) =>
+  getInitialInboxSplitIndex({
+    tabs,
+    urlSelectionProcessed: false,
+    defaultSelectionProcessed: false,
+    ...overrides,
+  });
+
 test("the inbox restores a system split from the URL after reload", () => {
-  assert.match(inboxSource, /const preselectedSplit = queryParams\?\.split;/);
-  assert.match(inboxSource, /tab\.project === preselectedSplit/);
-  assert.match(
-    inboxSource,
-    /\(preselectedProject \|\| preselectedSplit\).*preselectedSplitProcessed\.current/s,
+  assert.equal(resolve({ split: "Reactions" }), 1);
+});
+
+test("a board split restores by project id", () => {
+  assert.equal(resolve({ split: "Product", projectId: "15" }), 2);
+});
+
+test("a later tabs refresh does not reset a restored URL split", () => {
+  assert.equal(
+    resolve({ split: "Reactions", urlSelectionProcessed: true }),
+    null,
   );
 });
 
-test("a board split still restores by project id", () => {
-  assert.match(
-    inboxSource,
-    /tab\.projectId === parseInt\(preselectedProject\)/,
-  );
+test("an inbox URL without a split initializes the default only once", () => {
+  assert.equal(resolve(), 0);
+  assert.equal(resolve({ defaultSelectionProcessed: true }), null);
+});
+
+test("a split that is no longer available leaves selection unchanged", () => {
+  assert.equal(resolve({ split: "Missing" }), null);
 });

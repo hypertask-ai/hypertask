@@ -86,6 +86,7 @@ import {
 import { canWarmPreviousBoardFromInbox } from "@/lib/inboxSync/warmPreviousBoard";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
 import { shouldPreserveNativeInboxTab } from "@/lib/inboxKeyboardNavigation";
+import { getInitialInboxSplitIndex } from "@/lib/inboxSplitSettings";
 
 const Inbox = ({
   currentUser,
@@ -622,30 +623,22 @@ const Inbox = ({
 
   // Set active split on initial render when notifications first load: URL-selected split, or the first tab.
   useEffect(() => {
-    const tabs = _notificationsTQ?.structuredData?.tabs;
-    const hasTabs = tabs && tabs.length > 0;
-    if (!hasTabs) return;
+    const tabs = _notificationsTQ?.structuredData?.tabs ?? [];
+    const initialSplitIndex = getInitialInboxSplitIndex({
+      tabs,
+      split: preselectedSplit,
+      projectId: preselectedProject,
+      urlSelectionProcessed: preselectedSplitProcessed.current,
+      defaultSelectionProcessed: initialResetToFirstDone.current,
+    });
+    if (initialSplitIndex === null) return;
 
-    if (
-      (preselectedProject || preselectedSplit) &&
-      !preselectedSplitProcessed.current
-    ) {
-      const preselectedIndex = tabs.findIndex(
-        (tab: { project: string; projectId: number | null }) =>
-          preselectedProject
-            ? tab.projectId === parseInt(preselectedProject)
-            : tab.project === preselectedSplit,
-      );
-      if (preselectedIndex !== -1) {
-        preselectedSplitProcessed.current = true;
-        navigateTabs(preselectedIndex);
-      }
-      return;
-    }
-    if (!initialResetToFirstDone.current) {
+    if (preselectedProject || preselectedSplit) {
+      preselectedSplitProcessed.current = true;
+    } else {
       initialResetToFirstDone.current = true;
-      navigateTabs(0);
     }
+    navigateTabs(initialSplitIndex);
   }, [
     _notificationsTQ?.structuredData?.tabs,
     preselectedProject,
