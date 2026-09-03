@@ -60,7 +60,8 @@ export default function AIChatClosedLayout({
       >
         {children}
       </div>
-      {!isMobile && (
+      {/* /agents/chat has its own details-pane chevron; keep this one off there. */}
+      {!isMobile && !pathname?.startsWith("/agents/chat") && (
         <button
           tabIndex={-1}
           onClick={onOpenAIChat}
