@@ -186,11 +186,12 @@ const UserSelectionModal = ({
               onClick={() => handleUserSelection(user)}
               isSelected={selectedIndex === index}
             >
-              <UserRow 
+              <UserRow
                 userAvatar={user.photoURL ?? undefined}
                 displayName={user.displayName ?? undefined}
                 isChecked={internalSelectedUsers.has(user.id)}
                 isAgent={isAgent(user)}
+                agentId={isAgent(user) ? user.id : undefined}
               />
             </ModalRowElementContainer>
           ))}
@@ -205,13 +206,15 @@ type TUserRow = {
   userAvatar?: string | null;
   displayName?: string;
   isAgent?: boolean;
+  agentId?: string;
 }
 
-const UserRow: React.FC<TUserRow> = ({ userAvatar, displayName = "User", isChecked = false, isAgent = false }) => {
+const UserRow: React.FC<TUserRow> = ({ userAvatar, displayName = "User", isChecked = false, isAgent = false, agentId }) => {
   return (
     <>
       <div className="flex-grow flex space-x-2 items-center">
         <UserAvatar
+          agentId={agentId}
           alt=""
           compactOnMobile
           name={displayName}

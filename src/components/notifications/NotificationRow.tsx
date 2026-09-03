@@ -305,6 +305,7 @@ const NotificationUserName = () => {
                     </span>
                 ) : displayAvatar === "Show" ? (
                     <UserAvatar
+                        agentId={notification?.fromAgent?.id}
                         alt={displayName}
                         className="md:order-2"
                         name={displayName}

@@ -55,6 +55,7 @@ const InviteNewMembers: React.FC<{ currentProject: IProject }> = ({
                 {currentProject.members.slice(0, 2).map((member) => (
                   <UserAvatar
                     key={member.id}
+                    agentId={member.agent?.id}
                     className="board-header-avatar w-[30px] h-[30px] dark:border-[#212429] border-[#f7f7f7] border-[3px]  ml-[-8px] rounded-[600px]  overflow-hidden "
                     alt={member.agent?.displayName ?? member.user?.displayName ?? "Board member"}
                     name={member.agent?.displayName ?? member.user?.displayName ?? member.user?.email}

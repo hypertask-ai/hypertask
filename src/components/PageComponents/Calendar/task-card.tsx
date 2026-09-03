@@ -141,6 +141,9 @@ export function TaskCard({
                   {assignees.slice(0, 5).map((assignee, index) => (
                     <UserAvatar
                       key={index}
+                      agentId={
+                        typeof assignee.id === "string" ? assignee.id : undefined
+                      }
                       alt={assignee.displayName ?? "Assignee"}
                       className={`${
                         index === 0 ? "ml-[0px] " : "ml-[-8px]"

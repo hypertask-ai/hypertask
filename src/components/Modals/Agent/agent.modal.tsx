@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
-import UserAvatar from "@/components/Common/UserAvatar";
+import AgentAvatar from "@/components/Agents/AgentAvatar";
 import {
   ModalContainerCustom,
   ModalFooterComp,
@@ -268,11 +268,11 @@ const AgentModal: React.FC<AgentModalProps> = ({ closeHandler }) => {
         <ModalBody className="p-0">
           <section className="px-5 py-5">
             <div className="flex items-center gap-4">
-              <UserAvatar
-                alt="Agent photo preview"
-                fallbackClassName="bg-active-elementBg text-emphasis"
+              <AgentAvatar
+                agentId={agent?.id ?? displayName ?? "new-agent"}
                 name={displayName || "Agent"}
                 photoURL={previewSrc}
+                className="text-emphasis"
                 size={72}
               />
 

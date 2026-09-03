@@ -31,6 +31,7 @@ import {
 import { userChannel } from "@/lib/realtime/shared";
 import AgentDetail from "../[agentId]/AgentDetail";
 import type { TAgent } from "../AgentsRegister";
+import AgentAvatar from "@/components/Agents/AgentAvatar";
 
 
 // While we are waiting for an external agent to answer, the only way to see
@@ -52,27 +53,6 @@ type TChatMessage = {
 
 type TAgentChatSession = { id: string; agentId: string };
 
-function AgentAvatar({ agent, size }: { agent: TAgent; size: number }) {
-  if (agent.photoURL) {
-    return (
-      <img
-        src={agent.photoURL}
-        alt=""
-        style={{ width: size, height: size }}
-        className="rounded-full shrink-0 object-cover"
-      />
-    );
-  }
-  const initials = agent.displayName.slice(0, 2).toUpperCase();
-  return (
-    <div
-      style={{ width: size, height: size }}
-      className="rounded-full shrink-0 bg-hoverCardBackground flex items-center justify-center text-[11px] font-medium text-white-black"
-    >
-      {initials}
-    </div>
-  );
-}
 
 /** Header status line: a live lease names its ticket, anything else is idle. */
 function chatStatusText(agent: TAgent): string {
@@ -140,7 +120,7 @@ function RosterRow({
         selected ? "bg-hoverCardBackground" : "hover:bg-hoverCardBackground",
       )}
     >
-      <AgentAvatar agent={agent} size={28} />
+      <AgentAvatar agentId={agent.id} name={agent.displayName} photoURL={agent.photoURL} size={28} className="text-[11px]" />
       <span
         className={cn("w-2 h-2 rounded-full shrink-0", rosterDotClass(agent))}
       />
@@ -690,7 +670,7 @@ const AgentChatClient = (props: IProp) => {
             <ArrowLeft size={16} />
           </button>
         )}
-        <AgentAvatar agent={selectedAgent} size={28} />
+        <AgentAvatar agentId={selectedAgent.id} name={selectedAgent.displayName} photoURL={selectedAgent.photoURL} size={28} className="text-[11px]" />
         <div className="min-w-0">
           <p className="truncate text-[14px] font-semibold">
             {selectedAgent.displayName}

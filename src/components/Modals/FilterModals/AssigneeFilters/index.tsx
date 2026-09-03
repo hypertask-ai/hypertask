@@ -68,6 +68,7 @@ const AssigneeFilters = ({ closeHandler, calendarAssignees, view }: IProps) => {
             >
               <div className="flex-grow flex space-x-2 items-center ">
                 <UserAvatar
+                  agentId={isAgent(assignee) ? assignee.id : undefined}
                   alt=""
                   compactOnMobile
                   name={assignee.displayName ?? undefined}

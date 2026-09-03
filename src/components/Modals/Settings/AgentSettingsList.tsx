@@ -41,6 +41,7 @@ const AgentSettingsList: React.FC<AgentSettingsListProps> = ({
             key={agent.id}
           >
             <UserAvatar
+              agentId={agent.id}
               alt=""
               name={agent.displayName}
               photoURL={agent.photoURL}

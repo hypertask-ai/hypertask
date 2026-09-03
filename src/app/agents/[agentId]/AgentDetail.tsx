@@ -29,6 +29,7 @@ import {
 } from "@/lib/realtime/client";
 import { BOARD_EVENT, boardChannel } from "@/lib/realtime/shared";
 import type { TAgent } from "../AgentsRegister";
+import AgentAvatar from "@/components/Agents/AgentAvatar";
 import type {
   AgentRuntimeHealth,
   AgentRuntimeQueueItem,
@@ -194,27 +195,6 @@ function AgentSwitch({
   );
 }
 
-function AgentAvatar({ agent, size }: { agent: TAgent; size: number }) {
-  if (agent.photoURL) {
-    return (
-      <img
-        src={agent.photoURL}
-        alt=""
-        style={{ width: size, height: size }}
-        className="rounded-full shrink-0 object-cover"
-      />
-    );
-  }
-  const initials = agent.displayName.slice(0, 2).toUpperCase();
-  return (
-    <div
-      style={{ width: size, height: size }}
-      className="rounded-full shrink-0 bg-hoverCardBackground flex items-center justify-center text-[13px] font-medium text-white-black"
-    >
-      {initials}
-    </div>
-  );
-}
 
 function InfoRow({
   label,
@@ -1160,7 +1140,7 @@ const AgentDetail = (props: IProp) => {
                 embedded && "flex-wrap",
               )}
             >
-              <AgentAvatar agent={agent} size={34} />
+              <AgentAvatar agentId={agent.id} name={agent.displayName} photoURL={agent.photoURL} size={34} className="text-[13px]" />
               {working ? (
                 <WorkingSpinner label={`${agent.displayName} is working now`} />
               ) : (

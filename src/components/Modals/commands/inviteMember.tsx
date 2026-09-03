@@ -432,6 +432,7 @@ const InviteMember = (props: Props) => {
                       >
                         <div className="flex-grow flex space-x-2 items-center cursor-pointer">
                           <UserAvatar
+                            agentId={item.id}
                             alt=""
                             name={item.displayName}
                             photoURL={item.photoURL}

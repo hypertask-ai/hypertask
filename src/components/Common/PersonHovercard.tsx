@@ -159,6 +159,7 @@ const PersonHovercardSurface = ({
               {profile ? (
                 <div className="flex min-w-0 items-start gap-2.5">
                   <UserAvatar
+                    agentId={profile.kind === "agent" ? profile.id : undefined}
                     alt=""
                     name={profile.displayName}
                     photoURL={profile.photoURL ?? ""}
