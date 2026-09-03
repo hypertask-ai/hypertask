@@ -314,6 +314,10 @@ test("accepted Settings surface exposes six filters and read-only agent controls
     /const metadataClass = "text-micro font-medium text-text-light-gray"/,
   );
   assert.doesNotMatch(section, /const chipClass|className=\{chipClass\}/);
+  assert.match(
+    section,
+    /rounded-\[4px\] bg-shadcn-primary[^"]*text-primary-foreground/,
+  );
   assert.match(section, /How webhooks work/);
   assert.match(section, /Send test/);
   assert.match(section, /Rotate secret/);

@@ -777,7 +777,7 @@ export default function WebhooksSection() {
             </span>
           </fieldset>
           <button
-            className="ml-2 inline-flex w-fit items-center gap-2 rounded-[4px] bg-active-modal-element px-4 py-2 font-semibold transition hover:brightness-110 disabled:cursor-not-allowed disabled:text-text-light-gray"
+            className="ml-2 inline-flex w-fit items-center gap-2 rounded-[4px] bg-shadcn-primary px-4 py-2 font-semibold text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:text-text-light-gray"
             disabled={Boolean(busy) || !teamId || !url.trim() || events.length === 0}
             type="submit"
           >
