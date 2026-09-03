@@ -22,7 +22,7 @@ const { toStoredHtml } = loadTs("src/utils/helperFunctions/toStoredHtml.ts");
 
 test("markdown is converted on the way into storage", () => {
   const html = toStoredHtml("Thanks!\n\n- **INNE-1447**: offer call");
-  assert.match(html, /<li><strong>INNE-1447<\/strong>: offer call<\/li>/);
+  assert.match(html, /<li><p><strong>INNE-1447<\/strong>: offer call<\/p><\/li>/);
   assert.ok(!html.includes("**"), `raw markdown was stored: ${html}`);
 });
 

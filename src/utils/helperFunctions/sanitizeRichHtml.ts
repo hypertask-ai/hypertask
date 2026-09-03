@@ -50,7 +50,20 @@ const VOID_TAGS = new Set(["br", "hr", "img"]);
 const GLOBAL_ATTRIBUTES = new Set(["class"]);
 
 const TAG_ATTRIBUTES: Record<string, Set<string>> = {
-  a: new Set(["href", "target", "rel", "title"]),
+  a: new Set([
+    "contenteditable",
+    "data-id",
+    "data-label",
+    "data-mention-suggestion-char",
+    "data-type",
+    "href",
+    "projectid",
+    "rel",
+    "target",
+    "text",
+    "title",
+    "uniqueindex",
+  ]),
   // HTML-block (Pages canvas): the raw HTML lives base64-encoded in data-html,
   // never as live child nodes, so it is only ever executed in the sandboxed
   // iframe NodeView. Base64 has no <>"'& chars, so it round-trips escapeHtml.
@@ -63,6 +76,7 @@ const TAG_ATTRIBUTES: Record<string, Set<string>> = {
     "contenteditable",
     "data-id",
     "data-label",
+    "data-mention-suggestion-char",
     "data-type",
     "projectid",
     "text",

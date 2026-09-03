@@ -35,6 +35,22 @@ export function isInternalTaskDetailHref(href: string): boolean {
   return parseInternalTaskDetailHref(href) !== null;
 }
 
+export function shouldFollowLinkNatively(event: {
+  button: number;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}): boolean {
+  return (
+    event.button !== 0 ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey
+  );
+}
+
 export function preserveInboxFlowOnTaskHref(
   href: string,
   inboxFlow: string | null | undefined,

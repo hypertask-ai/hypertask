@@ -16,6 +16,9 @@ const {
 const { validateCreateTaskBody } = jiti(
   path.join(root, "src/lib/mcp/tasks/validators.ts")
 );
+const { normalizeBlockHtml } = jiti(
+  path.join(root, "src/lib/mcp/normalizeBlockHtml.ts")
+);
 
 test("converts markdown to sanitized rich HTML", () => {
   // bare text must wrap in a block tag, never come out as a bare text node —
@@ -27,7 +30,7 @@ test("converts markdown to sanitized rich HTML", () => {
 
   const list = markdownToHtml("- one\n- two");
   assert.ok(list.includes("<ul>"));
-  assert.ok(list.includes("<li>one</li>"));
+  assert.ok(list.includes("<li><p>one</p></li>"));
 
   const link = markdownToHtml("[text](https://example.com)");
   assert.ok(link.includes('<a href="https://example.com">text</a>'));
@@ -114,7 +117,7 @@ No material findings.
 \`\`\``;
   const renderedReview = formatRichTextInput(reviewComment);
   assert.match(renderedReview, /<strong>AI review:<\/strong>/);
-  assert.match(renderedReview, /<ol>[\s\S]*<li>Task commands stay on task pages\.<\/li>/);
+  assert.match(renderedReview, /<ol>[\s\S]*<li><p>Task commands stay on task pages\.<\/p><\/li>/);
   assert.match(renderedReview, /<pre><code class="language-text">/);
   assert.ok(!renderedReview.includes("**"));
 
@@ -123,6 +126,30 @@ No material findings.
 
   const unsafeLink = formatRichTextInput("[bad](javascript:alert(1))");
   assert.equal(unsafeLink, "<p><a>bad</a></p>");
+});
+
+test("normalizes list items and rich-text mention links before storage", () => {
+  assert.equal(
+    normalizeBlockHtml(
+      '<ol><li><strong>First</strong> item<ul><li>Nested</li></ul></li><li><p>Already wrapped</p></li></ol>'
+    ),
+    '<ol><li><p><strong>First</strong> item</p><ul><li><p>Nested</p></li></ul></li><li><p>Already wrapped</p></li></ol>'
+  );
+  assert.equal(
+    normalizeBlockHtml(
+      '<p><span data-type="mention" class="mention" data-id="HTPR-6009" data-label="task" projectid="15" uniqueindex="6009">HTPR-6009</span></p>'
+    ),
+    '<p><a href="https://app.hypertask.ai/detail/project-15/6009" data-type="mention" class="mention" data-id="HTPR-6009" data-label="task" projectid="15" uniqueindex="6009">HTPR-6009</a></p>'
+  );
+  assert.equal(
+    normalizeBlockHtml(
+      '<p><span data-type="mention" class="mention" data-id="page_abc" data-label="page">Roadmap</span></p>'
+    ),
+    '<p><a href="https://app.hypertask.ai/page/page_abc" data-type="mention" class="mention" data-id="page_abc" data-label="page">Roadmap</a></p>'
+  );
+
+  const invalid = '<span data-type="mention" class="mention" data-id="HTPR-6009" data-label="task" projectid="15/evil" uniqueindex="6009">HTPR-6009</span>';
+  assert.equal(normalizeBlockHtml(invalid), `<p>${invalid}</p>`);
 });
 
 test("task create normalizes inferred markdown to stored HTML", () => {
@@ -138,6 +165,6 @@ test("task create normalizes inferred markdown to stored HTML", () => {
   assert.equal(result.valid, true);
   assert.equal(
     result.data.description,
-    "<p><strong>Done</strong></p>\n<ol>\n<li>First</li>\n<li>Second</li>\n</ol>"
+    "<p><strong>Done</strong></p>\n<ol>\n<li><p>First</p></li>\n<li><p>Second</p></li>\n</ol>"
   );
 });

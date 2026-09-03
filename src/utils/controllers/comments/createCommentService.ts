@@ -40,6 +40,7 @@ import {
 } from "@/lib/mcp/webhooks/outbox";
 import type { WebhookDelivery } from "@/lib/mcp/webhooks/events";
 import { generalConfig } from "@/lib/configs/general.config";
+import { normalizeRichTextStructure } from "@/utils/helperFunctions/normalizeRichTextStructure";
 import {
   buildAgentInvocationSelector,
   claimPendingAgentInvocation,
@@ -379,7 +380,7 @@ async function processTaskReferencesFromCommentText(
  */
 export async function createCommentService(params: CreateCommentParams) {
   const {
-    text,
+    text: inputText,
     creatorId,
     taskId,
     ownerId,
@@ -394,6 +395,7 @@ export async function createCommentService(params: CreateCommentParams) {
     inboundEmailId,
     extraBoardWebhookEvents = [],
   } = params;
+  const text = normalizeRichTextStructure(inputText);
 
   const task = await prisma.task.findFirst({
     where: {

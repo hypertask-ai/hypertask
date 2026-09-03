@@ -1,4 +1,5 @@
 import { Marked } from 'marked'
+import { normalizeBlockHtml } from '../../lib/mcp/normalizeBlockHtml'
 import { escapeHtml } from './escapeHtml'
 import { sanitizeRichHtml } from './sanitizeRichHtml'
 
@@ -86,5 +87,5 @@ export function formatRichTextInput(
 
 export function markdownToHtml(markdown: string): string {
   if (markdown.trim().length === 0) return ''
-  return sanitizeRichHtml((marked.parse(markdown) as string).trim())
+  return normalizeBlockHtml(sanitizeRichHtml((marked.parse(markdown) as string).trim()))
 }

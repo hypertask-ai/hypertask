@@ -1,3 +1,4 @@
+import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
 import { normalizeAssistantHtml } from './normalizeAssistantHtml'
 
 // Every rich-text value the AI chat persists (comments, drafts, task descriptions) goes
@@ -15,7 +16,7 @@ import { normalizeAssistantHtml } from './normalizeAssistantHtml'
 //
 // So sanitizing happens inside normalizeAssistantHtml instead, at the one place this
 // change actually creates exposure: markdown link syntax becoming a live anchor. Raw HTML
-// the model writes is stored as-is, exactly as it was before this feature existed.
+// the model writes remains unsanitized; only its rich-text structure is normalized here.
 export function toStoredHtml(text: string): string {
-  return normalizeAssistantHtml(text)
+  return normalizeBlockHtml(normalizeAssistantHtml(text))
 }

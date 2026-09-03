@@ -392,7 +392,8 @@ span[data-label^="project"] {
   color: #5896f1 !important;
   font-weight: 400;
 }
-span[data-label="task"] {
+:is(span, a)[data-label="task"],
+:is(span, a)[data-label="page"] {
   cursor: pointer;
   color: #5896f1 !important;
   font-weight: 400;
