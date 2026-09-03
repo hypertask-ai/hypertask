@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
 import type { McpAgentSummary } from "@/lib/mcp/agents";
-import { getMcpSessionAgentSummary, mapMcpAgent, mcpAgentSelect } from "@/lib/mcp/agents";
+import {
+  getMcpSessionAgentSummary,
+  mapVisibleMcpAgent,
+  mcpVisibleAgentSelect,
+} from "@/lib/mcp/agents";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
@@ -390,15 +394,15 @@ export async function POST(request: NextRequest) {
       },
       select: {
         userId: true,
-        agent: { select: mcpAgentSelect },
-        agentAssigner: { select: mcpAgentSelect },
+        agent: { select: mcpVisibleAgentSelect(ctx.user.id) },
+        agentAssigner: { select: mcpVisibleAgentSelect(ctx.user.id) },
       },
     });
 
     const assignees: McpAssigneeResponseItem[] = assigneeRows.map((row) => {
       const item: McpAssigneeResponseItem = { userId: row.userId };
-      const agent = mapMcpAgent(row.agent);
-      const agentAssigner = mapMcpAgent(row.agentAssigner);
+      const agent = mapVisibleMcpAgent(row.agent, ctx.user.id);
+      const agentAssigner = mapVisibleMcpAgent(row.agentAssigner, ctx.user.id);
       if (agent) item.agent = agent;
       if (agentAssigner) item.agentAssigner = agentAssigner;
       return item;
