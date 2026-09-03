@@ -429,6 +429,7 @@ export async function createWorkspaceWebhook(input: {
         url,
         events,
         secret,
+        supportsUnassignedEvent: true,
         createdById: input.userId,
       },
       include: {

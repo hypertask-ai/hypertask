@@ -2,6 +2,7 @@
 -- one scope is allowed so a mismatched project/team pair cannot cross tenants.
 ALTER TABLE "WebhookSubscription" ALTER COLUMN "projectId" DROP NOT NULL;
 ALTER TABLE "WebhookSubscription" ADD COLUMN "teamId" TEXT;
+ALTER TABLE "WebhookSubscription" ADD COLUMN "supportsUnassignedEvent" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "WebhookSubscription" ADD CONSTRAINT "WebhookSubscription_scope_check"
   CHECK (("projectId" IS NOT NULL)::integer + ("teamId" IS NOT NULL)::integer = 1);
 

@@ -156,6 +156,7 @@ test("workspace webhook scope is exclusive and delivery attempts are durable", (
   assert.match(schema, /model BoardWebhookAttempt[\s\S]*?durationMs\s+Int/);
   assert.match(schema, /@@unique\(\[deliveryId, attemptNumber\]\)/);
   assert.match(schema, /payloadBody\s+String\?[\s\S]*?payloadHash\s+String\?/);
+  assert.match(schema, /supportsUnassignedEvent\s+Boolean\s+@default\(false\)/);
   assert.match(
     migration,
     /UNIQUE INDEX "BoardWebhookDelivery_subscriptionId_sourceDeliveryId_manualRetryKey_key"[\s\S]*?WHERE "sourceDeliveryId" IS NOT NULL AND "manualRetryKey" IS NOT NULL/,
@@ -166,8 +167,11 @@ test("settings mutations require session and same-origin checks", () => {
   const route = read("src/app/api/settings/webhooks/route.ts");
 
   assert.match(route, /getSessionUser\(request\.headers\)/);
-  assert.match(route, /if \(!origin \|\| !host\) return false/);
-  assert.match(route, /new URL\(origin\)\.host === host/);
+  assert.match(route, /if \(!origin \|\| !host \|\| !protocol\) return false/);
+  assert.match(
+    route,
+    /new URL\(origin\)\.origin === new URL\(`\$\{protocol\}:\/\/\$\{host\}`\)\.origin/,
+  );
   for (const method of ["POST", "PATCH", "DELETE"]) {
     const start = route.indexOf(`export async function ${method}`);
     const end = route.indexOf("\nexport async function ", start + 1);
@@ -197,6 +201,15 @@ test("settings mutations reject cross-origin requests before calling the service
     assert.equal(response.status, 403, method);
     assert.deepEqual(route.calls, [], method);
   }
+});
+
+test("settings mutations reject a matching host on the wrong scheme", async () => {
+  const route = loadSettingsRoute({ userId: 6 });
+  const response = await route.POST(
+    mutationRequest("POST", "http://app.hypertask.ai"),
+  );
+  assert.equal(response.status, 403);
+  assert.deepEqual(route.calls, []);
 });
 
 test("every workspace operation stops at the owner boundary", async () => {
@@ -234,11 +247,14 @@ test("every workspace operation stops at the owner boundary", async () => {
 
 test("workspace management is owner-scoped and agent rows have no mutation path", () => {
   const service = read("src/lib/mcp/webhooks/workspaceManagement.ts");
+  const mcpRoute = read("src/app/api/mcp/webhooks/route.ts");
 
   assert.match(service, /where: \{ id: teamId, googleAccount: \{ userId \} \}/);
   assert.match(service, /OR: \[\{ teamId, projectId: null \}, \{ project: \{ teamId \} \}\]/);
   assert.match(service, /where: \{ id: projectId, teamId: input\.teamId \}/);
   assert.match(service, /\^\[1-9\]\\d\*\$\/\.test\(input\.projectId\)/);
+  assert.match(service, /supportsUnassignedEvent: true/);
+  assert.match(mcpRoute, /supportsUnassignedEvent: true/);
   assert.match(service, /subscriptionId: subscription\.id,[\s\S]*?idempotencyKey,/);
   assert.match(service, /agent:[\s\S]*?userId: input\.userId[\s\S]*?members:/);
   assert.match(service, /kind: 'agent' as const/);
@@ -278,6 +294,11 @@ test("accepted Settings surface exposes six filters and read-only agent controls
   assert.match(section, /Retry/);
   assert.match(section, /Open agent/);
   assert.match(section, /endpoint\.kind === "workspace"/);
+  assert.match(section, /const workspaceRequestRef = useRef\(0\)/);
+  assert.match(
+    section,
+    /teamIdRef\.current !== requestTeamId \|\|[\s\S]*?workspaceRequestRef\.current !== requestToken/,
+  );
 });
 
 test("new mention and unassignment events are persisted at their domain transactions", () => {

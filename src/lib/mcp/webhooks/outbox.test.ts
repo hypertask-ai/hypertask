@@ -18,7 +18,13 @@ type Row = {
   payloadHash: string
 }
 
-function fakeTx(subscriptions: Array<{ id: string; events: string[] }>) {
+function fakeTx(
+  subscriptions: Array<{
+    id: string
+    events: string[]
+    supportsUnassignedEvent?: boolean
+  }>,
+) {
   const rows: Row[] = []
   let lastWhere: any = null
   return {
@@ -29,16 +35,26 @@ function fakeTx(subscriptions: Array<{ id: string; events: string[] }>) {
     webhookSubscription: {
       findMany: async ({ where }: any) => {
         lastWhere = where
-        const requestedEvents = where.AND[0].OR
-          .slice(1)
-          .map((filter: any) => filter.events.has)
+        const matches = (subscription: (typeof subscriptions)[number], filter: any) => {
+          if (filter.events?.isEmpty) return subscription.events.length === 0
+          if (filter.events?.has) return subscription.events.includes(filter.events.has)
+          if (filter.supportsUnassignedEvent === false) {
+            return subscription.supportsUnassignedEvent !== true
+          }
+          if (filter.AND) {
+            return filter.AND.every((part: any) => matches(subscription, part))
+          }
+          return false
+        }
         return subscriptions
-          .filter(
-            (s) =>
-              s.events.length === 0 ||
-              requestedEvents.some((event: string) => s.events.includes(event)),
+          .filter((subscription) =>
+            where.AND[0].OR.some((filter: any) => matches(subscription, filter)),
           )
-          .map((s) => ({ id: s.id, events: s.events }))
+          .map((subscription) => ({
+            id: subscription.id,
+            supportsUnassignedEvent:
+              subscription.supportsUnassignedEvent ?? false,
+          }))
       },
     },
     boardWebhookDelivery: {
@@ -100,7 +116,17 @@ test('task.unassigned preserves legacy subscribers without duplicating new ones'
   const tx = fakeTx([
     { id: 'legacy-all', events: [] },
     { id: 'legacy-assigned', events: ['task.assigned'] },
-    { id: 'new-unassigned', events: ['task.assigned', 'task.unassigned'] },
+    { id: 'new-all', events: [], supportsUnassignedEvent: true },
+    {
+      id: 'new-unassigned',
+      events: ['task.assigned', 'task.unassigned'],
+      supportsUnassignedEvent: true,
+    },
+    {
+      id: 'new-assigned-only',
+      events: ['task.assigned'],
+      supportsUnassignedEvent: true,
+    },
   ])
   const delivery: WebhookDelivery = {
     event: 'task.unassigned',
@@ -115,8 +141,13 @@ test('task.unassigned preserves legacy subscribers without duplicating new ones'
   await persistBoardWebhookEvent(tx, 15, delivery)
 
   assert.deepEqual(
-    tx.rows.map((row: Row) => row.event),
-    ['task.assigned', 'task.assigned', 'task.unassigned'],
+    tx.rows.map((row: Row) => [row.subscriptionId, row.event]),
+    [
+      ['legacy-all', 'task.assigned'],
+      ['legacy-assigned', 'task.assigned'],
+      ['new-all', 'task.unassigned'],
+      ['new-unassigned', 'task.unassigned'],
+    ],
   )
   assert.deepEqual(tx.lastWhere.AND[1].OR, [
     { projectId: 15 },

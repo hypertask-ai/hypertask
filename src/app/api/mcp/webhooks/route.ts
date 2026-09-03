@@ -286,6 +286,7 @@ export async function POST(request: NextRequest) {
         url,
         secret,
         events,
+        supportsUnassignedEvent: true,
         createdById: ctx.user.id,
         agentId: ctx.agentId ?? null,
       },

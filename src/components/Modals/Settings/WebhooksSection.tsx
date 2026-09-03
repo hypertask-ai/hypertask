@@ -123,9 +123,16 @@ const endpointName = (endpoint: Endpoint) => {
 };
 
 const endpointStatusClass = (endpoint: Endpoint) => {
+  if (!endpoint.active) return "bg-text-light-gray";
   if (endpoint.lastDeliveryOk === false) return "bg-red-400";
   if (endpoint.lastDeliveryOk === true) return "bg-green-500";
   return "bg-text-light-gray";
+};
+
+const endpointStatusLabel = (endpoint: Endpoint) => {
+  if (!endpoint.active) return "Endpoint paused";
+  if (endpoint.lastDeliveryOk === false) return "Delivery failed";
+  return "Endpoint active";
 };
 
 const endpointDescription = (endpoint: Endpoint) => {
@@ -163,6 +170,7 @@ const workspaceSuccessMessages = {
 export default function WebhooksSection() {
   const { projects, teamId } = useSettingsTeam();
   const teamIdRef = useRef(teamId);
+  const workspaceRequestRef = useRef(0);
   teamIdRef.current = teamId;
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -233,6 +241,7 @@ export default function WebhooksSection() {
   }, [selectedId, teamId]);
 
   useEffect(() => {
+    workspaceRequestRef.current += 1;
     setEndpoints([]);
     setDeliveries([]);
     setSelectedId(null);
@@ -261,6 +270,7 @@ export default function WebhooksSection() {
   ) => {
     if (!teamId || busy) return;
     const requestTeamId = teamId;
+    const requestToken = ++workspaceRequestRef.current;
     setBusy(`${action}:${endpoint.id}`);
     try {
       const response = await fetch(API_URL, {
@@ -274,7 +284,12 @@ export default function WebhooksSection() {
         secret?: string;
         error?: string;
       };
-      if (teamIdRef.current !== requestTeamId) return;
+      if (
+        teamIdRef.current !== requestTeamId ||
+        workspaceRequestRef.current !== requestToken
+      ) {
+        return;
+      }
       if (!response.ok || !data.success) {
         throw new Error(data.error ?? `Could not ${action} webhook`);
       }
@@ -288,7 +303,12 @@ export default function WebhooksSection() {
       toast.success(workspaceSuccessMessages[action]);
       setRefreshVersion((current) => current + 1);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Webhook action failed");
+      if (
+        teamIdRef.current === requestTeamId &&
+        workspaceRequestRef.current === requestToken
+      ) {
+        toast.error(error instanceof Error ? error.message : "Webhook action failed");
+      }
     } finally {
       setBusy(null);
     }
@@ -324,6 +344,7 @@ export default function WebhooksSection() {
     event.preventDefault();
     if (busy || !teamId || !url.trim() || events.length === 0) return;
     const requestTeamId = teamId;
+    const requestToken = ++workspaceRequestRef.current;
     setBusy("create");
     try {
       const response = await fetch(API_URL, {
@@ -344,7 +365,12 @@ export default function WebhooksSection() {
         secret?: string;
         error?: string;
       };
-      if (teamIdRef.current !== requestTeamId) return;
+      if (
+        teamIdRef.current !== requestTeamId ||
+        workspaceRequestRef.current !== requestToken
+      ) {
+        return;
+      }
       if (!response.ok || !data.success || !data.endpoint || !data.secret) {
         throw new Error(data.error ?? "Could not add endpoint");
       }
@@ -357,7 +383,12 @@ export default function WebhooksSection() {
       setUrl("");
       toast.success("Webhook endpoint added");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not add endpoint");
+      if (
+        teamIdRef.current === requestTeamId &&
+        workspaceRequestRef.current === requestToken
+      ) {
+        toast.error(error instanceof Error ? error.message : "Could not add endpoint");
+      }
     } finally {
       setBusy(null);
     }
@@ -491,7 +522,7 @@ export default function WebhooksSection() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span
-                          aria-label={endpoint.lastDeliveryOk === false ? "Delivery failed" : "Endpoint active"}
+                          aria-label={endpointStatusLabel(endpoint)}
                           className={cn(
                             "h-2 w-2 rounded-full",
                             endpointStatusClass(endpoint),

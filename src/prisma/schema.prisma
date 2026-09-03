@@ -1866,6 +1866,7 @@ model WebhookSubscription {
   url            String
   secret         String
   events         String[]  // e.g. ["comment.created","task.escalated"]; empty = all
+  supportsUnassignedEvent Boolean @default(false)
   active         Boolean   @default(true)
   createdById    Int?
   createdBy      User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)

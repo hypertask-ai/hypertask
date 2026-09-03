@@ -25,9 +25,11 @@ function noStore<T>(body: T, init?: ResponseInit) {
 function trustedMutationOrigin(request: NextRequest) {
   const origin = request.headers.get('origin')
   const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host')
-  if (!origin || !host) return false
+  const protocol =
+    request.headers.get('x-forwarded-proto') ?? request.nextUrl.protocol.slice(0, -1)
+  if (!origin || !host || !protocol) return false
   try {
-    return new URL(origin).host === host
+    return new URL(origin).origin === new URL(`${protocol}://${host}`).origin
   } catch {
     return false
   }

@@ -37,16 +37,12 @@ function persistedDelivery(input: {
 
 function eventForSubscription(
   delivery: WebhookDelivery,
-  selectedEvents: string[],
+  supportsUnassignedEvent: boolean,
 ): WebhookDelivery {
   // Before task.unassigned became independently selectable, board subscribers
   // received it as task.assigned with action=unassigned. Keep that wire contract
-  // for legacy empty/all and task.assigned-only subscriptions. New subscriptions
-  // that explicitly select task.unassigned receive the new event name once.
-  if (
-    delivery.event === 'task.unassigned' &&
-    !selectedEvents.includes('task.unassigned')
-  ) {
+  // only for subscriptions created before the expanded event catalog.
+  if (delivery.event === 'task.unassigned' && !supportsUnassignedEvent) {
     return {
       event: 'task.assigned',
       data: delivery.data,
@@ -66,7 +62,12 @@ export async function persistBoardWebhookEvent(
       ? [
           { events: { isEmpty: true } },
           { events: { has: 'task.unassigned' } },
-          { events: { has: 'task.assigned' } },
+          {
+            AND: [
+              { supportsUnassignedEvent: false },
+              { events: { has: 'task.assigned' } },
+            ],
+          },
         ]
       : [
           { events: { isEmpty: true } },
@@ -81,13 +82,16 @@ export async function persistBoardWebhookEvent(
       team: { projects: { some: { id: projectId } } },
     })
   }
-  const subscriptions: Array<{ id: string; events: string[] }> =
+  const subscriptions: Array<{
+    id: string
+    supportsUnassignedEvent: boolean
+  }> =
     await tx.webhookSubscription.findMany({
       where: {
         active: true,
         AND: [{ OR: eventSelection }, { OR: scopes }],
       },
-      select: { id: true, events: true },
+      select: { id: true, supportsUnassignedEvent: true },
     })
   if (subscriptions.length === 0) return []
 
@@ -96,7 +100,10 @@ export async function persistBoardWebhookEvent(
   for (const subscription of subscriptions) {
     const deliveryId = crypto.randomUUID()
     const stored = persistedDelivery({
-      delivery: eventForSubscription(delivery, subscription.events),
+      delivery: eventForSubscription(
+        delivery,
+        subscription.supportsUnassignedEvent,
+      ),
       deliveryId,
       occurredAt,
     })
