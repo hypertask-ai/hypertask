@@ -133,6 +133,9 @@ function preflight(rawUrl: string): { ok: true; url: URL; host: string } | { ok:
     return { ok: false, reason: 'url is not a valid absolute URL' }
   }
   if (u.protocol !== 'https:') return { ok: false, reason: 'url must use https' }
+  if (u.username || u.password) {
+    return { ok: false, reason: 'url must not include credentials' }
+  }
   const host = u.hostname.replace(/^\[|\]$/g, '') // strip IPv6 brackets
   const lower = host.toLowerCase()
   if (

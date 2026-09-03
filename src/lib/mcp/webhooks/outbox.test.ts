@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { persistBoardWebhookEvent } from './outbox'
+import { persistBoardWebhookEvent, webhookPayloadHash } from './outbox'
 import type { WebhookDelivery } from './events'
 import { WEBHOOK_EVENT_DEFINITIONS } from './events'
 import {
@@ -9,9 +9,22 @@ import {
   boardWebhookRetryDelaySeconds,
 } from './outboxDelivery'
 
-type Row = { id: string; subscriptionId: string; event: string; payload: any }
+type Row = {
+  id: string
+  subscriptionId: string
+  event: string
+  payload: any
+  payloadBody: string
+  payloadHash: string
+}
 
-function fakeTx(subscriptions: Array<{ id: string; events: string[] }>) {
+function fakeTx(
+  subscriptions: Array<{
+    id: string
+    events: string[]
+    supportsUnassignedEvent?: boolean
+  }>,
+) {
   const rows: Row[] = []
   let lastWhere: any = null
   return {
@@ -22,10 +35,26 @@ function fakeTx(subscriptions: Array<{ id: string; events: string[] }>) {
     webhookSubscription: {
       findMany: async ({ where }: any) => {
         lastWhere = where
-        const event = where.OR[1].events.has
+        const matches = (subscription: (typeof subscriptions)[number], filter: any) => {
+          if (filter.events?.isEmpty) return subscription.events.length === 0
+          if (filter.events?.has) return subscription.events.includes(filter.events.has)
+          if (filter.supportsUnassignedEvent === false) {
+            return subscription.supportsUnassignedEvent !== true
+          }
+          if (filter.AND) {
+            return filter.AND.every((part: any) => matches(subscription, part))
+          }
+          return false
+        }
         return subscriptions
-          .filter((s) => s.events.length === 0 || s.events.includes(event))
-          .map((s) => ({ id: s.id }))
+          .filter((subscription) =>
+            where.AND[0].OR.some((filter: any) => matches(subscription, filter)),
+          )
+          .map((subscription) => ({
+            id: subscription.id,
+            supportsUnassignedEvent:
+              subscription.supportsUnassignedEvent ?? false,
+          }))
       },
     },
     boardWebhookDelivery: {
@@ -68,8 +97,10 @@ test('board webhook outbox writes one durable row per matching subscription', as
     tx.rows.map((row: Row) => row.payload.id),
     ids
   )
-  assert.equal(tx.lastWhere.projectId, 15)
+  assert.deepEqual(tx.lastWhere.AND[1].OR, [{ projectId: 15 }])
   assert.equal(tx.lastWhere.active, true)
+  assert.equal(tx.rows[0].payloadBody, JSON.stringify(tx.rows[0].payload))
+  assert.match(tx.rows[0].payloadHash, /^[a-f0-9]{64}$/)
 })
 
 test('board webhook outbox skips subscriptions that did not ask for the event', async () => {
@@ -79,6 +110,59 @@ test('board webhook outbox skips subscriptions that did not ask for the event', 
 
   assert.deepEqual(ids, [])
   assert.equal(tx.rows.length, 0)
+})
+
+test('task.unassigned preserves legacy subscribers without duplicating new ones', async () => {
+  const tx = fakeTx([
+    { id: 'legacy-all', events: [] },
+    { id: 'legacy-assigned', events: ['task.assigned'] },
+    { id: 'new-all', events: [], supportsUnassignedEvent: true },
+    {
+      id: 'new-unassigned',
+      events: ['task.assigned', 'task.unassigned'],
+      supportsUnassignedEvent: true,
+    },
+    {
+      id: 'new-assigned-only',
+      events: ['task.assigned'],
+      supportsUnassignedEvent: true,
+    },
+  ])
+  const delivery: WebhookDelivery = {
+    event: 'task.unassigned',
+    data: {
+      task: { id: 7, ticketNumber: 'HTPR-7', projectId: 15, title: 'Stuck' },
+      action: 'unassigned',
+      assignee: { userId: 6, agentId: null },
+      actor: { userId: 6, agentId: null },
+    },
+  }
+
+  await persistBoardWebhookEvent(tx, 15, delivery)
+
+  assert.deepEqual(
+    tx.rows.map((row: Row) => [row.subscriptionId, row.event]),
+    [
+      ['legacy-all', 'task.assigned'],
+      ['legacy-assigned', 'task.assigned'],
+      ['new-all', 'task.unassigned'],
+      ['new-unassigned', 'task.unassigned'],
+    ],
+  )
+  assert.deepEqual(tx.lastWhere.AND[1].OR, [
+    { projectId: 15 },
+    {
+      projectId: null,
+      team: { projects: { some: { id: 15 } } },
+    },
+  ])
+})
+
+test('webhook payload hashing rejects values without a JSON representation', () => {
+  assert.throws(
+    () => webhookPayloadHash(undefined),
+    /Webhook payload must be JSON-serializable/,
+  )
 })
 
 test('board webhook payload is the frozen public envelope', async () => {
@@ -115,8 +199,10 @@ test('board webhook payload is the frozen public envelope', async () => {
 
 test('board webhook retries use bounded exponential backoff', () => {
   assert.equal(boardWebhookRetryDelaySeconds(1), 30)
-  assert.equal(boardWebhookRetryDelaySeconds(2), 5 * 60)
-  assert.equal(boardWebhookRetryDelaySeconds(3), 30 * 60)
+  assert.equal(boardWebhookRetryDelaySeconds(2), 2 * 60)
+  assert.equal(boardWebhookRetryDelaySeconds(3), 5 * 60)
+  assert.equal(boardWebhookRetryDelaySeconds(4), 10 * 60)
+  assert.equal(boardWebhookRetryDelaySeconds(5), 30 * 60)
   assert.equal(boardWebhookRetryDelaySeconds(BOARD_WEBHOOK_MAX_ATTEMPTS), null)
 })
 
@@ -138,9 +224,8 @@ test('task.created rows are written through the caller transaction, not the root
     new URL('./taskEvents.ts', import.meta.url),
     'utf8'
   )
-  assert.ok(source.includes('persistTaskCreatedWebhook'))
-  assert.ok(source.includes('tx.task.findUnique'))
-  assert.ok(source.includes('tx.section.findUnique'))
+  assert.ok(source.includes('const created = await createTask(tx)'))
+  assert.ok(source.includes('persistTaskCreatedWebhook(\n      tx,'))
   // No root-client import means no path that can run outside the caller's tx.
   assert.equal(source.includes("from '@/lib/prisma'"), false)
 })

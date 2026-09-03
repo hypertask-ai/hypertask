@@ -537,6 +537,7 @@ model Team {
   byokApiKeys                  TeamByokApiKey[]
   slackInstall                 SlackInstall?
   aiProviderSettings           Json?
+  webhookSubscriptions         WebhookSubscription[]
   // HTPR-2572: signups on these email domains auto-join this team, billed a seat like an invite.
   allowedEmailDomains          String[]           @default([])
 }
@@ -1854,14 +1855,18 @@ model WebhookEvent {
 
 // Outbound webhook subscription: an agent/operator registers a URL to receive
 // signed HTTP callbacks when board events happen (HTPR-4434). Delivery is
-// fire-and-forget and HMAC-signed with `secret`. Scoped to one board.
+// fire-and-forget and HMAC-signed with `secret`. Scoped to one board or team.
 model WebhookSubscription {
   id             String    @id @default(uuid())
-  projectId      Int
-  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // The migration enforces XOR because Prisma schema syntax cannot express CHECK constraints.
+  projectId      Int?
+  project        Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamId         String?
+  team           Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   url            String
   secret         String
   events         String[]  // e.g. ["comment.created","task.escalated"]; empty = all
+  supportsUnassignedEvent Boolean @default(false)
   active         Boolean   @default(true)
   createdById    Int?
   createdBy      User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
@@ -1873,6 +1878,7 @@ model WebhookSubscription {
   deliveries     BoardWebhookDelivery[]
 
   @@index([projectId, active])
+  @@index([teamId, active])
 }
 
 // Durable outbox for board-wide subscriptions (HTPR-4530). Mirrors
@@ -1890,15 +1896,35 @@ model BoardWebhookDelivery {
   processingAt   DateTime?
   nextAttemptAt  DateTime            @default(now())
   lastAttemptAt  DateTime?
-  statusCode     Int?
-  error          String?             @db.Text
-  deliveredAt    DateTime?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  statusCode       Int?
+  error            String?             @db.Text
+  deliveredAt      DateTime?
+  payloadBody      String?             @db.Text
+  payloadHash      String?             @db.VarChar(64)
+  sourceDeliveryId String?
+  manualRetryKey   String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  attempts         BoardWebhookAttempt[]
 
+  // A partial unique index in the migration makes manual retries idempotent.
   @@index([subscriptionId, createdAt])
   @@index([status, nextAttemptAt])
   @@index([createdAt])
+}
+
+model BoardWebhookAttempt {
+  id            String               @id @default(uuid())
+  deliveryId    String
+  delivery      BoardWebhookDelivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  attemptNumber Int
+  statusCode    Int?
+  durationMs    Int
+  error         String?              @db.Text
+  attemptedAt   DateTime             @default(now())
+
+  @@unique([deliveryId, attemptNumber])
+  @@index([attemptedAt])
 }
 
 // One addressed outbound endpoint per managed agent (HTPR-5388). Unlike the

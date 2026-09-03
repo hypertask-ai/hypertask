@@ -9,11 +9,37 @@
 // it is not part of the change contract; wiring it is tracked separately.
 export const WEBHOOK_EVENTS = [
   'comment.created',
+  'comment.mention',
   'task.escalated',
   'task.created',
   'task.assigned',
+  'task.unassigned',
   'task.updated',
 ] as const
+
+export const WORKSPACE_WEBHOOK_EVENTS = [
+  'task.created',
+  'task.updated',
+  'task.assigned',
+  'task.unassigned',
+  'comment.created',
+  'comment.mention',
+] as const
+
+export const BOARD_WEBHOOK_RETRY_DELAYS_SECONDS = [
+  0,
+  30,
+  2 * 60,
+  5 * 60,
+  10 * 60,
+  30 * 60,
+] as const
+export const BOARD_WEBHOOK_MAX_ATTEMPTS =
+  BOARD_WEBHOOK_RETRY_DELAYS_SECONDS.length
+export const BOARD_WEBHOOK_RETRY_WINDOW_MINUTES = Math.ceil(
+  BOARD_WEBHOOK_RETRY_DELAYS_SECONDS.reduce((total, delay) => total + delay, 0) /
+    60,
+)
 
 export type WebhookEventType = (typeof WEBHOOK_EVENTS)[number]
 
@@ -69,6 +95,12 @@ export type WebhookEventPayloadMap = {
     comment: { id: number; text: string; createdAt: string }
     actor: WebhookActor
   }
+  'comment.mention': {
+    task: WebhookTaskReference
+    comment: { id: number; text: string; createdAt: string }
+    mentions: { agentIds: string[] }
+    actor: WebhookActor
+  }
   'task.escalated': {
     task: WebhookTaskReference
     reason: string | null
@@ -90,6 +122,12 @@ export type WebhookEventPayloadMap = {
     }
     actor: WebhookActor
   }
+  'task.unassigned': {
+    task: WebhookTaskReference
+    action: 'unassigned'
+    assignee: { userId: number; agentId: string | null }
+    actor: WebhookActor
+  }
   'task.updated': {
     task: WebhookTaskReference
     changes: WebhookTaskChanges
@@ -101,7 +139,7 @@ export type WebhookEventPayload<T extends WebhookEventType> =
   WebhookEventPayloadMap[T]
 
 export type WebhookDeliveryPayloadMap = WebhookEventPayloadMap & {
-  ping: { projectId: number; message: string }
+  ping: { projectId: number | null; message: string }
 }
 
 export type WebhookDeliveryEventType = keyof WebhookDeliveryPayloadMap
@@ -209,6 +247,20 @@ function sanitizeWebhookDelivery(delivery: WebhookDelivery): WebhookDelivery {
           actor: sanitizeActor(delivery.data.actor),
         },
       }
+    case 'comment.mention':
+      return {
+        event: delivery.event,
+        data: {
+          task: sanitizeTaskReference(delivery.data.task),
+          comment: {
+            id: delivery.data.comment.id,
+            text: delivery.data.comment.text,
+            createdAt: delivery.data.comment.createdAt,
+          },
+          mentions: { agentIds: [...new Set(delivery.data.mentions.agentIds)] },
+          actor: sanitizeActor(delivery.data.actor),
+        },
+      }
     case 'task.escalated':
       return {
         event: delivery.event,
@@ -239,6 +291,19 @@ function sanitizeWebhookDelivery(delivery: WebhookDelivery): WebhookDelivery {
         data: {
           task: sanitizeTaskReference(delivery.data.task),
           action: delivery.data.action,
+          assignee: {
+            userId: delivery.data.assignee.userId,
+            agentId: delivery.data.assignee.agentId,
+          },
+          actor: sanitizeActor(delivery.data.actor),
+        },
+      }
+    case 'task.unassigned':
+      return {
+        event: delivery.event,
+        data: {
+          task: sanitizeTaskReference(delivery.data.task),
+          action: 'unassigned',
           assignee: {
             userId: delivery.data.assignee.userId,
             agentId: delivery.data.assignee.agentId,
@@ -303,6 +368,17 @@ export const WEBHOOK_EVENT_DEFINITIONS = {
       ...actorFields,
     },
   },
+  'comment.mention': {
+    description: 'A comment mentioned one or more managed agents.',
+    dataFields: {
+      ...taskReferenceFields,
+      'comment.id': 'number',
+      'comment.text': 'string — comment HTML',
+      'comment.createdAt': 'string — ISO-8601 timestamp',
+      'mentions.agentIds': 'string[] — addressed managed-agent ids',
+      ...actorFields,
+    },
+  },
   'task.escalated': {
     description: 'A task was escalated for attention.',
     dataFields: {
@@ -328,6 +404,16 @@ export const WEBHOOK_EVENT_DEFINITIONS = {
     dataFields: {
       ...taskReferenceFields,
       action: '"assigned"|"unassigned"',
+      'assignee.userId': 'number',
+      'assignee.agentId': 'string|null — agent id, or null for a human assignment',
+      ...actorFields,
+    },
+  },
+  'task.unassigned': {
+    description: 'A human or agent was unassigned from a task.',
+    dataFields: {
+      ...taskReferenceFields,
+      action: '"unassigned"',
       'assignee.userId': 'number',
       'assignee.agentId': 'string|null — agent id, or null for a human assignment',
       ...actorFields,

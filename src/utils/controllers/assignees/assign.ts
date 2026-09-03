@@ -655,7 +655,7 @@ const removeAssignee = async ({
         })
       : null;
     const unassignedEvent: WebhookDelivery = {
-      event: "task.assigned",
+      event: "task.unassigned",
       data: {
         task: {
           id: taskId,
@@ -867,7 +867,7 @@ export const clearHumanAssignees = async (
                 ...new Set(current.map((assign) => assign.userId)),
               ]) {
                 const unassignedEvent: WebhookDelivery = {
-                  event: "task.assigned",
+                  event: "task.unassigned",
                   data: {
                     task: {
                       id: taskId,

@@ -38,7 +38,7 @@ function maskSecret(secret: string): string {
 
 function serialize(sub: {
   id: string
-  projectId: number
+  projectId: number | null
   url: string
   secret: string
   events: string[]
@@ -286,6 +286,7 @@ export async function POST(request: NextRequest) {
         url,
         secret,
         events,
+        supportsUnassignedEvent: true,
         createdById: ctx.user.id,
         agentId: ctx.agentId ?? null,
       },

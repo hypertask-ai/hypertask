@@ -20,9 +20,11 @@ const {
 test('task lifecycle webhook events are subscribable and documented', () => {
   assert.deepEqual(WEBHOOK_EVENTS, [
     'comment.created',
+    'comment.mention',
     'task.escalated',
     'task.created',
     'task.assigned',
+    'task.unassigned',
     'task.updated',
   ])
   assert.deepEqual(Object.keys(WEBHOOK_EVENT_DEFINITIONS), WEBHOOK_EVENTS)

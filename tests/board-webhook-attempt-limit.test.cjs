@@ -15,7 +15,7 @@ const stubModule = (relativePath, exports) => {
  *
  * A worker can POST successfully and then die before persisting the result. The
  * sweep must treat that abandoned claim as a spent attempt, otherwise the same
- * event is redelivered forever even though the row advertises a four-attempt
+ * event is redelivered forever even though the row advertises a six-attempt
  * limit.
  */
 const load = () => {
