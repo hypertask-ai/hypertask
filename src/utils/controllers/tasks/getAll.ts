@@ -9,23 +9,29 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
 
         try {
 
-            if (!projectId || !userId) {
+            const projectIdNum = Array.isArray(projectId) ? NaN : Number(projectId)
+            const userIdNum = Array.isArray(userId) ? NaN : Number(userId)
+            if (
+                !Number.isInteger(projectIdNum) ||
+                projectIdNum < 1 ||
+                !Number.isInteger(userIdNum) ||
+                userIdNum < 1
+            ) {
                 return({
                     status:200,
                     json:[]
                 })
-                // return res.status(200).json([]);
             }
 
             const tasks = await prisma.task.findMany({
                 where: {
-                    projectId: parseInt(projectId as string),
+                    projectId: projectIdNum,
                     status: 'Normal',
                     // Scope to projects the requesting user owns or is a member of, so a
                     // caller cannot read another tenant's board by passing an arbitrary
                     // projectId (HTPR-3962). Mirrors the getProjectWhere scoping used by
                     // the MCP task routes and the archived-tasks loader.
-                    project: getProjectWhere(parseInt(userId as string)),
+                    project: getProjectWhere(userIdNum),
                 },
                 select: {
                     id: true,
@@ -44,9 +50,7 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
                             OR: [
                                 { agentId: null },
                                 {
-                                    agent: boardAgentVisibilityWhere(
-                                        parseInt(userId as string)
-                                    ),
+                                    agent: boardAgentVisibilityWhere(userIdNum),
                                 },
                             ],
                         },
@@ -61,7 +65,7 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
                                 select: { id: true },
                                 where: {
                                     seen: false,
-                                    userId: parseInt(userId as string),
+                                    userId: userIdNum,
                                 }
                             }
                         }
