@@ -181,7 +181,7 @@ const TaskTitleModal = () => {
                                         disabled={isGeneratingTitle}
                                         ariaLabel="Dictate task title"
                                         mobilePresentation="prominent"
-                                        // This ticket requires the white high-contrast treatment in dark themes.
+                                        // Owner-approved HTPR-5995 requires the style-guide exception: white in dark themes.
                                         mobilePrimaryTone="default"
                                         className="h-11 w-11 shrink-0 justify-center"
                                         wrapperClassName="shrink-0"
