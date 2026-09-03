@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { RefObject } from "react";
 
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
@@ -37,6 +37,7 @@ const EmbeddedTaskDetail = ({
   scrollElementRef,
 }: EmbeddedTaskDetailProps) => {
   const currentUser = useRecoilValue(currentUserAtom);
+  const queryClient = useQueryClient();
   const { data: preferences } = useGetUserPreferences();
   const taskQuery = useQuery({
     queryKey: ["swipe-unread-task-detail", taskId],
@@ -44,7 +45,7 @@ const EmbeddedTaskDetail = ({
   });
   const commentsQuery = useQuery({
     queryKey: [globalConstants.CommentsTQPrefixKey, taskId],
-    queryFn: () => fetchCommentsHelper(taskId, currentUser.id),
+    queryFn: () => fetchCommentsHelper(taskId, currentUser.id, queryClient),
     enabled: Boolean(currentUser?.id),
   });
 

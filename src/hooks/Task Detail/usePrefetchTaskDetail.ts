@@ -86,7 +86,7 @@ export const usePrefetchTaskDetailTargets = ({
       if (!userId) return;
 
       prefetch([globalConstants.CommentsTQPrefixKey, target.id], () =>
-        fetchCommentsHelper(target.id, userId),
+        fetchCommentsHelper(target.id, userId, queryClient),
       );
       prefetch(["draft for [task,userId]:", target.id, userId], () =>
         getDraftsHelper(target.id, userId),

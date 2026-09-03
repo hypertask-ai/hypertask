@@ -73,7 +73,6 @@ const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), {
   ssr: false,
 });
 import { focusManager, useQueryClient } from "@tanstack/react-query";
-import { useGetAllComments } from "@/hooks/Task Detail/useGetComments";
 import LinksModal from "@/components/Modals/LinksModal";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -291,16 +290,11 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const router = useRouter();
 
   // =================== React Query Hooks
-  const {
-    data: commentsFromQueryTQ,
-    refetch: refethComments,
-    isRefetching: commentFromTQRefetching,
-  } = useGetAllComments(
-    [globalConstants.CommentsTQPrefixKey, _parsedTask.id],
-    _parsedTask.id,
-    currentUser.id,
-    _parsedComments
-  );
+  // Comments are already fetched once by DescriptionAndCommentsProvider's
+  // useCommentAndDescriptions (same query key, [CommentsTQPrefixKey, taskId]).
+  // A second useGetAllComments call here used to fire its own request on
+  // every task-detail open (HTPR-6047); the refetch below reaches that same
+  // query instance instead of holding a redundant observer.
   const { data: sectionsForProjectTQ = [] } = useGetSectionsMoveTask(
     [taskDetailConfig.queryKeys.moveTaskModal, currentProject?.id],
     currentProject?.id!
@@ -1640,7 +1634,9 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     // setComments((comments) =>
     // comments?.filter((comment) => String(comment.id) !== String(id))
     // );
-    refethComments();
+    queryClient.refetchQueries({
+      queryKey: [globalConstants.CommentsTQPrefixKey, _parsedTask.id],
+    });
 
     if (currentIndex >= 0) {
       if (comments.length === 1) {
