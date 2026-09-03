@@ -12,7 +12,7 @@ export function QueuedMessagesStrip({
 }) {
   return (
     <div
-      className="mb-2 flex w-full flex-col gap-1.5 rounded-lg border border-border-light-gray-thin bg-containerBackground p-2"
+      className="mb-2 flex w-full flex-col gap-1.5 rounded-[5px] border border-border-light-gray-thin bg-containerBackground p-2"
       aria-label="Queued messages"
     >
       <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-text-light-gray">

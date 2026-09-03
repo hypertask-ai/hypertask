@@ -431,13 +431,10 @@ const AgentChatClient = (props: IProp) => {
       // Same signal a failed send sets: no live webhook subscribed to
       // chat.message, so the human side of the notice must survive a reload.
       if (data.chatEnabled === false) setDeliveryNotice(true);
-      // This is the one place both the poll and the realtime nudge funnel
-      // through, so it's the one place a queued follow-up needs to check
-      // whether the ball just came back to us.
-      const latest = data.messages[data.messages.length - 1];
-      if (!latest || latest.role !== "human") {
-        drainQueuedMessageRef.current();
-      }
+      // Draining here would read awaitingRef before the render that follows
+      // this setMessages has run, so it'd still see the stale (pre-reply)
+      // value. The effect below (keyed on the derived `awaiting`) is the one
+      // place that's guaranteed to observe the committed state instead.
     } catch (e) {
       if (
         sessionIdRef.current === loadSessionId &&
@@ -594,6 +591,14 @@ const AgentChatClient = (props: IProp) => {
   // must reopen so the user can send again, and the poll must stay stopped.
   const composerLocked = awaiting && !deliveryNotice;
 
+  // Drain a queued follow-up once the ball is actually back in our court.
+  // Runs after render, so it always sees the awaiting value this render
+  // computed -- unlike draining synchronously inside loadMessages, which ran
+  // before awaitingRef had been updated and left the queue stuck.
+  useEffect(() => {
+    if (!awaiting) drainQueuedMessageRef.current();
+  }, [awaiting]);
+
   // Record when the current wait began so the poll below can time out; a new
   // wait for the same session (a fresh send) restarts the clock.
   useEffect(() => {
@@ -677,7 +682,11 @@ const AgentChatClient = (props: IProp) => {
   // has no other way to reach this page's team filter state. "All teams"
   // (null) is one of the stops, matching the dropdown below.
   const teamCycle = useRecoilValue(agentChatTeamCycleAtom);
-  const teamCycleSeenRef = useRef(0);
+  // Seeded from whatever the atom already holds at mount, not 0: the atom
+  // retains its last event, so a fresh mount (e.g. navigating back to Agent
+  // Chat after cycling teams elsewhere) must acknowledge that stale seq
+  // instead of replaying it as a brand-new press.
+  const teamCycleSeenRef = useRef(teamCycle?.seq ?? 0);
   useEffect(() => {
     if (!teamCycle || teamCycle.seq === teamCycleSeenRef.current) return;
     teamCycleSeenRef.current = teamCycle.seq;
@@ -778,9 +787,9 @@ const AgentChatClient = (props: IProp) => {
     } finally {
       sendingRef.current = false;
       setSending(false);
-      // A queued follow-up auto-sends once this one settles (including on
-      // failure -- the queue is only cleared by a session switch below).
-      queueMicrotask(() => drainQueuedMessageRef.current());
+      // A queued follow-up drains via the `awaiting` effect above: success
+      // leaves the ball with the agent (no-op here), and failure reverts the
+      // optimistic message, which flips `awaiting` back to false and fires it.
     }
   }, []);
 
@@ -1088,7 +1097,9 @@ const AgentChatClient = (props: IProp) => {
       if (overlayOpen) return;
       const isCycleKey =
         (e.ctrlKey && e.key === "Tab") ||
-        (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp"));
+        // Excludes Shift: Alt+Shift+Arrow is the app-wide team-cycle
+        // shortcut (GloablProviders.tsx) and must not also fire this.
+        (e.altKey && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp"));
       if (isCycleKey) {
         // A focused control other than the composer (the team filter
         // <select>, a button, a search input) owns Alt+Arrow for its own
