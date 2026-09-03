@@ -42,7 +42,7 @@ test("task detail starts both required chat chunks without a serial waterfall", 
   assert.match(provider, /const ChatProvider = lazy\(loadChatProvider\)/);
   assert.match(
     provider,
-    /if \(isTaskDetailPage\) \{[\s\S]*?Promise\.all\(\[loadChatProvider\(\), loadAIChatLayout\(\)\]\)/,
+    /useEffect\(\(\) => \{[\s\S]*?if \(!isTaskDetailPage\) return;[\s\S]*?Promise\.all\(\[loadChatProvider\(\), loadAIChatLayout\(\)\]\)[\s\S]*?\}, \[isTaskDetailPage\]\)/,
   );
   assert.doesNotMatch(provider, /import AIChatLayout from/);
   assert.doesNotMatch(provider, /import \{ ChatProvider \} from/);

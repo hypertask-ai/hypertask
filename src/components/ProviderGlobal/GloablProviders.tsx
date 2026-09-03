@@ -393,11 +393,12 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
     isFullScreenChat ||
     isTaskDetailPage ||
     showAiChatInterface;
-  if (isTaskDetailPage) {
-    // This provider wraps the task itself, so starting its sibling layout now
-    // prevents a provider -> layout -> editor download waterfall.
+  useEffect(() => {
+    if (!isTaskDetailPage) return;
+    // The provider starts during render; start its sibling layout as soon as the
+    // loading fallback commits instead of waiting for the provider to resolve.
     void Promise.all([loadChatProvider(), loadAIChatLayout()]).catch(() => {});
-  }
+  }, [isTaskDetailPage]);
   // https://app.hypertask.ai/detail/project-15/5424: clear both legacy and
   // user-scoped tutorial state without ever loading the disabled runtime. This
   // prevents a returning tab from reviving the overlay after the entry points
