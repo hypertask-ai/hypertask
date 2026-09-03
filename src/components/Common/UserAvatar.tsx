@@ -49,7 +49,6 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
         className={cn(sharedClassName, "object-cover", imageClassName)}
         decoding="async"
         height={size}
-        loading="lazy"
         onError={() => setFailedPhotoURL(photoURL)}
         src={photoURL}
         title={title}
