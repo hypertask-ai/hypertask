@@ -9,6 +9,7 @@ import scheduleCommentSummaryGeneration from '@/pages/api/queues/FAST/generateCo
 import { processMentionsFromCommentText } from './processMentions'
 import { omitCommentSeen } from './readReceipts'
 import { invalidateHyperAiCommentOrigin } from '@/lib/ai/hyperAiConfirmation'
+import { publicAgentSelect } from '@/lib/agents/publicAgent'
 
 export interface UpdateCommentParams {
   commentId: number
@@ -119,6 +120,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
       data: { text, summary: null },
       include: {
         creator: { select: { id: true, email: true, displayName: true } },
+        agent: { select: publicAgentSelect },
         attachments: true
       }
     })

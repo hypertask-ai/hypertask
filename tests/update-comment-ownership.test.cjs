@@ -53,8 +53,16 @@ function loadService(storedComment) {
           id: 44,
           taskId: 91,
           text: args.data.text,
+          creatorId: storedComment?.creatorId ?? null,
+          agentId: storedComment?.agentId ?? null,
           seen: [6],
           attachments: [],
+          ...(args.include?.creator && storedComment?.creator
+            ? { creator: storedComment.creator }
+            : {}),
+          ...(args.include?.agent && storedComment?.agent
+            ? { agent: storedComment.agent }
+            : {}),
         };
       },
     },
@@ -128,6 +136,50 @@ test("a user cannot update a comment they do not own", async () => {
   assert.deepEqual(calls.lookup[0].where, { id: 44, creatorId: 6 });
   assert.equal(calls.transactions, 0);
   assert.deepEqual(calls.invalidations, []);
+});
+
+test("editing an agent comment preserves its creator and agent attribution", async () => {
+  const creator = {
+    id: 6,
+    email: "valentin@example.test",
+    displayName: "Valentin Yeo",
+  };
+  const agent = {
+    id: "agent-1",
+    userId: 6,
+    displayName: "QA Agent",
+    photoURL: "https://files.test/qa-agent.png",
+    createdAt: "2026-09-02T19:00:00.000Z",
+    revokedAt: null,
+    runtimeType: "EXTERNAL",
+    heartbeatAt: null,
+    permissions: {},
+  };
+  const { updateCommentService, calls } = loadService({
+    id: 44,
+    taskId: 91,
+    creatorId: creator.id,
+    creator,
+    agentId: agent.id,
+    agent,
+    task: { projectId: 15 },
+  });
+
+  const updated = await updateCommentService({
+    commentId: 44,
+    text: "edited by the owner",
+    userId: creator.id,
+  });
+
+  assert.equal(updated.creatorId, creator.id);
+  assert.deepEqual(updated.creator, creator);
+  assert.equal(updated.agentId, agent.id);
+  assert.deepEqual(updated.agent, agent);
+  assert.deepEqual(calls.commentUpdates[0].data, {
+    text: "edited by the owner",
+    summary: null,
+  });
+  assert.ok(calls.commentUpdates[0].include.agent);
 });
 
 test("an owner updates text and attachments in one transaction", async () => {
