@@ -97,6 +97,7 @@ export interface UpdateTaskBody {
     labels?: (string | number)[];
     add_labels?: (string | number)[];
     remove_labels?: (string | number)[];
+    skip_if_labels_present?: (string | number)[];
     due_date?: string | null; // ISO 8601 date or datetime; null to clear
     assignee?: number[];
     parent_task_id?: number | null;
@@ -282,6 +283,26 @@ export async function executeTaskUpdate({
     const hasLabels = requestBody.labels !== undefined && Array.isArray(requestBody.labels);
     const hasLabelMutation =
         Array.isArray(requestBody.add_labels) || Array.isArray(requestBody.remove_labels);
+    const hasLabelPrecondition = requestBody.skip_if_labels_present !== undefined;
+    if (
+        hasLabelPrecondition &&
+        (!Array.isArray(requestBody.skip_if_labels_present) ||
+            requestBody.skip_if_labels_present.length === 0 ||
+            requestBody.skip_if_labels_present.length > 50 ||
+            !hasLabelMutation)
+    ) {
+        return NextResponse.json(
+            {
+                ...buildFieldError(
+                    'invalid_field',
+                    'skip_if_labels_present',
+                    'skip_if_labels_present must contain 1-50 labels and accompany add_labels or remove_labels'
+                ),
+                ...(dryRun && { valid: false })
+            },
+            { status: 400 }
+        );
+    }
     const hasDueDate = requestBody.due_date !== undefined;
     const hasAssigneeField = requestBody.assignee !== undefined;
     const hasDescriptionUpdate = requestBody.description !== undefined;
@@ -942,7 +963,11 @@ export async function executeTaskUpdate({
                     await mutateTaskLabels(
                         task.id,
                         task.projectId,
-                        { add: requestBody.add_labels, remove: requestBody.remove_labels },
+                        {
+                            add: requestBody.add_labels,
+                            remove: requestBody.remove_labels,
+                            skipIfPresent: requestBody.skip_if_labels_present,
+                        },
                         userObj
                     );
                 } catch (labelError) {

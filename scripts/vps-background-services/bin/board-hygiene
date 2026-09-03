@@ -13,6 +13,7 @@ export OPEN_SECTIONS='4389,9190,5945,6106,10103,4309,6297,4311,4310'
 
 unlabelled=
 cursor=
+seen_cursors=
 while :; do
   encoded_cursor=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$cursor")
   page=$(ht GET "/mcp/tasks?project_id=$BOARD&limit=200&cursor=$encoded_cursor")
@@ -28,18 +29,33 @@ for t in d["tasks"]:
     labs={l.get("name") for l in (t.get("labels") or [])}
     if KIND & labs: continue
     desc=re.sub("<[^>]+>"," ",t.get("description") or "")[:400]
-    print(json.dumps({"ticket":t.get("ticketNumber"),"title":t.get("title"),"desc":desc}))
+    print(json.dumps({"ticket":t.get("ticketNumber"),"title":(t.get("title") or "")[:200],"desc":desc}))
 ' <<<"$page")
   if [ -n "$batch" ]; then
     unlabelled+="${unlabelled:+$'\n'}$batch"
   fi
-  cursor=$(jq -er 'if .success == true then (.nextCursor // "") else error(.error // "task list failed") end' <<<"$page")
-  [ -z "$cursor" ] && break
+  next_cursor=$(jq -er 'if .success == true then (.nextCursor // "") else error(.error // "task list failed") end' <<<"$page")
+  [ -z "$next_cursor" ] && break
+  if grep -Fxq "$next_cursor" <<<"$seen_cursors"; then
+    echo "board-hygiene: repeated task cursor, refusing a partial run" >&2
+    exit 1
+  fi
+  seen_cursors+="${seen_cursors:+$'\n'}$next_cursor"
+  cursor="$next_cursor"
 done
 
 [ -z "$unlabelled" ] && exit 0
+unlabelled=$(python3 -c '
+import sys,json
+seen=set()
+for line in sys.stdin:
+    record=json.loads(line)
+    ticket=record.get("ticket")
+    if ticket and ticket not in seen:
+        seen.add(ticket)
+        print(json.dumps(record))
+' <<<"$unlabelled")
 count=$(wc -l <<<"$unlabelled")
-candidates=$(python3 -c 'import sys,json; [print(json.loads(line)["ticket"]) for line in sys.stdin if line.strip()]' <<<"$unlabelled")
 
 INSTRUCTIONS="$HOME/.config/board-hygiene/INSTRUCTIONS.md"
 if [ ! -r "$INSTRUCTIONS" ]; then
@@ -50,18 +66,19 @@ fi
 # gpt-5.6-sol at low effort: the ChatGPT subscription serves only sol and luna,
 # so low effort is the cheap tier. Classification is a judgement call, which is
 # the one thing worth a model; everything else here is plain code.
-out=$(HAX_PRESET= hax --provider=codex --model=gpt-5.6-sol --effort=low \
-        --no-session --raw -p "$(cat "$INSTRUCTIONS")
-
-## Tickets
-
-$unlabelled" 2>/dev/null)
-
 applied=0
-while read -r line; do
-  [[ "$line" =~ ^(HTPR-[0-9]+)=(Bug|FEATURE|IMPROVEMENT)$ ]] || continue
-  t="${BASH_REMATCH[1]}"; k="${BASH_REMATCH[2]}"
-  grep -Fxq "$t" <<<"$candidates" || continue
+while read -r record; do
+  t=$(jq -er '.ticket | select(type == "string" and test("^HTPR-[0-9]+$"))' <<<"$record")
+  out=$(HAX_PRESET= hax --provider=codex --model=gpt-5.6-sol --effort=low \
+          --no-session --raw -p "$(cat "$INSTRUCTIONS")
+
+## Ticket
+
+$record
+
+Return exactly one line for $t and no other ticket." 2>/dev/null)
+  [[ "$out" =~ ^${t}=(Bug|FEATURE|IMPROVEMENT)$ ]] || continue
+  k="${BASH_REMATCH[1]}"
   case "$k" in
     Bug)         label="Bug" ;;
     FEATURE)     label="FEATURE 💎" ;;
@@ -84,12 +101,22 @@ sys.exit(0 if eligible else 1)
     continue
   fi
   payload=$(jq -cn --arg ticket "$t" --arg label "$label" \
-    '{ticket_number: $ticket, add_labels: [$label]}')
+    '{
+      ticket_number: $ticket,
+      add_labels: [$label],
+      skip_if_labels_present: [
+        "FEATURE 💎",
+        "IMPROVEMENT ⚒️",
+        "Bug",
+        "SPEED OPTIMIZATION ⏩",
+        "Infra"
+      ]
+    }')
   if ht POST /mcp/tasks/update "$payload" 2>/dev/null | jq -e '.success == true' >/dev/null; then
     echo "$(date -Is) $t -> $label" >> "$STATE/applied.log"
     applied=$((applied+1))
   fi
-done <<<"$out"
+done <<<"$unlabelled"
 
 [ "$applied" -gt 0 ] && echo "board-hygiene: labelled $applied of $count unlabelled tickets"
 exit 0

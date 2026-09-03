@@ -28,12 +28,9 @@ HTPR-1235=FEATURE
 `))
 })
 
-test('board hygiene safely adds a kind to every eligible ticket', async () => {
+test('board hygiene never uses replacement label writes', async () => {
   const script = await readFile(executable, 'utf8')
 
-  assert.match(script, /cursor=\$encoded_cursor/)
-  assert.match(script, /grep -Fxq "\$t" <<<"\$candidates"/)
-  assert.match(script, /ticket_number=\$t&project_id=\$BOARD/)
-  assert.match(script, /add_labels: \[\$label\]/)
+  assert.match(script, /skip_if_labels_present/)
   assert.doesNotMatch(script, /--labels\b/)
 })
