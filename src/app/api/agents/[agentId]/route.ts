@@ -409,6 +409,12 @@ export async function PATCH(
       { status: 400 },
     );
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json(
+      { success: false, error: "Invalid JSON" },
+      { status: 400 },
+    );
+  }
 
   if (body.visibility !== undefined) {
     const suppliedFields = Object.entries(body).filter(
