@@ -31,10 +31,10 @@ function trustedOrigin(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!(await isFeatureFlagOwner(request.headers))) {
-    return noStore({ error: "Not found" }, 404);
-  }
   try {
+    if (!(await isFeatureFlagOwner(request.headers))) {
+      return noStore({ error: "Not found" }, 404);
+    }
     return noStore({ flags: await listFeatureFlagModes() });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
@@ -43,15 +43,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!(await isFeatureFlagOwner(request.headers))) {
-    return noStore({ error: "Not found" }, 404);
-  }
-  if (!trustedOrigin(request)) return noStore({ error: "Forbidden" }, 403);
-  if (!request.headers.get("content-type")?.startsWith("application/json")) {
-    return noStore({ error: "Content-Type must be application/json" }, 415);
-  }
-
   try {
+    if (!(await isFeatureFlagOwner(request.headers))) {
+      return noStore({ error: "Not found" }, 404);
+    }
+    if (!trustedOrigin(request)) return noStore({ error: "Forbidden" }, 403);
+    if (!request.headers.get("content-type")?.startsWith("application/json")) {
+      return noStore({ error: "Content-Type must be application/json" }, 415);
+    }
+
     const text = await request.text();
     if (text.length > 1024) return noStore({ error: "Request is too large" }, 413);
     const body = JSON.parse(text) as { key?: unknown; mode?: unknown } | null;

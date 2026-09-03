@@ -82,7 +82,8 @@ test("declared flags remain listed without a row and can be changed", async () =
   assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), true);
 });
 
-test("unknown or malformed keys cannot create rows", async () => {
+test("unknown flags fail closed and cannot create rows", async () => {
+  assert.equal(await flags.isFeatureEnabled("unknown-flag", 6), false);
   await assert.rejects(flags.setFeatureFlagMode("unknown-flag", "OFF"), /Unknown feature flag/);
   await assert.rejects(flags.setFeatureFlagMode("Bad Flag", "OFF"), /Invalid feature flag/);
 });

@@ -14,12 +14,16 @@ let reads = 0;
 let writes = 0;
 let broadcasts = 0;
 let broadcastFails = false;
+let authFails = false;
 class FeatureFlagInputError extends Error {}
 
 stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "EVERYONE", "OFF"],
   FeatureFlagInputError,
-  isFeatureFlagOwner: async () => userId === 6,
+  isFeatureFlagOwner: async () => {
+    if (authFails) throw new Error("auth unavailable");
+    return userId === 6;
+  },
   listFeatureFlagModes: async () => {
     reads += 1;
     return [{ key: "htpr-6091-feature-flags", mode: "OWNER_ONLY", updatedAt: null }];
@@ -31,7 +35,10 @@ stubModule("src/lib/flags.ts", {
   featureFlagsForUser: async (id) => ({ example: id === 6 }),
 });
 stubModule("src/lib/auth/getSessionUser.ts", {
-  getSessionUser: async () => (userId ? { userId } : null),
+  getSessionUser: async () => {
+    if (authFails) throw new Error("auth unavailable");
+    return userId ? { userId } : null;
+  },
 });
 stubModule("src/lib/realtime/server.ts", {
   broadcastFeatureFlagsChange: async () => {
@@ -70,6 +77,7 @@ test.beforeEach(() => {
   writes = 0;
   broadcasts = 0;
   broadcastFails = false;
+  authFails = false;
 });
 
 test("non-owners receive 404 before flag data is read", async () => {
@@ -78,6 +86,17 @@ test("non-owners receive 404 before flag data is read", async () => {
     body: { error: "Not found" },
   });
   assert.equal(reads, 0);
+});
+
+test("authentication failures return private structured errors", async (t) => {
+  t.mock.method(console, "error", () => {});
+  authFails = true;
+  const adminResponse = await admin.GET(request());
+  const userResponse = await flagsRoute.GET(request());
+  assert.equal(adminResponse.status, 500);
+  assert.equal(userResponse.status, 500);
+  assert.equal(adminResponse.headers.get("cache-control"), "private, no-store");
+  assert.equal(userResponse.headers.get("cache-control"), "private, no-store");
 });
 
 test("the owner can list and change a declared flag", async () => {

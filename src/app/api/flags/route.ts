@@ -12,10 +12,9 @@ function noStore(body: unknown, status = 200) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
-  if (!session) return noStore({ error: "Unauthorized" }, 401);
-
   try {
+    const session = await getSessionUser(request.headers);
+    if (!session) return noStore({ error: "Unauthorized" }, 401);
     return noStore({ flags: await featureFlagsForUser(session.userId) });
   } catch (error) {
     console.error("[feature-flags] read failed", error);

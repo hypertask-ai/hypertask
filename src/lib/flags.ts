@@ -43,6 +43,8 @@ export async function isFeatureEnabled(
     where: { key },
     select: { mode: true },
   });
+  const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
+  if (!row && !declared) return false;
   return featureFlagModeEnabled(row?.mode ?? "OWNER_ONLY", userId);
 }
 
