@@ -103,6 +103,130 @@ function fakeTransaction() {
 
 const actor = { userId: 6, displayName: "Valentin" };
 
+function fakeSingleEventTransaction(subscription) {
+  const rows = [];
+  const membersWhere = [];
+  const tx = {
+    rows,
+    membersWhere,
+    agentWebhookSubscription: {
+      findUnique: async ({ select }) => {
+        membersWhere.push(select.agent.select.members.where);
+        return subscription;
+      },
+    },
+    agentWebhookDelivery: {
+      create: async ({ data }) => {
+        rows.push(data);
+        return data;
+      },
+    },
+  };
+  return tx;
+}
+
+function chatSubscription({ events, members } = {}) {
+  return {
+    id: "sub-chat",
+    active: true,
+    projectId: null,
+    events: events ?? ["chat.message"],
+    agent: {
+      revokedAt: null,
+      members: members === undefined ? [{ id: "member-1" }] : members,
+    },
+  };
+}
+
+test("chat.message persists a board-free chat payload", async () => {
+  const { persistAgentWebhookEvent } = loadOutbox();
+  const tx = fakeSingleEventTransaction(chatSubscription());
+
+  const deliveryId = await persistAgentWebhookEvent(tx, {
+    event: "chat.message",
+    agentId: "agent-a",
+    projectId: null,
+    taskId: null,
+    ticketNumber: null,
+    taskTitle: null,
+    actor,
+    chat: {
+      sessionId: "session-1",
+      messageId: "message-1",
+      text: "Can you update the board?",
+      userName: "Valentin",
+    },
+  });
+
+  assert.equal(typeof deliveryId, "string");
+  assert.equal(tx.rows.length, 1);
+  assert.equal(tx.rows[0].event, "chat.message");
+  assert.equal(tx.rows[0].payload.event, "chat.message");
+  assert.equal(tx.rows[0].payload.projectId, null);
+  assert.equal(tx.rows[0].payload.taskId, null);
+  assert.deepEqual(tx.rows[0].payload.chat, {
+    sessionId: "session-1",
+    messageId: "message-1",
+    text: "Can you update the board?",
+    userName: "Valentin",
+  });
+  assert.deepEqual(tx.rows[0].payload.actor, actor);
+});
+
+test("chat.message accepts a null project when the agent sits on any owner board", async () => {
+  const { persistAgentWebhookEvent } = loadOutbox();
+
+  // Membership cannot be narrowed to a board for a chat event; the where
+  // clause must not demand projectId null.
+  const accepted = fakeSingleEventTransaction(chatSubscription());
+  const deliveryId = await persistAgentWebhookEvent(accepted, {
+    event: "chat.message",
+    agentId: "agent-a",
+    projectId: null,
+    taskId: null,
+    ticketNumber: null,
+    taskTitle: null,
+    actor,
+    chat: { sessionId: "s", messageId: "m", text: "hi", userName: null },
+  });
+  assert.equal(typeof deliveryId, "string");
+  assert.deepEqual(accepted.membersWhere[0], {});
+
+  // Board events keep the board-narrowed grant.
+  const scoped = fakeSingleEventTransaction(
+    chatSubscription({ events: ["comment.created"] })
+  );
+  await persistAgentWebhookEvent(scoped, {
+    event: "comment.created",
+    agentId: "agent-a",
+    projectId: 15,
+    taskId: 42,
+    ticketNumber: "HTPR-42",
+    taskTitle: "Webhook payload",
+    actor,
+    commentId: 99,
+    commentHtml: "<p>Plain comment</p>",
+  });
+  assert.deepEqual(scoped.membersWhere[0], { projectId: 15 });
+
+  // An agent on no board of the owner is still skipped for chat events.
+  const noBoards = fakeSingleEventTransaction(
+    chatSubscription({ members: [] })
+  );
+  const skipped = await persistAgentWebhookEvent(noBoards, {
+    event: "chat.message",
+    agentId: "agent-a",
+    projectId: null,
+    taskId: null,
+    ticketNumber: null,
+    taskTitle: null,
+    actor,
+    chat: { sessionId: "s", messageId: "m", text: "hi", userName: null },
+  });
+  assert.equal(skipped, null);
+  assert.equal(noBoards.rows.length, 0);
+});
+
 test("assigned comments target only assigned agents and keep the event payload", async () => {
   const { persistAgentWebhookEvents } = loadOutbox();
   const tx = fakeTransaction();

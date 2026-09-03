@@ -33,7 +33,10 @@ export async function persistAgentWebhookEvent(
         select: {
           revokedAt: true,
           members: {
-            where: { projectId: input.projectId },
+            // A chat.message carries no board, so membership cannot be
+            // narrowed to one: any board of the owner grants the same
+            // "sits on a board of this owner" bar the task events apply.
+            where: input.projectId === null ? {} : { projectId: input.projectId },
             select: { id: true },
             take: 1,
           },
@@ -46,7 +49,9 @@ export async function persistAgentWebhookEvent(
     !subscription?.active ||
     subscription.agent.revokedAt != null ||
     subscription.agent.members.length === 0 ||
-    (subscription.projectId != null &&
+    // A board-scoped subscription still receives board-free chat events.
+    (input.projectId !== null &&
+      subscription.projectId != null &&
       subscription.projectId !== input.projectId) ||
     !subscription.events.includes(input.event)
   ) {
@@ -190,7 +195,10 @@ export async function ensurePendingAgentTaskCreatedWebhook(
   return updated > 0;
 }
 
-type AgentWebhookBroadcastInput = Omit<AgentWebhookEventInput, "agentId"> &
+// Broadcast targets always carry a real board: task events are board scoped.
+type AgentWebhookBroadcastInput = Omit<AgentWebhookEventInput, "agentId" | "projectId"> & {
+  projectId: number;
+} &
   (
     | { broadcast: false; agentIds: readonly string[] }
     | { broadcast: true; agentIds?: never }

@@ -2056,6 +2056,9 @@ model ChatMessage {
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   isDelivered Boolean @default(false)
   attachments   Attachment[]
+  // The human message an agent reply answers; doubles as the idempotency key
+  // so a retried agent POST cannot duplicate a reply.
+  replyToMessageId String? @unique
 
   @@index([sessionId])
 }

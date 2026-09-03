@@ -204,6 +204,7 @@ export enum CommandMode {
   SuggestReply,
   ToggleArchivedSearchResults,
   ToggleBoardZoom,
+  GoToAgentChat,
 }
 
 export enum ELogType {

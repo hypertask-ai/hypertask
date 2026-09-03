@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { CustomFieldType, DecisionRequestStatus, Prisma } from "@prisma/client";
 import {
@@ -9806,6 +9806,20 @@ export async function POST(request: NextRequest) {
   };
   let usageProjectId: number | null = null;
   let actingAgent: Awaited<ReturnType<typeof loadActingAgent>> = null;
+  // External agents are chatted with from Agent Chat, not this native stream.
+  // Checked before any provider or model work so the turn never starts.
+  if (body.session_id) {
+    const chatAgent = await prisma.chatSession.findFirst({
+      where: { id: body.session_id, userId: dbUser.id },
+      select: { agent: { select: { runtimeType: true } } },
+    });
+    if (chatAgent?.agent?.runtimeType === "EXTERNAL") {
+      return NextResponse.json(
+        { error: "External agents are chatted with from Agent Chat" },
+        { status: 400 }
+      );
+    }
+  }
   try {
     const requestedProjectId = body.default_context?.project_id;
     // Global chat pages intentionally omit a board. Reuse the session's board
