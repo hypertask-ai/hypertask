@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const React = require("react");
+const { JSDOM } = require("jsdom");
 const jitiModule = require("jiti");
 const { z } = require("zod");
 
@@ -12,11 +14,13 @@ const jiti = jitiModule.createJiti
       alias: { "@": path.join(root, "src") },
       interopDefault: true,
       moduleCache: false,
+      jsx: true,
     })
   : jitiModule(__filename, {
       alias: { "@": path.join(root, "src") },
       interopDefault: true,
       cache: false,
+      jsx: true,
     });
 
 test("agent webhook discovery is complete and test deliveries use the durable queue", () => {
@@ -118,4 +122,118 @@ test("agent settings guide customers to a verified first delivery", () => {
   assert.match(panel, /Verify signatures and process deliveries/);
   assert.match(panel, /How webhooks work/);
   assert.match(panel, /href="https:\/\/docs\.hypertask\.ai\/mcp\/agent-webhooks\/"/);
+});
+
+test("external agent cards open webhook settings only when requested", async () => {
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const previousNavigator = global.navigator;
+  const previousFetch = global.fetch;
+  const previousReact = global.React;
+  const previousSelf = global.self;
+  const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
+    url: "https://app.hypertask.ai/agents",
+  });
+  let webhookRequests = 0;
+  let reactRoot;
+
+  try {
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.navigator = dom.window.navigator;
+    global.React = React;
+    global.self = dom.window;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    global.fetch = async () => {
+      webhookRequests += 1;
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          subscription: null,
+          deliveries: [],
+        }),
+      };
+    };
+
+    const { AgentCard } = jiti(
+      path.join(root, "src/app/agents/AgentsRegister.tsx"),
+    );
+    const container = document.getElementById("root");
+    reactRoot = require("react-dom/client").createRoot(container);
+    const agent = {
+      id: "external-agent",
+      slug: "external-agent",
+      displayName: "External Agent",
+      photoURL: null,
+      createdAt: "2026-09-02T12:00:00.000Z",
+      revokedAt: null,
+      archivedAt: null,
+      working: null,
+      runtimeType: "EXTERNAL",
+      prompt: null,
+      modelOptionId: null,
+      heartbeatAt: null,
+      lastPostedAt: null,
+      boards: [{ id: 15, name: "Hypertask Product" }],
+    };
+
+    await React.act(async () => {
+      reactRoot.render(
+        React.createElement(AgentCard, {
+          agent,
+          pending: false,
+          onToggle: () => {},
+        }),
+      );
+    });
+
+    const plug = container.querySelector(
+      'button[aria-label="Configure webhook for External Agent"]',
+    );
+    assert.ok(plug, "external agents should expose webhook settings");
+    assert.equal(webhookRequests, 0, "the collapsed panel must not fetch");
+
+    await React.act(async () => plug.click());
+    assert.equal(webhookRequests, 1);
+    assert.match(container.textContent, /Wake this agent without polling/);
+    assert.equal(dom.window.location.pathname, "/agents");
+
+    await React.act(async () => plug.click());
+    assert.doesNotMatch(container.textContent, /Wake this agent without polling/);
+    assert.equal(webhookRequests, 1);
+    assert.equal(dom.window.location.pathname, "/agents");
+
+    await React.act(async () => {
+      reactRoot.render(
+        React.createElement(AgentCard, {
+          agent: { ...agent, id: "native-agent", runtimeType: "NATIVE" },
+          pending: false,
+          onToggle: () => {},
+        }),
+      );
+    });
+    assert.equal(container.querySelector('button[aria-label^="Configure webhook"]'), null);
+  } finally {
+    if (reactRoot) await React.act(async () => reactRoot.unmount());
+    dom.window.close();
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+    if (previousNavigator === undefined) delete global.navigator;
+    else global.navigator = previousNavigator;
+    if (previousFetch === undefined) delete global.fetch;
+    else global.fetch = previousFetch;
+    if (previousReact === undefined) delete global.React;
+    else global.React = previousReact;
+    if (previousSelf === undefined) delete global.self;
+    else global.self = previousSelf;
+    if (previousActEnvironment === undefined) {
+      delete global.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  }
 });

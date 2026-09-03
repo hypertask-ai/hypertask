@@ -12,7 +12,11 @@ import {
   Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import type { IAgent } from "@/models/model";
+
+type AgentWebhookTarget = {
+  id: string;
+  boards?: { id: number; name: string }[];
+};
 
 const EVENTS = [
   "comment.mention",
@@ -47,7 +51,7 @@ type Subscription = {
 const ACTION_CLASS =
   "inline-flex min-h-7 items-center gap-1.5 rounded-[4px] border-0 px-2 py-1 text-meta font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-light-gray";
 
-export default function AgentWebhookPanel({ agent }: { agent: IAgent }) {
+export default function AgentWebhookPanel({ agent }: { agent: AgentWebhookTarget }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);

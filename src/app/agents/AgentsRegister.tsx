@@ -12,6 +12,8 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import { getAiModelOptionById } from "@/lib/aiModelOptions";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { IconoirKanban } from "@/components/Common/IconoirIcons";
+import { PlugZap } from "lucide-react";
+import AgentWebhookPanel from "@/components/Modals/Agent/AgentWebhookPanel";
 import AgentSelect, { AgentOption } from "./AgentSelect";
 import WorkingSpinner from "./WorkingSpinner";
 import {
@@ -184,7 +186,7 @@ function InfoRow({
   );
 }
 
-function AgentCard({
+export function AgentCard({
   agent,
   onToggle,
   pending,
@@ -204,6 +206,7 @@ function AgentCard({
       ? agent.prompt?.split("\n")[0]?.trim() || "No instructions set"
       : "External runtime";
   const cardBoards = agent.boards ?? [];
+  const [webhookOpen, setWebhookOpen] = useState(false);
 
   return (
     // A real anchor covers the card, so these pages can be middle-clicked,
@@ -231,6 +234,29 @@ function AgentCard({
           {agent.displayName}
         </span>
         <span className="flex-1" />
+        {agent.runtimeType === "EXTERNAL" && (
+          <button
+            type="button"
+            aria-label={`Configure webhook for ${agent.displayName}`}
+            aria-expanded={webhookOpen}
+            title="Connect and push events"
+            className={cn(
+              "relative z-20 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[4px] border-0 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none",
+              webhookOpen && "bg-active-modal-element text-white-black",
+            )}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setWebhookOpen((open) => !open);
+            }}
+          >
+            <PlugZap
+              strokeWidth={1.75}
+              className="h-3.5 w-3.5 shrink-0"
+              aria-hidden
+            />
+          </button>
+        )}
         <div className="relative z-20">
           <AgentSwitch agent={agent} onToggle={onToggle} pending={pending} />
         </div>
@@ -302,6 +328,11 @@ function AgentCard({
           )}
         </InfoRow>
       </div>
+      {webhookOpen && (
+        <div className="relative z-20 -mx-4 -mb-4 mt-4">
+          <AgentWebhookPanel agent={agent} />
+        </div>
+      )}
     </div>
   );
 }
