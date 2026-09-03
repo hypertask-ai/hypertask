@@ -115,6 +115,7 @@ Before changing a feature, trace the entry point through middleware, route handl
 - Name the key after the ticket, for example `htpr-6091-feature-flags`; never reuse a flag for another feature.
 - New flags always default to **Only me**. Developers never release them; Valentin changes the mode at `/admin/flags`.
 - Gate protected behavior on the server. `useFlag` only hides client UI and never replaces API authorization.
-- Bug fixes restoring documented behavior, invisible performance work, security fixes, dependency or CI changes, and copy fixes do not need flags.
+- Bug fixes restoring documented behavior, invisible performance work, security fixes, dependency or CI changes, copy fixes, and tickets carrying the **AI CHAT 💬** label do not need flags.
+- The merge freeze for a required flag does not apply to tickets carrying the **AI CHAT 💬** label.
 - Reviewers must block feature or UI pull requests that omit the required flag.
 - After a flag has stayed on **Everyone** for 14 days, create a follow-up ticket to remove the flag and dead branch.
