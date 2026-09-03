@@ -76,19 +76,19 @@ const handler = createMcpHandler(
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
 
-  if (bearerToken.startsWith('htmk_')) {
-    const request = new NextRequest(_request.url, {
-      method: _request.method,
-      headers: _request.headers,
-    })
-    const ctx = await validateMcpAuth(request, {
-      deferManagementPermissionCheck: true,
-    })
-    if (
-      !ctx?.management ||
-      !hasAnyManagementPermission(ctx.management.permissions)
-    ) return undefined
+  const headers = new Headers(_request.headers)
+  headers.set('Authorization', `Bearer ${bearerToken}`)
+  const request = new NextRequest(_request.url, {
+    method: _request.method,
+    headers,
+  })
+  const ctx = await validateMcpAuth(request, {
+    deferManagementPermissionCheck: true,
+  })
+  if (!ctx) return undefined
 
+  if (ctx.management) {
+    if (!hasAnyManagementPermission(ctx.management.permissions)) return undefined
     return {
       token: bearerToken,
       clientId: String(ctx.user.id),
@@ -96,39 +96,16 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
     }
   }
 
-  const secret = process.env.JWT_SECRET
-  if (!secret) return undefined
-
-  try {
-    // Mirror validateMcpAuth's acceptance chain (src/lib/mcp/auth.ts): its final
-    // fallback verifies signature + any known issuer with NO audience check, so
-    // one permissive verify here matches it exactly. OAuth access tokens from the
-    // claude.ai connector carry a different audience and MUST pass this gate;
-    // strict per-audience auth (+ DB revocation) happens downstream in /api/mcp/*.
-    const decoded = jwt.verify(bearerToken, secret, {
-      issuer: [
-        'hypertasks',
-        process.env.JWT_ISSUER || 'hypertask',
-        process.env.JWT_ISSUER || 'https://app.hypertask.ai',
-      ],
-    }) as jwt.JwtPayload
-
-    const clientId =
-      typeof decoded.userId === 'number'
-        ? String(decoded.userId)
-        : typeof decoded.sub === 'string'
-          ? decoded.sub
-          : undefined
-    if (!clientId) return undefined
-
-    return {
-      token: bearerToken,
-      clientId,
-      scopes: ['mcp:full'],
-      expiresAt: decoded.exp,
-    }
-  } catch {
-    return undefined
+  const decoded = jwt.decode(bearerToken)
+  const expiresAt =
+    decoded && typeof decoded !== 'string' && typeof decoded.exp === 'number'
+      ? decoded.exp
+      : undefined
+  return {
+    token: bearerToken,
+    clientId: String(ctx.user.id),
+    scopes: ['mcp:full'],
+    expiresAt,
   }
 }
 

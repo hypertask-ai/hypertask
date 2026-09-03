@@ -243,7 +243,7 @@ test("the persisted owner can remove a client after authorization-code cleanup",
   const response = await remove(DELETE);
 
   assert.equal(response.status, 200);
-  assert.equal(calls.committed.length, 2);
+  assert.equal(calls.committed.length, 3);
 });
 
 test("the owner revokes the selected client's tracked access token and registration", async () => {
@@ -257,7 +257,7 @@ test("the owner revokes the selected client's tracked access token and registrat
   });
   assert.equal(calls.queries.length, 3);
   assert.ok(calls.queries.every(({ sql }) => sql.includes("FOR UPDATE")));
-  assert.equal(calls.revokedTokenUpserts.length, 1);
+  assert.equal(calls.revokedTokenUpserts.length, 2);
   assert.deepEqual(calls.revokedTokenUpserts[0].where, {
     jti: "selected-client-access-token",
   });
@@ -267,10 +267,18 @@ test("the owner revokes the selected client's tracked access token and registrat
     calls.revokedTokenUpserts[0].create.expires_at,
     new Date("2099-01-01T00:00:00.000Z"),
   );
+  assert.deepEqual(calls.revokedTokenUpserts[1].where, {
+    jti: "user:6:oauth:legacy",
+  });
+  assert.equal(calls.revokedTokenUpserts[1].create.user_id, 6);
+  assert.deepEqual(
+    calls.revokedTokenUpserts[1].create.expires_at,
+    new Date("9999-12-31T23:59:59.999Z"),
+  );
   assert.deepEqual(calls.clientDeletes, [
     { where: { client_id: "owned-client" } },
   ]);
-  assert.equal(calls.committed.length, 2);
+  assert.equal(calls.committed.length, 3);
 });
 
 test("a failed delete rolls the revocation back and returns an error", async () => {
@@ -297,7 +305,7 @@ test("serialization failures retry the complete removal transaction", async () =
 
   assert.equal(response.status, 200);
   assert.equal(calls.transactions, 2);
-  assert.equal(calls.committed.length, 2);
+  assert.equal(calls.committed.length, 3);
 });
 
 test("Settings uses the approved Remove dialog and updates the list locally", () => {

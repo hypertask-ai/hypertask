@@ -189,6 +189,7 @@ test('Android receives a hashed, rotating, revocable OAuth session', async () =>
   assert.equal(initial.expires_in, 60 * 60)
   assert.match(initial.refresh_token, /^[A-Za-z0-9_-]{43}$/)
   assert.equal(typeof initialAccess.jti, 'string')
+  assert.equal(initialAccess.client_id, clientId)
   const initialHash = crypto.createHash('sha256').update(initial.refresh_token).digest('hex')
   const initialRow = refreshRows.get(initialHash)
   assert.ok(initialRow)
@@ -205,7 +206,10 @@ test('Android receives a hashed, rotating, revocable OAuth session', async () =>
 
   assert.equal(refreshResponse.status, 200)
   assert.notEqual(refreshed.refresh_token, initial.refresh_token)
+  assert.equal(refreshedAccess.client_id, clientId)
   assert.notEqual(refreshedAccess.jti, initialAccess.jti)
+  assert.equal(clientLocks.length, 2)
+  assert.deepEqual(clientLocks[1].values, [clientId])
   assert.equal(refreshRows.get(
     crypto.createHash('sha256').update(refreshed.refresh_token).digest('hex'),
   ).familyId, initialRow.familyId)

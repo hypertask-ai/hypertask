@@ -175,6 +175,7 @@ async function exchangeRefreshToken(formData: FormData) {
     stored.firebaseUid,
     stored.user.id,
     stored.user.email,
+    stored.clientId,
     MOBILE_ACCESS_TOKEN_EXPIRY_SECONDS,
   )
   const nextAccessIdentity = accessTokenIdentity(nextAccessToken)
@@ -186,6 +187,14 @@ async function exchangeRefreshToken(formData: FormData) {
   for (let attempt = 0; attempt < SERIALIZABLE_ATTEMPTS; attempt += 1) {
     try {
       rotated = await prisma.$transaction(async (tx) => {
+        const clients = await tx.$queryRaw<Array<{ client_id: string }>>`
+          SELECT "client_id"
+          FROM "OAuthClient"
+          WHERE "client_id" = ${stored.clientId}
+          FOR UPDATE
+        `
+        if (clients.length !== 1) return false
+
         const currentUser = await tx.user.findUnique({
           where: { id: stored.user.id },
           select: { mcpTokensRevokedAt: true },
@@ -447,6 +456,7 @@ export async function POST(request: NextRequest) {
             authCode.firebase_uid,
             authCode.user.id,
             authCode.user.email,
+            authCode.client_id,
             accessTokenExpirySeconds,
             agentId,
             agentTokenJti

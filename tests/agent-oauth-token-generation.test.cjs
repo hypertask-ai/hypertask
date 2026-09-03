@@ -24,6 +24,7 @@ const {
 } = jiti(path.join(root, 'src/lib/mcp/auth.ts'))
 
 const agentId = 'a9ced00e-1c88-4c9d-a5a4-497b5c494759'
+const clientId = 'oauth-client'
 
 test('OAuth agent tokens retain the managed token generation across restarts', () => {
   const managedToken = jwt.sign(
@@ -41,6 +42,7 @@ test('OAuth agent tokens retain the managed token generation across restarts', (
     'firebase-owner',
     6,
     'owner@example.test',
+    clientId,
     3600,
     agentId,
     generation
@@ -51,6 +53,7 @@ test('OAuth agent tokens retain the managed token generation across restarts', (
   })
 
   assert.equal(decoded.agentId, agentId)
+  assert.equal(decoded.client_id, clientId)
   assert.equal(decoded.agentTokenGeneration, 'generation-7')
   assert.notEqual(decoded.jti, 'generation-7')
   assert.equal(presentedAgentTokenGeneration(decoded), 'generation-7')
@@ -59,10 +62,10 @@ test('OAuth agent tokens retain the managed token generation across restarts', (
 
 test('OAuth credentials get unique jtis within one managed generation', () => {
   const first = jwt.decode(createOAuthToken(
-    'firebase-owner', 6, 'owner@example.test', 3600, agentId, 'generation-7'
+    'firebase-owner', 6, 'owner@example.test', clientId, 3600, agentId, 'generation-7'
   ))
   const second = jwt.decode(createOAuthToken(
-    'firebase-owner', 6, 'owner@example.test', 3600, agentId, 'generation-7'
+    'firebase-owner', 6, 'owner@example.test', clientId, 3600, agentId, 'generation-7'
   ))
 
   assert.equal(first.agentTokenGeneration, second.agentTokenGeneration)
@@ -72,7 +75,7 @@ test('OAuth credentials get unique jtis within one managed generation', () => {
 test('OAuth credentials carry millisecond issuance time for revoke-all ordering', () => {
   const before = Date.now()
   const decoded = jwt.decode(createOAuthToken(
-    'firebase-owner', 6, 'owner@example.test', 3600
+    'firebase-owner', 6, 'owner@example.test', clientId, 3600
   ))
   const after = Date.now()
 
@@ -87,6 +90,7 @@ test('OAuth refuses to mint an unrevocable agent token without a generation', ()
       'firebase-owner',
       6,
       'owner@example.test',
+      clientId,
       3600,
       agentId
     ),
@@ -132,7 +136,7 @@ test('the stored generation is the minted credential jti and nothing else', () =
 
 test('rotation changes the accepted generation without reusing OAuth jti', () => {
   const oauthToken = createOAuthToken(
-    'firebase-owner', 6, 'owner@example.test', 3600, agentId, 'generation-7'
+    'firebase-owner', 6, 'owner@example.test', clientId, 3600, agentId, 'generation-7'
   )
   const decoded = jwt.decode(oauthToken)
 

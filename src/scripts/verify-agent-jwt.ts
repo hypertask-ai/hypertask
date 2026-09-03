@@ -34,6 +34,7 @@ const oauthAgent = createOAuthToken(
   "firebase-uid",
   3,
   "o@example.com",
+  "agent-oauth-client",
   3600,
   AGENT_ID,
   AGENT_TOKEN_JTI
@@ -52,7 +53,13 @@ if (typeof oauthAgentDecoded.jti !== "string" || oauthAgentDecoded.jti === AGENT
   throw new Error("createOAuthToken should use a distinct OAuth jti");
 }
 
-const oauthUser = createOAuthToken("firebase-uid-2", 4, "u@example.com", 3600);
+const oauthUser = createOAuthToken(
+  "firebase-uid-2",
+  4,
+  "u@example.com",
+  "user-oauth-client",
+  3600,
+);
 const oauthUserDecoded = jwt.decode(oauthUser) as jwt.JwtPayload;
 if (oauthUserDecoded.exp === undefined) {
   throw new Error("createOAuthToken without agent should set exp");

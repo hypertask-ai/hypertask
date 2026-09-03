@@ -35,8 +35,12 @@ const {
   classifyMcpAuthFailure,
   mcpUnauthorizedResponse,
   createMcpToken,
+  createOAuthToken,
   legacyTokenRevocationJti,
 } = jiti(path.join(root, 'src/lib/mcp/auth.ts'))
+const { oauthLegacyRevocationJti } = jiti(
+  path.join(root, 'src/lib/mcp/oauthTokenContract.ts')
+)
 
 const USER = { id: 6, email: 'valentin@hypertask.ai' }
 
@@ -53,10 +57,11 @@ function requestWithToken(token) {
 function lookup({
   revokedJtis = [],
   mcpTokensRevokedAt = null,
+  oauthClientExists = true,
   user = USER,
   agent = null,
 } = {}) {
-  const calls = { revokedLookups: 0, agentLookups: 0 }
+  const calls = { revokedLookups: 0, agentLookups: 0, oauthClientLookups: 0 }
   const record = user ? { id: user.id, mcpTokensRevokedAt } : null
   return {
     calls,
@@ -64,6 +69,12 @@ function lookup({
       user: {
         findUnique: async () => record,
         findFirst: async () => record,
+      },
+      oAuthClient: {
+        findUnique: async ({ where }) => {
+          calls.oauthClientLookups += 1
+          return oauthClientExists ? { client_id: where.client_id } : null
+        },
       },
       revokedToken: {
         findFirst: async (args) => {
@@ -113,6 +124,43 @@ test('a token revoked through the administrative namespaced jti is still named a
   const reason = await classifyMcpAuthFailure(requestWithToken(token), db)
 
   assert.equal(reason, 'token_revoked')
+})
+
+test('a removed OAuth client is named as revoked', async () => {
+  const token = createOAuthToken(
+    'firebase-owner',
+    USER.id,
+    USER.email,
+    'removed-client',
+  )
+  const { db, calls } = lookup({ oauthClientExists: false })
+
+  assert.equal(
+    await classifyMcpAuthFailure(requestWithToken(token), db),
+    'token_revoked'
+  )
+  assert.equal(calls.oauthClientLookups, 1)
+})
+
+test('the legacy OAuth cutoff is named as revoked without a client lookup', async () => {
+  const token = jwt.sign(
+    { sub: 'firebase-owner', userId: USER.id, jti: 'legacy-oauth' },
+    testSigningKey,
+    {
+      issuer: process.env.JWT_ISSUER,
+      audience: 'http://localhost:3001',
+      expiresIn: '30d',
+    }
+  )
+  const { db, calls } = lookup({
+    revokedJtis: [oauthLegacyRevocationJti(USER.id)],
+  })
+
+  assert.equal(
+    await classifyMcpAuthFailure(requestWithToken(token), db),
+    'token_revoked'
+  )
+  assert.equal(calls.oauthClientLookups, 0)
 })
 
 test('legacy revocation identifies one exact bearer without affecting another user token', async () => {

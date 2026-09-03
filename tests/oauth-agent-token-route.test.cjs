@@ -194,6 +194,7 @@ test('OAuth exchange binds a unique credential to the stored managed generation'
 
   assert.equal(response.status, 200)
   assert.equal(decoded.agentId, agentId)
+  assert.equal(decoded.client_id, authCode.client_id)
   assert.equal(decoded.agentTokenGeneration, 'managed-generation-7')
   assert.notEqual(decoded.jti, 'managed-generation-7')
   assert.equal(decoded.exp, undefined)

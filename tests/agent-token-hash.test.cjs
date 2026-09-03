@@ -38,8 +38,13 @@ function stubModule(relativePath, exports) {
 
 const owner = { id: 6, email: "owner@example.test", displayName: "Owner" };
 const agentId = "55555555-5555-4555-8555-555555555555";
+const oauthClientId = "owned-oauth-client";
 
-const state = { agent: null };
+const state = {
+  agent: null,
+  oauthClientExists: true,
+  oauthLegacyTokensRevoked: false,
+};
 
 stubModule("src/lib/prisma.ts", {
   default: {
@@ -47,11 +52,21 @@ stubModule("src/lib/prisma.ts", {
       findUnique: async ({ where }) =>
         where.id === owner.id ? { ...owner, mcpTokensRevokedAt: null } : null,
       findFirst: async ({ where }) =>
-        where.email === owner.email
-          ? { ...owner, mcpTokensRevokedAt: null }
+        where.email === owner.email ? { ...owner, mcpTokensRevokedAt: null } : null,
+    },
+    revokedToken: {
+      findFirst: async ({ where }) =>
+        state.oauthLegacyTokensRevoked &&
+        where.jti.in.includes(`user:${owner.id}:oauth:legacy`)
+          ? { jti: `user:${owner.id}:oauth:legacy` }
           : null,
     },
-    revokedToken: { findFirst: async () => null },
+    oAuthClient: {
+      findUnique: async ({ where }) =>
+        state.oauthClientExists && where.client_id === oauthClientId
+          ? { client_id: oauthClientId }
+          : null,
+    },
     agent: {
       // The real query filters on id, owner and liveness. Answering on the id
       // alone would let the route drop the owner check and still look correct.
@@ -105,6 +120,8 @@ function mintAndStore() {
 
 test.beforeEach(() => {
   state.agent = null;
+  state.oauthClientExists = true;
+  state.oauthLegacyTokensRevoked = false;
 });
 
 test("the issued credential still authenticates once only its digest is stored", async () => {
@@ -193,12 +210,13 @@ test("a token sharing the stored generation but not the stored bytes is refused"
   assert.equal(await validateMcpAuth(requestWith(sameGeneration)), null);
 });
 
-test("an OAuth access token is accepted on its generation and rejected once rotated", async () => {
+test("an OAuth access token requires its live client and current agent generation", async () => {
   mintAndStore();
   const oauthToken = createOAuthToken(
     "firebase-owner",
     owner.id,
     owner.email,
+    oauthClientId,
     3600,
     agentId,
     state.agent.mcpTokenJti,
@@ -206,8 +224,76 @@ test("an OAuth access token is accepted on its generation and rejected once rota
 
   assert.equal((await validateMcpAuth(requestWith(oauthToken)))?.agentId, agentId);
 
+  state.oauthClientExists = false;
+  assert.equal(await validateMcpAuth(requestWith(oauthToken)), null);
+
+  state.oauthClientExists = true;
   mintAndStore();
   assert.equal(await validateMcpAuth(requestWith(oauthToken)), null);
+});
+
+test("removing a client rejects legacy OAuth tokens without revoking direct MCP tokens", async () => {
+  const legacyOAuthToken = jwt.sign(
+    {
+      sub: "firebase-owner",
+      userId: owner.id,
+      email: owner.email,
+      jti: crypto.randomUUID(),
+    },
+    TEST_SIGNING_KEY,
+    {
+      issuer: process.env.JWT_ISSUER,
+      audience: process.env.JWT_OAUTH_AUDIENCE,
+      expiresIn: 3600,
+    },
+  );
+  const directToken = mintAndStore();
+
+  assert.equal((await validateMcpAuth(requestWith(legacyOAuthToken)))?.user.id, owner.id);
+  state.oauthLegacyTokensRevoked = true;
+  assert.equal(await validateMcpAuth(requestWith(legacyOAuthToken)), null);
+  assert.equal((await validateMcpAuth(requestWith(directToken)))?.agentId, agentId);
+});
+
+test("the legacy marker covers the historical OAuth audience", async () => {
+  const legacyOAuthToken = jwt.sign(
+    {
+      sub: "firebase-owner",
+      userId: owner.id,
+      email: owner.email,
+      jti: crypto.randomUUID(),
+    },
+    TEST_SIGNING_KEY,
+    {
+      issuer: process.env.JWT_ISSUER,
+      audience: "http://localhost:3001",
+      expiresIn: 3600,
+    },
+  );
+
+  assert.equal((await validateMcpAuth(requestWith(legacyOAuthToken)))?.user.id, owner.id);
+  state.oauthLegacyTokensRevoked = true;
+  assert.equal(await validateMcpAuth(requestWith(legacyOAuthToken)), null);
+});
+
+test("a malformed OAuth client claim fails closed", async () => {
+  const malformed = jwt.sign(
+    {
+      sub: "firebase-owner",
+      userId: owner.id,
+      email: owner.email,
+      jti: crypto.randomUUID(),
+      client_id: 42,
+    },
+    TEST_SIGNING_KEY,
+    {
+      issuer: process.env.JWT_ISSUER,
+      audience: process.env.JWT_OAUTH_AUDIENCE,
+      expiresIn: 3600,
+    },
+  );
+
+  assert.equal(await validateMcpAuth(requestWith(malformed)), null);
 });
 
 test("another JWT_SECRET-signed flow cannot claim its way out of the digest check", async () => {

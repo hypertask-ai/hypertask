@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { oauthLegacyRevocationJti } from "@/lib/mcp/oauthTokenContract";
 import prisma from "@/lib/prisma";
 
 const DELETE_ATTEMPTS = 3;
+const PERMANENT_REVOCATION_EXPIRY = new Date("9999-12-31T23:59:59.999Z");
 
 class ClientNotOwnedError extends Error {}
 
@@ -119,6 +121,17 @@ export async function DELETE(
               update: { revoked_at: now },
             });
           }
+          const legacyRevocationJti = oauthLegacyRevocationJti(session.userId);
+          await tx.revokedToken.upsert({
+            where: { jti: legacyRevocationJti },
+            create: {
+              jti: legacyRevocationJti,
+              user_id: session.userId,
+              revoked_at: now,
+              expires_at: PERMANENT_REVOCATION_EXPIRY,
+            },
+            update: { revoked_at: now },
+          });
           await tx.oAuthClient.delete({ where: { client_id: clientId } });
         });
         break;
