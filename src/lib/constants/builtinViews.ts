@@ -54,7 +54,7 @@ export const overduePredicate: BuiltinView["predicate"] = (task, context) =>
   !isDoneColumn(task.section, context.doneSectionTitles);
 
 export const blockedPredicate: BuiltinView["predicate"] = (task) =>
-  task.waitingOnUserId != null || (task._count?.relatedFromTasks ?? 0) > 0;
+  task.waitingOnUserId != null || (task.blockingTasks?.length ?? 0) > 0;
 
 export const agentsPredicate: BuiltinView["predicate"] = (task) =>
   (task.assignees ?? []).some((assignee) => assignee.agentId != null);
