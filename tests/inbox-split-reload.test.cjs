@@ -24,25 +24,25 @@ const resolve = (overrides = {}) =>
   });
 
 test("the inbox restores a system split from the URL after reload", () => {
-  assert.equal(resolve({ split: "Reactions" }), 1);
+  assert.strictEqual(resolve({ split: "Reactions" }), 1);
 });
 
 test("a board split restores by project id", () => {
-  assert.equal(resolve({ split: "Product", projectId: "15" }), 2);
+  assert.strictEqual(resolve({ split: "Product", projectId: "15" }), 2);
 });
 
 test("a later tabs refresh does not reset a restored URL split", () => {
-  assert.equal(
+  assert.strictEqual(
     resolve({ split: "Reactions", urlSelectionProcessed: true }),
     null,
   );
 });
 
 test("an inbox URL without a split initializes the default only once", () => {
-  assert.equal(resolve(), 0);
-  assert.equal(resolve({ defaultSelectionProcessed: true }), null);
+  assert.strictEqual(resolve(), 0);
+  assert.strictEqual(resolve({ defaultSelectionProcessed: true }), null);
 });
 
 test("a split that is no longer available leaves selection unchanged", () => {
-  assert.equal(resolve({ split: "Missing" }), null);
+  assert.strictEqual(resolve({ split: "Missing" }), null);
 });
