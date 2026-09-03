@@ -10,6 +10,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -18,15 +19,20 @@ import {
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
-import { appShellRailAtom } from "@/store";
+import { appShellRailAtom, agentChatTeamCycleAtom } from "@/store";
 import { IUser, IProject, ITask } from "@/models/model";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import toast from "react-hot-toast";
-import { ArrowLeft, ChevronLeft, ChevronRight, Info, Plus, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Info, Plus, X } from "lucide-react";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
+import {
+  wrapTablesInMessageHtml,
+  interceptMessageLinkClick,
+} from "@/utils/helperFunctions/messageHtmlLinks";
+import formatDateDifference from "@/utils/generateTime";
 import { isWorking, statusOf, listTeams } from "@/lib/agents/registerView";
 import {
   tokenizeMessageLinks,
@@ -45,6 +51,10 @@ import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
+import { AudioButton } from "@/components/RTE/Components/AudioButton";
+import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
+import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -60,7 +70,6 @@ const AWAITING_POLL_MS = 4000;
 const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 8000;
 const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
-const TEAM_FILTER_KEY = "agentChat.teamId";
 
 type TChatMessage = {
   id: string;
@@ -101,9 +110,21 @@ function MessageBubble({
   message: TChatMessage;
   projectIdForPrefix: TProjectIdForPrefix;
 }) {
-  if (message.role === "human") {
+  const router = useRouter();
+  const isHuman = message.role === "human";
+  const timestamp = (
+    <div
+      className={cn(
+        "mt-0.5 text-[10px] text-text-light-gray opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 max-md:opacity-100",
+        isHuman ? "text-right" : "text-left",
+      )}
+    >
+      {formatDateDifference(new Date(message.createdAt))}
+    </div>
+  );
+  if (isHuman) {
     return (
-      <div className="flex justify-end">
+      <div className="group/msg flex flex-col items-end">
         <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground whitespace-pre-wrap break-words">
           {tokenizeMessageLinks(message.content, projectIdForPrefix).map(
             (segment, i) =>
@@ -122,21 +143,39 @@ function MessageBubble({
               ),
           )}
         </div>
+        {timestamp}
       </div>
     );
   }
   // markdownToHtml escapes raw HTML and sanitizes the result, so the string is
   // safe to inject.
   return (
-    <div className="flex justify-start">
+    <div className="group/msg flex flex-col items-start">
       <div
         className={cn(
           "max-w-[80%] rounded-[4px] bg-cardBackground px-3 py-2 text-dense",
           MARKDOWN_CLASS,
         )}
-        dangerouslySetInnerHTML={{ __html: markdownToHtml(message.content) }}
+        onClick={(e) => interceptMessageLinkClick(e, router)}
+        dangerouslySetInnerHTML={{
+          __html: wrapTablesInMessageHtml(markdownToHtml(message.content)),
+        }}
       />
+      {timestamp}
     </div>
+  );
+}
+
+function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="Scroll to latest messages"
+      className="absolute left-1/2 top-2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-active-elementBg shadow-md"
+    >
+      <ChevronDown size={18} strokeWidth={1.75} />
+    </button>
   );
 }
 
@@ -201,7 +240,26 @@ const AgentChatClient = (props: IProp) => {
   const [messages, setMessages] = useState<TChatMessage[] | null>(null);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  // Mic dictation (AudioButton), same component and editor={null} pattern as
+  // the plain-text title field in TaskTitleModal.tsx.
+  const [isRecording, setIsRecording] = useState(false);
+  const [isDictationProcessing, setIsDictationProcessing] = useState(false);
   const [sending, setSending] = useState(false);
+  // FIFO follow-ups typed while the agent is working (HTPR-6038), same
+  // pattern as useAiChat.ts's messageQueueRef/drainQueuedMessage: the
+  // composer never locks, a send while awaiting enqueues instead of
+  // double-firing, and the oldest queued message auto-sends once the
+  // agent's reply lands.
+  const [queuedMessages, setQueuedMessages] = useState<
+    { id: string; content: string }[]
+  >([]);
+  const messageQueueRef = useRef<{ id: string; content: string }[]>([]);
+  // Set to a queued item's id when its drained send fails, so the item goes
+  // back to the front of the queue instead of vanishing into the draft, and
+  // draining stops until that same item is removed (the failure would
+  // otherwise flip `awaiting` back to false and fire the next item out of
+  // order).
+  const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
   // When the current wait for this session's reply began (last send, or first
   // noticed); the awaiting poll stops 15 minutes after it.
@@ -213,6 +271,12 @@ const AgentChatClient = (props: IProp) => {
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
   const [isNarrow, setIsNarrow] = useState(false);
   const [openingFullChat, setOpeningFullChat] = useState(false);
+  // Auto-scroll + "scroll to bottom" indicator, same pattern as AI Chat's
+  // MessageList.tsx / useAiChat.ts (handleMessageListScroll,
+  // scrollMessagesToBottom), ported directly since both are a handful of
+  // plain DOM-ref lines with no AI-chat-specific coupling.
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   // "+" in the roster header: a minimal name-only create flow over the same
   // endpoint the admin API and CLI use, since no create-agent page exists yet.
@@ -237,6 +301,10 @@ const AgentChatClient = (props: IProp) => {
   const selectedIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
+  // Mirrors `awaiting` (computed below, after `messages` is known) for
+  // drainQueuedMessage, a useRef-stable callback that can't otherwise read a
+  // fresh value of a plain render-time const.
+  const awaitingRef = useRef(false);
   // Mirrors `draft` for the global keydown handler below, so that handler
   // doesn't need `draft` in its dependency array (which would tear down and
   // re-add the window listener on every keystroke).
@@ -317,23 +385,19 @@ const AgentChatClient = (props: IProp) => {
     }
   }, []);
 
-  // The team filter is remembered per browser; default to "All teams".
+  // Default the team filter to whatever team the user was last working in on
+  // a board (HTPR-6036), not a separately-remembered Agent Chat preference:
+  // switching boards to another team and then opening Agent Chat should show
+  // that team's agents. A manual change below only affects this component's
+  // own state, so it wins for the rest of this visit without being written
+  // back here (the keyboard team-cycle shortcut is the one thing that does
+  // update the shared last-board-team value from this page).
   useEffect(() => {
-    try {
-      setTeamId(window.localStorage.getItem(TEAM_FILTER_KEY) || null);
-    } catch {
-      // Private browsing and hardened policies can reject localStorage.
-    }
+    setTeamId(getLastBoardTeam());
   }, []);
 
   const setTeamFilter = (next: string | null) => {
     setTeamId(next);
-    try {
-      if (next) window.localStorage.setItem(TEAM_FILTER_KEY, next);
-      else window.localStorage.removeItem(TEAM_FILTER_KEY);
-    } catch {
-      // Private browsing and hardened policies can reject localStorage.
-    }
   };
 
   // Below 900px the three panes stack: roster list, then chat, and the details
@@ -373,6 +437,10 @@ const AgentChatClient = (props: IProp) => {
       // Same signal a failed send sets: no live webhook subscribed to
       // chat.message, so the human side of the notice must survive a reload.
       if (data.chatEnabled === false) setDeliveryNotice(true);
+      // Draining here would read awaitingRef before the render that follows
+      // this setMessages has run, so it'd still see the stale (pre-reply)
+      // value. The effect below (keyed on the derived `awaiting`) is the one
+      // place that's guaranteed to observe the committed state instead.
     } catch (e) {
       if (
         sessionIdRef.current === loadSessionId &&
@@ -438,6 +506,9 @@ const AgentChatClient = (props: IProp) => {
     (agent: TAgent) => {
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
+      // A queued follow-up belongs to the chat it was typed in, not whatever
+      // agent gets selected next.
+      messageQueueRef.current = [];
       // flushSync (rather than the normal batched update) commits the chat
       // pane, composer included, before this handler returns, so the
       // composerRef.focus() below still runs inside the tap's call stack --
@@ -451,6 +522,7 @@ const AgentChatClient = (props: IProp) => {
         setMessagesError(null);
         setDeliveryNotice(false);
         setDraft("");
+        setQueuedMessages([]);
       });
       dismissMention();
       if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
@@ -483,14 +555,66 @@ const AgentChatClient = (props: IProp) => {
     void loadMessages(sessionName);
   }, [sessionName, loadMessages]);
 
+  const scrollMessagesToBottom = useCallback(
+    (behavior: ScrollBehavior = "smooth") => {
+      const target = messageListRef.current;
+      if (!target) return;
+      target.scrollTo({ top: target.scrollHeight, behavior });
+    },
+    [],
+  );
+
+  const handleMessageListScroll = useCallback(() => {
+    const target = messageListRef.current;
+    if (!target) {
+      setShowScrollToBottom(false);
+      return;
+    }
+    const { scrollTop, scrollHeight, clientHeight } = target;
+    setShowScrollToBottom(scrollTop + clientHeight < scrollHeight - 4);
+  }, []);
+
+  // Jump to the bottom on a new message (own send, poll, or realtime nudge),
+  // but not on every poll: a poll can hand back the same-length or reordered
+  // array with nothing new in it, and if the user has scrolled up to read
+  // older content that must not yank them back down.
+  const prevMessagesLengthRef = useRef(0);
+  useLayoutEffect(() => {
+    const length = messages?.length ?? 0;
+    const grew = length > prevMessagesLengthRef.current;
+    prevMessagesLengthRef.current = length;
+    // showScrollToBottom is false when the user was already at (or near) the
+    // bottom as of the last scroll read, so it's safe to follow new content.
+    if (grew || !showScrollToBottom) scrollMessagesToBottom("smooth");
+    handleMessageListScroll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages]);
+  useLayoutEffect(() => {
+    // A different chat's message count has nothing to do with this one's;
+    // don't let it suppress the next genuine-growth scroll.
+    prevMessagesLengthRef.current = 0;
+    scrollMessagesToBottom("auto");
+    handleMessageListScroll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionName]);
+
   const lastMessage =
     messages && messages.length > 0 ? messages[messages.length - 1] : null;
   // Same definition as the route's `awaiting`: the last message is ours, so
   // the ball is in the agent's court.
   const awaiting = lastMessage?.role === "human";
+  awaitingRef.current = awaiting;
   // A failed delivery (deliveryNotice) leaves the ball with us: the composer
   // must reopen so the user can send again, and the poll must stay stopped.
   const composerLocked = awaiting && !deliveryNotice;
+
+  // Drain a queued follow-up once the ball is actually back in our court.
+  // Runs after render, so it always sees the awaiting value this render
+  // computed -- unlike draining synchronously inside loadMessages, which ran
+  // before awaitingRef had been updated and left the queue stuck.
+  useEffect(() => {
+    if (!awaiting) drainQueuedMessageRef.current();
+  }, [awaiting]);
 
   // Record when the current wait began so the poll below can time out; a new
   // wait for the same session (a fresh send) restarts the clock.
@@ -570,6 +694,47 @@ const AgentChatClient = (props: IProp) => {
 
   const teams = useMemo(() => listTeams(agents ?? []), [agents]);
 
+  // Alt+Shift+Arrow team cycling (HTPR-6036): the app-wide keydown handler
+  // (GloablProviders.tsx, alongside Ctrl+B) bumps this atom's seq since it
+  // has no other way to reach this page's team filter state. "All teams"
+  // (null) is one of the stops, matching the dropdown below.
+  const teamCycle = useRecoilValue(agentChatTeamCycleAtom);
+  // Seeded from whatever the atom already holds at mount, not 0: the atom
+  // retains its last event, so a fresh mount (e.g. navigating back to Agent
+  // Chat after cycling teams elsewhere) must acknowledge that stale seq
+  // instead of replaying it as a brand-new press.
+  const teamCycleSeenRef = useRef(teamCycle?.seq ?? 0);
+  // Shared by the atom-driven effect below and the Ctrl+K palette's
+  // Next/Previous team entries (AllCommands.ts -> chatPaletteCommands.ts).
+  const stepTeamCycle = useCallback(
+    (direction: 1 | -1) => {
+      const stops: (string | null)[] = [null, ...teams.map((t) => t.id)];
+      const currentIndex = stops.indexOf(teamId);
+      const nextIndex =
+        (((currentIndex === -1 ? 0 : currentIndex) + direction) %
+          stops.length +
+          stops.length) %
+        stops.length;
+      const next = stops[nextIndex];
+      setTeamId(next);
+      if (next) setLastBoardTeam(next);
+    },
+    [teams, teamId],
+  );
+  useEffect(() => {
+    if (!teamCycle || teamCycle.seq === teamCycleSeenRef.current) return;
+    // The roster (and so `teams`) isn't loaded yet: stepTeamCycle's stops
+    // array would be just [null], silently losing the cycle. Leave the seq
+    // unacknowledged so this effect re-runs and replays it once agents load.
+    if (agents === null) return;
+    teamCycleSeenRef.current = teamCycle.seq;
+    stepTeamCycle(teamCycle.direction);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stepTeamCycle
+    // intentionally excluded: it closes over teamId, and re-running this on
+    // every teamId change (including the ones it causes itself) would fight
+    // the cycle. Only a new atom event should trigger a step.
+  }, [teamCycle, teams, agents]);
+
   const roster = useMemo(() => {
     const visible = (agents ?? []).filter(
       (a) => a.revokedAt === null && a.archivedAt === null,
@@ -596,29 +761,24 @@ const AgentChatClient = (props: IProp) => {
     });
   }, [agents, search, teamId, teams]);
 
-  const handleSend = async () => {
-    const text = draft.trim();
-    if (!session || !text || sendingRef.current) return;
-    if (text.length > MAX_MESSAGE_LENGTH) {
-      toast.error("Message is too long (8000 characters max)");
-      return;
-    }
+  // The actual POST, used by both a direct send and a drained queue item.
+  // Reads the target session off sessionIdRef (not the `session` state
+  // closure) so a queued send drained after the user switched agents can
+  // still be safely dropped by the same staleness check a direct send uses.
+  const sendMessageText = useCallback(async (text: string, queuedId?: string) => {
+    const targetSessionId = sessionIdRef.current;
+    if (!targetSessionId) return;
     const optimistic: TChatMessage = {
       // react-hooks/purity false-flags this pre-existing, unrelated line
       // purely from the shape of unrelated functions added elsewhere in this
-      // component (confirmed by isolating each addition); handleSend only
-      // ever runs from an event handler, never during render.
+      // component (confirmed by isolating each addition); sendMessageText
+      // only ever runs from an event handler, never during render.
       // eslint-disable-next-line react-hooks/purity
       id: `optimistic-${Date.now()}`,
       role: "human",
       content: text,
       createdAt: new Date().toISOString(),
     };
-    setDraft("");
-    dismissMention();
-    // The composer is about to disable while the agent works; put the cursor
-    // back now so the next message can start the moment it re-enables.
-    composerRef.current?.focus();
     setDeliveryNotice(false);
     // A new message restarts the 15 minute awaiting-poll bound.
     setAwaitingSince(null);
@@ -626,7 +786,7 @@ const AgentChatClient = (props: IProp) => {
     sendingRef.current = true;
     setSending(true);
     try {
-      const res = await fetch(`/api/agent-chat/${session.id}/messages`, {
+      const res = await fetch(`/api/agent-chat/${targetSessionId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
@@ -641,7 +801,7 @@ const AgentChatClient = (props: IProp) => {
         throw new Error(data.error ?? "Failed to send message");
       }
       const sentMessage = data.message;
-      if (sessionIdRef.current !== session.id) return;
+      if (sessionIdRef.current !== targetSessionId) return;
       setMessages((prev) =>
         (prev ?? []).map((m) => (m.id === optimistic.id ? sentMessage : m)),
       );
@@ -649,15 +809,80 @@ const AgentChatClient = (props: IProp) => {
       // never see this message unless its runtime is set up later.
       if (data.delivered === false) setDeliveryNotice(true);
     } catch (e) {
-      if (sessionIdRef.current !== session.id) return;
-      // Roll the optimistic bubble back and hand the text back to the user.
+      if (sessionIdRef.current !== targetSessionId) return;
+      // Roll the optimistic bubble back.
       setMessages((prev) => (prev ?? []).filter((m) => m.id !== optimistic.id));
-      setDraft(text);
+      if (queuedId) {
+        // A drained queue item failing must not free up the next item to
+        // fire out of order: put it back at the front and block draining
+        // until it's removed.
+        blockedQueueIdRef.current = queuedId;
+        messageQueueRef.current = [{ id: queuedId, content: text }, ...messageQueueRef.current];
+        setQueuedMessages(messageQueueRef.current);
+      } else {
+        setDraft(text);
+      }
       toast.error(e instanceof Error ? e.message : "Failed to send message");
     } finally {
       sendingRef.current = false;
       setSending(false);
+      // A queued follow-up drains via the `awaiting` effect above: success
+      // leaves the ball with the agent (no-op here), and failure reverts the
+      // optimistic message, which flips `awaiting` back to false and fires it.
     }
+  }, []);
+
+  const removeQueuedMessage = useCallback((id: string) => {
+    messageQueueRef.current = messageQueueRef.current.filter(
+      (item) => item.id !== id,
+    );
+    setQueuedMessages(messageQueueRef.current);
+    // Removing the item that blocked draining clears the block; anything
+    // still behind it in the queue is free to send again.
+    if (blockedQueueIdRef.current === id) blockedQueueIdRef.current = null;
+  }, []);
+
+  const drainQueuedMessage = useCallback(() => {
+    if (sendingRef.current) return;
+    const queue = messageQueueRef.current;
+    if (queue.length === 0) return;
+    // Only the agent's reply (not the human's own next queued message)
+    // clears the ball from our court -- draining while still awaiting would
+    // fire a second message before the first got a reply.
+    if (awaitingRef.current) return;
+    const [next, ...rest] = queue;
+    // A previously failed item stays at the front and blocks draining until
+    // it's removed, so a later reply landing doesn't fire the next item out
+    // of order.
+    if (blockedQueueIdRef.current === next.id) return;
+    messageQueueRef.current = rest;
+    setQueuedMessages(rest);
+    void sendMessageText(next.content, next.id);
+  }, [sendMessageText]);
+
+  const drainQueuedMessageRef = useRef(drainQueuedMessage);
+  drainQueuedMessageRef.current = drainQueuedMessage;
+
+  const handleSend = async () => {
+    const text = draft.trim();
+    if (!session || !text || sendingRef.current) return;
+    if (text.length > MAX_MESSAGE_LENGTH) {
+      toast.error("Message is too long (8000 characters max)");
+      return;
+    }
+    setDraft("");
+    dismissMention();
+    composerRef.current?.focus();
+    if (composerLocked) {
+      // Same rationale as the optimistic message id above: this only runs
+      // from an event handler, never during render.
+      // eslint-disable-next-line react-hooks/purity
+      const queued = { id: `queued-${Date.now()}`, content: text };
+      messageQueueRef.current = [...messageQueueRef.current, queued];
+      setQueuedMessages(messageQueueRef.current);
+      return;
+    }
+    await sendMessageText(text);
   };
   // Stable reference for the palette-command listener below, which shouldn't
   // re-subscribe on every render just because handleSend is a new closure.
@@ -700,6 +925,14 @@ const AgentChatClient = (props: IProp) => {
     setMentionResults([]);
     setMentionIndex(0);
   };
+
+  // AudioButton's dictation callback. There is no Tiptap editor here, so this
+  // mirrors appendDictationToTitle (TaskTitleModal.tsx): append transcript
+  // text to the plain-string draft, same append helper.
+  const insertDictation = useCallback((transcript: string) => {
+    setDraft((current) => appendTitleDictation(current, transcript));
+    composerRef.current?.focus();
+  }, []);
 
   // Detects an in-progress "@mention" ending at the cursor (must start at the
   // beginning of the text or after whitespace, same rule as the composer's
@@ -910,7 +1143,9 @@ const AgentChatClient = (props: IProp) => {
       if (overlayOpen) return;
       const isCycleKey =
         (e.ctrlKey && e.key === "Tab") ||
-        (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp"));
+        // Excludes Shift: Alt+Shift+Arrow is the app-wide team-cycle
+        // shortcut (GloablProviders.tsx) and must not also fire this.
+        (e.altKey && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp"));
       if (isCycleKey) {
         // A focused control other than the composer (the team filter
         // <select>, a button, a search input) owns Alt+Arrow for its own
@@ -973,12 +1208,18 @@ const AgentChatClient = (props: IProp) => {
         case "add-agent":
           setShowCreateAgent(true);
           return;
+        case "next-team":
+          stepTeamCycle(1);
+          return;
+        case "previous-team":
+          stepTeamCycle(-1);
+          return;
       }
     };
     window.addEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
     return () =>
       window.removeEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
-  }, [cycleAgent, openLatestReplyLinks]);
+  }, [cycleAgent, openLatestReplyLinks, stepTeamCycle]);
 
   // Put the cursor in the composer the moment it becomes usable: on initial
   // load (deep link or roster click) and again after a message sends, so
@@ -1128,7 +1369,17 @@ const AgentChatClient = (props: IProp) => {
         </div>
       ) : (
         <>
-          <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+          <div className="relative flex flex-1 flex-col overflow-hidden">
+            {showScrollToBottom && (
+              <ScrollToBottomButton
+                onClick={() => scrollMessagesToBottom("smooth")}
+              />
+            )}
+          <div
+            ref={messageListRef}
+            onScroll={handleMessageListScroll}
+            className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
+          >
             {messagesError && (
               <p className="text-meta text-red-500">{messagesError}</p>
             )}
@@ -1158,12 +1409,19 @@ const AgentChatClient = (props: IProp) => {
               </div>
             )}
           </div>
+          </div>
           {/* Card surface under the well: the two tokens differ in every theme, so the box stays visible on AMOLED (well = page) and porcelain (card = page). */}
           <div className="shrink-0 bg-cardBackground px-4 pb-4 pt-1">
             {deliveryNotice && (
               <p className="mb-2 text-meta text-text-light-gray">
                 This agent&apos;s runtime has not enabled chat yet.
               </p>
+            )}
+            {queuedMessages.length > 0 && (
+              <QueuedMessagesStrip
+                items={queuedMessages}
+                onRemove={removeQueuedMessage}
+              />
             )}
             <div className="relative flex items-end gap-2">
               {mentionOpen && (
@@ -1199,22 +1457,37 @@ const AgentChatClient = (props: IProp) => {
                 onChange={(e) => handleComposerChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
                 onKeyDown={handleComposerKeyDown}
                 rows={2}
-                disabled={composerLocked}
                 placeholder={
                   composerLocked
-                    ? `${selectedAgent.displayName} is working on a reply`
+                    ? `${selectedAgent.displayName} is working -- this will queue`
                     : `Message ${selectedAgent.displayName}`
                 }
                 aria-label={`Message ${selectedAgent.displayName}`}
                 className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
               />
+              <AudioButton
+                id="agent-chat-audio-button"
+                editor={null}
+                callbackHandler={insertDictation}
+                toggleRecording={setIsRecording}
+                globalRecording={isRecording}
+                hasText={draft.trim().length > 0}
+                onProcessingChange={setIsDictationProcessing}
+                disabled={sending}
+                ariaLabel="Dictate message"
+                className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"
+              />
               <button
                 type="button"
                 onClick={() => void handleSend()}
-                disabled={composerLocked || !draft.trim() || sending}
-                className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-dense font-medium"
+                disabled={!draft.trim() || sending || isRecording || isDictationProcessing}
+                aria-label={composerLocked ? "Queue message" : "Send message"}
+                className={cn(
+                  MOBILE_TARGET,
+                  "rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 text-dense font-medium",
+                )}
               >
-                Send
+                {composerLocked ? "Queue" : "Send"}
               </button>
             </div>
           </div>

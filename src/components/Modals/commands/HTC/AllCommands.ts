@@ -378,6 +378,20 @@ const getAgentChatCommands = (): CommandGroup => ({
       commandMode: CommandMode.AgentChatAddAgent,
       keywords: "agent chat add create new agent",
     },
+    {
+      key: "agentChatNextTeam",
+      name: "Next team",
+      keyboard: ["ALT", "SHIFT", "⭣"],
+      commandMode: CommandMode.AgentChatNextTeam,
+      keywords: "agent chat next team cycle filter",
+    },
+    {
+      key: "agentChatPreviousTeam",
+      name: "Previous team",
+      keyboard: ["ALT", "SHIFT", "⭡"],
+      commandMode: CommandMode.AgentChatPreviousTeam,
+      keywords: "agent chat previous team cycle filter",
+    },
   ],
 });
 

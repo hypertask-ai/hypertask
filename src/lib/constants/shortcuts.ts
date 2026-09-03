@@ -213,6 +213,8 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Send message", pressKey: [cmdControl, "ENTER"] },
         { shortTitle: "Open all links in latest reply", pressKey: ["CTRL", "O"] },
         { shortTitle: "Search tasks to reference", pressKey: ["@"] },
+        { shortTitle: "Next team (any page)", pressKey: [altOptions, "SHIFT", "⭣"] },
+        { shortTitle: "Previous team (any page)", pressKey: [altOptions, "SHIFT", "⭡"] },
       ],
     },
     {

@@ -57,6 +57,7 @@ import {
 } from "@/lib/boardSync/pilot";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
+import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import {
   type BoardReadinessTraceScope,
   createBoardReadinessRouteEntryId,
@@ -1151,6 +1152,7 @@ useEffect(() => {
     const project = _allProjects[_projectIndex]
     setCurrentProject(project)
     setRecoilCurrentProject(project)
+    if (project.teamId) setLastBoardTeam(project.teamId)
   } else if (_allProjects && _projectIndex === -1) {
     // Project not found - might be a timing issue, set to null
     setCurrentProject(null)

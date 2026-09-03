@@ -46,6 +46,7 @@ import {
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
+import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
 import toast from "react-hot-toast";
 
 const SCREENSHOT_MIME_TYPES = new Set([
@@ -660,50 +661,6 @@ function ScreenshotButton({ onClick }: { onClick: () => void }) {
     >
       <ImageIcon size={18} strokeWidth={1.75} />
     </button>
-  );
-}
-
-function QueuedMessagesStrip({
-  items,
-  onRemove,
-}: {
-  items: { id: string; content: string }[];
-  onRemove: (id: string) => void;
-}) {
-  return (
-    <div
-      className="mb-2 flex w-full flex-col gap-1.5 rounded-lg border border-border-light-gray-thin bg-containerBackground p-2"
-      aria-label="Queued messages"
-    >
-      <div className="flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-wide text-text-light-gray">
-        <span>Queued · sends when reply finishes</span>
-        <span>{items.length}</span>
-      </div>
-      <ul className="flex flex-col gap-1">
-        {items.map((item, index) => (
-          <li
-            key={item.id}
-            className="flex items-center gap-2 rounded-md bg-newcomment-well px-2 py-1.5 text-meta text-white-black"
-          >
-            <span
-              className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-hover-active text-[10px] font-bold text-text-light-gray"
-              aria-hidden="true"
-            >
-              {index + 1}
-            </span>
-            <span className="min-w-0 flex-1 truncate">{item.content}</span>
-            <button
-              type="button"
-              className="shrink-0 text-icon-dark-gray hover:text-white-black"
-              aria-label="Remove queued message"
-              onClick={() => onRemove(item.id)}
-            >
-              <X size={14} strokeWidth={1.75} />
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
