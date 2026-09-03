@@ -72,7 +72,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     // excludeUserId must not be the caller. Passing it excluded the owner
     // whenever the owner is also the requester (boards with zero Member
     // rows then returned an empty list even though the owner has full access).
-    const result = await getProjectMembers(projectId);
+    const requestingUserId = user.id;
+    const result = await getProjectMembers(
+      projectId,
+      undefined,
+      requestingUserId,
+    );
 
     if (result.error) {
       return NextResponse.json(

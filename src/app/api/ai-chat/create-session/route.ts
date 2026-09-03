@@ -1,6 +1,5 @@
 import prisma from "@/lib/prisma";
-import { isValidUser } from "@/utils/edgeHelpers";
-import { cookies } from "next/headers";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -13,16 +12,8 @@ const createSessionSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const userCookie = cookieStore.get("nookies_user");
-
-    if (!userCookie?.value) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { isValid, user } = isValidUser(userCookie.value);
-
-    if (!isValid || !user) {
+    const userId = (await getSessionUser(request.headers))?.userId;
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -40,7 +31,7 @@ export async function POST(request: NextRequest) {
       const agent = await prisma.agent.findFirst({
         where: {
           id: parsed.data.agentId,
-          userId: user.id,
+          userId: userId,
           revokedAt: null,
         },
         select: { id: true, displayName: true },
@@ -57,9 +48,9 @@ export async function POST(request: NextRequest) {
       // chat" requests converge on the same row instead of forking two
       // sessions -- a plain findFirst-then-create has a race window here.
       const session = await prisma.chatSession.upsert({
-        where: { userId_agentId: { userId: user.id, agentId: agent.id } },
+        where: { userId_agentId: { userId: userId, agentId: agent.id } },
         update: {},
-        create: { userId: user.id, agentId: agent.id, title: agent.displayName },
+        create: { userId: userId, agentId: agent.id, title: agent.displayName },
         select: { id: true },
       });
       return NextResponse.json({ success: true, session }, { status: 200 });
@@ -67,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     const session = await prisma.chatSession.create({
       data: {
-        userId: user.id,
+        userId: userId,
         taskId: parsed.data.taskId,
       },
       include: {

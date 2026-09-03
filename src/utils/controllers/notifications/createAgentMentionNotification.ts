@@ -21,7 +21,17 @@ export async function createAgentMentionNotification(
     params;
 
   const agent = await prisma.agent.findFirst({
-    where: { id: agentId, revokedAt: null },
+    where: {
+      id: agentId,
+      revokedAt: null,
+      OR: [
+        { userId: mentionedBy },
+        {
+          visibility: "TEAM",
+          members: { some: { projectId } },
+        },
+      ],
+    },
     select: { id: true, userId: true },
   });
 

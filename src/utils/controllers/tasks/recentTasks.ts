@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import getAllMinimal from "../projects/getAllMinimal";
 import { ITask } from "@/models/model";
 import {
@@ -84,6 +85,12 @@ const recentTaskInclude = (userId: number) => ({
 const personalDueDateTaskInclude = (userId: number) => ({
   ...recentTaskInclude(userId),
   assignees: {
+    where: {
+      OR: [
+        { agentId: null },
+        { agent: boardAgentVisibilityWhere(userId) },
+      ],
+    },
     select: {
       userId: true,
       agentId: true,
@@ -120,6 +127,12 @@ const getRecentTasks = async (
           project: { select: { id: true, title: true } },
           savedContent: { where: { userId, commentId: null } },
           assignees: {
+            where: {
+              OR: [
+                { agentId: null },
+                { agent: boardAgentVisibilityWhere(userId) },
+              ],
+            },
             include: {
               user: true,
               agent: { select: publicAgentSelect },

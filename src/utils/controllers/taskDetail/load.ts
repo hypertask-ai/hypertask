@@ -8,6 +8,7 @@ import {
   publicAgentSelect,
   sanitizeAgentCredentials,
 } from "@/lib/agents/publicAgent";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 type Db = Pick<PrismaClient, "$queryRaw">;
 
@@ -150,6 +151,12 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
       },
     },
     assignees: {
+      where: {
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(userId) },
+        ],
+      },
       include: {
         user: { select: userSelect },
         agent: { select: { id: true, displayName: true, photoURL: true } },
@@ -356,6 +363,12 @@ export function legacyTaskInclude(userId: number): Prisma.TaskInclude {
     relatedFromTasks: { include: { targetTask: true } },
     agent: { select: publicAgentSelect },
     assignees: {
+      where: {
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(userId) },
+        ],
+      },
       include: { user: true, agent: { select: publicAgentSelect } },
     },
   };

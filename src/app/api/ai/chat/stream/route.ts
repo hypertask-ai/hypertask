@@ -2190,6 +2190,7 @@ function buildTools(
   recordToolStart?: ToolStartRecorder,
   heartbeatTurn?: HeartbeatTurnMetadata
 ): ToolSet {
+  const requestingUserId = user.id;
   const sendStatus = (toolName: string) => {
     const content = toolStatus[toolName];
     if (content) send("status", { content });
@@ -2285,7 +2286,7 @@ function buildTools(
     const getMembers = (projectId: number) => {
       const existing = projectMembers.get(projectId);
       if (existing) return existing;
-      const pending = getProjectMembers(projectId);
+      const pending = getProjectMembers(projectId, undefined, requestingUserId);
       projectMembers.set(projectId, pending);
       return pending;
     };
@@ -2890,7 +2891,7 @@ function buildTools(
             };
           }
 
-          const boardAgents = await getBoardAgentMembers(boardId);
+          const boardAgents = await getBoardAgentMembers(boardId, user.id);
           if (!boardAgents.some((row) => row.agent.id === input.agent_id)) {
             return {
               success: false,
@@ -3938,7 +3939,11 @@ function buildTools(
         }
         // HTPR-3805: "list members" must include the caller — excluding them
         // dropped the owner entirely on boards with zero Member rows.
-        const result = await getProjectMembers(input.project_id);
+        const result = await getProjectMembers(
+          input.project_id,
+          undefined,
+          requestingUserId,
+        );
         if (result.error) {
           return { success: false, error: result.error.message };
         }
@@ -7060,7 +7065,11 @@ function buildTools(
         if (input.mentions?.length) {
           sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, input.mentions);
         }
-        sanitizedText = await resolveTextMentions(sanitizedText, taskWithOwner.projectId);
+        sanitizedText = await resolveTextMentions(
+          sanitizedText,
+          taskWithOwner.projectId,
+          user.id,
+        );
         sanitizedText = toStoredHtml(sanitizedText);
         sanitizedText = await linkifyTicketRefs(
           sanitizedText,

@@ -1,23 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { agentTokenCredentialFields, createMcpToken } from "@/lib/mcp/auth";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-async function getCurrentUserFromCookies() {
-  try {
-    const cookieStore = await cookies();
-    const userCookie = cookieStore.get("nookies_user");
-    if (!userCookie?.value) return null;
-    return JSON.parse(userCookie.value) as { id?: number };
-  } catch {
-    return null;
-  }
-}
-
-export async function POST(_request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
+export async function POST(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
   const params = await props.params;
-  const currentUser = await getCurrentUserFromCookies();
-  if (!currentUser?.id) {
+  const userId = (await getSessionUser(request.headers))?.userId;
+  if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
@@ -27,7 +16,7 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ age
   const agent = await prisma.agent.findFirst({
     where: {
       id: params.agentId,
-      userId: currentUser.id,
+      userId: userId,
       revokedAt: null,
       runtimeType: "EXTERNAL",
     },
@@ -42,7 +31,7 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ age
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: currentUser.id },
+    where: { id: userId },
     select: { email: true },
   });
 
@@ -53,7 +42,7 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ age
     );
   }
 
-  const token = createMcpToken(currentUser.id, user.email, undefined, agent.id);
+  const token = createMcpToken(userId, user.email, undefined, agent.id);
 
   await prisma.agent.update({
     where: { id: agent.id },
@@ -67,10 +56,10 @@ export async function POST(_request: NextRequest, props: { params: Promise<{ age
   return NextResponse.json({ success: true, token });
 }
 
-export async function DELETE(_request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
   const params = await props.params;
-  const currentUser = await getCurrentUserFromCookies();
-  if (!currentUser?.id) {
+  const userId = (await getSessionUser(request.headers))?.userId;
+  if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
@@ -78,7 +67,7 @@ export async function DELETE(_request: NextRequest, props: { params: Promise<{ a
   }
 
   const agent = await prisma.agent.findFirst({
-    where: { id: params.agentId, userId: currentUser.id, revokedAt: null },
+    where: { id: params.agentId, userId: userId, revokedAt: null },
     select: { id: true },
   });
 

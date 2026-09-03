@@ -1,11 +1,19 @@
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
+import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
-const assigneesGetAll = async (taskId: string | string[]) => {
+const assigneesGetAll = async (
+  taskId: string | string[],
+  requestingUserId: number,
+) => {
   try {
     const assignees = await prisma.assignees.findMany({
       where: {
         taskId: parseInt(taskId as string),
+        OR: [
+          { agentId: null },
+          { agent: boardAgentVisibilityWhere(requestingUserId) },
+        ],
       },
       include: {
         user: true,
