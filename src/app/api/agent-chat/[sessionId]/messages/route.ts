@@ -42,7 +42,7 @@ export async function POST(
     const session = await prisma.chatSession.findFirst({
       where: {
         id: sessionId,
-        userId: userId,
+        userId,
         agentId: { not: null },
         agent: {
           revokedAt: null,

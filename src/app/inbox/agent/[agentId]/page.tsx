@@ -28,10 +28,17 @@ export async function generateMetadata(
 
   const userObj = parseUserCookie(userObjString);
   const userId = (await getSessionUser(new Headers(await headers())))?.userId;
-  if (!userObj || userObj.id !== userId) return { title: "Agent Inbox" };
+  if (
+    !userObj ||
+    !Number.isInteger(userObj.id) ||
+    typeof userId !== "number" ||
+    userObj.id !== userId
+  ) {
+    return { title: "Agent Inbox" };
+  }
 
   const agent = await prisma.agent.findFirst({
-    where: { id: params.agentId, userId: userObj.id },
+    where: { id: params.agentId, userId },
     select: { displayName: true },
   });
 
@@ -55,10 +62,17 @@ export default async function AgentInboxPage(
 
   const userObj = parseUserCookie(userObjString);
   const userId = (await getSessionUser(new Headers(await headers())))?.userId;
-  if (!userObj || userObj.id !== userId) return redirect("/login");
+  if (
+    !userObj ||
+    !Number.isInteger(userObj.id) ||
+    typeof userId !== "number" ||
+    userObj.id !== userId
+  ) {
+    return redirect("/login");
+  }
 
   const agent = await prisma.agent.findFirst({
-    where: { id: params.agentId, userId: userObj.id },
+    where: { id: params.agentId, userId },
   });
 
   if (!agent) return redirect("/inbox");
