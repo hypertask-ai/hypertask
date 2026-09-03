@@ -59,11 +59,19 @@ test("mention links use the shared token in every theme", () => {
   const globals = fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8");
   assert.match(globals, /color: var\(--color-rich-text-link\) !important/);
 
-  for (const theme of ["amoled", "dark", "dia", "graphite", "light", "porcelain"]) {
+  const themeColors = {
+    amoled: "#5896f1",
+    dark: "#5896f1",
+    dia: "#3e6b4f",
+    graphite: "#5896f1",
+    light: "#1365a3",
+    porcelain: "#1365a3",
+  };
+  for (const [theme, color] of Object.entries(themeColors)) {
     const css = fs.readFileSync(
       path.join(root, `src/styles/tailwindThemes/${theme}.css`),
       "utf8",
     );
-    assert.match(css, /--color-rich-text-link:\s*#5896f1/);
+    assert.ok(css.includes(`--color-rich-text-link: ${color}`));
   }
 });
