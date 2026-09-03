@@ -335,6 +335,52 @@ const getBulkTaskCommands = (
   };
 };
 
+// Agent Chat's shortcuts are handler-only local keydown listeners with no
+// dispatchable action of their own (roster/composer/mention state lives in
+// AgentChatClient.tsx, not here). These entries make them palette-visible
+// and invokable by dispatching a window CustomEvent AgentChatClient listens
+// for (src/lib/agents/chatPaletteCommands.ts) rather than duplicating that
+// component-local state and logic here.
+const getAgentChatCommands = (): CommandGroup => ({
+  group: "Agent Chat",
+  commandLists: [
+    {
+      key: "agentChatNextAgent",
+      name: "Next agent",
+      keyboard: ["CTRL", "TAB"],
+      commandMode: CommandMode.AgentChatNextAgent,
+      keywords: "agent chat next cycle roster switch",
+    },
+    {
+      key: "agentChatPreviousAgent",
+      name: "Previous agent",
+      keyboard: ["CTRL", "SHIFT", "TAB"],
+      commandMode: CommandMode.AgentChatPreviousAgent,
+      keywords: "agent chat previous cycle roster switch",
+    },
+    {
+      key: "agentChatSendMessage",
+      name: "Send message",
+      keyboard: ["CTRL", "ENTER"],
+      commandMode: CommandMode.AgentChatSendMessage,
+      keywords: "agent chat send message composer",
+    },
+    {
+      key: "agentChatOpenLinks",
+      name: "Open all links in latest reply",
+      keyboard: ["CTRL", "O"],
+      commandMode: CommandMode.AgentChatOpenLinks,
+      keywords: "agent chat open links latest reply tabs",
+    },
+    {
+      key: "agentChatAddAgent",
+      name: "Add agent",
+      commandMode: CommandMode.AgentChatAddAgent,
+      keywords: "agent chat add create new agent",
+    },
+  ],
+});
+
 const getAppShellCommands = (): CommandGroup => ({
   group: "App shell surfaces",
   commandLists: [
@@ -1806,12 +1852,14 @@ export const getAllCommands = (
   const task = getTaskCommands(commandOptions);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();
+  const agentChat = getAgentChatCommands();
   const groups = [
     navigate,
     inbox,
     time,
     ...(bulk ? [bulk] : []),
     ...(commandOptions.appShellRailOn ? [appShell] : []),
+    ...(commandOptions.agentChatOn ? [agentChat] : []),
     task,
     board,
     teamAndBilling,

@@ -202,6 +202,20 @@ export const getKeyboardShortcuts = (
       ],
     },
     {
+      title: "Agent Chat",
+      sub: [
+        // Ctrl+Tab also cycles agents but browsers (and, on Mac, the OS)
+        // reserve it for switching tabs/apps before it ever reaches the
+        // page, so Option/Alt+Arrow is the one advertised here as reliable
+        // on every platform.
+        { shortTitle: "Next agent", pressKey: [altOptions, "⭣"] },
+        { shortTitle: "Previous agent", pressKey: [altOptions, "⭡"] },
+        { shortTitle: "Send message", pressKey: [cmdControl, "ENTER"] },
+        { shortTitle: "Open all links in latest reply", pressKey: ["CTRL", "O"] },
+        { shortTitle: "Search tasks to reference", pressKey: ["@"] },
+      ],
+    },
+    {
       title: "Format",
       sub: [
         { shortTitle: "Tiptap menu", pressKey: ["/"] },

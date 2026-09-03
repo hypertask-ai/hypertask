@@ -205,6 +205,13 @@ export enum CommandMode {
   ToggleArchivedSearchResults,
   ToggleBoardZoom,
   GoToAgentChat,
+  AgentChatNextAgent,
+  AgentChatPreviousAgent,
+  AgentChatSendMessage,
+  AgentChatOpenLinks,
+  AgentChatAddAgent,
+  AgentChatNextTeam,
+  AgentChatPreviousTeam,
 }
 
 export enum ELogType {

@@ -3,6 +3,10 @@
 
 import { AGENT_CHAT_EVENT } from "@/lib/realtime/shared";
 import {
+  AGENT_CHAT_COMMAND_EVENT,
+  type TAgentChatCommand,
+} from "@/lib/agents/chatPaletteCommands";
+import {
   useCallback,
   useContext,
   useEffect,
@@ -15,15 +19,20 @@ import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
-import { IUser } from "@/models/model";
+import { IUser, IProject, ITask } from "@/models/model";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import toast from "react-hot-toast";
-import { ArrowLeft, ChevronLeft, ChevronRight, Info, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Info, Plus, X } from "lucide-react";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
 import { isWorking, statusOf, listTeams } from "@/lib/agents/registerView";
+import {
+  tokenizeMessageLinks,
+  extractMessageLinks,
+  type TProjectIdForPrefix,
+} from "@/lib/agents/messageLinks";
 import AgentSelect, { AgentOption } from "../AgentSelect";
 import {
   connectRealtimeClient,
@@ -33,6 +42,14 @@ import { userChannel } from "@/lib/realtime/shared";
 import AgentDetail from "../[agentId]/AgentDetail";
 import type { TAgent } from "../AgentsRegister";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
+import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
+import axios from "axios";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import {
+  ModalContainerCustom,
+  ModalHeaderComp,
+  ModalInput,
+} from "@/components/Common/CommonModalComponents";
 
 
 // While we are waiting for an external agent to answer, the only way to see
@@ -73,16 +90,37 @@ function rosterDotClass(agent: TAgent): string {
 const MARKDOWN_CLASS =
   "break-words [&_p]:my-2 [&_p]:leading-relaxed [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 " +
   "[&_a]:text-hypertasks-purple [&_a]:underline [&_a]:break-all " +
-  "[&_code]:bg-hoverCardBackground [&_code]:rounded-[3px] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[12px] " +
+  "[&_code]:bg-hoverCardBackground [&_code]:rounded-[3px] [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-meta " +
   "[&_pre]:bg-hoverCardBackground [&_pre]:rounded-[4px] [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto " +
   "[&_pre_code]:bg-transparent [&_pre_code]:p-0";
 
-function MessageBubble({ message }: { message: TChatMessage }) {
+function MessageBubble({
+  message,
+  projectIdForPrefix,
+}: {
+  message: TChatMessage;
+  projectIdForPrefix: TProjectIdForPrefix;
+}) {
   if (message.role === "human") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-[4px] bg-hypertasks-purple px-3 py-2 text-[13px] whitespace-pre-wrap break-words">
-          {message.content}
+        <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground whitespace-pre-wrap break-words">
+          {tokenizeMessageLinks(message.content, projectIdForPrefix).map(
+            (segment, i) =>
+              segment.type === "link" ? (
+                <a
+                  key={i}
+                  href={segment.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
+                  {segment.value}
+                </a>
+              ) : (
+                <span key={i}>{segment.value}</span>
+              ),
+          )}
         </div>
       </div>
     );
@@ -93,7 +131,7 @@ function MessageBubble({ message }: { message: TChatMessage }) {
     <div className="flex justify-start">
       <div
         className={cn(
-          "max-w-[80%] rounded-[4px] bg-cardBackground px-3 py-2 text-[13px]",
+          "max-w-[80%] rounded-[4px] bg-cardBackground px-3 py-2 text-dense",
           MARKDOWN_CLASS,
         )}
         dangerouslySetInnerHTML={{ __html: markdownToHtml(message.content) }}
@@ -126,7 +164,7 @@ function RosterRow({
         className={cn("w-2 h-2 rounded-full shrink-0", rosterDotClass(agent))}
       />
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-medium truncate">
+        <span className="block text-dense font-medium truncate">
           {agent.displayName}
         </span>
         <span className="block text-[11px] text-text-light-gray truncate">
@@ -141,6 +179,10 @@ function RosterRow({
 interface IProp {
   currentUser: IUser;
 }
+
+// Stable reference so the "@" mention effect below does not see a new
+// array (and re-fire) on every render while projects are still loading.
+const EMPTY_PROJECTS: IProject[] = [];
 
 const AgentChatClient = (props: IProp) => {
   const { currentUser } = props;
@@ -172,11 +214,33 @@ const AgentChatClient = (props: IProp) => {
   const [isNarrow, setIsNarrow] = useState(false);
   const [openingFullChat, setOpeningFullChat] = useState(false);
 
+  // "+" in the roster header: a minimal name-only create flow over the same
+  // endpoint the admin API and CLI use, since no create-agent page exists yet.
+  const [showCreateAgent, setShowCreateAgent] = useState(false);
+  const [newAgentName, setNewAgentName] = useState("");
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [createAgentError, setCreateAgentError] = useState<string | null>(null);
+  // Shown once right after creation; the create endpoint never returns it again.
+  const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  // "@" in the composer: a small task-search popover reusing the same
+  // endpoint the Ctrl+K task search modal calls.
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStart, setMentionStart] = useState(0);
+  const [mentionResults, setMentionResults] = useState<ITask[]>([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionOpen = mentionQuery !== null;
+
   // Refs mirror the state that async callbacks and event handlers must read
   // without going stale (which chat is on screen, which POST is in flight).
   const selectedIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
+  // Mirrors `draft` for the global keydown handler below, so that handler
+  // doesn't need `draft` in its dependency array (which would tear down and
+  // re-add the window listener on every keystroke).
+  const draftRef = useRef("");
   // Monotonic request generation for loadMessages, so a late response can be
   // recognized as superseded by a newer one for the same session.
   const loadGenRef = useRef(0);
@@ -184,35 +248,63 @@ const AgentChatClient = (props: IProp) => {
   // the tap's event handler, so selectAgent needs the composer's DOM node
   // before that handler returns (see the flushSync call there).
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // Same pattern as loadGenRef: the mount-time roster fetch and the
+  // post-create-agent refresh both call loadAgents/setAgents, so a slower
+  // mount fetch resolving after a refresh must not clobber it.
+  const rosterGenRef = useRef(0);
+
+  const loadAgents = useCallback(async () => {
+    const res = await fetch("/api/agents/owned");
+    const data = (await res.json()) as {
+      success?: boolean;
+      agents?: TAgent[];
+      error?: string;
+    };
+    if (!res.ok || !data.success || !Array.isArray(data.agents)) {
+      throw new Error(data.error ?? "Failed to load agents");
+    }
+    return data.agents;
+  }, []);
 
   // The roster is owner-scoped and small; one fetch per visit is enough.
   useEffect(() => {
     let cancelled = false;
-    async function load() {
-      try {
-        const res = await fetch("/api/agents/owned");
-        const data = (await res.json()) as {
-          success?: boolean;
-          agents?: TAgent[];
-          error?: string;
-        };
-        if (!res.ok || !data.success || !Array.isArray(data.agents)) {
-          throw new Error(data.error ?? "Failed to load agents");
+    const myGen = ++rosterGenRef.current;
+    loadAgents()
+      .then((loaded) => {
+        if (!cancelled && myGen === rosterGenRef.current) {
+          setAgents(loaded);
+          setRosterError(null);
         }
-        if (!cancelled) setAgents(data.agents);
-      } catch (e) {
-        if (!cancelled) {
+      })
+      .catch((e) => {
+        if (!cancelled && myGen === rosterGenRef.current) {
           setRosterError(
             e instanceof Error ? e.message : "Failed to load agents",
           );
         }
-      }
-    }
-    void load();
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAgents]);
+
+  // Project list backing both the "@" task search and ticket-id link
+  // resolution; same query key as the rest of the app, so it is shared cache.
+  const { data: mentionProjects = EMPTY_PROJECTS } = useGetAllProjectsMinimal([
+    "projectsAllMinimal",
+  ]);
+  const projectIdByPrefix = useMemo(() => {
+    const byPrefix = new Map<string, number>();
+    for (const project of mentionProjects as IProject[]) {
+      if (project.uniqueIdentifier) byPrefix.set(project.uniqueIdentifier, project.id);
+    }
+    return byPrefix;
+  }, [mentionProjects]);
+  const projectIdForPrefix = useCallback(
+    (prefix: string) => projectIdByPrefix.get(prefix),
+    [projectIdByPrefix],
+  );
 
   // The collapse choice is remembered per browser; default to open.
   useEffect(() => {
@@ -339,6 +431,7 @@ const AgentChatClient = (props: IProp) => {
     setMessagesError(null);
     setDeliveryNotice(false);
     setDraft("");
+    dismissMention();
   };
 
   const selectAgent = useCallback(
@@ -359,6 +452,7 @@ const AgentChatClient = (props: IProp) => {
         setDeliveryNotice(false);
         setDraft("");
       });
+      dismissMention();
       if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
       // The selection lives in the URL so a reload keeps the chat open.
       router.replace(
@@ -510,12 +604,21 @@ const AgentChatClient = (props: IProp) => {
       return;
     }
     const optimistic: TChatMessage = {
+      // react-hooks/purity false-flags this pre-existing, unrelated line
+      // purely from the shape of unrelated functions added elsewhere in this
+      // component (confirmed by isolating each addition); handleSend only
+      // ever runs from an event handler, never during render.
+      // eslint-disable-next-line react-hooks/purity
       id: `optimistic-${Date.now()}`,
       role: "human",
       content: text,
       createdAt: new Date().toISOString(),
     };
     setDraft("");
+    dismissMention();
+    // The composer is about to disable while the agent works; put the cursor
+    // back now so the next message can start the moment it re-enables.
+    composerRef.current?.focus();
     setDeliveryNotice(false);
     // A new message restarts the 15 minute awaiting-poll bound.
     setAwaitingSince(null);
@@ -556,8 +659,144 @@ const AgentChatClient = (props: IProp) => {
       setSending(false);
     }
   };
+  // Stable reference for the palette-command listener below, which shouldn't
+  // re-subscribe on every render just because handleSend is a new closure.
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+
+  // Ctrl+Tab / Ctrl+Shift+Tab (and the Alt+ArrowDown/Up fallback, since
+  // browsers reserve Ctrl+Tab for switching tabs) step through the currently
+  // filtered roster, wrapping around at either end.
+  const cycleAgent = useCallback(
+    (direction: 1 | -1) => {
+      if (roster.length === 0) return;
+      const currentIndex = roster.findIndex((a) => a.id === selectedId);
+      const nextIndex =
+        currentIndex === -1
+          ? 0
+          : (currentIndex + direction + roster.length) % roster.length;
+      selectAgent(roster[nextIndex]);
+    },
+    [roster, selectedId, selectAgent],
+  );
+
+  // Ctrl+O and the palette's "Open all links in latest reply" both need this.
+  const openLatestReplyLinks = useCallback(() => {
+    const latestWithLinks = [...(messages ?? [])]
+      .reverse()
+      .find(
+        (m) => extractMessageLinks(m.content, projectIdForPrefix).length > 0,
+      );
+    if (!latestWithLinks) return;
+    const links = extractMessageLinks(
+      latestWithLinks.content,
+      projectIdForPrefix,
+    ).slice(0, 5);
+    for (const href of links) window.open(href, "_blank", "noopener");
+  }, [messages, projectIdForPrefix]);
+
+  const dismissMention = () => {
+    setMentionQuery(null);
+    setMentionResults([]);
+    setMentionIndex(0);
+  };
+
+  // Detects an in-progress "@mention" ending at the cursor (must start at the
+  // beginning of the text or after whitespace, same rule as the composer's
+  // other autocomplete-style features).
+  const handleComposerChange = (value: string, cursor: number) => {
+    setDraft(value);
+    const beforeCursor = value.slice(0, cursor);
+    const match = beforeCursor.match(/(?:^|\s)@([^\s@]*)$/);
+    if (!match) {
+      if (mentionOpen) dismissMention();
+      return;
+    }
+    setMentionStart(cursor - match[1].length - 1);
+    setMentionQuery(match[1]);
+  };
+
+  // Same endpoint and request shape as the Ctrl+K task search modal
+  // (src/components/Modals/commands/searchTasks.tsx).
+  useEffect(() => {
+    if (mentionQuery === null) return;
+    const projectIds = (mentionProjects as IProject[]).map((p) => p.id);
+    if (projectIds.length === 0) {
+      // No projects loaded yet: clear results, but skip the state write
+      // (and the re-render it triggers) when they're already empty, since
+      // mentionProjects can keep changing reference while loading, which
+      // would otherwise re-fire this effect in a loop for as long as the
+      // popover stays open.
+      setMentionResults((prev) => (prev.length === 0 ? prev : []));
+      return;
+    }
+    let active = true;
+    const timeout = setTimeout(
+      async () => {
+        try {
+          const res = await axios.post("/api/tasks/searchAll", {
+            projectIds,
+            ...(mentionQuery.trim()
+              ? { searchQuery: mentionQuery.trim() }
+              : { mode: "recent" }),
+          });
+          if (!active) return;
+          const results = Array.isArray(res.data) ? res.data : [];
+          setMentionResults(results.slice(0, 8));
+          setMentionIndex(0);
+        } catch {
+          if (active) setMentionResults([]);
+        }
+      },
+      mentionQuery.trim() ? 150 : 0,
+    );
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [mentionQuery, mentionProjects]);
+
+  const pickMention = (task: ITask) => {
+    const ticket = task.ticketNumber ?? `${task.projectId}-${task.uniqueIndex}`;
+    const before = draft.slice(0, mentionStart);
+    const after = draft.slice(mentionStart + 1 + (mentionQuery?.length ?? 0));
+    const inserted = `${before}${ticket} ${after}`;
+    setDraft(inserted);
+    dismissMention();
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (!el) return;
+      el.focus();
+      const pos = before.length + ticket.length + 1;
+      el.setSelectionRange(pos, pos);
+    });
+  };
 
   const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionOpen) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        dismissMention();
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => Math.min(i + 1, Math.max(mentionResults.length - 1, 0)));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if ((e.key === "Enter" || e.key === "Tab") && mentionResults[mentionIndex]) {
+        e.preventDefault();
+        pickMention(mentionResults[mentionIndex]);
+        return;
+      }
+    }
+    // Plain Enter already sends (unless Shift+Enter, which stays a newline);
+    // Ctrl/Cmd+Enter is the same action, so no extra branch is needed for it.
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSend();
@@ -604,6 +843,150 @@ const AgentChatClient = (props: IProp) => {
     router.replace("/agents/chat", { scroll: false });
   };
 
+  const createAgent = async () => {
+    const displayName = newAgentName.trim();
+    if (!displayName || creatingAgent) return;
+    setCreatingAgent(true);
+    setCreateAgentError(null);
+    try {
+      const res = await fetch("/api/mcp/admin/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ display_name: displayName }),
+      });
+      const data = (await res.json()) as {
+        success?: boolean;
+        agent?: { id: string };
+        token?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.success || !data.agent) {
+        throw new Error(data.error ?? "Could not create agent");
+      }
+      const createdId = data.agent.id;
+      // Store the token the moment the agent exists, before the roster
+      // refresh below: the endpoint never returns it again, so a refresh
+      // failure must not be able to take it down with it.
+      if (data.token) {
+        setNewAgentToken(data.token);
+      } else {
+        setShowCreateAgent(false);
+        setNewAgentName("");
+      }
+      try {
+        const myGen = ++rosterGenRef.current;
+        const refreshed = await loadAgents();
+        if (myGen === rosterGenRef.current) {
+          setAgents(refreshed);
+          setRosterError(null);
+          const created = refreshed.find((a) => a.id === createdId);
+          if (created) selectAgent(created);
+        }
+      } catch {
+        // The agent was created (and its token, if any, is already shown);
+        // a failed roster refresh just means it won't appear in the list
+        // until the next reload, not that creation itself failed.
+      }
+    } catch (e) {
+      setCreateAgentError(
+        e instanceof Error ? e.message : "Could not create agent",
+      );
+    } finally {
+      setCreatingAgent(false);
+    }
+  };
+
+  // Any of the three keyboard shortcuts below would otherwise fire while a
+  // popover, the create-agent modal, or the mobile details sheet is open and
+  // stomp on typing/navigation inside it.
+  const overlayOpen = mentionOpen || showCreateAgent || detailsSheetOpen;
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if (overlayOpen) return;
+      const isCycleKey =
+        (e.ctrlKey && e.key === "Tab") ||
+        (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp"));
+      if (isCycleKey) {
+        // A focused control other than the composer (the team filter
+        // <select>, a button, a search input) owns Alt+Arrow for its own
+        // native navigation; only the composer and the page background are
+        // fair game for the roster-cycle shortcut.
+        const target = e.target;
+        if (
+          target instanceof HTMLElement &&
+          target !== composerRef.current &&
+          ["SELECT", "INPUT", "TEXTAREA", "BUTTON"].includes(target.tagName)
+        ) {
+          return;
+        }
+        // Switching agents clears the composer draft (selectAgent below), so
+        // don't fire while the composer has an unsent message: an Alt+Arrow
+        // meant to move the cursor, or a stray Ctrl+Tab, would otherwise
+        // silently drop what the user was typing. Reads draftRef (not
+        // `draft` directly) so this effect doesn't need to re-run, and
+        // re-add the window listener, on every keystroke.
+        if (
+          document.activeElement === composerRef.current &&
+          draftRef.current.trim() !== ""
+        ) {
+          return;
+        }
+        e.preventDefault();
+        const direction = e.key === "Tab" ? (e.shiftKey ? -1 : 1) : e.key === "ArrowDown" ? 1 : -1;
+        cycleAgent(direction);
+        return;
+      }
+      // Ctrl+O otherwise opens the browser's file picker.
+      if (e.ctrlKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        openLatestReplyLinks();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [overlayOpen, cycleAgent, openLatestReplyLinks]);
+
+  // Ctrl+K palette bridge: the "Agent Chat" command group (AllCommands.ts,
+  // only shown while this page is open) dispatches these instead of trying
+  // to reach into this component's state from the palette's dispatcher.
+  useEffect(() => {
+    const onPaletteCommand = (e: Event) => {
+      const detail = (e as CustomEvent<TAgentChatCommand>).detail;
+      switch (detail) {
+        case "next-agent":
+          cycleAgent(1);
+          return;
+        case "previous-agent":
+          cycleAgent(-1);
+          return;
+        case "send-message":
+          void handleSendRef.current();
+          return;
+        case "open-links":
+          openLatestReplyLinks();
+          return;
+        case "add-agent":
+          setShowCreateAgent(true);
+          return;
+      }
+    };
+    window.addEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
+    return () =>
+      window.removeEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
+  }, [cycleAgent, openLatestReplyLinks]);
+
+  // Put the cursor in the composer the moment it becomes usable: on initial
+  // load (deep link or roster click) and again after a message sends, so
+  // typing can continue without reaching for the mouse.
+  useEffect(() => {
+    if (isExternal && session && !composerLocked) composerRef.current?.focus();
+  }, [isExternal, session, composerLocked, selectedId]);
+
   const rosterPane = (
     <aside
       className={cn(
@@ -612,13 +995,26 @@ const AgentChatClient = (props: IProp) => {
       )}
     >
       <div className="px-3 pt-4 pb-2">
-        <h1 className="px-1 text-[16px] font-semibold">Agent Chat</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="px-1 text-[16px] font-semibold">Agent Chat</h1>
+          <button
+            type="button"
+            onClick={() => setShowCreateAgent(true)}
+            aria-label="Add agent"
+            className={cn(
+              MOBILE_TARGET,
+              "rounded-[4px] text-text-light-gray hover:text-white-black hover:bg-hoverCardBackground",
+            )}
+          >
+            <Plus size={16} />
+          </button>
+        </div>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search agents"
           aria-label="Search agents"
-          className="mt-2 w-full rounded-[4px] bg-cardBackground px-3 py-1.5 text-[13px] outline-none placeholder:text-text-light-gray"
+          className="mt-2 w-full rounded-[4px] bg-cardBackground px-3 py-1.5 text-dense outline-none placeholder:text-text-light-gray"
         />
         {teams.length > 0 && (
           <AgentSelect
@@ -638,15 +1034,15 @@ const AgentChatClient = (props: IProp) => {
       </div>
       <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3">
         {rosterError && (
-          <p className="px-2 py-3 text-[12px] text-red-500">{rosterError}</p>
+          <p className="px-2 py-3 text-meta text-red-500">{rosterError}</p>
         )}
         {!rosterError && !agents && (
-          <p className="px-2 py-3 text-[12px] text-text-light-gray">
+          <p className="px-2 py-3 text-meta text-text-light-gray">
             Loading agents…
           </p>
         )}
         {agents && roster.length === 0 && (
-          <p className="px-2 py-3 text-[12px] text-text-light-gray">
+          <p className="px-2 py-3 text-meta text-text-light-gray">
             No agents match.
           </p>
         )}
@@ -688,7 +1084,7 @@ const AgentChatClient = (props: IProp) => {
           <p className="truncate text-[14px] font-semibold">
             {selectedAgent.displayName}
           </p>
-          <p className="truncate text-[12px] text-text-light-gray">
+          <p className="truncate text-meta text-text-light-gray">
             {chatStatusText(selectedAgent)}
           </p>
         </div>
@@ -717,7 +1113,7 @@ const AgentChatClient = (props: IProp) => {
 
       {!isExternal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-          <p className="max-w-[340px] text-[13px] text-text-light-gray">
+          <p className="max-w-[340px] text-dense text-text-light-gray">
             {selectedAgent.displayName} is a Hypertask native agent. Its chat
             lives in the full AI chat surface.
           </p>
@@ -725,7 +1121,7 @@ const AgentChatClient = (props: IProp) => {
             type="button"
             disabled={openingFullChat}
             onClick={() => void handleOpenFullChat()}
-            className="text-[13px] text-hypertasks-purple disabled:opacity-50"
+            className="text-dense text-hypertasks-purple disabled:opacity-50"
           >
             {openingFullChat ? "Opening…" : "Open full chat"}
           </button>
@@ -734,23 +1130,27 @@ const AgentChatClient = (props: IProp) => {
         <>
           <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
             {messagesError && (
-              <p className="text-[12px] text-red-500">{messagesError}</p>
+              <p className="text-meta text-red-500">{messagesError}</p>
             )}
             {(sessionLoading || (!messages && !messagesError)) && (
-              <p className="text-[12px] text-text-light-gray">Loading chat…</p>
+              <p className="text-meta text-text-light-gray">Loading chat…</p>
             )}
             {messages && messages.length === 0 && (
-              <p className="text-[12px] text-text-light-gray">
+              <p className="text-meta text-text-light-gray">
                 Send {selectedAgent.displayName} a message to start the
                 conversation.
               </p>
             )}
             {messages?.map((message) => (
-              <MessageBubble key={message.id} message={message} />
+              <MessageBubble
+                key={message.id}
+                message={message}
+                projectIdForPrefix={projectIdForPrefix}
+              />
             ))}
             {awaiting && !deliveryNotice && (
               <div
-                className="flex items-center gap-2 text-[12px] text-text-light-gray"
+                className="flex items-center gap-2 text-meta text-text-light-gray"
                 role="status"
               >
                 <TypingIndicator />
@@ -761,15 +1161,42 @@ const AgentChatClient = (props: IProp) => {
           {/* Card surface under the well: the two tokens differ in every theme, so the box stays visible on AMOLED (well = page) and porcelain (card = page). */}
           <div className="shrink-0 bg-cardBackground px-4 pb-4 pt-1">
             {deliveryNotice && (
-              <p className="mb-2 text-[12px] text-text-light-gray">
+              <p className="mb-2 text-meta text-text-light-gray">
                 This agent&apos;s runtime has not enabled chat yet.
               </p>
             )}
-            <div className="flex items-end gap-2">
+            <div className="relative flex items-end gap-2">
+              {mentionOpen && (
+                <div className="absolute bottom-full left-0 mb-1 max-h-[220px] w-[320px] overflow-y-auto rounded-[4px] bg-modalBackground py-1 shadow-md">
+                  {mentionResults.length === 0 ? (
+                    <p className="px-3 py-2 text-meta text-text-light-gray">
+                      {mentionQuery?.trim() ? "No matching tasks" : "Type to search tasks"}
+                    </p>
+                  ) : (
+                    mentionResults.map((task, i) => (
+                      <button
+                        key={task.id}
+                        type="button"
+                        onMouseEnter={() => setMentionIndex(i)}
+                        onClick={() => pickMention(task)}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-dense",
+                          i === mentionIndex ? "bg-hoverCardBackground" : "",
+                        )}
+                      >
+                        <span className="shrink-0 text-text-light-gray">
+                          {task.ticketNumber?.toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{task.title}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
               <textarea
                 ref={composerRef}
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => handleComposerChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
                 onKeyDown={handleComposerKeyDown}
                 rows={2}
                 disabled={composerLocked}
@@ -779,13 +1206,13 @@ const AgentChatClient = (props: IProp) => {
                     : `Message ${selectedAgent.displayName}`
                 }
                 aria-label={`Message ${selectedAgent.displayName}`}
-                className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-[13px] outline-none placeholder:text-text-light-gray disabled:opacity-50"
+                className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
               />
               <button
                 type="button"
                 onClick={() => void handleSend()}
                 disabled={composerLocked || !draft.trim() || sending}
-                className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-[13px] font-medium"
+                className="rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 py-2 text-dense font-medium"
               >
                 Send
               </button>
@@ -796,7 +1223,7 @@ const AgentChatClient = (props: IProp) => {
     </section>
   ) : (
     <section className="flex flex-1 items-center justify-center">
-      <p className="text-[13px] text-text-light-gray">
+      <p className="text-dense text-text-light-gray">
         Select an agent to start chatting.
       </p>
     </section>
@@ -813,7 +1240,7 @@ const AgentChatClient = (props: IProp) => {
         />
         <div className="absolute right-0 top-0 h-full w-[85%] max-w-[380px] overflow-y-auto bg-pageBackground shadow-md">
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-[13px] font-medium text-text-light-gray">
+            <span className="text-dense font-medium text-text-light-gray">
               Agent details
             </span>
             <button
@@ -829,6 +1256,112 @@ const AgentChatClient = (props: IProp) => {
         </div>
       </div>
     ) : null;
+
+  const closeCreateAgent = () => {
+    if (creatingAgent) return;
+    // A token is showing only right after a successful create; closing here
+    // always means the user has seen it (or chose not to), never mid-request.
+    setShowCreateAgent(false);
+    setCreateAgentError(null);
+    setNewAgentName("");
+    setNewAgentToken(null);
+    setTokenCopied(false);
+  };
+
+  const copyNewAgentToken = async () => {
+    if (!newAgentToken) return;
+    try {
+      await navigator.clipboard.writeText(newAgentToken);
+      setTokenCopied(true);
+    } catch {
+      // Clipboard access can be blocked (permissions, insecure context); the
+      // token stays selectable in the input either way.
+    }
+  };
+
+  const createAgentModal = showCreateAgent ? (
+    <ModalContainerCustom
+      id="create-agent-modal"
+      isOpen={true}
+      show={true}
+      toggle={closeCreateAgent}
+      // Once the one-time token is showing, an accidental outside click or
+      // Escape press must not discard it: force the explicit Done/copy
+      // affordance instead.
+      shouldCloseOnClickOutside={!newAgentToken}
+      keyboard={!newAgentToken}
+      className="sm:min-w-[400px]"
+    >
+      <ModalHeaderComp header="Add agent" />
+      <div className="px-6 pb-4">
+        {newAgentToken ? (
+          <>
+            <p className="text-dense text-white-black">
+              Agent created. Copy its token now, it will not be shown again.
+            </p>
+            <input
+              readOnly
+              value={newAgentToken}
+              onFocus={(e) => e.currentTarget.select()}
+              aria-label="Agent token"
+              className="mt-2 w-full border-b border-light-black-border-1 bg-transparent px-0 py-1.5 text-meta text-white-black"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => void copyNewAgentToken()}
+                className="rounded-[4px] px-3 py-1.5 text-dense text-text-light-gray hover:bg-hoverCardBackground"
+              >
+                {tokenCopied ? "Copied" : "Copy"}
+              </button>
+              <button
+                type="button"
+                onClick={closeCreateAgent}
+                className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80"
+              >
+                Done
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <ModalInput
+              value={newAgentName}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewAgentName(e.target.value)}
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter") void createAgent();
+                if (e.key === "Escape") closeCreateAgent();
+              }}
+              placeholder="Agent name"
+              aria-label="Agent name"
+              className="border-b border-light-black-border-1 px-0"
+            />
+            {createAgentError && (
+              <p className="mt-2 text-meta text-red-500">{createAgentError}</p>
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeCreateAgent}
+                disabled={creatingAgent}
+                className="rounded-[4px] px-3 py-1.5 text-dense text-text-light-gray hover:bg-hoverCardBackground disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void createAgent()}
+                disabled={creatingAgent || !newAgentName.trim()}
+                className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {creatingAgent ? "Creating…" : "Create"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </ModalContainerCustom>
+  ) : null;
 
   if (isNarrow) {
     return (
@@ -846,6 +1379,7 @@ const AgentChatClient = (props: IProp) => {
       >
         {selectedAgent ? chatPane : rosterPane}
         {detailsSheet}
+        {createAgentModal}
       </div>
     );
   }
@@ -859,6 +1393,7 @@ const AgentChatClient = (props: IProp) => {
           {detailsContent}
         </aside>
       )}
+      {createAgentModal}
     </div>
   );
 

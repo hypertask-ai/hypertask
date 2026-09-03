@@ -1121,6 +1121,7 @@ export interface IAllCommands {
     sectionId: number | null;
   };
   appShellRailOn?: boolean;
+  agentChatOn?: boolean;
   showArchivedOnBoard?: boolean;
   boardZoomedOut?: boolean;
   searchOptions?: {
