@@ -11,6 +11,13 @@ export function isAgentVisibility(value: unknown): value is AgentVisibility {
   return AGENT_VISIBILITIES.includes(value as AgentVisibility);
 }
 
+export function isAgentVisibleToUser(
+  agent: { userId: number; visibility: AgentVisibility },
+  userId: number,
+): boolean {
+  return agent.userId === userId || agent.visibility === "TEAM";
+}
+
 /** Visibility inside a board/team query whose human access is already proven. */
 export function boardAgentVisibilityWhere(
   userId: number,

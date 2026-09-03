@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { accessibleAgentWhere } from "@/lib/agents/visibility";
 
 export const runtime = "nodejs";
 
@@ -31,8 +32,8 @@ export async function POST(request: NextRequest) {
       const agent = await prisma.agent.findFirst({
         where: {
           id: parsed.data.agentId,
-          userId: userId,
           revokedAt: null,
+          ...accessibleAgentWhere(userId),
         },
         select: { id: true, displayName: true },
       });

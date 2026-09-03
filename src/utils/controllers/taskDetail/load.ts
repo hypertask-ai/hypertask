@@ -5,10 +5,16 @@ import type { TaskDetailSlug } from "./types";
 import type { IComment } from "@/models/model";
 import { CYCLE_WINDOW_SIZE } from "@/lib/cycles";
 import {
+  projectPublicAgent,
   publicAgentSelect,
   sanitizeAgentCredentials,
+  type PublicAgent,
 } from "@/lib/agents/publicAgent";
-import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import {
+  boardAgentVisibilityWhere,
+  isAgentVisibleToUser,
+  type AgentVisibility,
+} from "@/lib/agents/visibility";
 
 type Db = Pick<PrismaClient, "$queryRaw">;
 
@@ -30,8 +36,15 @@ const publicCommentCreator = Prisma.sql`
   ) END
 `;
 
-const publicCommentAgent = Prisma.sql`
-  CASE WHEN agent.id IS NULL THEN 'null'::jsonb ELSE JSONB_BUILD_OBJECT(
+const hiddenCommentAgent = (userId: number) => Prisma.sql`
+  agent.id IS NOT NULL
+  AND agent."userId" <> ${userId}
+  AND agent.visibility = 'PRIVATE'::"AgentVisibility"
+`;
+
+const publicCommentAgent = (userId: number) => Prisma.sql`
+  CASE WHEN agent.id IS NULL OR (${hiddenCommentAgent(userId)})
+  THEN 'null'::jsonb ELSE JSONB_BUILD_OBJECT(
     'id', agent.id,
     'userId', agent."userId",
     'displayName', agent."displayName",
@@ -71,6 +84,14 @@ const userSelect = {
   photoURL: true,
   email: true,
 } satisfies Prisma.UserSelect;
+
+export function projectVisibleTaskAgent(
+  agent: (PublicAgent & { visibility: AgentVisibility }) | null,
+  userId: number,
+): PublicAgent | null {
+  if (!agent || !isAgentVisibleToUser(agent, userId)) return null;
+  return projectPublicAgent(agent) as PublicAgent;
+}
 
 export function parseProjectSlug(projectSlug: string): number {
   return parseInt(projectSlug.split("-")[1], 10);
@@ -298,7 +319,7 @@ export function taskDetailInclude(userId: number): Prisma.TaskInclude {
         },
       },
     },
-    agent: { select: publicAgentSelect },
+    agent: { select: { ...publicAgentSelect, visibility: true } },
     pullRequests: {
       orderBy: { createdAt: "asc" },
       select: {
@@ -396,8 +417,11 @@ export async function fetchTaskDetail(
   if (!task) return null;
 
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
+  const visibleAgent = projectVisibleTaskAgent(task.agent, userId);
   return {
     ...task,
+    agentId: visibleAgent ? task.agentId : null,
+    agent: visibleAgent,
     description_: task.description_
       ? { ...task.description_, reactions }
       : task.description_,
@@ -409,9 +433,12 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
     WITH base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
         ${assignmentActivityWithCurrentAvatars} AS activity,
-        c."seen", c."agentId", c."agentDisplayName",
+        c."seen",
+        CASE WHEN (${hiddenCommentAgent(userId)}) THEN NULL ELSE c."agentId" END AS "agentId",
+        CASE WHEN (${hiddenCommentAgent(userId)}) THEN 'Private agent'
+          ELSE c."agentDisplayName" END AS "agentDisplayName",
         ${publicCommentCreator} AS creator,
-        ${publicCommentAgent} AS agent
+        ${publicCommentAgent(userId)} AS agent
       FROM "Comment" c
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
@@ -517,9 +544,12 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
         ${assignmentActivityWithCurrentAvatars} AS activity,
-        c."seen", c."agentId", c."agentDisplayName",
+        c."seen",
+        CASE WHEN (${hiddenCommentAgent(userId)}) THEN NULL ELSE c."agentId" END AS "agentId",
+        CASE WHEN (${hiddenCommentAgent(userId)}) THEN 'Private agent'
+          ELSE c."agentDisplayName" END AS "agentDisplayName",
         ${publicCommentCreator} AS creator,
-        ${publicCommentAgent} AS agent
+        ${publicCommentAgent(userId)} AS agent
       FROM "Comment" c
       INNER JOIN task_row ti ON c."taskId" = ti."taskId"
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
@@ -588,7 +618,10 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
 export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw`
     SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-      c.activity, c."seen", c."agentId", c."agentDisplayName",
+      c.activity, c."seen",
+      CASE WHEN (${hiddenCommentAgent(userId)}) THEN NULL ELSE c."agentId" END AS "agentId",
+      CASE WHEN (${hiddenCommentAgent(userId)}) THEN 'Private agent'
+        ELSE c."agentDisplayName" END AS "agentDisplayName",
       (
         SELECT JSONB_AGG(reaction_data) FROM (
           SELECT JSONB_BUILD_OBJECT(
@@ -607,7 +640,7 @@ export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
           AND ((sc."userId" = ${userId} AND sc."type" = 'Private') OR sc."type" = 'Public')
       ), '[]'::jsonb) AS "savedContent",
       ${publicCommentCreator} AS creator,
-      ${publicCommentAgent} AS agent
+      ${publicCommentAgent(userId)} AS agent
     FROM "Comment" c
     LEFT JOIN "User" creator ON c."creatorId" = creator."id"
     LEFT JOIN "Agent" agent ON c."agentId" = agent."id"

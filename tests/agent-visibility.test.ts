@@ -10,6 +10,7 @@ async function main() {
     accessibleAgentWhere,
     boardAgentVisibilityWhere,
     deleteOwnedAgentProviderKeyInTransaction,
+    isAgentVisibleToUser,
     setOwnedAgentVisibilityInTransaction,
     upsertOwnedAgentProviderKeyInTransaction,
   } = await import("@/lib/agents/visibility");
@@ -36,6 +37,38 @@ async function main() {
       },
     ],
   });
+  assert.equal(
+    isAgentVisibleToUser({ userId: 42, visibility: "PRIVATE" }, 42),
+    true,
+  );
+  assert.equal(
+    isAgentVisibleToUser({ userId: 7, visibility: "PRIVATE" }, 42),
+    false,
+  );
+  assert.equal(
+    isAgentVisibleToUser({ userId: 7, visibility: "TEAM" }, 42),
+    true,
+  );
+
+  const { projectVisibleTaskAgent } = await import(
+    "@/utils/controllers/taskDetail/load"
+  );
+  const taskAgent = {
+    id: "private-agent",
+    userId: 7,
+    displayName: "Private helper",
+    photoURL: null,
+    createdAt: new Date("2026-09-03T00:00:00Z"),
+    revokedAt: null,
+    runtimeType: "NATIVE" as const,
+    heartbeatAt: null,
+    permissions: {},
+    visibility: "PRIVATE" as const,
+  };
+  assert.equal(projectVisibleTaskAgent(taskAgent, 42), null);
+  const ownerTaskAgent = projectVisibleTaskAgent(taskAgent, 7);
+  assert.equal(ownerTaskAgent?.id, taskAgent.id);
+  assert.equal("visibility" in (ownerTaskAgent ?? {}), false);
 
   let updateCount = 0;
   const noKeyTx = {
@@ -162,6 +195,8 @@ async function main() {
     notificationsRoute,
     tokenRoute,
     inboxPage,
+    taskDetailLoad,
+    createSessionRoute,
   ] = await Promise.all([
     readFile("src/app/agents/[agentId]/AgentDetail.tsx", "utf8"),
     readFile("src/app/api/agents/[agentId]/provider-key/route.ts", "utf8"),
@@ -170,6 +205,8 @@ async function main() {
     readFile("src/app/api/agents/[agentId]/notifications/route.ts", "utf8"),
     readFile("src/app/api/agents/[agentId]/mcp-token/route.ts", "utf8"),
     readFile("src/app/inbox/agent/[agentId]/page.tsx", "utf8"),
+    readFile("src/utils/controllers/taskDetail/load.ts", "utf8"),
+    readFile("src/app/api/ai-chat/create-session/route.ts", "utf8"),
   ]);
   assert.match(detail, /<InfoRow label="Visibility">/);
   assert.match(detail, /<AgentOption value="PRIVATE">Private<\/AgentOption>/);
@@ -181,6 +218,12 @@ async function main() {
   assert.match(providerRoute, /deleteOwnedAgentProviderKey\(/);
   assert.match(providerRoute, /upsertOwnedAgentProviderKey\(/);
   assert.match(agentRoute, /setOwnedAgentVisibility\(/);
+  assert.match(
+    taskDetailLoad,
+    /agentId: visibleAgent \? task\.agentId : null,[\s\S]*agent: visibleAgent/,
+  );
+  assert.match(taskDetailLoad, /hiddenCommentAgent\(userId\)/);
+  assert.match(createSessionRoute, /\.\.\.accessibleAgentWhere\(userId\)/);
   for (const ownerSurface of [
     agentRoute,
     activityRoute,
