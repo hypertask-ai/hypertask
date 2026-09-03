@@ -16,7 +16,18 @@ export async function createFollowerService(params: {
   try {
     const { taskId, mentionById, agentId, commentId, fromAgentId } = params;
     let { userId } = params;
-    if (!taskId) {
+    const agent = agentId
+      ? await prisma.agent.findFirst({
+          where: {
+            id: agentId,
+            revokedAt: null,
+          },
+        })
+      : undefined;
+
+    if (!userId && agentId && agent) userId = agent.userId;
+
+    if (!userId || !taskId) {
       return { status: 400, body: { message: "Missing required information." } };
     }
 
@@ -27,31 +38,6 @@ export async function createFollowerService(params: {
 
     if (!task) {
       return { status: 404, body: { message: "Task not found." } };
-    }
-
-    const agent = agentId
-      ? await prisma.agent.findFirst({
-          where: {
-            id: agentId,
-            revokedAt: null,
-            OR: [
-              { userId: mentionById },
-              {
-                visibility: "TEAM",
-                members: { some: { projectId: task.projectId } },
-              },
-            ],
-          },
-        })
-      : undefined;
-
-    if (agentId && !agent) {
-      return { status: 404, body: { message: "Agent not found." } };
-    }
-    if (!userId && agent) userId = agent.userId;
-
-    if (!userId) {
-      return { status: 400, body: { message: "Missing required information." } };
     }
 
     const notifyAgentMention = async () => {

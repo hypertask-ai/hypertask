@@ -1,12 +1,11 @@
 import { IUser } from "@/models/model";
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { Metadata } from "next";
 import { Suspense } from "react";
 import { InboxZeroProvider } from "@/lib/contexts/InboxZeroContext";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import AgentInbox from "../AgentInbox";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const parseUserCookie = (userObjString: { value: string }): IUser | null => {
   try {
@@ -27,18 +26,10 @@ export async function generateMetadata(
   if (!userObjString?.value) return { title: "Agent Inbox" };
 
   const userObj = parseUserCookie(userObjString);
-  const userId = (await getSessionUser(new Headers(await headers())))?.userId;
-  if (
-    !userObj ||
-    !Number.isInteger(userObj.id) ||
-    typeof userId !== "number" ||
-    userObj.id !== userId
-  ) {
-    return { title: "Agent Inbox" };
-  }
+  if (!userObj) return { title: "Agent Inbox" };
 
   const agent = await prisma.agent.findFirst({
-    where: { id: params.agentId, userId },
+    where: { id: params.agentId, userId: userObj.id },
     select: { displayName: true },
   });
 
@@ -61,18 +52,10 @@ export default async function AgentInboxPage(
   if (!userObjString) return redirect("/login");
 
   const userObj = parseUserCookie(userObjString);
-  const userId = (await getSessionUser(new Headers(await headers())))?.userId;
-  if (
-    !userObj ||
-    !Number.isInteger(userObj.id) ||
-    typeof userId !== "number" ||
-    userObj.id !== userId
-  ) {
-    return redirect("/login");
-  }
+  if (!userObj) return redirect("/login");
 
   const agent = await prisma.agent.findFirst({
-    where: { id: params.agentId, userId },
+    where: { id: params.agentId, userId: userObj.id },
   });
 
   if (!agent) return redirect("/inbox");

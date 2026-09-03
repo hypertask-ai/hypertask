@@ -2,36 +2,29 @@ import {  PrismaClient } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 
 const tasksGetAll = async (projectId:number|string|string[], userId:number|string|string[]) => {
 
         try {
 
-            const projectIdNum = Array.isArray(projectId) ? NaN : Number(projectId)
-            const userIdNum = Array.isArray(userId) ? NaN : Number(userId)
-            if (
-                !Number.isInteger(projectIdNum) ||
-                projectIdNum < 1 ||
-                !Number.isInteger(userIdNum) ||
-                userIdNum < 1
-            ) {
+            if (!projectId || !userId) {
                 return({
                     status:200,
                     json:[]
                 })
+                // return res.status(200).json([]);
             }
 
             const tasks = await prisma.task.findMany({
                 where: {
-                    projectId: projectIdNum,
+                    projectId: parseInt(projectId as string),
                     status: 'Normal',
                     // Scope to projects the requesting user owns or is a member of, so a
                     // caller cannot read another tenant's board by passing an arbitrary
                     // projectId (HTPR-3962). Mirrors the getProjectWhere scoping used by
                     // the MCP task routes and the archived-tasks loader.
-                    project: getProjectWhere(userIdNum),
+                    project: getProjectWhere(parseInt(userId as string)),
                 },
                 select: {
                     id: true,
@@ -46,14 +39,6 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
                     sectionChangedAt: true,
                     lastCommentAt: true,
                     assignees: {
-                        where: {
-                            OR: [
-                                { agentId: null },
-                                {
-                                    agent: boardAgentVisibilityWhere(userIdNum),
-                                },
-                            ],
-                        },
                         select: {
                             user: true
                         }
@@ -65,7 +50,7 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
                                 select: { id: true },
                                 where: {
                                     seen: false,
-                                    userId: userIdNum,
+                                    userId: parseInt(userId as string),
                                 }
                             }
                         }

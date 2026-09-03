@@ -230,15 +230,12 @@ async function listTasks(
     prisma.task.count({ where }),
     prisma.task.findMany({
       where,
-      include: taskMcpGetInclude(actor.user.id),
+      include: taskMcpGetInclude,
       orderBy: { updatedAt: "desc" },
       take: clampLimit(params.limit, 20),
     }),
   ]);
-  return [
-    headerBlock(`*Tasks:* (${total} found)`),
-    ...taskList(tasks.map((task) => mapSlackTask(task, actor.user.id))),
-  ];
+  return [headerBlock(`*Tasks:* (${total} found)`), ...taskList(tasks.map(mapSlackTask))];
 }
 
 async function searchTasks(
@@ -276,7 +273,7 @@ async function searchTasks(
     prisma.task.count({ where }),
     prisma.task.findMany({
       where,
-      include: taskMcpGetInclude(actor.user.id),
+      include: taskMcpGetInclude,
       ...(ids.length ? {} : { orderBy: { updatedAt: "desc" as const } }),
       take: 20,
     }),
@@ -286,7 +283,7 @@ async function searchTasks(
     : rows;
   return [
     headerBlock(`*Search: "${query}"* (${total} found)`),
-    ...taskList(tasks.map((task) => mapSlackTask(task!, actor.user.id))),
+    ...taskList(tasks.map((task) => mapSlackTask(task!))),
   ];
 }
 
@@ -674,15 +671,15 @@ async function resolveSection(projectId: number, reference: string) {
 
 async function findTask(actor: SlackActor, ticket: string): Promise<SlackTaskView | null> {
   const task = await findTaskRecord(actor, ticket, true);
-  return task ? mapSlackTask(task, actor.user.id) : null;
+  return task ? mapSlackTask(task) : null;
 }
 
 async function findTaskById(actor: SlackActor, taskId: number): Promise<SlackTaskView | null> {
   const task = await prisma.task.findFirst({
     where: { id: taskId, project: accessibleProjectWhere(actor) },
-    include: taskMcpGetInclude(actor.user.id),
+    include: taskMcpGetInclude,
   });
-  return task ? mapSlackTask(task, actor.user.id) : null;
+  return task ? mapSlackTask(task) : null;
 }
 
 async function findTaskRecord(actor: SlackActor, ticket: string, full = false): Promise<any | null> {
@@ -696,10 +693,7 @@ async function findTaskRecord(actor: SlackActor, ticket: string, full = false): 
       : { ticketNumber: { equals: reference, mode: "insensitive" } }),
   };
   if (full) {
-    return prisma.task.findFirst({
-      where,
-      include: taskMcpGetInclude(actor.user.id),
-    });
+    return prisma.task.findFirst({ where, include: taskMcpGetInclude });
   }
   return prisma.task.findFirst({
     where,
@@ -770,8 +764,8 @@ async function isProjectMember(projectId: number, userId: number): Promise<boole
   return (await projectMemberIds(projectId)).includes(userId);
 }
 
-function mapSlackTask(task: any, userId: number): SlackTaskView {
-  const mapped = mapTaskToMcpGetResponse(task, userId);
+function mapSlackTask(task: any): SlackTaskView {
+  const mapped = mapTaskToMcpGetResponse(task);
   return {
     boardTitle: mapped.boardTitle,
     commentCount: mapped.totalComments,

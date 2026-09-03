@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isValidUser } from "@/utils/edgeHelpers";
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { accessibleAgentWhere } from "@/lib/agents/visibility";
 
 export const runtime = "nodejs";
 
@@ -13,22 +13,22 @@ export async function GET(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
-    if (!userId) {
+    const cookieStore = await cookies();
+    const userCookie = cookieStore.get("nookies_user");
+
+    if (!userCookie?.value) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { isValid, user } = isValidUser(userCookie.value);
+
+    if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { sessionId } = await params;
     const session = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        userId,
-        agentId: { not: null },
-        agent: {
-          revokedAt: null,
-          ...accessibleAgentWhere(userId),
-        },
-      },
+      where: { id: sessionId, userId: user.id, agentId: { not: null } },
       select: { id: true, agentId: true },
     });
 

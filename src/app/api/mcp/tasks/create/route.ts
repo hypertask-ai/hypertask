@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
 
                 return {
                     success: true,
-                    task: mapTaskToDetail(task, user.id),
+                    task: mapTaskToDetail(task),
                     message: 'Task created successfully',
                     ...(sessionAgent ? { agent: sessionAgent } : {}),
                 };

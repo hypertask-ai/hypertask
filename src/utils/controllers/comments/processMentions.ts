@@ -24,15 +24,10 @@ import { SESSION_COOKIE, signSession } from "@/lib/auth/session";
 export async function resolveTextMentions(
   text: string,
   projectId: number,
-  requestingUserId: number,
 ): Promise<string> {
   try {
     if (!text.includes("@")) return text; // nothing to resolve, skip the query
-    const { members } = await getProjectMembers(
-      projectId,
-      undefined,
-      requestingUserId,
-    );
+    const { members } = await getProjectMembers(projectId);
     if (!members?.length) return text;
     const resolvable: ResolvableMember[] = members.map((m) => ({
       id: m.id,

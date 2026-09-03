@@ -27,8 +27,7 @@ export type GetProjectMembersResult =
  */
 export async function getProjectMembers(
   projectId: number,
-  excludeUserId: number | undefined,
-  requestingUserId: number,
+  excludeUserId?: number,
 ): Promise<GetProjectMembersResult> {
   const project = await prisma.project.findFirst({
     where: {
@@ -69,7 +68,7 @@ export async function getProjectMembers(
       email: u.email ?? "",
     }));
 
-  const boardAgentRows = await getBoardAgentMembers(projectId, requestingUserId);
+  const boardAgentRows = await getBoardAgentMembers(projectId);
   for (const row of boardAgentRows) {
     members.push({
       id: row.agent.id,

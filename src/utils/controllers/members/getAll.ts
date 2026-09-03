@@ -2,10 +2,10 @@
 
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
-import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import { IUser } from "@/models/model";
 
 
-const membersGetAll = async (projectId:string|string[], user: { id: number },teamMembers?:any, teamId_?:string|string[]) => {
+const membersGetAll = async (projectId:string|string[], user:IUser,teamMembers?:any, teamId_?:string|string[]) => {
         try {
             const projectIdNum = parseInt(projectId as string);
             const members = await prisma.member.findMany({
@@ -21,11 +21,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                 where: {
                     projectId: projectIdNum,
                     agentId: { not: null },
-                    agent: {
-                        revokedAt: null,
-                        archivedAt: null,
-                        ...boardAgentVisibilityWhere(user.id),
-                    },
+                    agent: { revokedAt: null, archivedAt: null },
                 },
                 include: {
                     agent: { select: publicAgentSelect },

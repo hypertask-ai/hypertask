@@ -4,7 +4,6 @@ import prisma from "@/lib/prisma";
 import type { AgentMentionItem } from "@/models/model";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "@/utils/controllers/search/document";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -14,16 +13,17 @@ const handler: NextApiHandler = async (
     try {
       const query = req.query;
       const { param, projectId } = query;
-      const userId = (
-        await getSessionUser(new Headers(req.headers as Record<string, string>))
-      )?.userId;
-      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const userObj = req.cookies?.nookies_user
+        ? JSON.parse(req.cookies.nookies_user)
+        : null;
+      if (!userObj || !userObj.id)
+        return res.status(401).json({ message: "Unauthorized" });
       if (!param)
         return res
           .status(400)
           .json({ message: httpStatusConfig.statusCodes[400].userMessage });
 
-      const projectIds = await fetchidlist(userId);
+      const projectIds = await fetchidlist(userObj?.id);
       if (projectIds.length === 0) {
         return res
           .status(400)
@@ -52,7 +52,7 @@ const handler: NextApiHandler = async (
         typeof projectId === "string" ? parseInt(projectId, 10) : null;
       const boardAgentRows =
         parsedProjectId && projectIds.includes(parsedProjectId)
-          ? await getBoardAgentMembers(parsedProjectId, userId)
+          ? await getBoardAgentMembers(parsedProjectId)
           : [];
       const updatedAgents: AgentMentionItem[] = boardAgentRows
         .filter(

@@ -1,9 +1,4 @@
 import prisma from '@/lib/prisma';
-import {
-  accessibleAgentMembershipWhere,
-  isAgentVisibleToUser,
-  type AgentVisibility,
-} from '@/lib/agents/visibility';
 
 export interface McpAgentSummary {
   id: string;
@@ -15,19 +10,6 @@ export const mcpAgentSelect = {
   displayName: true,
   photoURL: true,
 } as const;
-
-export function mcpVisibleAgentSelect(userId: number, projectId?: number) {
-  return {
-    ...mcpAgentSelect,
-    userId: true,
-    visibility: true,
-    members: {
-      where: accessibleAgentMembershipWhere(userId, projectId),
-      select: { projectId: true },
-      ...(projectId === undefined ? {} : { take: 1 }),
-    },
-  } as const;
-}
 
 type AgentRow = {
   id: string;
@@ -41,23 +23,6 @@ export function mapMcpAgent(agent: AgentRow): McpAgentSummary | undefined {
     id: agent.id,
     displayName: agent.displayName,
   };
-}
-
-export function mapVisibleMcpAgent(
-  agent:
-    | (NonNullable<AgentRow> & {
-        userId: number;
-        visibility: AgentVisibility;
-        members: readonly { projectId: number }[];
-      })
-    | null
-    | undefined,
-  userId: number,
-  projectId: number,
-): McpAgentSummary | undefined {
-  return agent && isAgentVisibleToUser(agent, userId, projectId)
-    ? mapMcpAgent(agent)
-    : undefined;
 }
 
 export async function getMcpSessionAgentSummary(

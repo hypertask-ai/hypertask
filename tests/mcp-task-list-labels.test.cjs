@@ -24,17 +24,8 @@ function loadMappers() {
 
   const stubs = {
     "@/lib/mcp/agents": {
-      mapVisibleMcpAgent: (agent, userId, projectId) =>
-        agent &&
-        (agent.userId === userId ||
-          (agent.visibility === "TEAM" &&
-            agent.members.some((member) => member.projectId === projectId)))
-          ? { id: agent.id, displayName: agent.displayName }
-          : undefined,
-      mcpVisibleAgentSelect: () => ({}),
-    },
-    "@/lib/agents/visibility": {
-      accessibleAgentWhere: (userId) => ({ userId }),
+      mapMcpAgent: () => undefined,
+      mcpAgentSelect: {},
     },
     "@/lib/staleness": {
       taskStaleness: () => ({}),
@@ -72,14 +63,6 @@ test("the MCP task list selects labels in the paginated task query", () => {
   );
 });
 
-test("task list counts only assignees visible to the task board", () => {
-  assert.match(routeSource, /assigneeCount:\s*assignees\.length/);
-  assert.match(
-    routeSource,
-    /mapTaskAssignee\(assignee, user\.id, task\.projectId\)/,
-  );
-});
-
 test("list and detail labels share the exact id/name mapping", () => {
   const { mapMcpTaskLabel, mapTaskToMcpGetResponse } = loadMappers();
   const taskLabels = [
@@ -105,7 +88,7 @@ test("list and detail labels share the exact id/name mapping", () => {
     _count: { comments: 0 },
     createdAt: new Date("2026-08-07T00:00:00.000Z"),
     updatedAt: new Date("2026-08-07T00:00:00.000Z"),
-  }, 6);
+  });
 
   assert.deepEqual(listLabels, [
     { id: "label-1", name: "Bug" },
@@ -114,73 +97,6 @@ test("list and detail labels share the exact id/name mapping", () => {
   assert.deepEqual(detail.labels, listLabels);
   assert.deepEqual(detail.pullRequests, []);
   assert.deepEqual(Object.keys(listLabels[0]).sort(), ["id", "name"]);
-});
-
-test("task responses redact agents that are not visible to the viewer", () => {
-  const { mapTaskToMcpGetResponse, taskDetailInclude } = loadMappers();
-  const agent = {
-    id: "private-agent",
-    displayName: "Private helper",
-    userId: 9,
-    visibility: "PRIVATE",
-    members: [],
-  };
-  const task = {
-    id: 5065,
-    uniqueIndex: 5065,
-    projectId: 15,
-    title: "Private agent task",
-    section: "In Progress",
-    status: "Normal",
-    project: { title: "Hypertask Product" },
-    agent,
-    taskLabels: [],
-    assignees: [{
-      user: { id: 9, email: "owner@example.test", displayName: "Owner" },
-      agent,
-      agentAssigner: agent,
-    }],
-    followers: [],
-    attachments: [],
-    customFieldValues: [],
-    subTasks: [],
-    _count: { comments: 0 },
-    createdAt: new Date("2026-08-07T00:00:00.000Z"),
-    updatedAt: new Date("2026-08-07T00:00:00.000Z"),
-  };
-
-  const hidden = mapTaskToMcpGetResponse(task, 6);
-  assert.equal(hidden.agent, undefined);
-  assert.deepEqual(hidden.assignees, []);
-
-  const owner = mapTaskToMcpGetResponse(task, 9);
-  assert.equal(owner.agent.id, agent.id);
-  assert.equal(owner.assignees[0].agentAssigner.id, agent.id);
-
-  assert.equal(
-    mapTaskToMcpGetResponse(
-      { ...task, agent: { ...agent, visibility: "TEAM", members: [] } },
-      6,
-    ).agent,
-    undefined,
-  );
-  assert.equal(
-    mapTaskToMcpGetResponse(
-      { ...task, agent: { ...agent, visibility: "TEAM", members: [{ projectId: 15 }] } },
-      6,
-    ).agent.id,
-    agent.id,
-  );
-  assert.equal(
-    mapTaskToMcpGetResponse(
-      { ...task, agent: { ...agent, visibility: "TEAM", members: [{ projectId: 99 }] } },
-      6,
-    ).agent,
-    undefined,
-  );
-  assert.deepEqual(taskDetailInclude(6).assignees.where, {
-    OR: [{ agentId: null }, { agent: { userId: 6 } }],
-  });
 });
 
 test("task responses expose the permanent-delete deadline", () => {
@@ -204,7 +120,7 @@ test("task responses expose the permanent-delete deadline", () => {
     createdAt: new Date("2026-09-01T00:00:00.000Z"),
     updatedAt: new Date("2026-09-02T00:00:00.000Z"),
     permanentlyDeleteAt,
-  }, 6);
+  });
 
   assert.equal(
     detail.permanentlyDeleteAt,
@@ -224,7 +140,7 @@ test("task responses expose the permanent-delete deadline", () => {
     customFieldValues: [],
     subTasks: [],
     _count: { comments: 0 },
-  }, 6);
+  });
   assert.equal(withoutDeadline.permanentlyDeleteAt, null);
 });
 
@@ -301,7 +217,7 @@ test("task get returns linked pull requests in selected order", () => {
     _count: { comments: 0 },
     createdAt: new Date("2026-09-01T00:00:00.000Z"),
     updatedAt,
-  }, 6);
+  });
 
   assert.deepEqual(
     detail.pullRequests.map(({ number, displayState, headSha, updatedAt: value }) => ({

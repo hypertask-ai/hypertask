@@ -1,7 +1,6 @@
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { buildCalendarAuthorizationRevision } from "@/lib/calendarSync/access";
-import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import type {
   CalendarProjectV1,
   CalendarTaskV1,
@@ -131,12 +130,6 @@ export const getCalendarReadModel = async ({
         updatedByUserIds: true,
         project: { select: { id: true, title: true, name: true } },
         assignees: {
-          where: {
-            OR: [
-              { agentId: null },
-              { agent: boardAgentVisibilityWhere(userId) },
-            ],
-          },
           select: {
             id: true,
             userId: true,

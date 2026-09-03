@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
-import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
+import { mapMcpAgent, mcpAgentSelect } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
@@ -296,19 +296,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       where: { id: commentId },
       select: {
         agentDisplayName: true,
-        agent: {
-          select: mcpVisibleAgentSelect(user.id, comment.task.projectId),
-        },
+        agent: { select: mcpAgentSelect },
       },
     })
-    const agent = mapVisibleMcpAgent(
-      commentWithAgent?.agent,
-      user.id,
-      comment.task.projectId
-    )
-    const hasAgentAttribution = Boolean(
-      commentWithAgent?.agent || commentWithAgent?.agentDisplayName
-    )
+    const agent = mapMcpAgent(commentWithAgent?.agent)
 
     const response: UpdateCommentResponse = {
       success: true,
@@ -318,8 +309,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         createdAt: updatedComment.createdAt.toISOString(),
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),
-        ...(hasAgentAttribution
-          ? { agent_display_name: agent?.displayName || 'Private agent' }
+        ...(commentWithAgent?.agentDisplayName
+          ? { agent_display_name: commentWithAgent.agentDisplayName }
           : {}),
       }
     }

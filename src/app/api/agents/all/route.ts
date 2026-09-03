@@ -1,17 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
   getAccessibleAgentBoard,
   getAgentTeamIds,
   getBoardAgentMembers,
 } from "@/utils/controllers/agents/boardMembers";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
+async function getCurrentUserFromCookies() {
+  try {
+    const cookieStore = await cookies();
+    const userCookie = cookieStore.get("nookies_user");
+    if (!userCookie?.value) return null;
+    return JSON.parse(userCookie.value) as { id?: number };
+  } catch (error: unknown) {
+    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
+    return null;
+  }
+}
 
 /** Returns agents explicitly added to the board via Member.agentId. */
 export async function GET(request: NextRequest) {
-  const userId = (await getSessionUser(request.headers))?.userId;
-  if (!userId) {
+  const user = await getCurrentUserFromCookies();
+  if (!user?.id) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
@@ -28,7 +39,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const project = await getAccessibleAgentBoard(projectIdNumber, userId);
+  const project = await getAccessibleAgentBoard(projectIdNumber, user.id);
   if (!project) {
     return NextResponse.json(
       { success: false, error: "Board not found" },
@@ -36,7 +47,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const boardAgentRows = await getBoardAgentMembers(projectIdNumber, userId);
+  const boardAgentRows = await getBoardAgentMembers(projectIdNumber);
   const teamIdByAgentId = await getAgentTeamIds(
     boardAgentRows.map((row) => row.agent.id)
   );

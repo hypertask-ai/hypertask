@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
 import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
 import {
@@ -9,16 +10,21 @@ import { getAccessibleAgentBoard } from "@/utils/controllers/agents/boardMembers
 import { getAgentTeamId } from "@/utils/controllers/agents/teamScope";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
-import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-async function getCurrentUser(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
-  return session ? { id: session.userId } : null;
+async function getCurrentUserFromCookies() {
+  try {
+    const cookieStore = await cookies();
+    const userCookie = cookieStore.get("nookies_user");
+    if (!userCookie?.value) return null;
+    return JSON.parse(userCookie.value) as { id?: number };
+  } catch (error: any) {
+    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
+    return null;
+  }
 }
 
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser(request);
+  const user = await getCurrentUserFromCookies();
   if (!user?.id) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -45,13 +51,11 @@ export async function GET(request: NextRequest) {
   const agents = await prisma.agent.findMany({
     where: {
       members: { some: { project: { teamId } } },
-      ...boardAgentVisibilityWhere(currentUserId),
     },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
       displayName: true,
-      visibility: true,
       photoURL: true,
       createdAt: true,
       revokedAt: true,
@@ -176,7 +180,7 @@ export async function GET(request: NextRequest) {
  * Body: { displayName: string, photoURL?: string, projectId: number }
  */
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser(request);
+  const user = await getCurrentUserFromCookies();
   if (!user?.id) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -273,7 +277,6 @@ export async function POST(request: NextRequest) {
       select: {
         id: true,
         displayName: true,
-        visibility: true,
         photoURL: true,
         createdAt: true,
         revokedAt: true,

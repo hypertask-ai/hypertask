@@ -282,9 +282,6 @@ test("moving into an agent-configured section uses the agent-only assignment pat
       validateProjectMemberIds: async () => ({ invalidIds: [] }),
     },
     "@/lib/agents/publicAgent": { publicAgentSelect: {} },
-    "@/lib/agents/visibility": {
-      boardAgentVisibilityWhere: (userId) => ({ OR: [{ userId }, { visibility: "TEAM" }] }),
-    },
     "@/lib/agentWebhooks/outbox": {
       persistAgentWebhookEvent: async () => null,
       publishAgentWebhookDeliveries: async () => {},

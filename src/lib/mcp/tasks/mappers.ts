@@ -1,8 +1,4 @@
-import {
-    mapVisibleMcpAgent,
-    mcpVisibleAgentSelect,
-} from '@/lib/mcp/agents';
-import { accessibleAgentWhere } from '@/lib/agents/visibility';
+import { mapMcpAgent, mcpAgentSelect } from '@/lib/mcp/agents';
 import { taskStaleness } from '@/lib/staleness';
 import { derivePullRequestDisplayState } from '@/lib/pullRequests/githubPullRequests';
 import { McpTaskAssignee, TaskDetail } from './types';
@@ -23,18 +19,16 @@ export function mapTaskDescriptionContent(task: {
 
 export function mapTaskAssignee(a: {
     user: { id: number; email: string; displayName: string | null };
-    agent?: Parameters<typeof mapVisibleMcpAgent>[0];
-    agentAssigner?: Parameters<typeof mapVisibleMcpAgent>[0];
-}, userId: number, projectId: number): McpTaskAssignee | undefined {
-    const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
-    if (a.agent && !agent) return undefined;
-
+    agent?: Parameters<typeof mapMcpAgent>[0];
+    agentAssigner?: Parameters<typeof mapMcpAgent>[0];
+}): McpTaskAssignee {
     const mapped: McpTaskAssignee = {
         id: a.user.id,
         email: a.user.email,
         displayName: a.user.displayName || undefined,
     };
-    const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
+    const agent = mapMcpAgent(a.agent);
+    const agentAssigner = mapMcpAgent(a.agentAssigner);
     if (agent) mapped.agent = agent;
     if (agentAssigner) mapped.agentAssigner = agentAssigner;
     return mapped;
@@ -54,8 +48,7 @@ export function mapMcpTaskLabel(taskLabel: {
     };
 }
 
-export function taskDetailInclude(userId: number) {
-    return {
+export const taskDetailInclude = {
     project: {
         select: {
             id: true,
@@ -68,15 +61,9 @@ export function taskDetailInclude(userId: number) {
     description_: true,
     estimate: true,
     agent: {
-        select: mcpVisibleAgentSelect(userId),
+        select: mcpAgentSelect,
     },
     assignees: {
-        where: {
-            OR: [
-                { agentId: null },
-                { agent: accessibleAgentWhere(userId) },
-            ],
-        },
         include: {
             user: {
                 select: {
@@ -85,8 +72,8 @@ export function taskDetailInclude(userId: number) {
                     displayName: true
                 }
             },
-            agent: { select: mcpVisibleAgentSelect(userId) },
-            agentAssigner: { select: mcpVisibleAgentSelect(userId) },
+            agent: { select: mcpAgentSelect },
+            agentAssigner: { select: mcpAgentSelect },
         }
     },
     followers: {
@@ -143,13 +130,11 @@ export function taskDetailInclude(userId: number) {
             updatedAt: true,
         },
     },
-    };
-}
+};
 
 /** GET /api/mcp/tasks single-task lookup (includes hierarchy fields). */
-export function taskMcpGetInclude(userId: number) {
-    return {
-    ...taskDetailInclude(userId),
+export const taskMcpGetInclude = {
+    ...taskDetailInclude,
     attachments: {
         select: {
             id: true,
@@ -185,10 +170,9 @@ export function taskMcpGetInclude(userId: number) {
             },
         },
     },
-    };
-}
+};
 
-export function mapTaskToMcpGetResponse(task: any, userId: number) {
+export function mapTaskToMcpGetResponse(task: any) {
     const subTasks = Array.isArray(task.subTasks)
         ? task.subTasks.map(
               (st: {
@@ -248,13 +232,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         riskLevel: task.riskLevel ? (task.riskLevel.toLowerCase() as 'low' | 'medium' | 'high') : undefined,
         acceptanceCriteria: task.acceptanceCriteria || undefined,
         verifyCommand: task.verifyCommand || undefined,
-        assignees: (task.assignees ?? [])
-            .map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId)
-            )
-            .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
-                Boolean(assignee)
-            ),
+        assignees: (task.assignees ?? []).map(mapTaskAssignee),
         followers: (task.followers ?? []).map((f: { user: { id: number; email: string; displayName: string | null } }) => ({
             id: f.user.id,
             email: f.user.email,
@@ -312,13 +290,13 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
             : undefined,
     };
 
-    const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
+    const agent = mapMcpAgent(task.agent);
     return agent ? { ...mapped, agent } : mapped;
 }
 
-export function mapTaskToDetail(task: any, userId: number): TaskDetail {
+export function mapTaskToDetail(task: any): TaskDetail {
     const descriptionContent = mapTaskDescriptionContent(task);
-    const taskAgent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
+    const taskAgent = mapMcpAgent(task.agent);
 
     return {
         id: task.id,
@@ -347,13 +325,7 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
         riskLevel: task.riskLevel ? (task.riskLevel.toLowerCase() as 'low' | 'medium' | 'high') : undefined,
         acceptanceCriteria: task.acceptanceCriteria || undefined,
         verifyCommand: task.verifyCommand || undefined,
-        assignees: task.assignees
-            ?.map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId)
-            )
-            .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
-                Boolean(assignee)
-            ) || [],
+        assignees: task.assignees?.map(mapTaskAssignee) || [],
         followers: task.followers?.map((f: any) => ({
             id: f.user.id,
             email: f.user.email,

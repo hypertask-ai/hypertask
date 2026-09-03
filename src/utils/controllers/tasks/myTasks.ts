@@ -2,7 +2,6 @@ import prisma from "@/lib/prisma";
 import getAllMinimal from "../projects/getAllMinimal";
 import { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 import type { MyTasksBoardTask } from "@/lib/myTasksGrouping";
-import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 export { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 
@@ -35,12 +34,6 @@ const getMyTasks = async (userId: number) => {
         // agent.userId is deliberate: the assignee modal cannot remove an agent
         // without it (HTPR-5090).
         assignees: {
-          where: {
-            OR: [
-              { agentId: null },
-              { agent: boardAgentVisibilityWhere(userId) },
-            ],
-          },
           include: {
             // email stays: several avatar/initials fallbacks use it when a
             // user has no displayName. It is one short column against the

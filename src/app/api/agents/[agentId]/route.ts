@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import {
@@ -27,11 +28,6 @@ import {
   type AgentManagementDatabase,
 } from "@/lib/mcp/agents/ownedAgents";
 import { buildAgentBoardAccess } from "@/lib/agents/boardAccess";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import {
-  isAgentVisibility,
-  setOwnedAgentVisibility,
-} from "@/lib/agents/visibility";
 
 /**
  * The URL carries a readable slug now (/agents/board-maintainer), so every
@@ -42,9 +38,16 @@ async function resolveAgent(userId: number, ref: string) {
   return resolveOwnedAgent(userId, ref);
 }
 
-async function getCurrentUser(request: NextRequest) {
-  const session = await getSessionUser(request.headers);
-  return session ? { id: session.userId } : null;
+async function getCurrentUserFromCookies() {
+  try {
+    const cookieStore = await cookies();
+    const userCookie = cookieStore.get("nookies_user");
+    if (!userCookie?.value) return null;
+    return JSON.parse(userCookie.value) as { id?: number };
+  } catch (error: any) {
+    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
+    return null;
+  }
 }
 
 export async function GET(
@@ -52,7 +55,7 @@ export async function GET(
   props: { params: Promise<{ agentId: string }> },
 ) {
   const params = await props.params;
-  const user = await getCurrentUser(request);
+  const user = await getCurrentUserFromCookies();
   if (!user?.id) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -67,7 +70,6 @@ export async function GET(
     select: {
       id: true,
       displayName: true,
-      visibility: true,
       photoURL: true,
       createdAt: true,
       revokedAt: true,
@@ -367,7 +369,7 @@ export async function PATCH(
   props: { params: Promise<{ agentId: string }> },
 ) {
   const params = await props.params;
-  const user = await getCurrentUser(request);
+  const user = await getCurrentUserFromCookies();
   if (!user?.id) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -398,7 +400,6 @@ export async function PATCH(
     revoke?: unknown;
     revoked?: unknown;
     archived?: unknown;
-    visibility?: unknown;
   };
 
   try {
@@ -408,39 +409,6 @@ export async function PATCH(
       { success: false, error: "Invalid JSON" },
       { status: 400 },
     );
-  }
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json(
-      { success: false, error: "Invalid JSON" },
-      { status: 400 },
-    );
-  }
-
-  if (body.visibility !== undefined) {
-    const suppliedFields = Object.entries(body).filter(
-      ([, value]) => value !== undefined,
-    );
-    if (suppliedFields.length !== 1 || !isAgentVisibility(body.visibility)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid visibility" },
-        { status: 400 },
-      );
-    }
-    const result = await setOwnedAgentVisibility(
-      existing.id,
-      user.id,
-      body.visibility,
-    );
-    if (!result.ok) {
-      return NextResponse.json(
-        { success: false, error: result.error },
-        { status: result.status },
-      );
-    }
-    return NextResponse.json({
-      success: true,
-      agent: { id: existing.id, visibility: result.visibility },
-    });
   }
 
   // `revoked` states the wanted result, `revoke` only says "flip it". Two tabs
@@ -697,7 +665,6 @@ export async function PATCH(
     select: {
       id: true,
       displayName: true,
-      visibility: true,
       photoURL: true,
       createdAt: true,
       revokedAt: true,
@@ -738,7 +705,7 @@ export async function DELETE(
   props: { params: Promise<{ agentId: string }> },
 ) {
   const params = await props.params;
-  const user = await getCurrentUser(request);
+  const user = await getCurrentUserFromCookies();
   if (!user?.id) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },

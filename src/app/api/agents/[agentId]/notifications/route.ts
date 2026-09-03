@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+
+async function getCurrentUserFromCookies() {
+  try {
+    const cookieStore = await cookies();
+    const userCookie = cookieStore.get("nookies_user");
+    if (!userCookie?.value) return null;
+    return JSON.parse(userCookie.value) as { id?: number };
+  } catch (error: any) {
+    console.log("🚀 ~ getCurrentUserFromCookies ~ error:", error);
+    return null;
+  }
+}
 
 export async function GET(request: NextRequest, props: { params: Promise<{ agentId: string }> }) {
   const params = await props.params;
-  const userId = (await getSessionUser(request.headers))?.userId;
-  if (!userId) {
+  const user = await getCurrentUserFromCookies();
+  if (!user?.id) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 }
@@ -13,7 +25,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ agent
   }
 
   const result = await getStructuredInboxForAgent({
-    userId,
+    userId: user.id,
     agentId: params.agentId,
   });
 

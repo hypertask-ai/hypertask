@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit, mcpUnauthorizedResponse } from '@/lib/mcp/auth'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
-import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
-import { accessibleAgentWhere } from '@/lib/agents/visibility'
+import { mapMcpAgent, mcpAgentSelect } from '@/lib/mcp/agents'
 import type { McpTaskAssignee } from '@/lib/mcp/tasks/types'
 import {
   mapMcpTaskLabel,
@@ -272,7 +271,7 @@ export async function GET(request: NextRequest) {
         const tasks = await prisma.task.findMany({
           where,
           include: {
-            ...taskMcpGetInclude(user.id),
+            ...taskMcpGetInclude,
             savedContent: {
               where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' },
               select: { id: true, type: true },
@@ -299,13 +298,13 @@ export async function GET(request: NextRequest) {
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: mapTaskToMcpGetResponse(tasks[0], user.id)
+            task: mapTaskToMcpGetResponse(tasks[0])
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id))
+          tasks: tasks.map(mapTaskToMcpGetResponse)
         })
       }
     }
@@ -547,15 +546,9 @@ export async function GET(request: NextRequest) {
         sectionChangedAt: true,
         lastCommentAt: true,
         agent: {
-          select: mcpVisibleAgentSelect(user.id),
+          select: mcpAgentSelect,
         },
         assignees: {
-          where: {
-            OR: [
-              { agentId: null },
-              { agent: accessibleAgentWhere(user.id) },
-            ],
-          },
           include: {
             user: {
               select: {
@@ -564,8 +557,8 @@ export async function GET(request: NextRequest) {
                 displayName: true,
               },
             },
-            agent: { select: mcpVisibleAgentSelect(user.id) },
-            agentAssigner: { select: mcpVisibleAgentSelect(user.id) },
+            agent: { select: mcpAgentSelect },
+            agentAssigner: { select: mcpAgentSelect },
           },
         },
         taskLabels: {
@@ -581,6 +574,7 @@ export async function GET(request: NextRequest) {
         },
         _count: {
           select: {
+            assignees: true,
             taskLabels: true,
             comments: mcpTaskUserCommentCount,
           },
@@ -614,10 +608,7 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const taskList: TaskListItem[] = tasks.map(task => {
-      const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
-      const assignees = task.assignees
-        .map((assignee) => mapTaskAssignee(assignee, user.id, task.projectId))
-        .filter((assignee): assignee is McpTaskAssignee => Boolean(assignee))
+      const agent = mapMcpAgent(task.agent)
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
@@ -646,8 +637,8 @@ export async function GET(request: NextRequest) {
         status: task.status,
         priority: task.priority?.Priority_Value || undefined,
         dueDate: task.dueDate?.toISOString() || undefined,
-        assignees,
-        assigneeCount: assignees.length,
+        assignees: task.assignees.map(mapTaskAssignee),
+        assigneeCount: task._count.assignees,
         labels: task.taskLabels.map(mapMcpTaskLabel),
         labelCount: task._count.taskLabels,
         commentCount: task._count.comments,
