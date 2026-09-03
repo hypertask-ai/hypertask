@@ -151,6 +151,8 @@ async function generateAndStoreTaskSummaryWithLease(
           text: true,
           activity: true,
           createdAt: true,
+          agentDisplayName: true,
+          agent: { select: { displayName: true } },
           creator: { select: { displayName: true, email: true } },
         },
       },
@@ -202,6 +204,8 @@ async function generateAndStoreTaskSummaryWithLease(
       if (!text || isSessionNoise(text)) return null;
       return {
         creator:
+          comment.agent?.displayName ||
+          comment.agentDisplayName ||
           comment.creator?.displayName ||
           comment.creator?.email ||
           (comment.activity ? "Activity Log" : "Unknown"),

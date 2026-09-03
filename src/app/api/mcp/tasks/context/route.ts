@@ -168,14 +168,13 @@ export async function GET(request: NextRequest) {
             id: true,
             text: true,
             createdAt: true,
+            agentDisplayName: true,
+            agent: {
+              select: { displayName: true },
+            },
             creator: {
               select: {
                 email: true,
-                displayName: true,
-              },
-            },
-            agent: {
-              select: {
                 displayName: true,
               },
             },
@@ -230,6 +229,7 @@ export async function GET(request: NextRequest) {
       id: comment.id,
       author:
         comment.agent?.displayName ||
+        comment.agentDisplayName ||
         comment.creator?.displayName ||
         comment.creator?.email ||
         'Unknown',

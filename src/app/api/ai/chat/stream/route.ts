@@ -1882,6 +1882,9 @@ function mapCommentToResponse(comment: any) {
         }
       : undefined,
     ...(agent ? { agent } : {}),
+    ...(comment.agentDisplayName
+      ? { agent_display_name: comment.agentDisplayName }
+      : {}),
     attachments: (comment.attachments ?? []).map((attachment: any) => ({
       id: attachment.id,
       fileName: attachment.fileName || "",
@@ -4623,6 +4626,7 @@ function buildTools(
                 id: true,
                 text: true,
                 createdAt: true,
+                agentDisplayName: true,
                 creator: {
                   select: { email: true, displayName: true },
                 },
@@ -4670,6 +4674,7 @@ function buildTools(
           id: comment.id,
           author:
             comment.agent?.displayName ||
+            comment.agentDisplayName ||
             comment.creator?.displayName ||
             comment.creator?.email ||
             "Unknown",

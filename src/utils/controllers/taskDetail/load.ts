@@ -396,7 +396,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
     WITH base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
         ${assignmentActivityWithCurrentAvatars} AS activity,
-        c."seen", c."agentId",
+        c."seen", c."agentId", c."agentDisplayName",
         ${publicCommentCreator} AS creator,
         ${publicCommentAgent} AS agent
       FROM "Comment" c
@@ -448,7 +448,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
       GROUP BY sc."commentId"
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
-      bc.activity, bc."seen", bc."agentId",
+      bc.activity, bc."seen", bc."agentId", bc."agentDisplayName",
       COALESCE(rbc.reactions, '[]'::jsonb) AS reactions,
       COALESCE(abc.attachments, '[]'::jsonb) AS attachments,
       COALESCE(sbc."savedContent", '[]'::jsonb) AS "savedContent",
@@ -504,7 +504,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
         ${assignmentActivityWithCurrentAvatars} AS activity,
-        c."seen", c."agentId",
+        c."seen", c."agentId", c."agentDisplayName",
         ${publicCommentCreator} AS creator,
         ${publicCommentAgent} AS agent
       FROM "Comment" c
@@ -556,7 +556,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       GROUP BY sc."commentId"
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
-      bc.activity, bc."seen", bc."agentId",
+      bc.activity, bc."seen", bc."agentId", bc."agentDisplayName",
       COALESCE(rbc.reactions, '[]'::jsonb) AS reactions,
       COALESCE(abc.attachments, '[]'::jsonb) AS attachments,
       COALESCE(sbc."savedContent", '[]'::jsonb) AS "savedContent",
@@ -575,7 +575,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
 export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw`
     SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-      c.activity, c."seen", c."agentId",
+      c.activity, c."seen", c."agentId", c."agentDisplayName",
       (
         SELECT JSONB_AGG(reaction_data) FROM (
           SELECT JSONB_BUILD_OBJECT(
@@ -600,7 +600,7 @@ export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
     LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
     WHERE c."taskId" = ${taskId}
     GROUP BY c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
-      c.seen, c.activity, c."agentId", creator."id", agent."id"
+      c.seen, c.activity, c."agentId", c."agentDisplayName", creator."id", agent."id"
     ORDER BY c."createdAt" ASC
   `;
 }

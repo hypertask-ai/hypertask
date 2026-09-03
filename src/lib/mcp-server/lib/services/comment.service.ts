@@ -42,6 +42,7 @@ export interface CommentDetail {
   type?: 'comment' | 'activity';
   activity?: unknown;
   creatorId?: number;
+  agent_display_name?: string;
   creator?: {
     id: number;
     email: string;

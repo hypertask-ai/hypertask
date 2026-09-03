@@ -53,6 +53,78 @@ export const agentLifecycleDeps: AgentLifecycleDeps = {
 const notFound = () =>
   NextResponse.json({ success: false, error: 'Agent not found' }, { status: 404 })
 
+export async function handleArchiveAgentRequest(
+  request: NextRequest,
+  rawAgentId: string
+): Promise<NextResponse> {
+  const rateLimited = await checkMcpRateLimit(request)
+  if (rateLimited) return rateLimited
+
+  const ctx = await validateMcpAuth(request, {
+    deferManagementPermissionCheck: true,
+  })
+  if (!ctx) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Unauthorized. Invalid or missing authentication token.',
+      },
+      { status: 401 }
+    )
+  }
+  if (ctx.agentId) {
+    return NextResponse.json(
+      { success: false, error: 'Agents cannot manage agents' },
+      { status: 403 }
+    )
+  }
+  if (
+    ctx.management &&
+    !hasManagementWritePermission(ctx.management.permissions)
+  ) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Management key does not have permission to manage agents',
+      },
+      { status: 403 }
+    )
+  }
+
+  const agentId = rawAgentId.trim()
+  if (!agentId) {
+    return NextResponse.json(
+      buildFieldError(
+        'invalid_field',
+        'agent_id',
+        'agent_id must be a non-empty string'
+      ),
+      { status: 400 }
+    )
+  }
+
+  try {
+    const archived = await archiveOwnedAgent(
+      prisma as unknown as AgentLifecycleDatabase,
+      ctx.user.id,
+      agentId,
+      true
+    )
+    if (archived.status === 'not_found') return notFound()
+
+    return NextResponse.json({
+      success: true,
+      agent: describe(archived.agent),
+    })
+  } catch (error) {
+    console.error('[MCP Archive Agent] Error:', error)
+    return NextResponse.json(
+      { success: false, error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
 export async function handlePatchAgentRequest(
   request: NextRequest,
   rawAgentId: string

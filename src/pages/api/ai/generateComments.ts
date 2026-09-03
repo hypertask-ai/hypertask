@@ -130,7 +130,10 @@ export const generateCommentsHandler = async (taskId: number, commentIds: number
       comment_created_by = "Activity Log"
     }
     else {
-      comment_created_by = comment.creator?.displayName;
+      comment_created_by =
+        comment.agent?.displayName ||
+        comment.agentDisplayName ||
+        comment.creator?.displayName;
       comment_text = comment.text ?? '';
     }
     const { mentions, src } = extractTipTapContent(comment_text);    
@@ -165,6 +168,7 @@ async function getComments(taskId: number, commentIdsToGet: number[]) {
       },
       include: {
         creator: true,
+        agent: { select: { displayName: true } },
         reactions: {
           where: { isDeleted: false },
           select: {
@@ -190,6 +194,7 @@ async function getComments(taskId: number, commentIdsToGet: number[]) {
       },
       include: {
         creator: true,
+        agent: { select: { displayName: true } },
         reactions: {
           where: { isDeleted: false },
           select: {

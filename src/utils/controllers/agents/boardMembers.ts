@@ -48,7 +48,7 @@ export async function getBoardAgentMembers(
     where: {
       projectId,
       agentId: { not: null },
-      agent: { revokedAt: null },
+      agent: { revokedAt: null, archivedAt: null },
     },
     include: {
       agent: { select: publicAgentSelect },

@@ -50,6 +50,8 @@ export interface CommentItem {
     displayName?: string
   }
   agent?: McpAgentSummary
+  /** Preserved display name when the comment's managed agent was deleted. */
+  agent_display_name?: string
   attachments?: Array<{
     id: number
     fileName: string
@@ -155,6 +157,9 @@ function mapCommentToResponse(comment: any, includeActivity = false): CommentIte
       displayName: comment.creator.displayName || undefined
     } : undefined,
     ...(agent ? { agent } : {}),
+    ...(comment.agentDisplayName
+      ? { agent_display_name: comment.agentDisplayName }
+      : {}),
     attachments: comment.attachments.map((a: any) => ({
       id: a.id,
       fileName: a.fileName || '',

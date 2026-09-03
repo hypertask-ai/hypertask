@@ -192,9 +192,28 @@ export async function saveAgentRuntimeSnapshot(
   throw new Error("Redis returned an invalid runtime sequence result");
 }
 
-export async function clearAgentRuntimeSnapshot(agentId: string): Promise<void> {
+export async function clearAgentRuntimeSnapshot(
+  agentId: string,
+  fenceGeneration?: number,
+): Promise<void> {
   const redis = await getRedis();
-  await redis.del(runtimeKey(agentId));
+  if (fenceGeneration === undefined) {
+    await redis.del(runtimeKey(agentId));
+    return;
+  }
+  if (!Number.isSafeInteger(fenceGeneration)) {
+    throw new Error("Agent runtime fence generation must be a safe integer");
+  }
+
+  // Delete and fence in one Redis script so a heartbeat that authenticated just
+  // before an agent delete cannot recreate the snapshot after the delete.
+  await redis.eval(
+    "redis.call('DEL', KEYS[1]); redis.call('SET', KEYS[2], ARGV[1]); return 1;",
+    2,
+    runtimeKey(agentId),
+    runtimeSequenceKey(agentId),
+    JSON.stringify({ generation: fenceGeneration, sequence: 0 }),
+  );
 }
 
 export async function readAgentRuntimeSnapshot(

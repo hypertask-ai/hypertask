@@ -105,6 +105,7 @@ async function fetchReplyContext(taskId: number, userId: number) {
           commentText: true,
           text: true,
           createdAt: true,
+          agentDisplayName: true,
           creator: { select: { displayName: true } },
           agent: { select: { displayName: true } },
         },
@@ -119,8 +120,9 @@ async function generateSuggestion(task: NonNullable<ReplyContext>, userId: numbe
     ? comments
         .map((comment) => {
           const author =
-            comment.creator?.displayName ??
             comment.agent?.displayName ??
+            comment.agentDisplayName ??
+            comment.creator?.displayName ??
             "Unknown";
           const text = clamp(
             comment.commentText || htmlToPlainText(comment.text),

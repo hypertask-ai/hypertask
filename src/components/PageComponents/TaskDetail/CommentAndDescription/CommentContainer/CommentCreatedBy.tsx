@@ -8,6 +8,7 @@ import { useRecoilState } from "@/lib/state";
 import CreatedBy from "../Common/CreatedBy";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import styles from "@/styles/tiptap.module.scss";
+import type { PersonHovercardSubject } from "@/models/personHovercard";
 
 const NewCommentDot = () => (
   <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-amber-500" />
@@ -19,14 +20,20 @@ const CommentCreatedBy = () => {
   const { newCommentIds, currentTask } = useTaskContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
 
-  const displayName = comment.agent?.displayName ?? comment.creator?.displayName ?? "";
-  const photoURL = comment.agent?.photoURL ?? comment.creator?.photoURL ?? "";
+  const displayName =
+    comment.agent?.displayName ??
+    comment.agentDisplayName ??
+    comment.creator?.displayName ??
+    "";
+  const photoURL = comment.agent?.photoURL ??
+    (comment.agentDisplayName ? "" : comment.creator?.photoURL ?? "");
   const isNewComment = newCommentIds.includes(Number(comment.id));
-  const subject = comment.agent
-    ? { kind: "agent" as const, id: comment.agent.id }
-    : comment.creator
-      ? { kind: "user" as const, id: comment.creator.id }
-      : null;
+  let subject: PersonHovercardSubject | null = null;
+  if (comment.agent) {
+    subject = { kind: "agent", id: comment.agent.id };
+  } else if (!comment.agentDisplayName && comment.creator) {
+    subject = { kind: "user", id: comment.creator.id };
+  }
 
   // -------------------- MOBILE
   if (_mbl) {

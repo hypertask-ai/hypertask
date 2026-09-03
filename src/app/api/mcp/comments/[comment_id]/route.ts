@@ -35,6 +35,7 @@ export interface UpdateCommentResponse {
     createdAt: string
     creatorId?: number
     agent?: McpAgentSummary
+    agent_display_name?: string
   }
 }
 
@@ -294,6 +295,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     const commentWithAgent = await prisma.comment.findUnique({
       where: { id: commentId },
       select: {
+        agentDisplayName: true,
         agent: { select: mcpAgentSelect },
       },
     })
@@ -307,6 +309,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         createdAt: updatedComment.createdAt.toISOString(),
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),
+        ...(commentWithAgent?.agentDisplayName
+          ? { agent_display_name: commentWithAgent.agentDisplayName }
+          : {}),
       }
     }
 

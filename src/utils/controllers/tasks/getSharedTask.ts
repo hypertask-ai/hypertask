@@ -13,6 +13,8 @@ export const getSharedComments = async (
               c."creatorId",
               c."createdAt",
               c.activity,
+              c."agentId",
+              c."agentDisplayName",
   
           -- =========== reactions
           (
@@ -40,11 +42,17 @@ export const getSharedComments = async (
                   WHERE a."commentId" = c.id
               ) as attachments,
   
-          -- =========== creator  
-          COALESCE(to_jsonb(creator), 'null') AS creator
+          -- =========== creator
+          COALESCE(to_jsonb(creator), 'null') AS creator,
+          CASE WHEN agent.id IS NULL THEN 'null'::jsonb ELSE JSONB_BUILD_OBJECT(
+              'id', agent.id,
+              'displayName', agent."displayName",
+              'photoURL', agent."photoURL"
+          ) END AS agent
   
           FROM "Comment" c
           LEFT JOIN "User" creator ON c."creatorId" = creator."id"
+          LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
           
           WHERE "taskId" = ${parseInt(taskId as string)}
           GROUP BY
@@ -54,7 +62,10 @@ export const getSharedComments = async (
               c."creatorId",
               c."createdAt",
               c.activity,
-              creator."id"
+              c."agentId",
+              c."agentDisplayName",
+              creator."id",
+              agent."id"
           ORDER BY c."createdAt" ASC;
       `;
     return {
