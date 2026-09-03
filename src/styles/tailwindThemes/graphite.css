@@ -194,7 +194,7 @@ html.graphite {
 }
 
 .graphite .attachment-tile:hover {
-  background: #2c2f36 !important;
+  background: var(--bg-modalBackground) !important;
 }
 
 .graphite .attachment-tile-name {
