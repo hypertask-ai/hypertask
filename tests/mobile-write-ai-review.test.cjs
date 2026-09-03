@@ -255,7 +255,7 @@ async function withRenderedSheet(text, callback) {
 }
 
 test("mobile Write with AI matches the empty mobile composer state", async () => {
-  await withRenderedSheet("", async ({ container }) => {
+  await withRenderedSheet("", async ({ container, dom }) => {
     const heading = [...container.querySelectorAll("h2")].find(
       (element) => element.textContent.trim() === "Write with AI",
     );
@@ -280,6 +280,15 @@ test("mobile Write with AI matches the empty mobile composer state", async () =>
     assert.match(send.className, /bg-shadcn-primary/);
     assert.match(send.className, /text-primary-foreground/);
     assert.match(send.className, /rounded-\[4px\]/);
+
+    global.fetch = () => new Promise(() => {});
+    await click(dom, send);
+    assert.equal(
+      container
+        .querySelector('[role="status"] .lucide-loader-circle')
+        .getAttribute("stroke-width"),
+      "1.5",
+    );
   });
 });
 
@@ -326,6 +335,71 @@ test("mobile Write with AI renders the complete existing-draft chip strip", asyn
     await click(dom, buttonWithText(container, "Friendlier"));
     assert.equal(requests[0].command, "CustomEdit");
     assert.equal(requests[0].instruction, "Make the tone friendlier.");
+  });
+});
+
+test("mobile Write with AI keeps the keyboard target and chip strip in place while rewriting", async () => {
+  await withRenderedSheet("Original draft", async ({ container, dom }) => {
+    let resolveResponse;
+    global.fetch = () =>
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      });
+
+    const prompt = container.querySelector("input");
+    const strip = container.querySelector(".overflow-x-auto");
+    const chip = buttonWithText(container, "Improve readability");
+    const draft = container.querySelector('[contenteditable="true"]');
+    draft.focus();
+    assert.equal(document.activeElement, draft);
+
+    let pointerDownAccepted;
+    await act(async () => {
+      pointerDownAccepted = chip.dispatchEvent(
+        new dom.window.MouseEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    assert.equal(pointerDownAccepted, false);
+    assert.equal(document.activeElement, prompt);
+
+    await click(dom, chip);
+
+    assert.strictEqual(container.querySelector("input"), prompt);
+    assert.strictEqual(container.querySelector(".overflow-x-auto"), strip);
+    assert.equal(document.activeElement, prompt);
+    assert.equal(draft.getAttribute("contenteditable"), "false");
+    assert.equal(chip.disabled, true);
+    assert.match(container.textContent, /Rewriting draft/);
+    const loadingStatus = container.querySelector('[role="status"]');
+    assert.equal(
+      loadingStatus
+        .querySelector(".lucide-loader-circle")
+        .getAttribute("stroke-width"),
+      "1.5",
+    );
+    assert.equal(
+      loadingStatus.dispatchEvent(
+        new dom.window.MouseEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+      false,
+    );
+    assert.equal(document.activeElement, prompt);
+    await setInput(dom, prompt, "Next instruction");
+
+    await act(async () => {
+      resolveResponse({
+        ok: true,
+        json: async () => ({ corrected_html: "<p>Clearer draft</p>" }),
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    assert.equal(prompt.value, "Next instruction");
   });
 });
 
