@@ -38,17 +38,15 @@ const publicCommentCreator = Prisma.sql`
 
 const hasAccessibleAgentProject = (
   userId: number,
-  taskId: Prisma.Sql,
+  projectId: Prisma.Sql,
 ) => Prisma.sql`
   EXISTS (
     SELECT 1
     FROM "Member" visibility_agent_member
     INNER JOIN "Project" visibility_project
       ON visibility_project.id = visibility_agent_member."projectId"
-    INNER JOIN "Task" visibility_task
-      ON visibility_task.id = ${taskId}
     WHERE visibility_agent_member."agentId" = agent.id
-      AND visibility_agent_member."projectId" = visibility_task."projectId"
+      AND visibility_agent_member."projectId" = ${projectId}
       AND visibility_project.status = 'Normal'::"Status"
       AND (
         visibility_project."ownerId" = ${userId}
@@ -65,7 +63,7 @@ const hasAccessibleAgentProject = (
 
 const hiddenCommentAgent = (
   userId: number,
-  taskId: Prisma.Sql,
+  projectId: Prisma.Sql,
 ) => Prisma.sql`
   (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
   OR (
@@ -73,7 +71,7 @@ const hiddenCommentAgent = (
     AND agent."userId" <> ${userId}
     AND NOT (
       agent.visibility = 'TEAM'::"AgentVisibility"
-      AND (${hasAccessibleAgentProject(userId, taskId)})
+      AND (${hasAccessibleAgentProject(userId, projectId)})
     )
   )
 `;
@@ -442,7 +440,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(userId, Prisma.sql`c."taskId"`)}) AS hidden
+        SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`)}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
@@ -557,7 +555,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(userId, Prisma.sql`c."taskId"`)}) AS hidden
+        SELECT (${hiddenCommentAgent(userId, Prisma.sql`ti."projectId"`)}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
@@ -651,7 +649,7 @@ export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
     LEFT JOIN "User" creator ON c."creatorId" = creator."id"
     LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
     LEFT JOIN LATERAL (
-      SELECT (${hiddenCommentAgent(userId, Prisma.sql`c."taskId"`)}) AS hidden
+      SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`)}) AS hidden
     ) agent_visibility ON TRUE
     WHERE c."taskId" = ${taskId}
     GROUP BY c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
