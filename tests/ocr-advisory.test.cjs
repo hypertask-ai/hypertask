@@ -1,6 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { chmod, mkdir, mkdtemp, readFile, stat, utimes, writeFile } = require('node:fs/promises')
+const { chmod, mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } = require('node:fs/promises')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { spawnSync } = require('node:child_process')
@@ -12,8 +12,9 @@ async function executable(path, body) {
   await chmod(path, 0o755)
 }
 
-async function fixture() {
+async function fixture(t) {
   const home = await mkdtemp(join(tmpdir(), 'ht-ocr-advisory-'))
+  t.after(() => rm(home, { recursive: true, force: true }))
   const fakeBin = join(home, 'bin')
   const worktree = join(home, 'projects/hypertask-oss')
   await mkdir(fakeBin, { recursive: true })
@@ -38,7 +39,8 @@ printf '%s\\n' "$*" >> "$HOME/git.log"
 `)
   await executable(join(fakeBin, 'gh'), `
 if [[ "$1 $2" == "pr list" ]]; then
-  printf '%s\\n' '230 feature head-sha'
+  [[ " $* " == *" --limit 1000 "* ]] || exit 1
+  printf '%s\\n' '230 feature head-sha false' '231 draft draft-sha true'
 else
   printf '%s\\n' "$*" >> "$HOME/gh.log"
 fi
@@ -58,8 +60,8 @@ function run({ home, fakeBin }, extraEnv = {}) {
   })
 }
 
-test('reviews public production PRs from the public checkout', async () => {
-  const fixtureData = await fixture()
+test('reviews public production PRs from the public checkout', async (t) => {
+  const fixtureData = await fixture(t)
   const result = run(fixtureData)
 
   assert.equal(result.status, 0, result.stderr)
@@ -75,27 +77,33 @@ test('reviews public production PRs from the public checkout', async () => {
   await stat(join(fixtureData.home, '.local/state/ocr-advisory/head-sha'))
 })
 
-test('retains old markers for open heads and removes closed-head markers', async () => {
-  const fixtureData = await fixture()
+test('retains old markers for ready and draft heads, then removes closed-head markers', async (t) => {
+  const fixtureData = await fixture(t)
   const state = join(fixtureData.home, '.local/state/ocr-advisory')
   await mkdir(state, { recursive: true })
   const openMarker = join(state, 'head-sha')
+  const draftMarker = join(state, 'draft-sha')
   const closedMarker = join(state, 'closed-sha')
   await writeFile(openMarker, '')
+  await writeFile(draftMarker, '')
   await writeFile(closedMarker, '')
   const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000)
   await utimes(openMarker, old, old)
+  await utimes(draftMarker, old, old)
   await utimes(closedMarker, old, old)
+  const before = await stat(openMarker)
 
   const result = run(fixtureData)
 
   assert.equal(result.status, 0, result.stderr)
-  await stat(openMarker)
+  assert.equal((await stat(openMarker)).ino, before.ino)
+  await stat(draftMarker)
   await assert.rejects(stat(closedMarker), { code: 'ENOENT' })
+  await assert.rejects(readFile(join(fixtureData.home, 'review.log')), { code: 'ENOENT' })
 })
 
-test('fails closed when the advisory checkout is not the public repository', async () => {
-  const fixtureData = await fixture()
+test('fails closed when the advisory checkout is not the public repository', async (t) => {
+  const fixtureData = await fixture(t)
   await executable(join(fixtureData.fakeBin, 'git'), `
 if [[ "$1 $2" == "remote get-url" ]]; then
   printf '%s\\n' 'https://github.com/hypertask-ai/hypertasks.git'
