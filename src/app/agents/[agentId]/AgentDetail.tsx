@@ -1006,14 +1006,9 @@ const AgentDetail = (props: IProp) => {
     setVisibilityNotice(null);
     try {
       const updated = await patchAgent({ visibility: value });
+      const visibility = updated.visibility === "TEAM" ? "TEAM" : "PRIVATE";
       setAgent((current) =>
-        current
-          ? {
-              ...current,
-              visibility:
-                updated.visibility === "TEAM" ? "TEAM" : "PRIVATE",
-            }
-          : current,
+        current ? { ...current, visibility } : current,
       );
     } catch (error) {
       setVisibilityNotice({
