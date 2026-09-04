@@ -719,11 +719,11 @@ const TiptapCreateTaskModal = () => {
           resetComposerAfterCreate();
           document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.focus();
           setUploadInProgress(false);
-          releaseSubmission();
           completeTaskCreatePerformanceTraceAfterPaint(
             "composer_reset",
             traceScope,
           );
+          releaseSubmission();
           return savedMessage;
         },
         error: (error) => {
