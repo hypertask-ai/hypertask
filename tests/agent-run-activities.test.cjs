@@ -583,32 +583,263 @@ test("chat selection posts one human message and one select prompt event", async
   assert.deepEqual(harness.published, ["delivery-1"]);
 });
 
-test("migration and comment integration keep activity side effects atomic", () => {
-  const fs = require("node:fs");
-  const migration = fs.readFileSync(
+test("migration constrains retry keys and elicitation selections", () => {
+  const migration = require("node:fs").readFileSync(
     path.join(
       root,
       "src/prisma/migrations/20260904152000_add_agent_run_activities/migration.sql",
     ),
     "utf8",
   );
-  const comments = fs.readFileSync(
-    path.join(root, "src/utils/controllers/comments/createCommentService.ts"),
-    "utf8",
-  );
   assert.match(migration, /UNIQUE INDEX "AgentRunActivity_runId_idempotencyKey_key"/);
   assert.match(migration, /AgentRunActivity_selection_check/);
-  assert.match(
-    comments,
-    /persistAgentRunActivity\(tx, agentRunActivity\)[\s\S]*?tx\.comment\.create/,
+  assert.match(migration, /AgentRunActivity_options_type_check/);
+});
+
+function loadAtomicCommentService(prisma, persistAgentWebhookEvent) {
+  const noop = async () => {};
+  const modules = {
+    "src/lib/prisma.ts": { default: prisma },
+    "src/utils/controllers/notifications/IdsToSendNotificationsTo.ts": {
+      default: async () => [],
+    },
+    "src/lib/realtime/server.ts": {
+      broadcastBoardChange: noop,
+      broadcastInboxChange: noop,
+    },
+    "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts":
+      { default: noop },
+    "src/utils/controllers/notifications/agentActionRecipients.ts": {
+      includeSenderInRecipients: () => false,
+      shouldNotifyTaskOwnerForComment: () => false,
+    },
+    "src/pages/api/queues/FAST/generateSummary.ts": { default: noop },
+    "src/utils/controllers/tasks/single.ts": { updateTaskSingle: noop },
+    "src/utils/controllers/turbopuffer/turbopufferHelper.ts": {
+      upsertCommentToTurbopuffer: noop,
+    },
+    "src/utils/controllers/comments/processMentions.ts": {
+      getMentionedUserIdsFromCommentText: () => [],
+      getMentionedAgentIdsFromCommentText: () => [],
+      processMentionsFromCommentText: noop,
+    },
+    "src/utils/controllers/comments/extractTaskReferences.ts": {
+      extractTaskReferencesFromCommentText: () => [],
+    },
+    "src/utils/controllers/tasks/addRelatedTasks.ts": {
+      addRelatedTasks: async () => ({ status: 200 }),
+    },
+    "src/utils/controllers/FCM/index.ts": { sendDataOnlyFcm: noop },
+    "src/utils/controllers/notifications/shouldNotify.ts": {
+      shouldNotify: async () => true,
+    },
+    "src/utils/controllers/notifications/sendNotification.ts": {
+      sendEmailNotification: noop,
+    },
+    "src/pages/api/queues/FAST/generateCommentSummary.ts": { default: noop },
+    "src/utils/controllers/projects/getAllIncludes.ts": {
+      taskWriteAccessWhere: () => ({}),
+    },
+    "src/lib/ai/hyperAiConfirmation.ts": {
+      recordHyperAiCommentOrigin: noop,
+    },
+    "src/lib/agentWebhooks/outbox.ts": {
+      persistAgentRunTriggerWebhooks: async () => [],
+      persistAgentTaskRunPromptWebhooks: async () => [],
+      persistAgentWebhookEvent,
+      persistAgentWebhookEvents: async () => [],
+      publishAgentWebhookDeliveries: noop,
+    },
+    "src/lib/mcp/webhooks/outbox.ts": {
+      persistBoardWebhookEvents: async () => [],
+      publishBoardWebhookDeliveries: noop,
+    },
+    "src/lib/configs/general.config.ts": {
+      generalConfig: { hyperAiId: 332 },
+    },
+    "src/utils/helperFunctions/normalizeRichTextStructure.ts": {
+      normalizeRichTextStructure: (text) => text,
+    },
+    "src/utils/controllers/comments/agentInvocationCorrelation.ts": {
+      buildAgentInvocationSelector: () => null,
+      claimPendingAgentInvocation: async () => null,
+      DirectReplyAlreadyHandledError: class extends Error {},
+    },
+    "src/utils/controllers/comments/inboundEmailReceipt.ts": {
+      claimInboundEmailProcessing: noop,
+      completeInboundEmailProcessing: noop,
+      findInboundEmailReceipt: async () => null,
+      recordInboundEmailComment: noop,
+      releaseInboundEmailProcessing: noop,
+      requireInboundEmailComment: () => null,
+    },
+  };
+  for (const [relativePath, exports] of Object.entries(modules)) {
+    stub(relativePath, exports);
+  }
+  const servicePath = "src/utils/controllers/comments/createCommentService.ts";
+  delete require.cache[path.join(root, servicePath)];
+  return load(servicePath).createCommentService;
+}
+
+function atomicCommentHarness() {
+  const run = runRow();
+  const elicitation = activityRow({
+    type: "ELICITATION",
+    options: [{ value: "yes", label: "Yes" }],
+  });
+  const task = {
+    ...run.task,
+    uniqueIndex: 42,
+    waitingOnUserId: null,
+    updatedByUserIds: [],
+    project: { team: {}, owner: { devices: [] } },
+  };
+  const activities = [elicitation];
+  const comments = [];
+  const webhookWrites = [];
+  let failure = "comment";
+
+  const tx = {
+    $queryRaw: async () => [{ id: task.id }],
+    task: { findFirst: async () => task },
+    agentRun: {
+      updateMany: async ({ where, data }) => {
+        if (!matchesRun(run, where)) return { count: 0 };
+        Object.assign(run, data);
+        return { count: 1 };
+      },
+      findFirst: async ({ where }) => (matchesRun(run, where) ? run : null),
+    },
+    agentRunActivity: {
+      create: async ({ data }) => {
+        const activity = activityRow({
+          ...data,
+          options: data.options ?? null,
+        });
+        activities.push(activity);
+        return activity;
+      },
+      updateMany: async ({ where, data }) => {
+        const activity = activities.find(
+          (candidate) =>
+            candidate.id === where.id &&
+            candidate.runId === where.runId &&
+            candidate.type === where.type &&
+            candidate.selectedAt === null,
+        );
+        if (!activity) return { count: 0 };
+        Object.assign(activity, data);
+        return { count: 1 };
+      },
+    },
+    comment: {
+      create: async ({ data }) => {
+        if (failure === "comment") throw new Error("comment write failed");
+        const comment = {
+          id: `comment-${comments.length + 1}`,
+          createdAt: new Date(),
+          ...data,
+        };
+        comments.push(comment);
+        return comment;
+      },
+    },
+    assignees: { findMany: async () => [] },
+  };
+  const prisma = {
+    ...tx,
+    $transaction: async (callback) => {
+      const runSnapshot = { ...run };
+      const activityRows = [...activities];
+      const activitySnapshots = activityRows.map((activity) => ({ ...activity }));
+      const commentCount = comments.length;
+      const webhookCount = webhookWrites.length;
+      try {
+        return await callback(tx);
+      } catch (error) {
+        Object.assign(run, runSnapshot);
+        activityRows.forEach((activity, index) =>
+          Object.assign(activity, activitySnapshots[index]),
+        );
+        activities.splice(0, activities.length, ...activityRows);
+        comments.length = commentCount;
+        webhookWrites.length = webhookCount;
+        throw error;
+      }
+    },
+  };
+  const createCommentService = loadAtomicCommentService(
+    prisma,
+    async (_tx, event) => {
+      webhookWrites.push(event);
+      if (failure === "webhook") throw new Error("selection webhook failed");
+      return "delivery-1";
+    },
   );
-  assert.match(
+  return {
+    run,
+    elicitation,
+    activities,
     comments,
-    /persistAgentRunSelection\(tx, agentRunSelection\)[\s\S]*?tx\.comment\.create/,
+    webhookWrites,
+    createCommentService,
+    setFailure: (value) => {
+      failure = value;
+    },
+  };
+}
+
+test("activity comments and selection prompts roll back as one transaction", async () => {
+  const harness = atomicCommentHarness();
+  const originalHeartbeat = harness.run.lastActivityAt;
+  const commentInput = {
+    creatorId: 6,
+    taskId: 42,
+    ownerId: 6,
+    currentUser: { id: 6, displayName: "Valentin" },
+    accessUserId: 6,
+  };
+
+  await assert.rejects(
+    harness.createCommentService({
+      ...commentInput,
+      text: "<p>Answer</p>",
+      agentId: "agent-1",
+      agentRunActivity: {
+        ...activityInput({ type: "RESPONSE", text: "Answer" }),
+        id: "response-activity",
+        runId: "run-1",
+        agentId: "agent-1",
+        context: { taskId: 42, chatSessionId: null },
+        idempotencyKey: "response-key",
+        createdAt: new Date("2026-09-04T10:02:00.000Z"),
+      },
+    }),
+    /comment write failed/,
   );
-  assert.match(comments, /prompt: text,[\s\S]*?signal: "select"/);
-  assert.match(
-    comments,
-    /mentionedAgentId === agentRunSelection\?\.agentId/,
+  assert.equal(harness.activities.length, 1);
+  assert.equal(harness.run.lastActivityAt, originalHeartbeat);
+
+  harness.setFailure("webhook");
+  await assert.rejects(
+    harness.createCommentService({
+      ...commentInput,
+      text: "<p>Yes</p>",
+      agentRunSelection: {
+        runId: "run-1",
+        agentId: "agent-1",
+        activityId: harness.elicitation.id,
+        context: { taskId: 42, chatSessionId: null },
+        option: { value: "yes", label: "Yes" },
+        selectedById: 6,
+        selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+      },
+    }),
+    /selection webhook failed/,
   );
+  assert.equal(harness.elicitation.selectedAt, null);
+  assert.equal(harness.comments.length, 0);
+  assert.equal(harness.webhookWrites.length, 0);
+  assert.equal(harness.run.lastActivityAt, originalHeartbeat);
 });
