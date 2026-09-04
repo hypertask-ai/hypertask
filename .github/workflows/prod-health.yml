@@ -71,6 +71,14 @@ jobs:
             exit 1
           fi
 
+          if [ "$STATE" != "READY" ]; then
+            DEPLOY_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
+            MSG="Deployment $DEPLOY_UID for $SHA still $STATE after $i checks; not verified"
+            notify "⚠️ hypertasks: $MSG"
+            echo "::error::$MSG"
+            exit 1
+          fi
+
           # ── 2. Health-check the live app (3 attempts, 20s apart) ───────────
           # Vercel sometimes bot-challenges the hosted runner's IP
           # (x-vercel-mitigated: challenge). A challenged response proves nothing
@@ -190,6 +198,11 @@ jobs:
           done
 
           if $healthy; then
+            LIVE_BUILD=$(curl -s --max-time 30 "https://app.hypertask.ai/api/version" | jq -r '.buildId // empty')
+            if [ "$LIVE_BUILD" != "$SHA" ]; then
+              echo "::error::live build $LIVE_BUILD != expected $SHA"
+              exit 1
+            fi
             echo "Production healthy on $SHA"
             exit 0
           fi
