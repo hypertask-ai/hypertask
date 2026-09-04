@@ -18,6 +18,7 @@ import type {
 const DEFAULT_API_URL = "https://api.hypertask.ai/api";
 const TASK_LEASE_TTL_SECONDS = 300;
 const TASK_LEASE_HEARTBEAT_MS = 60_000;
+const TASK_LEASE_RELEASE_TIMEOUT_MS = 5_000;
 const AUTO_THOUGHT_MS = 8_000;
 const RUN_STATUS_POLL_MS = 5_000;
 const THREAD_ITEM_LIMIT = 100;
@@ -123,8 +124,10 @@ export class AgentClient {
   private readonly token: string;
 
   constructor(token: string, options: Omit<AgentClientOptions, "token"> = {}) {
+    if (typeof token !== "string" || !token.trim()) {
+      throw new AgentSdkError("token is required");
+    }
     this.token = token.trim();
-    if (!this.token) throw new AgentSdkError("token is required");
     this.baseUrl = (options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, "");
     this.requestFetch = options.fetch ?? globalThis.fetch;
     if (typeof this.requestFetch !== "function") {
@@ -688,10 +691,25 @@ class AgentRunImpl implements AgentRun {
         operationController.abort();
         await heartbeatPromise;
         this.signal.removeEventListener("abort", abortOperation);
-        await this.client.request("/mcp/tasks/lease/release", {
-          method: "POST",
-          body: { task_id: taskId },
-        }).catch((error) => this.client.reportError(error));
+        const releaseController = new AbortController();
+        let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+        const releaseTimeout = new Promise<never>((_, reject) => {
+          releaseTimer = setTimeout(() => {
+            releaseController.abort();
+            reject(new AgentSdkError("Task lease release timed out"));
+          }, TASK_LEASE_RELEASE_TIMEOUT_MS);
+          (releaseTimer as unknown as { unref?: () => void }).unref?.();
+        });
+        await Promise.race([
+          this.client.request("/mcp/tasks/lease/release", {
+            method: "POST",
+            body: { task_id: taskId },
+            signal: releaseController.signal,
+          }),
+          releaseTimeout,
+        ])
+          .catch((error) => this.client.reportError(error))
+          .finally(() => clearTimeout(releaseTimer));
       }
     });
     const tail = operation.then(

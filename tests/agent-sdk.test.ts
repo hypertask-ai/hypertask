@@ -515,6 +515,14 @@ test("client trims accepted tokens before authorizing requests", async () => {
 
   await agent.client.request("/mcp/test");
   assert.equal(authorization, "Bearer unit-test-token");
+  assert.throws(
+    () =>
+      createAgent({
+        token: null as unknown as string,
+        webhookSecret: secret,
+      }),
+    AgentSdkError,
+  );
 });
 
 test("async onError failures stay observed", async () => {
@@ -966,6 +974,63 @@ test("task helpers release the lease when a write fails", async () => {
     "/api/mcp/tasks/lease/release",
   ]);
   assert.equal(errors.length, 1);
+});
+
+test("a stalled task lease release cannot block later operations", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  const api = apiFixture();
+  const events: string[] = [];
+  const errors: unknown[] = [];
+  let releaseStarted!: () => void;
+  const startedRelease = new Promise<void>((resolve) => {
+    releaseStarted = resolve;
+  });
+  let releaseCount = 0;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/update")) {
+      events.push("update");
+    } else if (init.method === "POST" && url.pathname.endsWith("/mcp/comments")) {
+      events.push("comment");
+    } else if (
+      init.method === "POST" &&
+      url.pathname.endsWith("/mcp/tasks/lease/release")
+    ) {
+      releaseCount += 1;
+      events.push(`release-${releaseCount}`);
+      if (releaseCount === 1) {
+        releaseStarted();
+        await new Promise(() => {});
+      }
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: (error) => errors.push(error),
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Testing lease cleanup.");
+    await received.task?.update({ title: "First operation" });
+    await received.task?.comment("Second operation");
+  });
+
+  try {
+    const dispatch = agent.client.dispatch(payload(), run);
+    await startedRelease;
+    context.mock.timers.tick(5_000);
+    await dispatch;
+    assert.deepEqual(events, ["update", "release-1", "comment", "release-2"]);
+    assert.equal(errors.length, 1);
+    assert.match(String(errors[0]), /Task lease release timed out/);
+  } finally {
+    context.mock.timers.reset();
+  }
 });
 
 test("concurrent task helpers hold separate serialized leases", async () => {
