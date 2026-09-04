@@ -10,6 +10,7 @@ const allTasks = read("src/app/all-tasks/AllTasks.tsx");
 const taskListRow = read(
   "src/components/Common/TaskRowComponents/TaskListRow.tsx",
 );
+const flags = read("src/lib/flags.ts");
 
 test("All Tasks owns one mobile horizontal inset around its header and rows", () => {
   assert.match(allTasks, /className="px-4 @md:px-0"/);
@@ -17,19 +18,53 @@ test("All Tasks owns one mobile horizontal inset around its header and rows", ()
     allTasks,
     /className="flex items-center justify-between gap-5 @md:px-\[40px\]"/,
   );
-  assert.match(
-    allTasks,
-    /className="rounded-b-\[4px\] mt-3 px-0 @md:!px-16/,
-  );
+  assert.match(allTasks, /rounded-b-\[4px\] px-0 @md:!px-16/);
   const taskRowTag = allTasks.match(/<TaskListRow\b([\s\S]*?)\/>/);
   assert.ok(taskRowTag, "All Tasks should render a TaskListRow");
   assert.match(taskRowTag[1], /\bflushMobilePadding\b/);
 });
 
+test("the mobile redesign is owner-only until its feature flag is released", () => {
+  assert.match(flags, /"htpr-5992-mobile-all-tasks"/);
+  assert.match(
+    allTasks,
+    /useFlag\("htpr-5992-mobile-all-tasks"\)/,
+  );
+  assert.match(allTasks, /\{mobileRedesignEnabled && \(/);
+  assert.match(allTasks, /\{!mobileRedesignEnabled && \(/);
+});
+
+test("the redesigned project tabs are inline, scrollable, and selectable", () => {
+  assert.match(
+    allTasks,
+    /mobile-split-alltasks-[\s\S]*?aria-pressed=\{activeSplit === index\}[\s\S]*?updateSplitAndTasks\(index\)/,
+  );
+  assert.match(
+    allTasks,
+    /overflow-x-auto border-b border-border-light-gray-thin pb-2 @md:hidden/,
+  );
+  assert.match(allTasks, /tabs\[activeSplit\] === "All"/);
+});
+
+test("All Tasks opts into compact mobile rows without changing shared desktop rows", () => {
+  const taskRowTag = allTasks.match(/<TaskListRow\b([\s\S]*?)\/>/);
+  assert.ok(taskRowTag);
+  assert.match(taskRowTag[1], /compactMobile=\{mobileRedesignEnabled\}/);
+  assert.match(taskListRow, /compactMobile\?: boolean/);
+  assert.match(
+    taskListRow,
+    /compactMobile && \([\s\S]*?@md:hidden[\s\S]*?task\.ticketNumber[\s\S]*?task\.title/,
+  );
+  assert.equal(
+    [...taskListRow.matchAll(/compactMobile && "hidden @md:flex"/g)].length,
+    3,
+  );
+});
+
 test("mobile task rows shrink and truncate inside their content box", () => {
   assert.doesNotMatch(taskListRow, /(?:max-)?w-\[[^\]]*vw\]/);
   assert.doesNotMatch(taskListRow, /xs:flex-wrap|xs:whitespace-pre-wrap/);
-  assert.match(taskListRow, /className="flex min-w-0 flex-grow/);
+  assert.match(taskListRow, /"flex min-w-0 flex-grow/);
   assert.match(taskListRow, /className="min-w-0 flex-1 flex-column/);
   assert.match(
     taskListRow,
