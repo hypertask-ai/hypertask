@@ -99,6 +99,7 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
     onClick.expression?.getText(allTasksSource),
     "() => updateSplitAndTasks(index)",
   );
+  assert.match(attributeText(mobileTabButton, "className"), /MOBILE_TARGET/);
 
   let tabBar;
   for (

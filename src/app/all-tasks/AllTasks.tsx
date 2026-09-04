@@ -29,6 +29,7 @@ import {
   type AllTasksDateRange,
 } from "@/lib/configs/allTasks.config";
 import { useFlag } from "@/hooks/useFlag";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 const HypertasksCommands = dynamic(() => import("@/components/commands"), {
   ssr: false,
 });
@@ -528,7 +529,7 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
                 type="button"
                 aria-pressed={activeSplit === index}
                 onClick={() => updateSplitAndTasks(index)}
-                className={`shrink-0 rounded-[4px] px-2.5 py-1.5 text-dense ${
+                className={`${MOBILE_TARGET} rounded-[4px] px-2.5 py-1.5 text-dense ${
                   activeSplit === index
                     ? "bg-active-elementBg text-white-black"
                     : "text-text-light-gray"
