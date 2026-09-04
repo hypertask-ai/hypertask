@@ -168,6 +168,16 @@ test("linking refuses an inaccessible task before attachment persistence", async
   assert.deepEqual(linker.events, ["lock", "authorize"]);
 });
 
+test("linking rejects a receipt issued to another user", async () => {
+  const linker = loadLinker();
+
+  await assert.rejects(
+    linker.linkTaskAttachment(99, 7, receipt),
+    (error) => error.name === "TaskAttachmentLinkError" && error.status === 403,
+  );
+  assert.deepEqual(linker.events, []);
+});
+
 test("linking rejects a receipt key outside task attachment storage", async () => {
   const linker = loadLinker();
 

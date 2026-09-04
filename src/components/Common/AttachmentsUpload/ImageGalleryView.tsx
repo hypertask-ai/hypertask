@@ -129,7 +129,7 @@ const ImageGallery = (props: IProps) => {
               onUploadFailed={onUploadFailed}
               handleRemove={removeHandler}
               variant={variant}
-              backgroundTaskUpload={backgroundTaskUploads && mode === "Creating task"}
+              backgroundTaskUpload={backgroundTaskUploads}
             />
           )
         })}

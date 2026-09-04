@@ -21,6 +21,9 @@ export async function linkTaskAttachment(
   userId: number,
   receipt: TaskAttachmentLinkReceipt,
 ) {
+  if (receipt.userId !== userId) {
+    throw new TaskAttachmentLinkError("This upload cannot be linked", 403);
+  }
   if (
     !receipt.key.startsWith(`${TASK_ATTACHMENT_PREFIX}/`) ||
     receipt.key.includes("..")

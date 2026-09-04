@@ -76,10 +76,11 @@ async function defaultLink(
       receipt,
     }),
   });
-  const body = (await response.json().catch(() => ({}))) as {
-    attachment?: IAttachment;
-    error?: string;
-  };
+  const parsed = await response.json().catch(() => null);
+  const body =
+    parsed && typeof parsed === "object"
+      ? (parsed as { attachment?: IAttachment; error?: string })
+      : {};
   if (!response.ok || !body.attachment) {
     throw new Error(body.error || "Could not link attachment");
   }

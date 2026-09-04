@@ -47,7 +47,10 @@ interface ISingleFile {
 
     const [progressPercentage, setProgressBar] = useState<number>(0);
     const backgroundUploadIdRef = useRef<string | undefined>(undefined);
-    const onMountUploadIfFile = async()=>{
+    const onMountUploadIfFile = async (
+      isActive: () => boolean,
+      registerUnsubscribe: (unsubscribe: () => void) => void,
+    ) => {
 
       // is this not an uploading component then return
       if (!shouldUpload || !callback )return 
@@ -69,9 +72,11 @@ interface ISingleFile {
               if (job) setProgressBar(job.progress);
             };
             const unsubscribe = subscribeCreateTaskUploads(syncProgress);
+            registerUnsubscribe(unsubscribe);
             try {
               syncProgress();
               const uploaded = await started.promise;
+              if (!isActive()) return;
               setUploadString(uploaded.url);
               callback({
                 id,
@@ -82,7 +87,10 @@ interface ISingleFile {
             }
             return;
           }
-          const source = await uploadSingleFileViaApi(file, setProgressBar);
+          const source = await uploadSingleFileViaApi(file, (progress) => {
+            if (isActive()) setProgressBar(progress);
+          });
+          if (!isActive()) return;
           console.log("🚀 ~ onMountUploadIfFile ~ result:", source)
           setUploadString(source)
           // console.log("🚀 ~ onMountUploadIfFile ~ file:", file)
@@ -119,8 +127,21 @@ interface ISingleFile {
       reportUploadFailure?.(file.name);
     };
 
-    useEffect(()=>{
-      onMountUploadIfFile().catch(onUploadFailed)
+    useEffect(() => {
+      let active = true;
+      let unsubscribe: () => void = () => undefined;
+      void onMountUploadIfFile(
+        () => active,
+        (listener) => {
+          unsubscribe = listener;
+        },
+      ).catch((error) => {
+        if (active) onUploadFailed(error);
+      });
+      return () => {
+        active = false;
+        unsubscribe();
+      };
     },[])
 
     const isImage = file.type?.startsWith("image/");

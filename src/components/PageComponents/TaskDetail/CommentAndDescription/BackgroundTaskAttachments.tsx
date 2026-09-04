@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { CircleAlert, Paperclip, RotateCcw } from "lucide-react";
 import { buildStyles, CircularProgressbar } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
@@ -14,29 +14,32 @@ import {
   type CreateTaskUploadSnapshot,
 } from "@/lib/createTaskAttachmentUploads";
 
+function PendingImage({ file }: { file: File }) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    if (imageRef.current) imageRef.current.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      ref={imageRef}
+      alt=""
+      className="h-[36px] w-[60px] rounded-md object-contain"
+    />
+  );
+}
+
 function PendingAttachment({ upload }: { upload: CreateTaskUploadSnapshot }) {
-  const imageUrl = useMemo(
-    () => (upload.file.type.startsWith("image/") ? URL.createObjectURL(upload.file) : null),
-    [upload.file],
-  );
-  useEffect(
-    () => () => {
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
-    },
-    [imageUrl],
-  );
+  const isImage = upload.file.type.startsWith("image/");
   const failed = upload.status === "upload-failed" || upload.status === "link-failed";
 
   return (
     <div className="relative mb-2 flex min-h-[76px] w-[72px] flex-col items-center rounded-md bg-[#27292D] p-1 text-white sm:p-2">
       <div className="grid h-[36px] w-[60px] place-items-center rounded-md bg-secondary">
-        {imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={imageUrl}
-            alt=""
-            className="h-[36px] w-[60px] rounded-md object-contain"
-          />
+        {isImage ? (
+          <PendingImage file={upload.file} />
         ) : (
           <Paperclip size={18} className="text-heading" strokeWidth={1.75} aria-hidden />
         )}

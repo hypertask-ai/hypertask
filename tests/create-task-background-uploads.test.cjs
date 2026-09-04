@@ -138,6 +138,38 @@ test("Retry uploads again only for upload failure and reuses a receipt for link 
   uploads.acknowledgeCreateTaskUpload(started.id);
 });
 
+test("a null link response becomes a retryable failure", async () => {
+  const originalFetch = global.fetch;
+  const selected = file("null-link-response.txt");
+  try {
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => null,
+    });
+    const started = uploads.startCreateTaskUpload(selected, async () => ({
+      url: "https://files.example/null-link-response",
+      receipt: "null-response-receipt",
+    }));
+    uploads.bindCreateTaskUploads(99, [selected]);
+    await started.promise;
+    await nextTurn();
+    assert.equal(uploads.createTaskUploadById(started.id).status, "link-failed");
+
+    global.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        attachment: attachment(3, "https://files.example/null-link-response"),
+      }),
+    });
+    uploads.retryCreateTaskUpload(started.id);
+    await nextTurn();
+    assert.equal(uploads.createTaskUploadById(started.id).status, "complete");
+    uploads.acknowledgeCreateTaskUpload(started.id);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("task detail renders background progress, failure, and Retry wiring", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync(
