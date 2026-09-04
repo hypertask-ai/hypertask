@@ -26,6 +26,12 @@ enum Status {
   Deleted
 }
 
+enum FeatureFlagMode {
+  OFF
+  OWNER_ONLY
+  EVERYONE
+}
+
 enum EventType {
   TeamEvent
   UserEvent
@@ -453,6 +459,12 @@ model SubscribedDevices {
   user              User    @relation(fields: [userId], references: [id])
 
   @@unique([firebaseId])
+}
+
+model FeatureFlag {
+  key       String          @id
+  mode      FeatureFlagMode @default(OWNER_ONLY)
+  updatedAt DateTime        @updatedAt
 }
 
 model UserSetting {

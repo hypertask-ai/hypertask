@@ -7,7 +7,9 @@ import {
   TASK_EVENT,
   TIME_EVENT,
   AGENT_CHAT_EVENT,
+  FEATURE_FLAGS_EVENT,
   boardChannel,
+  featureFlagsChannel,
   taskChannel,
   timeBoardChannel,
   timeTaskChannel,
@@ -20,7 +22,9 @@ export {
   TASK_EVENT,
   TIME_EVENT,
   AGENT_CHAT_EVENT,
+  FEATURE_FLAGS_EVENT,
   boardChannel,
+  featureFlagsChannel,
   taskChannel,
   timeBoardChannel,
   timeTaskChannel,
@@ -151,4 +155,8 @@ export async function broadcastInboxChange(
 ): Promise<void> {
   if (userId == null) return;
   await broadcast(userChannel(userId), INBOX_EVENT, payload, excludeSocketId);
+}
+
+export async function broadcastFeatureFlagsChange(): Promise<void> {
+  await broadcast(featureFlagsChannel(), FEATURE_FLAGS_EVENT);
 }
