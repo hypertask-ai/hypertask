@@ -44,7 +44,7 @@ test.beforeEach(() => {
   row = null;
   readError = null;
   sessionUserId = 6;
-  usersById = new Map([[6, { canManageFeatureFlags: true }]]);
+  usersById = new Map([[6, { email: "valentin.yeo@gmail.com" }]]);
 });
 
 test("admin access requires the signed, active owner", async () => {
@@ -56,14 +56,14 @@ test("admin access requires the signed, active owner", async () => {
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
 });
 
-test("ownership follows the persisted permission rather than a database id", async () => {
-  usersById = new Map([
-    [6, { canManageFeatureFlags: false }],
-    [42, { canManageFeatureFlags: true }],
-  ]);
+test("owner access requires both the approved id and login identity", async () => {
+  usersById.set(6, { email: "someone@example.com" });
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
-  sessionUserId = 42;
+  usersById.set(6, { email: "VALENTIN.YEO@GMAIL.COM" });
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), true);
+  sessionUserId = 42;
+  usersById.set(42, { email: "valentin.yeo@gmail.com" });
+  assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
 });
 
 test("feature flag modes enforce owner-only, everyone, and off", () => {

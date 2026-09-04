@@ -2,6 +2,11 @@ import type { FeatureFlagMode as PrismaFeatureFlagMode } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
+const FEATURE_FLAG_OWNER = {
+  userId: 6,
+  email: "valentin.yeo@gmail.com",
+} as const;
+
 export const FEATURE_FLAG_KEYS = ["htpr-6091-feature-flags"] as const;
 export const FEATURE_FLAG_MODES = ["OWNER_ONLY", "EVERYONE", "OFF"] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
@@ -9,11 +14,12 @@ export type FeatureFlagMode = PrismaFeatureFlagMode;
 export class FeatureFlagInputError extends Error {}
 
 async function isFeatureFlagOwnerUser(userId: number): Promise<boolean> {
+  if (userId !== FEATURE_FLAG_OWNER.userId) return false;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { canManageFeatureFlags: true },
+    select: { email: true },
   });
-  return user?.canManageFeatureFlags === true;
+  return user?.email.trim().toLowerCase() === FEATURE_FLAG_OWNER.email;
 }
 
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
