@@ -779,7 +779,16 @@ useEffect(() => {
 // HTPR-3805: explicit shared-link surfaces always win. An inherited surface may
 // paint from IndexedDB first, then reconcile once from authoritative metadata.
 // If the user switches surface in between, preserve that newer manual choice.
-useEffect(() => {
+// HTPR-6072: useLayoutEffect, not useEffect. boardLayout is a single shared
+// Recoil atom with no per-project memory, so on a switch it still holds the
+// previous project's value the instant this component re-renders for the new
+// one. A passive effect would let the browser paint that stale value before
+// correcting it one tick later - a visible flash, and reason enough to gate
+// SectionComp's very existence on this effect having run (the earlier fix).
+// A layout effect runs after render but before paint: setBoardLayout here
+// still lands before the browser ever shows a frame, so SectionComp can stay
+// mounted through every switch with no gate at all.
+useLayoutEffect(() => {
   if (!pinnedProject) return
   const origin = data?.dataOrigin === "indexeddb" ? "indexeddb" : "network"
   const previous = surfaceResolutionRef.current
@@ -1057,18 +1066,12 @@ return (
       Array.isArray(data.updatedProjects) &&
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
-      ) : data && data.updatedProjects && boardDataReady &&
-        // HTPR-6072: gate on the surface resolution actually being current for
-        // THIS project, not on "SectionComp rendered before" (the earlier
-        // unconditional-once-rendered bypass). boardLayout is a single shared
-        // Recoil atom re-resolved by the passive effect below on every switch -
-        // it has no per-project memory - so rendering before that effect has
-        // resolved this project's key can paint SectionComp with the previous
-        // board's layout mode for one frame. surfaceResolutionRef.current.key
-        // and surfaceInitializedFor are written together in that same effect,
-        // so checking the ref here is equivalent to the state check; it is
-        // the earlier bypass removed, not an optimization over it.
-        surfaceResolutionRef.current?.key === surfaceInitializationKey ? (
+      ) : data && data.updatedProjects && boardDataReady ? (
+           // HTPR-6072: no gate on surface resolution here. The surface-resolution
+           // effect above is now a useLayoutEffect, so boardLayout is corrected
+           // before the browser paints - SectionComp can stay mounted across
+           // every switch instead of being hidden behind a loading branch while
+           // that effect catches up (which was itself an unmount/remount).
            <SectionComp
             _allProjects={projectsForSection}
             _projectCount={data.updatedProjects.length}

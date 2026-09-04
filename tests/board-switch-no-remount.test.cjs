@@ -242,48 +242,56 @@ test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) f
   );
 });
 
-test("HTPR-6072: SectionComp cannot render before this project's surface resolution is current", () => {
-  // #264 let SectionComp render once sectionCompEverRenderedRef was true,
-  // regardless of whether boardLayout (a single shared Recoil atom, no
-  // per-project memory) had actually been re-resolved for the newly routed
-  // project. That could paint one frame of the new board in the previous
-  // board's layout mode. The gate must require surfaceResolutionRef.current.key
-  // to match the current surfaceInitializationKey - the same key the effect
-  // that resolves boardLayout stamps onto that ref - with no "ever rendered"
-  // escape hatch.
+test("HTPR-6072: SectionComp renders on boardDataReady alone, with no surface-resolution gate", () => {
+  // #264 gated on sectionCompEverRenderedRef ("ever rendered"); a later fix
+  // tightened that to surfaceResolutionRef.current.key === surfaceInitializationKey,
+  // which was safer but reintroduced the exact remount it was meant to
+  // prevent: a key change again swapped SectionComp out for the loading
+  // branch for a frame, once the shallow switch (HTPR-6072) stopped giving a
+  // fresh server render to reset that state. The real fix removes the gate
+  // entirely - see the useLayoutEffect test below for why that's still safe.
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
   const gateMatch = src.match(
-    /\) : data && data\.updatedProjects && boardDataReady &&[\s\S]{0,1200}?surfaceResolutionRef\.current\?\.key === surfaceInitializationKey \? \([\s\S]{0,20}<SectionComp/,
+    /\) : data && data\.updatedProjects && boardDataReady \? \([\s\S]{0,700}<SectionComp/,
   );
   assert.ok(
     gateMatch,
-    "expected the SectionComp render gate to require surfaceResolutionRef.current.key === surfaceInitializationKey with no bypass",
+    "expected SectionComp to render whenever boardDataReady, with nothing else gating it",
+  );
+  assert.ok(
+    !/surfaceResolutionRef\.current\?\.key === surfaceInitializationKey \? \(/.test(src),
+    "expected the surfaceResolutionRef render gate to be removed, not left as dead code",
   );
   assert.ok(
     !/sectionCompEverRenderedRef/.test(src),
-    "expected the sectionCompEverRenderedRef bypass to be removed, not left as dead code",
+    "expected the sectionCompEverRenderedRef bypass to stay removed",
   );
 });
 
-test("HTPR-6072: surfaceResolutionRef.current.key is only ever written alongside surfaceInitializedFor", () => {
-  // Proves the gate change is safe: every write site that sets
-  // surfaceResolutionRef.current to the current key does so either in the
-  // same statement block as setSurfaceInitializedFor(surfaceInitializationKey),
-  // or only after a prior render already set surfaceInitializedFor to that
-  // key. So gating on the ref can never be less safe than gating on the
-  // state - it just drops the "ever rendered" fallback that could disagree
-  // with it.
+test("HTPR-6072: the surface-resolution effect runs before paint (useLayoutEffect, not useEffect)", () => {
+  // boardLayout is a single shared Recoil atom with no per-project memory,
+  // so it still holds the previous project's value the instant this
+  // component re-renders for a newly switched project. Dropping the render
+  // gate (above) is only safe because this effect is a useLayoutEffect: it
+  // corrects boardLayout before the browser paints, so a changed
+  // surfaceInitializationKey never paints the previous project's layout mode
+  // - a plain useEffect would let that stale frame paint first.
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
   const effectMatch = src.match(
-    /useEffect\(\(\) => \{\s*if \(!pinnedProject\) return[\s\S]{0,1800}?\}, \[\s*\n\s*boardLayout,/,
+    /(useLayoutEffect|useEffect)\(\(\) => \{\s*if \(!pinnedProject\) return[\s\S]{0,1800}?\}, \[\s*\n\s*boardLayout,/,
   );
   assert.ok(effectMatch, "expected to find the surface resolution effect");
+  assert.equal(
+    effectMatch[1],
+    "useLayoutEffect",
+    "the surface resolution effect must be useLayoutEffect so a switch never paints the previous board's layout mode",
+  );
   const body = effectMatch[0];
   const freshResolutionBlock = body.match(
     /if \(!previous \|\| previous\.key !== surfaceInitializationKey\) \{[\s\S]*?\n  \}/,
@@ -292,6 +300,6 @@ test("HTPR-6072: surfaceResolutionRef.current.key is only ever written alongside
   assert.ok(
     /surfaceResolutionRef\.current = \{[\s\S]*?key: surfaceInitializationKey,/.test(freshResolutionBlock[0]) &&
     /setSurfaceInitializedFor\(surfaceInitializationKey\)/.test(freshResolutionBlock[0]),
-    "expected surfaceResolutionRef and surfaceInitializedFor to be set together in the fresh-resolution branch",
+    "expected surfaceResolutionRef and surfaceInitializedFor to still be set together in the fresh-resolution branch",
   );
 });
