@@ -14,6 +14,7 @@ const root = path.resolve(__dirname, "..");
 const originalFetch = global.fetch;
 let rows;
 let operationRows;
+let onPendingOperationRead;
 let failTransactionAfterAction;
 let lockCalls;
 let lockTail;
@@ -48,7 +49,11 @@ const figmaConnectionStore = {
   },
 };
 const figmaConnectionOperationStore = {
-  findUnique: async ({ where }) => operationRows.get(where.userId) ?? null,
+  findUnique: async ({ where }) => {
+    const operation = operationRows.get(where.userId) ?? null;
+    if (operation?.pendingUntil) onPendingOperationRead?.();
+    return operation;
+  },
   upsert: async ({ where, create, update }) => {
     const next = operationRows.has(where.userId) ? update : create;
     operationRows.set(where.userId, next);
@@ -71,8 +76,8 @@ const prisma = {
   figmaConnectionOperation: figmaConnectionOperationStore,
   $transaction: async (action) => {
     let releaseLock;
-    const rowsBeforeTransaction = new Map(rows);
-    const operationsBeforeTransaction = new Map(operationRows);
+    let rowsBeforeTransaction;
+    let operationsBeforeTransaction;
     const tx = {
       $executeRaw: async (query) => {
         assert.match(
@@ -84,6 +89,8 @@ const prisma = {
           releaseLock = resolve;
         });
         await previous;
+        rowsBeforeTransaction = new Map(rows);
+        operationsBeforeTransaction = new Map(operationRows);
         lockCalls += 1;
       },
       figmaConnection: figmaConnectionStore,
@@ -132,6 +139,7 @@ test.beforeEach(() => {
   global.fetch = originalFetch;
   rows = new Map();
   operationRows = new Map();
+  onPendingOperationRead = null;
   failTransactionAfterAction = false;
   lockCalls = 0;
   lockTail = Promise.resolve();
@@ -246,13 +254,19 @@ test("a durable refresh lease prevents concurrent token rotation", async () => {
 
   const first = connection.getFigmaAccessToken(6, 10_000);
   await refreshStarted;
-  await assert.rejects(
-    connection.getFigmaAccessToken(6, 10_000),
-    /refresh is already in progress/,
-  );
+  let signalLeaseObserved;
+  const leaseObserved = new Promise((resolve) => {
+    signalLeaseObserved = resolve;
+  });
+  onPendingOperationRead = signalLeaseObserved;
+  const overlapping = connection.getFigmaAccessToken(6, 10_000);
+  await leaseObserved;
   assert.equal(refreshCalls, 1);
   releaseRefresh();
-  assert.equal(await first, "fresh-access");
+  assert.deepEqual(await Promise.all([first, overlapping]), [
+    "fresh-access",
+    "fresh-access",
+  ]);
   assert.equal(lockCalls, 5);
 });
 

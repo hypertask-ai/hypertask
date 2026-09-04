@@ -14,6 +14,8 @@ import {
 const FIGMA_LOCK_NAMESPACE = 1_179_207_757;
 const FIGMA_OPERATION_TTL_MS = 30_000;
 const REFRESH_SKEW_MS = 60_000;
+const REFRESH_WAIT_ATTEMPTS = 60;
+const REFRESH_WAIT_INTERVAL_MS = 100;
 
 type ConnectedToken = FigmaToken & {
   figmaUserName: string | null;
@@ -150,6 +152,38 @@ export function getFigmaConnection(userId: number) {
   });
 }
 
+async function waitForPendingRefresh(
+  userId: number,
+  nowMs: number,
+): Promise<string | null | undefined> {
+  const startedAt = Date.now();
+  for (let attempt = 0; attempt < REFRESH_WAIT_ATTEMPTS; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, REFRESH_WAIT_INTERVAL_MS));
+    const checkNowMs = nowMs + (Date.now() - startedAt);
+    const [connection, operation] = await Promise.all([
+      prisma.figmaConnection.findUnique({
+        where: { userId },
+        select: { encryptedAccessToken: true, expiresAt: true },
+      }),
+      prisma.figmaConnectionOperation.findUnique({
+        where: { userId },
+        select: { pendingUntil: true },
+      }),
+    ]);
+    if (!connection) return null;
+    if (connection.expiresAt.getTime() > checkNowMs + REFRESH_SKEW_MS) {
+      return decryptSecret(connection.encryptedAccessToken);
+    }
+    if (
+      !operation?.pendingUntil ||
+      operation.pendingUntil.getTime() <= checkNowMs
+    ) {
+      return getFigmaAccessToken(userId, checkNowMs);
+    }
+  }
+  return undefined;
+}
+
 export async function getFigmaAccessToken(
   userId: number,
   nowMs = Date.now(),
@@ -210,7 +244,9 @@ export async function getFigmaAccessToken(
   if (refresh.status === "missing") return null;
   if (refresh.status === "fresh") return refresh.accessToken;
   if (refresh.status === "pending") {
-    throw new Error("Figma token refresh is already in progress");
+    const accessToken = await waitForPendingRefresh(userId, nowMs);
+    if (accessToken !== undefined) return accessToken;
+    throw new Error("Figma token refresh did not finish in time");
   }
 
   let refreshed: FigmaToken;
