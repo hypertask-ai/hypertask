@@ -5,27 +5,6 @@ import {
 } from "@/lib/agents/publicAgent";
 import { IComment } from "@/models/model";
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function sharedAssignmentWasSelf(
-  comment: Record<string, unknown>
-): boolean | undefined {
-  if (!isRecord(comment.activity) || comment.activity.type !== "TaskAssigned") {
-    return undefined;
-  }
-  const data = comment.activity.data;
-  if (!isRecord(data) || !isRecord(data.fromAgent) || !isRecord(data.toAgent)) {
-    return undefined;
-  }
-  const fromAgentId = data.fromAgent.id;
-  const toAgentId = data.toAgent.id;
-  return typeof fromAgentId === "string" && typeof toAgentId === "string"
-    ? fromAgentId === toAgentId
-    : undefined;
-}
-
 export const redactSharedComments = <T extends Record<string, unknown>>(
   comments: T[]
 ): T[] =>
@@ -33,22 +12,7 @@ export const redactSharedComments = <T extends Record<string, unknown>>(
     const agentAuthored = Boolean(
       comment.agentId || comment.agent || comment.agentDisplayName
     );
-    const isSelfAssignment = sharedAssignmentWasSelf(comment);
-    const redacted = redactAgentIdentitiesForPublicShare(comment) as Record<
-      string,
-      unknown
-    >;
-
-    if (
-      isSelfAssignment !== undefined &&
-      isRecord(redacted.activity) &&
-      isRecord(redacted.activity.data)
-    ) {
-      redacted.activity = {
-        ...redacted.activity,
-        data: { ...redacted.activity.data, isSelfAssignment },
-      };
-    }
+    const redacted = redactAgentIdentitiesForPublicShare(comment);
 
     return (agentAuthored
       ? {

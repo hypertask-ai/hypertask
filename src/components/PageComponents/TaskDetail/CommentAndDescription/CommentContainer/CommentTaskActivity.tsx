@@ -288,13 +288,15 @@ const TaskAssignedActivity = ({
     photoURL: activity.data.toAgent?.photoURL ?? activity.data.toUser?.user.photoURL,
   };
 
-  const isSelf =
-    activity.data.isSelfAssignment ??
-    (activity.data.fromAgent && activity.data.toAgent
-      ? activity.data.fromAgent.id === activity.data.toAgent.id
-      : !activity.data.fromAgent && !activity.data.toAgent
-      ? activity.data.fromUser.userId === activity.data.toUser.userId
-      : false);
+  let inferredSelfAssignment = false;
+  if (activity.data.fromAgent && activity.data.toAgent) {
+    inferredSelfAssignment =
+      activity.data.fromAgent.id === activity.data.toAgent.id;
+  } else if (!activity.data.fromAgent && !activity.data.toAgent) {
+    inferredSelfAssignment =
+      activity.data.fromUser.userId === activity.data.toUser.userId;
+  }
+  const isSelf = activity.data.isSelfAssignment ?? inferredSelfAssignment;
 
   if (isSelf) {
     return (
