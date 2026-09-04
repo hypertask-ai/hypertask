@@ -201,8 +201,12 @@ const MentionList = forwardRef((props, ref) => {
 
   return (
     <div
-      style={{ color: "#777C85", WebkitOverflowScrolling: "touch" }}
-      className="mention_container bg-mentionList items w-[280px] text-content sm:w-[500px] border-border-self-comment no-scrollbar scrollbar-none overflow-y-auto max-h-72 overscroll-contain touch-pan-y touch-manipulation"
+      style={{
+        color: "#777C85",
+        WebkitOverflowScrolling: "touch",
+        maxHeight: "min(18rem, calc(100dvh - 24px))",
+      }}
+      className="mention_container bg-mentionList items w-[280px] text-content sm:w-[500px] border-border-self-comment no-scrollbar scrollbar-none overflow-y-auto overscroll-contain touch-pan-y touch-manipulation"
       onWheel={(e) => e.stopPropagation()}
       onTouchMove={touchMoveHandler}
     >

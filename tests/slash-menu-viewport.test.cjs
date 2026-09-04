@@ -48,6 +48,6 @@ test("mentions choose available viewport space instead of clipping above mobile 
   );
   assert.match(renderer, /name: "preventOverflow"/);
   assert.match(renderer, /padding: 12, altAxis: true/);
-  assert.match(list, /max-h-72/);
+  assert.match(list, /maxHeight: "min\(18rem, calc\(100dvh - 24px\)\)"/);
   assert.match(list, /overflow-y-auto/);
 });
