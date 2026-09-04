@@ -102,6 +102,7 @@ test("uses the signed viewer's OAuth bearer token for one requested node", async
 
 test("starts the cover and connected frame lookups together", async () => {
   let releaseCover;
+  let releaseFrame;
   let signalCoverStarted;
   let signalFrameStarted;
   const coverStarted = new Promise((resolve) => {
@@ -110,30 +111,35 @@ test("starts the cover and connected frame lookups together", async () => {
   const frameStarted = new Promise((resolve) => {
     signalFrameStarted = resolve;
   });
+  const coverResponse = new Promise((resolve) => {
+    releaseCover = () => resolve(json(COVER));
+  });
+  const frameResponse = new Promise((resolve) => {
+    releaseFrame = () =>
+      resolve(json({ images: { "12:34": "https://s3-alpha.figma.com/frame.png" } }));
+  });
   handler = (url) => {
     if (url.hostname === "www.figma.com") {
       signalCoverStarted();
-      return new Promise((resolve) => {
-        releaseCover = () => resolve(json(COVER));
-      });
+      return coverResponse;
     }
     signalFrameStarted();
-    return json({ images: { "12:34": "https://s3-alpha.figma.com/frame.png" } });
+    return frameResponse;
   };
 
   const responsePromise = GET(request(`${FIGMA}?node-id=12-34`));
-  await coverStarted;
   let timeout;
-  const frameStartedInTime = await Promise.race([
-    frameStarted.then(() => true),
+  const bothStartedInTime = await Promise.race([
+    Promise.all([coverStarted, frameStarted]).then(() => true),
     new Promise((resolve) => {
       timeout = setTimeout(() => resolve(false), 1000);
     }),
   ]);
   clearTimeout(timeout);
   releaseCover();
+  releaseFrame();
   assert.equal((await responsePromise).status, 200);
-  assert.equal(frameStartedInTime, true);
+  assert.equal(bothStartedInTime, true);
   assert.deepEqual(tokenUserIds, [6]);
   assert.equal(calls.length, 2);
 });

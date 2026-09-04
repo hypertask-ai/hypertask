@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { createHash } = require("node:crypto");
 const path = require("node:path");
 const test = require("node:test");
 const { NextRequest } = require("next/server");
@@ -137,6 +138,7 @@ async function beginAttempt() {
   const location = new URL(response.headers.get("location"));
   return {
     state: location.searchParams.get("state"),
+    codeChallenge: location.searchParams.get("code_challenge"),
     cookie: response.cookies.get(oauth.FIGMA_OAUTH_ATTEMPT_COOKIE).value,
   };
 }
@@ -211,7 +213,12 @@ test("callback exchanges the code and returns to the initiating screen", async (
         init.body.get("redirect_uri"),
         "https://app.hypertask.ai/api/figma/oauth/callback",
       );
-      assert.match(init.body.get("code_verifier"), /^[A-Za-z0-9_-]{43}$/);
+      const codeVerifier = init.body.get("code_verifier");
+      assert.match(codeVerifier, /^[A-Za-z0-9_-]{43}$/);
+      assert.equal(
+        createHash("sha256").update(codeVerifier).digest("base64url"),
+        attempt.codeChallenge,
+      );
       return Response.json({
         access_token: "access-token",
         expires_in: 3600,

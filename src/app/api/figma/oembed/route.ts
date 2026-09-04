@@ -216,8 +216,8 @@ const getRenderedImages = async (
 };
 
 function previewResponse(body: unknown, cacheControl = CACHE_CONTROL) {
-  // Connect rotates and disconnect clears the HttpOnly connection-version
-  // cookie, so browser cache entries cannot cross Figma authorization states.
+  // Connect rotates and disconnect clears the client-readable, non-secret
+  // connection version, so cached previews cannot cross authorization states.
   return NextResponse.json(body, {
     headers: {
       "Cache-Control": cacheControl,
