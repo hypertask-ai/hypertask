@@ -1,12 +1,16 @@
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import getFirst from "@/utils/controllers/projects/getFirst";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "GET") {
+        const session = verifySession(req.cookies[SESSION_COOKIE])
+        if (!session) {
+            return res.status(401).json({ error: "Unauthorized", code: "SESSION_REQUIRED" })
+        }
+
         try {
-            const user = JSON.parse(req.cookies.nookies_user!)
-            if (!user) return res.status(401).json({message:"Missing user"})
-            const response  = await getFirst(user.id)
+            const response  = await getFirst(session.id)
             return res.status(response.status).json(response.json)
 
         } catch (error) {
