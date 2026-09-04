@@ -177,7 +177,6 @@ const [surfaceInitializedFor, setSurfaceInitializedFor] = useState<string | null
 // for that effect to catch up: boardLayout (Recoil, already reactive) will
 // update SectionComp in place once the effect resolves, same as any other
 // layout change while mounted.
-const sectionCompEverRenderedRef = useRef(false)
 const surfaceResolutionRef = useRef<{
   key: string;
   origin: "indexeddb" | "network";
@@ -1051,13 +1050,6 @@ const boardDataReady = Boolean(
   isBoardPayloadHydrated(data.updatedProjects[projectIndex]),
 )
 
-// HTPR-6072: arms sectionCompEverRenderedRef the moment the board data
-// itself is ready, one tick ahead of the render that actually picks the
-// SectionComp branch below - a useLayoutEffect, not a render-time write.
-useLayoutEffect(() => {
-  if (boardDataReady) sectionCompEverRenderedRef.current = true
-}, [boardDataReady])
-
 return (
     <Suspense fallback={<></>}>
 
@@ -1066,7 +1058,17 @@ return (
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
       ) : data && data.updatedProjects && boardDataReady &&
-        (surfaceInitializedFor === surfaceInitializationKey || sectionCompEverRenderedRef.current) ? (
+        // HTPR-6072: gate on the surface resolution actually being current for
+        // THIS project, not on "SectionComp rendered before" (the earlier
+        // unconditional-once-rendered bypass). boardLayout is a single shared
+        // Recoil atom re-resolved by the passive effect below on every switch -
+        // it has no per-project memory - so rendering before that effect has
+        // resolved this project's key can paint SectionComp with the previous
+        // board's layout mode for one frame. surfaceResolutionRef.current.key
+        // and surfaceInitializedFor are written together in that same effect,
+        // so checking the ref here is equivalent to the state check; it is
+        // the earlier bypass removed, not an optimization over it.
+        surfaceResolutionRef.current?.key === surfaceInitializationKey ? (
            <SectionComp
             _allProjects={projectsForSection}
             _projectCount={data.updatedProjects.length}

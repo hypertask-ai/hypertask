@@ -242,36 +242,56 @@ test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) f
   );
 });
 
-test("HTPR-6072: the surface-readiness gate does not unmount SectionComp on a second switch", () => {
-  // surfaceInitializedFor is set by a passive effect, so surfaceInitializationKey
-  // (which changes synchronously on every switch) outruns it by one render.
-  // Gating SectionComp's render on that comparison alone unmounts and
-  // remounts the whole board tree on every switch, even a warm one. Once
-  // SectionComp has rendered for real, sectionCompEverRenderedRef must let
-  // it keep rendering while the surface effect catches up.
+test("HTPR-6072: SectionComp cannot render before this project's surface resolution is current", () => {
+  // #264 let SectionComp render once sectionCompEverRenderedRef was true,
+  // regardless of whether boardLayout (a single shared Recoil atom, no
+  // per-project memory) had actually been re-resolved for the newly routed
+  // project. That could paint one frame of the new board in the previous
+  // board's layout mode. The gate must require surfaceResolutionRef.current.key
+  // to match the current surfaceInitializationKey - the same key the effect
+  // that resolves boardLayout stamps onto that ref - with no "ever rendered"
+  // escape hatch.
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
   const gateMatch = src.match(
-    /\) : data && data\.updatedProjects && boardDataReady &&\s*\n\s*\(surfaceInitializedFor === surfaceInitializationKey \|\| sectionCompEverRenderedRef\.current\) \? \(\s*\n\s*<SectionComp/,
+    /\) : data && data\.updatedProjects && boardDataReady &&[\s\S]{0,1200}?surfaceResolutionRef\.current\?\.key === surfaceInitializationKey \? \([\s\S]{0,20}<SectionComp/,
   );
   assert.ok(
     gateMatch,
-    "expected the SectionComp render gate to accept either a fresh surface match or sectionCompEverRenderedRef",
+    "expected the SectionComp render gate to require surfaceResolutionRef.current.key === surfaceInitializationKey with no bypass",
+  );
+  assert.ok(
+    !/sectionCompEverRenderedRef/.test(src),
+    "expected the sectionCompEverRenderedRef bypass to be removed, not left as dead code",
   );
 });
 
-test("HTPR-6072: sectionCompEverRenderedRef arms in an effect, not during render", () => {
+test("HTPR-6072: surfaceResolutionRef.current.key is only ever written alongside surfaceInitializedFor", () => {
+  // Proves the gate change is safe: every write site that sets
+  // surfaceResolutionRef.current to the current key does so either in the
+  // same statement block as setSurfaceInitializedFor(surfaceInitializationKey),
+  // or only after a prior render already set surfaceInitializedFor to that
+  // key. So gating on the ref can never be less safe than gating on the
+  // state - it just drops the "ever rendered" fallback that could disagree
+  // with it.
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
-  const armMatch = src.match(
-    /useLayoutEffect\(\(\) => \{\s*if \(boardDataReady\) sectionCompEverRenderedRef\.current = true\s*\}, \[boardDataReady\]\)/,
+  const effectMatch = src.match(
+    /useEffect\(\(\) => \{\s*if \(!pinnedProject\) return[\s\S]{0,1800}?\}, \[\s*\n\s*boardLayout,/,
   );
+  assert.ok(effectMatch, "expected to find the surface resolution effect");
+  const body = effectMatch[0];
+  const freshResolutionBlock = body.match(
+    /if \(!previous \|\| previous\.key !== surfaceInitializationKey\) \{[\s\S]*?\n  \}/,
+  );
+  assert.ok(freshResolutionBlock, "expected the fresh-resolution branch");
   assert.ok(
-    armMatch,
-    "expected sectionCompEverRenderedRef to be armed inside a useLayoutEffect keyed on boardDataReady",
+    /surfaceResolutionRef\.current = \{[\s\S]*?key: surfaceInitializationKey,/.test(freshResolutionBlock[0]) &&
+    /setSurfaceInitializedFor\(surfaceInitializationKey\)/.test(freshResolutionBlock[0]),
+    "expected surfaceResolutionRef and surfaceInitializedFor to be set together in the fresh-resolution branch",
   );
 });
