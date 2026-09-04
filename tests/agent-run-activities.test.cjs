@@ -986,6 +986,7 @@ function atomicCommentHarness() {
   const publishedBoardWebhookIds = [];
   const fcmCalls = [];
   const taskCommentBroadcasts = [];
+  const replayCompletionOrder = [];
   const sideEffectOrder = [];
   const draftDeleteWheres = [];
   const updateTaskCalls = [];
@@ -1091,6 +1092,9 @@ function atomicCommentHarness() {
             return { count: 0 };
           }
           Object.assign(activity, data);
+          if (data.commentNotificationsCompletedAt) {
+            replayCompletionOrder.push("complete");
+          }
           return { count: 1 };
         }
         const activity = activities.find(
@@ -1193,6 +1197,7 @@ function atomicCommentHarness() {
     },
     async (...args) => {
       taskCommentBroadcasts.push(args);
+      replayCompletionOrder.push("broadcast");
     },
     async (ids) => {
       publishedAgentWebhookIds.push([...ids]);
@@ -1232,6 +1237,7 @@ function atomicCommentHarness() {
     publishedBoardWebhookIds,
     fcmCalls,
     taskCommentBroadcasts,
+    replayCompletionOrder,
     sideEffectOrder,
     draftDeleteWheres,
     updateTaskCalls,
@@ -1486,6 +1492,7 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.deepEqual(harness.taskCommentBroadcasts, [
     [42, { originUserId: 6 }],
   ]);
+  assert.deepEqual(harness.replayCompletionOrder, ["broadcast", "complete"]);
   assert.equal(
     harness.sideEffectOrder.filter((effect) => effect === "mentions").length,
     1,

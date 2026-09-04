@@ -1280,6 +1280,13 @@ export async function createCommentService(params: CreateCommentParams) {
           ),
         );
       }
+      // Keep the realtime handoff inside the lease so an interrupted replay can
+      // retry it, while completed duplicate requests remain side-effect free.
+      if (agentRunReplayComment) {
+        await broadcastTaskComment(taskId, {
+          originUserId: accessUserId ?? currentUser.id,
+        });
+      }
       const completed = await prisma.agentRunActivity.updateMany({
         where: {
           id: agentRunCommentNotificationClaim.activityId,
@@ -1296,11 +1303,6 @@ export async function createCommentService(params: CreateCommentParams) {
         throw new Error("Run activity notification claim was lost");
       }
       agentRunCommentNotificationClaim = null;
-      if (agentRunReplayComment) {
-        await broadcastTaskComment(taskId, {
-          originUserId: accessUserId ?? currentUser.id,
-        });
-      }
     } else {
       const devices = await prisma.subscribedDevices.findMany({
         where: { userId: { in: userIds } },
