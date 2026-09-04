@@ -1,5 +1,5 @@
 version: 3
-last_updated: 2026-08-22
+last_updated: 2026-09-04
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate."
 
 topology:
@@ -52,6 +52,11 @@ policies:
   previews:
     verification: opt-in
     required_for_every_pull_request: false
+  actions_pull_requests:
+    repository_creation_setting: enabled
+    auto_revert_token: github.token
+    token_scope: push_only_auto_revert_job
+    dedicated_pat_required: false
   concurrency:
     cancel_superseded_pull_request_runs: true
     cancel_staging_push_runs: false
@@ -174,12 +179,16 @@ workflows:
           ]
         require_pg_tests_when: postgres_suite_selected
         tests_changed_by_the_pull_request_count_as_coverage: false
-      push_staging:
+      push_production:
         scope: full
         coverage: true
         auto_revert_on_test_failure: true
         auto_revert_scope: test_step_only
-        auto_revert_job: auto-revert-staging
+        auto_revert_job: auto-revert-production
+        auto_revert_parent_gate: exact_previous_push_ci_tests_success
+        auto_revert_parent_lookup_attempts: 3
+        auto_revert_ambiguous_parent_behavior: alert_and_skip
+        auto_revert_stale_head_behavior: alert_and_skip
         auto_revert_method: compare_and_swap_push_then_labelled_pull_request
         auto_revert_pull_request_automerge_when: branch_still_at_failing_sha
         auto_revert_loop_guard: revert_commit_committer_identity
