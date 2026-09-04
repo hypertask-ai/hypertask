@@ -94,9 +94,14 @@ function runUpload(job: UploadJob) {
     source: undefined,
     receipt: undefined,
   });
-  const promise = job.upload(job.file, (progress) => {
-    patch(job, { progress });
-  });
+  let promise: Promise<TaskAttachmentUploadReceipt>;
+  try {
+    promise = job.upload(job.file, (progress) => {
+      patch(job, { progress });
+    });
+  } catch (error) {
+    promise = Promise.reject(error);
+  }
   job.promise = promise;
   void promise.then(
     ({ url, receipt }) => {
@@ -215,7 +220,11 @@ export function bindCreateTaskUploads(
   const bound = new Set<string>();
   attachments.forEach((attachment) => {
     const job = jobForAttachment(attachment);
-    if (!job || bound.has(job.id)) return;
+    if (
+      !job ||
+      bound.has(job.id) ||
+      (job.taskId !== undefined && job.taskId !== taskId)
+    ) return;
     bound.add(job.id);
     patch(job, { taskId, reserved: false, discardWhenReleased: false });
     if (job.status === "uploaded" || job.status === "link-failed") {

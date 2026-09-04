@@ -48,6 +48,29 @@ test("one file object starts one upload promise across remounts", async () => {
   uploads.discardUnboundCreateTaskUploads([selected]);
 });
 
+test("a synchronous uploader failure becomes a retryable job", async () => {
+  const selected = file("sync-failure.txt");
+  let calls = 0;
+  const started = uploads.startCreateTaskUpload(selected, () => {
+    calls += 1;
+    if (calls === 1) throw new Error("synchronous failure");
+    return Promise.resolve({
+      url: "https://files.example/sync-failure",
+      receipt: "sync-failure-receipt",
+    });
+  });
+
+  await assert.rejects(started.promise, /synchronous failure/);
+  await nextTurn();
+  assert.equal(uploads.createTaskUploadById(started.id).status, "upload-failed");
+
+  uploads.retryCreateTaskUpload(started.id);
+  await nextTurn();
+  assert.equal(calls, 2);
+  assert.equal(uploads.createTaskUploadById(started.id).status, "uploaded");
+  uploads.discardUnboundCreateTaskUploads([selected]);
+});
+
 test("a marked attachment resolves its upload job without a wrapper", async () => {
   const selected = file("direct-marker.txt");
   const started = uploads.startCreateTaskUpload(
@@ -104,6 +127,37 @@ test("a reserved upload binds and finishes after the composer unmounts", async (
     { taskId: 99, receipt: "receipt-after-unmount" },
   ]);
   assert.equal(uploads.createTaskUploadById(started.id).status, "complete");
+  uploads.acknowledgeCreateTaskUpload(started.id);
+});
+
+test("an upload cannot be rebound while its first task link is pending", async () => {
+  const selected = file("single-task-binding.txt");
+  const linkedTaskIds = [];
+  let finishLink;
+  const started = uploads.startCreateTaskUpload(
+    selected,
+    async () => ({
+      url: "https://files.example/single-task-binding",
+      receipt: "single-task-binding-receipt",
+    }),
+    (taskId) => {
+      linkedTaskIds.push(taskId);
+      return new Promise((resolve) => {
+        finishLink = resolve;
+      });
+    },
+  );
+  await started.promise;
+
+  assert.equal(uploads.bindCreateTaskUploads(99, [selected]), 1);
+  assert.equal(uploads.bindCreateTaskUploads(100, [selected]), 0);
+  assert.equal(uploads.createTaskUploadById(started.id).taskId, 99);
+
+  finishLink(attachment(5, "https://files.example/single-task-binding"));
+  await nextTurn();
+  assert.deepEqual(linkedTaskIds, [99]);
+  assert.equal(uploads.createTaskUploadsForTask(99).length, 1);
+  assert.equal(uploads.createTaskUploadsForTask(100).length, 0);
   uploads.acknowledgeCreateTaskUpload(started.id);
 });
 
