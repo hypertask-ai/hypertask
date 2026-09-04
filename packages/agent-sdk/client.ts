@@ -101,9 +101,9 @@ function eventForPayload(payload: AgentWebhookPayload): AgentEventName {
 
 function chronological(a: AgentThreadItem, b: AgentThreadItem): number {
   const difference = Date.parse(a.createdAt) - Date.parse(b.createdAt);
-  return Number.isFinite(difference) && difference !== 0
-    ? difference
-    : String(a.id).localeCompare(String(b.id));
+  if (Number.isFinite(difference) && difference !== 0) return difference;
+  if (typeof a.id === "number" && typeof b.id === "number") return a.id - b.id;
+  return String(a.id).localeCompare(String(b.id));
 }
 
 export class AgentClient {
@@ -206,7 +206,9 @@ export class AgentClient {
       return;
     }
     try {
-      this.onErrorCallback(error, payload);
+      void Promise.resolve(this.onErrorCallback(error, payload)).catch((callbackError) =>
+        console.error("[hypertask-agent-sdk] onError callback failed", callbackError),
+      );
     } catch (callbackError) {
       console.error("[hypertask-agent-sdk] onError callback failed", callbackError);
     }

@@ -177,9 +177,15 @@ function apiFixture(
         success: true,
         comments: [
           {
-            id: 1,
-            text: "Earlier comment",
-            commentText: "Earlier comment",
+            id: 10,
+            text: "Later same-time comment",
+            commentText: "Later same-time comment",
+            createdAt: new Date(now - 500).toISOString(),
+          },
+          {
+            id: 9,
+            text: "Earlier same-time comment",
+            commentText: "Earlier same-time comment",
             createdAt: new Date(now - 500).toISOString(),
           },
         ],
@@ -451,6 +457,32 @@ test("client wraps response body read failures", async () => {
   });
 });
 
+test("async onError failures stay observed", async () => {
+  const reported: unknown[][] = [];
+  const originalConsoleError = console.error;
+  console.error = (...values: unknown[]) => {
+    reported.push(values);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: apiFixture().fetch,
+    onError: async () => {
+      throw new Error("async callback failed");
+    },
+  });
+
+  try {
+    agent.client.reportError(new Error("original error"));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(reported.length, 1);
+    assert.match(String(reported[0][1]), /async callback failed/);
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test("malformed activity responses fail with AgentSdkError", async () => {
   const api = apiFixture({ malformedActivity: true });
   const agent = createAgent({
@@ -569,6 +601,10 @@ test("run events bind the token, hydrate context, and use stable activity keys",
     assert.equal(received.prompt, "Please investigate");
     assert.equal(received.ticket?.ticketNumber, "TEST-101");
     assert.equal(received.thread[0].kind, "comment");
+    assert.deepEqual(
+      received.thread.filter((item) => item.kind === "comment").map((item) => item.id),
+      [9, 10],
+    );
     await received.thought("Starting now.");
     await received.respond("Done.");
   });
