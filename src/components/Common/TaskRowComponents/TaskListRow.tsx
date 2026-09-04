@@ -19,6 +19,7 @@ interface IProps {
   showDueDate?: boolean;
   isOverdue?: boolean;
   flushMobilePadding?: boolean;
+  compactMobile?: boolean;
 }
 
 export const TaskListRow = (props: IProps) => {
@@ -32,9 +33,18 @@ export const TaskListRow = (props: IProps) => {
     showDueDate = false,
     isOverdue = false,
     flushMobilePadding = false,
+    compactMobile = false,
   } = props;
 
   const isBulkSelected = false; // Not using bulk selection in scheduled view
+  const isStarred = !!(task.savedContent && task.savedContent.length > 0);
+  const isSeen =
+    task.notifications && task.notifications.length > 0
+      ? task.notifications[0].seen
+      : true;
+  let mobileDotColor = "bg-transparent";
+  if (!isSeen) mobileDotColor = "bg-[#5896F1]";
+  else if (isStarred) mobileDotColor = "bg-[#FFCB33]";
 
   // Get assignee name or task owner name
   const assigneeName =
@@ -61,26 +71,56 @@ export const TaskListRow = (props: IProps) => {
       handleMouseLeave={handleMouseLeave}
       openTask={handleClick}
       className={cn(
-        "flex cursor-pointer @md:space-x-8 py-[8px] px-[20px] @md:px-5 rounded-md justify-between w-full flex-col @md:flex-row @md:border-l-4",
+        "flex cursor-pointer @md:space-x-8 @md:py-[8px] @md:px-5 rounded-md justify-between w-full @md:flex-row @md:border-l-4",
+        compactMobile
+          ? "flex-row items-baseline gap-2 border-b border-border-light-gray-thin px-0 py-[9px] @md:items-stretch @md:gap-0 @md:border-b-0"
+          : "flex-col px-[20px] py-[8px]",
         flushMobilePadding && "px-0",
         selected
           ? "@md:bg-active-elementBg @md:border-l-selected-item-border"
           : "@md:border-l-transparent bg-transparent"
       )}
     >
+      {compactMobile && (
+        <div className="flex min-w-0 flex-1 items-baseline gap-2 @md:hidden">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "h-[7px] w-[7px] shrink-0 self-center rounded-full",
+              mobileDotColor
+            )}
+          />
+          <span className="shrink-0 text-[13px] font-bold text-icon-dark-gray">
+            {task.ticketNumber}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-white-black">
+            {task.title}
+          </span>
+          <span
+            className={cn(
+              "ml-2 shrink-0 text-[13px] text-text-light-gray",
+              isOverdue && "text-[#F88F9C]"
+            )}
+            suppressHydrationWarning
+          >
+            {showDueDate
+              ? task.dueDate && formatDueDateDifference(task.dueDate)
+              : task.updatedAt && formatDateDifference(task.updatedAt)}
+          </span>
+        </div>
+      )}
+
       {/* First column: StarredDot & Notification Dot | Assignee Name | Comment Count */}
-      <div className="flex @md:space-x-6 @md:min-w-[15%]">
+      <div
+        className={cn(
+          "flex @md:space-x-6 @md:min-w-[15%]",
+          compactMobile && "hidden @md:flex"
+        )}
+      >
         <div className="flex justify-between w-100">
           <div className="gap-1 flex items-center min-w-0">
             <span className="flex @md:gap-[10px] items-center min-w-0">
-              <StarAndSeenDots
-                starred={!!(task.savedContent && task.savedContent.length > 0)}
-                seen={
-                  task.notifications && task.notifications.length > 0
-                    ? task.notifications[0].seen
-                    : true
-                }
-              />
+              <StarAndSeenDots starred={isStarred} seen={isSeen} />
               {showDueDate
                 ? assigneeName && (
                     <span
@@ -128,7 +168,12 @@ export const TaskListRow = (props: IProps) => {
       </div>
 
       {/* Second column: Title Container (ticket number, title, labels) | Description */}
-      <div className="flex min-w-0 flex-grow mt-2 @sm:mt-0 gap-2 items-baseline @md:items-center @md:w-[40%] flex-col @md:flex-row">
+      <div
+        className={cn(
+          "flex min-w-0 flex-grow mt-2 @sm:mt-0 gap-2 items-baseline @md:items-center @md:w-[40%] flex-col @md:flex-row",
+          compactMobile && "hidden @md:flex"
+        )}
+      >
         {/* ============ title =================  */}
         <div
           suppressHydrationWarning
@@ -173,7 +218,12 @@ export const TaskListRow = (props: IProps) => {
       </div>
 
       {/* Third column: Archive status | Due date Label | Time */}
-      <div className="flex items-center justify-end gap-2 @md:min-w-[120px]">
+      <div
+        className={cn(
+          "flex items-center justify-end gap-2 @md:min-w-[120px]",
+          compactMobile && "hidden @md:flex"
+        )}
+      >
         {/* Archive status */}
         <div className="hidden @md:flex items-center">
           <Check

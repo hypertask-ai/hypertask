@@ -7,7 +7,10 @@ const FEATURE_FLAG_OWNER = {
   email: "valentin.yeo@gmail.com",
 } as const;
 
-export const FEATURE_FLAG_KEYS = ["htpr-6091-feature-flags"] as const;
+export const FEATURE_FLAG_KEYS = [
+  "htpr-5992-mobile-all-tasks",
+  "htpr-6091-feature-flags",
+] as const;
 export const FEATURE_FLAG_MODES = ["OWNER_ONLY", "EVERYONE", "OFF"] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
