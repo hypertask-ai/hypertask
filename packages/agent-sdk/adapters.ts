@@ -91,27 +91,31 @@ function byteBody(value: unknown): Uint8Array | null {
 }
 
 async function toRequest(request: NodeRequest, useParsedBody: boolean): Promise<Request> {
-  let body: Uint8Array;
-  if (useParsedBody && request.body !== undefined) {
-    const bytes = byteBody(request.body);
-    if (!bytes) {
-      throw new Error(
-        "Raw webhook bytes are unavailable; mount this adapter before JSON middleware",
-      );
+  const method = (request.method ?? "POST").toUpperCase();
+  let requestBody: ArrayBuffer | undefined;
+  if (method !== "GET" && method !== "HEAD") {
+    let body: Uint8Array;
+    if (useParsedBody && request.body !== undefined) {
+      const bytes = byteBody(request.body);
+      if (!bytes) {
+        throw new Error(
+          "Raw webhook bytes are unavailable; mount this adapter before JSON middleware",
+        );
+      }
+      body = bytes;
+    } else {
+      body = await collectBody(request);
     }
-    body = bytes;
-  } else {
-    body = await collectBody(request);
+    if (body.length > MAX_WEBHOOK_BYTES) throw new Error("Webhook body is too large");
+    requestBody = new ArrayBuffer(body.byteLength);
+    new Uint8Array(requestBody).set(body);
   }
-  if (body.length > MAX_WEBHOOK_BYTES) throw new Error("Webhook body is too large");
   const headers = requestHeaders(request.headers);
   const host = headers.get("host") ?? "localhost";
   const forwardedProtocol = headers.get("x-forwarded-proto")?.split(",")[0].trim();
   const protocol = forwardedProtocol === "https" ? "https" : "http";
-  const requestBody = new ArrayBuffer(body.byteLength);
-  new Uint8Array(requestBody).set(body);
   return new Request(new URL(request.url ?? "/", `${protocol}://${host}`), {
-    method: request.method ?? "POST",
+    method,
     headers,
     body: requestBody,
   });

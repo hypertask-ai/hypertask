@@ -347,6 +347,35 @@ test("Node adapters do not expose unexpected handler errors", async () => {
   assert.match(responseBody, /Webhook request failed/);
 });
 
+test("Node adapters omit bodies from GET requests", async () => {
+  let receivedMethod: string | undefined;
+  const handler: WebhookHandler = Object.assign(
+    async (request: Request) => {
+      receivedMethod = request.method;
+      return new Response(null, { status: 405 });
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const adapter = nodeHttpAdapter(handler);
+  const request = {
+    method: "GET",
+    url: "/webhook",
+    headers: {},
+    async *[Symbol.asyncIterator]() {
+      throw new Error("GET body should not be read");
+    },
+  };
+  const response = {
+    statusCode: 0,
+    setHeader() {},
+    end() {},
+  };
+
+  await adapter(request, response);
+  assert.equal(response.statusCode, 405);
+  assert.equal(receivedMethod, "GET");
+});
+
 test("client wraps response body read failures", async () => {
   const agent = createAgent({
     token: "unit-test-token",
@@ -492,6 +521,47 @@ test("run events bind the token, hydrate context, and use stable activity keys",
       "delivery-1:2:activity-response",
     ],
   );
+});
+
+test("run records cannot overwrite SDK internals", async () => {
+  const api = apiFixture();
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (
+      (init.method ?? "GET") === "GET" &&
+      url.pathname.endsWith("/mcp/agents/runs/run-1")
+    ) {
+      return Response.json({
+        success: true,
+        run: {
+          ...run,
+          client: null,
+          deliveryId: "untrusted-value",
+          onFirstActivity: null,
+          signal: null,
+        },
+      });
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  let handled = false;
+  agent.on("mention", async (received) => {
+    handled = true;
+    await received.thought("Internal state is intact.");
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await work.drain();
+  assert.equal(handled, true);
 });
 
 test("delivery claims dedupe concurrent work and retain completion", async () => {
@@ -1073,6 +1143,29 @@ test("dispatch waits for an automatic thought already in flight", async (context
   }
 });
 
+test("successful handlers cancel an unstarted automatic thought", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  agent.on("mention", () => {});
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await work.drain();
+  assert.equal(
+    api.calls.some(
+      (call) =>
+        call.method === "POST" &&
+        call.path.endsWith("/mcp/agents/runs/run-1/activities"),
+    ),
+    false,
+  );
+});
+
 test("automatic acknowledgement posts a thought before ten seconds", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"], now });
   const api = apiFixture();
@@ -1082,20 +1175,37 @@ test("automatic acknowledgement posts a thought before ten seconds", async (cont
     apiUrl,
     fetch: api.fetch,
   });
-  agent.on("mention", () => {});
-  const work = background();
-  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  context.mock.timers.tick(8_000);
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  await work.drain();
-  const activity = api.calls.find(
-    (call) =>
-      call.method === "POST" &&
-      call.path.endsWith("/mcp/agents/runs/run-1/activities"),
-  );
-  assert.deepEqual(activity?.body, { type: "thought", text: "Working on this." });
-  context.mock.timers.reset();
+  let handlerStarted!: () => void;
+  const startedHandler = new Promise<void>((resolve) => {
+    handlerStarted = resolve;
+  });
+  let finishHandler!: () => void;
+  const handlerGate = new Promise<void>((resolve) => {
+    finishHandler = resolve;
+  });
+  agent.on("mention", async () => {
+    handlerStarted();
+    await handlerGate;
+  });
+
+  try {
+    const work = background();
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await startedHandler;
+    context.mock.timers.tick(8_000);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    finishHandler();
+    await work.drain();
+    const activity = api.calls.find(
+      (call) =>
+        call.method === "POST" &&
+        call.path.endsWith("/mcp/agents/runs/run-1/activities"),
+    );
+    assert.deepEqual(activity?.body, { type: "thought", text: "Working on this." });
+  } finally {
+    finishHandler();
+    context.mock.timers.reset();
+  }
 });
 
 test("memory delivery claims expire and fence stale owners", async () => {

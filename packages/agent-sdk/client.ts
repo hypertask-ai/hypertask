@@ -288,6 +288,7 @@ export class AgentClient {
 
       try {
         for (const handler of handlers) await handler(run);
+        cancelAutoThought();
         await autoThoughtDone;
         if (autoThoughtFailed) throw autoThoughtError;
       } catch (error) {
@@ -433,7 +434,6 @@ class AgentRunImpl implements AgentRun {
     private readonly deliveryId: string,
     readonly signal: AbortSignal,
   ) {
-    Object.assign(this, context.record);
     this.id = context.record.id;
     this.agentId = context.record.agentId;
     this.taskId = context.record.taskId;
