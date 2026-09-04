@@ -999,6 +999,7 @@ function atomicCommentHarness() {
   const draftDeleteWheres = [];
   const updateTaskCalls = [];
   let assigneeLookupCalls = 0;
+  let leaseRenewals = 0;
   let draftDeleteCalls = 0;
   let taskReferenceParseCalls = 0;
   let failure = "comment";
@@ -1098,6 +1099,12 @@ function atomicCommentHarness() {
               where.commentNotificationsProcessingAt.getTime()
           ) {
             return { count: 0 };
+          }
+          if (
+            !where.OR &&
+            data.commentNotificationsProcessingAt instanceof Date
+          ) {
+            leaseRenewals += 1;
           }
           if (data.commentNotificationDeliveryKeys?.push) {
             activity.commentNotificationDeliveryKeys.push(
@@ -1295,6 +1302,7 @@ function atomicCommentHarness() {
     draftDeleteWheres,
     updateTaskCalls,
     getAssigneeLookupCalls: () => assigneeLookupCalls,
+    getLeaseRenewals: () => leaseRenewals,
     getDraftDeleteCalls: () => draftDeleteCalls,
     getTaskReferenceParseCalls: () => taskReferenceParseCalls,
     waitForMentionProcessing: () => mentionProcessingStarted,
@@ -1418,6 +1426,7 @@ test("first activity comments broadcast before notification completion", async (
     "broadcast",
     "complete",
   ]);
+  assert.equal(harness.getLeaseRenewals(), 3);
 });
 
 test("activity replay rejects a comment linked to another activity", async () => {
@@ -1955,6 +1964,7 @@ test("mention processing stops when a delivery checkpoint loses its lease", asyn
       failOnError: true,
       deliveryProgress: {
         has: () => false,
+        beforeDelivery: async () => {},
         mark: async () => {
           throw new Error("notification lease lost");
         },

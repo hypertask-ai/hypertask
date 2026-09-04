@@ -217,6 +217,7 @@ export const sendDataOnlyFcm = async (
   deliveryOptions?: {
     failOnError?: boolean;
     deliveredDeviceIds?: ReadonlySet<string>;
+    beforeDelivery?: () => Promise<void>;
     markDelivered?: (firebaseId: string) => Promise<void>;
   },
 ) => {
@@ -273,6 +274,7 @@ export const sendDataOnlyFcm = async (
       },
     };
 
+    await deliveryOptions?.beforeDelivery?.();
     let deliveryResolved = false;
     try {
       const response = await admin.messaging().send(body);

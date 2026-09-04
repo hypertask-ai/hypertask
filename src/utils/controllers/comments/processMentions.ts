@@ -67,6 +67,7 @@ export interface ProcessMentionsParams {
   failOnError?: boolean;
   deliveryProgress?: {
     has: (stage: MentionDeliveryStage, recipient: number | string) => boolean;
+    beforeDelivery: () => Promise<void>;
     mark: (
       stage: MentionDeliveryStage,
       recipient: number | string,
@@ -174,6 +175,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     if (shouldSkipMentionRecipient({ userId, mentionedBy, hyperAiId, fromAgentId })) continue;
 
     if (!deliveryProgress?.has("follower:user", userId)) {
+      await deliveryProgress?.beforeDelivery();
       let delivered = false;
       try {
         // Add user as follower (if not already assignee)
@@ -201,6 +203,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     }
 
     if (!deliveryProgress?.has("email:user", userId)) {
+      await deliveryProgress?.beforeDelivery();
       let delivered = false;
       try {
         delivered =
@@ -226,6 +229,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     }
 
     if (!deliveryProgress?.has("notification:user", userId)) {
+      await deliveryProgress?.beforeDelivery();
       let delivered = false;
       try {
         await axios.post(
@@ -253,6 +257,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
 
   for (const agentIdStr of uniqueAgentMentionIds) {
     if (deliveryProgress?.has("follower:agent", agentIdStr)) continue;
+    await deliveryProgress?.beforeDelivery();
     let delivered = false;
     try {
       const result = await createFollowerService({

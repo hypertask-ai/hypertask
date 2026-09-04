@@ -318,6 +318,7 @@ async function sendCommentEmails({
   mentionedUserIds,
   fromAgentId,
   deliveredUserIds,
+  beforeDelivery,
   markDelivered,
 }: {
   task: any;
@@ -328,6 +329,7 @@ async function sendCommentEmails({
   mentionedUserIds: Set<number>;
   fromAgentId?: string | null;
   deliveredUserIds?: ReadonlySet<number>;
+  beforeDelivery?: () => Promise<void>;
   markDelivered?: (userId: number) => Promise<void>;
 }): Promise<void> {
   const emailRecipientIds = recipientUserIds.filter(
@@ -361,6 +363,7 @@ async function sendCommentEmails({
       // shouldNotify, not the legacy preference helper: only the former reads the
       // per-category matrix, so the old call ignored "comments off" entirely.
       if (await shouldNotify(recipient.id, "Comment", "email")) {
+        await beforeDelivery?.();
         const sent = await sendEmailNotification("Comment", {
           sender: senderName,
           recipient: recipient.email,
@@ -1058,6 +1061,30 @@ export async function createCommentService(params: CreateCommentParams) {
       }
       notificationDeliveryKeys.add(key);
     };
+    const renewNotificationClaim = async () => {
+      if (!agentRunCommentNotificationClaim) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      const renewedAt = new Date(
+        Math.max(
+          Date.now(),
+          agentRunCommentNotificationClaim.processingAt.getTime() + 1,
+        ),
+      );
+      const renewed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsCompletedAt: null,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: { commentNotificationsProcessingAt: renewedAt },
+      });
+      if (renewed.count === 0) {
+        throw new Error("Run activity notification claim was lost");
+      }
+      agentRunCommentNotificationClaim.processingAt = renewedAt;
+    };
 
     if (resolvedDirectReplyUserId != null) {
       void broadcastInboxChange(resolvedDirectReplyUserId, {
@@ -1181,6 +1208,7 @@ export async function createCommentService(params: CreateCommentParams) {
               deliveryProgress: {
                 has: (stage: string, recipient: number | string) =>
                   notificationDeliveryKeys.has(`mention:${stage}:${recipient}`),
+                beforeDelivery: renewNotificationClaim,
                 mark: (stage: string, recipient: number | string) =>
                   checkpointNotificationDelivery(
                     `mention:${stage}:${recipient}`,
@@ -1268,7 +1296,9 @@ export async function createCommentService(params: CreateCommentParams) {
 
     // Publish only after mention notifications exist. Agent replies can then
     // claim the persisted invocation identified by reply_to_comment_id.
+    if (isAgentRunComment) await renewNotificationClaim();
     await publishAgentWebhookDeliveries(webhookDeliveryIds);
+    if (isAgentRunComment) await renewNotificationClaim();
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     if (isAgentRunComment) {
       if (
@@ -1299,6 +1329,7 @@ export async function createCommentService(params: CreateCommentParams) {
                 .filter((key) => key.startsWith("fcm:"))
                 .map((key) => key.slice("fcm:".length)),
             ),
+            beforeDelivery: renewNotificationClaim,
             markDelivered: (firebaseId) =>
               checkpointNotificationDelivery(`fcm:${firebaseId}`),
           },
@@ -1330,6 +1361,7 @@ export async function createCommentService(params: CreateCommentParams) {
               .filter((key) => key.startsWith("email:"))
               .map((key) => Number(key.slice("email:".length))),
           ),
+          beforeDelivery: renewNotificationClaim,
           markDelivered: (userId) =>
             checkpointNotificationDelivery(`email:${userId}`),
         });
@@ -1348,6 +1380,7 @@ export async function createCommentService(params: CreateCommentParams) {
       }
       // Keep the realtime handoff inside the lease so an interrupted request
       // can retry it, while completed duplicate requests remain side-effect free.
+      await renewNotificationClaim();
       await broadcastTaskComment(taskId, {
         originUserId: accessUserId ?? currentUser.id,
       });
