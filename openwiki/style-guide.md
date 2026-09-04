@@ -116,6 +116,10 @@ Use a borderless text or icon action with `text-text-light-gray` or `text-icon-d
 
 Destructive actions use the semantic destructive token or an existing destructive component. A destructive color does not justify a second primary action.
 
+### Approved exceptions to the button hierarchy
+
+- Mobile new-task dictation buttons (title and description empty state, `TaskTitleModal.tsx` and `AttachmentsUpload/index.tsx`, `mobilePrimaryTone="default"`) use the inverted-theme white-black treatment instead of `bg-shadcn-primary`, matching the empty dictation action of the mobile comment field below. Owner-approved by Valentin on 2026-09-04, ticket https://app.hypertask.ai/detail/project-15/5995.
+
 ## Reference implementation: mobile comment field
 
 The mobile comment composer is the reference for combining shape, spacing, tokens, icons, and action hierarchy. Its production composition is:
