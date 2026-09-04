@@ -53,6 +53,7 @@ const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
 });
 const oauth = jiti(path.join(root, "src/lib/figma/oauth.ts"));
+const figmaPaths = jiti(path.join(root, "src/lib/figma/paths.ts"));
 const startRoute = jiti(
   path.join(root, "src/app/api/figma/oauth/start/route.ts"),
 );
@@ -236,8 +237,12 @@ test("callback exchanges the code and returns to the initiating screen", async (
   assert.equal(connectedToken.figmaUserName, "Valentin");
   assert.equal(calls.length, 2);
   const setCookie = response.headers.get("set-cookie");
-  assert.match(setCookie, new RegExp(oauth.FIGMA_CONNECTION_VERSION_COOKIE));
-  assert.match(setCookie, /HttpOnly/i);
+  const connectionCookie = setCookie.slice(
+    setCookie.indexOf(`${figmaPaths.FIGMA_CONNECTION_VERSION_COOKIE}=`),
+  );
+  assert.match(connectionCookie, /Secure/i);
+  assert.match(connectionCookie, /SameSite=lax/i);
+  assert.doesNotMatch(connectionCookie, /HttpOnly/i);
 });
 
 test("connection reads and disconnects only the signed user's row", async () => {
@@ -271,5 +276,7 @@ test("connection reads and disconnects only the signed user's row", async () => 
   );
   assert.equal(response.status, 200);
   assert.equal(disconnectedUserId, 6);
-  assert.match(response.headers.get("set-cookie"), /Max-Age=0/);
+  const clearedConnectionCookie = response.headers.get("set-cookie");
+  assert.match(clearedConnectionCookie, /Max-Age=0/);
+  assert.doesNotMatch(clearedConnectionCookie, /HttpOnly/i);
 });

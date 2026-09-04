@@ -2,6 +2,7 @@ import { InputRule, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
 import {
+  FIGMA_CONNECTION_VERSION_COOKIE,
   FIGMA_OAUTH_START_PATH,
   FIGMA_OEMBED_PATH,
 } from '@/lib/figma/paths';
@@ -27,13 +28,47 @@ type FigmaPreviewData = {
   width?: number;
 };
 
-const fetchFigmaOembed = (figmaUrl: string): Promise<FigmaPreviewData> =>
-  fetch(`${FIGMA_OEMBED_PATH}?url=${encodeURIComponent(figmaUrl)}`).then(
-    (response) => {
-      if (!response.ok) throw new Error('Figma preview unavailable');
-      return response.json();
-    },
-  );
+// ProseMirror can recreate a node view several times together, so share only
+// requests made under the same Figma authorization state and only in flight.
+const oembedRequests = new Map<string, Promise<FigmaPreviewData>>();
+
+const getFigmaConnectionVersion = () => {
+  const prefix = `${FIGMA_CONNECTION_VERSION_COOKIE}=`;
+  const cookie = document.cookie
+    .split(';')
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(prefix));
+  return cookie?.slice(prefix.length) ?? '';
+};
+
+export const fetchFigmaOembed = (
+  figmaUrl: string,
+): Promise<FigmaPreviewData> => {
+  const connectionVersion = getFigmaConnectionVersion();
+  const cacheKey = `${connectionVersion}:${figmaUrl}`;
+  const inFlight = oembedRequests.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const request = fetch(
+    `${FIGMA_OEMBED_PATH}?url=${encodeURIComponent(figmaUrl)}`,
+  ).then(async (response) => {
+    if (!response.ok) throw new Error('Figma preview unavailable');
+    const data: FigmaPreviewData = await response.json();
+    if (getFigmaConnectionVersion() !== connectionVersion) {
+      throw new Error('Figma connection changed');
+    }
+    return data;
+  });
+
+  oembedRequests.set(cacheKey, request);
+  const clearSettledRequest = () => {
+    if (oembedRequests.get(cacheKey) === request) {
+      oembedRequests.delete(cacheKey);
+    }
+  };
+  void request.then(clearSettledRequest, clearSettledRequest);
+  return request;
+};
 
 export const renderFigmaPreview = (
   preview: HTMLButtonElement,

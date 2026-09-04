@@ -15,8 +15,11 @@ const { hasFigmaEmbed } = jiti(
 const { isContentCarouselImage } = jiti(
   path.join(root, "src/utils/helperFunctions/isContentCarouselImage.ts"),
 );
-const { renderFigmaPreview } = jiti(
+const { fetchFigmaOembed, renderFigmaPreview } = jiti(
   path.join(root, "src/components/RTE/Extensions/FigmaTiptap/index.ts"),
+);
+const { FIGMA_CONNECTION_VERSION_COOKIE } = jiti(
+  path.join(root, "src/lib/figma/paths.ts"),
 );
 
 const source = (relativePath) =>
@@ -92,6 +95,68 @@ test("renders at most six returned Figma frames side by side", () => {
     assert.equal(images.length, 5);
   } finally {
     delete global.document;
+  }
+});
+
+test("deduplicates only in-flight previews within one connection version", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>", {
+    url: "https://app.hypertask.ai/detail/project-15/6136",
+  });
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  global.document = dom.window.document;
+  document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-one; Path=/`;
+
+  const responses = [];
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    return new Promise((resolve) => responses.push(resolve));
+  };
+
+  try {
+    const first = fetchFigmaOembed("https://www.figma.com/design/abc");
+    const duplicate = fetchFigmaOembed("https://www.figma.com/design/abc");
+    assert.equal(first, duplicate);
+    assert.equal(fetchCalls, 1);
+
+    responses.shift()(Response.json({ title: "First" }));
+    assert.deepEqual(await first, { title: "First" });
+
+    const settled = fetchFigmaOembed("https://www.figma.com/design/abc");
+    assert.notEqual(settled, first);
+    assert.equal(fetchCalls, 2);
+    responses.shift()(Response.json({ title: "Second" }));
+    assert.deepEqual(await settled, { title: "Second" });
+  } finally {
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+  }
+});
+
+test("rejects an in-flight preview after the connection version changes", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>", {
+    url: "https://app.hypertask.ai/detail/project-15/6136",
+  });
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  global.document = dom.window.document;
+  document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-one; Path=/`;
+
+  let resolveFetch;
+  global.fetch = async () =>
+    new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+
+  try {
+    const preview = fetchFigmaOembed("https://www.figma.com/design/stale");
+    document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-two; Path=/`;
+    resolveFetch(Response.json({ title: "Stale" }));
+    await assert.rejects(preview, /Figma connection changed/);
+  } finally {
+    global.document = originalDocument;
+    global.fetch = originalFetch;
   }
 });
 

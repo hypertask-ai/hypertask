@@ -4,9 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { figmaConnectEnabledFor } from "@/lib/figma/connection";
-import { FIGMA_OAUTH_CALLBACK_PATH } from "@/lib/figma/paths";
 import {
   FIGMA_CONNECTION_VERSION_COOKIE,
+  FIGMA_OAUTH_CALLBACK_PATH,
+} from "@/lib/figma/paths";
+import {
   FIGMA_CONNECTION_VERSION_MAX_AGE_SECONDS,
   FIGMA_OAUTH_ATTEMPT_COOKIE,
   FIGMA_OAUTH_ATTEMPT_MAX_AGE_SECONDS,
@@ -80,7 +82,6 @@ export function rotateFigmaConnectionVersion(
     FIGMA_CONNECTION_VERSION_COOKIE,
     randomBytes(16).toString("base64url"),
     {
-      httpOnly: true,
       maxAge: FIGMA_CONNECTION_VERSION_MAX_AGE_SECONDS,
       path: "/",
       sameSite: "lax",
@@ -91,7 +92,6 @@ export function rotateFigmaConnectionVersion(
 
 export function clearFigmaConnectionVersion(response: NextResponse): void {
   response.cookies.set(FIGMA_CONNECTION_VERSION_COOKIE, "", {
-    httpOnly: true,
     maxAge: 0,
     path: "/",
     sameSite: "lax",

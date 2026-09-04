@@ -19,7 +19,6 @@ const MAX_EXPIRES_IN_SECONDS = 400 * 24 * 60 * 60;
 const MAX_RETURN_TO_LENGTH = 2000;
 
 export const FIGMA_OAUTH_ATTEMPT_COOKIE = "ht_figma_oauth";
-export const FIGMA_CONNECTION_VERSION_COOKIE = "ht_figma_connection";
 
 export type FigmaOAuthConfig = {
   clientId: string;
