@@ -1,6 +1,6 @@
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { AGENT_SDK_FEATURE_FLAG } from "@/lib/agentRuns/model";
+import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { postSignedWebhook } from "@/lib/mcp/webhooks/delivery";
 import { queueAgentWebhookDelivery } from "./queue";
 
@@ -65,7 +65,7 @@ export async function deliverAgentWebhook(
   if (
     carriesRun &&
     !(await isFeatureEnabled(
-      AGENT_SDK_FEATURE_FLAG,
+      AGENT_RUN_FEATURE_FLAG,
       delivery.subscription.agent.userId,
     ))
   ) {

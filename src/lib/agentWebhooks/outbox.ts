@@ -3,7 +3,7 @@ import type { AgentRun, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  AGENT_SDK_FEATURE_FLAG,
+  AGENT_RUN_FEATURE_FLAG,
   NONTERMINAL_AGENT_RUN_STATUSES,
   type AgentRunContext,
   agentRunContextForEvent,
@@ -421,7 +421,7 @@ export async function persistAgentRunTriggerWebhooks(
 
   const triggerSubscribed = subscription.events.includes(input.event);
   const runsEnabled = await isFeatureEnabled(
-    AGENT_SDK_FEATURE_FLAG,
+    AGENT_RUN_FEATURE_FLAG,
     subscription.agent.userId,
     tx,
   );
@@ -536,7 +536,7 @@ export async function persistAgentTaskRunPromptWebhooks(
       (subscription.projectId !== null &&
         subscription.projectId !== input.projectId) ||
       !(await isFeatureEnabled(
-        AGENT_SDK_FEATURE_FLAG,
+        AGENT_RUN_FEATURE_FLAG,
         run.agent.userId,
         tx,
       ))

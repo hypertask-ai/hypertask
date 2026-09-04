@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { AGENT_SDK_FEATURE_FLAG } from "@/lib/agentRuns/model";
+import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -123,7 +123,7 @@ export async function upsertAgentWebhook(input: {
 }) {
   await assertAgentWebhookOwner(input.userId, input.agentId);
   const runsEnabled = await isFeatureEnabled(
-    AGENT_SDK_FEATURE_FLAG,
+    AGENT_RUN_FEATURE_FLAG,
     input.userId,
   );
   const availableEvents = availableAgentWebhookEvents(runsEnabled);
@@ -303,7 +303,7 @@ export async function manageAgentWebhook(input: {
 
   if (input.action === "get") {
     const runsEnabled = await isFeatureEnabled(
-      AGENT_SDK_FEATURE_FLAG,
+      AGENT_RUN_FEATURE_FLAG,
       input.userId,
     );
     const availableEvents = availableAgentWebhookEvents(runsEnabled);
