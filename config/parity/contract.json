@@ -34,12 +34,20 @@
       "matches": {
         "api": [
           "^GET /api/mcp/agents($|/\\[agentId\\]$|/analytics$|/presence$)",
-          "^POST /api/mcp/agents/runtime-heartbeat$"
+          "^POST /api/mcp/agents/runtime-heartbeat$",
+          "^GET /api/mcp/agents/runs/\\[id\\]$"
         ],
         "mcp": ["^hypertask_(agent_presence|list_agents)$"],
         "cli": ["^presence$", "^agents list$"],
         "ai_chat": ["^hypertask_(agent_presence|ask_agent)$", "^hypertask_list_agents$"],
         "hyperai": ["^hypertask_(agent_presence|list_agents)$"]
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/6119",
+          "expires": "2026-09-30",
+          "entries": ["GET /api/mcp/agents/runs/[id]"]
+        }
       }
     },
     {
@@ -68,7 +76,8 @@
           "^POST /api/mcp/admin/agents/\\[agentId\\]/token$",
           "^POST /api/mcp/admin/tokens$",
           "^DELETE /api/mcp/admin/tokens$",
-          "^GET /api/mcp/admin/connections$"
+          "^GET /api/mcp/admin/connections$",
+          "^POST /api/mcp/agents/runs/\\[id\\]/stop$"
         ],
         "mcp": [
           "^hypertask_create_agent$",
@@ -110,6 +119,11 @@
         ]
       },
       "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/6119",
+          "expires": "2026-09-30",
+          "entries": ["POST /api/mcp/agents/runs/[id]/stop"]
+        },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/5896",
           "expires": "2026-09-15",
