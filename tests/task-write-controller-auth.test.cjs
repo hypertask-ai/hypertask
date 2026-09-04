@@ -517,7 +517,12 @@ test("a post-commit move notification failure preserves the successful update", 
   assert.equal(deliveryAttempts, 1);
 });
 
-function loadMoveController({ targetProjectId, sectionProjectId, agentId }) {
+function loadMoveController({
+  targetProjectId,
+  sectionProjectId,
+  agentId,
+  projectIdentifier = "T",
+}) {
   const calls = { downstream: 0, queue: 0 };
   const currentTask = {
     id: TASK_ID,
@@ -540,7 +545,8 @@ function loadMoveController({ targetProjectId, sectionProjectId, agentId }) {
         return knownProjects.has(where.id)
           ? {
               id: where.id,
-              uniqueIdentifier: where.id === SOURCE_PROJECT ? "HTPR" : "T",
+              uniqueIdentifier:
+                where.id === SOURCE_PROJECT ? "HTPR" : projectIdentifier,
               teamId: "team-1",
             }
           : null;
@@ -618,7 +624,7 @@ function loadMoveController({ targetProjectId, sectionProjectId, agentId }) {
   };
 }
 
-test("cross-board moves preserve the ticket key while allocating a destination index", async () => {
+test("cross-board moves adopt the destination ticket identity", async () => {
   const { move, calls } = loadMoveController({
     targetProjectId: OWNER_PROJECT,
     sectionProjectId: OWNER_PROJECT,
@@ -629,10 +635,25 @@ test("cross-board moves preserve the ticket key while allocating a destination i
   assert.equal(result.success, true);
   assert.equal(result.task.projectId, OWNER_PROJECT);
   assert.equal(result.task.uniqueIndex, 1);
-  assert.equal(result.task.ticketNumber, "HTPR-5731");
-  assert.equal(calls.updatedTask.ticketNumber, undefined);
+  assert.equal(result.task.ticketNumber, "T-1");
+  assert.equal(calls.updatedTask.ticketNumber, "T-1");
   assert.equal(calls.updatedTask.cycleId, null);
   assert.equal(calls.allowProjectChange, true);
+});
+
+test("cross-board moves reject a destination without a ticket identifier", async () => {
+  const { move, calls } = loadMoveController({
+    targetProjectId: OWNER_PROJECT,
+    sectionProjectId: OWNER_PROJECT,
+    agentId: null,
+    projectIdentifier: null,
+  });
+
+  const result = await move();
+
+  assert.equal(result.statusCode, 409);
+  assert.equal(result.error, "Target project has no ticket identifier");
+  assert.deepEqual(calls, { downstream: 0, queue: 0 });
 });
 
 test("same-board moves preserve task identity while changing the section", async () => {
