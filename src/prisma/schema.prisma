@@ -2257,6 +2257,7 @@ model AgentRunActivity {
   commentAgentWebhookDeliveryIds String[]  @default([])
   commentBoardWebhookDeliveryIds String[]  @default([])
   commentNotificationsProcessingAt DateTime?
+  commentMentionsAttemptedAt          DateTime?
   commentFcmAttemptedAt               DateTime?
   commentEmailsAttemptedAt            DateTime?
   commentNotificationsCompletedAt     DateTime?

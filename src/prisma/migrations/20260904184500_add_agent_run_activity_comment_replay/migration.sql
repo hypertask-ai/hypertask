@@ -4,6 +4,7 @@ ALTER TABLE "AgentRunActivity"
     ADD COLUMN "commentAgentWebhookDeliveryIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     ADD COLUMN "commentBoardWebhookDeliveryIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     ADD COLUMN "commentNotificationsProcessingAt" TIMESTAMP(3),
+    ADD COLUMN "commentMentionsAttemptedAt" TIMESTAMP(3),
     ADD COLUMN "commentFcmAttemptedAt" TIMESTAMP(3),
     ADD COLUMN "commentEmailsAttemptedAt" TIMESTAMP(3),
     ADD COLUMN "commentNotificationsCompletedAt" TIMESTAMP(3),

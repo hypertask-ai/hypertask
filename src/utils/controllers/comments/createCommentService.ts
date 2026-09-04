@@ -950,15 +950,19 @@ export async function createCommentService(params: CreateCommentParams) {
   const isAgentRunComment = Boolean(
     agentRunActivity || agentRunSelection || agentRunReplayComment,
   );
-  if (isAgentRunComment) {
-    // Queue committed outbox rows before replayable post-commit work can fail.
+  if (agentRunReplayComment?.notificationsCompletedAt) {
     await publishAgentWebhookDeliveries(webhookDeliveryIds);
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
+    return comment;
   }
-  if (agentRunReplayComment?.notificationsCompletedAt) return comment;
   let agentRunCommentNotificationClaim: {
     activityId: string;
     processingAt: Date;
+  } | null = null;
+  let agentRunCommentNotificationState: {
+    commentMentionsAttemptedAt: Date | null;
+    commentFcmAttemptedAt: Date | null;
+    commentEmailsAttemptedAt: Date | null;
   } | null = null;
   try {
     if (isAgentRunComment) {
@@ -993,6 +997,15 @@ export async function createCommentService(params: CreateCommentParams) {
         throw new Error("Run activity comment notifications are still processing");
       }
       agentRunCommentNotificationClaim = { activityId, processingAt };
+      agentRunCommentNotificationState =
+        await prisma.agentRunActivity.findUniqueOrThrow({
+          where: { id: activityId },
+          select: {
+            commentMentionsAttemptedAt: true,
+            commentFcmAttemptedAt: true,
+            commentEmailsAttemptedAt: true,
+          },
+        });
     }
 
     if (resolvedDirectReplyUserId != null) {
@@ -1099,6 +1112,47 @@ export async function createCommentService(params: CreateCommentParams) {
       recipientUserIds.push(resolvedDirectReplyUserId);
     }
     const mentionedUserIds = new Set(getMentionedUserIdsFromCommentText(text));
+    const runMentionProcessing = () =>
+      processMentionsFromCommentText({
+        text,
+        commentId: comment.id,
+        taskId,
+        projectId: task.projectId,
+        mentionedBy: creatorIdNum,
+        fromAgentId: agentId ?? null,
+        skipUserIds:
+          resolvedDirectReplyUserId === null
+            ? []
+            : [resolvedDirectReplyUserId],
+      }).catch((err) =>
+        console.warn("[createCommentService] processMentions failed:", err),
+      );
+    let mentionProcessing: Promise<void> = Promise.resolve();
+    if (isAgentRunComment) {
+      if (
+        !agentRunCommentNotificationClaim ||
+        !agentRunCommentNotificationState
+      ) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      if (!agentRunCommentNotificationState.commentMentionsAttemptedAt) {
+        const reserved = await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentMentionsAttemptedAt: null,
+          },
+          data: { commentMentionsAttemptedAt: new Date() },
+        });
+        if (reserved.count === 0) {
+          throw new Error("Run activity mention notification claim was lost");
+        }
+        mentionProcessing = runMentionProcessing();
+      }
+    } else {
+      mentionProcessing = runMentionProcessing();
+    }
 
     const [_, __, ___, ____, commentCreator, userIds] = await Promise.all([
       prisma.drafts.deleteMany({
@@ -1117,22 +1171,7 @@ export async function createCommentService(params: CreateCommentParams) {
         resolvedDirectReplyUserId,
         Boolean(inboundEmailId || agentRunReplayComment),
       ),
-      agentRunReplayComment
-        ? Promise.resolve()
-        : processMentionsFromCommentText({
-            text,
-            commentId: comment.id,
-            taskId,
-            projectId: task.projectId,
-            mentionedBy: creatorIdNum,
-            fromAgentId: agentId ?? null,
-            skipUserIds:
-              resolvedDirectReplyUserId == null
-                ? []
-                : [resolvedDirectReplyUserId],
-          }).catch((err) =>
-            console.warn("[createCommentService] processMentions failed:", err),
-          ),
+      mentionProcessing,
       processTaskReferences
         ? processTaskReferencesFromCommentText(
             text,
@@ -1151,29 +1190,21 @@ export async function createCommentService(params: CreateCommentParams) {
       idsToSendNotificationsTo(taskId, creatorId, task.userId, task.projectId),
     ]);
 
-    // Publish ordinary comments only after mention notifications exist. Agent
-    // replies can then claim the persisted invocation identified by
-    // reply_to_comment_id.
-    if (!isAgentRunComment) {
-      await publishAgentWebhookDeliveries(webhookDeliveryIds);
-      await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
-    }
+    // Publish only after mention notifications exist. Agent replies can then
+    // claim the persisted invocation identified by reply_to_comment_id.
+    await publishAgentWebhookDeliveries(webhookDeliveryIds);
+    await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     if (isAgentRunComment) {
-      if (!agentRunCommentNotificationClaim) {
+      if (
+        !agentRunCommentNotificationClaim ||
+        !agentRunCommentNotificationState
+      ) {
         throw new Error("Run activity notification claim is missing");
       }
-      // ponytail: FCM and comment email are best-effort for ordinary comments.
-      // Reserve one attempt before handoff so a process exit cannot duplicate it;
-      // guaranteed delivery needs a provider-idempotent notification outbox.
-      const notificationState =
-        await prisma.agentRunActivity.findUniqueOrThrow({
-          where: { id: agentRunCommentNotificationClaim.activityId },
-          select: {
-            commentFcmAttemptedAt: true,
-            commentEmailsAttemptedAt: true,
-          },
-        });
-      if (!notificationState.commentFcmAttemptedAt) {
+      // ponytail: these channels retain the ordinary comment path's best-effort
+      // contract. Reserve one attempt before handoff so a process exit cannot
+      // duplicate it; guaranteed delivery needs a provider-idempotent outbox.
+      if (!agentRunCommentNotificationState.commentFcmAttemptedAt) {
         const devices = await prisma.subscribedDevices.findMany({
           where: { userId: { in: userIds } },
         });
@@ -1199,7 +1230,7 @@ export async function createCommentService(params: CreateCommentParams) {
           comment,
         );
       }
-      if (!notificationState.commentEmailsAttemptedAt) {
+      if (!agentRunCommentNotificationState.commentEmailsAttemptedAt) {
         const reserved = await prisma.agentRunActivity.updateMany({
           where: {
             id: agentRunCommentNotificationClaim.activityId,

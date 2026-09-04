@@ -69,6 +69,7 @@ function activityRow(overrides = {}) {
     commentAgentWebhookDeliveryIds: [],
     commentBoardWebhookDeliveryIds: [],
     commentNotificationsProcessingAt: null,
+    commentMentionsAttemptedAt: null,
     commentFcmAttemptedAt: null,
     commentEmailsAttemptedAt: null,
     commentNotificationsCompletedAt: null,
@@ -786,6 +787,7 @@ test("migration constrains retry keys and elicitation selections", () => {
     replayMigration,
     /"commentNotificationsProcessingAt" TIMESTAMP\(3\)/,
   );
+  assert.match(replayMigration, /"commentMentionsAttemptedAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /"commentFcmAttemptedAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /"commentEmailsAttemptedAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /"commentNotificationsCompletedAt" TIMESTAMP\(3\)/);
@@ -799,6 +801,7 @@ function loadAtomicCommentService(
   publishAgentWebhookDeliveries,
   publishBoardWebhookDeliveries,
   sendDataOnlyFcm,
+  processMentionsFromCommentText,
   extractTaskReferencesFromCommentText,
 ) {
   const noop = async () => {};
@@ -825,7 +828,7 @@ function loadAtomicCommentService(
     "src/utils/controllers/comments/processMentions.ts": {
       getMentionedUserIdsFromCommentText: () => [],
       getMentionedAgentIdsFromCommentText: () => [],
-      processMentionsFromCommentText: noop,
+      processMentionsFromCommentText,
     },
     "src/utils/controllers/comments/extractTaskReferences.ts": {
       extractTaskReferencesFromCommentText,
@@ -908,6 +911,7 @@ function atomicCommentHarness() {
   const publishedAgentWebhookIds = [];
   const publishedBoardWebhookIds = [];
   const fcmCalls = [];
+  const sideEffectOrder = [];
   const updateTaskCalls = [];
   let assigneeLookupCalls = 0;
   let draftDeleteCalls = 0;
@@ -967,6 +971,7 @@ function atomicCommentHarness() {
         if (
           where.commentNotificationsCompletedAt === null ||
           where.commentNotificationsProcessingAt ||
+          where.commentMentionsAttemptedAt === null ||
           where.commentFcmAttemptedAt === null ||
           where.commentEmailsAttemptedAt === null
         ) {
@@ -975,6 +980,8 @@ function atomicCommentHarness() {
             !activity ||
             (where.commentNotificationsCompletedAt === null &&
               activity.commentNotificationsCompletedAt !== null) ||
+            (where.commentMentionsAttemptedAt === null &&
+              activity.commentMentionsAttemptedAt !== null) ||
             (where.commentFcmAttemptedAt === null &&
               activity.commentFcmAttemptedAt !== null) ||
             (where.commentEmailsAttemptedAt === null &&
@@ -1093,11 +1100,21 @@ function atomicCommentHarness() {
       updateTaskCalls.push(args);
       return { status: 200, json: {} };
     },
-    async (ids) => publishedAgentWebhookIds.push([...ids]),
-    async (ids) => publishedBoardWebhookIds.push([...ids]),
+    async (ids) => {
+      publishedAgentWebhookIds.push([...ids]);
+      sideEffectOrder.push("agent webhook");
+    },
+    async (ids) => {
+      publishedBoardWebhookIds.push([...ids]);
+      sideEffectOrder.push("board webhook");
+    },
     async (...args) => {
       fcmCalls.push(args);
+      sideEffectOrder.push("fcm");
       if (failure === "fcm") throw new Error("FCM handoff failed");
+    },
+    async () => {
+      sideEffectOrder.push("mentions");
     },
     () => {
       taskReferenceParseCalls += 1;
@@ -1114,6 +1131,7 @@ function atomicCommentHarness() {
     publishedAgentWebhookIds,
     publishedBoardWebhookIds,
     fcmCalls,
+    sideEffectOrder,
     updateTaskCalls,
     getAssigneeLookupCalls: () => assigneeLookupCalls,
     getDraftDeleteCalls: () => draftDeleteCalls,
@@ -1244,8 +1262,10 @@ test("activity comment links and task counters commit once across replay", async
   assert.equal(harness.task.totalComments, 1);
   assert.deepEqual(harness.task.updatedByUserIds, [6]);
   assert.notEqual(harness.task.updatedAt, originalTaskUpdatedAt);
-  assert.deepEqual(harness.publishedAgentWebhookIds, [["delivery-1"]]);
-  assert.deepEqual(harness.publishedBoardWebhookIds, [[]]);
+  assert.deepEqual(harness.publishedAgentWebhookIds, []);
+  assert.deepEqual(harness.publishedBoardWebhookIds, []);
+  assert.deepEqual(harness.sideEffectOrder, ["mentions"]);
+  assert.ok(harness.elicitation.commentMentionsAttemptedAt instanceof Date);
   assert.equal(harness.fcmCalls.length, 0);
   assert.equal(harness.updateTaskCalls.length, 0);
   assert.equal(harness.getDraftDeleteCalls(), 1);
@@ -1271,6 +1291,7 @@ test("activity comment links and task counters commit once across replay", async
     /notifications are still processing/,
   );
   assert.equal(harness.fcmCalls.length, 0);
+  assert.deepEqual(harness.sideEffectOrder, ["mentions"]);
   assert.equal(
     harness.getAssigneeLookupCalls(),
     assigneeLookupsBeforeBlockedReplay,
@@ -1297,6 +1318,12 @@ test("activity comment links and task counters commit once across replay", async
     /FCM handoff failed/,
   );
   assert.ok(harness.elicitation.commentFcmAttemptedAt instanceof Date);
+  assert.deepEqual(harness.sideEffectOrder, [
+    "mentions",
+    "agent webhook",
+    "board webhook",
+    "fcm",
+  ]);
   assert.equal(harness.elicitation.commentEmailsAttemptedAt, null);
   assert.equal(harness.elicitation.commentNotificationsCompletedAt, null);
   assert.equal(harness.getDraftDeleteCalls(), 2);
@@ -1322,11 +1349,13 @@ test("activity comment links and task counters commit once across replay", async
   assert.deepEqual(harness.publishedAgentWebhookIds, [
     ["delivery-1"],
     ["delivery-1"],
-    ["delivery-1"],
-    ["delivery-1"],
   ]);
-  assert.deepEqual(harness.publishedBoardWebhookIds, [[], [], [], []]);
+  assert.deepEqual(harness.publishedBoardWebhookIds, [[], []]);
   assert.equal(harness.fcmCalls.length, 1);
+  assert.equal(
+    harness.sideEffectOrder.filter((effect) => effect === "mentions").length,
+    1,
+  );
   assert.ok(harness.elicitation.commentEmailsAttemptedAt instanceof Date);
   assert.equal(harness.getDraftDeleteCalls(), 3);
   assert.equal(harness.getTaskReferenceParseCalls(), 3);
@@ -1342,7 +1371,7 @@ test("activity comment links and task counters commit once across replay", async
     },
   });
   assert.equal(harness.fcmCalls.length, 1);
-  assert.equal(harness.publishedAgentWebhookIds.length, 5);
+  assert.equal(harness.publishedAgentWebhookIds.length, 3);
   assert.equal(harness.getDraftDeleteCalls(), 3);
   assert.equal(harness.getTaskReferenceParseCalls(), 3);
   assert.equal(harness.updateTaskCalls.length, 0);
