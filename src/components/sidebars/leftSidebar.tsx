@@ -207,7 +207,7 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
       e.preventDefault();
 
       markBoardSwitchIntent({ surface: "sidebar", projectId: selectedProject.id });
-      goToProjectShortcut(selectedProject.id, true);
+      goToProjectShortcut(selectedProject.id, true, false, undefined, true);
       setShowBoardManager(false);
       setActiveItem(null);
     }
@@ -329,7 +329,7 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
       const projectId = favoritesTQ[index].project.id;
       toggleLeftSidebar();
       markBoardSwitchIntent({ surface: "sidebar", projectId });
-      goToProjectShortcut(projectId, true);
+      goToProjectShortcut(projectId, true, false, undefined, true);
     }
   };
 
@@ -722,7 +722,7 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
                                             [project.id]: Date.now(),
                                           }));
                                           markBoardSwitchIntent({ surface: "sidebar", projectId: project.id });
-                                          goToProjectShortcut(project.id, true);
+                                          goToProjectShortcut(project.id, true, false, undefined, true);
                                           setShowBoardManager(false);
                                           setActiveItem(null);
                                         }}

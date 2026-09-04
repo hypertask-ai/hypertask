@@ -147,8 +147,8 @@ const useCommittedBoardReadinessTrace = ({
 const  LandingPage= ({
   user,
   authenticated,
-  slugs
-    }: { 
+  slugs: slugsProp
+    }: {
   slugs:any,
   user: IUser,
   authenticated: boolean,
@@ -162,6 +162,13 @@ const {
 } = useBoardStartup();
 const isMblForChat = useContext(MobileViewContext)
 const searchParams = useSearchParams()
+// HTPR-6072: the sidebar board switch updates the URL via
+// window.history.pushState (shallow - no server round trip), which
+// next/navigation's useSearchParams reflects immediately. Read the routed
+// project id from there so a shallow switch is picked up without a fresh
+// render from page.tsx; slugsProp (the server-rendered id) is only used
+// pre-hydration, before searchParams has a value.
+const slugs = searchParams?.get('id') ?? slugsProp
 const pilotParameter = searchParams?.get("local_db")
 const currentView = searchParams?.get('view')
 const requestedSurface = searchParams?.get('tutorial') === '1'
@@ -929,13 +936,18 @@ useEffect(() => {
       }, 1000)
       return () => clearTimeout(retryTimer)
     } else {
-      // Max retries reached - project likely doesn't exist or user doesn't have access
-      console.error(`❌ Project not found after ${MAX_RETRIES} retries. Redirecting to homepage.`, { slugs })
+      // Max retries reached - project likely doesn't exist or user doesn't have
+      // access. This also catches a shallow sidebar switch (HTPR-6072) landing
+      // on a project the client's own project list rejects: re-push the
+      // current URL as a real navigation so page.tsx's server-side access gate
+      // (getProjectForValidation) renders Unauthorized/NoBoardsEmptyState
+      // instead of leaving the client stuck retrying.
+      console.error(`❌ Project not found after ${MAX_RETRIES} retries. Falling back to a full navigation.`, { slugs })
       // Reset retry counter for next navigation
       retryCountRef.current = 0
       setProjectLookupFailed(true)
-      // Redirect to homepage or show error
-      router.push('/')
+      const currentSearch = searchParams?.toString()
+      router.push(`${pathname}${currentSearch ? `?${currentSearch}` : ""}`)
     }
   } else if (projectIndex >= 0) {
     // Project found - reset retry counter

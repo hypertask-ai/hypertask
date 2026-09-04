@@ -44,6 +44,7 @@ export const useProjectQuery = () => {
     updateBoardCookie: boolean = false,
     updateSearchParamsOnly: boolean = false,
     surface?: "board" | "table",
+    shallow: boolean = false,
   ) => {
     // Track board usage
     setLastUsedBoards((prev) => ({
@@ -80,6 +81,18 @@ export const useProjectQuery = () => {
     // Only update search params without navigation
     if (updateSearchParamsOnly) {
       router.replace(destination);
+      return;
+    }
+
+    // HTPR-6072: the sidebar board switcher goes shallow - pushState updates
+    // the URL and next/navigation's useSearchParams picks it up immediately,
+    // without the server round trip router.push triggers (which remounts
+    // LandingPage on every switch). Only the sidebar switcher passes
+    // shallow=true; every other caller (task detail, calendar, command
+    // palette, etc.) keeps the full navigation, including its server-side
+    // access gate.
+    if (shallow) {
+      window.history.pushState(null, "", destination);
       return;
     }
 

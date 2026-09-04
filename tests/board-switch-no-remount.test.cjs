@@ -303,3 +303,81 @@ test("HTPR-6072: the surface-resolution effect runs before paint (useLayoutEffec
     "expected surfaceResolutionRef and surfaceInitializedFor to still be set together in the fresh-resolution branch",
   );
 });
+
+test("HTPR-6072: LandingPage reads the routed project id from useSearchParams, not only its server prop", () => {
+  // A shallow sidebar switch updates the URL via window.history.pushState,
+  // which page.tsx never sees (no new server render, no new slugs prop).
+  // useSearchParams reflects a pushState URL change immediately (Next
+  // 14.1+), so LandingPage must derive the routed project id from there for
+  // a shallow switch to be picked up at all.
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  assert.ok(
+    /slugs: slugsProp/.test(src),
+    "expected the slugs prop to be renamed so it can be shadowed by a client-derived value",
+  );
+  assert.ok(
+    /const slugs = searchParams\?\.get\('id'\) \?\? slugsProp/.test(src),
+    "expected slugs to be derived from useSearchParams with the server prop only as a pre-hydration fallback",
+  );
+});
+
+test("HTPR-6072: the sidebar board switch goes shallow via pushState, not router.push", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/hooks/General/useProjectQuery.ts"),
+    "utf8",
+  );
+  assert.ok(
+    /shallow: boolean = false,/.test(src),
+    "expected goToProjectShortcut to take a shallow flag defaulting to false",
+  );
+  const shallowBranch = src.match(
+    /if \(shallow\) \{\s*window\.history\.pushState\(null, "", destination\);\s*return;\s*\}/,
+  );
+  assert.ok(
+    shallowBranch,
+    "expected the shallow branch to use window.history.pushState instead of router.push",
+  );
+  // shallow must be checked before the unconditional router.push so it's a
+  // real early return, not a dead branch.
+  const shallowIndex = src.indexOf("if (shallow)");
+  const pushIndex = src.indexOf("router.push(destination)");
+  assert.ok(shallowIndex > -1 && pushIndex > -1 && shallowIndex < pushIndex);
+});
+
+test("HTPR-6072: only the sidebar switcher passes shallow=true to goToProjectShortcut", () => {
+  // Every other caller (task detail, calendar, command palette, pinned,
+  // starred, notifications, create-task) must keep going through a full
+  // router.push so their server-side access gate and metadata stay intact.
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/components/sidebars/leftSidebar.tsx"),
+    "utf8",
+  );
+  const shallowCalls = src.match(/goToProjectShortcut\([^)]*true\)/g) || [];
+  assert.strictEqual(
+    shallowCalls.length,
+    3,
+    "expected exactly the 3 sidebar board-switcher call sites to pass shallow=true",
+  );
+});
+
+test("HTPR-6072: a project the client can't find falls back to a full navigation, not the homepage", () => {
+  // A shallow switch that lands on a project the client's own project list
+  // rejects (access revoked, bad id) must re-navigate for real so the
+  // server-side access gate can render Unauthorized/NoBoardsEmptyState,
+  // rather than silently bouncing to "/".
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  assert.ok(
+    !/router\.push\('\/'\)/.test(src),
+    "expected the project-not-found fallback to no longer hard-redirect to the homepage",
+  );
+  assert.ok(
+    /router\.push\(`\$\{pathname\}\$\{currentSearch \? `\?\$\{currentSearch\}` : ""\}`\)/.test(src),
+    "expected the project-not-found fallback to re-push the current URL as a real navigation",
+  );
+});
