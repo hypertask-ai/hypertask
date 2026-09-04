@@ -12,6 +12,7 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-5992-mobile-all-tasks",
   "htpr-6091-feature-flags",
   "htpr-6112-copy-current-url",
+  "htpr-6116-figma-node-preview",
 ] as const;
 export const FEATURE_FLAG_MODES = ["OWNER_ONLY", "EVERYONE", "OFF"] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
