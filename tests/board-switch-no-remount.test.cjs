@@ -203,3 +203,41 @@ test("HTPR-6072: a failed sub-task lookup does not leave taskInfo set with no mo
     "expected the catch block to clear taskInfo so it doesn't stay set with the modal never opening",
   );
 });
+
+test("HTPR-6072: the project re-sync effect runs before paint (useLayoutEffect, not useEffect)", () => {
+  // A passive useEffect runs after the browser paints, so on a switch React
+  // would paint one frame with the previous board's local currentProject
+  // and sections before this effect corrects them - a visible flash of the
+  // wrong board. useLayoutEffect runs before paint, so that frame is never
+  // shown.
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const effectMatch = src.match(
+    /(useLayoutEffect|useEffect)\(\(\) => \{[\s\S]{0,40}setProjects\(_allProjects\)[\s\S]*?\}, \[_allProjects, _projectIndex\]\)/,
+  );
+  assert.ok(effectMatch, "expected the project re-sync effect to still exist");
+  assert.equal(
+    effectMatch[1],
+    "useLayoutEffect",
+    "the re-sync effect must be useLayoutEffect so a switch never paints a stale board frame",
+  );
+});
+
+test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) frame", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const readinessEffectMatch = src.match(
+    /useLayoutEffect\(\(\) => \{\s*if \(!boardReadinessTraceScope\) return;[\s\S]{0,600}/,
+  );
+  assert.ok(readinessEffectMatch, "expected the readiness completion effect to still exist");
+  assert.ok(
+    /if \(_currentProject\?\.id !== _allProjects\[_projectIndex\]\?\.id\) return;/.test(
+      readinessEffectMatch[0],
+    ),
+    "expected the readiness effect to bail when local currentProject still lags the routed project",
+  );
+});

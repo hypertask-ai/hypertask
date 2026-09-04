@@ -1240,6 +1240,12 @@ const boardReadinessTraceScope = useCommittedBoardReadinessTrace({
 
 useLayoutEffect(() => {
   if (!boardReadinessTraceScope) return;
+  // HTPR-6072: belt-and-suspenders on top of the useLayoutEffect re-sync
+  // above - a readiness sample must never be taken while local state (the
+  // currentProject this render actually used) still lags the routed
+  // project. If they disagree, this frame is transitional; skip it rather
+  // than mark or complete a trace against it.
+  if (_currentProject?.id !== _allProjects[_projectIndex]?.id) return;
   const readinessCompletion = readinessCompletionRef.current;
   markBoardReadinessPhase("firstBoardCommit", boardReadinessTraceScope);
   readinessFrameRef.current = window.requestAnimationFrame(() => {
@@ -1313,16 +1319,20 @@ useViewCyclingShortcuts(_currentProject)
 
   },[_currentProject, activeBuiltinViews])
 
-useEffect(() => {
+// HTPR-6072: this is useLayoutEffect, not useEffect. SectionComp no longer
+// remounts on a board switch, so this is the only thing that re-syncs local
+// state to the newly selected project - a passive effect runs after paint,
+// which would let one frame render with the previous board's currentProject
+// and sections before this fires. useLayoutEffect runs before the browser
+// paints, so that stale frame is never shown.
+useLayoutEffect(() => {
 
   setProjects(_allProjects)
   setCurrentProject(_allProjects[_projectIndex])
   setRecoilCurrentProject(_allProjects[_projectIndex])
-  // HTPR-6072: SectionComp no longer remounts on a board switch, so this
-  // effect is the only thing that re-syncs local state to the newly
-  // selected project - it must also fire on _projectIndex changing alone
-  // (_allProjects, the full project list, often doesn't change reference
-  // between two boards in the same list).
+  // Must also fire on _projectIndex changing alone (_allProjects, the full
+  // project list, often doesn't change reference between two boards in the
+  // same list).
   setCurrentIndex(_projectIndex)
 
   setSections(_allProjects[_projectIndex].sections)
