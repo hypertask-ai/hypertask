@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const ts = require("typescript");
 
 const read = (relativePath) =>
   fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
@@ -11,6 +12,57 @@ const taskListRow = read(
   "src/components/Common/TaskRowComponents/TaskListRow.tsx",
 );
 const flags = read("src/lib/flags.ts");
+const allTasksSource = ts.createSourceFile(
+  "AllTasks.tsx",
+  allTasks,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TSX,
+);
+const jsxElements = [];
+const collectJsxElements = (node) => {
+  if (ts.isJsxElement(node)) jsxElements.push(node);
+  ts.forEachChild(node, collectJsxElements);
+};
+collectJsxElements(allTasksSource);
+
+const attributeNamed = (element, name) =>
+  element.openingElement.attributes.properties.find(
+    (attribute) =>
+      ts.isJsxAttribute(attribute) &&
+      attribute.name.getText(allTasksSource) === name,
+  );
+
+const attributeText = (element, name) => {
+  const initializer = attributeNamed(element, name)?.initializer;
+  if (!initializer) return "";
+  if (ts.isStringLiteral(initializer)) return initializer.text;
+  return initializer.getText(allTasksSource);
+};
+
+const guardedBy = (node, condition) => {
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+    if (
+      ts.isBinaryExpression(ancestor) &&
+      ancestor.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
+      ancestor.left.getText(allTasksSource) === condition
+    ) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const mobileTabButton = jsxElements.find(
+  (element) =>
+    element.openingElement.tagName.getText(allTasksSource) === "button" &&
+    attributeText(element, "key").includes("mobile-split-alltasks-"),
+);
+const legacyFooter = jsxElements.find(
+  (element) =>
+    element.openingElement.tagName.getText(allTasksSource) === "div" &&
+    attributeText(element, "className").includes("inbox_footer"),
+);
 
 test("All Tasks owns one mobile horizontal inset around its header and rows", () => {
   assert.match(allTasks, /className="px-4 @md:px-0"/);
@@ -30,24 +82,43 @@ test("the mobile redesign is gated behind its declared feature flag", () => {
     allTasks,
     /useFlag\("htpr-5992-mobile-all-tasks"\)/,
   );
-  assert.match(
-    allTasks,
-    /\{mobileRedesignEnabled && \(\s*<div[^>]+>[\s\S]*?mobile-split-alltasks-/,
-  );
-  assert.match(
-    allTasks,
-    /\{!mobileRedesignEnabled && \(\s*<div className="flex inbox_footer/,
-  );
+  assert.ok(mobileTabButton, "expected the redesigned mobile tab button");
+  assert.equal(guardedBy(mobileTabButton, "mobileRedesignEnabled"), true);
+  assert.ok(legacyFooter, "expected the legacy mobile tab footer");
+  assert.equal(guardedBy(legacyFooter, "!mobileRedesignEnabled"), true);
 });
 
 test("the redesigned project tabs are inline, scrollable, and selectable", () => {
-  assert.match(
-    allTasks,
-    /mobile-split-alltasks-[\s\S]*?aria-pressed=\{activeSplit === index\}[\s\S]*?updateSplitAndTasks\(index\)/,
+  assert.ok(mobileTabButton);
+  const pressed = attributeNamed(mobileTabButton, "aria-pressed")?.initializer;
+  const onClick = attributeNamed(mobileTabButton, "onClick")?.initializer;
+  assert.ok(pressed && ts.isJsxExpression(pressed));
+  assert.ok(onClick && ts.isJsxExpression(onClick));
+  assert.equal(pressed.expression?.getText(allTasksSource), "activeSplit === index");
+  assert.equal(
+    onClick.expression?.getText(allTasksSource),
+    "() => updateSplitAndTasks(index)",
   );
+
+  let tabBar;
+  for (
+    let ancestor = mobileTabButton.parent;
+    ancestor;
+    ancestor = ancestor.parent
+  ) {
+    if (
+      ts.isJsxElement(ancestor) &&
+      ancestor.openingElement.tagName.getText(allTasksSource) === "div" &&
+      attributeText(ancestor, "className").includes("overflow-x-auto")
+    ) {
+      tabBar = ancestor;
+      break;
+    }
+  }
+  assert.ok(tabBar, "expected an inline scrolling tab container");
   assert.match(
-    allTasks,
-    /overflow-x-auto border-b border-border-light-gray-thin pb-2 @md:hidden/,
+    attributeText(tabBar, "className"),
+    /border-b border-border-light-gray-thin pb-2 @md:hidden/,
   );
   assert.match(allTasks, /activeSplit === 0/);
 });
