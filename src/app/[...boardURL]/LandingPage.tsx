@@ -1047,7 +1047,8 @@ return (
         projectIndex >= 0 && // Only render if project index is valid
         data.updatedProjects[projectIndex] &&
         isBoardPayloadHydrated(data.updatedProjects[projectIndex]) ? (
-           <SectionComp
+           <SectionComp 
+            key={readinessRouteEntryId}
             _allProjects={projectsForSection}
             _projectCount={data.updatedProjects.length}
             _currentUser={user}
@@ -1199,13 +1200,9 @@ const kanbanContainerRef = useRef<HTMLDivElement>(null);
 const restoredScrollForProject = useRef<number | null>(null);
 const restoringScroll = useRef(false);
 const readinessFrameRef = useRef<number | null>(null);
-// HTPR-6072: bumped by every handleStateChangesOnBoardChange call so an
-// overlapping, slower switch can detect it's no longer the latest one.
-const boardSwitchGenerationRef = useRef(0);
 const readinessPaintFrameRef = useRef<number | null>(null);
 const readinessEntryKey = `${_currentUser.id}:${_readinessProjectId}:${_readinessRouteEntryId}`;
 const readinessCompletionRef = useRef({
-  entryKey: readinessEntryKey,
   accountId: _currentUser.id,
   projectId: _readinessProjectId,
   authenticated: _authenticated,
@@ -1213,25 +1210,6 @@ const readinessCompletionRef = useRef({
   readinessSource: _readinessSource,
   viewSurface: boardLayout,
 });
-// HTPR-6072: SectionComp no longer remounts on a board switch, so this ref's
-// one-time useRef initializer would otherwise stay pinned to the first
-// board forever. Recreate it whenever the readiness entry changes, but
-// leave it untouched (frozen) for re-renders within the same entry. A
-// layout effect (not a render-time write) so it runs once per entry,
-// before the readiness completion effect below reads it.
-useLayoutEffect(() => {
-  if (readinessCompletionRef.current.entryKey === readinessEntryKey) return;
-  readinessCompletionRef.current = {
-    entryKey: readinessEntryKey,
-    accountId: _currentUser.id,
-    projectId: _readinessProjectId,
-    authenticated: _authenticated,
-    localDatabasePilot: _localDatabasePilotEnabled,
-    readinessSource: _readinessSource,
-    viewSurface: boardLayout,
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [readinessEntryKey]);
 const boardReadinessTraceScope = useCommittedBoardReadinessTrace({
   accountId: _currentUser.id,
   projectId: _readinessProjectId,
@@ -1240,12 +1218,6 @@ const boardReadinessTraceScope = useCommittedBoardReadinessTrace({
 
 useLayoutEffect(() => {
   if (!boardReadinessTraceScope) return;
-  // HTPR-6072: belt-and-suspenders on top of the useLayoutEffect re-sync
-  // above - a readiness sample must never be taken while local state (the
-  // currentProject this render actually used) still lags the routed
-  // project. If they disagree, this frame is transitional; skip it rather
-  // than mark or complete a trace against it.
-  if (_currentProject?.id !== _allProjects[_projectIndex]?.id) return;
   const readinessCompletion = readinessCompletionRef.current;
   markBoardReadinessPhase("firstBoardCommit", boardReadinessTraceScope);
   readinessFrameRef.current = window.requestAnimationFrame(() => {
@@ -1319,26 +1291,17 @@ useViewCyclingShortcuts(_currentProject)
 
   },[_currentProject, activeBuiltinViews])
 
-// HTPR-6072: this is useLayoutEffect, not useEffect. SectionComp no longer
-// remounts on a board switch, so this is the only thing that re-syncs local
-// state to the newly selected project - a passive effect runs after paint,
-// which would let one frame render with the previous board's currentProject
-// and sections before this fires. useLayoutEffect runs before the browser
-// paints, so that stale frame is never shown.
-useLayoutEffect(() => {
+useEffect(() => {
 
   setProjects(_allProjects)
   setCurrentProject(_allProjects[_projectIndex])
   setRecoilCurrentProject(_allProjects[_projectIndex])
-  // Must also fire on _projectIndex changing alone (_allProjects, the full
-  // project list, often doesn't change reference between two boards in the
-  // same list).
-  setCurrentIndex(_projectIndex)
+  // setCurrentIndex(_projectIndex)
 
   setSections(_allProjects[_projectIndex].sections)
 
   // queryClient.refetchQueries({queryKey:["getAllTeamsMinimal"]})
-}, [_allProjects, _projectIndex])
+}, [_allProjects])
 
 // ================= detect horizontal scrollbar
 useEffect(() => {
@@ -1441,15 +1404,8 @@ const ensureBoardLoaded = async (index:number):Promise<IProject|null> => {
 }
 
 async function handleStateChangesOnBoardChange (index:number, saveBackSections?:ISection[]){
-  // HTPR-6072: SectionComp stays mounted across a switch now, so an
-  // overlapping switch (a second click before the first one's fetch
-  // resolves) can no longer rely on the old instance being torn down to
-  // drop a stale result. Tag each call and bail if a newer switch has
-  // started by the time this one's fetch comes back.
-  const switchGeneration = ++boardSwitchGenerationRef.current;
   const loaded = await ensureBoardLoaded(index);
   if (!loaded) return;
-  if (switchGeneration !== boardSwitchGenerationRef.current) return;
   const updatedProjects = deepCopy(projects);
   if (saveBackSections) updatedProjects[currentIndex].sections = saveBackSections;
   updatedProjects[index] = deepCopy(loaded);
