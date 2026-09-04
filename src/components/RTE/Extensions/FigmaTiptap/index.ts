@@ -15,11 +15,6 @@ declare module '@tiptap/core' {
 const figmaRegex =
   /https:\/\/[\w\.-]+\.?figma.com\/([\w-]+)\/([0-9a-zA-Z]{22,128})(?:\/.*)?$/;
 
-// HTPR-5149: ProseMirror can recreate a node view several times together, so
-// share only in-flight requests. Settled previews are connection-specific and
-// must go back through the browser's cookie-partitioned HTTP cache.
-const oembedCache = new Map<string, Promise<FigmaPreviewData>>();
-
 type FigmaPreviewData = {
   canConnectFigma?: boolean;
   height?: number;
@@ -29,24 +24,13 @@ type FigmaPreviewData = {
   width?: number;
 };
 
-const fetchFigmaOembed = (figmaUrl: string): Promise<FigmaPreviewData> => {
-  const cached = oembedCache.get(figmaUrl);
-  if (cached) return cached;
-
-  const request = fetch(
-    `/api/figma/oembed?url=${encodeURIComponent(figmaUrl)}`
-  ).then((response) => {
-    if (!response.ok) throw new Error('Figma preview unavailable');
-    return response.json();
-  });
-
-  oembedCache.set(figmaUrl, request);
-  const clearSettledRequest = () => {
-    if (oembedCache.get(figmaUrl) === request) oembedCache.delete(figmaUrl);
-  };
-  void request.then(clearSettledRequest, clearSettledRequest);
-  return request;
-};
+const fetchFigmaOembed = (figmaUrl: string): Promise<FigmaPreviewData> =>
+  fetch(`/api/figma/oembed?url=${encodeURIComponent(figmaUrl)}`).then(
+    (response) => {
+      if (!response.ok) throw new Error('Figma preview unavailable');
+      return response.json();
+    },
+  );
 
 export const renderFigmaPreview = (
   preview: HTMLButtonElement,
