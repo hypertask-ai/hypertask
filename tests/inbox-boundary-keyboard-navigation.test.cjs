@@ -8,9 +8,12 @@ const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
   interopDefault: true,
 });
-const { jumpToInboxBoundary, shouldPreserveNativeInboxTab } = jiti(
-  path.join(root, "src/lib/inboxKeyboardNavigation.ts"),
-);
+const {
+  getAdjacentInboxKeyboardRow,
+  jumpToInboxBoundary,
+  reconcileInboxKeyboardRow,
+  shouldPreserveNativeInboxTab,
+} = jiti(path.join(root, "src/lib/inboxKeyboardNavigation.ts"));
 
 test("draft rows do not disable desktop split cycling unless a draft control has focus", () => {
   assert.equal(shouldPreserveNativeInboxTab(null), false);
@@ -72,6 +75,56 @@ test("an empty inbox has no boundary target", () => {
 
   assert.equal(targetIndex, null);
   assert.equal(lookedUp, false);
+});
+
+test("J and K traverse drafts and notifications in rendered order", () => {
+  const rows = [
+    { key: "draft-9", kind: "draft" },
+    { key: "notification-4", kind: "notification" },
+    { key: "notification-5", kind: "notification" },
+  ];
+
+  assert.equal(
+    getAdjacentInboxKeyboardRow(rows, "notification-4", -1)?.key,
+    "draft-9",
+  );
+  assert.equal(
+    getAdjacentInboxKeyboardRow(rows, "draft-9", 1)?.key,
+    "notification-4",
+  );
+  assert.equal(
+    getAdjacentInboxKeyboardRow(rows, "notification-5", 1)?.key,
+    "notification-5",
+  );
+});
+
+test("mixed inbox focus initializes and reconciles by stable row identity", () => {
+  const originalRows = [
+    { key: "draft-9" },
+    { key: "notification-4" },
+  ];
+  assert.equal(
+    getAdjacentInboxKeyboardRow(originalRows, null, 1)?.key,
+    "draft-9",
+  );
+
+  const insertedRows = [{ key: "notification-8" }, ...originalRows];
+  assert.equal(
+    reconcileInboxKeyboardRow(
+      insertedRows,
+      "draft-9",
+      "notification-8",
+    )?.key,
+    "draft-9",
+  );
+  assert.equal(
+    reconcileInboxKeyboardRow(
+      insertedRows.filter((row) => row.key !== "draft-9"),
+      "draft-9",
+      "notification-8",
+    )?.key,
+    "notification-8",
+  );
 });
 
 test("the caller can restrict scrolling to the active split", () => {

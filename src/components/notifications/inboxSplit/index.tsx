@@ -25,10 +25,13 @@ import NotificationRow, { Seen } from "../NotificationRow";
 import RemindMeComponent from "@/components/Modals/RemindMe/RemindMeComponent";
 import SwipeableNotificationRow from "./SwipeableNotificationRow";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import useUpdateInView from "@/hooks/Inbox/useUpdateInView";
 import globalConstants from "@/lib/constants";
-import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
+import {
+  returnIfModalOrInputActive,
+  scrollToCenterIfNearBottom,
+  scrollToCenterIfNearTop,
+} from "@/utils/helperFunctions/helperFunctions";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import SubtaskLinkingModal from "@/components/Modals/SubtaskLinkingModal/SubtaskLinking";
@@ -51,7 +54,11 @@ import { inboxDataQueryKey } from "@/hooks/Inbox/useGetNotifications";
 import { updateInboxOptimistically } from "@/lib/inboxSync/optimistic";
 import InboxDraftRow from "@/components/notifications/InboxDraftRow";
 import Tooltip from "@/components/Common/Tooltip";
-import { jumpToInboxBoundary } from "@/lib/inboxKeyboardNavigation";
+import {
+  getAdjacentInboxKeyboardRow,
+  jumpToInboxBoundary,
+  reconcileInboxKeyboardRow,
+} from "@/lib/inboxKeyboardNavigation";
 import { markTaskDetailNavigationStart } from "@/lib/analytics/taskDetailReadiness";
 
 interface Props {
@@ -92,6 +99,12 @@ type InboxTimelineItem =
       draft: IUserDraft;
       date: Date;
     };
+
+type InboxKeyboardTimelineRow = {
+  key: string;
+  domId: string;
+  item: InboxTimelineItem;
+};
 
 interface GroupedInboxItems {
   [key: string]: {
@@ -288,6 +301,9 @@ const InboxSplit = ({
   const [globalFocus, setGlobalFocus] = useRecoilState(
     globalNotificationFocusAtom,
   );
+  const [activeKeyboardRowKey, setActiveKeyboardRowKey] = useState<
+    string | null
+  >(null);
   const { goToProjectShortcut } = useProjectQuery();
   const { updateInView } = useUpdateInView({
     value,
@@ -297,7 +313,6 @@ const InboxSplit = ({
     _notifications,
   });
   const queryClient = useQueryClient();
-  const { moveIdxDown, moveIdxUp } = useGlobalFocusHandler(queryKey);
   const [showCommands, ____] = useRecoilState(showCommandsAtom);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
@@ -375,9 +390,80 @@ const InboxSplit = ({
     );
   }, [_notifications, activeDrafts, selectedSplit]);
   const groupedInboxEntries = Object.entries(groupedInboxItems);
+  const keyboardRows = useMemo<InboxKeyboardTimelineRow[]>(
+    () =>
+      Object.values(groupedInboxItems).flatMap(({ items }) =>
+        items.map((item) =>
+          item.kind === "draft"
+            ? {
+                key: `draft-${item.draft.id}`,
+                domId: `inbox-draft-${item.draft.id}`,
+                item,
+              }
+            : {
+                key: `notification-${item.notification.id}`,
+                domId: `inbox-${item.notification.id}`,
+                item,
+              },
+        ),
+      ),
+    [groupedInboxItems],
+  );
+  const fallbackKeyboardRowKey =
+    keyboardRows.find(
+      (row) =>
+        row.item.kind === "notification" &&
+        row.item.notificationIndex === globalFocus.currIdx,
+    )?.key ?? null;
+  const selectedKeyboardRow = reconcileInboxKeyboardRow(
+    keyboardRows,
+    activeKeyboardRowKey,
+    fallbackKeyboardRowKey,
+  );
+  const selectedKeyboardNotificationIndex =
+    selectedKeyboardRow?.item.kind === "notification"
+      ? selectedKeyboardRow.item.notificationIndex
+      : null;
   const selectAllGroupKey = groupedInboxItems.today
     ? "today"
     : groupedInboxEntries[groupedInboxEntries.length - 1]?.[0];
+
+  const focusKeyboardRow = (
+    row: InboxKeyboardTimelineRow,
+    direction?: -1 | 1,
+  ) => {
+    setActiveKeyboardRowKey(row.key);
+    if (row.item.kind === "notification") {
+      const notificationIndex = row.item.notificationIndex;
+      setGlobalFocus((previous) => ({
+        ...previous,
+        currIdx: notificationIndex,
+      }));
+    }
+    const activeElement = activeSplitRef.current?.querySelector<HTMLElement>(
+      `[id="${row.domId}"]`,
+    );
+    if (activeElement && direction === -1) {
+      scrollToCenterIfNearTop(activeElement);
+    } else if (activeElement && direction === 1) {
+      scrollToCenterIfNearBottom(activeElement);
+    }
+  };
+
+  const openDraft = (draft: IUserDraft) => {
+    setTasksPlayList(
+      activeDrafts.map(({ task }) => ({
+        projectId: task.projectId,
+        uniqueIndex: task.uniqueIndex,
+      })),
+    );
+    navigateToTask(
+      draft.task.projectId,
+      draft.task.uniqueIndex,
+      "push",
+      "?inboxFlow=true&reply=true",
+    );
+  };
 
   const renderSelectAllControl = () =>
     selectedIdsArray.length > 0 ? (
@@ -412,6 +498,25 @@ const InboxSplit = ({
   // (HTPR-4872). `value === index` is the same active-split test already used
   // for keyboard shortcuts below.
   const isActiveSplit = value === index;
+  useEffect(() => {
+    if (
+      !isActiveSplit ||
+      selectedKeyboardNotificationIndex === null ||
+      selectedKeyboardNotificationIndex === globalFocus.currIdx
+    ) {
+      return;
+    }
+    setGlobalFocus((previous) => ({
+      ...previous,
+      currIdx: selectedKeyboardNotificationIndex,
+    }));
+  }, [
+    globalFocus.currIdx,
+    isActiveSplit,
+    selectedKeyboardNotificationIndex,
+    setGlobalFocus,
+  ]);
+
   useEffect(() => {
     if (!isActiveSplit) return;
     if (!reducedSearchActive) {
@@ -477,7 +582,10 @@ const InboxSplit = ({
     if (controller[e.keyCode]) {
       controller[e.keyCode].pressed = true;
     }
-    const bulkResult = bulkHandleKeyDown(e, globalFocus.currIdx);
+    const bulkResult =
+      selectedKeyboardNotificationIndex === null
+        ? undefined
+        : bulkHandleKeyDown(e, selectedKeyboardNotificationIndex);
 
     // If bulk action handled it, check if we need to update focus
     if (e.defaultPrevented) {
@@ -485,10 +593,12 @@ const InboxSplit = ({
         bulkResult?.newFocusIndex !== undefined &&
         bulkResult.newFocusIndex !== null
       ) {
-        setGlobalFocus((prev) => ({
-          ...prev,
-          currIdx: bulkResult.newFocusIndex!,
-        }));
+        const targetRow = keyboardRows.find(
+          (row) =>
+            row.item.kind === "notification" &&
+            row.item.notificationIndex === bulkResult.newFocusIndex,
+        );
+        if (targetRow) focusKeyboardRow(targetRow);
         return;
       }
     }
@@ -532,10 +642,12 @@ const InboxSplit = ({
           ).find((element) => element.id === rowId) ?? null,
       );
       if (targetIndex !== null) {
-        setGlobalFocus((prev) => ({
-          ...prev,
-          currIdx: targetIndex,
-        }));
+        const targetRow = keyboardRows.find(
+          (row) =>
+            row.item.kind === "notification" &&
+            row.item.notificationIndex === targetIndex,
+        );
+        if (targetRow) focusKeyboardRow(targetRow);
       }
       // Prevent further G combos after this triggers
       return;
@@ -548,7 +660,10 @@ const InboxSplit = ({
       gSequenceActive()
     ) {
       lastgClick.current = null;
-      const focusedProjectId = _notifications[globalFocus.currIdx]?.projectId;
+      const focusedProjectId =
+        selectedKeyboardRow?.item.kind === "draft"
+          ? selectedKeyboardRow.item.draft.task.projectId
+          : selectedKeyboardRow?.item.notification.projectId;
       if (!focusedProjectId || focusedProjectId === currentProject?.id)
         router.push("/");
       else goToProjectShortcut(focusedProjectId, true);
@@ -592,23 +707,39 @@ const InboxSplit = ({
 
     if (e.keyCode === KeyCodes.ENTER) {
       e.preventDefault();
-      openTask("view");
+      if (selectedKeyboardRow?.item.kind === "draft") {
+        openDraft(selectedKeyboardRow.item.draft);
+      } else {
+        openTask("view");
+      }
+      return;
     }
 
     // pressing r for reply
-    if (e.keyCode === KeyCodes.R && cmdControl) openTask("reply");
+    if (e.keyCode === KeyCodes.R && cmdControl) {
+      if (selectedKeyboardRow?.item.kind === "draft") {
+        openDraft(selectedKeyboardRow.item.draft);
+        return;
+      }
+      openTask("reply");
+    }
     // [alt][v] for audio reply
-    else if (e.keyCode === KeyCodes.V && e.altKey && !e.shiftKey)
+    else if (
+      e.keyCode === KeyCodes.V &&
+      e.altKey &&
+      !e.shiftKey &&
+      selectedKeyboardRow?.item.kind === "notification"
+    )
       openTask("audio");
     // ================ arrow for down movement, [j]
     else if (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN) {
       e.preventDefault();
-      const newIdx = await moveIdxDown(_notifications);
-
-      // Update anchor if not in selection mode
-      // if (!e.shiftKey && selectedCount === 0) {
-      //   updateAnchor(newIdx)
-      // }
+      const targetRow = getAdjacentInboxKeyboardRow(
+        keyboardRows,
+        selectedKeyboardRow?.key ?? null,
+        1,
+      );
+      if (targetRow) focusKeyboardRow(targetRow, 1);
       return;
     }
     // ================ arrow for up movement, [k]
@@ -617,16 +748,16 @@ const InboxSplit = ({
       !cmdControl
     ) {
       e.preventDefault();
-      const newIdx = moveIdxUp(_notifications);
-
-      // Update anchor if not in selection mode
-      // if (!e.shiftKey && selectedCount === 0) {
-      //   updateAnchor(newIdx)
-      // }
+      const targetRow = getAdjacentInboxKeyboardRow(
+        keyboardRows,
+        selectedKeyboardRow?.key ?? null,
+        -1,
+      );
+      if (targetRow) focusKeyboardRow(targetRow, -1);
       return;
     }
 
-    if (!_notifications[globalFocus.currIdx]) return;
+    if (selectedKeyboardRow?.item.kind !== "notification") return;
 
     // // [t] to go to project page
     // if (e.keyCode === KeyCodes.T && lastgClick.current !== null) {
@@ -646,11 +777,12 @@ const InboxSplit = ({
     }
 
     // [u] for unread
-    if (e.keyCode === KeyCodes.U && _notifications[globalFocus.currIdx]?.id) {
-      updateNotification(_notifications[globalFocus.currIdx]?.id);
+    const selectedNotification = selectedKeyboardRow.item.notification;
+    if (e.keyCode === KeyCodes.U && selectedNotification.id) {
+      updateNotification(selectedNotification.id);
       void markAsUnseen(
-        Number.parseInt(_notifications[globalFocus.currIdx]?.id),
-        _notifications[globalFocus.currIdx].seen,
+        Number.parseInt(selectedNotification.id),
+        selectedNotification.seen,
       ).finally(() =>
         queryClient.invalidateQueries({
           queryKey: queryKey ?? inboxDataQueryKey(currentUser?.id),
@@ -667,7 +799,7 @@ const InboxSplit = ({
 
     if (e.keyCode === KeyCodes.S && e.altKey) {
       e.preventDefault();
-      return starTaskUpdateInCache(_notifications[globalFocus.currIdx]);
+      return starTaskUpdateInCache(selectedNotification);
     }
   };
 
@@ -677,12 +809,15 @@ const InboxSplit = ({
     if (selectedIdsArray.length > 0) return;
     if (lastgClick.current !== null) {
     } else {
-      // Use specificIndex if provided (e.g., from mobile click), otherwise use globalFocus
-      const targetIndex =
-        specificIndex !== undefined ? specificIndex : globalFocus.currIdx;
-      if (_notifications[targetIndex])
+      const targetNotification =
+        specificIndex !== undefined
+          ? _notifications[specificIndex]
+          : selectedKeyboardRow?.item.kind === "notification"
+            ? selectedKeyboardRow.item.notification
+            : undefined;
+      if (targetNotification)
         void markAsDone(
-          _notifications[targetIndex],
+          targetNotification,
           index,
           cmdControl ? "Task" : "Notification",
         );
@@ -697,6 +832,12 @@ const InboxSplit = ({
 
   const handleMouseEnter = (index: number) => {
     currentHoveredDiv.current = index;
+    const hoveredRow = keyboardRows.find(
+      (row) =>
+        row.item.kind === "notification" &&
+        row.item.notificationIndex === index,
+    );
+    if (hoveredRow) setActiveKeyboardRowKey(hoveredRow.key);
     clearPrefetchHoverTimeout();
     prefetchHoverTimeout.current = setTimeout(() => {
       prefetchInboxTaskDetail(index);
@@ -769,7 +910,10 @@ const InboxSplit = ({
     notification: INotification | null = null,
     index?: number,
   ) => {
-    const selectedInbox = _notifications[globalFocus.currIdx];
+    const selectedInbox =
+      selectedKeyboardRow?.item.kind === "notification"
+        ? selectedKeyboardRow.item.notification
+        : undefined;
     // Mouse input owns an exact row; keyboard input falls back to focus.
     // Resolve this before any type-specific branch so a focused invitation
     // cannot override a clicked AgentMessage (or vice versa).
@@ -832,6 +976,7 @@ const InboxSplit = ({
       return router.push(finalUrl);
     }
 
+    if (!selectedInbox) return;
     const projectName = selectedInbox.project?.name;
     const taskIndex = selectedInbox.task?.uniqueIndex;
     const inboxFlowQuery = disableInboxFlow
@@ -892,6 +1037,9 @@ const InboxSplit = ({
     };
   }, [
     _notifications,
+    activeDrafts,
+    keyboardRows,
+    selectedKeyboardRow?.key,
     value,
     index,
     _notifications[globalFocus.currIdx],
@@ -976,12 +1124,18 @@ const InboxSplit = ({
               <div className="">
                 {group.items.map((item) => {
                   if (item.kind === "draft") {
+                    const rowKey = `draft-${item.draft.id}`;
                     return (
-                      <div key={`${groupKey}-draft-${item.draft.id}`}>
+                      <div
+                        id={`inbox-draft-${item.draft.id}`}
+                        key={`${groupKey}-draft-${item.draft.id}`}
+                      >
                         <InboxDraftRow
                           draft={item.draft}
                           activeDrafts={activeDrafts}
                           userId={currentUser!.id}
+                          selected={selectedKeyboardRow?.key === rowKey}
+                          onOpen={openDraft}
                         />
                         <div className="message_divider block md:hidden"> </div>
                       </div>
@@ -995,7 +1149,8 @@ const InboxSplit = ({
                       : "";
                   const intId = parseInt(notification.id);
                   const selected =
-                    _notifications[globalFocus.currIdx]?.id === notification.id;
+                    selectedKeyboardRow?.key ===
+                    `notification-${notification.id}`;
                   const isBulkSelected = selectedIds.includes(intId);
                   const isWaitingOnSynthetic =
                     notification.waitingOnSynthetic ||
