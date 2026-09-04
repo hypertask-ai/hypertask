@@ -796,28 +796,27 @@ export async function createCommentService(params: CreateCommentParams) {
         );
       }
       if (agentRunSelection && selectedRun) {
-        webhookDeliveryIds.push(
-          await persistAgentWebhookEvent(tx, {
-            event: "run.prompted",
-            agentId: agentRunSelection.agentId,
-            projectId: currentTask.projectId,
-            taskId,
-            ticketNumber: currentTask.ticketNumber,
-            taskTitle: currentTask.title,
-            commentId: comment.id,
-            commentHtml: text,
-            actor: agentWebhookActor,
-            runId: selectedRun.id,
-            run: serializeAgentRun(selectedRun),
-            prompt: text,
-            signal: "select",
-            selection: {
-              activityId: agentRunSelection.activityId,
-              value: agentRunSelection.option.value,
-              label: agentRunSelection.option.label,
-            },
-          }),
-        );
+        const selectionDeliveryId = await persistAgentWebhookEvent(tx, {
+          event: "run.prompted",
+          agentId: agentRunSelection.agentId,
+          projectId: currentTask.projectId,
+          taskId,
+          ticketNumber: currentTask.ticketNumber,
+          taskTitle: currentTask.title,
+          commentId: comment.id,
+          commentHtml: text,
+          actor: agentWebhookActor,
+          runId: selectedRun.id,
+          run: serializeAgentRun(selectedRun),
+          prompt: text,
+          signal: "select",
+          selection: {
+            activityId: agentRunSelection.activityId,
+            value: agentRunSelection.option.value,
+            label: agentRunSelection.option.label,
+          },
+        });
+        if (selectionDeliveryId) webhookDeliveryIds.push(selectionDeliveryId);
       }
       for (const mentionedAgentId of mentionedAgentIds) {
         if (
