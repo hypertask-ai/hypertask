@@ -1308,33 +1308,31 @@ test("activity comment links and task counters commit once across replay", async
 
   harness.setFailure(null);
   harness.elicitation.commentNotificationsProcessingAt = new Date();
-  const assigneeLookupsBeforeBlockedReplay = harness.getAssigneeLookupCalls();
-  const draftDeletesBeforeBlockedReplay = harness.getDraftDeleteCalls();
-  const taskReferenceParsesBeforeBlockedReplay =
+  const assigneeLookupsBeforeConcurrentReplay = harness.getAssigneeLookupCalls();
+  const draftDeletesBeforeConcurrentReplay = harness.getDraftDeleteCalls();
+  const taskReferenceParsesBeforeConcurrentReplay =
     harness.getTaskReferenceParseCalls();
-  await assert.rejects(
-    harness.createCommentService({
-      ...commentInput,
-      agentRunReplayComment: {
-        id: comment.id,
-        activityId: harness.elicitation.id,
-        agentWebhookDeliveryIds: ["delivery-1"],
-        boardWebhookDeliveryIds: [],
-        notificationsCompletedAt: null,
-      },
-    }),
-    /notifications are still processing/,
-  );
+  const concurrentReplay = await harness.createCommentService({
+    ...commentInput,
+    agentRunReplayComment: {
+      id: comment.id,
+      activityId: harness.elicitation.id,
+      agentWebhookDeliveryIds: ["delivery-1"],
+      boardWebhookDeliveryIds: [],
+      notificationsCompletedAt: null,
+    },
+  });
+  assert.equal(concurrentReplay.id, comment.id);
   assert.equal(harness.fcmCalls.length, 0);
   assert.deepEqual(harness.sideEffectOrder, ["mentions"]);
   assert.equal(
     harness.getAssigneeLookupCalls(),
-    assigneeLookupsBeforeBlockedReplay,
+    assigneeLookupsBeforeConcurrentReplay,
   );
-  assert.equal(harness.getDraftDeleteCalls(), draftDeletesBeforeBlockedReplay);
+  assert.equal(harness.getDraftDeleteCalls(), draftDeletesBeforeConcurrentReplay);
   assert.equal(
     harness.getTaskReferenceParseCalls(),
-    taskReferenceParsesBeforeBlockedReplay,
+    taskReferenceParsesBeforeConcurrentReplay,
   );
   harness.elicitation.commentNotificationsProcessingAt = null;
 

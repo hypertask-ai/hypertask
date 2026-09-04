@@ -989,12 +989,20 @@ export async function createCommentService(params: CreateCommentParams) {
         data: { commentNotificationsProcessingAt: processingAt },
       });
       if (claimed.count === 0) {
-        const completed = await prisma.agentRunActivity.findUnique({
+        const state = await prisma.agentRunActivity.findUnique({
           where: { id: activityId },
-          select: { commentNotificationsCompletedAt: true },
+          select: {
+            commentNotificationsCompletedAt: true,
+            commentNotificationsProcessingAt: true,
+          },
         });
-        if (completed?.commentNotificationsCompletedAt) return comment;
-        throw new Error("Run activity comment notifications are still processing");
+        if (
+          state?.commentNotificationsCompletedAt ||
+          state?.commentNotificationsProcessingAt
+        ) {
+          return comment;
+        }
+        throw new Error("Run activity comment notification claim was lost");
       }
       agentRunCommentNotificationClaim = { activityId, processingAt };
       agentRunCommentNotificationState =
