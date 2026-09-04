@@ -264,9 +264,14 @@ export class AgentClient {
     if (event === "stop") this.activeRuns.get(runRecord.id)?.controller.abort();
     const execution = this.acquireRun(runRecord.id, event === "stop");
     const dispatchController = new AbortController();
+    let claimError: unknown;
     const abortForRunStop = () =>
       dispatchController.abort(execution.controller.signal.reason);
-    const abortForLostClaim = () => dispatchController.abort(claimSignal?.reason);
+    const abortForLostClaim = () => {
+      claimError =
+        claimSignal?.reason ?? new AgentSdkError("Webhook delivery claim was lost");
+      dispatchController.abort(claimError);
+    };
     execution.controller.signal.addEventListener("abort", abortForRunStop, { once: true });
     claimSignal?.addEventListener("abort", abortForLostClaim, { once: true });
     if (execution.controller.signal.aborted) abortForRunStop();
@@ -356,6 +361,7 @@ export class AgentClient {
         await autoThoughtDone;
         throw error;
       }
+      if (claimError) throw claimError;
       if (statusCheckError) throw statusCheckError;
     } finally {
       if (statusMonitor) clearInterval(statusMonitor);
@@ -715,8 +721,8 @@ class AgentRunImpl implements AgentRun {
             "Project sections",
           ).filter(
             (candidate) =>
-              candidate.section_title.trim().toLocaleLowerCase() ===
-              section.trim().toLocaleLowerCase(),
+              candidate.section_title.trim().toLowerCase() ===
+              section.trim().toLowerCase(),
           );
           if (matches.length !== 1) {
             throw new AgentSdkError(
@@ -743,7 +749,7 @@ class AgentRunImpl implements AgentRun {
         } else {
           const reference = assignee.trim();
           if (!reference) throw new AgentSdkError("assignee is required");
-          if (reference.toLocaleLowerCase() === "me") {
+          if (reference.toLowerCase() === "me") {
             assignment = { assign_self: true };
           } else if (UUID_PATTERN.test(reference)) {
             assignment = { agent_id: reference };
@@ -754,15 +760,15 @@ class AgentRunImpl implements AgentRun {
               }),
               "Project members",
             );
-            const normalized = reference.toLocaleLowerCase();
+            const normalized = reference.toLowerCase();
             const matches = arrayValue<{
               id: number | string;
               displayName: string;
               email?: string;
             }>(response.members, "Project members").filter(
               (member) =>
-                member.displayName.trim().toLocaleLowerCase() === normalized ||
-                member.email?.trim().toLocaleLowerCase() === normalized,
+                member.displayName.trim().toLowerCase() === normalized ||
+                member.email?.trim().toLowerCase() === normalized,
             );
             if (matches.length !== 1) {
               throw new AgentSdkError(

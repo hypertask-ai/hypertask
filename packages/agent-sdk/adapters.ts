@@ -197,9 +197,7 @@ export function honoAdapter(
     const waitUntil = options.waitUntil ?? context.executionCtx?.waitUntil.bind(context.executionCtx);
     return handler(
       context.req.raw,
-      waitUntil
-        ? { waitUntil, distributed: options.distributed ?? true }
-        : undefined,
+      processContext({ ...options, waitUntil }),
     );
   };
 }

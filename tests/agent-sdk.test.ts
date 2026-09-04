@@ -6,6 +6,7 @@ import {
   createAgent,
   AgentSdkError,
   MemoryDeliveryStore,
+  honoAdapter,
   nodeHttpAdapter,
   verifyWebhookSignature,
   type AgentRunRecord,
@@ -430,6 +431,23 @@ test("Node adapters require explicit single-process mode", async () => {
   await nodeHttpAdapter(handler)(request(), response());
   await nodeHttpAdapter(handler, { distributed: false })(request(), response());
   assert.deepEqual(distributedValues, [true, false]);
+});
+
+test("Hono adapter preserves single-process mode without an execution context", async () => {
+  let receivedContext: BackgroundContext | undefined;
+  const handler: WebhookHandler = Object.assign(
+    async (_request: Request, context?: BackgroundContext) => {
+      receivedContext = context;
+      return new Response(null, { status: 204 });
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+
+  await honoAdapter(handler, { distributed: false })({
+    req: { raw: new Request("https://agent.example.test/webhook") },
+  });
+  assert.equal(receivedContext?.distributed, false);
+  assert.equal(typeof receivedContext?.waitUntil, "function");
 });
 
 test("Node adapters omit bodies from GET requests", async () => {
@@ -1367,7 +1385,7 @@ test("losing one delivery claim does not cancel a sibling delivery", async () =>
 
   await Promise.all([startedFirst, startedSecond]);
   firstClaim.abort(new Error("first claim lost"));
-  await firstDispatch;
+  await assert.rejects(firstDispatch, /first claim lost/);
   const siblingWasAborted = secondSignal?.aborted;
   finishSecond();
   await secondDispatch;
