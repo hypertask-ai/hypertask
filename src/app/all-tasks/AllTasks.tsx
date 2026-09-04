@@ -550,7 +550,7 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
               ref={ulRef}
               onMouseMove={handleMouseMove}
               className={`rounded-b-[4px] px-0 @md:!px-16 text-dense text-gray-200 overflow-y-auto scrollbar-none pb-20 @md:!pb-0 ${
-                mobileRedesignEnabled ? "mt-1" : "mt-3"
+                mobileRedesignEnabled ? "mt-1 @md:mt-3" : "mt-3"
               }`}
               aria-labelledby="assignDelayButton"
             >

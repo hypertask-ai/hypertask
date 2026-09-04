@@ -121,6 +121,10 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
     /border-b border-border-light-gray-thin pb-2 @md:hidden/,
   );
   assert.match(allTasks, /activeSplit === 0/);
+  assert.match(
+    allTasks,
+    /mobileRedesignEnabled \? "mt-1 @md:mt-3" : "mt-3"/,
+  );
 });
 
 test("All Tasks opts into compact mobile rows without changing shared desktop rows", () => {
