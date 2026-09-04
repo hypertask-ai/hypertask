@@ -1084,9 +1084,6 @@ function atomicCommentHarness() {
       deleteMany: async ({ where }) => {
         draftDeleteCalls += 1;
         draftDeleteWheres.push(where);
-        if (failure === "post-commit") {
-          throw new Error("post-commit side effect failed");
-        }
         return { count: 0 };
       },
     },
@@ -1096,7 +1093,14 @@ function atomicCommentHarness() {
       create: async (input) => input,
     },
     subscribedDevices: { findMany: async () => [] },
-    user: { findFirst: async () => ({ id: 6, displayName: "Valentin" }) },
+    user: {
+      findFirst: async () => {
+        if (failure === "post-commit") {
+          throw new Error("post-commit side effect failed");
+        }
+        return { id: 6, displayName: "Valentin" };
+      },
+    },
     $transaction: async (callback) => {
       const runSnapshot = { ...run };
       const taskSnapshot = {
@@ -1257,7 +1261,7 @@ test("activity comments and selection prompts roll back as one transaction", asy
   assert.equal(harness.updateTaskCalls.length, 0);
 });
 
-test("activity comment links and task counters commit once across replay", async () => {
+test("activity comments commit once across replay without consuming drafts", async () => {
   const harness = atomicCommentHarness();
   const originalTaskUpdatedAt = harness.task.updatedAt;
   const commentInput = {
@@ -1302,8 +1306,7 @@ test("activity comment links and task counters commit once across replay", async
   assert.ok(harness.elicitation.commentMentionsAttemptedAt instanceof Date);
   assert.equal(harness.fcmCalls.length, 0);
   assert.equal(harness.updateTaskCalls.length, 0);
-  assert.equal(harness.getDraftDeleteCalls(), 1);
-  assert.equal(harness.draftDeleteWheres[0].updatedAt.lte, comment.createdAt);
+  assert.equal(harness.getDraftDeleteCalls(), 0);
   assert.equal(harness.getTaskReferenceParseCalls(), 1);
 
   harness.setFailure(null);
@@ -1368,8 +1371,7 @@ test("activity comment links and task counters commit once across replay", async
     harness.sideEffectOrder.filter((effect) => effect === "mentions").length,
     1,
   );
-  assert.equal(harness.getDraftDeleteCalls(), 2);
-  assert.equal(harness.draftDeleteWheres[1].updatedAt.lte, comment.createdAt);
+  assert.equal(harness.getDraftDeleteCalls(), 0);
   assert.equal(harness.getTaskReferenceParseCalls(), 2);
 
   harness.setFailure(null);
@@ -1385,7 +1387,7 @@ test("activity comment links and task counters commit once across replay", async
   });
   assert.equal(harness.fcmCalls.length, 1);
   assert.equal(harness.publishedAgentWebhookIds.length, 2);
-  assert.equal(harness.getDraftDeleteCalls(), 2);
+  assert.equal(harness.getDraftDeleteCalls(), 0);
   assert.equal(harness.getTaskReferenceParseCalls(), 2);
   assert.equal(harness.updateTaskCalls.length, 0);
 });

@@ -1163,14 +1163,18 @@ export async function createCommentService(params: CreateCommentParams) {
     }
 
     const [_, __, ___, ____, commentCreator, userIds] = await Promise.all([
-      prisma.drafts.deleteMany({
-        where: {
-          type: "Comment",
-          taskId,
-          userId: creatorId,
-          updatedAt: { lte: comment.createdAt },
-        },
-      }),
+      // Run-generated comments are not composer submissions, so they must not
+      // consume the user's draft.
+      isAgentRunComment
+        ? Promise.resolve()
+        : prisma.drafts.deleteMany({
+            where: {
+              type: "Comment",
+              taskId,
+              userId: creatorId,
+              updatedAt: { lte: comment.createdAt },
+            },
+          }),
       createNotificationForComment(
         task,
         comment,
