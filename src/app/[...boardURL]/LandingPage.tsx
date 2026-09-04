@@ -169,6 +169,15 @@ const requestedSurface = searchParams?.get('tutorial') === '1'
   : searchParams?.get('surface')
 const surfaceInitializationKey = `${slugs}:${currentView ?? 'default'}:${requestedSurface === 'board' || requestedSurface === 'table' ? requestedSurface : 'inherit'}`
 const [surfaceInitializedFor, setSurfaceInitializedFor] = useState<string | null>(null)
+// HTPR-6072: surfaceInitializedFor is set by a passive effect, so on every
+// board switch surfaceInitializationKey changes synchronously (new render)
+// while surfaceInitializedFor still lags by one render - a real
+// unmount/remount of SectionComp below, not just a visual flash. Once the
+// board has rendered for real once, a later switch no longer needs to wait
+// for that effect to catch up: boardLayout (Recoil, already reactive) will
+// update SectionComp in place once the effect resolves, same as any other
+// layout change while mounted.
+const sectionCompEverRenderedRef = useRef(false)
 const surfaceResolutionRef = useRef<{
   key: string;
   origin: "indexeddb" | "network";
@@ -1034,6 +1043,21 @@ useEffect(() => {
   addLastActivityAt(undefined, user?.id);
 }, [secondaryStartupEnabled, user?.id])
 
+const boardDataReady = Boolean(
+  data &&
+  data.updatedProjects &&
+  projectIndex >= 0 &&
+  data.updatedProjects[projectIndex] &&
+  isBoardPayloadHydrated(data.updatedProjects[projectIndex]),
+)
+
+// HTPR-6072: arms sectionCompEverRenderedRef the moment the board data
+// itself is ready, one tick ahead of the render that actually picks the
+// SectionComp branch below - a useLayoutEffect, not a render-time write.
+useLayoutEffect(() => {
+  if (boardDataReady) sectionCompEverRenderedRef.current = true
+}, [boardDataReady])
+
 return (
     <Suspense fallback={<></>}>
 
@@ -1041,12 +1065,8 @@ return (
       Array.isArray(data.updatedProjects) &&
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
-      ) : data &&
-        surfaceInitializedFor === surfaceInitializationKey &&
-        data.updatedProjects &&
-        projectIndex >= 0 && // Only render if project index is valid
-        data.updatedProjects[projectIndex] &&
-        isBoardPayloadHydrated(data.updatedProjects[projectIndex]) ? (
+      ) : data && data.updatedProjects && boardDataReady &&
+        (surfaceInitializedFor === surfaceInitializationKey || sectionCompEverRenderedRef.current) ? (
            <SectionComp
             _allProjects={projectsForSection}
             _projectCount={data.updatedProjects.length}
