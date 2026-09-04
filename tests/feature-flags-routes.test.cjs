@@ -26,11 +26,25 @@ stubModule("src/lib/flags.ts", {
   },
   listFeatureFlagModes: async () => {
     reads += 1;
-    return [{ key: "htpr-6091-feature-flags", mode: "OWNER_ONLY", updatedAt: null }];
+    return [
+      {
+        key: "htpr-6091-feature-flags",
+        mode: "OWNER_ONLY",
+        updatedAt: null,
+        description: "Registers the feature flag controls themselves.",
+        ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+      },
+    ];
   },
   setFeatureFlagMode: async (key, mode) => {
     writes += 1;
-    return { key, mode, updatedAt: new Date() };
+    return {
+      key,
+      mode,
+      updatedAt: new Date(),
+      description: "Registers the feature flag controls themselves.",
+      ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+    };
   },
   featureFlagsForUser: async (id) => ({ example: id === 6 }),
 });
@@ -80,12 +94,21 @@ test.beforeEach(() => {
   authFails = false;
 });
 
-test("non-owners receive 404 before flag data is read", async () => {
+test("non-owners receive 404 before flag metadata is read or changed", async () => {
   assert.deepEqual(await json(await admin.GET(request())), {
     status: 404,
     body: { error: "Not found" },
   });
+  assert.deepEqual(
+    await json(
+      await admin.PATCH(
+        request("PATCH", { key: "htpr-6091-feature-flags", mode: "EVERYONE" }),
+      ),
+    ),
+    { status: 404, body: { error: "Not found" } },
+  );
   assert.equal(reads, 0);
+  assert.equal(writes, 0);
 });
 
 test("authentication failures return private structured errors", async (t) => {
@@ -99,16 +122,31 @@ test("authentication failures return private structured errors", async (t) => {
   assert.equal(userResponse.headers.get("cache-control"), "private, no-store");
 });
 
-test("the owner can list and change a declared flag", async () => {
+test("the owner can list and change a declared flag with server-owned metadata", async () => {
   userId = 6;
-  assert.equal((await admin.GET(request())).status, 200);
+  const listed = await json(await admin.GET(request()));
+  assert.equal(listed.status, 200);
+  assert.deepEqual(listed.body.flags[0], {
+    key: "htpr-6091-feature-flags",
+    mode: "OWNER_ONLY",
+    updatedAt: null,
+    description: "Registers the feature flag controls themselves.",
+    ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+  });
   const result = await json(
     await admin.PATCH(
-      request("PATCH", { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA" }),
+      request("PATCH", {
+        key: "htpr-6091-feature-flags",
+        mode: "OWNER_AND_QA",
+        description: "attacker copy",
+        ticketUrl: "https://evil.test",
+      }),
     ),
   );
   assert.equal(result.status, 200);
   assert.equal(result.body.flag.mode, "OWNER_AND_QA");
+  assert.equal(result.body.flag.description, "Registers the feature flag controls themselves.");
+  assert.equal(result.body.flag.ticketUrl, "https://app.hypertask.ai/detail/project-15/6091");
   assert.equal(writes, 1);
   assert.equal(broadcasts, 1);
 });

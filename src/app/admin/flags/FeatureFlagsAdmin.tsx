@@ -82,9 +82,21 @@ export default function FeatureFlagsAdmin() {
               key={flag.key}
               className="flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
-              <code className="break-all text-dense text-white-black">{flag.key}</code>
+              <div className="min-w-0 sm:max-w-lg">
+                {flag.ticketUrl ? (
+                  <a
+                    href={flag.ticketUrl}
+                    className="text-white-black underline-offset-2 hover:underline focus-visible:outline-none"
+                  >
+                    <code className="break-all text-dense">{flag.key}</code>
+                  </a>
+                ) : (
+                  <code className="break-all text-dense text-white-black">{flag.key}</code>
+                )}
+                <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
+              </div>
               <div
-                className="flex w-full rounded-sm bg-comment-description p-1 sm:w-auto"
+                className="flex w-full shrink-0 rounded-sm bg-comment-description p-1 sm:w-auto"
                 role="group"
                 aria-label={`Mode for ${flag.key}`}
               >

@@ -16,22 +16,68 @@ const FEATURE_FLAG_QA_USER = {
 
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 
-export const FEATURE_FLAG_KEYS = [
-  "htpr-5913-consistent-comment-shortcuts",
-  "htpr-5992-mobile-all-tasks",
-  "htpr-5993-optimistic-task-uploads",
-  "htpr-6072-shallow-board-switch",
-  "htpr-6091-feature-flags",
-  "htpr-6112-copy-current-url",
-  "htpr-6115-agent-sdk",
-  "htpr-6116-figma-node-preview",
-  "htpr-6118-comment-reactions-api",
-  "htpr-6122-agent-run-activities",
-  "htpr-6129-mobile-agent-chat-viewport",
-  "htpr-6130-mobile-reminder-safe-area",
-  FIGMA_CONNECT_FLAG,
-  "htpr-6141-ai-first-task-writer",
-] as const;
+const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: "htpr-5913-consistent-comment-shortcuts",
+    description:
+      "Makes comment shortcuts consistent: Ctrl+Enter sends and moves on, while Ctrl+Shift+Enter sends and stays.",
+  },
+  {
+    key: "htpr-5992-mobile-all-tasks",
+    description: "Shows the redesigned All Tasks view on mobile devices.",
+  },
+  {
+    key: "htpr-5993-optimistic-task-uploads",
+    description: "Saves new tasks immediately while their attachments continue uploading.",
+  },
+  {
+    key: "htpr-6072-shallow-board-switch",
+    description: "Switches between cached boards without remounting the whole board screen.",
+  },
+  {
+    key: "htpr-6091-feature-flags",
+    description:
+      "Registers the feature flag controls themselves; the owner-only admin page stays available in every mode.",
+  },
+  {
+    key: "htpr-6112-copy-current-url",
+    description: "Adds a Copy current URL action to the command menu.",
+  },
+  {
+    key: "htpr-6115-agent-sdk",
+    description: "Enables the shared Agent SDK run model and lifecycle endpoints.",
+  },
+  {
+    key: "htpr-6116-figma-node-preview",
+    description: "Shows a preview of Figma file contents instead of the file cover image.",
+  },
+  {
+    key: "htpr-6118-comment-reactions-api",
+    description: "Lets agents add and remove emoji reactions on comments through the API and CLI.",
+  },
+  {
+    key: "htpr-6122-agent-run-activities",
+    description: "Enables typed thought, action, response, error, and question updates for agent runs.",
+  },
+  {
+    key: "htpr-6129-mobile-agent-chat-viewport",
+    description: "Keeps the full Agent Chat visible on mobile when the keyboard is open.",
+  },
+  {
+    key: "htpr-6130-mobile-reminder-safe-area",
+    description: "Keeps the mobile reminder time selector aligned and clear of bottom controls.",
+  },
+  {
+    key: FIGMA_CONNECT_FLAG,
+    description: "Lets each user connect a Figma account so linked frames render as previews.",
+  },
+  {
+    key: "htpr-6141-ai-first-task-writer",
+    description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
+  },
+] as const satisfies readonly { key: string; description: string }[];
+
+export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
 const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6072-shallow-board-switch",
   "htpr-6122-agent-run-activities",
@@ -88,7 +134,25 @@ export type FeatureFlagRow = {
   key: string;
   mode: FeatureFlagMode;
   updatedAt: Date | null;
+  description: string;
+  ticketUrl: string | null;
 };
+
+const FEATURE_FLAG_TICKET_BASE = "https://app.hypertask.ai/detail/project-15";
+const LEGACY_FEATURE_FLAG_DESCRIPTION =
+  "This older feature flag has no description in this version of the app.";
+
+function withFeatureFlagMetadata(
+  row: Pick<FeatureFlagRow, "key" | "mode" | "updatedAt">,
+): FeatureFlagRow {
+  const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === row.key);
+  const ticketNumber = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(row.key)?.[1];
+  return {
+    ...row,
+    description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
+    ticketUrl: ticketNumber ? `${FEATURE_FLAG_TICKET_BASE}/${ticketNumber}` : null,
+  };
+}
 
 export function featureFlagModeEnabled(
   mode: FeatureFlagMode,
@@ -132,10 +196,10 @@ export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      { key, mode: defaultFeatureFlagMode(key), updatedAt: null },
+      withFeatureFlagMetadata({ key, mode: defaultFeatureFlagMode(key), updatedAt: null }),
     ]),
   );
-  stored.forEach((row) => byKey.set(row.key, row));
+  stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row)));
   return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
@@ -176,10 +240,11 @@ export async function setFeatureFlagMode(
     : Boolean(await prisma.featureFlag.findUnique({ where: { key }, select: { key: true } }));
   if (!existing) throw new FeatureFlagInputError("Unknown feature flag");
 
-  return prisma.featureFlag.upsert({
+  const row = await prisma.featureFlag.upsert({
     where: { key },
     create: { key, mode },
     update: { mode },
     select: { key: true, mode: true, updatedAt: true },
   });
+  return withFeatureFlagMetadata(row);
 }
