@@ -78,6 +78,11 @@ test("the mobile All Tasks redesign starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 7), false);
 });
 
+test("copy current URL starts owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 7), false);
+});
+
 test("a missing row defaults to owner only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 6), true);
   assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), false);
@@ -92,6 +97,7 @@ test("declared flags remain listed without a row and can be changed", async () =
   assert.deepEqual(await flags.listFeatureFlagModes(), [
     { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6091-feature-flags", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6112-copy-current-url", mode: "OWNER_ONLY", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");

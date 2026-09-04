@@ -58,6 +58,12 @@ const getNavigateCommands = (commandOptions: IAllCommands): CommandGroup => ({
       keywords: "undo restore reverse latest archive delete star pin inbox action",
     },
     {
+      key: "copyCurrentPageUrl",
+      name: "Copy current page URL",
+      commandMode: CommandMode.CopyViewURL,
+      keywords: "copy current page URL link board view task address clipboard",
+    },
+    {
       key: "GotoInbox",
       name: "Go to inbox",
       keyboard: ["G", null, "I"],
@@ -726,12 +732,6 @@ const getBoardCommands = (commandOptions: IAllCommands): CommandGroup => ({
       name: "Table columns",
       commandMode: CommandMode.ConfigureTableColumns,
       keywords: "columns fields show hide table configure customize",
-    },
-    {
-      key: "copyCurrentViewId",
-      name: "Copy URL of view",
-      commandMode: CommandMode.CopyViewURL,
-      keywords: "copy URL link view",
     },
     {
       key: "manageLabels",

@@ -40,7 +40,6 @@ import {
   ITask,
   ITaskLabel,
   IUser,
-  IViewType,
   preSelectParamPricing,
 } from "@/models/model";
 import axios from "axios";
@@ -173,7 +172,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import {
   getActiveColumnsViewFromProject,
-  getViewFromProject,
   getActiveEmptySectionSettingFromProject,
   getActiveSortingStackFromProject,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -212,6 +210,8 @@ import {
   taskTemplatePickerForProject,
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
+import { useFlag } from "@/hooks/useFlag";
+import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
 interface IHTCProps {
   callbackHandler?: (payload: any, mode: string) => void | Promise<void>;
@@ -220,6 +220,7 @@ interface IHTCProps {
 
 const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const queryClient = useQueryClient();
+  const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -735,6 +736,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   };
 
   const handleAction = (mode?: CommandMode, action?: string) => {
+    if (mode === CommandMode.CopyViewURL && !copyCurrentUrlEnabled) {
+      boardCloseHandler();
+      return;
+    }
+
     if (mode) {
       setShowCommands((prev) => ({ ...prev, mode }));
       setCommandMode(mode);
@@ -1196,8 +1202,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         commentFunctionHandler("CreateTaskFromComment");
         break;
       case CommandMode.CopyViewURL:
-        copyViewURL();
-        break;
+        void copyCurrentPageURL();
+        return;
       case CommandMode.SubscribeGoogleCalendar:
         subscribeGoogleCalendar();
         break;
@@ -1474,27 +1480,14 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     }
   };
 
-  const copyViewURL = () => {
-    const baseURL =
-      String(process.env.NEXT_PUBLIC_BASEURL) ?? "https://app.hypertask.ai";
-    const activeView: IViewType | undefined =
-      getViewFromProject(_currentProject);
-    if (activeView) {
-      if (activeView.type === "Unsaved")
-        return toast.error(`${activeView.type} views cannot be shared!`);
-      if (
-        activeView.type === "Applied" &&
-        activeView.view.visibility === "Private"
-      )
-        return toast.error(`Private views cannot be shared!`);
-      toast(`View ${activeView.view.title} copied to clipboard`);
-      navigator.clipboard.writeText(
-        `${baseURL}/project?id=${_currentProject?.id}${
-          activeView === null ? "" : `&view=${activeView.view.slug}`
-        }`
-      );
-      return boardCloseHandler();
-    } else toast("No active views.");
+  const copyCurrentPageURL = async () => {
+    try {
+      const copied = await writeTextToClipboard(window.location.href);
+      if (copied) toast.success("Current page URL copied");
+      else toast.error("Unable to copy current page URL");
+    } finally {
+      boardCloseHandler();
+    }
   };
 
   const copyBranchNameHandler = async () => {

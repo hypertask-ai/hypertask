@@ -45,6 +45,7 @@ import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
+import { useFlag } from "@/hooks/useFlag";
 
 type Props = {
   handleAction?: (mode?: CommandMode, action?: string) => void;
@@ -83,6 +84,7 @@ const Commands = (props: Props) => {
   // settings from the applied saved view on mount and overwrites them.
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
+  const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -130,6 +132,8 @@ const Commands = (props: Props) => {
           (command) =>
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
+            (command.commandMode !== CommandMode.CopyViewURL ||
+              copyCurrentUrlEnabled) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
@@ -232,6 +236,7 @@ const Commands = (props: Props) => {
     boardLayout,
     calendarSettings.showWeekends,
     contextOptions,
+    copyCurrentUrlEnabled,
     currentProject,
     frequentlyUsed,
     isMobile,
