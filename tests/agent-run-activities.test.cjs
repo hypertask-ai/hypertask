@@ -1832,6 +1832,90 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.equal(harness.taskCommentBroadcasts.length, 1);
 });
 
+test("mention processing stops when a delivery checkpoint loses its lease", async () => {
+  const followerCalls = [];
+  const emailCalls = [];
+  const mentionCalls = [];
+  stub("src/lib/configs/taskDetail.config.ts", {
+    default: { urls: { templates: { mention: () => "" } } },
+  });
+  stub("src/utils/controllers/comments/mentionRecipients.ts", {
+    shouldSkipMentionRecipient: () => false,
+  });
+  stub("src/utils/helperFunctions/multiPages/multipages.functions.ts", {
+    extractTipTapContent: () => ({ mentions: ["7", "8"], agentMentions: [] }),
+    stripBlockquoteContent: (text) => text,
+  });
+  stub("src/utils/controllers/notifications/sendMentionEmail.ts", {
+    sendMentionEmail: async (...args) => {
+      emailCalls.push(args);
+      return true;
+    },
+  });
+  stub("src/lib/prisma.ts", {
+    default: {
+      task: {
+        findUnique: async () => ({ title: "Task", uniqueIndex: 42 }),
+      },
+      agent: { findUnique: async () => ({ displayName: "Agent" }) },
+      user: { findUnique: async () => ({ displayName: "User" }) },
+    },
+  });
+  stub("src/utils/controllers/projects/getProjectMembers.ts", {
+    getProjectMembers: async () => ({ members: [] }),
+  });
+  stub("src/utils/controllers/comments/resolveMentions.ts", {
+    injectMentionSpans: (text) => text,
+  });
+  stub("src/utils/htmlEscape.ts", { escapeHtml: (value) => value });
+  stub("src/utils/controllers/followers/createFollowerService.ts", {
+    createFollowerService: async (input) => {
+      followerCalls.push(input.userId);
+      return { status: 201 };
+    },
+  });
+  stub("src/lib/auth/session.ts", {
+    SESSION_COOKIE: "session",
+    signSession: () => "signed",
+  });
+  const axiosPath = require.resolve("axios");
+  require.cache[axiosPath] = {
+    id: axiosPath,
+    filename: axiosPath,
+    loaded: true,
+    exports: {
+      default: {
+        post: async (...args) => mentionCalls.push(args),
+      },
+    },
+  };
+  const processorPath = "src/utils/controllers/comments/processMentions.ts";
+  delete require.cache[path.join(root, processorPath)];
+  const { processMentionsFromCommentText } = load(processorPath);
+
+  await assert.rejects(
+    processMentionsFromCommentText({
+      text: "mentions",
+      commentId: 1,
+      taskId: 42,
+      projectId: 15,
+      mentionedBy: 6,
+      fromAgentId: "agent-1",
+      failOnError: true,
+      deliveryProgress: {
+        has: () => false,
+        mark: async () => {
+          throw new Error("notification lease lost");
+        },
+      },
+    }),
+    /notification lease lost/,
+  );
+  assert.deepEqual(followerCalls, [7]);
+  assert.deepEqual(emailCalls, []);
+  assert.deepEqual(mentionCalls, []);
+});
+
 test("activity routes expose notification lease contention as retryable", async () => {
   const message = "Run activity comment notifications are still processing";
   stub("src/lib/mcp/auth.ts", { checkMcpRateLimit: async () => null });

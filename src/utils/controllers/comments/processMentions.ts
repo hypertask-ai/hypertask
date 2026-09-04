@@ -174,6 +174,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     if (shouldSkipMentionRecipient({ userId, mentionedBy, hyperAiId, fromAgentId })) continue;
 
     if (!deliveryProgress?.has("follower:user", userId)) {
+      let delivered = false;
       try {
         // Add user as follower (if not already assignee)
         const result = await createFollowerService({
@@ -190,17 +191,19 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
           );
           errors.push(new Error(`Mention follower failed for user ${userId}`));
         } else {
-          await deliveryProgress?.mark("follower:user", userId);
+          delivered = true;
         }
       } catch (err) {
         console.warn("[processMentions] createFollower failed for user", userId, err);
         errors.push(err);
       }
+      if (delivered) await deliveryProgress?.mark("follower:user", userId);
     }
 
     if (!deliveryProgress?.has("email:user", userId)) {
+      let delivered = false;
       try {
-        const sent =
+        delivered =
           !task?.title || !mentionedByActor?.displayName
             ? true
             : await sendMentionEmail(
@@ -212,18 +215,18 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
                 text,
                 taskId,
               );
-        if (sent) {
-          await deliveryProgress?.mark("email:user", userId);
-        } else {
+        if (!delivered) {
           errors.push(new Error(`Mention email failed for user ${userId}`));
         }
       } catch (err) {
         console.warn("[processMentions] mention email failed for user", userId, err);
         errors.push(err);
       }
+      if (delivered) await deliveryProgress?.mark("email:user", userId);
     }
 
     if (!deliveryProgress?.has("notification:user", userId)) {
+      let delivered = false;
       try {
         await axios.post(
           `${baseUrl}/api/comments/createMention`,
@@ -239,16 +242,18 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
             headers: { Cookie: `${SESSION_COOKIE}=${signSession({ id: mentionedBy }, 60)}` },
           },
         );
-        await deliveryProgress?.mark("notification:user", userId);
+        delivered = true;
       } catch (err) {
         console.warn("[processMentions] createMention failed for user", userId, err);
         errors.push(err);
       }
+      if (delivered) await deliveryProgress?.mark("notification:user", userId);
     }
   }
 
   for (const agentIdStr of uniqueAgentMentionIds) {
     if (deliveryProgress?.has("follower:agent", agentIdStr)) continue;
+    let delivered = false;
     try {
       const result = await createFollowerService({
         taskId,
@@ -266,12 +271,13 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
         );
         errors.push(new Error(`Mention follower failed for agent ${agentIdStr}`));
       } else {
-        await deliveryProgress?.mark("follower:agent", agentIdStr);
+        delivered = true;
       }
     } catch (err) {
       console.warn("[processMentions] createFollower failed for agent", agentIdStr, err);
       errors.push(err);
     }
+    if (delivered) await deliveryProgress?.mark("follower:agent", agentIdStr);
   }
 
   if (failOnError && errors.length > 0) {
