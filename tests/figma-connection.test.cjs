@@ -93,11 +93,13 @@ const prisma = {
       const result = await action(tx);
       if (failTransactionAfterAction) {
         failTransactionAfterAction = false;
-        rows = rowsBeforeTransaction;
-        operationRows = operationsBeforeTransaction;
         throw new Error("transaction commit failed");
       }
       return result;
+    } catch (error) {
+      rows = rowsBeforeTransaction;
+      operationRows = operationsBeforeTransaction;
+      throw error;
     } finally {
       releaseLock?.();
     }
