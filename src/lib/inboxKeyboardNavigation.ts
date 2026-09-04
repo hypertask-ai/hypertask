@@ -2,6 +2,39 @@ type InboxBoundaryItem = {
   id: string | number;
 };
 
+export type InboxKeyboardRow = {
+  key: string;
+};
+
+export function reconcileInboxKeyboardRow<T extends InboxKeyboardRow>(
+  rows: readonly T[],
+  currentKey: string | null,
+  fallbackKey: string | null,
+): T | null {
+  return (
+    rows.find((row) => row.key === currentKey) ??
+    rows.find((row) => row.key === fallbackKey) ??
+    rows[0] ??
+    null
+  );
+}
+
+export function getAdjacentInboxKeyboardRow<T extends InboxKeyboardRow>(
+  rows: readonly T[],
+  currentKey: string | null,
+  direction: -1 | 1,
+): T | null {
+  if (rows.length === 0) return null;
+
+  const currentIndex = rows.findIndex((row) => row.key === currentKey);
+  const targetIndex =
+    currentIndex === -1
+      ? 0
+      : Math.max(0, Math.min(rows.length - 1, currentIndex + direction));
+
+  return rows[targetIndex];
+}
+
 type ScrollableInboxRow = {
   scrollIntoView: (options?: ScrollIntoViewOptions) => void;
 };

@@ -68,6 +68,8 @@ const expectedContainerClasses = [
   "md:border-l-4",
   "md:border-l-transparent",
   "md:p-0",
+  "data-[selected=true]:md:border-l-selected-item-border",
+  "data-[selected=true]:md:bg-active-elementBg",
 ];
 
 test("the draft row keeps the same mobile content inset as notification rows", () => {

@@ -8,10 +8,7 @@ import {
   IUserDraft,
   USER_DRAFTS_QUERY_KEY,
 } from "@/hooks/General/useGetUserDrafts";
-import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
-import { useRecoilState } from "@/lib/state";
 import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
-import { tasksPlayListAtom } from "@/store";
 import { commentPreview } from "@/utils/controllers/notifications/commentPreview";
 import formatDateDifference from "@/utils/generateTime";
 import Tooltip from "@/components/Common/Tooltip";
@@ -20,32 +17,21 @@ interface InboxDraftRowProps {
   draft: IUserDraft;
   activeDrafts: IUserDraft[];
   userId: number;
+  selected: boolean;
+  onFocus: () => void;
+  onOpen: (draft: IUserDraft) => void;
 }
 
 const InboxDraftRow = ({
   draft,
   activeDrafts,
   userId,
+  selected,
+  onFocus,
+  onOpen,
 }: InboxDraftRowProps) => {
   const queryClient = useQueryClient();
-  const { navigateToTask } = useHypertasksNavigate();
-  const [, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const [isArchiving, setIsArchiving] = useState(false);
-
-  const openDraft = () => {
-    setTasksPlayList(
-      activeDrafts.map(({ task }) => ({
-        projectId: task.projectId,
-        uniqueIndex: task.uniqueIndex,
-      })),
-    );
-    navigateToTask(
-      draft.task.projectId,
-      draft.task.uniqueIndex,
-      "push",
-      "?inboxFlow=true&reply=true",
-    );
-  };
 
   const archiveDraft = async () => {
     if (isArchiving) return;
@@ -81,7 +67,11 @@ const InboxDraftRow = ({
   const archiveLabel = `Archive draft for ${draft.task.title}`;
 
   return (
-    <div className="group/draft-row relative flex min-w-0 items-center gap-[8px] hover:bg-hoverCardBackground focus-within:bg-hoverCardBackground sm:p-inbox-horizontal md:gap-0 md:border-l-4 md:border-l-transparent md:p-0">
+    <div
+      className="group/draft-row relative flex min-w-0 items-center gap-[8px] hover:bg-hoverCardBackground focus-within:bg-hoverCardBackground sm:p-inbox-horizontal md:gap-0 md:border-l-4 md:border-l-transparent md:p-0 data-[selected=true]:md:border-l-selected-item-border data-[selected=true]:md:bg-active-elementBg"
+      data-selected={selected}
+      onFocusCapture={onFocus}
+    >
       <div
         aria-hidden="true"
         className="inbox-row-gutter hidden shrink-0 md:block"
@@ -90,8 +80,9 @@ const InboxDraftRow = ({
       <button
         type="button"
         data-inbox-draft-control="true"
+        aria-current={selected ? "true" : undefined}
         className="relative flex min-w-0 flex-1 cursor-pointer flex-col justify-between rounded-md px-5 py-2 pr-14 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border-active md:flex-row md:items-center md:space-x-8 md:px-0 md:pr-10"
-        onClick={openDraft}
+        onClick={() => onOpen(draft)}
         onKeyDown={(event) => {
           if (event.key.toLowerCase() !== "e") return;
           event.preventDefault();
