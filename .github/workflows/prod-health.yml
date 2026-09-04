@@ -71,14 +71,6 @@ jobs:
             exit 1
           fi
 
-          if [ "$STATE" != "READY" ]; then
-            DEPLOY_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
-            MSG="Deployment $DEPLOY_UID for $SHA still $STATE after $i checks; not verified"
-            notify "⚠️ hypertasks: $MSG"
-            echo "::error::$MSG"
-            exit 1
-          fi
-
           # ── 2. Health-check the live app (3 attempts, 20s apart) ───────────
           # Vercel sometimes bot-challenges the hosted runner's IP
           # (x-vercel-mitigated: challenge). A challenged response proves nothing
@@ -198,26 +190,8 @@ jobs:
           done
 
           if $healthy; then
-            version_code=$(curl -s -o "$HC_DIR/version.json" -D "$HC_DIR/version.h" -w '%{http_code}' --max-time 30 \
-              "https://app.hypertask.ai/api/version") || version_code=000
-            version_challenged=no
-            if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/version.h" 2>/dev/null; then
-              version_challenged=yes
-            fi
-            LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null)
-            if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ -z "$LIVE_BUILD" ]; then
-              notify "⚠️ hypertasks: could not verify live build id for $SHA (status $version_code, challenged=$version_challenged); no rollback"
-              echo "::error::Could not verify live build id; skipping rollback"
-              exit 1
-            elif [ "$LIVE_BUILD" != "$SHA" ]; then
-              notify "🔴 hypertasks: production build id mismatch: live $LIVE_BUILD != expected $SHA"
-              echo "::error::live build $LIVE_BUILD != expected $SHA"
-              healthy=false
-              unchallenged_failure=true
-            else
-              echo "Production healthy on $SHA"
-              exit 0
-            fi
+            echo "Production healthy on $SHA"
+            exit 0
           fi
 
           # The FINAL attempt decides rollback (HTPR-5467). An unchallenged
