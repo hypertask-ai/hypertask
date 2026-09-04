@@ -2,6 +2,13 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+const axios = require("axios");
+
+const root = path.resolve(__dirname, "..");
+const jiti = require("jiti")(__filename, { interopDefault: true });
+const { markTaskSeen } = jiti(
+  path.join(root, "src/utils/api/Task Detail/markTaskSeen.ts"),
+);
 
 // HTPR-6047: task detail opens fired detailMeta, comments/getByTask and
 // users/preferences 2-3 times each. Two of the three causes were structural
@@ -49,6 +56,51 @@ test("HTPR-6047: fetchCommentsHelper reads preferences from the shared React Que
     !/prefMemo/.test(src),
     "the old standalone preferences memo must be gone, not left running alongside the shared cache",
   );
+});
+
+test("task detail uses the shared seen-request helper exactly once", () => {
+  const src = fs.readFileSync(
+    path.join(
+      root,
+      "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts",
+    ),
+    "utf8",
+  );
+
+  assert.equal(src.match(/markTaskSeen\(/g)?.length, 1);
+  assert.doesNotMatch(
+    src,
+    /axios\.post\("\/api\/(?:notifications\/getByTask|comments\/updateSeen)"/,
+    "the hook must not start another notification write outside the tested helper",
+  );
+});
+
+test("task seen requests choose one endpoint and preserve failures", async (t) => {
+  const originalPost = axios.post;
+  const calls = [];
+  t.after(() => {
+    axios.post = originalPost;
+  });
+  axios.post = async (...args) => {
+    calls.push(args);
+    return { status: 200 };
+  };
+
+  await markTaskSeen(42, []);
+  await markTaskSeen(42, [10, 11]);
+
+  assert.deepEqual(calls, [
+    ["/api/notifications/getByTask", { taskId: 42 }],
+    ["/api/comments/updateSeen", { commentIds: [10, 11], taskId: 42 }],
+  ]);
+
+  const timeout = Object.assign(new Error("timeout exceeded"), {
+    code: "ECONNABORTED",
+  });
+  axios.post = async () => {
+    throw timeout;
+  };
+  await assert.rejects(markTaskSeen(42, []), (error) => error === timeout);
 });
 
 test("HTPR-6047: FollowersProvider mounts inside the task-detail Suspense boundary", () => {

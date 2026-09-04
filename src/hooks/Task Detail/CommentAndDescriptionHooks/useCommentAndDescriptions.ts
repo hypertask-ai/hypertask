@@ -26,7 +26,6 @@ import {
   taskDetailNonEssentialReadyAtom,
   toggleAllCommentsSignalAtom,
 } from "@/store";
-import axios from "axios";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import {
@@ -37,6 +36,7 @@ import {
 import { usePathname } from "next/navigation";
 import { IShow } from "../useTaskDetailGlobalStates";
 import useDescriptionReactions from "./useDescriptionReactions";
+import { markTaskSeen } from "@/utils/api/Task Detail/markTaskSeen";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { LIKESHORTCUTEVENT, thumbsUpEmoji } from "@/lib/constants/constants";
 const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
@@ -210,14 +210,6 @@ const useDescriptionAndCommentsStates = () => {
     }),
   });
 
-  const updateNotificationsByTask = () => {
-    if (!currentUser?.id || !currentTask?.id) return;
-    // HTPR-4465: no userId in the body. The server takes it from the session.
-    axios.post("/api/notifications/getByTask", {
-      taskId: currentTask.id,
-    });
-  };
-
   const markTaskReadOnLeave = useCallback(
     (useBeacon = false) => {
       if (isShareView || !currentUser?.id || !currentTask?.id) return;
@@ -267,34 +259,29 @@ const useDescriptionAndCommentsStates = () => {
   const updateSeen = useCallback(async () => {
     if (!currentUser?.id || !currentTask?.id) return;
 
-    const commentsList = commentsListFromQuery;
-    if (!commentsList?.length) {
-      updateNotificationsByTask();
-      return;
-    }
+    const commentsList = commentsListFromQuery ?? [];
 
     try {
-      const hash = window.location.hash;
-      // HTPR-4465: no userId in the body. The server takes it from the session.
-      const body = {
-        commentIds: commentsList.map((item: IComment) => item.id).filter(Boolean),
-        taskId: currentTask.id,
-      };
-      const stack_: any = queryClient.getQueryData([
-        globalConstants.CommentStackStatusKey,
-      ]);
+      const commentIds = commentsList
+        .map((item: IComment) => item.id)
+        .filter(Boolean);
+      if (commentsList.length > 0) {
+        const hash = window.location.hash;
+        const stack_: any = queryClient.getQueryData([
+          globalConstants.CommentStackStatusKey,
+        ]);
 
-      const initialMap = processComments(
-        commentsList,
-        currentUser.id,
-        stack_?.stack,
-        hash,
-        newCommentIdsRef.current
-      );
-      if (!mountedRef.current) setStacked(initialMap);
-      mountedRef.current = true;
-      updateNotificationsByTask();
-      await axios.post("/api/comments/updateSeen", body);
+        const initialMap = processComments(
+          commentsList,
+          currentUser.id,
+          stack_?.stack,
+          hash,
+          newCommentIdsRef.current
+        );
+        if (!mountedRef.current) setStacked(initialMap);
+        mountedRef.current = true;
+      }
+      await markTaskSeen(currentTask.id, commentIds);
     } catch (error) {
       console.log("🤔 ~ updateSeen ~ error:", error);
     }
