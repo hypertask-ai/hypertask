@@ -7,9 +7,9 @@ const root = path.resolve(__dirname, "..");
 let row = null;
 let readError = null;
 let sessionUserId = 6;
-let ownerExists = true;
+let usersById = new Map();
 const prisma = {
-  user: { findUnique: async () => (ownerExists ? { id: 6 } : null) },
+  user: { findUnique: async ({ where }) => usersById.get(where.id) ?? null },
   featureFlag: {
     findUnique: async () => {
       if (readError) throw readError;
@@ -44,7 +44,7 @@ test.beforeEach(() => {
   row = null;
   readError = null;
   sessionUserId = 6;
-  ownerExists = true;
+  usersById = new Map([[6, { email: "valentin.yeo@gmail.com" }]]);
 });
 
 test("admin access requires the signed, active owner", async () => {
@@ -52,15 +52,25 @@ test("admin access requires the signed, active owner", async () => {
   sessionUserId = 7;
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
   sessionUserId = 6;
-  ownerExists = false;
+  usersById.clear();
+  assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
+});
+
+test("owner access requires both the approved id and login identity", async () => {
+  usersById.set(6, { email: "someone@example.com" });
+  assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
+  usersById.set(6, { email: "VALENTIN.YEO@GMAIL.COM" });
+  assert.equal(await flags.isFeatureFlagOwner(new Headers()), true);
+  sessionUserId = 42;
+  usersById.set(42, { email: "valentin.yeo@gmail.com" });
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
 });
 
 test("feature flag modes enforce owner-only, everyone, and off", () => {
-  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", 6), true);
-  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", 7), false);
-  assert.equal(flags.featureFlagModeEnabled("EVERYONE", 7), true);
-  assert.equal(flags.featureFlagModeEnabled("OFF", 6), false);
+  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", true), true);
+  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", false), false);
+  assert.equal(flags.featureFlagModeEnabled("EVERYONE", false), true);
+  assert.equal(flags.featureFlagModeEnabled("OFF", true), false);
 });
 
 test("a missing row defaults to owner only", async () => {

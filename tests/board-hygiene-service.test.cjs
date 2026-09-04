@@ -123,6 +123,8 @@ elif [[ "$prompt" == *'"ticket": "HTPR-7005"'* ]]; then
   printf '%s\\n' 'HTPR-7005=FEATURE'
 elif [[ "$prompt" == *'"ticket": "HTPR-7006"'* ]]; then
   printf '%s\\n' 'HTPR-7006=Bug'
+elif [[ "$prompt" == *'"ticket": "HTPR-7007"'* ]]; then
+  printf '%s\\n' 'HTPR-7007=SKIP'
 elif [[ "$prompt" == *'"ticket": "HTPR-7003"'* ]]; then
   printf '%s\\n' 'HTPR-7003=IMPROVEMENT'
 else
@@ -185,5 +187,26 @@ fi
       skip_if_labels_present: skipIfPresent,
     },
   ])
+  const mutationsBeforeSkip = await readFile(mutationLog, 'utf8')
+  await writeFile(
+    page1,
+    JSON.stringify({ success: true, tasks: [task('HTPR-7007', 'Valid skip')], nextCursor: null }),
+  )
+  const skipRun = await execFileAsync('bash', [executable], {
+    env: {
+      ...process.env,
+      HOME: home,
+      PAGE1: page1,
+      PAGE2: page2,
+      LATEST: latest,
+      LATEST_FAILURE: latestFailure,
+      PROMPT_LOG: promptLog,
+      MUTATION_LOG: mutationLog,
+    },
+  })
+  assert.equal(skipRun.stdout, '')
+  assert.equal(skipRun.stderr, '')
+  assert.equal(await readFile(mutationLog, 'utf8'), mutationsBeforeSkip)
+  assert.match(await readFile(promptLog, 'utf8'), /HTPR-7007/)
   await assert.rejects(access(marker))
 })
