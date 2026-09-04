@@ -177,7 +177,6 @@ const [surfaceInitializedFor, setSurfaceInitializedFor] = useState<string | null
 // for that effect to catch up: boardLayout (Recoil, already reactive) will
 // update SectionComp in place once the effect resolves, same as any other
 // layout change while mounted.
-const sectionCompEverRenderedRef = useRef(false)
 const surfaceResolutionRef = useRef<{
   key: string;
   origin: "indexeddb" | "network";
@@ -780,7 +779,16 @@ useEffect(() => {
 // HTPR-3805: explicit shared-link surfaces always win. An inherited surface may
 // paint from IndexedDB first, then reconcile once from authoritative metadata.
 // If the user switches surface in between, preserve that newer manual choice.
-useEffect(() => {
+// HTPR-6072: useLayoutEffect, not useEffect. boardLayout is a single shared
+// Recoil atom with no per-project memory, so on a switch it still holds the
+// previous project's value the instant this component re-renders for the new
+// one. A passive effect would let the browser paint that stale value before
+// correcting it one tick later - a visible flash, and reason enough to gate
+// SectionComp's very existence on this effect having run (the earlier fix).
+// A layout effect runs after render but before paint: setBoardLayout here
+// still lands before the browser ever shows a frame, so SectionComp can stay
+// mounted through every switch with no gate at all.
+useLayoutEffect(() => {
   if (!pinnedProject) return
   const origin = data?.dataOrigin === "indexeddb" ? "indexeddb" : "network"
   const previous = surfaceResolutionRef.current
@@ -1051,13 +1059,6 @@ const boardDataReady = Boolean(
   isBoardPayloadHydrated(data.updatedProjects[projectIndex]),
 )
 
-// HTPR-6072: arms sectionCompEverRenderedRef the moment the board data
-// itself is ready, one tick ahead of the render that actually picks the
-// SectionComp branch below - a useLayoutEffect, not a render-time write.
-useLayoutEffect(() => {
-  if (boardDataReady) sectionCompEverRenderedRef.current = true
-}, [boardDataReady])
-
 return (
     <Suspense fallback={<></>}>
 
@@ -1065,8 +1066,12 @@ return (
       Array.isArray(data.updatedProjects) &&
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
-      ) : data && data.updatedProjects && boardDataReady &&
-        (surfaceInitializedFor === surfaceInitializationKey || sectionCompEverRenderedRef.current) ? (
+      ) : data && data.updatedProjects && boardDataReady ? (
+           // HTPR-6072: no gate on surface resolution here. The surface-resolution
+           // effect above is now a useLayoutEffect, so boardLayout is corrected
+           // before the browser paints - SectionComp can stay mounted across
+           // every switch instead of being hidden behind a loading branch while
+           // that effect catches up (which was itself an unmount/remount).
            <SectionComp
             _allProjects={projectsForSection}
             _projectCount={data.updatedProjects.length}
