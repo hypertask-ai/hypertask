@@ -172,6 +172,8 @@ async function main() {
 
   const sharedTask = {
     id: "share-id",
+    userAgent: "Mozilla/5.0",
+    fallbackAgent: { id: "fallback-agent-id", displayName: "Fallback Agent" },
     task: {
       id: 99,
       agentId: "task-agent-id",
@@ -184,6 +186,11 @@ async function main() {
   const originalSharedTask = structuredClone(sharedTask);
   const redactedSharedTask = redactAgentIdentitiesForPublicShare(sharedTask);
 
+  assert.equal(redactedSharedTask.userAgent, "Mozilla/5.0");
+  assert.deepEqual(redactedSharedTask.fallbackAgent, {
+    displayName: PRIVATE_AGENT_DISPLAY_NAME,
+    photoURL: null,
+  });
   assert.equal(redactedSharedTask.task.agentId, null);
   assert.equal(
     redactedSharedTask.task.agentDisplayName,
@@ -203,12 +210,14 @@ async function main() {
     "agent-active-id",
     "agent-target-id",
     "agent-assigner-id",
+    "fallback-agent-id",
     "task-agent-id",
     "parent-agent-id",
     "subtask-agent-id",
     "Active Agent",
     "Target Agent",
     "Assigner Agent",
+    "Fallback Agent",
     "Deleted Agent",
     "Task Agent",
     "active-agent@example.test",

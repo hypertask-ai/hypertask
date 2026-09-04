@@ -32,11 +32,10 @@ const privateAgentAttribution = {
   photoURL: null,
 };
 
-function isAgentRelationKey(key: string): boolean {
+function isAgentRelationKey(key: string, value: unknown): boolean {
   return (
     agentRelationKeys.has(key) ||
-    key.endsWith("Agent") ||
-    key.endsWith("_agent")
+    ((key.endsWith("Agent") || key.endsWith("_agent")) && isRecord(value))
   );
 }
 
@@ -106,8 +105,11 @@ export function redactAgentIdentitiesForPublicShare<T>(value: T): T {
       redacted[key] = null;
     } else if (isAgentDisplayNameKey(key)) {
       redacted[key] = nested ? privateAgentAttribution.displayName : nested;
-    } else if (isAgentRelationKey(key)) {
-      redacted[key] = nested == null ? nested : { ...privateAgentAttribution };
+    } else if (isAgentRelationKey(key, nested)) {
+      redacted[key] =
+        nested === null || nested === undefined
+          ? nested
+          : { ...privateAgentAttribution };
     } else if (isAgentCollectionKey(key)) {
       redacted[key] = Array.isArray(nested)
         ? nested.map(() => ({ ...privateAgentAttribution }))
