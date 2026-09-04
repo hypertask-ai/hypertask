@@ -31,3 +31,23 @@ test("slash commands choose available viewport space and stay inset", () => {
   assert.match(list, /min-h-0/);
   assert.match(list, /overflow-y-auto/);
 });
+
+test("mentions choose available viewport space instead of clipping above mobile editors", () => {
+  const renderer = read("src/components/RTE/MentionData.js");
+  const list = read("src/components/RTE/MentionList.jsx");
+
+  assert.match(renderer, /placement: "auto-start"/);
+  assert.match(renderer, /strategy: "fixed"/);
+  assert.match(
+    renderer,
+    /allowedAutoPlacements: \["bottom-start", "top-start"\]/,
+  );
+  assert.match(
+    renderer,
+    /fallbackPlacements: \["bottom-start", "top-start"\]/,
+  );
+  assert.match(renderer, /name: "preventOverflow"/);
+  assert.match(renderer, /padding: 12, altAxis: true/);
+  assert.match(list, /max-h-72/);
+  assert.match(list, /overflow-y-auto/);
+});
