@@ -100,6 +100,8 @@ export interface CreateCommentParams {
   agentRunActivity?: AgentRunActivityPersistenceInput;
   /** Human elicitation choice that must commit with its visible task comment. */
   agentRunSelection?: AgentRunSelectionPersistenceInput;
+  /** Existing run comment whose idempotent database side effects need resuming. */
+  agentRunReplayCommentId?: number;
   /**
    * Extra board events to persist in the same transaction as the comment, so a
    * caller whose domain change IS this comment (escalation) never has a
@@ -387,6 +389,34 @@ async function processTaskReferencesFromCommentText(
   }
 }
 
+async function loadAgentRunReplayComment(
+  comments: Pick<typeof prisma.comment, "findFirst">,
+  input: {
+    commentId: number;
+    taskId: number;
+    creatorId: number;
+    agentId?: string | null;
+  },
+) {
+  const comment = await comments.findFirst({
+    where: {
+      id: input.commentId,
+      taskId: input.taskId,
+      creatorId: input.creatorId,
+      agentId: input.agentId ?? null,
+    },
+  });
+  if (!comment) throw new Error("Run activity comment not found");
+  return {
+    comment,
+    webhookDeliveryIds: [],
+    boardWebhookDeliveryIds: [],
+    resolvedDirectReplyUserId: null,
+    inboundCompleted: false,
+    inboundProcessingStartedAt: null,
+  };
+}
+
 /**
  * Creates a comment with full side effects: notifications, mentions, FCM.
  * Returns the created comment.
@@ -408,10 +438,14 @@ export async function createCommentService(params: CreateCommentParams) {
     inboundEmailId,
     agentRunActivity,
     agentRunSelection,
+    agentRunReplayCommentId,
     extraBoardWebhookEvents = [],
   } = params;
   if (agentRunActivity && agentRunSelection) {
     throw new Error("A comment cannot create and select an agent activity together");
+  }
+  if (agentRunReplayCommentId && (agentRunActivity || agentRunSelection)) {
+    throw new Error("A run comment replay cannot persist an activity");
   }
   if (
     agentRunActivity &&
@@ -502,7 +536,8 @@ export async function createCommentService(params: CreateCommentParams) {
     !hasInvocationCorrelation &&
     !inboundEmailId &&
     !agentRunActivity &&
-    !agentRunSelection
+    !agentRunSelection &&
+    !agentRunReplayCommentId
       ? await prisma.comment.findFirst({
           where: {
             taskId,
@@ -520,7 +555,12 @@ export async function createCommentService(params: CreateCommentParams) {
 
   // A replay must resume the original comment's unfinished work without
   // updating the task a second time.
-  if (!existingInboundReceipt) {
+  if (
+    !existingInboundReceipt &&
+    !agentRunActivity &&
+    !agentRunSelection &&
+    !agentRunReplayCommentId
+  ) {
     // Access was established above before the duplicate lookup or any write.
     await updateTaskSingle(
       { id: task.id, updatedAt: new Date() },
@@ -540,6 +580,14 @@ export async function createCommentService(params: CreateCommentParams) {
   let transactionResult;
   try {
     transactionResult = await prisma.$transaction(async (tx) => {
+      if (agentRunReplayCommentId) {
+        return loadAgentRunReplayComment(tx.comment, {
+          commentId: agentRunReplayCommentId,
+          taskId,
+          creatorId,
+          agentId,
+        });
+      }
       const lockedTask = await tx.$queryRaw<Array<{ id: number }>>`
         SELECT "id"
         FROM "Task"
@@ -624,6 +672,17 @@ export async function createCommentService(params: CreateCommentParams) {
           agentId,
         },
       });
+      if (agentRunActivity) {
+        await tx.agentRunActivity.update({
+          where: { id: agentRunActivity.id },
+          data: { responseCommentId: comment.id },
+        });
+      } else if (agentRunSelection) {
+        await tx.agentRunActivity.update({
+          where: { id: agentRunSelection.activityId },
+          data: { selectionCommentId: comment.id },
+        });
+      }
       let inboundProcessingStartedAt: Date | null = null;
       if (inboundEmailId) {
         inboundProcessingStartedAt = new Date();
@@ -634,11 +693,16 @@ export async function createCommentService(params: CreateCommentParams) {
           comment.id,
           inboundProcessingStartedAt,
         );
+      }
+      if (inboundEmailId || agentRunActivity || agentRunSelection) {
         await tx.task.update({
           where: { id: taskId },
           data: {
             totalComments: { increment: 1 },
             lastCommentAt: new Date(),
+            ...(agentRunActivity || agentRunSelection
+              ? { updatedAt: new Date() }
+              : {}),
             ...(creatorIdNum !== hyperAiId &&
             !currentTask.updatedByUserIds.includes(creatorIdNum)
               ? { updatedByUserIds: { push: creatorIdNum } }
@@ -899,7 +963,12 @@ export async function createCommentService(params: CreateCommentParams) {
 
     // Keep totalComments in sync — avoids a COUNT join on every board load.
     // creatorId is always set in this service (unlike activity comments).
-    if (!inboundEmailId) {
+    if (
+      !inboundEmailId &&
+      !agentRunActivity &&
+      !agentRunSelection &&
+      !agentRunReplayCommentId
+    ) {
       await prisma.task.update({
         where: { id: taskId },
         data: {
@@ -981,7 +1050,7 @@ export async function createCommentService(params: CreateCommentParams) {
         recipientUserIds,
         agentId ?? null,
         resolvedDirectReplyUserId,
-        Boolean(inboundEmailId),
+        Boolean(inboundEmailId || agentRunReplayCommentId),
       ),
       processMentionsFromCommentText({
         text,
@@ -1017,6 +1086,7 @@ export async function createCommentService(params: CreateCommentParams) {
     // claim the exact persisted invocation identified by reply_to_comment_id.
     await publishAgentWebhookDeliveries(webhookDeliveryIds);
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
+    if (agentRunReplayCommentId) return comment;
 
     const devices = await prisma.subscribedDevices.findMany({
       where: { userId: { in: userIds } },

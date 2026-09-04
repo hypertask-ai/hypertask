@@ -277,7 +277,9 @@ async function findIdempotentActivity(
   });
 }
 
-function replayCreatedActivity(
+async function replayCreatedActivity(
+  run: ActivityRunWithContext,
+  principal: AgentRunPrincipal,
   activity: AgentRunActivity,
   input: AgentRunActivityInput,
 ) {
@@ -286,6 +288,28 @@ function replayCreatedActivity(
       "Idempotency-Key was already used with different activity data",
     );
   }
+  if (input.type === "RESPONSE" && run.task) {
+    if (!activity.responseCommentId) {
+      throw new Error("Agent run response comment was not persisted");
+    }
+    const { createCommentService } = await import(
+      "@/utils/controllers/comments/createCommentService",
+    );
+    await createCommentService({
+      text: toStoredHtml(activity.text),
+      creatorId: principal.userId,
+      taskId: run.task.id,
+      ownerId: run.task.userId,
+      currentUser: {
+        id: principal.userId,
+        displayName: principal.displayName,
+      },
+      agentId: run.agentId,
+      accessUserId: principal.userId,
+      agentRunReplayCommentId: activity.responseCommentId,
+    });
+  }
+  broadcastActivityChange(run, principal.userId);
   return { activity: serializeAgentRunActivity(activity), duplicate: true };
 }
 
@@ -335,7 +359,7 @@ export async function createAgentRunActivity(
 
   if (idempotencyKey !== null) {
     const existing = await findIdempotentActivity(run.id, idempotencyKey);
-    if (existing) return replayCreatedActivity(existing, input);
+    if (existing) return replayCreatedActivity(run, principal, existing, input);
   }
   if (!NONTERMINAL_AGENT_RUN_STATUSES.includes(run.status)) {
     throw new AgentRunNotActiveError("Run is no longer active");
@@ -394,7 +418,7 @@ export async function createAgentRunActivity(
   } catch (error) {
     if (idempotencyKey !== null && isUniqueConstraintError(error)) {
       const existing = await findIdempotentActivity(run.id, idempotencyKey);
-      if (existing) return replayCreatedActivity(existing, input);
+      if (existing) return replayCreatedActivity(run, principal, existing, input);
     }
     throw error;
   }
@@ -438,6 +462,27 @@ export async function selectAgentRunActivity(
         "This elicitation already has a different selection",
       );
     }
+    if (run.task) {
+      if (!activity.selectionCommentId) {
+        throw new Error("Agent run selection comment was not persisted");
+      }
+      const { createCommentService } = await import(
+        "@/utils/controllers/comments/createCommentService",
+      );
+      await createCommentService({
+        text: toStoredHtml(activity.selectedLabel ?? option.label),
+        creatorId: principal.userId,
+        taskId: run.task.id,
+        ownerId: run.task.userId,
+        currentUser: {
+          id: principal.userId,
+          displayName: principal.displayName,
+        },
+        accessUserId: principal.userId,
+        agentRunReplayCommentId: activity.selectionCommentId,
+      });
+    }
+    broadcastActivityChange(run, principal.userId);
     return { activity: serializeAgentRunActivity(activity), duplicate: true };
   }
   if (!NONTERMINAL_AGENT_RUN_STATUSES.includes(run.status)) {
