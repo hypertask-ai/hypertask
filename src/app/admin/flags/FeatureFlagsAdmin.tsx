@@ -15,10 +15,15 @@ const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "OFF", label: "Off" },
 ];
 
-async function loadFlags(): Promise<FeatureFlagRow[]> {
+type AdminFeatureFlags = {
+  flags: FeatureFlagRow[];
+  detailsEnabled: boolean;
+};
+
+async function loadFlags(): Promise<AdminFeatureFlags> {
   const response = await fetch(ADMIN_FLAGS_ROUTE, { cache: "no-store" });
   if (!response.ok) throw new Error("Could not load feature flags");
-  return ((await response.json()) as { flags: FeatureFlagRow[] }).flags;
+  return (await response.json()) as AdminFeatureFlags;
 }
 
 async function updateFlag(input: { key: string; mode: FeatureFlagMode }) {
@@ -48,9 +53,16 @@ export default function FeatureFlagsAdmin() {
     mutationFn: updateFlag,
     onMutate: async (next) => {
       await queryClient.cancelQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY });
-      const previous = queryClient.getQueryData<FeatureFlagRow[]>(ADMIN_FEATURE_FLAGS_QUERY_KEY);
-      queryClient.setQueryData<FeatureFlagRow[]>(ADMIN_FEATURE_FLAGS_QUERY_KEY, (rows = []) =>
-        rows.map((row) => (row.key === next.key ? { ...row, mode: next.mode } : row)),
+      const previous = queryClient.getQueryData<AdminFeatureFlags>(ADMIN_FEATURE_FLAGS_QUERY_KEY);
+      queryClient.setQueryData<AdminFeatureFlags>(ADMIN_FEATURE_FLAGS_QUERY_KEY, (current) =>
+        current
+          ? {
+              ...current,
+              flags: current.flags.map((flag) =>
+                flag.key === next.key ? { ...flag, mode: next.mode } : flag,
+              ),
+            }
+          : current,
       );
       return { previous };
     },
@@ -58,8 +70,13 @@ export default function FeatureFlagsAdmin() {
       if (context?.previous) queryClient.setQueryData(ADMIN_FEATURE_FLAGS_QUERY_KEY, context.previous);
     },
     onSuccess: (flag) => {
-      queryClient.setQueryData<FeatureFlagRow[]>(ADMIN_FEATURE_FLAGS_QUERY_KEY, (rows = []) =>
-        rows.map((row) => (row.key === flag.key ? flag : row)),
+      queryClient.setQueryData<AdminFeatureFlags>(ADMIN_FEATURE_FLAGS_QUERY_KEY, (current) =>
+        current
+          ? {
+              ...current,
+              flags: current.flags.map((row) => (row.key === flag.key ? flag : row)),
+            }
+          : current,
       );
       void queryClient.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_PREFIX });
     },
@@ -77,14 +94,28 @@ export default function FeatureFlagsAdmin() {
         <div className="mt-6 overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
           {flags.isLoading && <p className="p-4 text-content text-text-light-gray">Loading flags...</p>}
           {flags.isError && <p className="p-4 text-content text-destructive">Could not load feature flags.</p>}
-          {flags.data?.map((flag) => (
+          {flags.data?.flags.map((flag) => (
             <div
               key={flag.key}
               className="flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
-              <code className="break-all text-dense text-white-black">{flag.key}</code>
+              <div className="min-w-0 sm:max-w-lg">
+                {flags.data.detailsEnabled && flag.ticketUrl ? (
+                  <a
+                    href={flag.ticketUrl}
+                    className="text-white-black underline-offset-2 hover:underline focus-visible:underline"
+                  >
+                    <code className="break-all text-dense">{flag.key}</code>
+                  </a>
+                ) : (
+                  <code className="break-all text-dense text-white-black">{flag.key}</code>
+                )}
+                {flags.data.detailsEnabled && (
+                  <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
+                )}
+              </div>
               <div
-                className="flex w-full rounded-sm bg-comment-description p-1 sm:w-auto"
+                className="flex w-full shrink-0 rounded-sm bg-comment-description p-1 sm:w-auto"
                 role="group"
                 aria-label={`Mode for ${flag.key}`}
               >

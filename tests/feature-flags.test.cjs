@@ -5,6 +5,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 let row = null;
+let listedRows = null;
 let readError = null;
 let sessionUserId = 6;
 let usersById = new Map();
@@ -15,7 +16,8 @@ const prisma = {
       if (readError) throw readError;
       return row;
     },
-    findMany: async () => (row ? [{ key: "htpr-6091-feature-flags", ...row }] : []),
+    findMany: async () =>
+      listedRows ?? (row ? [{ key: "htpr-6091-feature-flags", ...row }] : []),
     upsert: async ({ where, create, update }) => {
       row = { mode: row ? update.mode : create.mode, updatedAt: new Date() };
       return { key: where.key, ...row };
@@ -42,6 +44,7 @@ const flags = jiti(path.join(root, "src/lib/flags.ts"));
 
 test.beforeEach(() => {
   row = null;
+  listedRows = null;
   readError = null;
   sessionUserId = 6;
   usersById = new Map([
@@ -147,6 +150,12 @@ test("mobile Agent Chat viewport fix starts owner-only", async () => {
   );
 });
 
+test("feature flag details start owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6133-feature-flag-details", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6133-feature-flag-details", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6133-feature-flag-details", 7), false);
+});
+
 test("Figma connection starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 6), true);
   assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
@@ -198,34 +207,69 @@ test("database failures fail closed instead of becoming the default", async () =
   await assert.rejects(flags.isFeatureEnabled("htpr-6091-feature-flags", 6), /database unavailable/);
 });
 
-test("declared flags remain listed without a row and can be changed", async () => {
-  assert.deepEqual(await flags.listFeatureFlagModes(), [
-    {
-      key: "htpr-5913-consistent-comment-shortcuts",
-      mode: "OWNER_AND_QA",
-      updatedAt: null,
-    },
-    { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6072-shallow-board-switch", mode: "OWNER_ONLY", updatedAt: null },
-    { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6122-agent-run-activities", mode: "OWNER_ONLY", updatedAt: null },
-    {
-      key: "htpr-6129-mobile-agent-chat-viewport",
-      mode: "OWNER_ONLY",
-      updatedAt: null,
-    },
-    { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
-    { key: "htpr-6136-figma-connect", mode: "OWNER_ONLY", updatedAt: null },
-    { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
-  ]);
+test("declared flags remain listed with ticket details and can be changed", async () => {
+  const listed = await flags.listFeatureFlagModes();
+  assert.deepEqual(
+    listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
+    [
+      {
+        key: "htpr-5913-consistent-comment-shortcuts",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6072-shallow-board-switch", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6122-agent-run-activities", mode: "OWNER_ONLY", updatedAt: null },
+      {
+        key: "htpr-6129-mobile-agent-chat-viewport",
+        mode: "OWNER_ONLY",
+        updatedAt: null,
+      },
+      { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6133-feature-flag-details", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6136-figma-connect", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
+    ],
+  );
+  listed.forEach(({ key, description, ticketUrl }) => {
+    assert.ok(description.length > 20, `${key} needs a useful description`);
+    assert.equal(
+      ticketUrl,
+      `https://app.hypertask.ai/detail/project-15/${key.match(/^htpr-(\d+)-/)[1]}`,
+    );
+  });
+
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");
+  assert.match(changed.description, /feature flag controls/);
+  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/6091");
   assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), true);
+});
+
+test("legacy database flags stay visible, safe, and updateable", async () => {
+  const updatedAt = new Date("2026-09-04T12:00:00.000Z");
+  listedRows = [
+    { key: "htpr-1111-aaa", mode: "OFF", updatedAt },
+    { key: "legacy-rollout", mode: "OWNER_ONLY", updatedAt },
+  ];
+
+  const listed = await flags.listFeatureFlagModes();
+  const ticketNamed = listed.find(({ key }) => key === "htpr-1111-aaa");
+  assert.equal(ticketNamed.description, "This older feature flag has no description in this version of the app.");
+  assert.equal(ticketNamed.ticketUrl, "https://app.hypertask.ai/detail/project-15/1111");
+  const malformed = listed.find(({ key }) => key === "legacy-rollout");
+  assert.equal(malformed.ticketUrl, null);
+
+  row = { mode: "OFF", updatedAt };
+  const changed = await flags.setFeatureFlagMode("htpr-1111-aaa", "OWNER_ONLY");
+  assert.equal(changed.mode, "OWNER_ONLY");
+  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/1111");
 });
 
 test("unknown flags fail closed and cannot create rows", async () => {
