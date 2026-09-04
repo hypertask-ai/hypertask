@@ -357,11 +357,9 @@ export async function mutateTaskLabels(
     },
     userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null }
 ): Promise<void> {
-    const [addIds, removeIds, skipIfPresentIds] = await Promise.all([
-        resolveLabelIds(projectId, changes.add ?? []),
-        resolveLabelIds(projectId, changes.remove ?? []),
-        resolveLabelIds(projectId, changes.skipIfPresent ?? []),
-    ]);
+    const addIds = await resolveLabelIds(projectId, changes.add ?? []);
+    const removeIds = await resolveLabelIds(projectId, changes.remove ?? []);
+    const skipIfPresentIds = await resolveLabelIds(projectId, changes.skipIfPresent ?? []);
     const deliveryIds = await prisma.$transaction(async (tx) => {
         // This task-row lock is the shared mutex used by both MCP and UI label writers.
         await assertTaskBelongsToProject(tx, taskId, projectId);

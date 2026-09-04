@@ -62,7 +62,6 @@ test('board hygiene pages, binds model output, and emits an atomic additive upda
           task('HTPR-7004', 'Update failure'),
           task('HTPR-7005', 'Eligibility response failure'),
           task('HTPR-7006', 'Eligibility transport failure'),
-          task('HTPR-7007', 'Valid skip'),
           task('HTPR-7003', 'Valid candidate'),
         ],
         nextCursor: null,
@@ -154,7 +153,7 @@ fi
   }
 
   assert.equal(failure?.code, 1)
-  assert.match(failure.stdout, /labelled 1 of 8 unlabelled tickets/)
+  assert.match(failure.stdout, /labelled 1 of 7 unlabelled tickets/)
   assert.match(failure.stderr, /classification failed for HTPR-7002/)
   assert.match(failure.stderr, /skipped malformed ticket record/)
   assert.match(failure.stderr, /label update failed for HTPR-7004/)
@@ -162,15 +161,7 @@ fi
   assert.match(failure.stderr, /eligibility request failed for HTPR-7006/)
   assert.match(failure.stderr, /6 ticket\(s\) failed/)
   const prompts = await readFile(promptLog, 'utf8')
-  for (const ticket of [
-    'HTPR-7001',
-    'HTPR-7002',
-    'HTPR-7003',
-    'HTPR-7004',
-    'HTPR-7005',
-    'HTPR-7006',
-    'HTPR-7007',
-  ]) {
+  for (const ticket of ['HTPR-7001', 'HTPR-7002', 'HTPR-7003', 'HTPR-7004', 'HTPR-7005', 'HTPR-7006']) {
     assert.match(prompts, new RegExp(ticket))
   }
   const mutations = (await readFile(mutationLog, 'utf8'))
@@ -196,5 +187,26 @@ fi
       skip_if_labels_present: skipIfPresent,
     },
   ])
+  const mutationsBeforeSkip = await readFile(mutationLog, 'utf8')
+  await writeFile(
+    page1,
+    JSON.stringify({ success: true, tasks: [task('HTPR-7007', 'Valid skip')], nextCursor: null }),
+  )
+  const skipRun = await execFileAsync('bash', [executable], {
+    env: {
+      ...process.env,
+      HOME: home,
+      PAGE1: page1,
+      PAGE2: page2,
+      LATEST: latest,
+      LATEST_FAILURE: latestFailure,
+      PROMPT_LOG: promptLog,
+      MUTATION_LOG: mutationLog,
+    },
+  })
+  assert.equal(skipRun.stdout, '')
+  assert.equal(skipRun.stderr, '')
+  assert.equal(await readFile(mutationLog, 'utf8'), mutationsBeforeSkip)
+  assert.match(await readFile(promptLog, 'utf8'), /HTPR-7007/)
   await assert.rejects(access(marker))
 })
