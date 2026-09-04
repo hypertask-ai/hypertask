@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useState,
   type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,12 +39,13 @@ export function FeatureFlagProvider({
   userId: number | null;
 }) {
   const queryClient = useQueryClient();
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
   const query = useQuery({
     queryKey: featureFlagsQueryKey(userId ?? 0),
     queryFn: fetchFeatureFlags,
     enabled: userId !== null,
-    refetchInterval: FLAGS_REFRESH_MS,
-    refetchIntervalInBackground: true,
+    refetchInterval: realtimeConnected ? false : FLAGS_REFRESH_MS,
+    refetchIntervalInBackground: !realtimeConnected,
     retry: false,
   });
 
@@ -51,6 +53,7 @@ export function FeatureFlagProvider({
     if (userId === null) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
+    setRealtimeConnected(false);
     const refresh = () => {
       void queryClient.invalidateQueries({ queryKey: featureFlagsQueryKey(userId) });
       void queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY });
@@ -58,24 +61,41 @@ export function FeatureFlagProvider({
 
     void (async () => {
       const client = await connectRealtimeClient();
-      if (!client) return;
       if (cancelled) {
-        releaseRealtimeClientIfIdle(client);
+        if (client) releaseRealtimeClientIfIdle(client);
+        return;
+      }
+      if (!client) {
+        setRealtimeConnected(false);
         return;
       }
       const channelName = featureFlagsChannel();
       const channel = client.subscribe(channelName);
+      const realtimeUp = () => setRealtimeConnected(true);
+      const realtimeDown = () => setRealtimeConnected(false);
       unsubscribe = () => {
         channel.unbind(FEATURE_FLAGS_EVENT, refresh);
+        channel.unbind("pusher:subscription_succeeded", realtimeUp);
+        channel.unbind("pusher:subscription_error", realtimeDown);
         client.connection.unbind("connected", refresh);
+        client.connection.unbind("disconnected", realtimeDown);
+        client.connection.unbind("unavailable", realtimeDown);
+        client.connection.unbind("failed", realtimeDown);
         client.unsubscribe(channelName);
         releaseRealtimeClientIfIdle(client);
       };
       channel.bind(FEATURE_FLAGS_EVENT, refresh);
+      channel.bind("pusher:subscription_succeeded", realtimeUp);
+      channel.bind("pusher:subscription_error", realtimeDown);
       client.connection.bind("connected", refresh);
+      client.connection.bind("disconnected", realtimeDown);
+      client.connection.bind("unavailable", realtimeDown);
+      client.connection.bind("failed", realtimeDown);
+      if (channel.subscribed) realtimeUp();
     })().catch((error) => {
       unsubscribe?.();
       unsubscribe = undefined;
+      if (!cancelled) setRealtimeConnected(false);
       console.warn("[feature-flags] realtime setup failed", error);
     });
 

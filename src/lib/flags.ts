@@ -2,22 +2,29 @@ import type { FeatureFlagMode as PrismaFeatureFlagMode } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-export const FEATURE_FLAG_OWNER_USER_ID = 6;
+const FEATURE_FLAG_OWNER = {
+  userId: 6,
+  email: "valentin.yeo@gmail.com",
+} as const;
+
 export const FEATURE_FLAG_KEYS = ["htpr-6091-feature-flags"] as const;
 export const FEATURE_FLAG_MODES = ["OWNER_ONLY", "EVERYONE", "OFF"] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 export class FeatureFlagInputError extends Error {}
 
+async function isFeatureFlagOwnerUser(userId: number): Promise<boolean> {
+  if (userId !== FEATURE_FLAG_OWNER.userId) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+  return user?.email.trim().toLowerCase() === FEATURE_FLAG_OWNER.email;
+}
+
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   const session = await getSessionUser(headers);
-  if (session?.userId !== FEATURE_FLAG_OWNER_USER_ID) return false;
-  return Boolean(
-    await prisma.user.findUnique({
-      where: { id: FEATURE_FLAG_OWNER_USER_ID },
-      select: { id: true },
-    }),
-  );
+  return session ? isFeatureFlagOwnerUser(session.userId) : false;
 }
 
 export type FeatureFlagRow = {
@@ -28,10 +35,10 @@ export type FeatureFlagRow = {
 
 export function featureFlagModeEnabled(
   mode: FeatureFlagMode,
-  userId: number,
+  isOwner: boolean,
 ): boolean {
   if (mode === "EVERYONE") return true;
-  if (mode === "OWNER_ONLY") return userId === FEATURE_FLAG_OWNER_USER_ID;
+  if (mode === "OWNER_ONLY") return isOwner;
   return false;
 }
 
@@ -45,7 +52,11 @@ export async function isFeatureEnabled(
   });
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
-  return featureFlagModeEnabled(row?.mode ?? "OWNER_ONLY", userId);
+  const mode = row?.mode ?? "OWNER_ONLY";
+  return featureFlagModeEnabled(
+    mode,
+    mode === "OWNER_ONLY" && (await isFeatureFlagOwnerUser(userId)),
+  );
 }
 
 export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
@@ -67,8 +78,11 @@ export async function featureFlagsForUser(
   userId: number,
 ): Promise<Record<string, boolean>> {
   const rows = await listFeatureFlagModes();
+  const isOwner = rows.some((row) => row.mode === "OWNER_ONLY")
+    ? await isFeatureFlagOwnerUser(userId)
+    : false;
   return Object.fromEntries(
-    rows.map((row) => [row.key, featureFlagModeEnabled(row.mode, userId)]),
+    rows.map((row) => [row.key, featureFlagModeEnabled(row.mode, isOwner)]),
   );
 }
 
