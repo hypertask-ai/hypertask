@@ -42,13 +42,6 @@
         "cli": ["^presence$", "^agents list$"],
         "ai_chat": ["^hypertask_(agent_presence|ask_agent)$", "^hypertask_list_agents$"],
         "hyperai": ["^hypertask_(agent_presence|list_agents)$"]
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/6122",
-          "expires": "2026-09-18",
-          "entries": ["GET /api/mcp/agents/runs/[id]/activities"]
-        }
       }
     },
     {
@@ -66,16 +59,6 @@
         "cli": "The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command.",
         "ai_chat": "Agent Chat is the surface itself; native agents answer in-process without this route.",
         "hyperai": "HyperAI inherits the human session and never speaks as an external agent."
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/6122",
-          "expires": "2026-09-18",
-          "entries": [
-            "POST /api/mcp/agents/runs/[id]/activities",
-            "POST /api/mcp/agents/runs/[id]/activities/[activityId]/select"
-          ]
-        }
       }
     },
     {

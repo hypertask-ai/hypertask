@@ -83,6 +83,8 @@ export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {
     payload: {
       run: "The reactivated run.",
       prompt: "The new comment HTML or chat text.",
+      signal: "select when the prompt came from an elicitation choice.",
+      selection: "The chosen elicitation activity, value, and label.",
     },
   },
   "run.stopped": {
@@ -206,6 +208,12 @@ export type AgentWebhookEventInput = {
   runId?: string;
   run?: AgentWebhookRun;
   prompt?: string | null;
+  signal?: "select";
+  selection?: {
+    activityId: string;
+    value: string;
+    label: string;
+  };
   chat?: AgentWebhookChat;
   commentId?: number;
   commentHtml?: string;

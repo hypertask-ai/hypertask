@@ -23,6 +23,7 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-6115-agent-sdk",
   "htpr-6116-figma-node-preview",
   "htpr-6118-comment-reactions-api",
+  "htpr-6122-agent-run-activities",
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
   "htpr-6141-ai-first-task-writer",
@@ -37,6 +38,7 @@ export const FEATURE_FLAG_MODES = [
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+  key === "htpr-6122-agent-run-activities" ||
   key === "htpr-6129-mobile-agent-chat-viewport" ||
   key === "htpr-6130-mobile-reminder-safe-area" ||
   key === "htpr-6141-ai-first-task-writer"

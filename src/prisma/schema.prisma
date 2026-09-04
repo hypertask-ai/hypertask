@@ -231,6 +231,14 @@ enum AgentRunStatus {
   DONE
 }
 
+enum AgentRunActivityType {
+  THOUGHT
+  ACTION
+  RESPONSE
+  ERROR
+  ELICITATION
+}
+
 enum DisplayAvatar {
   Show
   Hidden
@@ -320,6 +328,7 @@ model User {
   decisionRequestsAnswered DecisionRequest[]             @relation("DecisionRequestAnsweredBy")
   webhookSubscriptions     WebhookSubscription[]
   stoppedAgentRuns         AgentRun[]                    @relation("AgentRunStoppedBy")
+  selectedAgentRunActivities AgentRunActivity[]           @relation("AgentRunActivitySelectedBy")
   aiSkills                  AI_Skill[]                  @relation("AI_SkillOwner")
   createdAiSkills           AI_Skill[]                  @relation("AI_SkillCreator")
   slackInstalls             SlackInstall[]
@@ -2216,12 +2225,34 @@ model AgentRun {
   lastActivityAt DateTime        @default(now())
   stoppedById    Int?
   stoppedBy      User?           @relation("AgentRunStoppedBy", fields: [stoppedById], references: [id], onDelete: SetNull)
+  activities     AgentRunActivity[]
 
   @@index([agentId, status])
   @@index([taskId, status])
   @@index([chatSessionId, status])
   @@index([lastActivityAt, status])
   @@index([stoppedById])
+}
+
+model AgentRunActivity {
+  id             String               @id @default(uuid())
+  runId          String
+  run            AgentRun             @relation(fields: [runId], references: [id], onDelete: Cascade)
+  type           AgentRunActivityType
+  text           String               @db.Text
+  link           String?              @db.VarChar(2048)
+  options        Json?
+  idempotencyKey String?              @db.VarChar(256)
+  selectedValue  String?              @db.VarChar(256)
+  selectedLabel  String?              @db.VarChar(256)
+  selectedAt     DateTime?
+  selectedById   Int?
+  selectedBy     User?                @relation("AgentRunActivitySelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime             @default(now())
+
+  @@unique([runId, idempotencyKey])
+  @@index([runId, createdAt, id])
+  @@index([selectedById])
 }
 
 /// Agent-scoped BYOK secrets (ciphertext), same shape as TeamByokApiKey.

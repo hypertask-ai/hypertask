@@ -32,6 +32,7 @@ import { recordHyperAiCommentOrigin } from "@/lib/ai/hyperAiConfirmation";
 import {
   persistAgentRunTriggerWebhooks,
   persistAgentTaskRunPromptWebhooks,
+  persistAgentWebhookEvent,
   persistAgentWebhookEvents,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
@@ -55,6 +56,13 @@ import {
   releaseInboundEmailProcessing,
   requireInboundEmailComment,
 } from "@/utils/controllers/comments/inboundEmailReceipt";
+import {
+  persistAgentRunActivity,
+  persistAgentRunSelection,
+  type AgentRunActivityPersistenceInput,
+  type AgentRunSelectionPersistenceInput,
+} from "@/lib/agentRuns/persistence";
+import { serializeAgentRun } from "@/lib/agentRuns/model";
 
 const INBOUND_PROCESSING_LEASE_MS = 5 * 60_000;
 
@@ -88,6 +96,10 @@ export interface CreateCommentParams {
   trustedCaller?: boolean;
   /** Resend's immutable received-email id, used for durable webhook replay safety. */
   inboundEmailId?: string;
+  /** Agent response row that must commit with its visible task comment. */
+  agentRunActivity?: AgentRunActivityPersistenceInput;
+  /** Human elicitation choice that must commit with its visible task comment. */
+  agentRunSelection?: AgentRunSelectionPersistenceInput;
   /**
    * Extra board events to persist in the same transaction as the comment, so a
    * caller whose domain change IS this comment (escalation) never has a
@@ -394,8 +406,27 @@ export async function createCommentService(params: CreateCommentParams) {
     processTaskReferences = true,
     trustedCaller = false,
     inboundEmailId,
+    agentRunActivity,
+    agentRunSelection,
     extraBoardWebhookEvents = [],
   } = params;
+  if (agentRunActivity && agentRunSelection) {
+    throw new Error("A comment cannot create and select an agent activity together");
+  }
+  if (
+    agentRunActivity &&
+    (agentRunActivity.context.taskId !== taskId ||
+      agentRunActivity.agentId !== agentId)
+  ) {
+    throw new Error("Agent activity does not match this task comment");
+  }
+  if (
+    agentRunSelection &&
+    (agentRunSelection.context.taskId !== taskId ||
+      agentRunSelection.selectedById !== Number(creatorId))
+  ) {
+    throw new Error("Agent selection does not match this task comment");
+  }
   const text = normalizeRichTextStructure(inputText);
 
   const task = await prisma.task.findFirst({
@@ -468,7 +499,10 @@ export async function createCommentService(params: CreateCommentParams) {
     });
   }
   const duplicate =
-    !hasInvocationCorrelation && !inboundEmailId
+    !hasInvocationCorrelation &&
+    !inboundEmailId &&
+    !agentRunActivity &&
+    !agentRunSelection
       ? await prisma.comment.findFirst({
           where: {
             taskId,
@@ -576,6 +610,12 @@ export async function createCommentService(params: CreateCommentParams) {
           };
         }
       }
+      if (agentRunActivity) {
+        await persistAgentRunActivity(tx, agentRunActivity);
+      }
+      const selectedRun = agentRunSelection
+        ? await persistAgentRunSelection(tx, agentRunSelection)
+        : null;
       const comment = await tx.comment.create({
         data: {
           text,
@@ -748,12 +788,43 @@ export async function createCommentService(params: CreateCommentParams) {
             commentId: comment.id,
             commentHtml: text,
             actor: agentWebhookActor,
-            excludeAgentIds: mentionedAgentIds,
+            excludeAgentIds: [
+              ...mentionedAgentIds,
+              ...(agentRunSelection ? [agentRunSelection.agentId] : []),
+            ],
           })),
         );
       }
+      if (agentRunSelection && selectedRun) {
+        const selectionDeliveryId = await persistAgentWebhookEvent(tx, {
+          event: "run.prompted",
+          agentId: agentRunSelection.agentId,
+          projectId: currentTask.projectId,
+          taskId,
+          ticketNumber: currentTask.ticketNumber,
+          taskTitle: currentTask.title,
+          commentId: comment.id,
+          commentHtml: text,
+          actor: agentWebhookActor,
+          runId: selectedRun.id,
+          run: serializeAgentRun(selectedRun),
+          prompt: text,
+          signal: "select",
+          selection: {
+            activityId: agentRunSelection.activityId,
+            value: agentRunSelection.option.value,
+            label: agentRunSelection.option.label,
+          },
+        });
+        if (selectionDeliveryId) webhookDeliveryIds.push(selectionDeliveryId);
+      }
       for (const mentionedAgentId of mentionedAgentIds) {
-        if (mentionedAgentId === agentId) continue;
+        if (
+          mentionedAgentId === agentId ||
+          mentionedAgentId === agentRunSelection?.agentId
+        ) {
+          continue;
+        }
         webhookDeliveryIds.push(
           ...(await persistAgentRunTriggerWebhooks(tx, {
             event: "comment.mention",
