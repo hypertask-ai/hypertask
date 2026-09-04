@@ -303,10 +303,8 @@ async function replayCreatedActivity(
       "Idempotency-Key was already used with different activity data",
     );
   }
-  if (input.type === "RESPONSE" && run.task) {
-    if (!activity.responseCommentId) {
-      throw new Error("Agent run response comment was not persisted");
-    }
+  // Older activities have no comment link, so they retain duplicate-only replay.
+  if (input.type === "RESPONSE" && run.task && activity.responseCommentId) {
     const { createCommentService } = await import(
       "@/utils/controllers/comments/createCommentService",
     );
@@ -477,9 +475,10 @@ export async function selectAgentRunActivity(
         "This elicitation already has a different selection",
       );
     }
-    if (run.task) {
-      if (!activity.selectionCommentId || !activity.selectedById) {
-        throw new Error("Agent run selection comment was not persisted");
+    // Older selections have no comment link, so they retain duplicate-only replay.
+    if (run.task && activity.selectionCommentId) {
+      if (!activity.selectedById) {
+        throw new Error("Agent run selection creator was not persisted");
       }
       const selectedBy = await prisma.user.findUnique({
         where: { id: activity.selectedById },

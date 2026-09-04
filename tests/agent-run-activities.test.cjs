@@ -593,6 +593,42 @@ test("a task response retry resumes side effects after its comment commits", asy
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
 });
 
+test("legacy task activities without comment links keep duplicate-only replay", async () => {
+  const run = runRow();
+  const response = activityRow({
+    type: "RESPONSE",
+    text: "Done",
+    idempotencyKey: "legacy-response",
+  });
+  const selection = activityRow({
+    id: "activity-2",
+    type: "ELICITATION",
+    options: [{ value: "yes", label: "Yes" }],
+    selectedValue: "yes",
+    selectedLabel: "Yes",
+    selectedAt: new Date("2026-09-04T10:02:00.000Z"),
+    selectedById: 6,
+  });
+  const harness = loadService({ runs: [run], activities: [response, selection] });
+
+  const responseReplay = await harness.service.createAgentRunActivity(
+    agentPrincipal,
+    run.id,
+    activityInput({ type: "RESPONSE", text: "Done" }),
+    "legacy-response",
+  );
+  const selectionReplay = await harness.service.selectAgentRunActivity(
+    browserPrincipal,
+    run.id,
+    selection.id,
+    "yes",
+  );
+
+  assert.equal(responseReplay.duplicate, true);
+  assert.equal(selectionReplay.duplicate, true);
+  assert.equal(harness.commentCalls.length, 0);
+});
+
 test("an idempotency unique race replays every non-null service key", async () => {
   const run = runRow();
   const harness = loadService({ runs: [run] });
