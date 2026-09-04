@@ -15,6 +15,7 @@ const originalFetch = global.fetch;
 let sessionUserId;
 let sessionError;
 let enabled;
+let eligibilityUserIds;
 let connectedToken;
 let connectedUserId;
 let connectionSummary;
@@ -31,7 +32,10 @@ stub("src/lib/auth/getSessionUser.ts", {
   },
 });
 stub("src/lib/figma/connection.ts", {
-  figmaConnectEnabledFor: async () => enabled,
+  figmaConnectEnabledFor: async (userId) => {
+    eligibilityUserIds.push(userId);
+    return enabled;
+  },
   connectFigmaUser: async (userId, issueToken) => {
     connectedUserId = userId;
     connectedToken = await issueToken();
@@ -76,6 +80,7 @@ test.beforeEach(() => {
   sessionUserId = 6;
   sessionError = null;
   enabled = true;
+  eligibilityUserIds = [];
   connectedToken = null;
   connectedUserId = null;
   connectionSummary = {
@@ -101,6 +106,7 @@ test("OAuth start requires the signed user and owner-only server flag", async ()
   sessionUserId = 6;
   enabled = false;
   assert.equal((await startRoute.GET(appRequest("/api/figma/oauth/start"))).status, 404);
+  assert.deepEqual(eligibilityUserIds, [6]);
 });
 
 test("session lookup failures return a controlled service error", async () => {
@@ -188,12 +194,18 @@ test("callback rejects missing and mismatched state before token exchange", asyn
 
 test("callback rejects a changed Hypertask session and clears one-use state", async () => {
   const attempt = await beginAttempt();
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    throw new Error("unexpected token exchange");
+  };
   sessionUserId = 7;
   const response = await callbackRoute.GET(callbackRequest(attempt));
   assert.equal(
     new URL(response.headers.get("location")).searchParams.get("figma_error"),
     "user_mismatch",
   );
+  assert.equal(fetchCalls, 0);
   assert.equal(connectedToken, null);
   assert.match(response.headers.get("set-cookie"), /Max-Age=0/);
 });
