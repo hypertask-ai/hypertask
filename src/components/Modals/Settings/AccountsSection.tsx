@@ -2,9 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MdAdd } from "react-icons/md";
+import { useSearchParams } from "next/navigation";
+import toast from "react-hot-toast";
 import SignOutModal from "@/components/Modals/SignOut/SignOutModal";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
+import { useFlag } from "@/hooks/useFlag";
 import { authClient } from "@/lib/auth/betterAuthClient";
+import {
+  FIGMA_CONNECTION_PATH,
+  FIGMA_DISCONNECT_PATH,
+  FIGMA_OAUTH_START_PATH,
+  FIGMA_SETTINGS_PATH,
+} from "@/lib/figma/paths";
 import {
   addAccount,
   getActiveAccountId,
@@ -15,12 +24,24 @@ import {
   SwitchAccount,
 } from "@/lib/auth/accounts";
 import SettingsCard from "./SettingsCard";
-import { settingsActionButtonClass } from "./SettingsBillingRow";
+import {
+  BillingActionRow,
+  settingsActionButtonClass,
+} from "./SettingsBillingRow";
 import SettingsSectionShell from "./SettingsSectionShell";
 import UserAvatar from "@/components/Common/UserAvatar";
 
+type FigmaConnection = {
+  figmaUserId: string;
+  figmaUserName: string | null;
+};
+
+const FIGMA_CONNECT_URL = `${FIGMA_OAUTH_START_PATH}?returnTo=${encodeURIComponent(FIGMA_SETTINGS_PATH)}`;
+
 const AccountsSection = () => {
   const { handleHardReset } = useSignout();
+  const figmaEnabled = useFlag("htpr-6136-figma-connect");
+  const searchParams = useSearchParams();
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +54,11 @@ const AccountsSection = () => {
   const [passkeyPending, setPasskeyPending] = useState<string | null>(null);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
   const [passkeyMessage, setPasskeyMessage] = useState<string | null>(null);
+  const [figmaConnection, setFigmaConnection] =
+    useState<FigmaConnection | null>(null);
+  const [figmaLoading, setFigmaLoading] = useState(true);
+  const [figmaError, setFigmaError] = useState<string | null>(null);
+  const [figmaDisconnecting, setFigmaDisconnecting] = useState(false);
   const {
     data: passkeys,
     isPending: passkeysLoading,
@@ -40,12 +66,37 @@ const AccountsSection = () => {
   } = authClient.useListPasskeys();
   const activeId = getActiveAccountId();
 
+  const refreshFigmaConnection = useCallback(async () => {
+    if (!figmaEnabled) return;
+    setFigmaError(null);
+    try {
+      const response = await fetch(FIGMA_CONNECTION_PATH, {
+        credentials: "include",
+      });
+      const data = (await response.json().catch(() => null)) as {
+        connection?: FigmaConnection | null;
+      } | null;
+      if (!response.ok || !data) {
+        throw new Error("Could not load the Figma connection");
+      }
+      setFigmaConnection(data.connection ?? null);
+    } catch {
+      setFigmaError("Could not load the Figma connection");
+    } finally {
+      setFigmaLoading(false);
+    }
+  }, [figmaEnabled]);
+
   const refreshAccounts = useCallback(async () => {
     const nextAccounts = await listAccounts();
     setAccounts(nextAccounts);
     setLoading(false);
     return nextAccounts;
   }, []);
+
+  useEffect(() => {
+    void refreshFigmaConnection();
+  }, [refreshFigmaConnection]);
 
   useEffect(() => {
     setPasskeysSupported(
@@ -119,6 +170,29 @@ const AccountsSection = () => {
     if (!signedOut) setSigningOutAll(false);
   };
 
+  const handleFigmaDisconnect = async () => {
+    setFigmaDisconnecting(true);
+    setFigmaError(null);
+    try {
+      const response = await fetch(FIGMA_DISCONNECT_PATH, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = (await response.json().catch(() => null)) as {
+        success?: boolean;
+      } | null;
+      if (!response.ok || data?.success !== true) {
+        throw new Error("Could not disconnect Figma");
+      }
+      setFigmaConnection(null);
+      toast.success("Figma disconnected");
+    } catch {
+      setFigmaError("Could not disconnect Figma");
+    } finally {
+      setFigmaDisconnecting(false);
+    }
+  };
+
   const handleAddPasskey = async () => {
     setPasskeyError(null);
     setPasskeyMessage(null);
@@ -165,6 +239,35 @@ const AccountsSection = () => {
       setPasskeyPending(null);
     }
   };
+
+  let figmaAction = (
+    <a className={settingsActionButtonClass} href={FIGMA_CONNECT_URL}>
+      Connect Figma
+    </a>
+  );
+  if (figmaLoading) {
+    figmaAction = (
+      <span className="text-dense font-medium text-text-light-gray">
+        Loading
+      </span>
+    );
+  } else if (figmaConnection) {
+    figmaAction = (
+      <div className="flex items-center gap-3">
+        <span className="max-w-[220px] truncate text-dense font-medium text-text-light-gray">
+          {figmaConnection.figmaUserName || figmaConnection.figmaUserId}
+        </span>
+        <button
+          className={settingsActionButtonClass}
+          disabled={figmaDisconnecting}
+          onClick={() => void handleFigmaDisconnect()}
+          type="button"
+        >
+          {figmaDisconnecting ? "Disconnecting" : "Disconnect"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <SettingsSectionShell
@@ -246,6 +349,18 @@ const AccountsSection = () => {
       {error && (
         <p className="text-dense font-medium text-red-400" role="alert">
           {error}
+        </p>
+      )}
+
+      {figmaEnabled && (
+        <SettingsCard title="Connected apps">
+          <BillingActionRow label="Figma account" action={figmaAction} />
+        </SettingsCard>
+      )}
+
+      {figmaEnabled && (figmaError || searchParams?.get("figma_error")) && (
+        <p className="text-dense font-medium text-red-400" role="alert">
+          {figmaError || "Figma could not be connected. Try again."}
         </p>
       )}
 

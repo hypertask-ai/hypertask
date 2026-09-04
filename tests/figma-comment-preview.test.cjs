@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/figma-comment-preview.test.cjs"), {
@@ -13,6 +14,9 @@ const { hasFigmaEmbed } = jiti(
 );
 const { isContentCarouselImage } = jiti(
   path.join(root, "src/utils/helperFunctions/isContentCarouselImage.ts"),
+);
+const { renderFigmaPreview } = jiti(
+  path.join(root, "src/components/RTE/Extensions/FigmaTiptap/index.ts"),
 );
 
 const source = (relativePath) =>
@@ -52,6 +56,43 @@ test("excludes Figma control thumbnails from the content-image carousel", () => 
     false,
   );
   assert.equal(isContentCarouselImage({ closest: () => null }), true);
+});
+
+test("renders at most six returned Figma frames side by side", () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  global.document = dom.window.document;
+  try {
+    const createdImages = [];
+    const createElement = document.createElement.bind(document);
+    document.createElement = (tagName, options) => {
+      const element = createElement(tagName, options);
+      if (tagName === "img") createdImages.push(element);
+      return element;
+    };
+    const preview = document.createElement("button");
+    const affordance = document.createElement("span");
+    preview.append(affordance);
+    renderFigmaPreview(preview, affordance, {
+      previewImages: Array.from({ length: 7 }, (_, index) => ({
+        name: `Frame ${index + 1}`,
+        url: `https://s3-alpha.figma.com/frame-${index + 1}.png`,
+      })),
+    });
+
+    assert.equal(preview.querySelectorAll("img").length, 0);
+    createdImages[0].onload();
+    let images = preview.querySelectorAll("img");
+    assert.equal(images.length, 6);
+    assert.equal(images[0].alt, "Frame 1");
+    assert.equal(images[5].alt, "Frame 6");
+    assert.match(images[0].className, /object-contain/);
+    assert.equal(affordance.textContent, "Click to open the live file");
+    createdImages[1].onerror();
+    images = preview.querySelectorAll("img");
+    assert.equal(images.length, 5);
+  } finally {
+    delete global.document;
+  }
 });
 
 test("Figma comments keep one editor while non-Figma comments stay lightweight", () => {
@@ -116,6 +157,7 @@ test("the persistent read view is inert but keeps its existing interactions", ()
     "src/components/RTE/Extensions/FigmaTiptap/index.ts",
   );
   const taskDetail = source("src/app/detail/[...slug]/TaskDetailComp.tsx");
+  const figmaPaths = source("src/lib/figma/paths.ts");
 
   assert.match(
     taskEditor,
@@ -128,6 +170,9 @@ test("the persistent read view is inert but keeps its existing interactions", ()
   assert.match(editorContainer, /!isEditModeActive &&/);
   assert.match(editorContainer, /!isReadOnlyExistingContent && \(/);
   assert.match(figmaNode, /preview\.dataset\.figmaEmbedPreview = 'true'/);
+  assert.match(figmaNode, /Connect Figma to preview/);
+  assert.match(figmaNode, /FIGMA_OAUTH_START_PATH/);
+  assert.match(figmaPaths, /\/api\/figma\/oauth\/start/);
   assert.match(taskEditor, /\.filter\(isContentCarouselImage\)/);
   assert.match(
     taskEditor,

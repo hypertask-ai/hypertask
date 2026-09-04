@@ -14,6 +14,8 @@ const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
+export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
+
 export const FEATURE_FLAG_KEYS = [
   "htpr-5913-consistent-comment-shortcuts",
   "htpr-5992-mobile-all-tasks",
@@ -27,8 +29,17 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-6122-agent-run-activities",
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
+  FIGMA_CONNECT_FLAG,
   "htpr-6141-ai-first-task-writer",
 ] as const;
+const OWNER_ONLY_BY_DEFAULT = new Set<string>([
+  "htpr-6072-shallow-board-switch",
+  "htpr-6122-agent-run-activities",
+  "htpr-6129-mobile-agent-chat-viewport",
+  "htpr-6130-mobile-reminder-safe-area",
+  FIGMA_CONNECT_FLAG,
+  "htpr-6141-ai-first-task-writer",
+]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
   "OWNER_ONLY",
@@ -37,15 +48,6 @@ export const FEATURE_FLAG_MODES = [
   "OFF",
 ] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
-
-const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
-  key === "htpr-6072-shallow-board-switch" ||
-  key === "htpr-6122-agent-run-activities" ||
-  key === "htpr-6129-mobile-agent-chat-viewport" ||
-  key === "htpr-6130-mobile-reminder-safe-area" ||
-  key === "htpr-6141-ai-first-task-writer"
-    ? "OWNER_ONLY"
-    : "OWNER_AND_QA";
 
 export class FeatureFlagInputError extends Error {}
 
@@ -98,6 +100,9 @@ export function featureFlagModeEnabled(
   if (mode === "OWNER_ONLY") return isOwner;
   return false;
 }
+
+const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+  OWNER_ONLY_BY_DEFAULT.has(key) ? "OWNER_ONLY" : "OWNER_AND_QA";
 
 export async function isFeatureEnabled(
   key: string,

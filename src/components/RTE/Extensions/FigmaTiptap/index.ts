@@ -1,6 +1,8 @@
 import { InputRule, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
+import { FIGMA_OAUTH_START_PATH } from '@/lib/figma/paths';
+
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     figma: {
@@ -13,18 +15,21 @@ declare module '@tiptap/core' {
 const figmaRegex =
   /https:\/\/[\w\.-]+\.?figma.com\/([\w-]+)\/([0-9a-zA-Z]{22,128})(?:\/.*)?$/;
 
-// HTPR-5149: ProseMirror recreates a node view on re-render, and the oEmbed
-// lookup used to ride along with it, so one task open fetched the same Figma
-// metadata up to five times. Keyed by the Figma URL and kept for the page's
-// life: a design's title and thumbnail do not change while you read a ticket.
-//
-// The request deliberately carries no abort signal. Each node view has its own
-// controller and aborts it on destroy or when the user clicks through to the
-// live iframe; passing that signal here would let one node view cancel the
-// response every other one is waiting on.
-const oembedCache = new Map<string, Promise<any>>();
+// HTPR-5149: ProseMirror can recreate a node view several times together, so
+// share only in-flight requests. Settled previews are connection-specific and
+// must go back through the browser's cookie-partitioned HTTP cache.
+const oembedCache = new Map<string, Promise<FigmaPreviewData>>();
 
-const fetchFigmaOembed = (figmaUrl: string): Promise<any> => {
+type FigmaPreviewData = {
+  canConnectFigma?: boolean;
+  height?: number;
+  previewImages?: { name: string; url: string }[];
+  thumbnailUrl?: string;
+  title?: string;
+  width?: number;
+};
+
+const fetchFigmaOembed = (figmaUrl: string): Promise<FigmaPreviewData> => {
   const cached = oembedCache.get(figmaUrl);
   if (cached) return cached;
 
@@ -35,10 +40,70 @@ const fetchFigmaOembed = (figmaUrl: string): Promise<any> => {
     return response.json();
   });
 
-  // A failure must not be cached, or the preview stays broken until reload.
-  request.catch(() => oembedCache.delete(figmaUrl));
   oembedCache.set(figmaUrl, request);
+  const clearSettledRequest = () => {
+    if (oembedCache.get(figmaUrl) === request) oembedCache.delete(figmaUrl);
+  };
+  void request.then(clearSettledRequest, clearSettledRequest);
   return request;
+};
+
+export const renderFigmaPreview = (
+  preview: HTMLButtonElement,
+  affordance: HTMLSpanElement,
+  data: FigmaPreviewData,
+  isCurrent = () => true,
+) => {
+  const images = Array.isArray(data.previewImages)
+    ? data.previewImages.slice(0, 6)
+    : [];
+  const markPreviewReady = () => {
+    affordance.textContent = 'Click to open the live file';
+    affordance.className =
+      'absolute bottom-2 right-3 text-[12px] text-white/90 opacity-0 transition-opacity drop-shadow-md';
+    preview.addEventListener('mouseenter', () => {
+      affordance.classList.replace('opacity-0', 'opacity-100');
+    });
+    preview.addEventListener('mouseleave', () => {
+      affordance.classList.replace('opacity-100', 'opacity-0');
+    });
+  };
+
+  if (images.length > 0) {
+    const gallery = document.createElement('span');
+    let activated = false;
+    gallery.className =
+      'absolute inset-0 flex items-center justify-center gap-1 overflow-hidden bg-cardBackground p-1';
+    images.forEach(({ name, url }) => {
+      const image = document.createElement('img');
+      image.alt = name || 'Figma frame';
+      image.className = 'h-full min-w-0 flex-1 object-contain';
+      image.onload = () => {
+        if (activated || !isCurrent()) return;
+        activated = true;
+        preview.prepend(gallery);
+        markPreviewReady();
+      };
+      image.onerror = () => image.remove();
+      gallery.append(image);
+      image.src = url;
+    });
+  } else if (data.thumbnailUrl) {
+    const image = document.createElement('img');
+    image.alt = data.title ? `${data.title} Figma preview` : 'Figma preview';
+    image.className = 'absolute inset-0 h-full w-full object-cover';
+    image.onload = () => {
+      if (!isCurrent()) return;
+      const ratio =
+        Number(data.width) > 0 && Number(data.height) > 0
+          ? `${data.width}/${data.height}`
+          : `${image.naturalWidth}/${image.naturalHeight}`;
+      preview.style.aspectRatio = ratio;
+      preview.prepend(image);
+      markPreviewReady();
+    };
+    image.src = data.thumbnailUrl;
+  }
 };
 
 const createEmbedSrc = (url: string) => {
@@ -131,6 +196,7 @@ export const Figma = Node.create({
       const affordance = document.createElement('span');
       const abortController = new AbortController();
       let iframe: HTMLIFrameElement | null = null;
+      let connectLink: HTMLAnchorElement | null = null;
       const attributes = mergeAttributes(
         this.options.HTMLAttributes,
         HTMLAttributes,
@@ -175,33 +241,28 @@ export const Figma = Node.create({
 
         if (figmaUrl) {
           fetchFigmaOembed(figmaUrl)
-            .then(({ thumbnailUrl, title, width, height }) => {
-              if (!thumbnailUrl || iframe || abortController.signal.aborted)
-                return;
+            .then((data) => {
+              if (iframe || abortController.signal.aborted) return;
+              renderFigmaPreview(
+                preview,
+                affordance,
+                data,
+                () => !iframe && !abortController.signal.aborted,
+              );
 
-              const image = document.createElement('img');
-              image.alt = title ? `${title} Figma preview` : 'Figma preview';
-              image.className = 'absolute inset-0 h-full w-full object-cover';
-              image.onload = () => {
-                if (iframe) return;
-                // Follow the design's own proportions once we know them.
-                const ratio =
-                  Number(width) > 0 && Number(height) > 0
-                    ? `${width}/${height}`
-                    : `${image.naturalWidth}/${image.naturalHeight}`;
-                preview.style.aspectRatio = ratio;
-                preview.prepend(image);
-                affordance.textContent = 'Click to open the live file';
-                affordance.className =
-                  'absolute bottom-2 right-3 text-[12px] text-white/90 opacity-0 transition-opacity drop-shadow-md';
-                preview.addEventListener('mouseenter', () => {
-                  affordance.classList.replace('opacity-0', 'opacity-100');
-                });
-                preview.addEventListener('mouseleave', () => {
-                  affordance.classList.replace('opacity-100', 'opacity-0');
-                });
-              };
-              image.src = thumbnailUrl;
+              if (data.canConnectFigma) {
+                const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+                connectLink = document.createElement('a');
+                connectLink.href = `${FIGMA_OAUTH_START_PATH}?returnTo=${encodeURIComponent(returnTo)}`;
+                connectLink.className =
+                  'mt-2 inline-flex text-dense font-semibold text-white-black hover:text-text-light-gray focus-visible:outline-none';
+                connectLink.textContent = 'Connect Figma to preview';
+                connectLink.setAttribute('contenteditable', 'false');
+                connectLink.addEventListener('click', (event) =>
+                  event.stopPropagation(),
+                );
+                dom.append(connectLink);
+              }
             })
             .catch(() => {});
         }
@@ -217,12 +278,17 @@ export const Figma = Node.create({
         ignoreMutation: (mutation) => dom.contains(mutation.target),
         // Without this ProseMirror handles the mousedown first and leaves the
         // atomic node selected, so the next keystroke replaces the embed.
-        stopEvent: (event) =>
+        stopEvent: (event) => {
           // `Node` here is Tiptap's, so reach for the DOM one explicitly.
-          preview.contains(event.target as globalThis.Node | null) &&
-          (event.type === "mousedown" ||
-            event.type === "mouseup" ||
-            event.type === "click"),
+          const target = event.target as globalThis.Node | null;
+          if (connectLink?.contains(target)) return true;
+          return (
+            preview.contains(target) &&
+            (event.type === "mousedown" ||
+              event.type === "mouseup" ||
+              event.type === "click")
+          );
+        },
         destroy: () => abortController.abort(),
       };
     };
