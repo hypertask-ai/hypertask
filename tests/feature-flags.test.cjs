@@ -126,6 +126,7 @@ test("declared flags without rows default to owner and QA", async () => {
     "htpr-6091-feature-flags",
     "htpr-6115-agent-sdk",
     "htpr-6116-figma-node-preview",
+    "htpr-6130-mobile-reminder-safe-area",
   ]) {
     assert.equal(await flags.isFeatureEnabled(key, 6), true);
     assert.equal(await flags.isFeatureEnabled(key, 985), true);
@@ -167,6 +168,7 @@ test("declared flags remain listed without a row and can be changed", async () =
     { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
+    { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_AND_QA", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");
