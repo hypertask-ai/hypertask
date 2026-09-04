@@ -370,8 +370,9 @@ test("Node adapters do not expose unexpected handler errors", async () => {
     setHeader(name: string, value: string) {
       headers.set(name, value);
     },
-    end(body = "") {
-      responseBody = body;
+    end(body: string | Uint8Array = "") {
+      responseBody =
+        typeof body === "string" ? body : new TextDecoder().decode(body);
     },
   };
 
@@ -389,7 +390,7 @@ test("Node adapters do not copy response headers before reading the body", async
         status: 201,
         headers: { "content-length": "6", "x-result": "success" },
       });
-      response.text = async () => {
+      response.arrayBuffer = async () => {
         throw new Error("response body failed");
       };
       return response;
@@ -417,6 +418,41 @@ test("Node adapters do not copy response headers before reading the body", async
   assert.equal(headers.has("content-length"), false);
   assert.equal(headers.has("x-result"), false);
   assert.equal(headers.get("content-type"), "application/json");
+});
+
+test("Node adapters preserve response body bytes", async () => {
+  const bytes = new Uint8Array([0xff, 0x00, 0x80]);
+  const handler: WebhookHandler = Object.assign(
+    async () =>
+      new Response(bytes, {
+        status: 200,
+        headers: { "content-length": String(bytes.length) },
+      }),
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const adapter = nodeHttpAdapter(handler);
+  const request = {
+    method: "POST",
+    url: "/webhook",
+    headers: {},
+    async *[Symbol.asyncIterator]() {},
+  };
+  const headers = new Map<string, string>();
+  let responseBody: string | Uint8Array | undefined;
+  const response = {
+    statusCode: 0,
+    setHeader(name: string, value: string) {
+      headers.set(name, value);
+    },
+    end(body?: string | Uint8Array) {
+      responseBody = body;
+    },
+  };
+
+  await adapter(request, response);
+  assert.equal(response.statusCode, 200);
+  assert.equal(headers.get("content-length"), String(bytes.length));
+  assert.deepEqual(responseBody, bytes);
 });
 
 test("Node adapters preserve multiple Set-Cookie response headers", async () => {
