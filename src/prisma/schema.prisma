@@ -333,6 +333,8 @@ model User {
   createdAiSkills           AI_Skill[]                  @relation("AI_SkillCreator")
   slackInstalls             SlackInstall[]
   slackUserLinks            SlackUserLink[]
+  figmaConnection           FigmaConnection?
+  figmaConnectionOperation  FigmaConnectionOperation?
   reportsCreated            Report[]                    @relation("ReportCreator")
   projectMilestonesCreated  ProjectMilestone[]          @relation("ProjectMilestoneCreator")
   projectStatusUpdates      ProjectStatusUpdate[]       @relation("ProjectStatusUpdateAuthor")
@@ -489,6 +491,26 @@ model FeatureFlag {
   key       String          @id
   mode      FeatureFlagMode @default(OWNER_AND_QA)
   updatedAt DateTime        @updatedAt
+}
+
+model FigmaConnection {
+  userId                Int      @id
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encryptedAccessToken  String   @db.Text
+  encryptedRefreshToken String   @db.Text
+  expiresAt             DateTime
+  figmaUserId           String
+  figmaUserName         String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model FigmaConnectionOperation {
+  userId       Int       @id
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operationId  String
+  pendingUntil DateTime?
+  updatedAt    DateTime  @updatedAt
 }
 
 model UserSetting {

@@ -147,6 +147,12 @@ test("mobile Agent Chat viewport fix starts owner-only", async () => {
   );
 });
 
+test("Figma connection starts owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), false);
+});
+
 test("declared flags without rows default to owner and QA", async () => {
   for (const key of [
     "htpr-5913-consistent-comment-shortcuts",
@@ -214,6 +220,7 @@ test("declared flags remain listed without a row and can be changed", async () =
       updatedAt: null,
     },
     { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6136-figma-connect", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
