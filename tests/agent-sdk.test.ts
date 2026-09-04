@@ -703,6 +703,36 @@ test("run events bind the token, hydrate context, and use stable activity keys",
   );
 });
 
+test("run routing rejects a trigger that differs from the authoritative run", async () => {
+  const api = apiFixture();
+  const authoritativeRun = { ...run, trigger: "assigned" as const };
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (url.pathname.endsWith("/mcp/agents/runs/run-1")) {
+      return Response.json({ success: true, run: authoritativeRun });
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  let handled = false;
+  agent.on("*", () => {
+    handled = true;
+  });
+
+  await assert.rejects(
+    agent.client.dispatch(payload(), authoritativeRun),
+    /does not belong to this agent token/,
+  );
+  assert.equal(handled, false);
+});
+
 test("malformed hydrated collections fail with AgentSdkError", async () => {
   const api = apiFixture();
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {

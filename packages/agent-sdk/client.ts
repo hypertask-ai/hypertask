@@ -240,7 +240,8 @@ export class AgentClient {
         (payload.run.id !== run.id ||
           payload.run.agentId !== run.agentId ||
           payload.run.taskId !== run.taskId ||
-          payload.run.chatSessionId !== run.chatSessionId))
+          payload.run.chatSessionId !== run.chatSessionId ||
+          payload.run.trigger !== run.trigger))
     ) {
       throw new AgentSdkError("Webhook run does not belong to this agent token");
     }
