@@ -9,6 +9,10 @@ const FEATURE_FLAG_OWNER = {
   userId: 6,
   email: "valentin.yeo@gmail.com",
 } as const;
+const FEATURE_FLAG_QA_USER = {
+  userId: 985,
+  email: "valentin@hypertask.ai",
+} as const;
 
 export const FEATURE_FLAG_KEYS = [
   "htpr-5913-consistent-comment-shortcuts",
@@ -20,7 +24,12 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-6116-figma-node-preview",
   "htpr-6118-comment-reactions-api",
 ] as const;
-export const FEATURE_FLAG_MODES = ["OWNER_ONLY", "EVERYONE", "OFF"] as const;
+export const FEATURE_FLAG_MODES = [
+  "OWNER_ONLY",
+  "OWNER_AND_QA",
+  "EVERYONE",
+  "OFF",
+] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 export class FeatureFlagInputError extends Error {}
@@ -30,17 +39,28 @@ type FeatureFlagDatabase = {
   user: Pick<PrismaClient["user"], "findUnique">;
 };
 
-async function isFeatureFlagOwnerUser(
+async function matchesFeatureFlagIdentity(
   userId: number,
+  identity: { userId: number; email: string },
   db: FeatureFlagDatabase = prisma,
 ): Promise<boolean> {
-  if (userId !== FEATURE_FLAG_OWNER.userId) return false;
+  if (userId !== identity.userId) return false;
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { email: true },
   });
-  return user?.email.trim().toLowerCase() === FEATURE_FLAG_OWNER.email;
+  return user?.email.trim().toLowerCase() === identity.email;
 }
+
+const isFeatureFlagOwnerUser = (
+  userId: number,
+  db: FeatureFlagDatabase = prisma,
+) => matchesFeatureFlagIdentity(userId, FEATURE_FLAG_OWNER, db);
+
+const isFeatureFlagQaUser = (
+  userId: number,
+  db: FeatureFlagDatabase = prisma,
+) => matchesFeatureFlagIdentity(userId, FEATURE_FLAG_QA_USER, db);
 
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   const session = await getSessionUser(headers);
@@ -56,8 +76,10 @@ export type FeatureFlagRow = {
 export function featureFlagModeEnabled(
   mode: FeatureFlagMode,
   isOwner: boolean,
+  isQa: boolean,
 ): boolean {
   if (mode === "EVERYONE") return true;
+  if (mode === "OWNER_AND_QA") return isOwner || isQa;
   if (mode === "OWNER_ONLY") return isOwner;
   return false;
 }
@@ -73,10 +95,12 @@ export async function isFeatureEnabled(
   });
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
-  const mode = row?.mode ?? "OWNER_ONLY";
+  const mode = row?.mode ?? "OWNER_AND_QA";
+  const includesOwner = mode === "OWNER_ONLY" || mode === "OWNER_AND_QA";
   return featureFlagModeEnabled(
     mode,
-    mode === "OWNER_ONLY" && (await isFeatureFlagOwnerUser(userId, db)),
+    includesOwner && (await isFeatureFlagOwnerUser(userId, db)),
+    mode === "OWNER_AND_QA" && (await isFeatureFlagQaUser(userId, db)),
   );
 }
 
@@ -88,7 +112,7 @@ export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      { key, mode: "OWNER_ONLY", updatedAt: null },
+      { key, mode: "OWNER_AND_QA", updatedAt: null },
     ]),
   );
   stored.forEach((row) => byKey.set(row.key, row));
@@ -99,11 +123,19 @@ export async function featureFlagsForUser(
   userId: number,
 ): Promise<Record<string, boolean>> {
   const rows = await listFeatureFlagModes();
-  const isOwner = rows.some((row) => row.mode === "OWNER_ONLY")
+  const isOwner = rows.some(
+    (row) => row.mode === "OWNER_ONLY" || row.mode === "OWNER_AND_QA",
+  )
     ? await isFeatureFlagOwnerUser(userId)
     : false;
+  const isQa = rows.some((row) => row.mode === "OWNER_AND_QA")
+    ? await isFeatureFlagQaUser(userId)
+    : false;
   return Object.fromEntries(
-    rows.map((row) => [row.key, featureFlagModeEnabled(row.mode, isOwner)]),
+    rows.map((row) => [
+      row.key,
+      featureFlagModeEnabled(row.mode, isOwner, isQa),
+    ]),
   );
 }
 

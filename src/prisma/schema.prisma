@@ -29,6 +29,7 @@ enum Status {
 enum FeatureFlagMode {
   OFF
   OWNER_ONLY
+  OWNER_AND_QA
   EVERYONE
 }
 
@@ -477,7 +478,7 @@ model SubscribedDevices {
 
 model FeatureFlag {
   key       String          @id
-  mode      FeatureFlagMode @default(OWNER_ONLY)
+  mode      FeatureFlagMode @default(OWNER_AND_QA)
   updatedAt DateTime        @updatedAt
 }
 
