@@ -103,8 +103,10 @@ export interface CreateCommentParams {
   /** Existing run comment and outbox rows whose side effects need resuming. */
   agentRunReplayComment?: {
     id: number;
+    activityId: string;
     agentWebhookDeliveryIds: string[];
     boardWebhookDeliveryIds: string[];
+    notificationsSentAt: Date | null;
   };
   /**
    * Extra board events to persist in the same transaction as the comment, so a
@@ -1112,7 +1114,7 @@ export async function createCommentService(params: CreateCommentParams) {
       await publishAgentWebhookDeliveries(webhookDeliveryIds);
       await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     }
-    if (agentRunReplayComment) return comment;
+    if (agentRunReplayComment?.notificationsSentAt) return comment;
 
     const devices = await prisma.subscribedDevices.findMany({
       where: { userId: { in: userIds } },
@@ -1149,6 +1151,28 @@ export async function createCommentService(params: CreateCommentParams) {
         comment.id,
         inboundProcessingStartedAt,
       );
+    } else if (isAgentRunComment) {
+      await fcmDelivery;
+      await sendCommentEmails({
+        task,
+        text,
+        creatorId,
+        currentUser,
+        recipientUserIds,
+        mentionedUserIds,
+        fromAgentId: agentId ?? null,
+      });
+      const commentActivityId =
+        agentRunActivity?.id ??
+        agentRunSelection?.activityId ??
+        agentRunReplayComment?.activityId;
+      if (!commentActivityId) {
+        throw new Error("Run activity comment is missing its activity");
+      }
+      await prisma.agentRunActivity.update({
+        where: { id: commentActivityId },
+        data: { commentNotificationsSentAt: new Date() },
+      });
     } else {
       void fcmDelivery.catch((error) =>
         console.warn("[createCommentService] FCM delivery failed:", error),

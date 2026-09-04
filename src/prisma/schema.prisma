@@ -2256,6 +2256,7 @@ model AgentRunActivity {
   selectionComment               Comment?  @relation("AgentRunActivitySelectionComment", fields: [selectionCommentId], references: [id], onDelete: SetNull)
   commentAgentWebhookDeliveryIds String[]  @default([])
   commentBoardWebhookDeliveryIds String[]  @default([])
+  commentNotificationsSentAt     DateTime?
   createdAt                      DateTime   @default(now())
 
   @@unique([runId, idempotencyKey])

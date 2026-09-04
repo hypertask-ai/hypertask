@@ -68,6 +68,7 @@ function activityRow(overrides = {}) {
     selectionCommentId: null,
     commentAgentWebhookDeliveryIds: [],
     commentBoardWebhookDeliveryIds: [],
+    commentNotificationsSentAt: null,
     createdAt: new Date("2026-09-04T10:01:00.000Z"),
     ...overrides,
   };
@@ -394,6 +395,12 @@ function loadService({
         failCommentAfterPersistence = false;
         throw new Error("post-commit comment side effect failed");
       }
+      const activityId =
+        input.agentRunActivity?.id ??
+        input.agentRunSelection?.activityId ??
+        input.agentRunReplayComment?.activityId;
+      const activity = db.activities.find(({ id }) => id === activityId);
+      if (activity) activity.commentNotificationsSentAt = new Date();
       return { id: commentId, text: input.text };
     },
   });
@@ -772,6 +779,7 @@ test("migration constrains retry keys and elicitation selections", () => {
   );
   assert.match(replayMigration, /ADD COLUMN "responseCommentId" INTEGER/);
   assert.match(replayMigration, /"commentAgentWebhookDeliveryIds" TEXT\[\]/);
+  assert.match(replayMigration, /"commentNotificationsSentAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /AgentRunActivity_selectionCommentId_fkey/);
 });
 
@@ -781,6 +789,7 @@ function loadAtomicCommentService(
   updateTaskSingle,
   publishAgentWebhookDeliveries,
   publishBoardWebhookDeliveries,
+  sendDataOnlyFcm,
 ) {
   const noop = async () => {};
   const modules = {
@@ -814,7 +823,7 @@ function loadAtomicCommentService(
     "src/utils/controllers/tasks/addRelatedTasks.ts": {
       addRelatedTasks: async () => ({ status: 200 }),
     },
-    "src/utils/controllers/FCM/index.ts": { sendDataOnlyFcm: noop },
+    "src/utils/controllers/FCM/index.ts": { sendDataOnlyFcm },
     "src/utils/controllers/notifications/shouldNotify.ts": {
       shouldNotify: async () => true,
     },
@@ -888,6 +897,7 @@ function atomicCommentHarness() {
   const webhookWrites = [];
   const publishedAgentWebhookIds = [];
   const publishedBoardWebhookIds = [];
+  const fcmCalls = [];
   const updateTaskCalls = [];
   let failure = "comment";
 
@@ -1023,6 +1033,7 @@ function atomicCommentHarness() {
     },
     async (ids) => publishedAgentWebhookIds.push([...ids]),
     async (ids) => publishedBoardWebhookIds.push([...ids]),
+    async (...args) => fcmCalls.push(args),
   );
   return {
     run,
@@ -1033,6 +1044,7 @@ function atomicCommentHarness() {
     webhookWrites,
     publishedAgentWebhookIds,
     publishedBoardWebhookIds,
+    fcmCalls,
     updateTaskCalls,
     createCommentService,
     setFailure: (value) => {
@@ -1162,6 +1174,7 @@ test("activity comment links and task counters commit once across replay", async
   assert.notEqual(harness.task.updatedAt, originalTaskUpdatedAt);
   assert.deepEqual(harness.publishedAgentWebhookIds, [["delivery-1"]]);
   assert.deepEqual(harness.publishedBoardWebhookIds, [[]]);
+  assert.equal(harness.fcmCalls.length, 0);
   assert.equal(harness.updateTaskCalls.length, 0);
 
   harness.setFailure(null);
@@ -1169,11 +1182,16 @@ test("activity comment links and task counters commit once across replay", async
     ...commentInput,
     agentRunReplayComment: {
       id: comment.id,
+      activityId: harness.elicitation.id,
       agentWebhookDeliveryIds: ["delivery-1"],
       boardWebhookDeliveryIds: [],
+      notificationsSentAt: null,
     },
   });
   assert.equal(replay.id, comment.id);
+  assert.ok(
+    harness.elicitation.commentNotificationsSentAt instanceof Date,
+  );
   assert.equal(harness.comments.length, 1);
   assert.equal(harness.task.totalComments, 1);
   assert.deepEqual(harness.publishedAgentWebhookIds, [
@@ -1181,5 +1199,19 @@ test("activity comment links and task counters commit once across replay", async
     ["delivery-1"],
   ]);
   assert.deepEqual(harness.publishedBoardWebhookIds, [[], []]);
+  assert.equal(harness.fcmCalls.length, 1);
+
+  await harness.createCommentService({
+    ...commentInput,
+    agentRunReplayComment: {
+      id: comment.id,
+      activityId: harness.elicitation.id,
+      agentWebhookDeliveryIds: ["delivery-1"],
+      boardWebhookDeliveryIds: [],
+      notificationsSentAt: harness.elicitation.commentNotificationsSentAt,
+    },
+  });
+  assert.equal(harness.fcmCalls.length, 1);
+  assert.equal(harness.publishedAgentWebhookIds.length, 3);
   assert.equal(harness.updateTaskCalls.length, 0);
 });

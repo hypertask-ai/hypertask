@@ -312,8 +312,10 @@ async function replayCreatedActivity(
       accessUserId: principal.userId,
       agentRunReplayComment: {
         id: activity.responseCommentId,
+        activityId: activity.id,
         agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
         boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
+        notificationsSentAt: activity.commentNotificationsSentAt,
       },
     });
   }
@@ -489,8 +491,10 @@ export async function selectAgentRunActivity(
         accessUserId: principal.userId,
         agentRunReplayComment: {
           id: activity.selectionCommentId,
+          activityId: activity.id,
           agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
           boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
+          notificationsSentAt: activity.commentNotificationsSentAt,
         },
       });
     }
