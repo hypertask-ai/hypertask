@@ -2,6 +2,11 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
+require("tsx/cjs");
+
+const { getNextRouterAwareHistoryState } = require(
+  path.join(__dirname, "..", "src/lib/navigation/nextHistoryState.ts"),
+);
 
 // HTPR-6072: SectionComp used to be keyed by readinessRouteEntryId, so React
 // fully unmounted and rebuilt the whole board tree on every switch - even
@@ -254,7 +259,7 @@ test("HTPR-6072: a pending shallow switch keeps the committed board mounted", ()
   );
   assert.match(
     src,
-    /const boardRender =\s*shallowBoardSwitchEnabled &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: readyBoardRender/,
+    /const boardRender =\s*shallowBoardSwitchEnabled &&\s*committedBoardRender\?\.accountId === user\.id &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: readyBoardRender/,
     "expected a shallow switch to retain the previous committed snapshot only while the target is pending",
   );
   assert.match(
@@ -303,6 +308,46 @@ test("HTPR-6072: sectionCompEverRenderedRef arms in an effect, not during render
   );
 });
 
+test("HTPR-6072: shallow navigation notifies Next when the current entry is already router-owned", () => {
+  const currentState = {
+    __NA: true,
+    __PRIVATE_NEXTJS_INTERNALS_TREE: ["", {}],
+    retainedByCaller: "keep-me",
+  };
+  const restoredUrls = [];
+
+  const nextPatchedPushState = (data, url) => {
+    // Next deliberately skips its router update for its own internal calls.
+    if (data?.__NA || data?._N) return data;
+    restoredUrls.push(url);
+    return {
+      ...data,
+      __NA: currentState.__NA,
+      __PRIVATE_NEXTJS_INTERNALS_TREE:
+        currentState.__PRIVATE_NEXTJS_INTERNALS_TREE,
+    };
+  };
+
+  nextPatchedPushState(currentState, "/project?id=1215");
+  assert.deepEqual(
+    restoredUrls,
+    [],
+    "passing window.history.state back unchanged reproduces the stale-board failure",
+  );
+
+  const storedState = nextPatchedPushState(
+    getNextRouterAwareHistoryState(currentState),
+    "/project?id=1215",
+  );
+  assert.deepEqual(restoredUrls, ["/project?id=1215"]);
+  assert.equal(storedState.__NA, true, "Next must restore its routing marker");
+  assert.equal(
+    storedState.retainedByCaller,
+    "keep-me",
+    "unrelated history state must survive the shallow switch",
+  );
+});
+
 test("HTPR-6072: shallow navigation is flag, route, and cache guarded", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/hooks/General/useProjectQuery.ts"),
@@ -311,8 +356,8 @@ test("HTPR-6072: shallow navigation is flag, route, and cache guarded", () => {
   assert.match(src, /useFlag\(\s*"htpr-6072-shallow-board-switch"/);
   assert.match(
     src,
-    /if \(shallowBoardSwitchEnabled && pathname === "\/project" && project\) \{\s*window\.history\.pushState\(window\.history\.state, "", destination\);\s*return;\s*\}[\s\S]{0,180}router\.push\(destination\)/,
-    "expected non-board, cache-miss, and flag-off navigation to retain router.push",
+    /if \(shallowBoardSwitchEnabled && pathname === "\/project" && project\) \{\s*window\.history\.pushState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*destination,\s*\);\s*return;\s*\}[\s\S]{0,180}router\.push\(destination\)/,
+    "expected warm board switches to notify Next while non-board, cache-miss, and flag-off navigation retains router.push",
   );
 });
 
@@ -327,8 +372,8 @@ test("HTPR-6072: the live URL selects a board only behind the flag", () => {
   );
   assert.match(
     src,
-    /if \(shallowBoardSwitchEnabled && pathname === "\/project"\) \{\s*window\.history\.replaceState\(window\.history\.state, "", newUrl\)\s*\} else \{\s*router\.replace/,
-    "expected canonicalization to preserve Next history state and retain the router fallback",
+    /if \(shallowBoardSwitchEnabled && pathname === "\/project"\) \{\s*window\.history\.replaceState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*newUrl,\s*\)\s*\} else \{\s*router\.replace/,
+    "expected canonicalization to notify Next, preserve history state, and retain the router fallback",
   );
 });
 
