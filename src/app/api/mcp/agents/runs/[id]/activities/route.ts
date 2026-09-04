@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  agentRunsEnabledFor,
+  agentRunActivitiesEnabledFor,
   authenticateAgentRunRequest,
   createAgentRunActivity,
   listAgentRunActivities,
@@ -33,7 +33,7 @@ async function authorize(request: NextRequest) {
       ),
     };
   }
-  if (!(await agentRunsEnabledFor(principal))) {
+  if (!(await agentRunActivitiesEnabledFor(principal))) {
     return {
       response: noStore({ success: false, error: "Run not found" }, 404),
     };

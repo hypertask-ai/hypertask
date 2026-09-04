@@ -236,6 +236,20 @@ test("activity input accepts typed rows and rejects invalid type-specific fields
       ],
     },
   );
+  assert.deepEqual(
+    model.parseAgentRunActivityInput({
+      type: "thought",
+      text: "Nullable fields",
+      link: null,
+      options: null,
+    }),
+    {
+      type: "THOUGHT",
+      text: "Nullable fields",
+      link: null,
+      options: null,
+    },
+  );
   assert.throws(
     () =>
       model.parseAgentRunActivityInput({
@@ -305,14 +319,20 @@ test("persistence rejects a late activity after a run stops", async () => {
   assert.equal(db.activities.length, 0);
 });
 
-function loadService({ runs = [], activities = [] } = {}) {
+function loadService({ runs = [], activities = [], featureEnabled = () => true } = {}) {
   const db = fakeDatabase(runs, activities);
   const commentCalls = [];
   const webhookEvents = [];
   const published = [];
   const broadcasts = [];
+  const flagChecks = [];
   stub("src/lib/prisma.ts", { default: db });
-  stub("src/lib/flags.ts", { isFeatureEnabled: async () => true });
+  stub("src/lib/flags.ts", {
+    isFeatureEnabled: async (key) => {
+      flagChecks.push(key);
+      return featureEnabled(key);
+    },
+  });
   stub("src/lib/mcp/auth.ts", { validateMcpAuth: async () => null });
   stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
   stub("src/lib/agentWebhooks/outbox.ts", {
@@ -353,8 +373,24 @@ function loadService({ runs = [], activities = [] } = {}) {
     webhookEvents,
     published,
     broadcasts,
+    flagChecks,
   };
 }
+
+test("activity behavior requires the parent and ticket feature flags", async () => {
+  const harness = loadService({
+    featureEnabled: (key) => key !== model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
+  });
+
+  assert.equal(
+    await harness.service.agentRunActivitiesEnabledFor(agentPrincipal),
+    false,
+  );
+  assert.deepEqual(harness.flagChecks, [
+    model.AGENT_RUN_FEATURE_FLAG,
+    model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
+  ]);
+});
 
 test("only the owner browser and matching agent can list run activities", async () => {
   const run = runRow();

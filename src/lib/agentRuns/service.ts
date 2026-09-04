@@ -11,6 +11,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import {
+  AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
   AGENT_RUN_STALE_AFTER_MS,
   AgentRunActivityConflictError,
@@ -93,6 +94,15 @@ export async function agentRunsEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
   return isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId);
+}
+
+export async function agentRunActivitiesEnabledFor(
+  principal: AgentRunPrincipal,
+): Promise<boolean> {
+  return (
+    (await agentRunsEnabledFor(principal)) &&
+    (await isFeatureEnabled(AGENT_RUN_ACTIVITY_FEATURE_FLAG, principal.userId))
+  );
 }
 
 export async function readAgentRun(

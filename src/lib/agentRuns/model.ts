@@ -11,6 +11,7 @@ import type {
 } from "@/lib/agentWebhooks/events";
 
 export const AGENT_RUN_FEATURE_FLAG = "htpr-6115-agent-sdk";
+export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
 export const NONTERMINAL_AGENT_RUN_STATUSES: AgentRunStatus[] = [
   "ACTIVE",
@@ -190,7 +191,7 @@ export function parseAgentRunActivityInput(value: unknown): AgentRunActivityInpu
   }
 
   let link: string | null = null;
-  if (body.link !== undefined) {
+  if (body.link !== undefined && body.link !== null) {
     link = typeof body.link === "string" ? body.link.trim() : "";
     if (!link || link.length > AGENT_RUN_ACTIVITY_LINK_MAX_LENGTH) {
       throw new AgentRunActivityInputError(
@@ -213,7 +214,9 @@ export function parseAgentRunActivityInput(value: unknown): AgentRunActivityInpu
     throw new AgentRunActivityInputError("link is only valid for action activities");
   }
   const options =
-    body.options === undefined ? null : parseActivityOptions(body.options);
+    body.options === undefined || body.options === null
+      ? null
+      : parseActivityOptions(body.options);
   if (type === "ELICITATION" && !options) {
     throw new AgentRunActivityInputError(
       "options are required for elicitation activities",
