@@ -71,6 +71,13 @@ function objectValue(value: unknown, label: string): JsonObject {
   return value as JsonObject;
 }
 
+function arrayValue<T>(value: unknown, label: string): T[] {
+  if (!Array.isArray(value)) {
+    throw new AgentSdkError(`${label} returned an invalid response`);
+  }
+  return value as T[];
+}
+
 function responseMessage(value: unknown, fallback: string): string {
   if (!value || typeof value !== "object") return fallback;
   const body = value as JsonObject;
@@ -329,7 +336,10 @@ export class AgentClient {
       `/mcp/agents/runs/${encodeURIComponent(record.id)}/activities`,
       { signal },
     ).then((response) =>
-      response.activities.map((activity) => ({
+      arrayValue<AgentActivity>(
+        objectValue(response, "Agent activities").activities,
+        "Agent activities",
+      ).map((activity) => ({
         kind: "activity" as const,
         ...activity,
       })),
@@ -356,11 +366,27 @@ export class AgentClient {
         ),
         activitiesPromise,
       ]);
-      const ticket = taskResponse.task ?? taskResponse.tasks?.[0] ?? null;
+      const taskBody = objectValue(taskResponse, "Run task");
+      const ticket =
+        (taskBody.task as AgentTask | undefined) ??
+        arrayValue<AgentTask>(taskBody.tasks ?? [], "Run task list")[0] ??
+        null;
       if (!ticket || ticket.id !== record.taskId) {
         throw new AgentSdkError("Run task is unavailable to this agent token");
       }
-      const comments: AgentThreadItem[] = commentResponse.comments.map((comment) => ({
+      const comments: AgentThreadItem[] = arrayValue<
+        {
+          id: number;
+          text: string;
+          commentText?: string;
+          createdAt: string;
+          creator?: unknown;
+          agent?: unknown;
+        }
+      >(
+        objectValue(commentResponse, "Task comments").comments,
+        "Task comments",
+      ).map((comment) => ({
         kind: "comment",
         id: comment.id,
         text: comment.commentText ?? comment.text,
@@ -390,7 +416,17 @@ export class AgentClient {
         ),
         activitiesPromise,
       ]);
-      const messages: AgentThreadItem[] = chatResponse.messages.map((message) => ({
+      const messages: AgentThreadItem[] = arrayValue<
+        {
+          id: string;
+          role: "human" | "assistant";
+          content: string;
+          createdAt: string;
+        }
+      >(
+        objectValue(chatResponse, "Chat messages").messages,
+        "Chat messages",
+      ).map((message) => ({
         kind: "message",
         id: message.id,
         text: message.content,

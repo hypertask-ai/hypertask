@@ -523,6 +523,40 @@ test("run events bind the token, hydrate context, and use stable activity keys",
   );
 });
 
+test("malformed hydrated collections fail with AgentSdkError", async () => {
+  const api = apiFixture();
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (
+      (init.method ?? "GET") === "GET" &&
+      url.pathname.endsWith("/mcp/agents/runs/run-1/activities")
+    ) {
+      return Response.json({ success: true, activities: null });
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  agent.on("mention", () => {
+    assert.fail("malformed context must not reach the handler");
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), (error) => {
+    assert.equal(error instanceof AgentSdkError, true);
+    assert.match((error as AgentSdkError).message, /Agent activities/);
+    return true;
+  });
+});
+
 test("run records cannot overwrite SDK internals", async () => {
   const api = apiFixture();
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {
