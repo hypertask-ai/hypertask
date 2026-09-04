@@ -36,17 +36,15 @@ test("HTPR-6072: local project state re-syncs on projectIndex alone, not just a 
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
-  // Without the remount, this effect is the only thing that re-derives
-  // sections/currentProject/currentIndex for the newly selected board - it
-  // must depend on _projectIndex, not just on _allProjects (which is often
-  // the same array reference across a switch between two boards).
-  const effectMatch = src.match(
-    /setSections\(_allProjects\[_projectIndex\]\.sections\)[\s\S]{0,80}\}, \[([^\]]+)\]\)/,
+  assert.match(
+    src,
+    /syncedBoardInput\.projects !== _allProjects \|\|\s*syncedBoardInput\.projectIndex !== _projectIndex/,
+    "the local state guard must notice an index-only board switch",
   );
-  assert.ok(effectMatch, "expected the project re-sync effect to still exist");
-  assert.ok(
-    /_projectIndex/.test(effectMatch[1]),
-    "the re-sync effect must depend on _projectIndex",
+  assert.match(
+    src,
+    /setSyncedBoardInput\(\{ projects: _allProjects, projectIndex: _projectIndex \}\);[\s\S]{0,300}setSections\(nextProject\?\.sections \?\? \[\]\);[\s\S]{0,100}setCurrentIndex\(_projectIndex\)/,
+    "the guarded render restart must synchronize every board-local state value",
   );
 });
 
@@ -209,24 +207,44 @@ test("HTPR-6072: a failed sub-task lookup does not leave taskInfo set with no mo
   );
 });
 
-test("HTPR-6072: the project re-sync effect runs before paint (useLayoutEffect, not useEffect)", () => {
-  // A passive useEffect runs after the browser paints, so on a switch React
-  // would paint one frame with the previous board's local currentProject
-  // and sections before this effect corrects them - a visible flash of the
-  // wrong board. useLayoutEffect runs before paint, so that frame is never
-  // shown.
+test("HTPR-6072: project re-sync restarts SectionComp before descendants reconcile", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
-  const effectMatch = src.match(
-    /(useLayoutEffect|useEffect)\(\(\) => \{[\s\S]{0,40}setProjects\(_allProjects\)[\s\S]*?\}, \[_allProjects, _projectIndex\]\)/,
+  const syncStart = src.indexOf("syncedBoardInput.projects !== _allProjects");
+  const descendantWork = src.indexOf("const filteredSectionsForActiveView");
+  assert.ok(syncStart >= 0 && syncStart < descendantWork);
+  assert.doesNotMatch(
+    src,
+    /useLayoutEffect\(\(\) => \{[\s\S]{0,500}setProjects\(_allProjects\)/,
+    "a board switch must not render descendants once, then force the whole tree through a layout-effect render",
   );
-  assert.ok(effectMatch, "expected the project re-sync effect to still exist");
-  assert.equal(
-    effectMatch[1],
-    "useLayoutEffect",
-    "the re-sync effect must be useLayoutEffect so a switch never paints a stale board frame",
+  assert.match(
+    src,
+    /useLayoutEffect\(\(\) => \{\s*const project = _allProjects\?\.\[_projectIndex\] \?\? null\s*setRecoilCurrentProject\(\(current\) => current === project \? current : project\)\s*\}, \[_allProjects, _projectIndex, setRecoilCurrentProject\]\)/,
+    "external current-project consumers must still synchronize before paint",
+  );
+});
+
+test("HTPR-6072: local data and the current-project atom publish in one render batch", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const callbackStart = src.indexOf("const markLocalBoardPublished");
+  const callbackEnd = src.indexOf("const {\n  authorizeAndPublishLocalBoard", callbackStart);
+  const callback = src.slice(callbackStart, callbackEnd);
+  assert.ok(callbackStart >= 0 && callbackEnd > callbackStart);
+  assert.match(callback, /queryClient\.getQueryData<IProjectsAll>/);
+  assert.ok(
+    callback.indexOf("setRouteCurrentProject") < callback.indexOf("setBoardAccess"),
+    "the authorized project atom and access state must enter the same React batch",
+  );
+  assert.match(
+    src,
+    /const queryData: IProjectsAll \| undefined =\s*cachedQueryData\?\.accountId === user\.id \? cachedQueryData : fetchedData/,
+    "the access-state render must read the already-published local cache instead of waiting for observer notification",
   );
 });
 

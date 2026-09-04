@@ -3,7 +3,7 @@ import nookies from "nookies"
 import {  IFavorites, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 
 import {     activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
-import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import  { lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { debounce, deepCopy } from "@/utils/helperFunctions/helperFunctions";
 
@@ -169,6 +169,7 @@ const  LandingPage= ({
 }) =>{
 
 const queryClient = useQueryClient();
+const setRouteCurrentProject = useSetRecoilState(currentProjectAtom)
 const router = useRouter()
 const {
   releaseSecondaryStartup,
@@ -266,6 +267,20 @@ const markLocalBoardPublished = useCallback(
     ) {
       return
     }
+    const localData = queryClient.getQueryData<IProjectsAll>(
+      PROJECTS_ALL_QUERY_KEY,
+    )
+    const localProject =
+      localData?.accountId === publishedAccountId &&
+      localData.dataOrigin === "indexeddb"
+        ? localData.updatedProjects.find(
+            (project) => project.id === publishedProjectId,
+          )
+        : undefined
+    if (!localProject) return
+    // Publish the authorized project atom in the same React batch as access.
+    // SectionComp then reconciles the target once with matching global state.
+    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView))
     setBoardAccess((current) =>
       current.key === boardAccessKey &&
       (current.status === "authorized" || current.status === "denied")
@@ -273,7 +288,14 @@ const markLocalBoardPublished = useCallback(
         : { key: boardAccessKey, status: "local" },
     )
   },
-  [boardAccessKey, requestedProjectId, user.id],
+  [
+    boardAccessKey,
+    currentView,
+    queryClient,
+    requestedProjectId,
+    setRouteCurrentProject,
+    user.id,
+  ],
 )
 const {
   authorizeAndPublishLocalBoard,
@@ -581,9 +603,13 @@ const currentBoardAccessStatus =
   boardAccess.key === boardAccessKey ? boardAccess.status : "pending";
 const activeBoardPayloadUnavailable =
   projectsErrorCause instanceof ActiveBoardPayloadUnavailableError;
-// Use persisted / in-memory cache immediately — don't wait for network
+// Read the cache first: local publication writes it before its access callback,
+// so that callback's React batch can render the target without waiting for the
+// query observer's scheduled notification.
+const cachedQueryData =
+  queryClient.getQueryData<IProjectsAll>(PROJECTS_ALL_QUERY_KEY)
 const queryData: IProjectsAll | undefined =
-  fetchedData ?? queryClient.getQueryData<IProjectsAll>(PROJECTS_ALL_QUERY_KEY);
+  cachedQueryData?.accountId === user.id ? cachedQueryData : fetchedData;
 const pilotAccessConfirmed =
   currentBoardAccessStatus === "local" ||
   (currentBoardAccessStatus === "authorized" &&
@@ -1229,8 +1255,27 @@ const isMbl = useContext(MobileViewContext);
 const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
 const showQuickTips = useRecoilValue(showQuickTipsAtom);
 const [_currentProject,setCurrentProject] = useState( _allProjects && _projectIndex >= 0 ? _allProjects[_projectIndex] : null)
-const [__, setRecoilCurrentProject] = useRecoilState(currentProjectAtom)
+const setRecoilCurrentProject = useSetRecoilState(currentProjectAtom)
 const [sections, setSections] = useState<ISection[]>(deepCopy(_allProjects && _projectIndex >= 0 ? _allProjects[_projectIndex]?.sections : []));
+const [currentIndex, setCurrentIndex] = useState<number>(_projectIndex);
+// Adjusting state during render makes React restart SectionComp before it
+// reconciles descendants, instead of rendering the old board tree and then
+// forcing the whole tree through a synchronous layout-effect render.
+const [syncedBoardInput, setSyncedBoardInput] = useState({
+  projects: _allProjects,
+  projectIndex: _projectIndex,
+});
+if (
+  syncedBoardInput.projects !== _allProjects ||
+  syncedBoardInput.projectIndex !== _projectIndex
+) {
+  const nextProject = _allProjects?.[_projectIndex] ?? null;
+  setSyncedBoardInput({ projects: _allProjects, projectIndex: _projectIndex });
+  setProjects(_allProjects);
+  setCurrentProject(nextProject);
+  setSections(nextProject?.sections ?? []);
+  setCurrentIndex(_projectIndex);
+}
 const { setShowTrial, showTrial } = useTrialModal(_currentProject);
 const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
   _currentProject?.id ?? null,
@@ -1247,19 +1292,10 @@ const filterRuntimeContext = useMemo(() => ({
       )),
 }), [runningTimers, sections, timerDataReady]);
 
-// Sync currentProject to Recoil when project data is available
 useEffect(() => {
-  if (_allProjects && _projectIndex >= 0 && _allProjects[_projectIndex]) {
-    const project = _allProjects[_projectIndex]
-    setCurrentProject(project)
-    setRecoilCurrentProject(project)
-    if (project.teamId) setLastBoardTeam(project.teamId)
-  } else if (_allProjects && _projectIndex === -1) {
-    // Project not found - might be a timing issue, set to null
-    setCurrentProject(null)
-    setRecoilCurrentProject(null)
-  }
-}, [_allProjects, _projectIndex, setRecoilCurrentProject])
+  const project = _allProjects?.[_projectIndex]
+  if (project?.teamId) setLastBoardTeam(project.teamId)
+}, [_allProjects, _projectIndex])
 
 const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
 const filteredSectionsForActiveView = useMemo(() => {
@@ -1294,7 +1330,6 @@ const filteredSectionsForActiveView = useMemo(() => {
   sections,
 ]);
 
-const [currentIndex, setCurrentIndex] = useState<number>(_projectIndex);
 const [favorites, setFavorites] = useState<IFavorites[]>([]);
 const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(isXScrollOnKanbanAtom);
 const kanbanContainerRef = useRef<HTMLDivElement>(null);
@@ -1421,26 +1456,12 @@ useViewCyclingShortcuts(_currentProject)
 
   },[_currentProject, activeBuiltinViews])
 
-// HTPR-6072: this is useLayoutEffect, not useEffect. SectionComp no longer
-// remounts on a board switch, so this is the only thing that re-syncs local
-// state to the newly selected project - a passive effect runs after paint,
-// which would let one frame render with the previous board's currentProject
-// and sections before this fires. useLayoutEffect runs before the browser
-// paints, so that stale frame is never shown.
+// Local state already targets the incoming board before descendants reconcile.
+// Keep only the shared atom synchronized before paint for external consumers.
 useLayoutEffect(() => {
-
-  setProjects(_allProjects)
-  setCurrentProject(_allProjects[_projectIndex])
-  setRecoilCurrentProject(_allProjects[_projectIndex])
-  // Must also fire on _projectIndex changing alone (_allProjects, the full
-  // project list, often doesn't change reference between two boards in the
-  // same list).
-  setCurrentIndex(_projectIndex)
-
-  setSections(_allProjects[_projectIndex].sections)
-
-  // queryClient.refetchQueries({queryKey:["getAllTeamsMinimal"]})
-}, [_allProjects, _projectIndex])
+  const project = _allProjects?.[_projectIndex] ?? null
+  setRecoilCurrentProject((current) => current === project ? current : project)
+}, [_allProjects, _projectIndex, setRecoilCurrentProject])
 
 // ================= detect horizontal scrollbar
 useEffect(() => {
