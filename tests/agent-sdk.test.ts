@@ -1265,6 +1265,59 @@ test("dispatch waits for an automatic thought already in flight", async (context
   }
 });
 
+test("starting an explicit activity cancels the automatic thought", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  const api = apiFixture();
+  let activityStarted!: () => void;
+  const startedActivity = new Promise<void>((resolve) => {
+    activityStarted = resolve;
+  });
+  let finishActivity!: () => void;
+  const activityGate = new Promise<void>((resolve) => {
+    finishActivity = resolve;
+  });
+  let activityRequests = 0;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (
+      init.method === "POST" &&
+      url.pathname.endsWith("/mcp/agents/runs/run-1/activities")
+    ) {
+      activityRequests += 1;
+      if (activityRequests === 1) activityStarted();
+      await activityGate;
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Explicit activity in flight.");
+  });
+
+  try {
+    const work = background();
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await startedActivity;
+    context.mock.timers.tick(8_000);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const requestsBeforeRelease = activityRequests;
+    finishActivity();
+    await work.drain();
+    assert.equal(requestsBeforeRelease, 1);
+    assert.equal(activityRequests, 1);
+  } finally {
+    finishActivity();
+    context.mock.timers.reset();
+  }
+});
+
 test("successful handlers cancel an unstarted automatic thought", async () => {
   const api = apiFixture();
   const agent = createAgent({

@@ -537,6 +537,10 @@ class AgentRunImpl implements AgentRun {
     extra: { link?: string; options?: AgentActivityOption[] } = {},
   ): Promise<AgentActivity> {
     this.assertNotStopped();
+    if (!this.activityRecorded) {
+      this.activityRecorded = true;
+      this.firstActivityCallback?.();
+    }
     const response = await this.client.request<{ activity: AgentActivity }>(
       `/mcp/agents/runs/${encodeURIComponent(this.id)}/activities`,
       {
@@ -546,10 +550,6 @@ class AgentRunImpl implements AgentRun {
         signal: this.signal,
       },
     );
-    if (!this.activityRecorded) {
-      this.activityRecorded = true;
-      this.firstActivityCallback?.();
-    }
     return response.activity;
   }
 
