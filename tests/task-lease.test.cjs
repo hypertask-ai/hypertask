@@ -129,7 +129,7 @@ test('agent writes require a live matching lease in every transaction', async ()
   );
 });
 
-test('agent writes accept a matching explicit lease instance token', async () => {
+test('agent writes accept tokenized explicit leases without adoption references', async () => {
   await assert.doesNotReject(
     assertAgentAssignmentChangeAllowed(
       mutationTx({
