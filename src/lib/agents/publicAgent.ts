@@ -48,6 +48,7 @@ function isAgentCollectionKey(key: string): boolean {
 function isAgentIdentifierKey(key: string): boolean {
   return (
     key === "agentId" ||
+    key === "agent_id" ||
     key.endsWith("AgentId") ||
     key.endsWith("_agent_id")
   );
@@ -56,6 +57,7 @@ function isAgentIdentifierKey(key: string): boolean {
 function isAgentDisplayNameKey(key: string): boolean {
   return (
     key === "agentDisplayName" ||
+    key === "agent_display_name" ||
     key.endsWith("AgentDisplayName") ||
     key.endsWith("_agent_display_name")
   );

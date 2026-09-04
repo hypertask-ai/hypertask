@@ -174,6 +174,8 @@ async function main() {
     id: "share-id",
     userAgent: "Mozilla/5.0",
     fallbackAgent: { id: "fallback-agent-id", displayName: "Fallback Agent" },
+    agent_id: "snake-agent-id",
+    agent_display_name: "Snake Agent",
     task: {
       id: 99,
       agentId: "task-agent-id",
@@ -191,6 +193,11 @@ async function main() {
     displayName: PRIVATE_AGENT_DISPLAY_NAME,
     photoURL: null,
   });
+  assert.equal(redactedSharedTask.agent_id, null);
+  assert.equal(
+    redactedSharedTask.agent_display_name,
+    PRIVATE_AGENT_DISPLAY_NAME,
+  );
   assert.equal(redactedSharedTask.task.agentId, null);
   assert.equal(
     redactedSharedTask.task.agentDisplayName,
@@ -211,6 +218,7 @@ async function main() {
     "agent-target-id",
     "agent-assigner-id",
     "fallback-agent-id",
+    "snake-agent-id",
     "task-agent-id",
     "parent-agent-id",
     "subtask-agent-id",
@@ -218,6 +226,7 @@ async function main() {
     "Target Agent",
     "Assigner Agent",
     "Fallback Agent",
+    "Snake Agent",
     "Deleted Agent",
     "Task Agent",
     "active-agent@example.test",
