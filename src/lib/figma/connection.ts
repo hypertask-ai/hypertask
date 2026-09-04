@@ -296,54 +296,59 @@ export async function getFigmaAccessToken(
     throw error;
   }
 
-  const data = {
-    encryptedAccessToken: encryptSecret(refreshed.accessToken),
-    encryptedRefreshToken: encryptSecret(
-      refreshed.refreshToken ?? refresh.refreshToken,
-    ),
-    expiresAt: refreshed.expiresAt,
-  };
-  const accessToken = await retryFigmaPersistence(() =>
-    withFigmaConnectionLock(userId, async (tx) => {
-      const operation = await tx.figmaConnectionOperation.findUnique({
-        where: { userId },
-        select: { operationId: true },
-      });
-      if (operation?.operationId !== operationId) return null;
+  try {
+    const data = {
+      encryptedAccessToken: encryptSecret(refreshed.accessToken),
+      encryptedRefreshToken: encryptSecret(
+        refreshed.refreshToken ?? refresh.refreshToken,
+      ),
+      expiresAt: refreshed.expiresAt,
+    };
+    const accessToken = await retryFigmaPersistence(() =>
+      withFigmaConnectionLock(userId, async (tx) => {
+        const operation = await tx.figmaConnectionOperation.findUnique({
+          where: { userId },
+          select: { operationId: true },
+        });
+        if (operation?.operationId !== operationId) return null;
 
-      const connection = await tx.figmaConnection.findUnique({
-        where: { userId },
-        select: {
-          encryptedAccessToken: true,
-          encryptedRefreshToken: true,
-          expiresAt: true,
-        },
-      });
-      if (!connection) return null;
-      if (
-        connection.encryptedAccessToken === data.encryptedAccessToken &&
-        connection.encryptedRefreshToken === data.encryptedRefreshToken
-      ) {
+        const connection = await tx.figmaConnection.findUnique({
+          where: { userId },
+          select: {
+            encryptedAccessToken: true,
+            encryptedRefreshToken: true,
+            expiresAt: true,
+          },
+        });
+        if (!connection) return null;
+        if (
+          connection.encryptedAccessToken === data.encryptedAccessToken &&
+          connection.encryptedRefreshToken === data.encryptedRefreshToken
+        ) {
+          return refreshed.accessToken;
+        }
+        if (
+          connection.encryptedRefreshToken !== refresh.encryptedRefreshToken
+        ) {
+          return connection.expiresAt.getTime() > nowMs + REFRESH_SKEW_MS
+            ? decryptSecret(connection.encryptedAccessToken)
+            : null;
+        }
+
+        await tx.figmaConnection.update({ where: { userId }, data });
+        await tx.figmaConnectionOperation.update({
+          where: { userId },
+          data: { pendingUntil: null },
+        });
         return refreshed.accessToken;
-      }
-      if (
-        connection.encryptedRefreshToken !== refresh.encryptedRefreshToken
-      ) {
-        return connection.expiresAt.getTime() > nowMs + REFRESH_SKEW_MS
-          ? decryptSecret(connection.encryptedAccessToken)
-          : null;
-      }
-
-      await tx.figmaConnection.update({ where: { userId }, data });
-      await tx.figmaConnectionOperation.update({
-        where: { userId },
-        data: { pendingUntil: null },
-      });
-      return refreshed.accessToken;
-    }),
-  );
-  if (!accessToken) {
-    throw new Error("Figma connection changed during token refresh");
+      }),
+    );
+    if (!accessToken) {
+      throw new Error("Figma connection changed during token refresh");
+    }
+    return accessToken;
+  } catch (error) {
+    await clearPendingOperation(userId, operationId).catch(() => {});
+    throw error;
   }
-  return accessToken;
 }

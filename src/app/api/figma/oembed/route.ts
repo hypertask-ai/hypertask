@@ -282,6 +282,7 @@ export async function GET(request: NextRequest) {
 
   return previewResponse({
     ...basePreview,
+    ...(fallback ? {} : { previewUnavailable: true }),
     ...(token === null ? { canConnectFigma: true } : {}),
   });
 }

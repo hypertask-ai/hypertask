@@ -25,6 +25,7 @@ type FigmaPreviewData = {
   previewImages?: { name: string; url: string }[];
   thumbnailUrl?: string;
   title?: string;
+  previewUnavailable?: boolean;
   width?: number;
 };
 
@@ -137,6 +138,8 @@ export const renderFigmaPreview = (
     };
     image.onerror = markPreviewUnavailable;
     image.src = data.thumbnailUrl;
+  } else if (data.previewUnavailable) {
+    markPreviewUnavailable();
   }
 };
 

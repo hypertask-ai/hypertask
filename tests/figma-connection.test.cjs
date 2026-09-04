@@ -15,7 +15,7 @@ const originalFetch = global.fetch;
 let rows;
 let operationRows;
 let onPendingOperationRead;
-let failTransactionAfterAction;
+let transactionFailuresAfterAction;
 let lockCalls;
 let lockTail;
 const currentRow = () => rows.get(6) ?? null;
@@ -98,8 +98,8 @@ const prisma = {
     };
     try {
       const result = await action(tx);
-      if (failTransactionAfterAction) {
-        failTransactionAfterAction = false;
+      if (transactionFailuresAfterAction > 0) {
+        transactionFailuresAfterAction -= 1;
         throw new Error("transaction commit failed");
       }
       return result;
@@ -140,7 +140,7 @@ test.beforeEach(() => {
   rows = new Map();
   operationRows = new Map();
   onPendingOperationRead = null;
-  failTransactionAfterAction = false;
+  transactionFailuresAfterAction = 0;
   lockCalls = 0;
   lockTail = Promise.resolve();
 });
@@ -175,7 +175,7 @@ test("persists an issued connection after a transaction commit failure without r
   let issueCalls = 0;
   const connected = await connection.connectFigmaUser(6, async () => {
     issueCalls += 1;
-    failTransactionAfterAction = true;
+    transactionFailuresAfterAction = 1;
     return {
       accessToken: "plain-access-token",
       refreshToken: "plain-refresh-token",
@@ -281,7 +281,7 @@ test("persists a rotated token after a transaction commit failure without refres
   let refreshCalls = 0;
   global.fetch = async () => {
     refreshCalls += 1;
-    failTransactionAfterAction = true;
+    transactionFailuresAfterAction = 1;
     return Response.json({
       access_token: "fresh-access",
       expires_in: 3600,
@@ -293,6 +293,31 @@ test("persists a rotated token after a transaction commit failure without refres
   assert.equal(await connection.getFigmaAccessToken(6, 10_000), "fresh-access");
   assert.equal(refreshCalls, 1);
   assert.equal(lockCalls, 5);
+});
+
+test("clears the refresh lease when persistence retries are exhausted", async () => {
+  await connection.connectFigmaUser(6, async () => ({
+    accessToken: "expired-access",
+    refreshToken: "refresh-token",
+    expiresAt: new Date(0),
+    userId: "figma-user",
+    figmaUserName: null,
+  }));
+  global.fetch = async () => {
+    transactionFailuresAfterAction = 2;
+    return Response.json({
+      access_token: "fresh-access",
+      expires_in: 3600,
+      refresh_token: "rotated-refresh",
+    });
+  };
+
+  await assert.rejects(
+    connection.getFigmaAccessToken(6, 10_000),
+    /transaction commit failed/,
+  );
+  assert.equal(operationRows.get(6).pendingUntil, null);
+  assert.equal(lockCalls, 6);
 });
 
 test("invalid refresh credentials remove the unusable local connection", async () => {

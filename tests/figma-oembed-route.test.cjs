@@ -176,6 +176,12 @@ test("renders at most six first-page frames and falls back on denial", async () 
     (await (await GET(request(`${FIGMA}?node-id=1-2`))).json()).thumbnailUrl,
     COVER.thumbnail_url,
   );
+
+  reset();
+  handler = () => json({}, 502);
+  const unavailable = await (await GET(request(`${FIGMA}?node-id=1-2`))).json();
+  assert.equal(unavailable.previewUnavailable, true);
+  assert.equal(unavailable.thumbnailUrl, "");
 });
 
 test("offers connection only when the eligible viewer has no stored account", async () => {

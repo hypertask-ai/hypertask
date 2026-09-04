@@ -137,6 +137,16 @@ test("keeps a live-file fallback when every preview image fails", () => {
       coverAffordance.textContent,
       "Preview unavailable — click to load live Figma",
     );
+
+    const emptyPreview = document.createElement("button");
+    const emptyAffordance = document.createElement("span");
+    renderFigmaPreview(emptyPreview, emptyAffordance, {
+      previewUnavailable: true,
+    });
+    assert.equal(
+      emptyAffordance.textContent,
+      "Preview unavailable — click to load live Figma",
+    );
   } finally {
     global.document = originalDocument;
   }
