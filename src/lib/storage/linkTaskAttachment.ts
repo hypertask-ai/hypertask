@@ -71,12 +71,7 @@ export async function linkTaskAttachment(
 
       const fileSource = getHypertasksStoragePublicUrl(receipt.key);
       const existing = await tx.attachment.findFirst({
-        where: {
-          taskId,
-          descriptionId: task.description_.id,
-          commentId: null,
-          fileSource,
-        },
+        where: { fileSource },
         select: {
           id: true,
           createdAt: true,
@@ -84,11 +79,21 @@ export async function linkTaskAttachment(
           fileType: true,
           fileSize: true,
           fileSource: true,
+          commentId: true,
           descriptionId: true,
           taskId: true,
         },
       });
-      if (existing) return existing;
+      if (existing) {
+        if (
+          existing.taskId === taskId &&
+          existing.descriptionId === task.description_.id &&
+          existing.commentId === null
+        ) {
+          return existing;
+        }
+        throw new TaskAttachmentLinkError("This upload is already linked", 409);
+      }
 
       try {
         await getHypertasksS3Client()

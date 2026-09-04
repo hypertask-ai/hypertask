@@ -195,6 +195,17 @@ test("a retry after a lost response returns the existing attachment", async () =
   );
 });
 
+test("a receipt cannot be replayed onto a second task", async () => {
+  const linker = loadLinker();
+  await linker.linkTaskAttachment(99, 6, receipt);
+
+  await assert.rejects(
+    linker.linkTaskAttachment(100, 6, receipt),
+    (error) => error.name === "TaskAttachmentLinkError" && error.status === 409,
+  );
+  assert.equal(linker.creates, 1);
+});
+
 test("linking refuses an inaccessible task before attachment persistence", async () => {
   const linker = loadLinker({ authorized: false });
 
