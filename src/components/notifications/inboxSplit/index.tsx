@@ -499,21 +499,27 @@ const InboxSplit = ({
   // for keyboard shortcuts below.
   const isActiveSplit = value === index;
   useEffect(() => {
-    if (
-      !isActiveSplit ||
-      selectedKeyboardNotificationIndex === null ||
-      selectedKeyboardNotificationIndex === globalFocus.currIdx
-    ) {
-      return;
+    if (!isActiveSplit) return;
+
+    const selectedKey = selectedKeyboardRow?.key ?? null;
+    if (activeKeyboardRowKey !== selectedKey) {
+      setActiveKeyboardRowKey(selectedKey);
     }
-    setGlobalFocus((previous) => ({
-      ...previous,
-      currIdx: selectedKeyboardNotificationIndex,
-    }));
+    if (
+      selectedKeyboardNotificationIndex !== null &&
+      selectedKeyboardNotificationIndex !== globalFocus.currIdx
+    ) {
+      setGlobalFocus((previous) => ({
+        ...previous,
+        currIdx: selectedKeyboardNotificationIndex,
+      }));
+    }
   }, [
+    activeKeyboardRowKey,
     globalFocus.currIdx,
     isActiveSplit,
     selectedKeyboardNotificationIndex,
+    selectedKeyboardRow?.key,
     setGlobalFocus,
   ]);
 
