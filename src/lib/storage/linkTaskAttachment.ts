@@ -24,8 +24,9 @@ async function lockAttachmentReceipt(
   tx: Prisma.TransactionClient,
   key: string,
 ) {
+  // Prisma cannot deserialize PostgreSQL's void lock result.
   await tx.$queryRaw(
-    Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, ${5993}))`,
+    Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, ${5993}))::text AS lock_result`,
   );
 }
 

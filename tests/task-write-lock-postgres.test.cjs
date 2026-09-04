@@ -251,8 +251,11 @@ async function provision() {
     const writeLocks = jiti(
       path.join(root, "src", "lib", "taskCardActions", "writeLocks.ts"),
     );
+    const attachmentLinker = jiti(
+      path.join(root, "src", "lib", "storage", "linkTaskAttachment.ts"),
+    );
 
-    return { prisma, writeLocks, url, container, cleanup };
+    return { prisma, writeLocks, attachmentLinker, url, container, cleanup };
   } catch (err) {
     cleanup();
     return { skipReason: `provisioning failed: ${err.message}` };
@@ -307,6 +310,26 @@ async function seedTask() {
   });
   return { user, project, task };
 }
+
+test("task attachment linking acquires its receipt lock on real PostgreSQL", async (t) => {
+  if (state.skipReason) return t.skip(state.skipReason);
+
+  const receipt = {
+    userId: 6,
+    key: "tasks/attachments/receipt-lock-regression.txt",
+    fileName: "receipt-lock-regression.txt",
+    contentType: "text/plain",
+    fileSize: 1,
+  };
+
+  await assert.rejects(
+    state.attachmentLinker.linkTaskAttachment(2147483647, 6, receipt),
+    (error) =>
+      error?.name === "TaskAttachmentLinkError" &&
+      error.status === 404 &&
+      error.message === "Task not found or access denied",
+  );
+});
 
 test("withTaskStarWriteLock runs a real archive on PostgreSQL and commits it", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);

@@ -167,6 +167,7 @@ test("linking locks the task, rechecks write access, and persists trusted metada
     linker.rawQueries.some(
       (query) =>
         /pg_advisory_xact_lock/.test(query.strings.join("?")) &&
+        /::text AS lock_result/.test(query.strings.join("?")) &&
         query.values.includes(receipt.key),
     ),
   );
