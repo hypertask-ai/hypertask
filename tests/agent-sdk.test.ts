@@ -5,12 +5,14 @@ import { test } from "node:test";
 import {
   createAgent,
   MemoryDeliveryStore,
+  nodeHttpAdapter,
   verifyWebhookSignature,
   type AgentRunRecord,
   type AgentWebhookPayload,
   type BackgroundContext,
   type DeliveryClaim,
   type DeliveryStore,
+  type WebhookHandler,
 } from "../packages/agent-sdk/index.js";
 
 const secret = "unit-test-signing-key";
@@ -100,7 +102,7 @@ type ApiCall = {
   body: Record<string, unknown> | null;
 };
 
-function apiFixture(options: { failUpdate?: boolean } = {}) {
+function apiFixture(options: { failActivity?: boolean; failUpdate?: boolean } = {}) {
   const calls: ApiCall[] = [];
   let activityId = 0;
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {
@@ -123,6 +125,12 @@ function apiFixture(options: { failUpdate?: boolean } = {}) {
     }
     if (url.pathname.endsWith("/mcp/agents/runs/run-1/activities")) {
       if (method === "GET") return Response.json({ success: true, activities: [] });
+      if (options.failActivity) {
+        return Response.json(
+          { success: false, error: "Activity failed" },
+          { status: 500 },
+        );
+      }
       activityId += 1;
       return Response.json({
         success: true,
@@ -305,6 +313,39 @@ test("handler cancels a webhook stream that exceeds its read deadline", async (c
   }
 });
 
+test("Node adapters do not expose unexpected handler errors", async () => {
+  const handler: WebhookHandler = Object.assign(
+    async (_request: Request, _context?: BackgroundContext) => {
+      throw new Error("database-password-was-here");
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const adapter = nodeHttpAdapter(handler);
+  const request = {
+    method: "POST",
+    url: "/webhook",
+    headers: {},
+    async *[Symbol.asyncIterator]() {},
+  };
+  let responseBody = "";
+  const headers = new Map<string, string>();
+  const response = {
+    statusCode: 0,
+    setHeader(name: string, value: string) {
+      headers.set(name, value);
+    },
+    end(body = "") {
+      responseBody = body;
+    },
+  };
+
+  await adapter(request, response);
+  assert.equal(response.statusCode, 500);
+  assert.equal(headers.get("content-type"), "application/json");
+  assert.equal(responseBody.includes("database-password-was-here"), false);
+  assert.match(responseBody, /Webhook request failed/);
+});
+
 test("handler rejects mismatched headers and unsafe runtime capabilities", async () => {
   const api = apiFixture();
   const agent = createAgent({
@@ -482,7 +523,7 @@ test("failed background work releases its owner-fenced delivery claim", async ()
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const work = background();
     assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
-    await work.drain();
+    await assert.rejects(work.drain(), /Handler failed/);
   }
   assert.equal(errors.length, 2);
 });
@@ -501,11 +542,7 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
     await received.task?.assign("me");
     await received.task?.comment("A comment");
     await received.task?.update({ title: "Updated" });
-    await received.task?.attach({
-      url: "https://files.example.test/report.pdf",
-      filename: "report.pdf",
-      contentType: "application/pdf",
-    });
+    await received.task?.attach("https://files.example.test/report.pdf");
   });
   const work = background();
   assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
@@ -538,6 +575,18 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
   );
   const comment = mutations.find((call) => call.path.endsWith("/mcp/comments"));
   assert.equal(comment?.headers.get("idempotency-key"), "delivery-1:4:comment");
+  const attachment = mutations.find((call) =>
+    call.path.endsWith("/mcp/tasks/attachments"),
+  );
+  assert.equal(attachment?.headers.get("idempotency-key"), "delivery-1:6:attach");
+  assert.deepEqual(attachment?.body?.files, [
+    {
+      filename: "report.pdf",
+      content_type: "application/pdf",
+      url: "https://files.example.test/report.pdf",
+    },
+  ]);
+  assert.equal(api.calls.some((call) => call.method === "HEAD"), false);
 });
 
 test("task helpers release the lease when a write fails", async () => {
@@ -556,7 +605,7 @@ test("task helpers release the lease when a write fails", async () => {
   });
   const work = background();
   assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
-  await work.drain();
+  await assert.rejects(work.drain(), /Update failed/);
   const postPaths = api.calls
     .filter((call) => call.method === "POST")
     .map((call) => call.path);
@@ -566,6 +615,74 @@ test("task helpers release the lease when a write fails", async () => {
     "/api/mcp/tasks/lease/release",
   ]);
   assert.equal(errors.length, 1);
+});
+
+test("task helper settles an in-flight heartbeat before releasing its lease", async (context) => {
+  context.mock.timers.enable({ apis: ["setInterval", "setTimeout"], now });
+  const api = apiFixture();
+  const events: string[] = [];
+  let updateStarted!: () => void;
+  const startedUpdate = new Promise<void>((resolve) => {
+    updateStarted = resolve;
+  });
+  let finishUpdate!: () => void;
+  const updateGate = new Promise<void>((resolve) => {
+    finishUpdate = resolve;
+  });
+  let heartbeatStarted!: () => void;
+  const startedHeartbeat = new Promise<void>((resolve) => {
+    heartbeatStarted = resolve;
+  });
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/update")) {
+      events.push("update");
+      updateStarted();
+      await updateGate;
+      return Response.json({ success: true });
+    }
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/heartbeat")) {
+      events.push("heartbeat");
+      heartbeatStarted();
+      return new Promise<Response>((_, reject) => {
+        const abort = () => {
+          events.push("heartbeat-settled");
+          reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+        };
+        init.signal?.addEventListener("abort", abort, { once: true });
+        if (init.signal?.aborted) abort();
+      });
+    }
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/release")) {
+      events.push("release");
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Updating with a heartbeat.");
+    await received.task?.update({ title: "Updated" });
+  });
+
+  try {
+    const work = background();
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await startedUpdate;
+    context.mock.timers.tick(60_000);
+    await startedHeartbeat;
+    finishUpdate();
+    await work.drain();
+    assert.deepEqual(events, ["update", "heartbeat", "heartbeat-settled", "release"]);
+  } finally {
+    context.mock.timers.reset();
+  }
 });
 
 test("a stop delivery aborts active work and still reaches stop handlers", async () => {
@@ -674,8 +791,13 @@ test("stopping during hydration prevents the cancelled handler from starting", a
     (await agent.handler(webhookRequest(stopPayload), stopWork.context)).status,
     202,
   );
-  await Promise.all([activeWork.drain(), stopWork.drain()]);
+  const [activeResult, stopResult] = await Promise.allSettled([
+    activeWork.drain(),
+    stopWork.drain(),
+  ]);
 
+  assert.equal(activeResult.status, "rejected");
+  assert.equal(stopResult.status, "fulfilled");
   assert.equal(mentionHandled, false);
   assert.equal(stopHandled, true);
   assert.equal(errors.length, 1, "the cancelled delivery reports its aborted work");
@@ -744,6 +866,44 @@ test("completion waits for an in-flight delivery claim renewal", async (context)
     finishRenewal();
     await work.drain();
     assert.deepEqual(events, ["claim", "renew", "complete"]);
+  } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("automatic acknowledgement failures stay observed until the handler settles", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  const api = apiFixture({ failActivity: true });
+  const errors: unknown[] = [];
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    onError: (error) => errors.push(error),
+  });
+  let handlerStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    handlerStarted = resolve;
+  });
+  let finishHandler!: () => void;
+  const handlerGate = new Promise<void>((resolve) => {
+    finishHandler = resolve;
+  });
+  agent.on("mention", async () => {
+    handlerStarted();
+    await handlerGate;
+  });
+
+  try {
+    const work = background();
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await started;
+    context.mock.timers.tick(8_000);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    finishHandler();
+    await assert.rejects(work.drain(), /Activity failed/);
+    assert.equal(errors.length, 1);
   } finally {
     context.mock.timers.reset();
   }

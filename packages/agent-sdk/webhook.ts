@@ -450,6 +450,7 @@ export function createWebhookHandler(options: {
       .catch(async (error) => {
         await deliveryStore.release(claim).catch(() => false);
         options.client.reportError(error, payload);
+        throw error;
       });
 
     try {

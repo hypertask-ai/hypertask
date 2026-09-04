@@ -82,7 +82,7 @@ await run.task?.update({ priority: 1 });
 await run.task?.attach("https://example.com/report.pdf");
 ```
 
-Every write claims a task lease, heartbeats it during long work, and releases it in `finally`. Activities, comments, updates, assignments, moves, and attachments use the existing retry-safe server contracts. A stopped run aborts local requests, and each task helper rechecks run status before writing. Handlers should also stop external work when `run.signal` aborts.
+Every write claims a task lease, heartbeats it during long work, and releases it in `finally`. Activities, comments, updates, assignments, moves, and attachments use the existing retry-safe server contracts. Attachment MIME types are inferred from common filename extensions; pass `{ url, filename, contentType }` for other types. A stopped run aborts local requests, and each task helper rechecks run status before writing. Handlers should also stop external work when `run.signal` aborts.
 
 ## Adapters
 
@@ -127,7 +127,7 @@ The SDK verifies HMAC-SHA256 over `timestamp.rawBody`, rejects timestamps outsid
 
 The built-in `MemoryDeliveryStore` is deliberately single-process only. It has expiring owner-fenced claims and bounded retention, which is suitable for plain Node and local development. Next, Cloudflare, and other distributed adapters fail with 503 unless `deliveryStore.durable === true`. A durable implementation must make `claim`, `renew`, `complete`, and `release` atomic, reject expired or stale owners, and honor the supplied expiry values.
 
-`waitUntil` keeps accepted work alive but is not a durable job queue. If the hosting platform needs crash-proof execution, its adapter should enqueue the verified delivery before returning 2xx and invoke the SDK worker from that queue.
+`waitUntil` keeps accepted work alive but is not a durable job queue. Background failures reject the scheduled promise and release the delivery claim so a durable scheduler can observe and retry them. If the hosting platform needs crash-proof execution, its adapter should enqueue the verified delivery before returning 2xx and invoke the SDK worker from that queue.
 
 ## Templates
 

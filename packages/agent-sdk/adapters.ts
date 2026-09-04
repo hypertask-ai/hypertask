@@ -124,7 +124,36 @@ async function sendResponse(response: Response, target: NodeResponse): Promise<v
 }
 
 function processContext(): BackgroundContext {
-  return { waitUntil: (task) => void task, distributed: false };
+  return {
+    waitUntil(task) {
+      void task.catch((error) =>
+        console.error("[hypertask-agent-sdk] background task failed", error),
+      );
+    },
+    distributed: false,
+  };
+}
+
+function sendAdapterError(error: unknown, response: NodeResponse): void {
+  const message = error instanceof Error ? error.message : "";
+  let status = 500;
+  let publicMessage = "Webhook request failed";
+  if (message === "Webhook body is too large") {
+    status = 413;
+    publicMessage = message;
+  } else if (message === "Webhook body timed out") {
+    status = 408;
+    publicMessage = message;
+  } else if (
+    message ===
+    "Raw webhook bytes are unavailable; mount this adapter before JSON middleware"
+  ) {
+    status = 400;
+    publicMessage = message;
+  }
+  response.statusCode = status;
+  response.setHeader("content-type", "application/json");
+  response.end(JSON.stringify({ success: false, error: publicMessage }));
 }
 
 export function nodeHttpAdapter(handler: WebhookHandler) {
@@ -132,9 +161,7 @@ export function nodeHttpAdapter(handler: WebhookHandler) {
     try {
       await sendResponse(await handler(await toRequest(request, false), processContext()), response);
     } catch (error) {
-      response.statusCode = error instanceof Error && error.message.includes("too large") ? 413 : 400;
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ success: false, error: String(error) }));
+      sendAdapterError(error, response);
     }
   };
 }
@@ -144,9 +171,7 @@ export function expressAdapter(handler: WebhookHandler) {
     try {
       await sendResponse(await handler(await toRequest(request, true), processContext()), response);
     } catch (error) {
-      response.statusCode = error instanceof Error && error.message.includes("too large") ? 413 : 400;
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify({ success: false, error: String(error) }));
+      sendAdapterError(error, response);
     }
   };
 }

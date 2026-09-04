@@ -19,8 +19,25 @@ const DEFAULT_API_URL = "https://api.hypertask.ai/api";
 const TASK_LEASE_TTL_SECONDS = 300;
 const TASK_LEASE_HEARTBEAT_MS = 60_000;
 const AUTO_THOUGHT_MS = 8_000;
+const THREAD_ITEM_LIMIT = 100;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ATTACHMENT_CONTENT_TYPES: Record<string, string> = {
+  apk: "application/vnd.android.package-archive",
+  csv: "text/csv",
+  gif: "image/gif",
+  gz: "application/gzip",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  json: "application/json",
+  md: "text/markdown",
+  pdf: "application/pdf",
+  png: "image/png",
+  tar: "application/x-tar",
+  txt: "text/plain",
+  webp: "image/webp",
+  zip: "application/zip",
+};
 
 type JsonObject = Record<string, unknown>;
 type RequestOptions = {
@@ -57,11 +74,9 @@ function objectValue(value: unknown, label: string): JsonObject {
 function responseMessage(value: unknown, fallback: string): string {
   if (!value || typeof value !== "object") return fallback;
   const body = value as JsonObject;
-  return typeof body.message === "string" && body.message
-    ? body.message
-    : typeof body.error === "string" && body.error
-      ? body.error
-      : fallback;
+  if (typeof body.message === "string" && body.message) return body.message;
+  if (typeof body.error === "string" && body.error) return body.error;
+  return fallback;
 }
 
 function eventForPayload(payload: AgentWebhookPayload): AgentEventName {
@@ -239,6 +254,8 @@ export class AgentClient {
         ...(this.handlers.get("*") ?? []),
       ];
 
+      let autoThoughtError: unknown;
+      let autoThoughtFailed = false;
       let autoThoughtDone = Promise.resolve();
       let cancelAutoThought = () => {};
       if (event !== "stop") {
@@ -252,12 +269,16 @@ export class AgentClient {
             resolve();
           };
           run.onFirstActivity(cancelAutoThought);
+        }).catch((error) => {
+          autoThoughtFailed = true;
+          autoThoughtError = error;
         });
       }
 
       try {
         for (const handler of handlers) await handler(run);
         await autoThoughtDone;
+        if (autoThoughtFailed) throw autoThoughtError;
       } catch (error) {
         cancelAutoThought();
         throw error;
@@ -316,9 +337,10 @@ export class AgentClient {
             creator?: unknown;
             agent?: unknown;
           }>;
-        }>(`/mcp/comments?task_id=${record.taskId}&limit=100&sort_order=desc`, {
-          signal,
-        }),
+        }>(
+          `/mcp/comments?task_id=${record.taskId}&limit=${THREAD_ITEM_LIMIT}&sort_order=desc`,
+          { signal },
+        ),
         activitiesPromise,
       ]);
       const ticket = taskResponse.task ?? taskResponse.tasks?.[0] ?? null;
@@ -370,10 +392,6 @@ export class AgentClient {
     }
 
     throw new AgentSdkError("Agent run has no task or chat context");
-  }
-
-  async externalHead(url: string, signal: AbortSignal): Promise<Response> {
-    return this.requestFetch(url, { method: "HEAD", redirect: "follow", signal });
   }
 }
 
@@ -505,20 +523,24 @@ class AgentRunImpl implements AgentRun {
     const abortOperation = () => operationController.abort(this.signal.reason);
     this.signal.addEventListener("abort", abortOperation, { once: true });
     let heartbeatError: unknown;
-    let heartbeatRunning = false;
+    let heartbeatPromise: Promise<void> | null = null;
     const heartbeat = setInterval(() => {
-      if (heartbeatRunning || operationController.signal.aborted) return;
-      heartbeatRunning = true;
-      this.client.request("/mcp/tasks/lease/heartbeat", {
-        method: "POST",
-        body: { task_id: this.taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
-        signal: operationController.signal,
-      }).catch((error) => {
-        heartbeatError = error;
-        operationController.abort(error);
-      }).finally(() => {
-        heartbeatRunning = false;
-      });
+      if (heartbeatPromise || operationController.signal.aborted) return;
+      heartbeatPromise = this.client
+        .request("/mcp/tasks/lease/heartbeat", {
+          method: "POST",
+          body: { task_id: this.taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
+          signal: operationController.signal,
+        })
+        .then(() => undefined)
+        .catch((error) => {
+          if (operationController.signal.aborted) return;
+          heartbeatError = error;
+          operationController.abort(error);
+        })
+        .finally(() => {
+          heartbeatPromise = null;
+        });
     }, TASK_LEASE_HEARTBEAT_MS);
     (heartbeat as unknown as { unref?: () => void }).unref?.();
 
@@ -528,6 +550,8 @@ class AgentRunImpl implements AgentRun {
       return result;
     } finally {
       clearInterval(heartbeat);
+      operationController.abort();
+      await heartbeatPromise;
       this.signal.removeEventListener("abort", abortOperation);
       await this.client.request("/mcp/tasks/lease/release", {
         method: "POST",
@@ -646,27 +670,32 @@ class AgentRunImpl implements AgentRun {
         ) {
           throw new AgentSdkError("Attachment URL must be credential-free HTTP(S)");
         }
-        const filename =
-          spec.filename?.trim() ||
-          decodeURIComponent(parsedUrl.pathname.split("/").filter(Boolean).at(-1) ?? "attachment");
-        let contentType = spec.contentType?.split(";")[0].trim().toLocaleLowerCase();
-        if (!contentType) {
-          const head = await this.client.externalHead(parsedUrl.toString(), this.signal);
-          if (!head.ok) {
-            throw new AgentSdkError(`Attachment URL returned HTTP ${head.status}`);
-          }
-          contentType = head.headers.get("content-type")?.split(";")[0].trim().toLocaleLowerCase();
+        let urlFilename: string;
+        try {
+          urlFilename = decodeURIComponent(
+            parsedUrl.pathname.split("/").filter(Boolean).at(-1) ?? "attachment",
+          );
+        } catch {
+          throw new AgentSdkError("Attachment URL has an invalid filename");
         }
+        const filename = spec.filename?.trim() || urlFilename;
+        const extension = filename.toLocaleLowerCase().split(".").at(-1) ?? "";
+        const contentType =
+          spec.contentType?.split(";")[0].trim().toLocaleLowerCase() ||
+          ATTACHMENT_CONTENT_TYPES[extension];
         if (!contentType) {
-          throw new AgentSdkError("Attachment content type is unavailable");
+          throw new AgentSdkError(
+            "contentType is required when it cannot be inferred from the filename",
+          );
         }
-        return this.withTaskLease("attach", (signal) =>
+        return this.withTaskLease("attach", (signal, key) =>
           this.client.request("/mcp/tasks/attachments", {
             method: "POST",
             body: {
               task_id: ticket.id,
               files: [{ filename, content_type: contentType, url: parsedUrl.toString() }],
             },
+            idempotencyKey: key,
             signal,
           }),
         );
