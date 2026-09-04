@@ -1,13 +1,15 @@
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_WEBHOOK_DELIVERY_CONTRACT,
-  AGENT_WEBHOOK_EVENT_DEFINITIONS,
-  AGENT_WEBHOOK_EVENTS,
+  availableAgentWebhookEventDefinitions,
+  availableAgentWebhookEvents,
   parseAgentWebhookEvents,
 } from "./events";
 import {
@@ -120,6 +122,12 @@ export async function upsertAgentWebhook(input: {
   body: Record<string, unknown>;
 }) {
   await assertAgentWebhookOwner(input.userId, input.agentId);
+  const runsEnabled = await isFeatureEnabled(
+    AGENT_RUN_FEATURE_FLAG,
+    input.userId,
+  );
+  const availableEvents = availableAgentWebhookEvents(runsEnabled);
+  const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
 
   const rawUrl = input.body.url;
   const requestedUrl = typeof rawUrl === "string" ? rawUrl.trim() : undefined;
@@ -141,7 +149,10 @@ export async function upsertAgentWebhook(input: {
   }
 
   if (input.body.events !== undefined) {
-    const parsedEvents = parseAgentWebhookEvents(input.body.events);
+    const parsedEvents = parseAgentWebhookEvents(
+      input.body.events,
+      availableEvents,
+    );
     if (!parsedEvents.ok) {
       throw new AgentWebhookInputError(parsedEvents.error, "events");
     }
@@ -189,9 +200,10 @@ export async function upsertAgentWebhook(input: {
       const url = requestedUrl ?? existing?.url ?? "";
       if (!url) throw new AgentWebhookInputError("url is required", "url");
 
-      const parsedEvents = parseAgentWebhookEvents(
-        input.body.events === undefined ? existing?.events : input.body.events,
-      );
+      const parsedEvents =
+        input.body.events === undefined && existing
+          ? { ok: true as const, events: existing.events }
+          : parseAgentWebhookEvents(input.body.events, availableEvents);
       if (!parsedEvents.ok) {
         throw new AgentWebhookInputError(parsedEvents.error, "events");
       }
@@ -231,10 +243,15 @@ export async function upsertAgentWebhook(input: {
   );
 
   return {
-    subscription: serializeAgentWebhookSubscription(subscription),
+    subscription: {
+      ...serializeAgentWebhookSubscription(subscription),
+      events: subscription.events.filter((event) =>
+        availableEvents.includes(event as (typeof availableEvents)[number]),
+      ),
+    },
     ...(rotateSecret ? { secret } : {}),
-    availableEvents: AGENT_WEBHOOK_EVENTS,
-    eventDefinitions: AGENT_WEBHOOK_EVENT_DEFINITIONS,
+    availableEvents,
+    eventDefinitions,
     deliveryContract: AGENT_WEBHOOK_DELIVERY_CONTRACT,
   };
 }
@@ -285,18 +302,37 @@ export async function manageAgentWebhook(input: {
   });
 
   if (input.action === "get") {
+    const runsEnabled = await isFeatureEnabled(
+      AGENT_RUN_FEATURE_FLAG,
+      input.userId,
+    );
+    const availableEvents = availableAgentWebhookEvents(runsEnabled);
+    const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
     return {
       success: true,
       scope: "agent" as const,
       agentId: input.agentId,
-      availableEvents: AGENT_WEBHOOK_EVENTS,
-      eventDefinitions: AGENT_WEBHOOK_EVENT_DEFINITIONS,
+      availableEvents,
+      eventDefinitions,
       deliveryContract: AGENT_WEBHOOK_DELIVERY_CONTRACT,
       subscription: subscription
-        ? serializeAgentWebhookSubscription(subscription)
+        ? {
+            ...serializeAgentWebhookSubscription(subscription),
+            events: subscription.events.filter((event) =>
+              availableEvents.includes(event as (typeof availableEvents)[number]),
+            ),
+          }
         : null,
       deliveries: subscription
-        ? subscription.deliveries.map(serializeAgentWebhookDelivery)
+        ? subscription.deliveries
+            .filter(
+              ({ event }) =>
+                event === "webhook.test" ||
+                availableEvents.includes(
+                  event as (typeof availableEvents)[number],
+                ),
+            )
+            .map(serializeAgentWebhookDelivery)
         : [],
     };
   }

@@ -13,6 +13,7 @@ import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import {
+  persistAgentRunTriggerWebhooks,
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
@@ -345,7 +346,7 @@ const createAssignee = async ({
       return {
         assign: existing,
         outcome: "already-assigned" as const,
-        webhookDeliveryId: null,
+        webhookDeliveryIds: [],
         boardWebhookDeliveryIds: [],
       };
     }
@@ -366,7 +367,7 @@ const createAssignee = async ({
         return {
           assign: null,
           outcome: "stale-task" as const,
-          webhookDeliveryId: null,
+          webhookDeliveryIds: [],
           boardWebhookDeliveryIds: [],
         };
       }
@@ -414,8 +415,8 @@ const createAssignee = async ({
       await tx.follower.delete({ where: { id: follower.id } });
     }
 
-    const webhookDeliveryId = agentId
-      ? await persistAgentWebhookEvent(tx, {
+    const webhookDeliveryIds = agentId
+      ? await persistAgentRunTriggerWebhooks(tx, {
           event: "task.assigned",
           agentId,
           projectId: task.projectId,
@@ -431,7 +432,7 @@ const createAssignee = async ({
               "Hypertask user",
           },
         })
-      : null;
+      : [];
     // Board-wide subscribers see every assignment, human or agent (HTPR-4530).
     const assignedEvent: WebhookDelivery = {
       event: "task.assigned",
@@ -455,12 +456,12 @@ const createAssignee = async ({
     return {
       assign,
       outcome: "created" as const,
-      webhookDeliveryId,
+      webhookDeliveryIds,
       boardWebhookDeliveryIds,
     };
   });
   if (result.outcome === "created") {
-    await publishAgentWebhookDeliveries([result.webhookDeliveryId]);
+    await publishAgentWebhookDeliveries(result.webhookDeliveryIds);
     await publishBoardWebhookDeliveries(result.boardWebhookDeliveryIds);
   }
 

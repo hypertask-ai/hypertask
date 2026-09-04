@@ -1,4 +1,7 @@
-import type { FeatureFlagMode as PrismaFeatureFlagMode } from "@prisma/client";
+import type {
+  FeatureFlagMode as PrismaFeatureFlagMode,
+  PrismaClient,
+} from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -13,6 +16,7 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-5993-optimistic-task-uploads",
   "htpr-6091-feature-flags",
   "htpr-6112-copy-current-url",
+  "htpr-6115-agent-sdk",
   "htpr-6116-figma-node-preview",
   "htpr-6118-comment-reactions-api",
 ] as const;
@@ -21,9 +25,17 @@ export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 export class FeatureFlagInputError extends Error {}
 
-async function isFeatureFlagOwnerUser(userId: number): Promise<boolean> {
+type FeatureFlagDatabase = {
+  featureFlag: Pick<PrismaClient["featureFlag"], "findUnique">;
+  user: Pick<PrismaClient["user"], "findUnique">;
+};
+
+async function isFeatureFlagOwnerUser(
+  userId: number,
+  db: FeatureFlagDatabase = prisma,
+): Promise<boolean> {
   if (userId !== FEATURE_FLAG_OWNER.userId) return false;
-  const user = await prisma.user.findUnique({
+  const user = await db.user.findUnique({
     where: { id: userId },
     select: { email: true },
   });
@@ -53,8 +65,9 @@ export function featureFlagModeEnabled(
 export async function isFeatureEnabled(
   key: string,
   userId: number,
+  db: FeatureFlagDatabase = prisma,
 ): Promise<boolean> {
-  const row = await prisma.featureFlag.findUnique({
+  const row = await db.featureFlag.findUnique({
     where: { key },
     select: { mode: true },
   });
@@ -63,7 +76,7 @@ export async function isFeatureEnabled(
   const mode = row?.mode ?? "OWNER_ONLY";
   return featureFlagModeEnabled(
     mode,
-    mode === "OWNER_ONLY" && (await isFeatureFlagOwnerUser(userId)),
+    mode === "OWNER_ONLY" && (await isFeatureFlagOwnerUser(userId, db)),
   );
 }
 

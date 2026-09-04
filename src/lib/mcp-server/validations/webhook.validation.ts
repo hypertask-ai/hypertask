@@ -1,13 +1,7 @@
 import { z } from "zod";
+import { AGENT_WEBHOOK_EVENTS } from "@/lib/agentWebhooks/events";
 
-const agentWebhookEvents = z.enum([
-  "comment.mention",
-  "task.assigned",
-  "task.unassigned",
-  "comment.created",
-  "task.updated",
-  "task.created",
-]);
+const agentWebhookEvents = z.enum(AGENT_WEBHOOK_EVENTS);
 
 const agentWebhookInputObjectSchema = z.object({
   action: z

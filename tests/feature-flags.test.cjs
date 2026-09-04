@@ -103,6 +103,7 @@ test("declared flags without rows default to owner only", async () => {
   for (const key of [
     "htpr-5913-consistent-comment-shortcuts",
     "htpr-6091-feature-flags",
+    "htpr-6115-agent-sdk",
     "htpr-6116-figma-node-preview",
   ]) {
     assert.equal(await flags.isFeatureEnabled(key, 6), true);
@@ -126,6 +127,7 @@ test("declared flags remain listed without a row and can be changed", async () =
     { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6091-feature-flags", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6112-copy-current-url", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6115-agent-sdk", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6116-figma-node-preview", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6118-comment-reactions-api", mode: "OWNER_ONLY", updatedAt: null },
   ]);

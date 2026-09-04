@@ -48,13 +48,21 @@ test("mention and assignment outbox rows share their domain transactions", () =>
     comments.indexOf("return {", comments.indexOf("const commentCreatedEvent")),
   );
   assert.doesNotMatch(commentWebhookSource, /projectId:\s*task\.projectId/);
-  assert.match(comments, /persistAgentWebhookEvent\(tx,/);
+  assert.match(comments, /persistAgentRunTriggerWebhooks\(tx,/);
+  assert.match(
+    comments,
+    /for \(const mentionedAgentId of mentionedAgentIds\) \{[\s\S]*?if \(mentionedAgentId === agentId\) continue;[\s\S]*?persistAgentRunTriggerWebhooks/,
+  );
 
   assert.match(assignments, /tx\.assignees\.create/);
   assert.match(assignments, /tx\.assignees\.deleteMany/);
   assert.equal(
+    (assignments.match(/persistAgentRunTriggerWebhooks\(tx,/g) ?? []).length,
+    1,
+  );
+  assert.equal(
     (assignments.match(/persistAgentWebhookEvent\(tx,/g) ?? []).length,
-    2,
+    1,
   );
 
   assert.match(

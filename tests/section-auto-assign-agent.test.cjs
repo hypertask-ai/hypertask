@@ -286,6 +286,7 @@ test("moving into an agent-configured section uses the agent-only assignment pat
       boardAgentVisibilityWhere: (userId) => ({ OR: [{ userId }, { visibility: "TEAM" }] }),
     },
     "@/lib/agentWebhooks/outbox": {
+      persistAgentRunTriggerWebhooks: async () => [],
       persistAgentWebhookEvent: async () => null,
       publishAgentWebhookDeliveries: async () => {},
     },

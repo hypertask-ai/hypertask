@@ -213,7 +213,8 @@ test("a failed inbound reply resumes its comment without repeating durable effec
       recordHyperAiCommentOrigin: async () => {},
     },
     "src/lib/agentWebhooks/outbox.ts": {
-      persistAgentWebhookEvent: async () => null,
+      persistAgentRunTriggerWebhooks: async () => [],
+      persistAgentTaskRunPromptWebhooks: async () => [],
       persistAgentWebhookEvents: async () => [],
       publishAgentWebhookDeliveries: async () => {},
     },

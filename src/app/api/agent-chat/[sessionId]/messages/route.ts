@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
-  persistAgentWebhookEvent,
+  persistAgentRunTriggerWebhooks,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
@@ -72,7 +72,7 @@ export async function POST(
       );
     }
 
-    const { message, deliveryId } = await prisma.$transaction(async (tx) => {
+    const { message, deliveryIds } = await prisma.$transaction(async (tx) => {
       const message = await tx.chatMessage.create({
         data: {
           sessionId: session.id,
@@ -83,9 +83,9 @@ export async function POST(
       });
 
       // The outbox row joins this transaction, so the webhook can never fire
-      // for a message that failed to commit. A null id means the agent has no
-      // active subscription covering chat.message.
-      const deliveryId = await persistAgentWebhookEvent(tx, {
+      // for a message that failed to commit. An empty list means the agent has
+      // no active subscription covering chat.message.
+      const deliveryIds = await persistAgentRunTriggerWebhooks(tx, {
         event: "chat.message",
         agentId,
         projectId: null,
@@ -109,11 +109,11 @@ export async function POST(
         data: { updatedAt: new Date() },
       });
 
-      return { message, deliveryId };
+      return { message, deliveryIds };
     });
 
     // Queue only after commit; a failure stays sweepable.
-    await publishAgentWebhookDeliveries([deliveryId]);
+    await publishAgentWebhookDeliveries(deliveryIds);
 
     // Other tabs of this user refetch the thread; fire and forget.
     void broadcast(userChannel(userId), AGENT_CHAT_EVENT, {
@@ -128,7 +128,7 @@ export async function POST(
         content: message.content,
         createdAt: message.createdAt,
       },
-      delivered: deliveryId !== null,
+      delivered: deliveryIds.length > 0,
     });
   } catch (error: any) {
     console.error("🚀 ~ POST ~ Error adding agent chat message", error);

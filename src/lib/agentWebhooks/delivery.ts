@@ -1,4 +1,6 @@
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { postSignedWebhook } from "@/lib/mcp/webhooks/delivery";
 import { queueAgentWebhookDelivery } from "./queue";
 
@@ -36,7 +38,7 @@ export async function deliverAgentWebhook(
     where: { id: deliveryId },
     include: {
       subscription: {
-        include: { agent: { select: { revokedAt: true } } },
+        include: { agent: { select: { revokedAt: true, userId: true } } },
       },
     },
   });
@@ -45,6 +47,27 @@ export async function deliverAgentWebhook(
   if (
     !delivery.subscription.active ||
     delivery.subscription.agent.revokedAt != null
+  ) {
+    await prisma.agentWebhookDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "cancelled", processingAt: null },
+    });
+    return { status: "skipped" };
+  }
+
+  const payload = delivery.payload;
+  const carriesRun =
+    delivery.event.startsWith("run.") ||
+    (typeof payload === "object" &&
+      payload !== null &&
+      !Array.isArray(payload) &&
+      "runId" in payload);
+  if (
+    carriesRun &&
+    !(await isFeatureEnabled(
+      AGENT_RUN_FEATURE_FLAG,
+      delivery.subscription.agent.userId,
+    ))
   ) {
     await prisma.agentWebhookDelivery.update({
       where: { id: delivery.id },

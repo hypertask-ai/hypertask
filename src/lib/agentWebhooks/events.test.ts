@@ -16,6 +16,9 @@ test("agent webhook discovery describes events, signing, and retries", () => {
     "task.updated",
     "task.created",
     "chat.message",
+    "run.created",
+    "run.prompted",
+    "run.stopped",
     "webhook.test",
   ]);
   assert.equal(AGENT_WEBHOOK_EVENT_DEFINITIONS["webhook.test"].subscribable, false);

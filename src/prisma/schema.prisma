@@ -217,6 +217,19 @@ enum AgentRuntimeType {
   NATIVE
 }
 
+enum AgentRunTrigger {
+  MENTION
+  ASSIGNED
+  CHAT
+}
+
+enum AgentRunStatus {
+  ACTIVE
+  STALE
+  STOPPED
+  DONE
+}
+
 enum DisplayAvatar {
   Show
   Hidden
@@ -305,6 +318,7 @@ model User {
   decisionRequestsCreated  DecisionRequest[]             @relation("DecisionRequestCreatedBy")
   decisionRequestsAnswered DecisionRequest[]             @relation("DecisionRequestAnsweredBy")
   webhookSubscriptions     WebhookSubscription[]
+  stoppedAgentRuns         AgentRun[]                    @relation("AgentRunStoppedBy")
   aiSkills                  AI_Skill[]                  @relation("AI_SkillOwner")
   createdAiSkills           AI_Skill[]                  @relation("AI_SkillCreator")
   slackInstalls             SlackInstall[]
@@ -1035,6 +1049,7 @@ model Task {
   taskMutes           TaskMute[]
   pages               Page[]
   taskLease           TaskLease?
+  agentRuns           AgentRun[]
 
   // @@index([projectId, deletedAt, updatedAt]) // Composite index for your exact query
   // @@index([updatedAt]) // For ordering
@@ -2089,6 +2104,7 @@ model ChatSession {
   agent Agent? @relation(fields: [agentId], references: [id])
   title String @default("New AI Chat")
   messages ChatMessage[]
+  agentRuns AgentRun[]
 
   @@index([userId])
   @@index([taskId])
@@ -2178,10 +2194,33 @@ model Agent {
   webhookSubscriptions      WebhookSubscription[]
   agentWebhookSubscription  AgentWebhookSubscription?
   chatSessions              ChatSession[]
+  runs                      AgentRun[]
   byokApiKeys               AgentByokApiKey[]
 
   @@index([userId])
   @@index([userId, revokedAt])
+}
+
+model AgentRun {
+  id             String          @id @default(uuid())
+  agentId        String
+  agent          Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  taskId         Int?
+  task           Task?           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  chatSessionId  String?
+  chatSession    ChatSession?    @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  trigger        AgentRunTrigger
+  status         AgentRunStatus  @default(ACTIVE)
+  createdAt      DateTime        @default(now())
+  lastActivityAt DateTime        @default(now())
+  stoppedById    Int?
+  stoppedBy      User?           @relation("AgentRunStoppedBy", fields: [stoppedById], references: [id], onDelete: SetNull)
+
+  @@index([agentId, status])
+  @@index([taskId, status])
+  @@index([chatSessionId, status])
+  @@index([lastActivityAt, status])
+  @@index([stoppedById])
 }
 
 /// Agent-scoped BYOK secrets (ciphertext), same shape as TeamByokApiKey.
