@@ -934,6 +934,70 @@ test("task helpers release the lease when a write fails", async () => {
   assert.equal(errors.length, 1);
 });
 
+test("concurrent task helpers hold separate serialized leases", async () => {
+  const api = apiFixture();
+  const events: string[] = [];
+  let updateStarted!: () => void;
+  const startedUpdate = new Promise<void>((resolve) => {
+    updateStarted = resolve;
+  });
+  let finishUpdate!: () => void;
+  const updateGate = new Promise<void>((resolve) => {
+    finishUpdate = resolve;
+  });
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
+      events.push("claim");
+    } else if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/update")) {
+      events.push("update");
+      updateStarted();
+      await updateGate;
+    } else if (init.method === "POST" && url.pathname.endsWith("/mcp/comments")) {
+      events.push("comment");
+    } else if (
+      init.method === "POST" &&
+      url.pathname.endsWith("/mcp/tasks/lease/release")
+    ) {
+      events.push("release");
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Starting parallel task writes.");
+    await Promise.all([
+      received.task?.update({ title: "Serialized update" }),
+      received.task?.comment("Serialized comment"),
+    ]);
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await startedUpdate;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const eventsWhileUpdateWasRunning = [...events];
+  finishUpdate();
+  await work.drain();
+
+  assert.deepEqual(eventsWhileUpdateWasRunning, ["claim", "update"]);
+  assert.deepEqual(events, [
+    "claim",
+    "update",
+    "release",
+    "claim",
+    "comment",
+    "release",
+  ]);
+});
+
 test("task helper propagates a stop that lands while claiming its lease", async () => {
   const api = apiFixture();
   let claimStarted!: () => void;
@@ -1079,6 +1143,30 @@ test("contextless runs fail before starting hydration requests", async () => {
     ),
     /Agent run has no task or chat context/,
   );
+  assert.equal(api.calls.length, 0);
+});
+
+test("contextless stop events still reach handlers", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let handled = false;
+  agent.on("stop", (received) => {
+    handled = true;
+    assert.equal(received.ticket, null);
+    assert.deepEqual(received.thread, []);
+  });
+  const contextlessRun = { ...run, taskId: null, chatSessionId: null };
+
+  await agent.client.dispatch(
+    payload({ event: "run.stopped", taskId: null, run: contextlessRun }),
+    contextlessRun,
+  );
+  assert.equal(handled, true);
   assert.equal(api.calls.length, 0);
 });
 

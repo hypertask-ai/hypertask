@@ -300,10 +300,15 @@ export class AgentClient {
     (statusMonitor as unknown as { unref?: () => void } | null)?.unref?.();
 
     try {
-      const context = await this.hydrateContext(
-        runRecord,
-        event === "stop" ? claimSignal : dispatchController.signal,
-      );
+      const context =
+        event === "stop" &&
+        runRecord.taskId === null &&
+        runRecord.chatSessionId === null
+          ? { record: runRecord, ticket: null, thread: [] }
+          : await this.hydrateContext(
+              runRecord,
+              event === "stop" ? claimSignal : dispatchController.signal,
+            );
       const run = new AgentRunImpl(
         this,
         context,
@@ -498,6 +503,8 @@ export class AgentClient {
 }
 
 class AgentRunImpl implements AgentRun {
+  private static readonly taskLeaseTails = new Map<number, Promise<void>>();
+
   readonly id: string;
   readonly agentId: string;
   readonly taskId: number | null;
@@ -620,52 +627,68 @@ class AgentRunImpl implements AgentRun {
 
   private async withTaskLease<T>(kind: string, work: (signal: AbortSignal, key: string) => Promise<T>): Promise<T> {
     if (this.taskId === null) throw new AgentSdkError("Run is not attached to a task");
-    await this.assertServerRunActive(this.signal);
-    await this.client.request("/mcp/tasks/lease/claim", {
-      method: "POST",
-      body: { task_id: this.taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
-      signal: this.signal,
-    });
-
-    const operationController = new AbortController();
-    const abortOperation = () => operationController.abort(this.signal.reason);
-    this.signal.addEventListener("abort", abortOperation, { once: true });
-    if (this.signal.aborted) abortOperation();
-    let heartbeatError: unknown;
-    let heartbeatPromise: Promise<void> | null = null;
-    const heartbeat = setInterval(() => {
-      if (heartbeatPromise || operationController.signal.aborted) return;
-      heartbeatPromise = this.client
-        .request("/mcp/tasks/lease/heartbeat", {
-          method: "POST",
-          body: { task_id: this.taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
-          signal: operationController.signal,
-        })
-        .then(() => undefined)
-        .catch((error) => {
-          if (operationController.signal.aborted) return;
-          heartbeatError = error;
-          operationController.abort(error);
-        })
-        .finally(() => {
-          heartbeatPromise = null;
-        });
-    }, TASK_LEASE_HEARTBEAT_MS);
-    (heartbeat as unknown as { unref?: () => void }).unref?.();
-
-    try {
-      const result = await work(operationController.signal, this.nextOperationKey(kind));
-      if (heartbeatError) throw heartbeatError;
-      return result;
-    } finally {
-      clearInterval(heartbeat);
-      operationController.abort();
-      await heartbeatPromise;
-      this.signal.removeEventListener("abort", abortOperation);
-      await this.client.request("/mcp/tasks/lease/release", {
+    const taskId = this.taskId;
+    const previous = AgentRunImpl.taskLeaseTails.get(taskId) ?? Promise.resolve();
+    const operation = previous.then(async () => {
+      await this.assertServerRunActive(this.signal);
+      await this.client.request("/mcp/tasks/lease/claim", {
         method: "POST",
-        body: { task_id: this.taskId },
-      }).catch((error) => this.client.reportError(error));
+        body: { task_id: taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
+        signal: this.signal,
+      });
+
+      const operationController = new AbortController();
+      const abortOperation = () => operationController.abort(this.signal.reason);
+      this.signal.addEventListener("abort", abortOperation, { once: true });
+      if (this.signal.aborted) abortOperation();
+      let heartbeatError: unknown;
+      let heartbeatPromise: Promise<void> | null = null;
+      const heartbeat = setInterval(() => {
+        if (heartbeatPromise || operationController.signal.aborted) return;
+        heartbeatPromise = this.client
+          .request("/mcp/tasks/lease/heartbeat", {
+            method: "POST",
+            body: { task_id: taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
+            signal: operationController.signal,
+          })
+          .then(() => undefined)
+          .catch((error) => {
+            if (operationController.signal.aborted) return;
+            heartbeatError = error;
+            operationController.abort(error);
+          })
+          .finally(() => {
+            heartbeatPromise = null;
+          });
+      }, TASK_LEASE_HEARTBEAT_MS);
+      (heartbeat as unknown as { unref?: () => void }).unref?.();
+
+      try {
+        const result = await work(operationController.signal, this.nextOperationKey(kind));
+        if (heartbeatError) throw heartbeatError;
+        return result;
+      } finally {
+        clearInterval(heartbeat);
+        operationController.abort();
+        await heartbeatPromise;
+        this.signal.removeEventListener("abort", abortOperation);
+        await this.client.request("/mcp/tasks/lease/release", {
+          method: "POST",
+          body: { task_id: taskId },
+        }).catch((error) => this.client.reportError(error));
+      }
+    });
+    const tail = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    AgentRunImpl.taskLeaseTails.set(taskId, tail);
+    try {
+      return await operation;
+    } finally {
+      if (AgentRunImpl.taskLeaseTails.get(taskId) === tail) {
+        AgentRunImpl.taskLeaseTails.delete(taskId);
+      }
     }
   }
 
