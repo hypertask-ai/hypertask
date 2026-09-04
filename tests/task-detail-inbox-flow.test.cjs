@@ -331,3 +331,19 @@ test("Inbox entry generates a marked initial task URL", () => {
     "/detail/project-15/5913?inboxFlow=true#comment-210855",
   );
 });
+
+test("Inbox task links seed the playlist before native navigation", () => {
+  const source = read("src/components/notifications/inboxSplit/index.tsx");
+  const taskLinkStart = source.indexOf(
+    "<Link",
+    source.indexOf('notification.type === "AgentMessage"'),
+  );
+  const taskLinkEnd = source.indexOf("</Link>", taskLinkStart);
+  assert.ok(taskLinkStart >= 0 && taskLinkEnd > taskLinkStart);
+
+  const taskLink = source.slice(taskLinkStart, taskLinkEnd);
+  assert.match(
+    taskLink,
+    /onClick=\{\(\) =>[\s\S]*?notification\.type !== "Invited" &&[\s\S]*?setTasksPlayList\([\s\S]*?buildUniqueTasksPlaylist\(_notifications\)/,
+  );
+});
