@@ -57,6 +57,7 @@ export type SerializedAgentRunActivity = {
 export class AgentRunActivityInputError extends Error {}
 export class AgentRunNotActiveError extends Error {}
 export class AgentRunActivityConflictError extends Error {}
+export class AgentRunActivityInProgressError extends Error {}
 export class AgentRunSelectionConflictError extends Error {}
 
 export type AgentRunContext =

@@ -62,7 +62,10 @@ import {
   type AgentRunActivityPersistenceInput,
   type AgentRunSelectionPersistenceInput,
 } from "@/lib/agentRuns/persistence";
-import { serializeAgentRun } from "@/lib/agentRuns/model";
+import {
+  AgentRunActivityInProgressError,
+  serializeAgentRun,
+} from "@/lib/agentRuns/model";
 
 const INBOUND_PROCESSING_LEASE_MS = 5 * 60_000;
 const AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS = 5 * 60_000;
@@ -996,11 +999,11 @@ export async function createCommentService(params: CreateCommentParams) {
             commentNotificationsProcessingAt: true,
           },
         });
-        if (
-          state?.commentNotificationsCompletedAt ||
-          state?.commentNotificationsProcessingAt
-        ) {
-          return comment;
+        if (state?.commentNotificationsCompletedAt) return comment;
+        if (state?.commentNotificationsProcessingAt) {
+          throw new AgentRunActivityInProgressError(
+            "Run activity comment notifications are still processing",
+          );
         }
         throw new Error("Run activity comment notification claim was lost");
       }

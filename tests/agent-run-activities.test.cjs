@@ -1315,17 +1315,19 @@ test("activity comments commit once across replay without consuming drafts", asy
   const draftDeletesBeforeConcurrentReplay = harness.getDraftDeleteCalls();
   const taskReferenceParsesBeforeConcurrentReplay =
     harness.getTaskReferenceParseCalls();
-  const concurrentReplay = await harness.createCommentService({
-    ...commentInput,
-    agentRunReplayComment: {
-      id: comment.id,
-      activityId: harness.elicitation.id,
-      agentWebhookDeliveryIds: ["delivery-1"],
-      boardWebhookDeliveryIds: [],
-      notificationsCompletedAt: null,
-    },
-  });
-  assert.equal(concurrentReplay.id, comment.id);
+  await assert.rejects(
+    harness.createCommentService({
+      ...commentInput,
+      agentRunReplayComment: {
+        id: comment.id,
+        activityId: harness.elicitation.id,
+        agentWebhookDeliveryIds: ["delivery-1"],
+        boardWebhookDeliveryIds: [],
+        notificationsCompletedAt: null,
+      },
+    }),
+    model.AgentRunActivityInProgressError,
+  );
   assert.equal(harness.fcmCalls.length, 0);
   assert.deepEqual(harness.sideEffectOrder, ["mentions"]);
   assert.equal(
@@ -1390,4 +1392,64 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.equal(harness.getDraftDeleteCalls(), 0);
   assert.equal(harness.getTaskReferenceParseCalls(), 2);
   assert.equal(harness.updateTaskCalls.length, 0);
+});
+
+test("activity routes expose notification lease contention as retryable", async () => {
+  const message = "Run activity comment notifications are still processing";
+  stub("src/lib/mcp/auth.ts", { checkMcpRateLimit: async () => null });
+  stub("src/lib/agentRuns/service.ts", {
+    agentRunActivitiesEnabledFor: async () => true,
+    authenticateAgentRunRequest: async (request) => ({
+      userId: 6,
+      agentId: request.url.endsWith("/select") ? null : "agent-1",
+      displayName: "Requester",
+      source: request.url.endsWith("/select") ? "browser" : "agent",
+    }),
+    browserMutationIsSameOrigin: () => true,
+    createAgentRunActivity: async () => {
+      throw new model.AgentRunActivityInProgressError(message);
+    },
+    listAgentRunActivities: async () => [],
+    selectAgentRunActivity: async () => {
+      throw new model.AgentRunActivityInProgressError(message);
+    },
+  });
+
+  const createRoute = load(
+    "src/app/api/mcp/agents/runs/[id]/activities/route.ts",
+  );
+  const createResponse = await createRoute.POST(
+    new Request("http://localhost/api/mcp/agents/runs/run-1/activities", {
+      method: "POST",
+      body: JSON.stringify({ type: "response", text: "Done" }),
+    }),
+    { params: Promise.resolve({ id: "run-1" }) },
+  );
+  assert.equal(createResponse.status, 503);
+  assert.equal(createResponse.headers.get("Retry-After"), "1");
+  assert.deepEqual(await createResponse.json(), {
+    success: false,
+    error: message,
+    retryable: true,
+  });
+
+  const selectRoute = load(
+    "src/app/api/mcp/agents/runs/[id]/activities/[activityId]/select/route.ts",
+  );
+  const selectResponse = await selectRoute.POST(
+    new Request(
+      "http://localhost/api/mcp/agents/runs/run-1/activities/activity-1/select",
+      { method: "POST", body: JSON.stringify({ value: "yes" }) },
+    ),
+    {
+      params: Promise.resolve({ id: "run-1", activityId: "activity-1" }),
+    },
+  );
+  assert.equal(selectResponse.status, 503);
+  assert.equal(selectResponse.headers.get("Retry-After"), "1");
+  assert.deepEqual(await selectResponse.json(), {
+    success: false,
+    error: message,
+    retryable: true,
+  });
 });

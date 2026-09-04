@@ -6,6 +6,7 @@ import {
   selectAgentRunActivity,
 } from "@/lib/agentRuns/service";
 import {
+  AgentRunActivityInProgressError,
   AgentRunActivityInputError,
   AgentRunNotActiveError,
   AgentRunSelectionConflictError,
@@ -16,10 +17,19 @@ import { checkMcpRateLimit } from "@/lib/mcp/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const noStore = (body: Record<string, unknown>, status = 200) =>
+const noStore = (
+  body: Record<string, unknown>,
+  status = 200,
+  retryAfterSeconds?: number,
+) =>
   NextResponse.json(body, {
     status,
-    headers: { "Cache-Control": "private, no-store" },
+    headers: {
+      "Cache-Control": "private, no-store",
+      ...(retryAfterSeconds
+        ? { "Retry-After": String(retryAfterSeconds) }
+        : {}),
+    },
   });
 
 export async function POST(
@@ -72,6 +82,13 @@ export async function POST(
   } catch (error) {
     if (error instanceof AgentRunActivityInputError) {
       return noStore({ success: false, error: error.message }, 400);
+    }
+    if (error instanceof AgentRunActivityInProgressError) {
+      return noStore(
+        { success: false, error: error.message, retryable: true },
+        503,
+        1,
+      );
     }
     if (
       error instanceof AgentRunSelectionConflictError ||
