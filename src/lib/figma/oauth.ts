@@ -334,17 +334,24 @@ export async function getFigmaUserName(
   accessToken: string,
   fetcher: typeof fetch = fetch,
 ): Promise<string | null> {
-  const response = await fetcher(`${FIGMA_API_BASE_URL}/me`, {
-    headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
-    redirect: "error",
-    signal: AbortSignal.timeout(FIGMA_REQUEST_TIMEOUT_MS),
-  });
-  if (!response.ok) {
-    await response.body?.cancel();
+  try {
+    const response = await fetcher(`${FIGMA_API_BASE_URL}/me`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(FIGMA_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      return null;
+    }
+    const data = await readBoundedJson(response);
+    return typeof data.handle === "string" && data.handle.trim()
+      ? data.handle.trim().slice(0, 200)
+      : null;
+  } catch {
     return null;
   }
-  const data = await readBoundedJson(response);
-  return typeof data.handle === "string" && data.handle.trim()
-    ? data.handle.trim().slice(0, 200)
-    : null;
 }

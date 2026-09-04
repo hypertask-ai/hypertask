@@ -122,6 +122,19 @@ test("code exchange uses Basic authentication and the PKCE verifier", async () =
   assert.equal(token.expiresAt.getTime(), 3_610_000);
 });
 
+test("optional Figma profile lookup tolerates transport and response failures", async () => {
+  assert.equal(
+    await oauth.getFigmaUserName("token", async () => {
+      throw new TypeError("fetch failed");
+    }),
+    null,
+  );
+  assert.equal(
+    await oauth.getFigmaUserName("token", async () => new Response("{")),
+    null,
+  );
+});
+
 test("refresh uses Figma's refresh endpoint and rejects failed credentials", async () => {
   const refreshed = await oauth.refreshFigmaToken(
     "refresh-token",
