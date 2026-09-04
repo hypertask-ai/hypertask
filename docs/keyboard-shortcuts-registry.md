@@ -91,7 +91,8 @@ G-chords (`G` then second key): `I` inbox, `B` task board, `C` calendar, `A` all
 | `Mod+Shift+D` | Speech to text | palette |
 | `Mod+Shift+F` | Dictate and improve | cheatsheet |
 | `Mod+Shift+,` | Discard draft | cheatsheet |
-| `Mod+ENTER` | Save text entry | editors |
+| `Mod+ENTER` | With the owner-only `htpr-5913-consistent-comment-shortcuts` flag: post a new comment and move to the next task (or return to its source list when there is no next task). Otherwise, save the active text entry as before. | `TipTapTaskDetail.tsx` |
+| `Mod+Shift+ENTER` | With the same flag: post a new comment and stay on the task. Description and existing-comment edits keep their previous behavior. | `TipTapTaskDetail.tsx` |
 
 ## Inbox
 
@@ -140,6 +141,8 @@ All of the bindings above except `@` are also registered in `AllCommands.ts` as 
 
 Public docs (`docs.hypertask.ai` `features/keyboard-shortcuts.mdx`) not updated in this PR: that site lives in a separate repo this codebase can't reach. Someone with access needs to add the team-cycle row (`Alt+Shift+ArrowDown`/`Alt+Shift+ArrowUp`) there to close out the fourth registration.
 
+The comment-submission change from https://app.hypertask.ai/detail/project-15/5913 is also intentionally absent from public docs while its flag is owner-only. Publishing it now would advertise behavior other users do not have; add both rows when the flag is released to Everyone.
+
 ## Handler-only bindings (easy to miss — NOT in the palette)
 
 These fire from raw keydown listeners and will NOT show up when scanning `AllCommands.ts`:
@@ -152,6 +155,7 @@ These fire from raw keydown listeners and will NOT show up when scanning `AllCom
 - `C` / `W` in TableView (`TableView.tsx`)
 - `1-7` app shell surfaces + `]` AI chat synonym + `[` sidebar collapse/expand (`useAppShellSurfaceShortcuts.ts`)
 - `;` snippets (TaskDetailComp)
+- `Mod+ENTER` / `Mod+Shift+ENTER` comment submission (`TipTapTaskDetail.tsx`) — these require the focused composer and its unsent draft, so the command palette cannot invoke them safely.
 - Agent Chat's `@` mention popover (`AgentChatClient.tsx` composer keydown) — a live-typing autocomplete, not a discrete action, so there's no `CommandMode` for it. The rest of Agent Chat's keyboard map (roster cycle, send, open-links, add agent, team cycle) IS in `AllCommands.ts` now, via a page-scoped command group that dispatches a `window` CustomEvent back into the component (see Agent Chat above).
 
 When auditing whether a key is free, grep for the letter in ALL of: `src/app`, `src/components`, `src/hooks`, `src/lib/contexts` — the palette alone is not the truth.

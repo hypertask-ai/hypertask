@@ -1,5 +1,6 @@
 export type CommentEnterShortcutAction =
   | "send"
+  | "send-and-move"
   | "send-and-stay"
   | "send-and-complete"
   | "consume"
@@ -73,6 +74,7 @@ export function resolveCommentEnterShortcutAction({
   key,
   shiftKey,
   altKey,
+  consistentCommentShortcuts,
   isInboxFlow,
   isCommentMode,
   inInbox,
@@ -81,12 +83,16 @@ export function resolveCommentEnterShortcutAction({
   key: string;
   shiftKey: boolean;
   altKey: boolean;
+  consistentCommentShortcuts: boolean;
   isInboxFlow: boolean;
   isCommentMode: boolean;
   inInbox: boolean;
 }): CommentEnterShortcutAction | null {
   if (!commandKey || key !== "Enter") return null;
 
+  if (consistentCommentShortcuts && isCommentMode && !altKey) {
+    return shiftKey ? "send-and-stay" : "send-and-move";
+  }
   if (shiftKey && !altKey) {
     if (!isInboxFlow) return "ignore";
     return isCommentMode ? "send-and-stay" : "send";

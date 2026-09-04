@@ -126,18 +126,23 @@ test("a successful comment publishes the tutorial completion signal", () => {
 });
 
 test("the tutorial comment does not consume its seeded inbox notification", () => {
-  assert.match(tiptap, /shouldPreserveLearnTutorialInboxOnComment/);
-  assert.match(tiptap, /!preserveTutorialInbox && inInbox/);
+  const sendCommentStart = tiptap.indexOf("const sendComment =");
+  const sendCommentEnd = tiptap.indexOf("const toggleAiTaskWriter", sendCommentStart);
+  assert.ok(sendCommentStart >= 0 && sendCommentEnd > sendCommentStart);
+  const sendComment = tiptap.slice(sendCommentStart, sendCommentEnd);
+
+  assert.match(sendComment, /shouldPreserveLearnTutorialInboxOnComment/);
+  assert.match(sendComment, /!preserveTutorialInbox && inInbox/);
   assert.match(
-    tiptap,
-    /!preserveTutorialInbox && isInboxFlow && inInbox && advanceOnSend/,
+    sendComment,
+    /!preserveTutorialInbox &&\s*\(alwaysAdvance \|\| \(isInboxFlow && inInbox && advanceOnSend\)\)/,
   );
 });
 
-test("comment shortcuts advance only from the inbox route", () => {
+test("comment shortcuts use the gated save-then-move path", () => {
   assert.match(
     tiptap,
-    /const isInboxFlow = shouldAdvanceAfterNotificationArchive\(inboxFlow\)/,
+    /useFlag\(\s*"htpr-5913-consistent-comment-shortcuts",?\s*\)/,
   );
 
   const shortcutStart = tiptap.indexOf("// Enter key combinations");
@@ -148,16 +153,25 @@ test("comment shortcuts advance only from the inbox route", () => {
   const shortcut = tiptap.slice(shortcutStart, shortcutEnd);
 
   assert.ok(shortcutStart >= 0 && shortcutEnd > shortcutStart);
-  assert.match(shortcut, /resolveCommentEnterShortcutAction\(/);
+  assert.match(shortcut, /resolveCommentEnterShortcutAction\([\s\S]*?consistentCommentShortcuts/);
   assert.match(
     shortcut,
     /if \(enterAction === "ignore"\) return;[\s\S]*?e\.preventDefault\(\)/,
   );
+  assert.match(shortcut, /enterAction === "send-and-move"[\s\S]*?sendComment\(true\)/);
   assert.match(
     shortcut,
     /enterAction === "send-and-stay"[\s\S]*?handleCallback\(\)/,
   );
   assert.doesNotMatch(shortcut, /handleCallback\("moveToNext"/);
+
+  const sendCommentStart = tiptap.indexOf("const sendComment =");
+  const sendCommentEnd = tiptap.indexOf("const toggleAiTaskWriter", sendCommentStart);
+  assert.ok(sendCommentStart >= 0 && sendCommentEnd > sendCommentStart);
+  const sendComment = tiptap.slice(sendCommentStart, sendCommentEnd);
+  assert.match(sendComment, /alwaysAdvance/);
+  assert.match(sendComment, /!preserveTutorialInbox/);
+  assert.match(sendComment, /\? "moveToNext"/);
 });
 
 test("due-date completion is published only after the save resolves", () => {

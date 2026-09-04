@@ -8,6 +8,7 @@ const FEATURE_FLAG_OWNER = {
 } as const;
 
 export const FEATURE_FLAG_KEYS = [
+  "htpr-5913-consistent-comment-shortcuts",
   "htpr-5992-mobile-all-tasks",
   "htpr-6091-feature-flags",
   "htpr-6112-copy-current-url",

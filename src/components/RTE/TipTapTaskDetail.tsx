@@ -88,6 +88,7 @@ import {
 } from "@/lib/taskDetailInboxFlow";
 import { armBackDismiss } from "@/lib/mobile/backDismiss";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
+import { useFlag } from "@/hooks/useFlag";
 const SetLinkModal = dynamic(
   () => import("../Modals/LinksModal/SetLinkModal"),
   {
@@ -210,6 +211,9 @@ const Tiptap = ({
   const isReadOnlyContent = isReadEditMode && !allowEdit;
   const { data: userPreferences } = useGetUserPreferences();
   const advanceOnSend = userPreferences.inboxAdvanceOnSend ?? true;
+  const consistentCommentShortcuts = useFlag(
+    "htpr-5913-consistent-comment-shortcuts",
+  );
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
   
   // State
@@ -529,8 +533,9 @@ const Tiptap = ({
   };
 
   // A task can still carry an inbox notification when opened from another
-  // surface. Only the inbox route may advance after sending.
-  const sendComment = () => {
+  // surface. The send button follows the Inbox preference; the consistent
+  // Ctrl/Cmd+Enter shortcut always advances.
+  const sendComment = (alwaysAdvance = false) => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
           window.sessionStorage.getItem(
@@ -543,7 +548,8 @@ const Tiptap = ({
       currentTask?.id,
     );
     return handleCallback(
-      !preserveTutorialInbox && isInboxFlow && inInbox && advanceOnSend
+      !preserveTutorialInbox &&
+        (alwaysAdvance || (isInboxFlow && inInbox && advanceOnSend))
         ? "moveToNext"
         : undefined,
       !preserveTutorialInbox && inInbox,
@@ -723,6 +729,7 @@ const Tiptap = ({
         key: e.key,
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        consistentCommentShortcuts,
         isInboxFlow,
         isCommentMode: mode === "create-comment",
         inInbox,
@@ -730,7 +737,9 @@ const Tiptap = ({
       if (enterAction) {
         if (enterAction === "ignore") return;
         e.preventDefault();
-        if (enterAction === "send-and-stay") {
+        if (enterAction === "send-and-move") {
+          sendComment(true);
+        } else if (enterAction === "send-and-stay") {
           handleCallback();
         } else if (enterAction === "send-and-complete") {
           handleCallback(undefined, inInbox, true);

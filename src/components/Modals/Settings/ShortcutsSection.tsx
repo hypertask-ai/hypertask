@@ -9,12 +9,20 @@ import { Search } from "lucide-react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
 
 const ShortcutsSection = () => {
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
-  const shortcutGroups = getKeyboardShortcuts(isApple, appShellRailOn);
+  const consistentCommentShortcuts = useFlag(
+    "htpr-5913-consistent-comment-shortcuts",
+  );
+  const shortcutGroups = getKeyboardShortcuts(
+    isApple,
+    appShellRailOn,
+    consistentCommentShortcuts,
+  );
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredGroups = useMemo(() => {
