@@ -12,16 +12,9 @@ async function main() {
   process.env.DATABASE_URL =
     "postgresql://unused:unused@localhost:5432/unused";
 
-  const [
-    {
-      PRIVATE_AGENT_DISPLAY_NAME,
-      redactAgentIdentitiesForPublicShare,
-    },
-    { redactSharedComments },
-  ] = await Promise.all([
-    import("@/lib/agents/publicAgent"),
-    import("@/utils/controllers/tasks/getSharedTask"),
-  ]);
+  const { PRIVATE_AGENT_DISPLAY_NAME, redactAgentIdentitiesForPublicShare } =
+    await import("@/lib/agents/publicAgent");
+  const { redactSharedComments } = await import("@/utils/controllers/tasks/getSharedTask");
 
   const humanComment = {
     id: "human-comment",
@@ -141,11 +134,7 @@ async function main() {
     displayName: PRIVATE_AGENT_DISPLAY_NAME,
     photoURL: null,
   });
-  assert.deepEqual(
-    comments,
-    originalComments,
-    "comment inputs must not be mutated",
-  );
+  assert.deepEqual(comments, originalComments, "comment inputs must not be mutated");
 
   const sharedTask = {
     id: "share-id",
@@ -183,11 +172,7 @@ async function main() {
   assert.equal(redactedSharedTask.task.parentTask.agentId, null);
   assert.equal(redactedSharedTask.task.subTasks[0].agentId, null);
   assert.deepEqual(redactedSharedTask.task.user, sharedTask.task.user);
-  assert.deepEqual(
-    sharedTask,
-    originalSharedTask,
-    "task inputs must not be mutated",
-  );
+  assert.deepEqual(sharedTask, originalSharedTask, "task inputs must not be mutated");
 
   const serialized = JSON.stringify({ redactedComments, redactedSharedTask });
   for (const privateValue of [
@@ -236,6 +221,7 @@ async function main() {
     );
   }
   assert.match(activityRenderer, /activity\.data\.isSelfAssignment \?\?/);
+  assert.doesNotMatch(activityRenderer, /(?:from|to)Agent\?\.photoURL\s*\?\?/);
 
   console.log("shared-task-agent-visibility.test.ts: all assertions passed");
 }
