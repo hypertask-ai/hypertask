@@ -279,6 +279,16 @@ test("connection reads and disconnects only the signed user's row", async () => 
   assert.equal(disconnectedUserId, null);
 
   enabled = false;
+  const disabledResponse = await disconnectRoute.DELETE(
+    appRequest("/api/figma/disconnect", {
+      method: "DELETE",
+      headers: { origin: "https://app.hypertask.ai" },
+    }),
+  );
+  assert.equal(disabledResponse.status, 404);
+  assert.equal(disconnectedUserId, null);
+
+  enabled = true;
   const response = await disconnectRoute.DELETE(
     appRequest("/api/figma/disconnect", {
       method: "DELETE",
@@ -304,6 +314,6 @@ test("disconnect stays gated when the flag is disabled without a connection", as
   );
 
   assert.equal(response.status, 404);
-  assert.equal(connectionUserId, 6);
+  assert.equal(connectionUserId, null);
   assert.equal(disconnectedUserId, null);
 });
