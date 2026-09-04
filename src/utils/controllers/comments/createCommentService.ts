@@ -416,6 +416,7 @@ async function loadAgentRunReplayComment(
   comments: Pick<typeof prisma.comment, "findFirst">,
   input: {
     commentId: number;
+    activityId: string;
     taskId: number;
     creatorId: number;
     agentId?: string | null;
@@ -429,6 +430,10 @@ async function loadAgentRunReplayComment(
       taskId: input.taskId,
       creatorId: input.creatorId,
       agentId: input.agentId ?? null,
+      OR: [
+        { agentRunResponseActivity: { is: { id: input.activityId } } },
+        { agentRunSelectionActivity: { is: { id: input.activityId } } },
+      ],
     },
   });
   if (!comment) throw new Error("Run activity comment not found");
@@ -608,6 +613,7 @@ export async function createCommentService(params: CreateCommentParams) {
       if (agentRunReplayComment) {
         return loadAgentRunReplayComment(tx.comment, {
           commentId: agentRunReplayComment.id,
+          activityId: agentRunReplayComment.activityId,
           taskId,
           creatorId,
           agentId,

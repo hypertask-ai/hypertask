@@ -1134,14 +1134,26 @@ function atomicCommentHarness() {
         comments.push(comment);
         return comment;
       },
-      findFirst: async ({ where }) =>
-        comments.find(
-          (comment) =>
-            comment.id === where.id &&
-            comment.taskId === where.taskId &&
-            comment.creatorId === where.creatorId &&
-            (comment.agentId ?? null) === where.agentId,
-        ) ?? null,
+      findFirst: async ({ where }) => {
+        const linkedActivityId =
+          where.OR?.[0]?.agentRunResponseActivity?.is?.id ??
+          where.OR?.[1]?.agentRunSelectionActivity?.is?.id;
+        const linkedActivity = activities.find(
+          ({ id }) => id === linkedActivityId,
+        );
+        return (
+          comments.find(
+            (comment) =>
+              comment.id === where.id &&
+              comment.taskId === where.taskId &&
+              comment.creatorId === where.creatorId &&
+              (comment.agentId ?? null) === where.agentId &&
+              (!linkedActivityId ||
+                linkedActivity?.responseCommentId === comment.id ||
+                linkedActivity?.selectionCommentId === comment.id),
+          ) ?? null
+        );
+      },
     },
     assignees: {
       findMany: async ({ where }) => {
@@ -1406,6 +1418,45 @@ test("first activity comments broadcast before notification completion", async (
     "broadcast",
     "complete",
   ]);
+});
+
+test("activity replay rejects a comment linked to another activity", async () => {
+  const harness = atomicCommentHarness();
+  harness.setFailure(null);
+  const input = {
+    text: "<p>Yes</p>",
+    creatorId: 6,
+    taskId: 42,
+    ownerId: 6,
+    currentUser: { id: 6, displayName: "Valentin" },
+    accessUserId: 6,
+  };
+  await harness.createCommentService({
+    ...input,
+    agentRunSelection: {
+      runId: "run-1",
+      agentId: "agent-1",
+      activityId: harness.elicitation.id,
+      context: { taskId: 42, chatSessionId: null },
+      option: { value: "yes", label: "Yes" },
+      selectedById: 6,
+      selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+    },
+  });
+
+  await assert.rejects(
+    harness.createCommentService({
+      ...input,
+      agentRunReplayComment: {
+        id: harness.comments[0].id,
+        activityId: "another-activity",
+        agentWebhookDeliveryIds: [],
+        boardWebhookDeliveryIds: [],
+        notificationsCompletedAt: null,
+      },
+    }),
+    /Run activity comment not found/,
+  );
 });
 
 test("failed activity mention handoffs remain retryable", async () => {
