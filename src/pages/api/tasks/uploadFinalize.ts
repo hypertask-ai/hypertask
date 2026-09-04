@@ -4,18 +4,7 @@ import {
   DIRECT_UPLOAD_MAX_FILES,
   DIRECT_UPLOAD_MAX_FILE_BYTES,
 } from "@/lib/storage/directUpload";
-import {
-  signTaskAttachmentLinkReceipt,
-  TASK_ATTACHMENT_LINK_RECEIPT_TTL_SECONDS,
-  verifyTaskAttachmentLinkReceipt,
-  verifyUploadGrant,
-} from "@/lib/storage/uploadGrant";
-import {
-  discardTaskAttachment,
-  linkTaskAttachment,
-  TaskAttachmentLinkError,
-} from "@/lib/storage/linkTaskAttachment";
-import { broadcastTaskChange } from "@/lib/realtime/server";
+import { verifyUploadGrant } from "@/lib/storage/uploadGrant";
 import {
   getHypertasksS3Client,
   HYPERTASKS_S3_BUCKET,
@@ -78,80 +67,11 @@ export default async function handler(
       .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
   }
 
-  if (req.body?.action === "link-task-attachment") {
-    let enabled: boolean;
-    try {
-      const { isFeatureEnabled } = await import("@/lib/flags");
-      enabled = await isFeatureEnabled(
-        "htpr-5993-optimistic-task-uploads",
-        session.id,
-      );
-    } catch (error) {
-      console.error("[uploadFinalize] Could not evaluate upload feature flag", error);
-      return res.status(500).json({ error: "Could not link attachment" });
-    }
-    if (!enabled) {
-      return res.status(403).json({ error: "Background task uploads are disabled" });
-    }
-    const taskId = Number(req.body?.taskId);
-    const receipt = verifyTaskAttachmentLinkReceipt(req.body?.receipt);
-    if (!Number.isSafeInteger(taskId) || taskId <= 0 || !receipt) {
-      return res.status(400).json({ error: "Invalid attachment link request" });
-    }
-    if (receipt.userId !== session.id) {
-      return res.status(403).json({ error: "This upload cannot be linked" });
-    }
-    try {
-      const attachment = await linkTaskAttachment(taskId, session.id, receipt);
-      try {
-        await broadcastTaskChange(taskId, { originUserId: session.id });
-      } catch (error) {
-        console.warn("[uploadFinalize] task realtime delivery failed", error);
-      }
-      return res.status(200).json({ success: true, attachment });
-    } catch (error) {
-      if (error instanceof TaskAttachmentLinkError) {
-        return res.status(error.status).json({ error: error.message });
-      }
-      console.error("[uploadFinalize] Could not link attachment", error);
-      return res.status(500).json({ error: "Could not link attachment" });
-    }
-  }
-
-  if (req.body?.action === "discard-task-attachment") {
-    const receipt = verifyTaskAttachmentLinkReceipt(req.body?.receipt);
-    if (
-      !receipt ||
-      !KEY_PATTERN.test(receipt.key) ||
-      receipt.key.includes("..")
-    ) {
-      return res.status(400).json({ error: "Invalid attachment discard request" });
-    }
-    if (receipt.userId !== session.id) {
-      return res.status(403).json({ error: "This upload cannot be discarded" });
-    }
-    try {
-      const discarded = await discardTaskAttachment(session.id, receipt);
-      return res.status(200).json({ success: true, discarded });
-    } catch (error) {
-      if (error instanceof TaskAttachmentLinkError) {
-        return res.status(error.status).json({ error: error.message });
-      }
-      console.error("[uploadFinalize] Could not discard attachment", error);
-      return res.status(500).json({ error: "Could not discard attachment" });
-    }
-  }
-
   const grant = verifyUploadGrant((req.body as { grant?: unknown })?.grant);
   if (!grant || grant.userId !== session.id) {
     return res
       .status(403)
       .json({ error: "This upload cannot be finalized", code: "GRANT_INVALID" });
-  }
-
-  const issueTaskLinkReceipts = req.body?.issueTaskLinkReceipts === true;
-  if (issueTaskLinkReceipts && !grant.taskLinkFiles) {
-    return res.status(403).json({ error: "This upload cannot be linked to a task" });
   }
 
   let keep: string[];
@@ -222,30 +142,7 @@ export default async function handler(
     });
   }
 
-  const taskLinkReceipts = issueTaskLinkReceipts
-    ? keep.map((key, index) => {
-        const file = grant.taskLinkFiles?.find((candidate) => candidate.key === key);
-        if (!file) return null;
-        return signTaskAttachmentLinkReceipt(
-          {
-            userId: session.id,
-            key,
-            fileName: file.fileName,
-            contentType: file.contentType,
-            fileSize: verified[index],
-          },
-          TASK_ATTACHMENT_LINK_RECEIPT_TTL_SECONDS,
-        );
-      })
-    : undefined;
-  if (taskLinkReceipts?.some((receipt) => receipt === null)) {
-    return res.status(400).json({ error: "Upload metadata is incomplete" });
-  }
-
-  return res.status(200).json({
-    success: true,
-    ...(taskLinkReceipts ? { taskLinkReceipts } : {}),
-  });
+  return res.status(200).json({ success: true });
 }
 
 // Duplicated from n8nUpload on purpose; see the note in uploadUrl.ts (HTPR-5520).

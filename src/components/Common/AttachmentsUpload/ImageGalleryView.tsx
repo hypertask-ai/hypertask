@@ -32,10 +32,9 @@ interface IProps {
   onUploadFailed?: (fileName: string) => void;
   onUploadPendingChange?: (pending: boolean) => void;
   variant?: "default" | "chat";
-  backgroundTaskUploads?: boolean;
 }
 const ImageGallery = (props: IProps) => {
-  const { files, mode, callbackAttachments, onUploadFailed, onUploadPendingChange, allowDelete, handleRemove, shouldUpload, variant = "default", backgroundTaskUploads = false } = props
+  const { files, mode, callbackAttachments, onUploadFailed, onUploadPendingChange, allowDelete, handleRemove, shouldUpload, variant = "default" } = props
   const [isModalOpen, setModalOpen] = useState(false);
   const [files_, setFiles] = useState<any[]>(files ?? [[]]);
   // console.log("🚀 ~ ImageGallery ~ files_:", files_)
@@ -129,7 +128,6 @@ const ImageGallery = (props: IProps) => {
               onUploadFailed={onUploadFailed}
               handleRemove={removeHandler}
               variant={variant}
-              backgroundTaskUpload={backgroundTaskUploads}
             />
           )
         })}

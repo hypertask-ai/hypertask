@@ -10,7 +10,6 @@ const FEATURE_FLAG_OWNER = {
 export const FEATURE_FLAG_KEYS = [
   "htpr-5913-consistent-comment-shortcuts",
   "htpr-5992-mobile-all-tasks",
-  "htpr-5993-optimistic-task-uploads",
   "htpr-6091-feature-flags",
   "htpr-6112-copy-current-url",
   "htpr-6116-figma-node-preview",

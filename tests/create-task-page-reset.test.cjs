@@ -41,7 +41,7 @@ test("all save modes reset only after a task was created", () => {
   );
   assert.match(
     source,
-    /const createTask = CreateTaskAndDescription\(\s*descriptionAtSave,\s*titleAtSave,\s*formValuesAtSave,?\s*\);\s*const traceScope = getTaskCreatePerformanceTraceScope\(\);\s*toast\.promise\(createTask, \{[\s\S]*?success: \(\) => \{[\s\S]*?resetComposerAfterCreate\(\);[\s\S]*?closeHandler\(true\);/,
+    /const createTask = CreateTaskAndDescription\(descriptionAtSave, titleAtSave\);\s*const traceScope = getTaskCreatePerformanceTraceScope\(\);\s*toast\.promise\(createTask, \{[\s\S]*?success: \(\) => \{[\s\S]*?resetComposerAfterCreate\(\);[\s\S]*?closeHandler\(true\);/,
     "Save & close must not discard or navigate until creation succeeds",
   );
   assert.match(
