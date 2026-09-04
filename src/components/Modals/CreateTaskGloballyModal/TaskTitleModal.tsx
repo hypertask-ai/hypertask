@@ -181,7 +181,7 @@ const TaskTitleModal = () => {
                                         disabled={isGeneratingTitle}
                                         ariaLabel="Dictate task title"
                                         mobilePresentation="prominent"
-                                        // Product-owner exception: “white buttons” in https://app.hypertask.ai/detail/project-15/5995.
+                                        // Owner-confirmed design exception: “white buttons” in https://app.hypertask.ai/detail/project-15/5995.
                                         mobilePrimaryTone="default"
                                         className="h-11 w-11 shrink-0 justify-center"
                                         wrapperClassName="shrink-0"
