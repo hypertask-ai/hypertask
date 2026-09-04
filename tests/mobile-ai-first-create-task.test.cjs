@@ -38,6 +38,10 @@ const { extractTaskProperties, mergeMobileCreateTaskWriterResult } = jiti(
 const { MOBILE_AI_TASK_WRITER_FOCUS } = jiti(
   path.join(root, "src/models/CreateTaskModalModels/model.ts"),
 );
+const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
+const { getAllCommands } = jiti(
+  path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"),
+);
 const { mobileMicPresentation } = jiti(
   path.join(
     root,
@@ -51,6 +55,31 @@ test("mobile plus opens the classic create form", () => {
     /onClick=\{\(\) => setCreateTaskModal\(\{ show: true \}\)\}/,
   );
   assert.doesNotMatch(mobileButton, /defaultEditMode: "Description-ai"/);
+});
+
+test("board cards expose only the working create-task AI writer command", () => {
+  const taskOptions = (isKanban) => ({
+    isApple: false,
+    isArchived: false,
+    hasNotifications: false,
+    isKanban,
+    hasSubtasks: false,
+    hasParent: false,
+    isStarred: false,
+    timeTrackingEnabled: false,
+  });
+  const commandsFor = (isKanban) =>
+    getAllCommands({ context: "Task", taskOptions: taskOptions(isKanban) })
+      .flatMap((group) => group.commandLists)
+      .map((command) => command.commandMode);
+
+  const boardCardCommands = commandsFor(true);
+  assert.equal(boardCardCommands.includes(CommandMode.OpenAiTaskWriter), false);
+  assert.equal(
+    boardCardCommands.includes(CommandMode.CreateTaskWithAiWriter),
+    true,
+  );
+  assert.equal(commandsFor(false).includes(CommandMode.OpenAiTaskWriter), true);
 });
 
 test("mobile create writer matches the approved stripped-down hierarchy", () => {
