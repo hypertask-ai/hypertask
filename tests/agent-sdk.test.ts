@@ -531,6 +531,46 @@ test("Node adapters preserve multiple Set-Cookie response headers", async () => 
   ]);
 });
 
+test("Node adapters reject cookie headers they cannot preserve", async () => {
+  const responseHeaders = new Headers({
+    "set-cookie": "session=one; Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+  });
+  const handlerResponse = new Response(null, {
+    status: 204,
+    headers: responseHeaders,
+  });
+  Object.defineProperty(handlerResponse.headers, "getSetCookie", {
+    value: undefined,
+  });
+  const handler: WebhookHandler = Object.assign(
+    async () => handlerResponse,
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const request = {
+    method: "POST",
+    url: "/webhook",
+    headers: {},
+    async *[Symbol.asyncIterator]() {},
+  };
+  const headers = new Map<string, string | string[]>();
+  let responseBody = "";
+  const response = {
+    statusCode: 0,
+    setHeader(name: string, value: string | string[]) {
+      headers.set(name, value);
+    },
+    end(body: string | Uint8Array = "") {
+      responseBody =
+        typeof body === "string" ? body : new TextDecoder().decode(body);
+    },
+  };
+
+  await nodeHttpAdapter(handler)(request, response);
+  assert.equal(response.statusCode, 500);
+  assert.equal(headers.has("set-cookie"), false);
+  assert.match(responseBody, /Webhook request failed/);
+});
+
 test("Node adapters require explicit single-process mode", async () => {
   const distributedValues: Array<boolean | undefined> = [];
   const handler: WebhookHandler = Object.assign(

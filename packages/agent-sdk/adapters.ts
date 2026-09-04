@@ -125,9 +125,13 @@ async function toRequest(request: NodeRequest, useParsedBody: boolean): Promise<
 async function sendResponse(response: Response, target: NodeResponse): Promise<void> {
   const body = new Uint8Array(await response.arrayBuffer());
   target.statusCode = response.status;
-  const setCookies = (
-    response.headers as Headers & { getSetCookie?: () => string[] }
-  ).getSetCookie?.() ?? [];
+  const responseHeaders = response.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
+  if (response.headers.has("set-cookie") && !responseHeaders.getSetCookie) {
+    throw new Error("The Headers implementation cannot preserve Set-Cookie values");
+  }
+  const setCookies = responseHeaders.getSetCookie?.() ?? [];
   response.headers.forEach((value, name) => {
     if (name !== "set-cookie" || setCookies.length === 0) target.setHeader(name, value);
   });
