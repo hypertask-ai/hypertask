@@ -21,6 +21,7 @@ const TASK_LEASE_HEARTBEAT_MS = 60_000;
 const TASK_LEASE_RELEASE_TIMEOUT_MS = 5_000;
 const AUTO_THOUGHT_MS = 8_000;
 const RUN_STATUS_POLL_MS = 5_000;
+const RUN_STOP_TOMBSTONE_MS = 24 * 60 * 60 * 1000;
 const THREAD_ITEM_LIMIT = 100;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -117,7 +118,11 @@ export class AgentClient {
   private readonly handlers = new Map<AgentEventSubscription, Set<AgentEventHandler>>();
   private readonly activeRuns = new Map<
     string,
-    { controller: AbortController; references: number }
+    {
+      controller: AbortController;
+      references: number;
+      cleanupTimer?: ReturnType<typeof setTimeout>;
+    }
   >();
   private readonly onErrorCallback?: AgentClientOptions["onError"];
 
@@ -394,7 +399,19 @@ export class AgentClient {
         const current = this.activeRuns.get(runId);
         if (!current || current.controller !== active!.controller) return;
         current.references -= 1;
-        if (current.references === 0) this.activeRuns.delete(runId);
+        if (current.references !== 0) return;
+        if (!current.controller.signal.aborted) {
+          this.activeRuns.delete(runId);
+          return;
+        }
+        if (current.cleanupTimer) return;
+        current.cleanupTimer = setTimeout(() => {
+          const tombstone = this.activeRuns.get(runId);
+          if (!tombstone || tombstone.controller !== current.controller) return;
+          tombstone.cleanupTimer = undefined;
+          if (tombstone.references === 0) this.activeRuns.delete(runId);
+        }, RUN_STOP_TOMBSTONE_MS);
+        (current.cleanupTimer as unknown as { unref?: () => void }).unref?.();
       },
     };
   }

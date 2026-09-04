@@ -1385,7 +1385,7 @@ test("server status polling aborts work stopped on another host", async (context
   }
 });
 
-test("a stop tombstone rejects a concurrent stale delivery", async () => {
+test("a stop tombstone rejects concurrent and post-completion stale deliveries", async () => {
   const api = apiFixture();
   const agent = createAgent({
     token: "unit-test-token",
@@ -1407,7 +1407,7 @@ test("a stop tombstone rejects a concurrent stale delivery", async () => {
   });
   let delayedHandled = false;
   agent.on("mention", async (received) => {
-    if (received.prompt === "delayed") {
+    if (received.prompt !== "active") {
       delayedHandled = true;
       return;
     }
@@ -1441,6 +1441,12 @@ test("a stop tombstone rejects a concurrent stale delivery", async () => {
   await assert.rejects(delayedDispatch);
   finishStop();
   await Promise.all([activeDispatch, stopDispatch]);
+  await assert.rejects(
+    agent.client.dispatch(
+      payload({ deliveryId: "delivery-after-stop", prompt: "post-stop" }),
+      run,
+    ),
+  );
   assert.equal(delayedHandled, false);
 });
 
