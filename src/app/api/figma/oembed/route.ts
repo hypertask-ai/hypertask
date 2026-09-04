@@ -5,6 +5,7 @@ import { FIGMA_API_BASE_URL } from "@/lib/figma/paths";
 
 const CACHE_CONTROL = "private, max-age=3600";
 const FRAME_CACHE_CONTROL = "private, max-age=86400";
+const NO_STORE_CACHE_CONTROL = "private, no-store";
 const UPSTREAM_TIMEOUT_MS = 5000;
 const MAX_OEMBED_BYTES = 64 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -244,8 +245,10 @@ export async function GET(request: NextRequest) {
   const fallbackPromise = getOembed(figmaUrl).catch(() => null);
   if (principal.status !== "allowed" || !target) {
     const fallback = await fallbackPromise;
+    const cacheControl =
+      principal.status === "error" ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL;
     return fallback
-      ? previewResponse(fallback)
+      ? previewResponse(fallback, cacheControl)
       : NextResponse.json(
           { error: "Figma preview is unavailable" },
           { status: 502 },
@@ -254,10 +257,12 @@ export async function GET(request: NextRequest) {
 
   let token: string | null | undefined;
   let rendered: Awaited<ReturnType<typeof getRenderedImages>> | null = null;
+  let degraded = false;
   try {
     token = await getFigmaAccessToken(principal.userId);
     if (token) rendered = await getRenderedImages(target, token);
   } catch {
+    degraded = true;
     // A connection or Figma failure keeps the cover and the live embed click.
   }
 
@@ -280,9 +285,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return previewResponse({
-    ...basePreview,
-    ...(fallback ? {} : { previewUnavailable: true }),
-    ...(token === null ? { canConnectFigma: true } : {}),
-  });
+  return previewResponse(
+    {
+      ...basePreview,
+      ...(fallback ? {} : { previewUnavailable: true }),
+      ...(token === null ? { canConnectFigma: true } : {}),
+    },
+    degraded || !fallback ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL,
+  );
 }

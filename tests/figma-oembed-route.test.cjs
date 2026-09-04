@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const originalFetch = global.fetch;
 let authenticated;
 let enabled;
+let principalError;
 let accessToken;
 let tokenUserIds;
 let calls;
@@ -19,6 +20,7 @@ function stub(file, exports) {
 stub("src/app/api/figma/_lib.ts", {
   getFigmaRequestUser: async () => {
     if (!authenticated) return { status: "unauthorized" };
+    if (principalError) return { status: "error" };
     return enabled
       ? { status: "allowed", userId: 6 }
       : { status: "disabled" };
@@ -46,6 +48,7 @@ const request = (url = FIGMA) =>
   new NextRequest(`https://app.test/api/figma/oembed?url=${encodeURIComponent(url)}`);
 function reset() {
   authenticated = enabled = true;
+  principalError = false;
   accessToken = "viewer-token";
   tokenUserIds = [];
   calls = [];
@@ -75,6 +78,15 @@ test("requires a signed session and server feature eligibility", async () => {
   assert.equal(calls.length, 1);
   assert.equal((await response.json()).thumbnailUrl, COVER.thumbnail_url);
   assert.equal(response.headers.get("cache-control"), "private, max-age=3600");
+  assert.deepEqual(tokenUserIds, []);
+
+  reset();
+  principalError = true;
+  const degradedResponse = await GET(request());
+  assert.equal(
+    degradedResponse.headers.get("cache-control"),
+    "private, no-store",
+  );
   assert.deepEqual(tokenUserIds, []);
 });
 
@@ -172,16 +184,23 @@ test("renders at most six first-page frames and falls back on denial", async () 
   reset();
   handler = (url) =>
     url.hostname === "www.figma.com" ? json(COVER) : json({}, 403);
+  const deniedResponse = await GET(request(`${FIGMA}?node-id=1-2`));
+  assert.equal((await deniedResponse.json()).thumbnailUrl, COVER.thumbnail_url);
   assert.equal(
-    (await (await GET(request(`${FIGMA}?node-id=1-2`))).json()).thumbnailUrl,
-    COVER.thumbnail_url,
+    deniedResponse.headers.get("cache-control"),
+    "private, no-store",
   );
 
   reset();
   handler = () => json({}, 502);
-  const unavailable = await (await GET(request(`${FIGMA}?node-id=1-2`))).json();
+  const unavailableResponse = await GET(request(`${FIGMA}?node-id=1-2`));
+  const unavailable = await unavailableResponse.json();
   assert.equal(unavailable.previewUnavailable, true);
   assert.equal(unavailable.thumbnailUrl, "");
+  assert.equal(
+    unavailableResponse.headers.get("cache-control"),
+    "private, no-store",
+  );
 });
 
 test("offers connection only when the eligible viewer has no stored account", async () => {
