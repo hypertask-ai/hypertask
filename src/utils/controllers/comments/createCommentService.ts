@@ -107,7 +107,7 @@ export interface CreateCommentParams {
     activityId: string;
     agentWebhookDeliveryIds: string[];
     boardWebhookDeliveryIds: string[];
-    notificationsSentAt: Date | null;
+    notificationsCompletedAt: Date | null;
   };
   /**
    * Extra board events to persist in the same transaction as the comment, so a
@@ -955,7 +955,7 @@ export async function createCommentService(params: CreateCommentParams) {
     await publishAgentWebhookDeliveries(webhookDeliveryIds);
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
   }
-  if (agentRunReplayComment?.notificationsSentAt) return comment;
+  if (agentRunReplayComment?.notificationsCompletedAt) return comment;
   let agentRunCommentNotificationClaim: {
     activityId: string;
     processingAt: Date;
@@ -976,7 +976,7 @@ export async function createCommentService(params: CreateCommentParams) {
       const claimed = await prisma.agentRunActivity.updateMany({
         where: {
           id: activityId,
-          commentNotificationsSentAt: null,
+          commentNotificationsCompletedAt: null,
           OR: [
             { commentNotificationsProcessingAt: null },
             { commentNotificationsProcessingAt: { lte: staleBefore } },
@@ -987,9 +987,9 @@ export async function createCommentService(params: CreateCommentParams) {
       if (claimed.count === 0) {
         const completed = await prisma.agentRunActivity.findUnique({
           where: { id: activityId },
-          select: { commentNotificationsSentAt: true },
+          select: { commentNotificationsCompletedAt: true },
         });
-        if (completed?.commentNotificationsSentAt) return comment;
+        if (completed?.commentNotificationsCompletedAt) return comment;
         throw new Error("Run activity comment notifications are still processing");
       }
       agentRunCommentNotificationClaim = { activityId, processingAt };
@@ -1101,15 +1101,13 @@ export async function createCommentService(params: CreateCommentParams) {
     const mentionedUserIds = new Set(getMentionedUserIdsFromCommentText(text));
 
     const [_, __, ___, ____, commentCreator, userIds] = await Promise.all([
-      agentRunReplayComment
-        ? Promise.resolve()
-        : prisma.drafts.deleteMany({
-            where: {
-              type: "Comment",
-              taskId,
-              userId: creatorId,
-            },
-          }),
+      prisma.drafts.deleteMany({
+        where: {
+          type: "Comment",
+          taskId,
+          userId: creatorId,
+        },
+      }),
       createNotificationForComment(
         task,
         comment,
@@ -1135,7 +1133,7 @@ export async function createCommentService(params: CreateCommentParams) {
           }).catch((err) =>
             console.warn("[createCommentService] processMentions failed:", err),
           ),
-      processTaskReferences && !agentRunReplayComment
+      processTaskReferences
         ? processTaskReferencesFromCommentText(
             text,
             taskId,
@@ -1164,18 +1162,33 @@ export async function createCommentService(params: CreateCommentParams) {
       if (!agentRunCommentNotificationClaim) {
         throw new Error("Run activity notification claim is missing");
       }
+      // ponytail: FCM and comment email are best-effort for ordinary comments.
+      // Reserve one attempt before handoff so a process exit cannot duplicate it;
+      // guaranteed delivery needs a provider-idempotent notification outbox.
       const notificationState =
         await prisma.agentRunActivity.findUniqueOrThrow({
           where: { id: agentRunCommentNotificationClaim.activityId },
           select: {
-            commentFcmSentAt: true,
-            commentEmailsSentAt: true,
+            commentFcmAttemptedAt: true,
+            commentEmailsAttemptedAt: true,
           },
         });
-      if (!notificationState.commentFcmSentAt) {
+      if (!notificationState.commentFcmAttemptedAt) {
         const devices = await prisma.subscribedDevices.findMany({
           where: { userId: { in: userIds } },
         });
+        const reserved = await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentFcmAttemptedAt: null,
+          },
+          data: { commentFcmAttemptedAt: new Date() },
+        });
+        if (reserved.count === 0) {
+          throw new Error("Run activity FCM notification claim was lost");
+        }
         await sendDataOnlyFcm(
           devices,
           commentCreator!,
@@ -1185,17 +1198,20 @@ export async function createCommentService(params: CreateCommentParams) {
           creatorId,
           comment,
         );
-        await prisma.agentRunActivity.updateMany({
+      }
+      if (!notificationState.commentEmailsAttemptedAt) {
+        const reserved = await prisma.agentRunActivity.updateMany({
           where: {
             id: agentRunCommentNotificationClaim.activityId,
             commentNotificationsProcessingAt:
               agentRunCommentNotificationClaim.processingAt,
-            commentFcmSentAt: null,
+            commentEmailsAttemptedAt: null,
           },
-          data: { commentFcmSentAt: new Date() },
+          data: { commentEmailsAttemptedAt: new Date() },
         });
-      }
-      if (!notificationState.commentEmailsSentAt) {
+        if (reserved.count === 0) {
+          throw new Error("Run activity email notification claim was lost");
+        }
         await sendCommentEmails({
           task,
           text,
@@ -1205,28 +1221,22 @@ export async function createCommentService(params: CreateCommentParams) {
           mentionedUserIds,
           fromAgentId: agentId ?? null,
         });
-        await prisma.agentRunActivity.updateMany({
-          where: {
-            id: agentRunCommentNotificationClaim.activityId,
-            commentNotificationsProcessingAt:
-              agentRunCommentNotificationClaim.processingAt,
-            commentEmailsSentAt: null,
-          },
-          data: { commentEmailsSentAt: new Date() },
-        });
       }
-      await prisma.agentRunActivity.updateMany({
+      const completed = await prisma.agentRunActivity.updateMany({
         where: {
           id: agentRunCommentNotificationClaim.activityId,
-          commentNotificationsSentAt: null,
+          commentNotificationsCompletedAt: null,
           commentNotificationsProcessingAt:
             agentRunCommentNotificationClaim.processingAt,
         },
         data: {
-          commentNotificationsSentAt: new Date(),
+          commentNotificationsCompletedAt: new Date(),
           commentNotificationsProcessingAt: null,
         },
       });
+      if (completed.count === 0) {
+        throw new Error("Run activity notification claim was lost");
+      }
       agentRunCommentNotificationClaim = null;
     } else {
       const devices = await prisma.subscribedDevices.findMany({
@@ -1289,7 +1299,7 @@ export async function createCommentService(params: CreateCommentParams) {
         .updateMany({
           where: {
             id: claim.activityId,
-            commentNotificationsSentAt: null,
+            commentNotificationsCompletedAt: null,
             commentNotificationsProcessingAt: claim.processingAt,
           },
           data: { commentNotificationsProcessingAt: null },

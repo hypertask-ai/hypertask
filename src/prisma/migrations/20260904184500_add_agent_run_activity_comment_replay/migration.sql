@@ -4,9 +4,9 @@ ALTER TABLE "AgentRunActivity"
     ADD COLUMN "commentAgentWebhookDeliveryIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     ADD COLUMN "commentBoardWebhookDeliveryIds" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     ADD COLUMN "commentNotificationsProcessingAt" TIMESTAMP(3),
-    ADD COLUMN "commentFcmSentAt" TIMESTAMP(3),
-    ADD COLUMN "commentEmailsSentAt" TIMESTAMP(3),
-    ADD COLUMN "commentNotificationsSentAt" TIMESTAMP(3),
+    ADD COLUMN "commentFcmAttemptedAt" TIMESTAMP(3),
+    ADD COLUMN "commentEmailsAttemptedAt" TIMESTAMP(3),
+    ADD COLUMN "commentNotificationsCompletedAt" TIMESTAMP(3),
     ADD CONSTRAINT "AgentRunActivity_response_comment_check" CHECK (
         "type" = 'RESPONSE' OR "responseCommentId" IS NULL
     ),

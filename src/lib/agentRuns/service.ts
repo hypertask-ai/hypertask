@@ -315,7 +315,7 @@ async function replayCreatedActivity(
         activityId: activity.id,
         agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
         boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
-        notificationsSentAt: activity.commentNotificationsSentAt,
+        notificationsCompletedAt: activity.commentNotificationsCompletedAt,
       },
     });
   }
@@ -494,7 +494,7 @@ export async function selectAgentRunActivity(
           activityId: activity.id,
           agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
           boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
-          notificationsSentAt: activity.commentNotificationsSentAt,
+          notificationsCompletedAt: activity.commentNotificationsCompletedAt,
         },
       });
     }

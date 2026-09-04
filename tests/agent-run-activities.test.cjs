@@ -69,9 +69,9 @@ function activityRow(overrides = {}) {
     commentAgentWebhookDeliveryIds: [],
     commentBoardWebhookDeliveryIds: [],
     commentNotificationsProcessingAt: null,
-    commentFcmSentAt: null,
-    commentEmailsSentAt: null,
-    commentNotificationsSentAt: null,
+    commentFcmAttemptedAt: null,
+    commentEmailsAttemptedAt: null,
+    commentNotificationsCompletedAt: null,
     createdAt: new Date("2026-09-04T10:01:00.000Z"),
     ...overrides,
   };
@@ -403,7 +403,7 @@ function loadService({
         input.agentRunSelection?.activityId ??
         input.agentRunReplayComment?.activityId;
       const activity = db.activities.find(({ id }) => id === activityId);
-      if (activity) activity.commentNotificationsSentAt = new Date();
+      if (activity) activity.commentNotificationsCompletedAt = new Date();
       return { id: commentId, text: input.text };
     },
   });
@@ -786,9 +786,9 @@ test("migration constrains retry keys and elicitation selections", () => {
     replayMigration,
     /"commentNotificationsProcessingAt" TIMESTAMP\(3\)/,
   );
-  assert.match(replayMigration, /"commentFcmSentAt" TIMESTAMP\(3\)/);
-  assert.match(replayMigration, /"commentEmailsSentAt" TIMESTAMP\(3\)/);
-  assert.match(replayMigration, /"commentNotificationsSentAt" TIMESTAMP\(3\)/);
+  assert.match(replayMigration, /"commentFcmAttemptedAt" TIMESTAMP\(3\)/);
+  assert.match(replayMigration, /"commentEmailsAttemptedAt" TIMESTAMP\(3\)/);
+  assert.match(replayMigration, /"commentNotificationsCompletedAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /AgentRunActivity_selectionCommentId_fkey/);
 });
 
@@ -799,6 +799,7 @@ function loadAtomicCommentService(
   publishAgentWebhookDeliveries,
   publishBoardWebhookDeliveries,
   sendDataOnlyFcm,
+  extractTaskReferencesFromCommentText,
 ) {
   const noop = async () => {};
   const modules = {
@@ -827,7 +828,7 @@ function loadAtomicCommentService(
       processMentionsFromCommentText: noop,
     },
     "src/utils/controllers/comments/extractTaskReferences.ts": {
-      extractTaskReferencesFromCommentText: () => [],
+      extractTaskReferencesFromCommentText,
     },
     "src/utils/controllers/tasks/addRelatedTasks.ts": {
       addRelatedTasks: async () => ({ status: 200 }),
@@ -909,6 +910,8 @@ function atomicCommentHarness() {
   const fcmCalls = [];
   const updateTaskCalls = [];
   let assigneeLookupCalls = 0;
+  let draftDeleteCalls = 0;
+  let taskReferenceParseCalls = 0;
   let failure = "comment";
 
   const tx = {
@@ -962,20 +965,20 @@ function atomicCommentHarness() {
       },
       updateMany: async ({ where, data }) => {
         if (
-          where.commentNotificationsSentAt === null ||
+          where.commentNotificationsCompletedAt === null ||
           where.commentNotificationsProcessingAt ||
-          where.commentFcmSentAt === null ||
-          where.commentEmailsSentAt === null
+          where.commentFcmAttemptedAt === null ||
+          where.commentEmailsAttemptedAt === null
         ) {
           const activity = activities.find(({ id }) => id === where.id);
           if (
             !activity ||
-            (where.commentNotificationsSentAt === null &&
-              activity.commentNotificationsSentAt !== null) ||
-            (where.commentFcmSentAt === null &&
-              activity.commentFcmSentAt !== null) ||
-            (where.commentEmailsSentAt === null &&
-              activity.commentEmailsSentAt !== null)
+            (where.commentNotificationsCompletedAt === null &&
+              activity.commentNotificationsCompletedAt !== null) ||
+            (where.commentFcmAttemptedAt === null &&
+              activity.commentFcmAttemptedAt !== null) ||
+            (where.commentEmailsAttemptedAt === null &&
+              activity.commentEmailsAttemptedAt !== null)
           ) {
             return { count: 0 };
           }
@@ -1040,6 +1043,7 @@ function atomicCommentHarness() {
     ...tx,
     drafts: {
       deleteMany: async () => {
+        draftDeleteCalls += 1;
         if (failure === "post-commit") {
           throw new Error("post-commit side effect failed");
         }
@@ -1091,7 +1095,14 @@ function atomicCommentHarness() {
     },
     async (ids) => publishedAgentWebhookIds.push([...ids]),
     async (ids) => publishedBoardWebhookIds.push([...ids]),
-    async (...args) => fcmCalls.push(args),
+    async (...args) => {
+      fcmCalls.push(args);
+      if (failure === "fcm") throw new Error("FCM handoff failed");
+    },
+    () => {
+      taskReferenceParseCalls += 1;
+      return [];
+    },
   );
   return {
     run,
@@ -1105,6 +1116,8 @@ function atomicCommentHarness() {
     fcmCalls,
     updateTaskCalls,
     getAssigneeLookupCalls: () => assigneeLookupCalls,
+    getDraftDeleteCalls: () => draftDeleteCalls,
+    getTaskReferenceParseCalls: () => taskReferenceParseCalls,
     createCommentService,
     setFailure: (value) => {
       failure = value;
@@ -1235,10 +1248,15 @@ test("activity comment links and task counters commit once across replay", async
   assert.deepEqual(harness.publishedBoardWebhookIds, [[]]);
   assert.equal(harness.fcmCalls.length, 0);
   assert.equal(harness.updateTaskCalls.length, 0);
+  assert.equal(harness.getDraftDeleteCalls(), 1);
+  assert.equal(harness.getTaskReferenceParseCalls(), 1);
 
   harness.setFailure(null);
   harness.elicitation.commentNotificationsProcessingAt = new Date();
   const assigneeLookupsBeforeBlockedReplay = harness.getAssigneeLookupCalls();
+  const draftDeletesBeforeBlockedReplay = harness.getDraftDeleteCalls();
+  const taskReferenceParsesBeforeBlockedReplay =
+    harness.getTaskReferenceParseCalls();
   await assert.rejects(
     harness.createCommentService({
       ...commentInput,
@@ -1247,7 +1265,7 @@ test("activity comment links and task counters commit once across replay", async
         activityId: harness.elicitation.id,
         agentWebhookDeliveryIds: ["delivery-1"],
         boardWebhookDeliveryIds: [],
-        notificationsSentAt: null,
+        notificationsCompletedAt: null,
       },
     }),
     /notifications are still processing/,
@@ -1257,8 +1275,34 @@ test("activity comment links and task counters commit once across replay", async
     harness.getAssigneeLookupCalls(),
     assigneeLookupsBeforeBlockedReplay,
   );
+  assert.equal(harness.getDraftDeleteCalls(), draftDeletesBeforeBlockedReplay);
+  assert.equal(
+    harness.getTaskReferenceParseCalls(),
+    taskReferenceParsesBeforeBlockedReplay,
+  );
   harness.elicitation.commentNotificationsProcessingAt = null;
 
+  harness.setFailure("fcm");
+  await assert.rejects(
+    harness.createCommentService({
+      ...commentInput,
+      agentRunReplayComment: {
+        id: comment.id,
+        activityId: harness.elicitation.id,
+        agentWebhookDeliveryIds: ["delivery-1"],
+        boardWebhookDeliveryIds: [],
+        notificationsCompletedAt: null,
+      },
+    }),
+    /FCM handoff failed/,
+  );
+  assert.ok(harness.elicitation.commentFcmAttemptedAt instanceof Date);
+  assert.equal(harness.elicitation.commentEmailsAttemptedAt, null);
+  assert.equal(harness.elicitation.commentNotificationsCompletedAt, null);
+  assert.equal(harness.getDraftDeleteCalls(), 2);
+  assert.equal(harness.getTaskReferenceParseCalls(), 2);
+
+  harness.setFailure(null);
   const replay = await harness.createCommentService({
     ...commentInput,
     agentRunReplayComment: {
@@ -1266,12 +1310,12 @@ test("activity comment links and task counters commit once across replay", async
       activityId: harness.elicitation.id,
       agentWebhookDeliveryIds: ["delivery-1"],
       boardWebhookDeliveryIds: [],
-      notificationsSentAt: null,
+      notificationsCompletedAt: null,
     },
   });
   assert.equal(replay.id, comment.id);
   assert.ok(
-    harness.elicitation.commentNotificationsSentAt instanceof Date,
+    harness.elicitation.commentNotificationsCompletedAt instanceof Date,
   );
   assert.equal(harness.comments.length, 1);
   assert.equal(harness.task.totalComments, 1);
@@ -1279,9 +1323,13 @@ test("activity comment links and task counters commit once across replay", async
     ["delivery-1"],
     ["delivery-1"],
     ["delivery-1"],
+    ["delivery-1"],
   ]);
-  assert.deepEqual(harness.publishedBoardWebhookIds, [[], [], []]);
+  assert.deepEqual(harness.publishedBoardWebhookIds, [[], [], [], []]);
   assert.equal(harness.fcmCalls.length, 1);
+  assert.ok(harness.elicitation.commentEmailsAttemptedAt instanceof Date);
+  assert.equal(harness.getDraftDeleteCalls(), 3);
+  assert.equal(harness.getTaskReferenceParseCalls(), 3);
 
   await harness.createCommentService({
     ...commentInput,
@@ -1290,10 +1338,12 @@ test("activity comment links and task counters commit once across replay", async
       activityId: harness.elicitation.id,
       agentWebhookDeliveryIds: ["delivery-1"],
       boardWebhookDeliveryIds: [],
-      notificationsSentAt: harness.elicitation.commentNotificationsSentAt,
+      notificationsCompletedAt: harness.elicitation.commentNotificationsCompletedAt,
     },
   });
   assert.equal(harness.fcmCalls.length, 1);
-  assert.equal(harness.publishedAgentWebhookIds.length, 4);
+  assert.equal(harness.publishedAgentWebhookIds.length, 5);
+  assert.equal(harness.getDraftDeleteCalls(), 3);
+  assert.equal(harness.getTaskReferenceParseCalls(), 3);
   assert.equal(harness.updateTaskCalls.length, 0);
 });
