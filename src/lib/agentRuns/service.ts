@@ -476,18 +476,22 @@ export async function selectAgentRunActivity(
       if (!activity.selectionCommentId || !activity.selectedById) {
         throw new Error("Agent run selection comment was not persisted");
       }
+      const selectedBy = await prisma.user.findUnique({
+        where: { id: activity.selectedById },
+        select: { id: true, email: true, displayName: true, photoURL: true },
+      });
+      if (!selectedBy) {
+        throw new Error("Agent run selection creator was not found");
+      }
       const { createCommentService } = await import(
         "@/utils/controllers/comments/createCommentService",
       );
       await createCommentService({
         text: toStoredHtml(activity.selectedLabel ?? option.label),
-        creatorId: activity.selectedById,
+        creatorId: selectedBy.id,
         taskId: run.task.id,
         ownerId: run.task.userId,
-        currentUser: {
-          id: principal.userId,
-          displayName: principal.displayName,
-        },
+        currentUser: selectedBy,
         accessUserId: principal.userId,
         agentRunReplayComment: {
           id: activity.selectionCommentId,

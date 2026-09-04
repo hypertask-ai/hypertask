@@ -190,6 +190,17 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
         return { count: matching.length };
       },
     },
+    user: {
+      findUnique: async ({ where }) =>
+        where.id === 6
+          ? {
+              id: 6,
+              email: "valentin@example.com",
+              displayName: "Persisted selector",
+              photoURL: null,
+            }
+          : null,
+    },
     chatMessage: {
       create: async ({ data }) => {
         const message = {
@@ -655,6 +666,10 @@ test("one browser selection wins and its retry does not post twice", async () =>
   assert.equal(harness.commentCalls[0].text, "<p>Docs</p>");
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
   assert.equal(
+    harness.commentCalls[1].currentUser.displayName,
+    "Persisted selector",
+  );
+  assert.equal(
     await harness.service.selectAgentRunActivity(
       agentPrincipal,
       run.id,
@@ -912,6 +927,7 @@ function atomicCommentHarness() {
   const publishedBoardWebhookIds = [];
   const fcmCalls = [];
   const sideEffectOrder = [];
+  const draftDeleteWheres = [];
   const updateTaskCalls = [];
   let assigneeLookupCalls = 0;
   let draftDeleteCalls = 0;
@@ -1049,8 +1065,9 @@ function atomicCommentHarness() {
   const prisma = {
     ...tx,
     drafts: {
-      deleteMany: async () => {
+      deleteMany: async ({ where }) => {
         draftDeleteCalls += 1;
+        draftDeleteWheres.push(where);
         if (failure === "post-commit") {
           throw new Error("post-commit side effect failed");
         }
@@ -1132,6 +1149,7 @@ function atomicCommentHarness() {
     publishedBoardWebhookIds,
     fcmCalls,
     sideEffectOrder,
+    draftDeleteWheres,
     updateTaskCalls,
     getAssigneeLookupCalls: () => assigneeLookupCalls,
     getDraftDeleteCalls: () => draftDeleteCalls,
@@ -1269,6 +1287,7 @@ test("activity comment links and task counters commit once across replay", async
   assert.equal(harness.fcmCalls.length, 0);
   assert.equal(harness.updateTaskCalls.length, 0);
   assert.equal(harness.getDraftDeleteCalls(), 1);
+  assert.equal(harness.draftDeleteWheres[0].updatedAt.lte, comment.createdAt);
   assert.equal(harness.getTaskReferenceParseCalls(), 1);
 
   harness.setFailure(null);
@@ -1336,6 +1355,7 @@ test("activity comment links and task counters commit once across replay", async
     1,
   );
   assert.equal(harness.getDraftDeleteCalls(), 2);
+  assert.equal(harness.draftDeleteWheres[1].updatedAt.lte, comment.createdAt);
   assert.equal(harness.getTaskReferenceParseCalls(), 2);
 
   harness.setFailure(null);

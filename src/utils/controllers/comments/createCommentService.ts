@@ -1160,6 +1160,7 @@ export async function createCommentService(params: CreateCommentParams) {
           type: "Comment",
           taskId,
           userId: creatorId,
+          updatedAt: { lte: comment.createdAt },
         },
       }),
       createNotificationForComment(
