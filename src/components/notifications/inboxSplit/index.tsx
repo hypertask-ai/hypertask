@@ -461,7 +461,7 @@ const InboxSplit = ({
       draft.task.projectId,
       draft.task.uniqueIndex,
       "push",
-      "?inboxFlow=true&reply=true",
+      `?${inboxConfig.urls.queryParams.inboxFlow}&${inboxConfig.urls.queryParams.reply}`,
     );
   };
 
@@ -809,12 +809,12 @@ const InboxSplit = ({
     if (selectedIdsArray.length > 0) return;
     if (lastgClick.current !== null) {
     } else {
-      const targetNotification =
-        specificIndex !== undefined
-          ? _notifications[specificIndex]
-          : selectedKeyboardRow?.item.kind === "notification"
-            ? selectedKeyboardRow.item.notification
-            : undefined;
+      let targetNotification: INotification | undefined;
+      if (specificIndex !== undefined) {
+        targetNotification = _notifications[specificIndex];
+      } else if (selectedKeyboardRow?.item.kind === "notification") {
+        targetNotification = selectedKeyboardRow.item.notification;
+      }
       if (targetNotification)
         void markAsDone(
           targetNotification,
