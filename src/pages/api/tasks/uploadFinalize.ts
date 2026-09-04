@@ -1,4 +1,5 @@
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import prisma from "@/lib/prisma";
 import {
   DIRECT_UPLOAD_MAX_BATCH_BYTES,
   DIRECT_UPLOAD_MAX_FILES,
@@ -17,6 +18,7 @@ import {
 import { broadcastTaskChange } from "@/lib/realtime/server";
 import {
   getHypertasksS3Client,
+  getHypertasksStoragePublicUrl,
   HYPERTASKS_S3_BUCKET,
 } from "@/lib/storage/hypertasksS3";
 import { TASK_ATTACHMENT_PREFIX } from "@/lib/storage/uploadTaskAttachmentToS3";
@@ -78,6 +80,10 @@ export default async function handler(
   }
 
   if (req.body?.action === "link-task-attachment") {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.id))) {
+      return res.status(403).json({ error: "Background task uploads are disabled" });
+    }
     const taskId = Number(req.body?.taskId);
     const receipt = verifyTaskAttachmentLinkReceipt(req.body?.receipt);
     if (!Number.isSafeInteger(taskId) || taskId <= 0 || !receipt) {
@@ -100,6 +106,36 @@ export default async function handler(
       }
       console.error("[uploadFinalize] Could not link attachment", error);
       return res.status(500).json({ error: "Could not link attachment" });
+    }
+  }
+
+  if (req.body?.action === "discard-task-attachment") {
+    const receipt = verifyTaskAttachmentLinkReceipt(req.body?.receipt);
+    if (
+      !receipt ||
+      !KEY_PATTERN.test(receipt.key) ||
+      receipt.key.includes("..")
+    ) {
+      return res.status(400).json({ error: "Invalid attachment discard request" });
+    }
+    if (receipt.userId !== session.id) {
+      return res.status(403).json({ error: "This upload cannot be discarded" });
+    }
+    try {
+      const linked = await prisma.attachment.findFirst({
+        where: { fileSource: getHypertasksStoragePublicUrl(receipt.key) },
+        select: { id: true },
+      });
+      if (!linked) {
+        await getHypertasksS3Client()
+          .deleteObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: receipt.key })
+          .promise()
+          .catch(() => undefined);
+      }
+      return res.status(200).json({ success: true, discarded: !linked });
+    } catch (error) {
+      console.error("[uploadFinalize] Could not discard attachment", error);
+      return res.status(500).json({ error: "Could not discard attachment" });
     }
   }
 

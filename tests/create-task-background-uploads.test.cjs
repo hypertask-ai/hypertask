@@ -48,6 +48,50 @@ test("one file object starts one upload promise across remounts", async () => {
   uploads.discardUnboundCreateTaskUploads([selected]);
 });
 
+test("discard cleans up completed and still-uploading objects by receipt", async () => {
+  const discarded = [];
+  const discard = async (receipt) => discarded.push(receipt);
+  const completedFile = file("discard-complete.txt");
+  const completed = uploads.startCreateTaskUpload(
+    completedFile,
+    async () => ({
+      url: "https://files.example/discard-complete",
+      receipt: "discard-complete-receipt",
+    }),
+    async () => attachment(6, "https://files.example/discard-complete"),
+    discard,
+  );
+  await completed.promise;
+  await nextTurn();
+  uploads.discardUnboundCreateTaskUploads([completedFile]);
+  await nextTurn();
+
+  let finishUpload;
+  const pendingFile = file("discard-pending.txt");
+  const pending = uploads.startCreateTaskUpload(
+    pendingFile,
+    () => new Promise((resolve) => {
+      finishUpload = resolve;
+    }),
+    async () => attachment(7, "https://files.example/discard-pending"),
+    discard,
+  );
+  uploads.discardUnboundCreateTaskUploads([pendingFile]);
+  finishUpload({
+    url: "https://files.example/discard-pending",
+    receipt: "discard-pending-receipt",
+  });
+  await pending.promise;
+  await nextTurn();
+
+  assert.deepEqual(discarded, [
+    "discard-complete-receipt",
+    "discard-pending-receipt",
+  ]);
+  assert.equal(uploads.createTaskUploadById(completed.id), undefined);
+  assert.equal(uploads.createTaskUploadById(pending.id), undefined);
+});
+
 test("a synchronous uploader failure becomes a retryable job", async () => {
   const selected = file("sync-failure.txt");
   let calls = 0;

@@ -32,14 +32,17 @@ type Link = (
   taskId: number,
   receipt: string,
 ) => Promise<IAttachment>;
+type Discard = (receipt: string) => Promise<void>;
 
 type UploadJob = CreateTaskUploadSnapshot & {
   receipt?: string;
   reserved: boolean;
+  discarded: boolean;
   discardWhenReleased: boolean;
   promise: Promise<TaskAttachmentUploadReceipt>;
   upload: Upload;
   link: Link;
+  discard: Discard;
 };
 
 type MarkedAttachment = {
@@ -87,6 +90,32 @@ async function defaultLink(
   return body.attachment;
 }
 
+async function defaultDiscard(receipt: string): Promise<void> {
+  await fetch("/api/tasks/uploadFinalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "discard-task-attachment",
+      receipt,
+    }),
+    keepalive: true,
+  });
+}
+
+function discardReceipt(job: UploadJob, receipt: string) {
+  void Promise.resolve()
+    .then(() => job.discard(receipt))
+    .catch(() => undefined);
+}
+
+function discardJob(job: UploadJob) {
+  if (job.discarded) return;
+  job.discarded = true;
+  jobs.delete(job.id);
+  jobsByFile.delete(job.file);
+  if (job.receipt) discardReceipt(job, job.receipt);
+}
+
 function runUpload(job: UploadJob) {
   patch(job, {
     status: "uploading",
@@ -97,7 +126,7 @@ function runUpload(job: UploadJob) {
   let promise: Promise<TaskAttachmentUploadReceipt>;
   try {
     promise = job.upload(job.file, (progress) => {
-      patch(job, { progress });
+      if (!job.discarded) patch(job, { progress });
     });
   } catch (error) {
     promise = Promise.reject(error);
@@ -105,10 +134,17 @@ function runUpload(job: UploadJob) {
   job.promise = promise;
   void promise.then(
     ({ url, receipt }) => {
+      if (job.discarded) {
+        job.receipt = receipt;
+        discardReceipt(job, receipt);
+        return;
+      }
       patch(job, { status: "uploaded", progress: 100, source: url, receipt });
       if (job.taskId) void runLink(job);
     },
-    () => patch(job, { status: "upload-failed" }),
+    () => {
+      if (!job.discarded) patch(job, { status: "upload-failed" });
+    },
   );
   return promise;
 }
@@ -130,6 +166,7 @@ export function startCreateTaskUpload(
   file: File,
   upload: Upload = uploadSingleTaskAttachment,
   link: Link = defaultLink,
+  discard: Discard = defaultDiscard,
 ) {
   const existing = jobsByFile.get(file);
   if (existing) return { id: existing.id, promise: existing.promise };
@@ -141,10 +178,12 @@ export function startCreateTaskUpload(
     progress: 0,
     status: "uploading" as const,
     reserved: false,
+    discarded: false,
     discardWhenReleased: false,
     promise: Promise.resolve({ url: "", receipt: "" }),
     upload,
     link,
+    discard,
   };
   jobs.set(id, job);
   jobsByFile.set(file, job);
@@ -194,8 +233,7 @@ export function releaseCreateTaskUploadReservations(attachments: unknown[]) {
     if (!job || job.taskId) return;
     job.reserved = false;
     if (!job.discardWhenReleased) return;
-    jobs.delete(job.id);
-    jobsByFile.delete(job.file);
+    discardJob(job);
     discarded = true;
   });
   if (discarded) emit();
@@ -252,8 +290,7 @@ export function discardUnboundCreateTaskUploads(attachments: unknown[]) {
       job.discardWhenReleased = true;
       return;
     }
-    jobs.delete(job.id);
-    jobsByFile.delete(job.file);
+    discardJob(job);
   });
   emit();
 }

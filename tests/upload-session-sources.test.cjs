@@ -221,3 +221,129 @@ test("enabled buffered uploads return a receipt with the actual uploaded size", 
     fileSize: 11,
   });
 });
+
+const finalizeSource = fs.readFileSync(
+  path.join(root, "src/pages/api/tasks/uploadFinalize.ts"),
+  "utf8",
+);
+const finalizeJavascript = ts.transpileModule(finalizeSource, {
+  compilerOptions: {
+    esModuleInterop: true,
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2020,
+  },
+}).outputText;
+
+function loadFinalizeRoute({ flagEnabled = true, linked = false } = {}) {
+  const deleted = [];
+  const linkCalls = [];
+  const receipt = {
+    userId: 6,
+    key: "tasks/attachments/x_t.txt",
+    fileName: "t.txt",
+    contentType: "text/plain",
+    fileSize: 11,
+  };
+  class TaskAttachmentLinkError extends Error {}
+  const prisma = {
+    attachment: {
+      findFirst: async () => (linked ? { id: 1 } : null),
+    },
+  };
+  const stubs = {
+    "@/lib/auth/session": {
+      SESSION_COOKIE: "ht_session",
+      verifySession: () => ({ id: 6 }),
+    },
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/storage/directUpload": {
+      DIRECT_UPLOAD_MAX_BATCH_BYTES: 100,
+      DIRECT_UPLOAD_MAX_FILES: 5,
+      DIRECT_UPLOAD_MAX_FILE_BYTES: 100,
+    },
+    "@/lib/storage/uploadGrant": {
+      signTaskAttachmentLinkReceipt: () => "signed",
+      TASK_ATTACHMENT_LINK_RECEIPT_TTL_SECONDS: 60,
+      verifyTaskAttachmentLinkReceipt: (token) =>
+        token === "valid-receipt" ? receipt : null,
+      verifyUploadGrant: () => null,
+    },
+    "@/lib/storage/linkTaskAttachment": {
+      linkTaskAttachment: async (...args) => {
+        linkCalls.push(args);
+        return { id: 1 };
+      },
+      TaskAttachmentLinkError,
+    },
+    "@/lib/realtime/server": { broadcastTaskChange: async () => undefined },
+    "@/lib/storage/hypertasksS3": {
+      getHypertasksS3Client: () => ({
+        deleteObject: ({ Key }) => ({
+          promise: async () => deleted.push(Key),
+        }),
+      }),
+      getHypertasksStoragePublicUrl: (key) => `https://files.example/${key}`,
+      HYPERTASKS_S3_BUCKET: "test-bucket",
+    },
+    "@/lib/storage/uploadTaskAttachmentToS3": {
+      TASK_ATTACHMENT_PREFIX: "tasks/attachments",
+    },
+    "@/lib/flags": { isFeatureEnabled: async () => flagEnabled },
+  };
+  const resolve = (request) => stubs[request] ?? require(request);
+  const originalLoad = Module._load;
+  Module._load = (request, parent, isMain) =>
+    stubs[request] ?? originalLoad(request, parent, isMain);
+  try {
+    const mod = { exports: {} };
+    new Function("module", "exports", "require", finalizeJavascript)(
+      mod,
+      mod.exports,
+      resolve,
+    );
+    return { route: mod.exports, deleted, linkCalls };
+  } finally {
+    Module._load = originalLoad;
+  }
+}
+
+function finalizeRequest(action) {
+  return {
+    method: "POST",
+    cookies: {},
+    headers: {},
+    body: { action, receipt: "valid-receipt", taskId: 99 },
+  };
+}
+
+test("final attachment linking is blocked when its feature flag is off", async () => {
+  const { route, linkCalls } = loadFinalizeRoute({ flagEnabled: false });
+  const res = responseRecorder();
+
+  await route.default(finalizeRequest("link-task-attachment"), res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(linkCalls.length, 0);
+});
+
+test("discard removes only an upload that has not been linked", async () => {
+  const unlinked = loadFinalizeRoute({ linked: false });
+  const unlinkedResponse = responseRecorder();
+  await unlinked.route.default(
+    finalizeRequest("discard-task-attachment"),
+    unlinkedResponse,
+  );
+  assert.equal(unlinkedResponse.statusCode, 200);
+  assert.equal(unlinkedResponse.body.discarded, true);
+  assert.deepEqual(unlinked.deleted, ["tasks/attachments/x_t.txt"]);
+
+  const linked = loadFinalizeRoute({ linked: true });
+  const linkedResponse = responseRecorder();
+  await linked.route.default(
+    finalizeRequest("discard-task-attachment"),
+    linkedResponse,
+  );
+  assert.equal(linkedResponse.statusCode, 200);
+  assert.equal(linkedResponse.body.discarded, false);
+  assert.deepEqual(linked.deleted, []);
+});

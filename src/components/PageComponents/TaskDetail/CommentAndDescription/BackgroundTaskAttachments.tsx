@@ -36,7 +36,7 @@ function PendingAttachment({ upload }: { upload: CreateTaskUploadSnapshot }) {
   const failed = upload.status === "upload-failed" || upload.status === "link-failed";
 
   return (
-    <div className="relative mb-2 flex min-h-[76px] w-[72px] flex-col items-center rounded-md bg-[#27292D] p-1 text-white sm:p-2">
+    <div className="relative mb-2 flex min-h-[76px] w-[72px] flex-col items-center rounded-md bg-cardBackground p-1 text-white-black sm:p-2">
       <div className="grid h-[36px] w-[60px] place-items-center rounded-md bg-secondary">
         {isImage ? (
           <PendingImage file={upload.file} />
@@ -51,7 +51,7 @@ function PendingAttachment({ upload }: { upload: CreateTaskUploadSnapshot }) {
         <>
           <CircleAlert
             size={24}
-            className="absolute right-[-5px] top-[-5px] rounded-full bg-[#27292D] p-1 text-destructive"
+            className="absolute right-[-5px] top-[-5px] rounded-full bg-cardBackground p-1 text-destructive"
             aria-label="Upload failed"
           />
           <button
@@ -64,13 +64,13 @@ function PendingAttachment({ upload }: { upload: CreateTaskUploadSnapshot }) {
           </button>
         </>
       ) : (
-        <div className="absolute right-[-5px] top-[-5px] h-[26px] w-[26px] rounded-full bg-[#27292D] p-1" aria-label="Uploading">
+        <div className="absolute right-[-5px] top-[-5px] h-[26px] w-[26px] rounded-full bg-cardBackground p-1" aria-label="Uploading">
           <CircularProgressbar
             strokeWidth={14}
             value={upload.status === "linking" ? 100 : upload.progress}
             styles={buildStyles({
               pathColor: "#C2CFA5",
-              trailColor: "#27292D",
+              trailColor: "var(--bg-cardBackground)",
             })}
           />
         </div>
