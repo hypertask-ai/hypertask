@@ -378,18 +378,27 @@ function loadService({ runs = [], activities = [], featureEnabled = () => true }
 }
 
 test("activity behavior requires the parent and ticket feature flags", async () => {
-  const harness = loadService({
+  const activityFlagDisabled = loadService({
     featureEnabled: (key) => key !== model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   });
 
   assert.equal(
-    await harness.service.agentRunActivitiesEnabledFor(agentPrincipal),
+    await activityFlagDisabled.service.agentRunActivitiesEnabledFor(agentPrincipal),
     false,
   );
-  assert.deepEqual(harness.flagChecks, [
+  assert.deepEqual(activityFlagDisabled.flagChecks, [
     model.AGENT_RUN_FEATURE_FLAG,
     model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   ]);
+
+  const parentFlagDisabled = loadService({
+    featureEnabled: (key) => key !== model.AGENT_RUN_FEATURE_FLAG,
+  });
+  assert.equal(
+    await parentFlagDisabled.service.agentRunActivitiesEnabledFor(agentPrincipal),
+    false,
+  );
+  assert.deepEqual(parentFlagDisabled.flagChecks, [model.AGENT_RUN_FEATURE_FLAG]);
 });
 
 test("only the owner browser and matching agent can list run activities", async () => {
