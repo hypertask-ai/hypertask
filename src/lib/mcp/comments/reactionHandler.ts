@@ -19,6 +19,7 @@ export type CommentReactionDependencies<TContext> = {
   checkRateLimit: (request: NextRequest) => Promise<Response | null>;
   validateAuth: (request: NextRequest) => Promise<TContext | null>;
   authorizeWrite: (context: TContext) => Promise<Response | null>;
+  featureEnabled: (context: TContext) => Promise<boolean>;
   actorUserId: (context: TContext) => number;
   findTarget: (context: TContext, commentId: number) => Promise<CommentReactionTarget | null>;
   setReaction: (
@@ -66,6 +67,19 @@ export function createCommentReactionHandler<TContext>(
     }
     const scopeError = await dependencies.authorizeWrite(context);
     if (scopeError) return scopeError;
+
+    let featureEnabled = false;
+    try {
+      featureEnabled = await dependencies.featureEnabled(context);
+    } catch (error) {
+      console.error('[comment-reaction] feature flag check failed', error);
+    }
+    if (!featureEnabled) {
+      return NextResponse.json(
+        { success: false, error: 'Not found.' },
+        { status: 404 }
+      );
+    }
 
     const { comment_id: rawCommentId } = await props.params;
     const commentId = Number(rawCommentId);

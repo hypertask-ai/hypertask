@@ -83,6 +83,11 @@ test("copy current URL starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 7), false);
 });
 
+test("comment reaction API starts owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 7), false);
+});
+
 test("declared flags without rows default to owner only", async () => {
   for (const key of [
     "htpr-5913-consistent-comment-shortcuts",
@@ -110,6 +115,7 @@ test("declared flags remain listed without a row and can be changed", async () =
     { key: "htpr-6091-feature-flags", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6112-copy-current-url", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6116-figma-node-preview", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6118-comment-reactions-api", mode: "OWNER_ONLY", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");
