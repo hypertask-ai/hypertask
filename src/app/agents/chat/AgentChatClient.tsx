@@ -52,6 +52,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useFlag } from "@/hooks/useFlag";
+import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
@@ -231,6 +232,9 @@ const AgentChatClient = (props: IProp) => {
   const isMbl = useContext(MobileViewContext);
   const mobileAgentChatViewportEnabled = useFlag(
     "htpr-6129-mobile-agent-chat-viewport",
+  );
+  const mobileAgentChatViewport = useMobileVisualViewport(
+    isMbl && mobileAgentChatViewportEnabled,
   );
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
 
@@ -1655,7 +1659,11 @@ const AgentChatClient = (props: IProp) => {
         )}
         style={{
           height:
-            isMbl && mobileAgentChatViewportEnabled ? "100dvh" : undefined,
+            isMbl && mobileAgentChatViewportEnabled
+              ? mobileAgentChatViewport
+                ? `${mobileAgentChatViewport.visibleHeight}px`
+                : "100dvh"
+              : undefined,
         }}
       >
         {selectedAgent ? chatPane : rosterPane}

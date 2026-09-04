@@ -19,10 +19,14 @@ test("mobile Agent Chat follows the keyboard-visible viewport behind its ticket 
     chat,
     /useFlag\(\s*"htpr-6129-mobile-agent-chat-viewport",?\s*\)/,
   );
+  assert.match(
+    chat,
+    /useMobileVisualViewport\(\s*isMbl\s*&&\s*mobileAgentChatViewportEnabled,?\s*\)/,
+  );
   assert.match(narrowLayout, /h-screen/);
   assert.match(
     narrowLayout,
-    /height:\s*isMbl\s*&&\s*mobileAgentChatViewportEnabled\s*\?\s*"100dvh"\s*:\s*undefined/,
+    /`\$\{mobileAgentChatViewport\.visibleHeight\}px`[\s\S]*?:\s*"100dvh"/,
   );
 });
 
