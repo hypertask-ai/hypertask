@@ -389,7 +389,7 @@ span[data-label^="agent"] {
 }
 span[data-label^="project"] {
   cursor: pointer;
-  color: #5896f1 !important;
+  color: var(--color-rich-text-link) !important;
   font-weight: 400;
 }
 :is(span, a)[data-label="task"],

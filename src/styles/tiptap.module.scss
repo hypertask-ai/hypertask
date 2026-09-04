@@ -11,6 +11,19 @@
   }
 }
 
+.editorContainer {
+  a {
+    cursor: pointer;
+    color: var(--color-rich-text-link);
+    overflow-wrap: break-word;
+
+    &:hover {
+      color: var(--color-rich-text-link);
+      text-decoration: underline;
+    }
+  }
+}
+
 .customLineBreak {
    p:empty {
     height: 21px;
@@ -203,15 +216,6 @@
     // overrides it, so only size attribute-less images ourselves
     img:not([width]) {
       width: fit-content;
-    }
-    a {
-      cursor: pointer;
-      color: var(--color-rich-text-link);
-      overflow-wrap: break-word;
-      &:hover {
-        color: var(--color-rich-text-link);
-        text-decoration: underline;
-      }
     }
     h1 {
       font-size: 24px;
