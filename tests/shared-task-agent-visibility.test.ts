@@ -152,6 +152,18 @@ async function main() {
     ).isSelfAssignment,
     true,
   );
+  const numericSelfAssignment = redactAgentIdentitiesForPublicShare({
+    fromAgent: { id: 7, displayName: "Legacy Agent" },
+    toAgent: { id: 7, displayName: "Legacy Agent" },
+  });
+  assert.equal(
+    (numericSelfAssignment as { isSelfAssignment?: boolean }).isSelfAssignment,
+    true,
+  );
+  assert.deepEqual(numericSelfAssignment.fromAgent, {
+    displayName: PRIVATE_AGENT_DISPLAY_NAME,
+    photoURL: null,
+  });
   assert.deepEqual(
     comments,
     originalComments,

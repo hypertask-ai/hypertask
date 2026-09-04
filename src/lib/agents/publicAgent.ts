@@ -94,10 +94,12 @@ export function redactAgentIdentitiesForPublicShare<T>(value: T): T {
 
   const fromAgentId = isRecord(value.fromAgent) ? value.fromAgent.id : undefined;
   const toAgentId = isRecord(value.toAgent) ? value.toAgent.id : undefined;
+  const hasFromAgentId =
+    typeof fromAgentId === "string" || typeof fromAgentId === "number";
+  const hasToAgentId =
+    typeof toAgentId === "string" || typeof toAgentId === "number";
   const isSelfAssignment =
-    typeof fromAgentId === "string" && typeof toAgentId === "string"
-      ? fromAgentId === toAgentId
-      : undefined;
+    hasFromAgentId && hasToAgentId ? fromAgentId === toAgentId : undefined;
   const redacted: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value)) {
     if (isAgentIdentifierKey(key)) {

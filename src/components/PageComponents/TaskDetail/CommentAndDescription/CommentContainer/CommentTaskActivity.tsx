@@ -289,7 +289,10 @@ const TaskAssignedActivity = ({
   };
 
   let inferredSelfAssignment = false;
-  if (activity.data.fromAgent && activity.data.toAgent) {
+  if (
+    activity.data.fromAgent?.id != null &&
+    activity.data.toAgent?.id != null
+  ) {
     inferredSelfAssignment =
       activity.data.fromAgent.id === activity.data.toAgent.id;
   } else if (!activity.data.fromAgent && !activity.data.toAgent) {
