@@ -491,6 +491,11 @@ test("the migration enforces one nonterminal run and exactly one context", () =>
     "utf8",
   );
   assert.match(migration, /num_nonnulls\("taskId", "chatSessionId"\) = 1/);
+  assert.match(migration, /"trigger" = 'CHAT' AND "chatSessionId" IS NOT NULL/);
+  assert.match(
+    migration,
+    /"trigger" IN \('MENTION', 'ASSIGNED'\) AND "taskId" IS NOT NULL/,
+  );
   assert.match(migration, /AgentRun_nonterminal_task_key[\s\S]*WHERE[\s\S]*'ACTIVE', 'STALE'/);
   assert.match(migration, /AgentRun_nonterminal_chat_key[\s\S]*WHERE[\s\S]*'ACTIVE', 'STALE'/);
   assert.match(migration, /AgentRun_stoppedById_idx[\s\S]*\("stoppedById"\)/);

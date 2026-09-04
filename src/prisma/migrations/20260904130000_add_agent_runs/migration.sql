@@ -13,7 +13,13 @@ CREATE TABLE "AgentRun" (
     "stoppedById" INTEGER,
 
     CONSTRAINT "AgentRun_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "AgentRun_context_check" CHECK (num_nonnulls("taskId", "chatSessionId") = 1)
+    CONSTRAINT "AgentRun_context_check" CHECK (
+        num_nonnulls("taskId", "chatSessionId") = 1
+        AND (
+            ("trigger" = 'CHAT' AND "chatSessionId" IS NOT NULL)
+            OR ("trigger" IN ('MENTION', 'ASSIGNED') AND "taskId" IS NOT NULL)
+        )
+    )
 );
 
 CREATE INDEX "AgentRun_agentId_status_idx" ON "AgentRun"("agentId", "status");

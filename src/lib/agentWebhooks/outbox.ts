@@ -529,11 +529,11 @@ export async function persistAgentTaskRunPromptWebhooks(
     if (excluded.has(run.agentId)) continue;
     const subscription = run.agent.agentWebhookSubscription;
     if (
-      run.agent.revokedAt != null ||
+      run.agent.revokedAt !== null ||
       run.agent.members.length === 0 ||
       !subscription?.active ||
       !subscription.events.includes("run.prompted") ||
-      (subscription.projectId != null &&
+      (subscription.projectId !== null &&
         subscription.projectId !== input.projectId) ||
       !(await isFeatureEnabled(
         AGENT_RUN_FEATURE_FLAG,

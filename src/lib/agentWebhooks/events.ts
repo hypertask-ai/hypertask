@@ -1,3 +1,9 @@
+export const AGENT_RUN_WEBHOOK_EVENTS = [
+  "run.created",
+  "run.prompted",
+  "run.stopped",
+] as const;
+
 export const AGENT_WEBHOOK_EVENTS = [
   "comment.mention",
   "task.assigned",
@@ -6,15 +12,7 @@ export const AGENT_WEBHOOK_EVENTS = [
   "task.updated",
   "task.created",
   "chat.message",
-  "run.created",
-  "run.prompted",
-  "run.stopped",
-] as const;
-
-export const AGENT_RUN_WEBHOOK_EVENTS = [
-  "run.created",
-  "run.prompted",
-  "run.stopped",
+  ...AGENT_RUN_WEBHOOK_EVENTS,
 ] as const;
 
 export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {

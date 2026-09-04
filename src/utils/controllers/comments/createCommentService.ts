@@ -753,6 +753,7 @@ export async function createCommentService(params: CreateCommentParams) {
         );
       }
       for (const mentionedAgentId of mentionedAgentIds) {
+        if (mentionedAgentId === agentId) continue;
         webhookDeliveryIds.push(
           ...(await persistAgentRunTriggerWebhooks(tx, {
             event: "comment.mention",

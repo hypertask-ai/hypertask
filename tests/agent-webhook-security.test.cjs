@@ -49,6 +49,10 @@ test("mention and assignment outbox rows share their domain transactions", () =>
   );
   assert.doesNotMatch(commentWebhookSource, /projectId:\s*task\.projectId/);
   assert.match(comments, /persistAgentRunTriggerWebhooks\(tx,/);
+  assert.match(
+    comments,
+    /for \(const mentionedAgentId of mentionedAgentIds\) \{[\s\S]*?if \(mentionedAgentId === agentId\) continue;[\s\S]*?persistAgentRunTriggerWebhooks/,
+  );
 
   assert.match(assignments, /tx\.assignees\.create/);
   assert.match(assignments, /tx\.assignees\.deleteMany/);
