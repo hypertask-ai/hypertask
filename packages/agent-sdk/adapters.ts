@@ -12,7 +12,7 @@ type NodeRequest = AsyncIterable<Uint8Array | string> & {
 };
 type NodeResponse = {
   statusCode: number;
-  setHeader(name: string, value: string): void;
+  setHeader(name: string, value: string | string[]): void;
   end(body?: string): void;
 };
 type ExpressResponse = NodeResponse & {
@@ -124,7 +124,13 @@ async function toRequest(request: NodeRequest, useParsedBody: boolean): Promise<
 async function sendResponse(response: Response, target: NodeResponse): Promise<void> {
   const body = await response.text();
   target.statusCode = response.status;
-  response.headers.forEach((value, name) => target.setHeader(name, value));
+  const setCookies = (
+    response.headers as Headers & { getSetCookie?: () => string[] }
+  ).getSetCookie?.() ?? [];
+  response.headers.forEach((value, name) => {
+    if (name !== "set-cookie" || setCookies.length === 0) target.setHeader(name, value);
+  });
+  if (setCookies.length > 0) target.setHeader("set-cookie", setCookies);
   target.end(body);
 }
 

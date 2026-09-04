@@ -408,6 +408,36 @@ test("Node adapters do not copy response headers before reading the body", async
   assert.equal(headers.get("content-type"), "application/json");
 });
 
+test("Node adapters preserve multiple Set-Cookie response headers", async () => {
+  const responseHeaders = new Headers();
+  responseHeaders.append("set-cookie", "session=one; Path=/; HttpOnly");
+  responseHeaders.append("set-cookie", "preference=two; Path=/");
+  const handler: WebhookHandler = Object.assign(
+    async () => new Response(null, { status: 204, headers: responseHeaders }),
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const request = {
+    method: "POST",
+    url: "/webhook",
+    headers: {},
+    async *[Symbol.asyncIterator]() {},
+  };
+  const headers = new Map<string, string | string[]>();
+  const response = {
+    statusCode: 0,
+    setHeader(name: string, value: string | string[]) {
+      headers.set(name, value);
+    },
+    end() {},
+  };
+
+  await nodeHttpAdapter(handler)(request, response);
+  assert.deepEqual(headers.get("set-cookie"), [
+    "session=one; Path=/; HttpOnly",
+    "preference=two; Path=/",
+  ]);
+});
+
 test("Node adapters require explicit single-process mode", async () => {
   const distributedValues: Array<boolean | undefined> = [];
   const handler: WebhookHandler = Object.assign(
