@@ -606,4 +606,9 @@ test("migration and comment integration keep activity side effects atomic", () =
     comments,
     /persistAgentRunSelection\(tx, agentRunSelection\)[\s\S]*?tx\.comment\.create/,
   );
+  assert.match(comments, /prompt: text,[\s\S]*?signal: "select"/);
+  assert.match(
+    comments,
+    /mentionedAgentId === agentRunSelection\?\.agentId/,
+  );
 });

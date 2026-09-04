@@ -23,7 +23,6 @@ import {
   serializeAgentRunActivity,
   storedAgentRunActivityOptions,
   type AgentRunActivityInput,
-  type AgentRunActivityOption,
   type AgentRunContext,
 } from "./model";
 import {

@@ -809,7 +809,7 @@ export async function createCommentService(params: CreateCommentParams) {
             actor: agentWebhookActor,
             runId: selectedRun.id,
             run: serializeAgentRun(selectedRun),
-            prompt: agentRunSelection.option.label,
+            prompt: text,
             signal: "select",
             selection: {
               activityId: agentRunSelection.activityId,
@@ -820,7 +820,12 @@ export async function createCommentService(params: CreateCommentParams) {
         );
       }
       for (const mentionedAgentId of mentionedAgentIds) {
-        if (mentionedAgentId === agentId) continue;
+        if (
+          mentionedAgentId === agentId ||
+          mentionedAgentId === agentRunSelection?.agentId
+        ) {
+          continue;
+        }
         webhookDeliveryIds.push(
           ...(await persistAgentRunTriggerWebhooks(tx, {
             event: "comment.mention",
