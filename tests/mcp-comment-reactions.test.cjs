@@ -30,6 +30,7 @@ const routeJavascript = ts.transpileModule(routeSource, {
 function loadCommentsRoute({
   authContext = { user: { id: 6 }, agentId: null },
   task = { id: 42, projectId: 15 },
+  taskRecord = null,
   taskResolver = null,
 } = {}) {
   const queryCalls = []
@@ -121,6 +122,7 @@ function loadCommentsRoute({
   const resolveTask = taskResolver ?? (async () => task)
   const prisma = {
     comment: {
+      findUnique: async () => commentsFixture[0],
       count: async (query) => {
         return commentsFixture.filter((comment) => {
           if (comment.taskId !== query.where.taskId) return false
@@ -149,6 +151,16 @@ function loadCommentsRoute({
             : comment.reactions,
         }))
       },
+    },
+    task: {
+      findUnique: async () => taskRecord ?? ({
+        userId: 6,
+        projectId: task.projectId,
+        uniqueIndex: 6113,
+      }),
+    },
+    user: {
+      findUnique: async () => ({ id: 6, email: 'owner@example.test', displayName: 'Valentin Yeo' }),
     },
   }
   const routeModule = { exports: {} }
@@ -187,9 +199,15 @@ function loadCommentsRoute({
     },
     '@/lib/mcp/comments/reactionResponse': { commentReactionInclude, mapMcpCommentReaction },
     '@/lib/mcp/comments/activityMetadata': { withActivityMetadata: (comment) => comment },
+    '@/lib/mcp/boards/links': {
+      buildMcpTaskUrl: (projectId, uniqueIndex) =>
+        `https://app.hypertask.ai/detail/project-${projectId}/${uniqueIndex}`,
+    },
     '@/utils/controllers/urls/extractUrlsFromContent': { buildMcpImageUrls: () => [], persistUrlsForComment: async () => {} },
     '@/utils/controllers/comments/processMentions': { convertPlainTextMentionsToHtml: (text) => text, resolveTextMentions: async (text) => text },
-    '@/utils/controllers/comments/createCommentService': { createCommentService: async () => ({}) },
+    '@/utils/controllers/comments/createCommentService': {
+      createCommentService: async () => commentsFixture[0],
+    },
     '@/utils/controllers/comments/agentInvocationCorrelation': {
       AgentInvocationNotPendingError: class extends Error {},
     },
@@ -198,7 +216,9 @@ function loadCommentsRoute({
     '@/utils/helperFunctions/sanitizeRichHtml': { sanitizeRichHtml: (text) => text },
     '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
-    '@/utils/helperFunctions/markdownToHtml': { markdownToHtml: (text) => text },
+    '@/utils/helperFunctions/markdownToHtml': {
+      formatRichTextInput: (text) => text,
+    },
     '@/lib/mcp/fieldError': { buildFieldError: () => ({}) },
     '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
@@ -206,7 +226,9 @@ function loadCommentsRoute({
       IdempotencyInProgressError: class extends Error {}, normalizeIdempotencyKey: () => null,
       withIdempotency: async (_operation, _userId, _key, _body, handler) => handler(),
     },
-    '@/lib/mcp/readJsonBody': { readJsonBody: async () => ({ ok: false, response: {} }) },
+    '@/lib/mcp/readJsonBody': {
+      readJsonBody: async (request) => ({ ok: true, body: request.body }),
+    },
   }
   const mockRequire = (request) => {
     if (modules[request]) return modules[request]
@@ -221,6 +243,7 @@ function loadCommentsRoute({
 
   return {
     GET: routeModule.exports.GET,
+    POST: routeModule.exports.POST,
     commentsFixture,
     queryCalls,
     resolverCalls,
@@ -249,6 +272,23 @@ test('comment reaction mapping keeps the stable user ID when no display name exi
       userId: 9,
       user: { id: 9 },
     }
+  )
+})
+
+test('comment creation links to the current task index after a board move', async () => {
+  const route = loadCommentsRoute({
+    task: { id: 42, projectId: 339 },
+    taskRecord: { userId: 6, projectId: 339, uniqueIndex: 1668 },
+  })
+  const response = await route.POST({
+    headers: new Headers(),
+    body: { ticket_number: 'INAI-19', text: '<p>Done</p>' },
+  })
+
+  assert.equal(response.status, 201)
+  assert.equal(
+    response.body.url,
+    'https://app.hypertask.ai/detail/project-339/1668'
   )
 })
 

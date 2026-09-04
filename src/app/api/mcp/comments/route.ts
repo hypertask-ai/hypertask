@@ -32,6 +32,7 @@ import {
   withIdempotency,
 } from '@/lib/mcp/idempotency/idempotencyStore'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
+import { buildMcpTaskUrl } from '@/lib/mcp/boards/links'
 import {
   commentReactionInclude,
   mapMcpCommentReaction,
@@ -102,6 +103,7 @@ export interface AddCommentRequest {
 
 export interface AddCommentResponse {
   success: boolean
+  url: string
   idempotent_replayed?: true
   /** MCP session agent that performed this action */
   agent?: McpAgentSummary
@@ -598,7 +600,7 @@ export async function POST(request: NextRequest) {
     // Get task owner for the API call
     const taskWithOwner = await prisma.task.findUnique({
       where: { id: task.id },
-      select: { userId: true, projectId: true }
+      select: { userId: true, projectId: true, uniqueIndex: true }
     })
 
     if (!taskWithOwner) {
@@ -792,6 +794,7 @@ export async function POST(request: NextRequest) {
 
         return {
           success: true,
+          url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           ...(sessionAgent ? { agent: sessionAgent } : {}),
           comment: {
             id: comment.id,
