@@ -17,6 +17,7 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useFlag } from "@/hooks/useFlag";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -78,6 +79,7 @@ const useSections = ({
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
   const isMbl = useContext(MobileViewContext);
+  const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -100,7 +102,10 @@ const useSections = ({
       // topInputRef.current?.focus();
       toggleCreateTaskGlobally(
         sectionPayload,
-        defaultEditFocus ?? (isMbl ? MOBILE_AI_TASK_WRITER_FOCUS : undefined),
+        defaultEditFocus ??
+          (isMbl && aiFirstTaskWriterEnabled
+            ? MOBILE_AI_TASK_WRITER_FOCUS
+            : undefined),
       )
     // }
     //  else {

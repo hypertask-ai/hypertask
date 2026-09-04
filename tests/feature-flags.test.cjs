@@ -154,6 +154,12 @@ test("the mobile reminder safe-area fix starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6130-mobile-reminder-safe-area", 7), false);
 });
 
+test("the AI-first task writer starts owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6141-ai-first-task-writer", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6141-ai-first-task-writer", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6141-ai-first-task-writer", 7), false);
+});
+
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
@@ -194,6 +200,7 @@ test("declared flags remain listed without a row and can be changed", async () =
       updatedAt: null,
     },
     { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");

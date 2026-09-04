@@ -209,7 +209,7 @@ test("mobile AI result preserves edits made in the classic form", () => {
   assert.equal(merged.attachments, current.attachments);
 });
 
-test("mobile board section plus and C shortcut open the AI task writer", async () => {
+test("board create entry points follow the AI-first flag", async () => {
   const testDom = new JSDOM("<!doctype html><div id='root'></div>", {
     url: "https://app.hypertask.ai/project/15",
   });
@@ -228,7 +228,11 @@ test("mobile board section plus and C shortcut open the AI task writer", async (
       Object.getOwnPropertyDescriptor(global, name),
     ]),
   );
+  let aiFirstTaskWriterEnabled = false;
   const moduleMocks = new Map([
+    [path.join(root, "src/hooks/useFlag.tsx"), {
+      useFlag: () => aiFirstTaskWriterEnabled,
+    }],
     [path.join(root, "src/lib/state.tsx"), {
       useRecoilState: (atom) => React.useState(atom.default),
       useSetRecoilState: () => () => {},
@@ -324,30 +328,55 @@ test("mobile board section plus and C shortcut open the AI task writer", async (
     const container = document.getElementById("root");
     const { createRoot } = require("react-dom/client");
     reactRoot = createRoot(container);
-    await React.act(async () => {
-      reactRoot.render(
-        React.createElement(
-          MobileViewContext.Provider,
-          { value: true },
-          React.createElement(Harness),
-        ),
-      );
-    });
+    const renderHarness = async (isMobile) => {
+      await React.act(async () => {
+        reactRoot.render(
+          React.createElement(
+            MobileViewContext.Provider,
+            { value: isMobile },
+            React.createElement(Harness),
+          ),
+        );
+      });
+    };
+    const clickColumnPlus = async () => {
+      await React.act(async () => {
+        container.querySelector(".create-new-task-button").click();
+      });
+    };
+    const dispatchShortcut = async ({ key, code, keyCode, ctrlKey = false }) => {
+      const shortcut = new KeyboardEvent("keydown", {
+        key,
+        code,
+        ctrlKey,
+        bubbles: true,
+      });
+      Object.defineProperty(shortcut, "keyCode", { value: keyCode });
+      await React.act(async () => document.dispatchEvent(shortcut));
+    };
 
-    await React.act(async () => {
-      container.querySelector(".create-new-task-button").click();
-    });
-    const shortcut = new KeyboardEvent("keydown", {
-      key: "c",
-      code: "KeyC",
-      bubbles: true,
-    });
-    Object.defineProperty(shortcut, "keyCode", { value: 67 });
-    await React.act(async () => document.dispatchEvent(shortcut));
+    await renderHarness(true);
+    await clickColumnPlus();
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
+    await dispatchShortcut({ key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true });
+
+    aiFirstTaskWriterEnabled = true;
+    await renderHarness(true);
+    await clickColumnPlus();
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
+
+    await renderHarness(false);
+    await clickColumnPlus();
+    await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
 
     assert.deepEqual(createCalls, [
+      { payload: sectionPayload, defaultEditFocus: undefined },
+      { payload: sectionPayload, defaultEditFocus: undefined },
       { payload: sectionPayload, defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS },
       { payload: sectionPayload, defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS },
+      { payload: sectionPayload, defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS },
+      { payload: sectionPayload, defaultEditFocus: undefined },
+      { payload: sectionPayload, defaultEditFocus: undefined },
     ]);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
