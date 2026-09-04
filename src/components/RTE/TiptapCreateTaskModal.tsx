@@ -79,11 +79,22 @@ import {
   getTaskCreatePerformanceTraceScope,
   type TaskCreateTraceScope,
 } from "@/lib/analytics/productPerformance";
+import { useFlag } from "@/hooks/useFlag";
+import {
+  createTaskUploadCount,
+  discardUnboundCreateTaskUploads,
+  releaseCreateTaskUploadReservations,
+  reserveCreateTaskUploads,
+} from "@/lib/createTaskAttachmentUploads";
 const attachmentButtonId = "create-task-modal-attachmentUpload";
 
 const TiptapCreateTaskModal = () => {
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
+  const backgroundTaskUploadsEnabled = useFlag(
+    "htpr-5993-optimistic-task-uploads",
+  );
+  const createSubmissionRef = useRef(false);
   const {
     editMode,
     setEditMode,
@@ -127,6 +138,8 @@ const TiptapCreateTaskModal = () => {
   const [newCommentAttachments, setNewCommentAttachments] = useState<any[]>(
     formValues.attachments
   );
+  const createTaskAttachmentsRef = useRef(newCommentAttachments);
+  createTaskAttachmentsRef.current = newCommentAttachments;
   const [canSave, setUploadingStateCreateTaskModal] = useRecoilState(
     uploadingStateCreateTaskModalAtom
   );
@@ -472,6 +485,15 @@ const TiptapCreateTaskModal = () => {
     }
   };
 
+  useEffect(
+    () => () => {
+      if (backgroundTaskUploadsEnabled) {
+        discardUnboundCreateTaskUploads(createTaskAttachmentsRef.current);
+      }
+    },
+    [backgroundTaskUploadsEnabled],
+  );
+
   const resetComposerAfterCreate = () => {
     resetFormValues();
     setEditMode("title");
@@ -521,10 +543,37 @@ const TiptapCreateTaskModal = () => {
     // starting title generation or flipping the upload flag.
     if (!param) return;
     if (uploadInProgress) return toast("Please wait for the task to upload");
-    if (canSave && !canSave?.canUpload)
+    if (!backgroundTaskUploadsEnabled && canSave && !canSave?.canUpload)
       return toast(
         `Please wait for the upload to finish before submitting your ticket.`
       );
+    if (backgroundTaskUploadsEnabled && createSubmissionRef.current) return;
+    if (backgroundTaskUploadsEnabled) createSubmissionRef.current = true;
+    const attachmentsAtSave = [
+      ...(formValuesOverride?.attachments ?? createTaskAttachmentsRef.current),
+    ];
+    const releaseSubmission = () => {
+      createSubmissionRef.current = false;
+      releaseCreateTaskUploadReservations(attachmentsAtSave);
+    };
+    const formValuesAtSave = backgroundTaskUploadsEnabled
+      ? {
+          ...formValues,
+          ...formValuesOverride,
+          attachments: attachmentsAtSave,
+        }
+      : formValuesOverride;
+    const backgroundUploadCount = backgroundTaskUploadsEnabled
+      ? createTaskUploadCount(attachmentsAtSave ?? [])
+      : 0;
+    if (backgroundUploadCount) {
+      reserveCreateTaskUploads(attachmentsAtSave ?? []);
+    }
+    const savedMessage = backgroundUploadCount
+      ? `Task saved. ${backgroundUploadCount} ${
+          backgroundUploadCount === 1 ? "file" : "files"
+        } uploading`
+      : "Succesfully created the task";
 
     // TipTap owns the freshest editor document. React state can still contain
     // the previous render when someone types and immediately saves, so every
@@ -534,7 +583,10 @@ const TiptapCreateTaskModal = () => {
     let titleAtSave = formValuesOverride?.title ?? getCurrentTitle();
     const epochAtSave = saveEpochRef.current;
     if (shouldGenerateTitleForSave(titleAtSave, descriptionAtSave)) {
-      if (titleGenerationForSaveRef.current) return;
+      if (titleGenerationForSaveRef.current) {
+        releaseSubmission();
+        return;
+      }
       titleGenerationForSaveRef.current = true;
       setUploadInProgress(true);
       try {
@@ -545,6 +597,7 @@ const TiptapCreateTaskModal = () => {
             await generateTitleFromDescription(descriptionAtSave);
           if (saveEpochRef.current !== epochAtSave) {
             setUploadInProgress(false);
+            releaseSubmission();
             return;
           }
           descriptionAtSave =
@@ -558,6 +611,7 @@ const TiptapCreateTaskModal = () => {
       } catch (error) {
         console.log("Could not generate a title", error);
         setUploadInProgress(false);
+        releaseSubmission();
         if (saveEpochRef.current !== epochAtSave) return;
         setEditMode("title");
         setCurrentFocusedElement("Title");
@@ -572,6 +626,7 @@ const TiptapCreateTaskModal = () => {
       setEditMode("title");
       setCurrentFocusedElement("Title");
       toast.error("Add a title to save.");
+      releaseSubmission();
       return;
     }
     if (param === "Save") {
@@ -581,7 +636,7 @@ const TiptapCreateTaskModal = () => {
         const createTask = CreateTaskAndDescription(
           descriptionAtSave,
           titleAtSave,
-          formValuesOverride,
+          formValuesAtSave,
         );
         traceScope = getTaskCreatePerformanceTraceScope();
         const taskUrl = await createTask;
@@ -604,18 +659,25 @@ const TiptapCreateTaskModal = () => {
             "task_detail",
             traceScope,
           );
+          if (backgroundUploadCount) toast.success(savedMessage);
+          releaseSubmission();
           return true;
         }
       } catch (error) {
         completeTaskCreatePerformanceTrace("error", traceScope);
         console.log("🚀 ~ CreateTaskAndDescription ~ error:", error);
         setUploadInProgress(false);
+        releaseSubmission();
         toast.error("Error when creating");
         return;
       }
     } else if (param === "SaveAndClose") {
       setUploadInProgress(true);
-      const createTask = CreateTaskAndDescription(descriptionAtSave, titleAtSave);
+      const createTask = CreateTaskAndDescription(
+        descriptionAtSave,
+        titleAtSave,
+        formValuesAtSave,
+      );
       const traceScope = getTaskCreatePerformanceTraceScope();
       toast.promise(createTask, {
         loading: "Creating the task",
@@ -623,6 +685,7 @@ const TiptapCreateTaskModal = () => {
           localStorage.removeItem("MENTION_PROJECT_ID");
           resetComposerAfterCreate();
           setUploadInProgress(false);
+          releaseSubmission();
           // Creation has finished, so both the modal and /new can close without
           // a discard prompt. Passing false here would ask whether to discard a
           // task that has already been saved.
@@ -632,18 +695,23 @@ const TiptapCreateTaskModal = () => {
             traceScope,
             divIds.wrapperId,
           );
-          return `Succesfully created the task`;
+          return savedMessage;
         },
         error: (error) => {
           completeTaskCreatePerformanceTrace("error", traceScope);
           console.log("🚀 ~ toast.promise ~ error:", error);
           setUploadInProgress(false);
+          releaseSubmission();
           return "error when creating";
         },
       });
     } else if (param === "SaveAndNew") {
       setUploadInProgress(true);
-      const createTask = CreateTaskAndDescription(descriptionAtSave, titleAtSave);
+      const createTask = CreateTaskAndDescription(
+        descriptionAtSave,
+        titleAtSave,
+        formValuesAtSave,
+      );
       const traceScope = getTaskCreatePerformanceTraceScope();
       toast.promise(createTask, {
         loading: "Creating the task",
@@ -651,16 +719,18 @@ const TiptapCreateTaskModal = () => {
           resetComposerAfterCreate();
           document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.focus();
           setUploadInProgress(false);
+          releaseSubmission();
           completeTaskCreatePerformanceTraceAfterPaint(
             "composer_reset",
             traceScope,
           );
-          return `Succesfully created the task`;
+          return savedMessage;
         },
         error: (error) => {
           completeTaskCreatePerformanceTrace("error", traceScope);
           console.log("🚀 ~ toast.promise ~ error:", error);
           setUploadInProgress(false);
+          releaseSubmission();
           return "error when creating";
         },
       });
@@ -1178,6 +1248,7 @@ const TiptapCreateTaskModal = () => {
               dictationCoordinator={dictationCoordinator}
               toggleAiTaskWriter={toggleAiTaskWriter}
               isAiTaskWriterOpen={shouldShowAiTaskWriter}
+              backgroundTaskUploads={backgroundTaskUploadsEnabled}
             />
           </FileDragOverlay>
         </div>

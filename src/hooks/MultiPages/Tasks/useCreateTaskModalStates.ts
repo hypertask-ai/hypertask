@@ -54,6 +54,7 @@ import {
   type TaskCreateTraceScope,
 } from "@/lib/analytics/productPerformance";
 import { createAutoTitleGenerationCoordinator } from "@/lib/ai/autoTitleGeneration";
+import { bindCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 
 const descriptionText = (description: string) => {
   if (typeof DOMParser === "undefined") {
@@ -608,6 +609,7 @@ const useCreateTaskModalGlobalStates = () => {
     // Reject missing task results so every save mode uses its error path and
     // keeps the typed form instead of reporting a false success.
     if (!task) throw new Error("Task could not be created");
+    bindCreateTaskUploads(task.id, formValuesAtSave.attachments);
     const savedTitle = (titleOverride ?? formValuesAtSave.title).trim();
     const titleEditSignal =
       generatedTitleTrackerRef.current.takeSignal(savedTitle);

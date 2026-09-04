@@ -285,10 +285,9 @@ export const uploadAttachmentsDescription = (
 
      
       
-      const timenow = Date.now();
-        attachments.forEach((attch, index) => {
+        attachments.forEach((attch) => {
           console.log("🚀 ~ attachments.forEach ~ attch:", attch)
-          if (attch) {
+          if (attch?.file?.source && !attch.file.createTaskUploadId) {
             let urlToAdd: ICreateTaskUrl = {
               // TaskId: taskId,
               urlString: attch.file.source as string,

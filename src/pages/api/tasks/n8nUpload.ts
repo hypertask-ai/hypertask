@@ -9,7 +9,14 @@ import {
   UPLOAD_MAX_FILE_BYTES,
   UPLOAD_MAX_REQUEST_BYTES,
 } from "@/lib/storage/uploadLimits";
-import { uploadTaskAttachmentToS3 } from "@/lib/storage/uploadTaskAttachmentToS3";
+import {
+  parseHypertasksAttachmentKeyFromUrl,
+  uploadTaskAttachmentToS3,
+} from "@/lib/storage/uploadTaskAttachmentToS3";
+import {
+  signTaskAttachmentLinkReceipt,
+  TASK_ATTACHMENT_LINK_RECEIPT_TTL_SECONDS,
+} from "@/lib/storage/uploadGrant";
 import type { NextApiRequest, NextApiResponse } from "next";
 import getRawBody from "raw-body";
 
@@ -141,6 +148,17 @@ export default async function handler(
   }
 
   try {
+    const taskLinkRequested =
+      req.headers["x-upload-purpose"] === "task-attachment-link";
+    if (req.headers["x-upload-purpose"] !== undefined && !taskLinkRequested) {
+      throw new UploadRequestError("Invalid upload purpose", 400);
+    }
+    if (taskLinkRequested) {
+      const { isFeatureEnabled } = await import("@/lib/flags");
+      if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.id))) {
+        throw new UploadRequestError("Background task uploads are disabled", 403);
+      }
+    }
     const contentType = req.headers["content-type"];
     if (typeof contentType !== "string") {
       throw new UploadRequestError("Invalid content type", 400);
@@ -158,7 +176,28 @@ export default async function handler(
     }
 
     const fileUrls = await uploadAttachmentsToS3(files);
-    return res.status(200).json({ success: true, fileUrls });
+    const taskLinkReceipts = taskLinkRequested
+      ? fileUrls.map((fileUrl, index) => {
+          const key = parseHypertasksAttachmentKeyFromUrl(fileUrl);
+          if (!key) throw new Error("Uploaded attachment key is invalid");
+          return signTaskAttachmentLinkReceipt(
+            {
+              userId: session.id,
+              key,
+              fileName: files[index].fileName,
+              contentType:
+                files[index].fileType || "application/octet-stream",
+              fileSize: files[index].buffer.length,
+            },
+            TASK_ATTACHMENT_LINK_RECEIPT_TTL_SECONDS
+          );
+        })
+      : undefined;
+    return res.status(200).json({
+      success: true,
+      fileUrls,
+      ...(taskLinkReceipts ? { taskLinkReceipts } : {}),
+    });
   } catch (error) {
     if (error instanceof UploadRequestError) {
       return res.status(error.status).json({ error: error.message });

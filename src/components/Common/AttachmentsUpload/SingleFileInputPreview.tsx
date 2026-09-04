@@ -1,11 +1,18 @@
 import { buildStyles, CircularProgressbar } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
 import { UploadTooLargeError } from "@/lib/storage/uploadLimits";
+import {
+  createTaskUploadById,
+  createTaskUploadIsReserved,
+  markedCreateTaskAttachment,
+  startCreateTaskUpload,
+  subscribeCreateTaskUploads,
+} from "@/lib/createTaskAttachmentUploads";
 
 interface ISingleFile {
     id:number;
@@ -18,6 +25,7 @@ interface ISingleFile {
     callback?:(attachmentReturned: any) => void;
     onUploadFailed?: (fileName: string) => void;
     variant?: "default" | "chat";
+    backgroundTaskUpload?: boolean;
   }
   const SingleFileInputPreview: React.FC<ISingleFile> = ({
     id,
@@ -30,6 +38,7 @@ interface ISingleFile {
     callback,
     onUploadFailed: reportUploadFailure,
     variant = "default",
+    backgroundTaskUpload = false,
   }) => {
     // if upload is true, we will display a progress bar here, and show its progress. 
     // upon 100 percent completion, we will do a callback and send it back. 
@@ -37,6 +46,7 @@ interface ISingleFile {
 
 
     const [progressPercentage, setProgressBar] = useState<number>(0);
+    const backgroundUploadIdRef = useRef<string | undefined>(undefined);
     const onMountUploadIfFile = async()=>{
 
       // is this not an uploading component then return
@@ -51,6 +61,27 @@ interface ISingleFile {
         else{
 
           // ================== we will upload and THEN make the callback
+          if (backgroundTaskUpload) {
+            const started = startCreateTaskUpload(file);
+            backgroundUploadIdRef.current = started.id;
+            const syncProgress = () => {
+              const job = createTaskUploadById(started.id);
+              if (job) setProgressBar(job.progress);
+            };
+            const unsubscribe = subscribeCreateTaskUploads(syncProgress);
+            try {
+              syncProgress();
+              const uploaded = await started.promise;
+              setUploadString(uploaded.url);
+              callback({
+                id,
+                file: markedCreateTaskAttachment(started.id, file, uploaded.url),
+              });
+            } finally {
+              unsubscribe();
+            }
+            return;
+          }
           const source = await uploadSingleFileViaApi(file, setProgressBar);
           console.log("🚀 ~ onMountUploadIfFile ~ result:", source)
           setUploadString(source)
@@ -80,7 +111,11 @@ interface ISingleFile {
           ? error.message
           : `Could not upload "${file.name}". Please try again.`;
       toast.error(message);
-      handleRemove?.(file.name);
+      const reservedForSave =
+        backgroundTaskUpload &&
+        backgroundUploadIdRef.current &&
+        createTaskUploadIsReserved(backgroundUploadIdRef.current);
+      if (!reservedForSave) handleRemove?.(file.name);
       reportUploadFailure?.(file.name);
     };
 

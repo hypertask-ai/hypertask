@@ -7,10 +7,12 @@ import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { IDraft } from "@/models/model";
 import { isMeaningfulDescriptionDraft } from "@/hooks/General/useHasDrafts";
-import { useContext, useMemo } from "react";
+import { useCallback, useContext, useMemo } from "react";
 import { HighlightMenu } from "../ContextMenu";
 import QuoteButton from "../ContextMenu/QuoteButton";
 import Tiptap from "@/components/RTE/TipTapTaskDetail";
+import BackgroundTaskAttachments from "../BackgroundTaskAttachments";
+import type { IAttachment } from "@/models/model";
 
 const DescriptonBody = ({ draftTQ }: any) => {
   const isMbl = useContext(MobileViewContext);
@@ -24,8 +26,12 @@ const DescriptonBody = ({ draftTQ }: any) => {
     setCarousalItems,
   } = useTaskContext();
   const task = useMemo(() => JSON.parse(parsedTask), [parsedTask]);
-  const { description, descriptionAttachments, uploadingDescription } =
-    useDescriptionAndCommentsContext();
+  const {
+    description,
+    descriptionAttachments,
+    setDescriptionAttachments,
+    uploadingDescription,
+  } = useDescriptionAndCommentsContext();
   const { redirectAPI } = useSaveContent();
   const isEditing =
     editMode === "description" ||
@@ -37,6 +43,20 @@ const DescriptonBody = ({ draftTQ }: any) => {
     draftTQ?.find((draft: IDraft) => isMeaningfulDescriptionDraft(draft))
       ?.content ??
     description;
+  const addLinkedAttachment = useCallback(
+    (attachment: IAttachment) => {
+      setDescriptionAttachments((current) =>
+        current.some(
+          (item) =>
+            item.id === attachment.id ||
+            item.fileSource === attachment.fileSource,
+        )
+          ? current
+          : [...current, attachment],
+      );
+    },
+    [setDescriptionAttachments],
+  );
 
   return (
     <>
@@ -66,6 +86,11 @@ const DescriptonBody = ({ draftTQ }: any) => {
           )}
         />
       )}
+
+      <BackgroundTaskAttachments
+        taskId={task.id}
+        onLinked={addLinkedAttachment}
+      />
 
       {!isEditing && (
         <AttachmentView

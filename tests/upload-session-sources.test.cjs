@@ -27,6 +27,9 @@ const jiti = require("jiti")(__filename, {
 const { signSession, SESSION_COOKIE } = jiti(
   path.join(root, "src/lib/auth/session.ts")
 );
+const { verifyTaskAttachmentLinkReceipt } = jiti(
+  path.join(root, "src/lib/storage/uploadGrant.ts")
+);
 
 const source = fs.readFileSync(
   path.join(root, "src/pages/api/tasks/n8nUpload.ts"),
@@ -42,7 +45,7 @@ const javascript = ts.transpileModule(source, {
 
 const UPLOADED_URL = "https://files.hypertask.app/tasks/attachments/x_t.txt";
 
-function loadRoute(sessionUser = null) {
+function loadRoute(sessionUser = null, { flagEnabled = true } = {}) {
   const uploaded = [];
   const seenHeaders = [];
   const stubs = {
@@ -52,7 +55,12 @@ function loadRoute(sessionUser = null) {
         return sessionUser;
       },
     },
+    "@/lib/flags": {
+      isFeatureEnabled: async () => flagEnabled,
+    },
     "@/lib/storage/uploadTaskAttachmentToS3": {
+      parseHypertasksAttachmentKeyFromUrl: () =>
+        "tasks/attachments/x_t.txt",
       uploadTaskAttachmentToS3: async (buffer, fileName, fileType) => {
         uploaded.push({ fileName, fileType, size: buffer.length });
         return UPLOADED_URL;
@@ -101,7 +109,7 @@ function responseRecorder() {
 
 // One small text file over a real Readable, so raw-body consumes the request
 // exactly as it does in production.
-function uploadRequest({ cookies = {}, cookieHeader } = {}) {
+function uploadRequest({ cookies = {}, cookieHeader, purpose } = {}) {
   const boundary = "upload-boundary";
   const body = Buffer.concat([
     Buffer.from(
@@ -117,6 +125,7 @@ function uploadRequest({ cookies = {}, cookieHeader } = {}) {
       "content-type": `multipart/form-data; boundary="${boundary}"`,
       "content-length": String(body.length),
       ...(cookieHeader ? { cookie: cookieHeader } : {}),
+      ...(purpose ? { "x-upload-purpose": purpose } : {}),
     },
   });
 }
@@ -163,4 +172,52 @@ test("upload rejects a request with neither session source", async () => {
   assert.equal(res.statusCode, 401);
   assert.equal(res.body.code, "SESSION_REQUIRED");
   assert.equal(uploaded.length, 0);
+});
+
+test("background task upload receipts are gated before bytes reach storage", async () => {
+  const { route, uploaded } = loadRoute(
+    { userId: 6, source: "better-auth" },
+    { flagEnabled: false },
+  );
+  const res = responseRecorder();
+
+  await route.default(
+    uploadRequest({
+      cookies: {},
+      purpose: "task-attachment-link",
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(uploaded.length, 0);
+});
+
+test("enabled buffered uploads return a receipt with the actual uploaded size", async () => {
+  const { route, uploaded } = loadRoute(
+    { userId: 6, source: "better-auth" },
+    { flagEnabled: true },
+  );
+  const res = responseRecorder();
+
+  await route.default(
+    uploadRequest({
+      cookies: {},
+      purpose: "task-attachment-link",
+    }),
+    res,
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(uploaded.length, 1);
+  const receipt = verifyTaskAttachmentLinkReceipt(
+    res.body.taskLinkReceipts?.[0],
+  );
+  assert.deepEqual(receipt, {
+    userId: 6,
+    key: "tasks/attachments/x_t.txt",
+    fileName: "t.txt",
+    contentType: "text/plain",
+    fileSize: 11,
+  });
 });

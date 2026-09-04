@@ -82,7 +82,7 @@ test("discard during title generation cancels the pending save", () => {
   assert.match(modal, /const epochAtSave = saveEpochRef\.current;/);
   assert.match(
     modal,
-    /if \(saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*return;/,
+    /if \(saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*releaseSubmission\(\);\s*return;/,
   );
   const hook = fs.readFileSync(
     path.join(root, "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts"),
@@ -123,7 +123,7 @@ test("save-time title generation admits only one concurrent attempt", () => {
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   assert.match(
     modal,
-    /if \(titleGenerationForSaveRef\.current\) return;\s*titleGenerationForSaveRef\.current = true;[\s\S]*?finally \{\s*titleGenerationForSaveRef\.current = false;/,
+    /if \(titleGenerationForSaveRef\.current\) \{\s*releaseSubmission\(\);\s*return;\s*\}\s*titleGenerationForSaveRef\.current = true;[\s\S]*?finally \{\s*titleGenerationForSaveRef\.current = false;/,
   );
 });
 
@@ -186,6 +186,6 @@ test("discard, board switch, and newer writing invalidate generated titles", () 
   );
   assert.match(
     modalSource,
-    /if \(saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*return;/,
+    /if \(saveEpochRef\.current !== epochAtSave\) \{\s*setUploadInProgress\(false\);\s*releaseSubmission\(\);\s*return;/,
   );
 });

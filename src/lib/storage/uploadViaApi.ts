@@ -13,6 +13,17 @@ import {
 type UploadApiResponse = {
   success?: boolean;
   fileUrls?: string[];
+  taskLinkReceipts?: string[];
+};
+
+type UploadResult = {
+  urls: string[];
+  taskLinkReceipts: string[];
+};
+
+export type TaskAttachmentUploadReceipt = {
+  url: string;
+  receipt: string;
 };
 
 type UploadUrlApiResponse = {
@@ -84,7 +95,8 @@ function putToStorage(
  * video is no longer capped by the 4.5 MB serverless request-body ceiling.
  */
 async function requestUploadTickets(
-  files: File[]
+  files: File[],
+  issueTaskLinkReceipts = false,
 ): Promise<{ uploads: DirectUploadTicket[]; grant: string }> {
   const response = await axios
     .post<UploadUrlApiResponse>("/api/tasks/uploadUrl", {
@@ -93,6 +105,9 @@ async function requestUploadTickets(
         size: file.size,
         type: file.type || null,
       })),
+      ...(issueTaskLinkReceipts
+        ? { purpose: "task-attachment-link" }
+        : {}),
     })
     .catch((error: unknown) => {
       // The handshake itself being unreachable is exactly the case the buffered
@@ -118,8 +133,9 @@ async function requestUploadTickets(
 /** The original buffered path. Kept as the fallback for small files. */
 async function uploadFilesViaBufferedApi(
   files: File[],
-  onProgress?: (progress: number) => void
-): Promise<string[]> {
+  onProgress?: (progress: number) => void,
+  issueTaskLinkReceipts = false,
+): Promise<UploadResult> {
   const formData = new FormData();
   for (const file of files) {
     formData.append("files", file, file.name);
@@ -131,6 +147,9 @@ async function uploadFilesViaBufferedApi(
     {
       headers: {
         "Content-Type": "multipart/form-data",
+        ...(issueTaskLinkReceipts
+          ? { "x-upload-purpose": "task-attachment-link" }
+          : {}),
       },
       onUploadProgress: (event) => {
         if (!onProgress || !event.total) {
@@ -143,10 +162,17 @@ async function uploadFilesViaBufferedApi(
   ).catch(throwReadableUploadError);
 
   const fileUrls = response.data?.fileUrls ?? [];
+  const taskLinkReceipts = response.data?.taskLinkReceipts ?? [];
   if (!Array.isArray(fileUrls) || fileUrls.length === 0) {
     throw new Error("Upload succeeded but no file URLs were returned");
   }
-  return fileUrls;
+  if (
+    issueTaskLinkReceipts &&
+    (!Array.isArray(taskLinkReceipts) || taskLinkReceipts.length !== fileUrls.length)
+  ) {
+    throw new Error("Upload succeeded but no task link receipt was returned");
+  }
+  return { urls: fileUrls, taskLinkReceipts };
 }
 
 /**
@@ -157,25 +183,36 @@ async function uploadFilesViaBufferedApi(
 async function finalizeUploads(
   grant: string,
   keep: string[],
-  discard: string[]
-) {
-  if (keep.length === 0 && discard.length === 0) return;
-  const request = axios.post("/api/tasks/uploadFinalize", {
+  discard: string[],
+  issueTaskLinkReceipts = false,
+): Promise<string[]> {
+  if (keep.length === 0 && discard.length === 0) return [];
+  const request = axios.post<UploadApiResponse>("/api/tasks/uploadFinalize", {
     grant,
     keep,
     discard,
+    ...(issueTaskLinkReceipts ? { issueTaskLinkReceipts: true } : {}),
   });
   if (keep.length === 0) {
     await request.catch(() => undefined);
-    return;
+    return [];
   }
-  await request.catch(throwReadableUploadError);
+  const response = await request.catch(throwReadableUploadError);
+  const receipts = response.data?.taskLinkReceipts ?? [];
+  if (issueTaskLinkReceipts && receipts.length !== keep.length) {
+    throw new Error("Upload was verified but no task link receipt was returned");
+  }
+  return receipts;
 }
 
-export async function uploadFilesViaApi(
+async function uploadFilesViaApiInternal(
   files: File[],
-  onProgress?: (progress: number) => void
-): Promise<string[]> {
+  onProgress?: (progress: number) => void,
+  issueTaskLinkReceipts = false,
+): Promise<UploadResult> {
+  if (issueTaskLinkReceipts && files.length !== 1) {
+    throw new Error("Task-link uploads must contain exactly one file");
+  }
   // Check before sending: nothing above the direct-upload ceiling is accepted.
   const sizeError = getDirectUploadSizeError(files);
   if (sizeError) {
@@ -185,7 +222,10 @@ export async function uploadFilesViaApi(
   let uploads: DirectUploadTicket[];
   let grant: string;
   try {
-    ({ uploads, grant } = await requestUploadTickets(files));
+    ({ uploads, grant } = await requestUploadTickets(
+      files,
+      issueTaskLinkReceipts,
+    ));
   } catch (error) {
     // No tickets at all, so nothing has been uploaded yet and the whole batch
     // can still go the buffered way when it is small enough.
@@ -196,7 +236,11 @@ export async function uploadFilesViaApi(
       throw error;
     }
     onProgress?.(0);
-    return uploadFilesViaBufferedApi(files, onProgress);
+    return uploadFilesViaBufferedApi(
+      files,
+      onProgress,
+      issueTaskLinkReceipts,
+    );
   }
 
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
@@ -231,10 +275,18 @@ export async function uploadFilesViaApi(
         // The bytes may still have landed before the connection dropped, so the
         // direct object is discarded before the buffered retry.
         stored.push(uploads[index].key);
-        const [url] = await uploadFilesViaBufferedApi([file]);
+        const fallback = await uploadFilesViaBufferedApi(
+          [file],
+          undefined,
+          issueTaskLinkReceipts,
+        );
         loaded[index] = file.size;
         report();
-        return { fallbackUrl: url, discardKey: uploads[index].key };
+        return {
+          fallbackUrl: fallback.urls[0],
+          fallbackReceipt: fallback.taskLinkReceipts[0],
+          discardKey: uploads[index].key,
+        };
       }
     })
   );
@@ -247,27 +299,48 @@ export async function uploadFilesViaApi(
 
   const urls: string[] = [];
   const discard: string[] = [];
+  let fallbackReceipt: string | undefined;
   for (const result of settled) {
     const value = (result as PromiseFulfilledResult<unknown>).value;
     if (typeof value === "string") {
       urls.push(value);
       continue;
     }
-    const fallback = value as { fallbackUrl: string; discardKey: string };
+    const fallback = value as {
+      fallbackUrl: string;
+      fallbackReceipt?: string;
+      discardKey: string;
+    };
     urls.push(fallback.fallbackUrl);
+    fallbackReceipt = fallback.fallbackReceipt;
     discard.push(fallback.discardKey);
   }
 
   // The signed PUT cannot carry a size limit, so the server checks the stored
   // length and removes anything above the per-file or batch ceiling.
-  await finalizeUploads(
+  const directReceipts = await finalizeUploads(
     grant,
     stored.filter((key) => !discard.includes(key)),
-    discard
+    discard,
+    issueTaskLinkReceipts && !fallbackReceipt,
   );
 
   onProgress?.(100);
-  return urls;
+  return {
+    urls,
+    taskLinkReceipts: issueTaskLinkReceipts
+      ? [fallbackReceipt ?? directReceipts[0]].filter(
+          (receipt): receipt is string => Boolean(receipt),
+        )
+      : [],
+  };
+}
+
+export async function uploadFilesViaApi(
+  files: File[],
+  onProgress?: (progress: number) => void,
+): Promise<string[]> {
+  return (await uploadFilesViaApiInternal(files, onProgress)).urls;
 }
 
 export async function uploadSingleFileViaApi(
@@ -276,4 +349,17 @@ export async function uploadSingleFileViaApi(
 ): Promise<string> {
   const urls = await uploadFilesViaApi([file], onProgress);
   return urls[0];
+}
+
+export async function uploadSingleTaskAttachment(
+  file: File,
+  onProgress?: (progress: number) => void,
+): Promise<TaskAttachmentUploadReceipt> {
+  const result = await uploadFilesViaApiInternal([file], onProgress, true);
+  const url = result.urls[0];
+  const receipt = result.taskLinkReceipts[0];
+  if (!url || !receipt) {
+    throw new Error("Upload completed without a task link receipt");
+  }
+  return { url, receipt };
 }
