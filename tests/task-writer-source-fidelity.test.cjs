@@ -50,6 +50,13 @@ test("task_writer keeps its structured-output contract", () => {
   assert.match(prompt, /HT_MEDIA_1/);
 });
 
+test("task_writer preserves raw screenshot URLs instead of inventing media tokens", () => {
+  const prompt = createKanbanSystemPrompt("task_writer");
+  assert.match(prompt, /media token is valid ONLY when that exact token appears in the input/);
+  assert.match(prompt, /raw screenshot or image URL is a link, not a media token/);
+  assert.match(prompt, /NEVER replace a raw URL with an HT_MEDIA token/);
+});
+
 test("write_with_ai still writes in the user's voice, not the assistant's", () => {
   const prompt = createKanbanSystemPrompt("write_with_ai");
   assert.match(prompt, /You ARE the user/);
