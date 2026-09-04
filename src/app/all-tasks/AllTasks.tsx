@@ -129,10 +129,8 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     // date-range select): the browser should dismiss it, not router.back().
     const activeTag = document.activeElement?.tagName;
     const inFormControl =
-      activeTag === "INPUT" ||
-      activeTag === "TEXTAREA" ||
-      activeTag === "SELECT" ||
-      activeTag === "BUTTON";
+      activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT";
+    const inButton = activeTag === "BUTTON";
     if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show && !inFormControl) {
       event.preventDefault();
       return router.back();
@@ -153,6 +151,7 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     }
     if (
       (inFormControl && activeTag !== "SELECT") ||
+      inButton ||
       returnIfModalOrInputActive()
     )
       return;

@@ -20,11 +20,15 @@ const allTasksSource = ts.createSourceFile(
   ts.ScriptKind.TSX,
 );
 const jsxElements = [];
-const collectJsxElements = (node) => {
+const ifStatements = [];
+const variableDeclarations = [];
+const collectNodes = (node) => {
   if (ts.isJsxElement(node)) jsxElements.push(node);
-  ts.forEachChild(node, collectJsxElements);
+  if (ts.isIfStatement(node)) ifStatements.push(node);
+  if (ts.isVariableDeclaration(node)) variableDeclarations.push(node);
+  ts.forEachChild(node, collectNodes);
 };
-collectJsxElements(allTasksSource);
+collectNodes(allTasksSource);
 
 const attributeNamed = (element, name) =>
   element.openingElement.attributes.properties.find(
@@ -128,18 +132,33 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
   );
 });
 
-test("native project-tab keyboard activation wins over task shortcuts", () => {
-  const buttonGuard = allTasks.indexOf('activeTag === "BUTTON"');
-  const controlReturn = allTasks.indexOf(
-    '(inFormControl && activeTag !== "SELECT")',
+test("buttons defer task shortcuts without changing Escape navigation", () => {
+  const inButton = variableDeclarations.find(
+    (declaration) => declaration.name.getText(allTasksSource) === "inButton",
   );
-  const taskEnterShortcut = allTasks.indexOf(
-    "event.keyCode === KeyCodes.ENTER",
-    controlReturn,
+  assert.equal(
+    inButton?.initializer?.getText(allTasksSource),
+    'activeTag === "BUTTON"',
   );
-  assert.notEqual(buttonGuard, -1);
-  assert.ok(buttonGuard < controlReturn);
-  assert.ok(controlReturn < taskEnterShortcut);
+
+  const escapeGuard = ifStatements.find((statement) =>
+    statement.expression.getText(allTasksSource).includes("KeyCodes.ESCAPE"),
+  );
+  assert.ok(escapeGuard);
+  assert.match(escapeGuard.expression.getText(allTasksSource), /!inFormControl/);
+  assert.doesNotMatch(escapeGuard.expression.getText(allTasksSource), /inButton/);
+
+  const buttonShortcutGuard = ifStatements.find(
+    (statement) =>
+      statement.expression.getText(allTasksSource).includes("inButton") &&
+      ts.isReturnStatement(statement.thenStatement),
+  );
+  const taskEnterShortcut = ifStatements.find((statement) =>
+    statement.expression.getText(allTasksSource).includes("KeyCodes.ENTER"),
+  );
+  assert.ok(buttonShortcutGuard);
+  assert.ok(taskEnterShortcut);
+  assert.ok(buttonShortcutGuard.pos < taskEnterShortcut.pos);
 });
 
 test("All Tasks opts into compact mobile rows without changing shared desktop rows", () => {
