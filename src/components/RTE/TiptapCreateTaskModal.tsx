@@ -139,7 +139,9 @@ const TiptapCreateTaskModal = () => {
     formValues.attachments
   );
   const createTaskAttachmentsRef = useRef(newCommentAttachments);
-  createTaskAttachmentsRef.current = newCommentAttachments;
+  useEffect(() => {
+    createTaskAttachmentsRef.current = newCommentAttachments;
+  }, [newCommentAttachments]);
   const [canSave, setUploadingStateCreateTaskModal] = useRecoilState(
     uploadingStateCreateTaskModalAtom
   );

@@ -1,5 +1,4 @@
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
-import prisma from "@/lib/prisma";
 import {
   DIRECT_UPLOAD_MAX_BATCH_BYTES,
   DIRECT_UPLOAD_MAX_FILES,
@@ -12,13 +11,13 @@ import {
   verifyUploadGrant,
 } from "@/lib/storage/uploadGrant";
 import {
+  discardTaskAttachment,
   linkTaskAttachment,
   TaskAttachmentLinkError,
 } from "@/lib/storage/linkTaskAttachment";
 import { broadcastTaskChange } from "@/lib/realtime/server";
 import {
   getHypertasksS3Client,
-  getHypertasksStoragePublicUrl,
   HYPERTASKS_S3_BUCKET,
 } from "@/lib/storage/hypertasksS3";
 import { TASK_ATTACHMENT_PREFIX } from "@/lib/storage/uploadTaskAttachmentToS3";
@@ -80,8 +79,18 @@ export default async function handler(
   }
 
   if (req.body?.action === "link-task-attachment") {
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.id))) {
+    let enabled: boolean;
+    try {
+      const { isFeatureEnabled } = await import("@/lib/flags");
+      enabled = await isFeatureEnabled(
+        "htpr-5993-optimistic-task-uploads",
+        session.id,
+      );
+    } catch (error) {
+      console.error("[uploadFinalize] Could not evaluate upload feature flag", error);
+      return res.status(500).json({ error: "Could not link attachment" });
+    }
+    if (!enabled) {
       return res.status(403).json({ error: "Background task uploads are disabled" });
     }
     const taskId = Number(req.body?.taskId);
@@ -122,18 +131,12 @@ export default async function handler(
       return res.status(403).json({ error: "This upload cannot be discarded" });
     }
     try {
-      const linked = await prisma.attachment.findFirst({
-        where: { fileSource: getHypertasksStoragePublicUrl(receipt.key) },
-        select: { id: true },
-      });
-      if (!linked) {
-        await getHypertasksS3Client()
-          .deleteObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: receipt.key })
-          .promise()
-          .catch(() => undefined);
-      }
-      return res.status(200).json({ success: true, discarded: !linked });
+      const discarded = await discardTaskAttachment(session.id, receipt);
+      return res.status(200).json({ success: true, discarded });
     } catch (error) {
+      if (error instanceof TaskAttachmentLinkError) {
+        return res.status(error.status).json({ error: error.message });
+      }
       console.error("[uploadFinalize] Could not discard attachment", error);
       return res.status(500).json({ error: "Could not discard attachment" });
     }

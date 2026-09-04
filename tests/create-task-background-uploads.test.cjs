@@ -13,6 +13,7 @@ const uploads = jiti(
 
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 const file = (name) => new File([name], name, { type: "text/plain" });
+const ignoreDiscard = async () => undefined;
 const attachment = (id, source) => ({
   id,
   createdAt: new Date(),
@@ -36,7 +37,12 @@ test("one file object starts one upload promise across remounts", async () => {
     return pending;
   };
 
-  const first = uploads.startCreateTaskUpload(selected, upload);
+  const first = uploads.startCreateTaskUpload(
+    selected,
+    upload,
+    undefined,
+    ignoreDiscard,
+  );
   const second = uploads.startCreateTaskUpload(selected, upload);
 
   assert.equal(second.id, first.id);
@@ -70,9 +76,10 @@ test("discard cleans up completed and still-uploading objects by receipt", async
   const pendingFile = file("discard-pending.txt");
   const pending = uploads.startCreateTaskUpload(
     pendingFile,
-    () => new Promise((resolve) => {
-      finishUpload = resolve;
-    }),
+    () =>
+      new Promise((resolve) => {
+        finishUpload = resolve;
+      }),
     async () => attachment(7, "https://files.example/discard-pending"),
     discard,
   );
@@ -95,14 +102,19 @@ test("discard cleans up completed and still-uploading objects by receipt", async
 test("a synchronous uploader failure becomes a retryable job", async () => {
   const selected = file("sync-failure.txt");
   let calls = 0;
-  const started = uploads.startCreateTaskUpload(selected, () => {
-    calls += 1;
-    if (calls === 1) throw new Error("synchronous failure");
-    return Promise.resolve({
-      url: "https://files.example/sync-failure",
-      receipt: "sync-failure-receipt",
-    });
-  });
+  const started = uploads.startCreateTaskUpload(
+    selected,
+    () => {
+      calls += 1;
+      if (calls === 1) throw new Error("synchronous failure");
+      return Promise.resolve({
+        url: "https://files.example/sync-failure",
+        receipt: "sync-failure-receipt",
+      });
+    },
+    undefined,
+    ignoreDiscard,
+  );
 
   await assert.rejects(started.promise, /synchronous failure/);
   await nextTurn();
@@ -292,26 +304,137 @@ test("a null link response becomes a retryable failure", async () => {
   }
 });
 
-test("task detail renders background progress, failure, and Retry wiring", () => {
+test("task detail renders upload progress, failure, and a working Retry", async () => {
   const fs = require("node:fs");
-  const source = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/PageComponents/TaskDetail/CommentAndDescription/BackgroundTaskAttachments.tsx",
-    ),
-    "utf8",
-  );
-  const detail = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
-    ),
-    "utf8",
-  );
+  const React = require("react");
+  const { JSDOM } = require("jsdom");
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const previousReact = global.React;
+  const previousNavigator = global.navigator;
+  const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
+  const previousCssLoader = require.extensions[".css"];
+  const uploadsPath = path.join(root, "src/lib/createTaskAttachmentUploads.ts");
+  const previousUploadsModule = require.cache[uploadsPath];
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
+    url: "https://app.hypertask.ai/detail/project-15/99",
+  });
+  let reactRoot;
+  let started;
 
-  assert.match(source, /upload\.status === "upload-failed" \|\| upload\.status === "link-failed"/);
-  assert.match(source, /retryCreateTaskUpload\(upload\.id\)/);
-  assert.match(source, />\s*Retry\s*</);
-  assert.match(source, /CircularProgressbar/);
-  assert.match(detail, /<BackgroundTaskAttachments[\s\S]*?taskId=\{task\.id\}/);
+  try {
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.React = React;
+    global.navigator = dom.window.navigator;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    require.extensions[".css"] = () => undefined;
+    require.cache[uploadsPath] = {
+      id: uploadsPath,
+      filename: uploadsPath,
+      loaded: true,
+      exports: uploads,
+    };
+
+    const load = require("jiti")(__filename, {
+      interopDefault: true,
+      jsx: true,
+      alias: { "@": path.join(root, "src") },
+      cache: false,
+    });
+    const BackgroundTaskAttachments = load(
+      path.join(
+        root,
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/BackgroundTaskAttachments.tsx",
+      ),
+    ).default;
+    const selected = file("visible-retry.txt");
+    let uploadCalls = 0;
+    let reportProgress;
+    let failUpload;
+    const firstUpload = new Promise((_resolve, reject) => {
+      failUpload = reject;
+    });
+    started = uploads.startCreateTaskUpload(
+      selected,
+      async (_file, onProgress) => {
+        uploadCalls += 1;
+        reportProgress = onProgress;
+        if (uploadCalls === 1) return firstUpload;
+        return {
+          url: "https://files.example/visible-retry",
+          receipt: "visible-retry-receipt",
+        };
+      },
+      async () => attachment(8, "https://files.example/visible-retry"),
+      ignoreDiscard,
+    );
+    uploads.bindCreateTaskUploads(99, [selected]);
+    const linked = [];
+    const container = document.getElementById("root");
+    reactRoot = require("react-dom/client").createRoot(container);
+
+    await React.act(async () => {
+      reactRoot.render(
+        React.createElement(BackgroundTaskAttachments, {
+          taskId: 99,
+          onLinked: (value) => linked.push(value),
+        }),
+      );
+    });
+    assert.ok(container.querySelector('[aria-label="Uploading"]'));
+    const progressPath = container.querySelector(".CircularProgressbar-path");
+    const initialProgressStyle = progressPath.getAttribute("style");
+    await React.act(async () => reportProgress(55));
+    assert.notEqual(progressPath.getAttribute("style"), initialProgressStyle);
+
+    const rejected = assert.rejects(started.promise, /visible failure/);
+    await React.act(async () => {
+      failUpload(new Error("visible failure"));
+      await rejected;
+      await nextTurn();
+    });
+    const retry = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent.trim() === "Retry",
+    );
+    assert.ok(retry);
+
+    await React.act(async () => {
+      retry.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await nextTurn();
+      await nextTurn();
+    });
+    assert.equal(uploadCalls, 2);
+    assert.equal(linked.length, 1);
+    assert.equal(container.querySelector("button"), null);
+
+    const detail = fs.readFileSync(
+      path.join(
+        root,
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
+      ),
+      "utf8",
+    );
+    assert.match(detail, /<BackgroundTaskAttachments[\s\S]*?taskId=\{task\.id\}/);
+  } finally {
+    if (reactRoot) await React.act(async () => reactRoot.unmount());
+    if (started && uploads.createTaskUploadById(started.id)) {
+      uploads.acknowledgeCreateTaskUpload(started.id);
+    }
+    dom.window.close();
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+    if (previousReact === undefined) delete global.React;
+    else global.React = previousReact;
+    if (previousNavigator === undefined) delete global.navigator;
+    else global.navigator = previousNavigator;
+    if (previousActEnvironment === undefined) delete global.IS_REACT_ACT_ENVIRONMENT;
+    else global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    if (previousCssLoader === undefined) delete require.extensions[".css"];
+    else require.extensions[".css"] = previousCssLoader;
+    if (previousUploadsModule === undefined) delete require.cache[uploadsPath];
+    else require.cache[uploadsPath] = previousUploadsModule;
+  }
 });

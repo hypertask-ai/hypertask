@@ -91,7 +91,7 @@ async function defaultLink(
 }
 
 async function defaultDiscard(receipt: string): Promise<void> {
-  await fetch("/api/tasks/uploadFinalize", {
+  const response = await fetch("/api/tasks/uploadFinalize", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -100,12 +100,21 @@ async function defaultDiscard(receipt: string): Promise<void> {
     }),
     keepalive: true,
   });
+  if (!response.ok) throw new Error("Could not discard attachment");
 }
 
-function discardReceipt(job: UploadJob, receipt: string) {
-  void Promise.resolve()
-    .then(() => job.discard(receipt))
-    .catch(() => undefined);
+async function discardReceipt(job: UploadJob, receipt: string) {
+  for (const delay of [0, 1_000, 5_000]) {
+    if (delay) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    try {
+      await job.discard(receipt);
+      return;
+    } catch {
+      // Best-effort cleanup gets two delayed retries during this JS document.
+    }
+  }
 }
 
 function discardJob(job: UploadJob) {
@@ -113,7 +122,7 @@ function discardJob(job: UploadJob) {
   job.discarded = true;
   jobs.delete(job.id);
   jobsByFile.delete(job.file);
-  if (job.receipt) discardReceipt(job, job.receipt);
+  if (job.receipt) void discardReceipt(job, job.receipt);
 }
 
 function runUpload(job: UploadJob) {
@@ -136,7 +145,7 @@ function runUpload(job: UploadJob) {
     ({ url, receipt }) => {
       if (job.discarded) {
         job.receipt = receipt;
-        discardReceipt(job, receipt);
+        void discardReceipt(job, receipt);
         return;
       }
       patch(job, { status: "uploaded", progress: 100, source: url, receipt });

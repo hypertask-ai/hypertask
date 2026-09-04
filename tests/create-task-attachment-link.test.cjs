@@ -15,14 +15,22 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function loadLinker({ authorized = true } = {}) {
+function loadLinker({
+  authorized = true,
+  storageAvailable = true,
+  deleteFails = false,
+} = {}) {
   const events = [];
   const rows = [];
+  const rawQueries = [];
+  const deleted = [];
   let creates = 0;
   let accessWhere;
   const tx = {
-    $queryRaw: async () => {
-      events.push("lock");
+    $queryRaw: async (query) => {
+      rawQueries.push(query);
+      const sql = query.strings.join("?");
+      events.push(sql.includes("pg_advisory_xact_lock") ? "receipt-lock" : "task-lock");
       return [{ id: 99 }];
     },
     task: {
@@ -35,12 +43,8 @@ function loadLinker({ authorized = true } = {}) {
     attachment: {
       findFirst: async ({ where }) => {
         events.push("find-attachment");
-        return rows.find(
-          (row) =>
-            row.taskId === where.taskId &&
-            row.descriptionId === where.descriptionId &&
-            row.commentId === where.commentId &&
-            row.fileSource === where.fileSource,
+        return rows.find((row) =>
+          Object.entries(where).every(([key, value]) => row[key] === value)
         ) ?? null;
       },
       create: async ({ data }) => {
@@ -92,7 +96,21 @@ function loadLinker({ authorized = true } = {}) {
     taskWriteAccessWhere: (userId) => ({ writer: userId }),
   });
   stubModule("src/lib/storage/hypertasksS3.ts", {
+    getHypertasksS3Client: () => ({
+      headObject: () => ({
+        promise: async () => {
+          if (!storageAvailable) throw new Error("object missing");
+        },
+      }),
+      deleteObject: ({ Key }) => ({
+        promise: async () => {
+          if (deleteFails) throw new Error("delete failed");
+          deleted.push(Key);
+        },
+      }),
+    }),
     getHypertasksStoragePublicUrl: (key) => `https://files.example/${key}`,
+    HYPERTASKS_S3_BUCKET: "test-bucket",
   });
   stubModule("src/lib/storage/uploadTaskAttachmentToS3.ts", {
     TASK_ATTACHMENT_PREFIX: "tasks/attachments",
@@ -110,6 +128,8 @@ function loadLinker({ authorized = true } = {}) {
     ...jiti(linkerPath),
     events,
     rows,
+    rawQueries,
+    deleted,
     get creates() {
       return creates;
     },
@@ -131,7 +151,25 @@ test("linking locks the task, rechecks write access, and persists trusted metada
   const linker = loadLinker();
   const linked = await linker.linkTaskAttachment(99, 6, receipt);
 
-  assert.deepEqual(linker.events.slice(0, 2), ["lock", "authorize"]);
+  assert.deepEqual(linker.events.slice(0, 3), [
+    "receipt-lock",
+    "task-lock",
+    "authorize",
+  ]);
+  assert.ok(
+    linker.rawQueries.some(
+      (query) =>
+        /pg_advisory_xact_lock/.test(query.strings.join("?")) &&
+        query.values.includes(receipt.key),
+    ),
+  );
+  assert.ok(
+    linker.rawQueries.some(
+      (query) =>
+        /FROM "Task"[\s\S]*FOR UPDATE/.test(query.strings.join("?")) &&
+        query.values.includes(99),
+    ),
+  );
   assert.deepEqual(linker.accessWhere, { id: 99, project: { writer: 6 } });
   assert.equal(linker.creates, 1);
   assert.equal(linked.fileName, "receipt-file.txt");
@@ -152,7 +190,7 @@ test("a retry after a lost response returns the existing attachment", async () =
   assert.equal(linker.creates, 1);
   assert.equal(retried.id, first.id);
   assert.equal(
-    linker.events.filter((event) => event === "lock").length,
+    linker.events.filter((event) => event === "task-lock").length,
     2,
   );
 });
@@ -165,7 +203,7 @@ test("linking refuses an inaccessible task before attachment persistence", async
     (error) => error.name === "TaskAttachmentLinkError" && error.status === 404,
   );
   assert.equal(linker.creates, 0);
-  assert.deepEqual(linker.events, ["lock", "authorize"]);
+  assert.deepEqual(linker.events, ["receipt-lock", "task-lock", "authorize"]);
 });
 
 test("linking rejects a receipt issued to another user", async () => {
@@ -189,4 +227,39 @@ test("linking rejects a receipt key outside task attachment storage", async () =
     (error) => error.name === "TaskAttachmentLinkError" && error.status === 400,
   );
   assert.deepEqual(linker.events, []);
+});
+
+test("linking rejects an upload that cancellation already removed", async () => {
+  const linker = loadLinker({ storageAvailable: false });
+
+  await assert.rejects(
+    linker.linkTaskAttachment(99, 6, receipt),
+    (error) => error.name === "TaskAttachmentLinkError" && error.status === 409,
+  );
+  assert.equal(linker.creates, 0);
+});
+
+test("discard shares the receipt lock and preserves linked objects", async () => {
+  const unlinked = loadLinker();
+  assert.equal(await unlinked.discardTaskAttachment(6, receipt), true);
+  assert.deepEqual(unlinked.deleted, [receipt.key]);
+  assert.match(
+    unlinked.rawQueries[0].strings.join("?"),
+    /pg_advisory_xact_lock/,
+  );
+  assert.ok(unlinked.rawQueries[0].values.includes(receipt.key));
+
+  const linked = loadLinker();
+  await linked.linkTaskAttachment(99, 6, receipt);
+  assert.equal(await linked.discardTaskAttachment(6, receipt), false);
+  assert.deepEqual(linked.deleted, []);
+});
+
+test("discard surfaces storage deletion failures for retry", async () => {
+  const linker = loadLinker({ deleteFails: true });
+
+  await assert.rejects(
+    linker.discardTaskAttachment(6, receipt),
+    (error) => error.name === "TaskAttachmentLinkError" && error.status === 502,
+  );
 });

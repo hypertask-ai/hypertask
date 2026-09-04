@@ -222,19 +222,13 @@ test("enabled buffered uploads return a receipt with the actual uploaded size", 
   });
 });
 
-const finalizeSource = fs.readFileSync(
-  path.join(root, "src/pages/api/tasks/uploadFinalize.ts"),
-  "utf8",
-);
-const finalizeJavascript = ts.transpileModule(finalizeSource, {
-  compilerOptions: {
-    esModuleInterop: true,
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText;
+let finalizeLoadId = 0;
 
-function loadFinalizeRoute({ flagEnabled = true, linked = false } = {}) {
+function loadFinalizeRoute({
+  flagEnabled = true,
+  flagError = false,
+  linked = false,
+} = {}) {
   const deleted = [];
   const linkCalls = [];
   const receipt = {
@@ -269,6 +263,10 @@ function loadFinalizeRoute({ flagEnabled = true, linked = false } = {}) {
       verifyUploadGrant: () => null,
     },
     "@/lib/storage/linkTaskAttachment": {
+      discardTaskAttachment: async (_userId, verifiedReceipt) => {
+        if (!linked) deleted.push(verifiedReceipt.key);
+        return !linked;
+      },
       linkTaskAttachment: async (...args) => {
         linkCalls.push(args);
         return { id: 1 };
@@ -288,20 +286,41 @@ function loadFinalizeRoute({ flagEnabled = true, linked = false } = {}) {
     "@/lib/storage/uploadTaskAttachmentToS3": {
       TASK_ATTACHMENT_PREFIX: "tasks/attachments",
     },
-    "@/lib/flags": { isFeatureEnabled: async () => flagEnabled },
+    "@/lib/flags": {
+      isFeatureEnabled: async () => {
+        if (flagError) throw new Error("flag unavailable");
+        return flagEnabled;
+      },
+    },
   };
-  const resolve = (request) => stubs[request] ?? require(request);
+  for (const [request, exports] of Object.entries(stubs)) {
+    const filename = path.join(root, "src", `${request.slice(2)}.ts`);
+    require.cache[filename] = {
+      id: filename,
+      filename,
+      loaded: true,
+      exports,
+    };
+  }
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);
   try {
-    const mod = { exports: {} };
-    new Function("module", "exports", "require", finalizeJavascript)(
-      mod,
-      mod.exports,
-      resolve,
+    delete require.cache[
+      path.join(root, "src/pages/api/tasks/uploadFinalize.ts")
+    ];
+    const load = require("jiti")(
+      path.join(root, `tests/upload-finalize-${++finalizeLoadId}.cjs`),
+      {
+        interopDefault: true,
+        alias: { "@": path.join(root, "src") },
+        cache: false,
+      },
     );
-    return { route: mod.exports, deleted, linkCalls };
+    const route = load(
+      path.join(root, "src/pages/api/tasks/uploadFinalize.ts"),
+    );
+    return { route, deleted, linkCalls };
   } finally {
     Module._load = originalLoad;
   }
@@ -323,6 +342,22 @@ test("final attachment linking is blocked when its feature flag is off", async (
   await route.default(finalizeRequest("link-task-attachment"), res);
 
   assert.equal(res.statusCode, 403);
+  assert.equal(linkCalls.length, 0);
+});
+
+test("final attachment linking returns JSON when flag evaluation fails", async () => {
+  const { route, linkCalls } = loadFinalizeRoute({ flagError: true });
+  const res = responseRecorder();
+  const originalError = console.error;
+  console.error = () => undefined;
+  try {
+    await route.default(finalizeRequest("link-task-attachment"), res);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(res.statusCode, 500);
+  assert.deepEqual(res.body, { error: "Could not link attachment" });
   assert.equal(linkCalls.length, 0);
 });
 
