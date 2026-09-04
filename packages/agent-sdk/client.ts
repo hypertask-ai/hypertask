@@ -331,7 +331,7 @@ export class AgentClient {
           let started = false;
           const timer = setTimeout(() => {
             started = true;
-            run.thought("Working on this.").then(() => resolve(), reject);
+            run.automaticThought().then(() => resolve(), reject);
           }, AUTO_THOUGHT_MS);
           (timer as unknown as { unref?: () => void }).unref?.();
           cancelAutoThought = () => {
@@ -516,7 +516,7 @@ class AgentRunImpl implements AgentRun {
   readonly ticket: AgentTask | null;
   readonly thread: AgentThreadItem[];
   readonly task: AgentTaskHelpers | null;
-  private operationSequence = 0;
+  private readonly operationSequences = new Map<string, number>();
   private firstActivityCallback?: () => void;
   private activityRecorded = false;
 
@@ -573,16 +573,23 @@ class AgentRunImpl implements AgentRun {
     });
   }
 
+  automaticThought(): Promise<AgentActivity> {
+    return this.activity("thought", "Working on this.", {}, "automatic-thought");
+  }
+
   private nextOperationKey(kind: string): string {
-    this.operationSequence += 1;
-    return `${this.deliveryId}:${this.operationSequence}:${kind}`;
+    const sequence = (this.operationSequences.get(kind) ?? 0) + 1;
+    this.operationSequences.set(kind, sequence);
+    return `${this.deliveryId}:${kind}:${sequence}`;
   }
 
   private async activity(
     type: AgentActivity["type"],
     text: string,
     extra: { link?: string; options?: AgentActivityOption[] } = {},
+    operationKind = `activity-${type}`,
   ): Promise<AgentActivity> {
+    const idempotencyKey = this.nextOperationKey(operationKind);
     this.assertNotStopped();
     if (!this.activityRecorded) {
       this.activityRecorded = true;
@@ -595,7 +602,7 @@ class AgentRunImpl implements AgentRun {
         {
           method: "POST",
           body: { type, text, ...extra },
-          idempotencyKey: this.nextOperationKey(`activity-${type}`),
+          idempotencyKey,
           signal: this.signal,
         },
       ),
@@ -627,6 +634,7 @@ class AgentRunImpl implements AgentRun {
   private async withTaskLease<T>(kind: string, work: (signal: AbortSignal, key: string) => Promise<T>): Promise<T> {
     if (this.taskId === null) throw new AgentSdkError("Run is not attached to a task");
     const taskId = this.taskId;
+    const idempotencyKey = this.nextOperationKey(kind);
     const previous = AgentRunImpl.taskLeaseTails.get(taskId) ?? Promise.resolve();
     const operation = previous.then(async () => {
       await this.assertServerRunActive(this.signal);
@@ -663,7 +671,7 @@ class AgentRunImpl implements AgentRun {
       (heartbeat as unknown as { unref?: () => void }).unref?.();
 
       try {
-        const result = await work(operationController.signal, this.nextOperationKey(kind));
+        const result = await work(operationController.signal, idempotencyKey);
         if (heartbeatError) throw heartbeatError;
         return result;
       } finally {
@@ -820,9 +828,9 @@ class AgentRunImpl implements AgentRun {
           throw new AgentSdkError("Attachment URL has an invalid filename");
         }
         const filename = spec.filename?.trim() || urlFilename;
-        const extension = filename.toLocaleLowerCase().split(".").at(-1) ?? "";
+        const extension = filename.toLowerCase().split(".").at(-1) ?? "";
         const contentType =
-          spec.contentType?.split(";")[0].trim().toLocaleLowerCase() ||
+          spec.contentType?.split(";")[0].trim().toLowerCase() ||
           ATTACHMENT_CONTENT_TYPES[extension];
         if (!contentType) {
           throw new AgentSdkError(

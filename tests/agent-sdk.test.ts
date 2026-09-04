@@ -670,8 +670,8 @@ test("run events bind the token, hydrate context, and use stable activity keys",
   assert.deepEqual(
     activityCalls.map((call) => call.headers.get("idempotency-key")),
     [
-      "delivery-1:1:activity-thought",
-      "delivery-1:2:activity-response",
+      "delivery-1:activity-thought:1",
+      "delivery-1:activity-response:1",
     ],
   );
 });
@@ -899,19 +899,19 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
   const updates = mutations.filter((call) => call.path.endsWith("/mcp/tasks/update"));
   assert.deepEqual(
     updates.map((call) => call.headers.get("idempotency-key")),
-    ["delivery-1:2:move", "delivery-1:5:update"],
+    ["delivery-1:move:1", "delivery-1:update:1"],
   );
   assert.equal(updates.at(-1)?.body?.task_id, task.id);
   const assignment = mutations.find((call) =>
     call.path.endsWith("/mcp/assignees/assign"),
   );
-  assert.equal(assignment?.headers.get("idempotency-key"), "delivery-1:3:assign");
+  assert.equal(assignment?.headers.get("idempotency-key"), "delivery-1:assign:1");
   const comment = mutations.find((call) => call.path.endsWith("/mcp/comments"));
-  assert.equal(comment?.headers.get("idempotency-key"), "delivery-1:4:comment");
+  assert.equal(comment?.headers.get("idempotency-key"), "delivery-1:comment:1");
   const attachment = mutations.find((call) =>
     call.path.endsWith("/mcp/tasks/attachments"),
   );
-  assert.equal(attachment?.headers.get("idempotency-key"), "delivery-1:6:attach");
+  assert.equal(attachment?.headers.get("idempotency-key"), "delivery-1:attach:1");
   assert.deepEqual(attachment?.body?.files, [
     {
       filename: "report.pdf",
@@ -1816,6 +1816,80 @@ test("successful handlers cancel an unstarted automatic thought", async () => {
     ),
     false,
   );
+});
+
+test("automatic thoughts do not shift mutation keys between delivery retries", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  const api = apiFixture();
+  let automaticThoughtPosted!: () => void;
+  const postedAutomaticThought = new Promise<void>((resolve) => {
+    automaticThoughtPosted = resolve;
+  });
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (
+      init.method === "POST" &&
+      url.pathname.endsWith("/mcp/agents/runs/run-1/activities")
+    ) {
+      automaticThoughtPosted();
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  let attempt = 0;
+  let firstHandlerStarted!: () => void;
+  const startedFirstHandler = new Promise<void>((resolve) => {
+    firstHandlerStarted = resolve;
+  });
+  let finishFirstHandler!: () => void;
+  const firstHandlerGate = new Promise<void>((resolve) => {
+    finishFirstHandler = resolve;
+  });
+  agent.on("mention", async (received) => {
+    attempt += 1;
+    if (attempt === 1) {
+      firstHandlerStarted();
+      await firstHandlerGate;
+    }
+    await received.task?.comment("Retry-safe comment");
+  });
+
+  try {
+    const firstDispatch = agent.client.dispatch(payload(), run);
+    await startedFirstHandler;
+    context.mock.timers.tick(8_000);
+    await postedAutomaticThought;
+    finishFirstHandler();
+    await firstDispatch;
+    await agent.client.dispatch(payload(), run);
+
+    const commentKeys = api.calls
+      .filter((call) => call.method === "POST" && call.path.endsWith("/mcp/comments"))
+      .map((call) => call.headers.get("idempotency-key"));
+    assert.deepEqual(commentKeys, [
+      "delivery-1:comment:1",
+      "delivery-1:comment:1",
+    ]);
+    const automaticThought = api.calls.find(
+      (call) =>
+        call.method === "POST" &&
+        call.path.endsWith("/mcp/agents/runs/run-1/activities"),
+    );
+    assert.equal(
+      automaticThought?.headers.get("idempotency-key"),
+      "delivery-1:automatic-thought:1",
+    );
+  } finally {
+    finishFirstHandler();
+    context.mock.timers.reset();
+  }
 });
 
 test("automatic acknowledgement posts a thought before ten seconds", async (context) => {
