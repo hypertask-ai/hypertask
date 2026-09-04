@@ -44,10 +44,7 @@ test.beforeEach(() => {
   row = null;
   readError = null;
   sessionUserId = 6;
-  usersById = new Map([
-    [6, { email: "valentin.yeo@gmail.com" }],
-    [985, { email: "valentin@hypertask.ai" }],
-  ]);
+  usersById = new Map([[6, { email: "valentin.yeo@gmail.com" }]]);
 });
 
 test("admin access requires the signed, active owner", async () => {
@@ -69,37 +66,21 @@ test("owner access requires both the approved id and login identity", async () =
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), false);
 });
 
-test("QA access requires both the approved id and login identity", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), true);
-  usersById.set(985, { email: "someone@example.com" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), false);
-  usersById.set(7, { email: "valentin@hypertask.ai" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), false);
+test("feature flag modes enforce owner-only, everyone, and off", () => {
+  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", true), true);
+  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", false), false);
+  assert.equal(flags.featureFlagModeEnabled("EVERYONE", false), true);
+  assert.equal(flags.featureFlagModeEnabled("OFF", true), false);
 });
 
-test("feature flag modes enforce owner, QA, everyone, and off access", () => {
-  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", true, false), true);
-  assert.equal(flags.featureFlagModeEnabled("OWNER_ONLY", false, true), false);
-  assert.equal(flags.featureFlagModeEnabled("OWNER_AND_QA", true, false), true);
-  assert.equal(flags.featureFlagModeEnabled("OWNER_AND_QA", false, true), true);
-  assert.equal(flags.featureFlagModeEnabled("OWNER_AND_QA", false, false), false);
-  assert.equal(flags.featureFlagModeEnabled("EVERYONE", false, false), true);
-  assert.equal(flags.featureFlagModeEnabled("OFF", true, true), false);
-});
-
-test("the mobile All Tasks redesign starts with owner and QA access", async () => {
+test("the mobile All Tasks redesign starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 985), true);
   assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 7), false);
 });
 
-test("background task uploads start with owner and QA access", async () => {
+test("background task uploads start owner-only", async () => {
   assert.equal(
     await flags.isFeatureEnabled("htpr-5993-optimistic-task-uploads", 6),
-    true,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-5993-optimistic-task-uploads", 985),
     true,
   );
   assert.equal(
@@ -108,19 +89,17 @@ test("background task uploads start with owner and QA access", async () => {
   );
 });
 
-test("copy current URL starts with owner and QA access", async () => {
+test("copy current URL starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 985), true);
   assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 7), false);
 });
 
-test("comment reaction API starts with owner and QA access", async () => {
+test("comment reaction API starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 985), true);
   assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 7), false);
 });
 
-test("declared flags without rows default to owner and QA", async () => {
+test("declared flags without rows default to owner only", async () => {
   for (const key of [
     "htpr-5913-consistent-comment-shortcuts",
     "htpr-6091-feature-flags",
@@ -128,24 +107,8 @@ test("declared flags without rows default to owner and QA", async () => {
     "htpr-6116-figma-node-preview",
   ]) {
     assert.equal(await flags.isFeatureEnabled(key, 6), true);
-    assert.equal(await flags.isFeatureEnabled(key, 985), true);
     assert.equal(await flags.isFeatureEnabled(key, 7), false);
   }
-});
-
-test("per-user flag responses distinguish QA from normal members", async () => {
-  const qaFlags = await flags.featureFlagsForUser(985);
-  const normalFlags = await flags.featureFlagsForUser(7);
-  assert.equal(qaFlags["htpr-6116-figma-node-preview"], true);
-  assert.equal(normalFlags["htpr-6116-figma-node-preview"], false);
-});
-
-test("stored owner-only flags stay unavailable to QA until changed", async () => {
-  row = { mode: "OWNER_ONLY", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), false);
-  await flags.setFeatureFlagMode("htpr-6091-feature-flags", "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 985), true);
 });
 
 test("database failures fail closed instead of becoming the default", async () => {
@@ -157,16 +120,16 @@ test("declared flags remain listed without a row and can be changed", async () =
   assert.deepEqual(await flags.listFeatureFlagModes(), [
     {
       key: "htpr-5913-consistent-comment-shortcuts",
-      mode: "OWNER_AND_QA",
+      mode: "OWNER_ONLY",
       updatedAt: null,
     },
-    { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
+    { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6091-feature-flags", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6112-copy-current-url", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6115-agent-sdk", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6116-figma-node-preview", mode: "OWNER_ONLY", updatedAt: null },
+    { key: "htpr-6118-comment-reactions-api", mode: "OWNER_ONLY", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");

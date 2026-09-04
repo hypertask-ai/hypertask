@@ -18,7 +18,7 @@ let authFails = false;
 class FeatureFlagInputError extends Error {}
 
 stubModule("src/lib/flags.ts", {
-  FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
+  FEATURE_FLAG_MODES: ["OWNER_ONLY", "EVERYONE", "OFF"],
   FeatureFlagInputError,
   isFeatureFlagOwner: async () => {
     if (authFails) throw new Error("auth unavailable");
@@ -104,11 +104,11 @@ test("the owner can list and change a declared flag", async () => {
   assert.equal((await admin.GET(request())).status, 200);
   const result = await json(
     await admin.PATCH(
-      request("PATCH", { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA" }),
+      request("PATCH", { key: "htpr-6091-feature-flags", mode: "OFF" }),
     ),
   );
   assert.equal(result.status, 200);
-  assert.equal(result.body.flag.mode, "OWNER_AND_QA");
+  assert.equal(result.body.flag.mode, "OFF");
   assert.equal(writes, 1);
   assert.equal(broadcasts, 1);
 });
