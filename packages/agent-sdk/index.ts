@@ -27,8 +27,10 @@ export function createAgent(options: AgentOptions) {
     handler,
     on: client.on.bind(client),
     adapters: {
-      node: nodeHttpAdapter(handler),
-      express: expressAdapter(handler),
+      node: (adapterOptions?: Parameters<typeof nodeHttpAdapter>[1]) =>
+        nodeHttpAdapter(handler, adapterOptions),
+      express: (adapterOptions?: Parameters<typeof expressAdapter>[1]) =>
+        expressAdapter(handler, adapterOptions),
       hono: (adapterOptions?: Parameters<typeof honoAdapter>[1]) =>
         honoAdapter(handler, adapterOptions),
       next: (waitUntil: (task: Promise<void>) => void) =>

@@ -19,6 +19,7 @@ const DEFAULT_API_URL = "https://api.hypertask.ai/api";
 const TASK_LEASE_TTL_SECONDS = 300;
 const TASK_LEASE_HEARTBEAT_MS = 60_000;
 const AUTO_THOUGHT_MS = 8_000;
+const RUN_STATUS_POLL_MS = 5_000;
 const THREAD_ITEM_LIMIT = 100;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -246,14 +247,22 @@ export class AgentClient {
     claimSignal?: AbortSignal,
   ): Promise<void> {
     const event = eventForPayload(payload);
+    let runRecord = preflightRun;
     if (
       event !== "stop" &&
-      (preflightRun.status === "stopped" || preflightRun.status === "done")
+      runRecord.taskId === null &&
+      runRecord.chatSessionId === null
     ) {
-      throw new AgentSdkError("Run is no longer active");
+      throw new AgentSdkError("Agent run has no task or chat context");
     }
-    if (event === "stop") this.activeRuns.get(preflightRun.id)?.controller.abort();
-    const execution = this.acquireRun(preflightRun.id, event === "stop");
+    if (event !== "stop") {
+      runRecord = await this.assertPayloadAccess(payload, claimSignal);
+      if (runRecord.status === "stopped" || runRecord.status === "done") {
+        throw new AgentSdkError("Run is no longer active");
+      }
+    }
+    if (event === "stop") this.activeRuns.get(runRecord.id)?.controller.abort();
+    const execution = this.acquireRun(runRecord.id, event === "stop");
     const dispatchController = new AbortController();
     const abortForRunStop = () =>
       dispatchController.abort(execution.controller.signal.reason);
@@ -263,9 +272,36 @@ export class AgentClient {
     if (execution.controller.signal.aborted) abortForRunStop();
     if (claimSignal?.aborted) abortForLostClaim();
 
+    let statusCheckError: unknown;
+    let statusCheckPromise: Promise<void> | null = null;
+    const statusMonitor =
+      event === "stop"
+        ? null
+        : setInterval(() => {
+            if (statusCheckPromise || dispatchController.signal.aborted) return;
+            statusCheckPromise = this.assertPayloadAccess(
+              payload,
+              dispatchController.signal,
+            )
+              .then((currentRun) => {
+                if (currentRun.status === "stopped" || currentRun.status === "done") {
+                  throw new AgentSdkError("Run is no longer active");
+                }
+              })
+              .catch((error) => {
+                if (dispatchController.signal.aborted) return;
+                statusCheckError = error;
+                dispatchController.abort(error);
+              })
+              .finally(() => {
+                statusCheckPromise = null;
+              });
+          }, RUN_STATUS_POLL_MS);
+    (statusMonitor as unknown as { unref?: () => void } | null)?.unref?.();
+
     try {
       const context = await this.hydrateContext(
-        preflightRun,
+        runRecord,
         event === "stop" ? claimSignal : dispatchController.signal,
       );
       const run = new AgentRunImpl(
@@ -316,7 +352,11 @@ export class AgentClient {
         await autoThoughtDone;
         throw error;
       }
+      if (statusCheckError) throw statusCheckError;
     } finally {
+      if (statusMonitor) clearInterval(statusMonitor);
+      dispatchController.abort();
+      await statusCheckPromise;
       execution.controller.signal.removeEventListener("abort", abortForRunStop);
       claimSignal?.removeEventListener("abort", abortForLostClaim);
       execution.release();
@@ -325,7 +365,7 @@ export class AgentClient {
 
   private acquireRun(runId: string, stopped: boolean) {
     let active = this.activeRuns.get(runId);
-    if (!active || active.controller.signal.aborted) {
+    if (!active) {
       active = { controller: new AbortController(), references: 0 };
       this.activeRuns.set(runId, active);
     }
@@ -542,6 +582,7 @@ class AgentRunImpl implements AgentRun {
       this.activityRecorded = true;
       this.firstActivityCallback?.();
     }
+    await this.assertServerRunActive(this.signal);
     const response = objectValue(
       await this.client.request(
         `/mcp/agents/runs/${encodeURIComponent(this.id)}/activities`,

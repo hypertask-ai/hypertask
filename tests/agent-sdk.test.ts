@@ -406,6 +406,32 @@ test("Node adapters do not copy response headers before reading the body", async
   assert.equal(headers.get("content-type"), "application/json");
 });
 
+test("Node adapters require explicit single-process mode", async () => {
+  const distributedValues: Array<boolean | undefined> = [];
+  const handler: WebhookHandler = Object.assign(
+    async (_request: Request, context?: BackgroundContext) => {
+      distributedValues.push(context?.distributed);
+      return new Response(null, { status: 204 });
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const request = () => ({
+    method: "POST",
+    url: "/webhook",
+    headers: {},
+    async *[Symbol.asyncIterator]() {},
+  });
+  const response = () => ({
+    statusCode: 0,
+    setHeader() {},
+    end() {},
+  });
+
+  await nodeHttpAdapter(handler)(request(), response());
+  await nodeHttpAdapter(handler, { distributed: false })(request(), response());
+  assert.deepEqual(distributedValues, [true, false]);
+});
+
 test("Node adapters omit bodies from GET requests", async () => {
   let receivedMethod: string | undefined;
   const handler: WebhookHandler = Object.assign(
@@ -1054,6 +1080,108 @@ test("contextless runs fail before starting hydration requests", async () => {
     /Agent run has no task or chat context/,
   );
   assert.equal(api.calls.length, 0);
+});
+
+test("server status polling aborts work stopped on another host", async (context) => {
+  context.mock.timers.enable({ apis: ["setInterval"], now });
+  const api = apiFixture();
+  let runStatus: AgentRunRecord["status"] = "active";
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (url.pathname.endsWith("/mcp/agents/runs/run-1")) {
+      return Response.json({ success: true, run: { ...run, status: runStatus } });
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  let handlerStarted!: () => void;
+  const startedHandler = new Promise<void>((resolve) => {
+    handlerStarted = resolve;
+  });
+  agent.on("mention", async (received) => {
+    handlerStarted();
+    await new Promise<void>((resolve) => {
+      const onAbort = () => resolve();
+      received.signal.addEventListener("abort", onAbort, { once: true });
+      if (received.signal.aborted) onAbort();
+    });
+  });
+
+  try {
+    const dispatch = agent.client.dispatch(payload(), run);
+    await startedHandler;
+    runStatus = "stopped";
+    context.mock.timers.tick(5_000);
+    await assert.rejects(dispatch, /Run is no longer active/);
+  } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("a stop tombstone rejects a concurrent stale delivery", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let activeStarted!: () => void;
+  const startedActive = new Promise<void>((resolve) => {
+    activeStarted = resolve;
+  });
+  let stopStarted!: () => void;
+  const startedStop = new Promise<void>((resolve) => {
+    stopStarted = resolve;
+  });
+  let finishStop!: () => void;
+  const stopGate = new Promise<void>((resolve) => {
+    finishStop = resolve;
+  });
+  let delayedHandled = false;
+  agent.on("mention", async (received) => {
+    if (received.prompt === "delayed") {
+      delayedHandled = true;
+      return;
+    }
+    activeStarted();
+    await new Promise<void>((resolve) => {
+      const onAbort = () => resolve();
+      received.signal.addEventListener("abort", onAbort, { once: true });
+      if (received.signal.aborted) onAbort();
+    });
+  });
+  agent.on("stop", async () => {
+    stopStarted();
+    await stopGate;
+  });
+
+  const activeDispatch = agent.client.dispatch(
+    payload({ deliveryId: "delivery-active", prompt: "active" }),
+    run,
+  );
+  await startedActive;
+  const stopDispatch = agent.client.dispatch(
+    payload({ event: "run.stopped", deliveryId: "delivery-stop-tombstone" }),
+    run,
+  );
+  await startedStop;
+  const delayedDispatch = agent.client.dispatch(
+    payload({ deliveryId: "delivery-delayed", prompt: "delayed" }),
+    run,
+  );
+
+  await assert.rejects(delayedDispatch);
+  finishStop();
+  await Promise.all([activeDispatch, stopDispatch]);
+  assert.equal(delayedHandled, false);
 });
 
 test("inactive run snapshots cannot dispatch delayed work", async () => {

@@ -29,7 +29,11 @@ agent.on("mention", async (run) => {
   await run.respond("Hello from the Hypertask Agent SDK.");
 });
 
-app.post("/webhook", express.raw({ type: "application/json" }), agent.adapters.express);
+app.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  agent.adapters.express({ distributed: false }),
+);
 app.listen(3000);
 ```
 
@@ -82,15 +86,17 @@ await run.task?.update({ priority: 1 });
 await run.task?.attach("https://example.com/report.pdf");
 ```
 
-Every write claims a task lease, heartbeats it during long work, and releases it in `finally`. Activities, comments, updates, assignments, moves, and attachments use the existing retry-safe server contracts. Attachment MIME types are inferred from common filename extensions; pass `{ url, filename, contentType }` for other types. A stopped run aborts local requests, and each task helper rechecks run status before writing. Handlers should also stop external work when `run.signal` aborts.
+Every write claims a task lease, heartbeats it during long work, and releases it in `finally`. Activities, comments, updates, assignments, moves, and attachments use the existing retry-safe server contracts. Attachment MIME types are inferred from common filename extensions; pass `{ url, filename, contentType }` for other types. The SDK polls run status every five seconds and aborts local requests when any host receives a stop. Each activity and task helper also rechecks run status before writing. Handlers should stop external work when `run.signal` aborts.
 
 ## Adapters
+
+Node and Express adapters default to distributed mode and require a durable `DeliveryStore`. Pass `{ distributed: false }` only when exactly one process receives webhooks. They also accept a custom `waitUntil` scheduler.
 
 ### Plain Node HTTP
 
 ```ts
 import http from "node:http";
-http.createServer(agent.adapters.node).listen(3000);
+http.createServer(agent.adapters.node({ distributed: false })).listen(3000);
 ```
 
 ### Hono

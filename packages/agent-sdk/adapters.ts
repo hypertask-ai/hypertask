@@ -128,14 +128,16 @@ async function sendResponse(response: Response, target: NodeResponse): Promise<v
   target.end(body);
 }
 
-function processContext(): BackgroundContext {
+function processContext(options: AdapterOptions): BackgroundContext {
   return {
-    waitUntil(task) {
-      void task.catch((error) =>
-        console.error("[hypertask-agent-sdk] background task failed", error),
-      );
-    },
-    distributed: false,
+    waitUntil:
+      options.waitUntil ??
+      ((task) => {
+        void task.catch((error) =>
+          console.error("[hypertask-agent-sdk] background task failed", error),
+        );
+      }),
+    distributed: options.distributed ?? true,
   };
 }
 
@@ -161,20 +163,26 @@ function sendAdapterError(error: unknown, response: NodeResponse): void {
   response.end(JSON.stringify({ success: false, error: publicMessage }));
 }
 
-export function nodeHttpAdapter(handler: WebhookHandler) {
+export function nodeHttpAdapter(handler: WebhookHandler, options: AdapterOptions = {}) {
   return async (request: NodeRequest, response: NodeResponse): Promise<void> => {
     try {
-      await sendResponse(await handler(await toRequest(request, false), processContext()), response);
+      await sendResponse(
+        await handler(await toRequest(request, false), processContext(options)),
+        response,
+      );
     } catch (error) {
       sendAdapterError(error, response);
     }
   };
 }
 
-export function expressAdapter(handler: WebhookHandler) {
+export function expressAdapter(handler: WebhookHandler, options: AdapterOptions = {}) {
   return async (request: NodeRequest, response: ExpressResponse): Promise<void> => {
     try {
-      await sendResponse(await handler(await toRequest(request, true), processContext()), response);
+      await sendResponse(
+        await handler(await toRequest(request, true), processContext(options)),
+        response,
+      );
     } catch (error) {
       sendAdapterError(error, response);
     }
