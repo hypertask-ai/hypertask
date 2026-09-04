@@ -75,6 +75,7 @@ import {
   resolveBoardSwitchIntent,
 } from "@/lib/analytics/boardSwitchLatency";
 import { useFlag } from "@/hooks/useFlag";
+import { getNextRouterAwareHistoryState } from "@/lib/navigation/nextHistoryState";
 import {
   shouldReleaseSecondaryStartupForTerminalBoard,
   shouldReleaseSecondaryStartupOnBoardRequest,
@@ -115,6 +116,7 @@ const GuestAuthLinks = lazy(
 const EMPTY_NOTIFICATION_COUNT = { all: 0, unseen: 0 } as const
 
 type BoardRenderSnapshot = {
+  accountId: number;
   projects: IProject[];
   projectIndex: number;
   activeSortingMode: TBoardSortingViewMode;
@@ -930,7 +932,11 @@ useEffect(() => {
     const newUrl = `/project${search ? `?${search}` : ""}`;
     console.log('🔄 Updating URL:', { from: pathname + (searchParams.toString() ? `?${searchParams.toString()}` : ''), to: newUrl, slugs });
     if (shallowBoardSwitchEnabled && pathname === "/project") {
-      window.history.replaceState(window.history.state, "", newUrl)
+      window.history.replaceState(
+        getNextRouterAwareHistoryState(window.history.state),
+        "",
+        newUrl,
+      )
     } else {
       router.replace(newUrl, { scroll: false });
     }
@@ -1082,6 +1088,7 @@ const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
   () =>
     boardDataReady && readyProject
       ? {
+          accountId: user.id,
           projects: projectsForSection,
           projectIndex,
           activeSortingMode,
@@ -1100,6 +1107,7 @@ const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
     projectsForSection,
     readinessRouteEntryId,
     readyProject,
+    user.id,
   ],
 )
 const [committedBoardRender, setCommittedBoardRender] =
@@ -1109,6 +1117,7 @@ useLayoutEffect(() => {
 }, [readyBoardRender])
 const boardRender =
   shallowBoardSwitchEnabled &&
+  committedBoardRender?.accountId === user.id &&
   currentBoardAccessStatus !== "denied" &&
   !projectLookupFailed &&
   hydrationFailedProjectId !== requestedProjectId

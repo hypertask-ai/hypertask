@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import nookies from "nookies";
 import { useFlag } from "@/hooks/useFlag";
+import { getNextRouterAwareHistoryState } from "@/lib/navigation/nextHistoryState";
 import {
   useRecoilValue,
   useResetRecoilState,
@@ -89,7 +90,11 @@ export const useProjectQuery = () => {
     }
 
     if (shallowBoardSwitchEnabled && pathname === "/project" && project) {
-      window.history.pushState(window.history.state, "", destination);
+      window.history.pushState(
+        getNextRouterAwareHistoryState(window.history.state),
+        "",
+        destination,
+      );
       return;
     }
 
