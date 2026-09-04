@@ -1146,6 +1146,12 @@ const InboxSplit = ({
                                 className={
                                   appShellRail ? "min-w-0 flex-1" : "w-full"
                                 }
+                                onClick={() =>
+                                  notification.type !== "Invited" &&
+                                  setTasksPlayList(
+                                    buildUniqueTasksPlaylist(_notifications),
+                                  )
+                                }
                                 href={
                                   notification.type !== "Invited"
                                     ? inboxConfig.urls.taskDetail(
