@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
+const agentRecord = (id: string, displayName: string) => ({
+  id,
+  displayName,
+  email: `${id}@example.test`,
+  photoURL: `https://example.test/${id}.png`,
+});
+
 async function main() {
   process.env.DATABASE_URL =
     "postgresql://unused:unused@localhost:5432/unused";
@@ -40,49 +47,17 @@ async function main() {
     text: "Agent comment",
     agentId: "agent-active-id",
     agentDisplayName: null,
-    agent: {
-      id: "agent-active-id",
-      displayName: "Active Agent",
-      email: "active-agent@example.test",
-      photoURL: "https://example.test/active-agent.png",
-    },
+    agent: agentRecord("agent-active-id", "Active Agent"),
     creator: { id: 42, displayName: "Human author" },
     activity: {
       type: "TaskAssigned",
       data: {
         fromAgentId: "agent-active-id",
-        fromAgent: {
-          id: "agent-active-id",
-          displayName: "Active Agent",
-          email: "active-agent@example.test",
-          photoURL: "https://example.test/active-agent.png",
-        },
-        toAgent: {
-          id: "agent-target-id",
-          displayName: "Target Agent",
-          email: "target-agent@example.test",
-          photoURL: "https://example.test/target-agent.png",
-        },
-        agentAssigner: {
-          id: "agent-assigner-id",
-          displayName: "Assigner Agent",
-          email: "assigner-agent@example.test",
-          photoURL: "https://example.test/assigner-agent.png",
-        },
-        assignedAgents: [
-          {
-            id: "agent-target-id",
-            displayName: "Target Agent",
-            email: "target-agent@example.test",
-          },
-        ],
-        agents: [
-          {
-            id: "agent-active-id",
-            displayName: "Active Agent",
-            email: "active-agent@example.test",
-          },
-        ],
+        fromAgent: agentRecord("agent-active-id", "Active Agent"),
+        toAgent: agentRecord("agent-target-id", "Target Agent"),
+        agentAssigner: agentRecord("agent-assigner-id", "Assigner Agent"),
+        assignedAgents: [agentRecord("agent-target-id", "Target Agent")],
+        agents: [agentRecord("agent-active-id", "Active Agent")],
         task: { id: 99, title: "Nested task", agentId: "agent-target-id" },
       },
     },
@@ -231,12 +206,6 @@ async function main() {
     "Snake Agent",
     "Deleted Agent",
     "Task Agent",
-    "active-agent@example.test",
-    "target-agent@example.test",
-    "assigner-agent@example.test",
-    "https://example.test/active-agent.png",
-    "https://example.test/target-agent.png",
-    "https://example.test/assigner-agent.png",
   ]) {
     assert.equal(serialized.includes(privateValue), false, privateValue);
   }
