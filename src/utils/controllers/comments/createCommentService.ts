@@ -1280,13 +1280,11 @@ export async function createCommentService(params: CreateCommentParams) {
           ),
         );
       }
-      // Keep the realtime handoff inside the lease so an interrupted replay can
-      // retry it, while completed duplicate requests remain side-effect free.
-      if (agentRunReplayComment) {
-        await broadcastTaskComment(taskId, {
-          originUserId: accessUserId ?? currentUser.id,
-        });
-      }
+      // Keep the realtime handoff inside the lease so an interrupted request
+      // can retry it, while completed duplicate requests remain side-effect free.
+      await broadcastTaskComment(taskId, {
+        originUserId: accessUserId ?? currentUser.id,
+      });
       const completed = await prisma.agentRunActivity.updateMany({
         where: {
           id: agentRunCommentNotificationClaim.activityId,

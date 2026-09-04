@@ -553,7 +553,7 @@ test("only the matching agent creates an idempotent task response and visible co
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
   assert.equal(harness.commentCalls[0].agentRunActivity.runId, run.id);
   assert.equal(run.status, "ACTIVE");
-  assert.equal(harness.broadcasts.length, 1);
+  assert.equal(harness.broadcasts.length, 0);
   await assert.rejects(
     harness.service.createAgentRunActivity(
       agentPrincipal,
@@ -687,6 +687,7 @@ test("chat responses store the activity and assistant message together", async (
     [{ role: "assistant", content: "Chat answer", sessionId: "session-1" }],
   );
   assert.equal(harness.db.sessionUpdates.length, 1);
+  assert.equal(harness.broadcasts.length, 1);
 });
 
 test("one browser selection wins and its retry does not post twice", async () => {
@@ -725,7 +726,7 @@ test("one browser selection wins and its retry does not post twice", async () =>
     harness.commentCalls[1].currentUser.displayName,
     "Persisted selector",
   );
-  assert.equal(harness.broadcasts.length, 1);
+  assert.equal(harness.broadcasts.length, 0);
   assert.equal(
     await harness.service.selectAgentRunActivity(
       agentPrincipal,
@@ -833,6 +834,7 @@ test("chat selection posts one human message and one select prompt event", async
     label: "Yes",
   });
   assert.deepEqual(harness.published, ["delivery-1"]);
+  assert.equal(harness.broadcasts.length, 1);
 });
 
 test("migration constrains retry keys and elicitation selections", () => {
@@ -986,7 +988,7 @@ function atomicCommentHarness() {
   const publishedBoardWebhookIds = [];
   const fcmCalls = [];
   const taskCommentBroadcasts = [];
-  const replayCompletionOrder = [];
+  const runCommentCompletionOrder = [];
   const sideEffectOrder = [];
   const draftDeleteWheres = [];
   const updateTaskCalls = [];
@@ -1093,7 +1095,7 @@ function atomicCommentHarness() {
           }
           Object.assign(activity, data);
           if (data.commentNotificationsCompletedAt) {
-            replayCompletionOrder.push("complete");
+            runCommentCompletionOrder.push("complete");
           }
           return { count: 1 };
         }
@@ -1197,7 +1199,7 @@ function atomicCommentHarness() {
     },
     async (...args) => {
       taskCommentBroadcasts.push(args);
-      replayCompletionOrder.push("broadcast");
+      runCommentCompletionOrder.push("broadcast");
     },
     async (ids) => {
       publishedAgentWebhookIds.push([...ids]);
@@ -1237,7 +1239,7 @@ function atomicCommentHarness() {
     publishedBoardWebhookIds,
     fcmCalls,
     taskCommentBroadcasts,
-    replayCompletionOrder,
+    runCommentCompletionOrder,
     sideEffectOrder,
     draftDeleteWheres,
     updateTaskCalls,
@@ -1331,6 +1333,37 @@ test("activity comments and selection prompts roll back as one transaction", asy
   assert.equal(harness.task.totalComments, 0);
   assert.equal(harness.task.updatedAt, originalTaskUpdatedAt);
   assert.equal(harness.updateTaskCalls.length, 0);
+});
+
+test("first activity comments broadcast before notification completion", async () => {
+  const harness = atomicCommentHarness();
+  harness.setFailure(null);
+
+  await harness.createCommentService({
+    text: "<p>Yes</p>",
+    creatorId: 6,
+    taskId: 42,
+    ownerId: 6,
+    currentUser: { id: 6, displayName: "Valentin" },
+    accessUserId: 6,
+    agentRunSelection: {
+      runId: "run-1",
+      agentId: "agent-1",
+      activityId: harness.elicitation.id,
+      context: { taskId: 42, chatSessionId: null },
+      option: { value: "yes", label: "Yes" },
+      selectedById: 6,
+      selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+    },
+  });
+
+  assert.deepEqual(harness.taskCommentBroadcasts, [
+    [42, { originUserId: 6 }],
+  ]);
+  assert.deepEqual(harness.runCommentCompletionOrder, [
+    "broadcast",
+    "complete",
+  ]);
 });
 
 test("activity notification leases stay claimed until parallel work settles", async () => {
@@ -1492,7 +1525,7 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.deepEqual(harness.taskCommentBroadcasts, [
     [42, { originUserId: 6 }],
   ]);
-  assert.deepEqual(harness.replayCompletionOrder, ["broadcast", "complete"]);
+  assert.deepEqual(harness.runCommentCompletionOrder, ["broadcast", "complete"]);
   assert.equal(
     harness.sideEffectOrder.filter((effect) => effect === "mentions").length,
     1,

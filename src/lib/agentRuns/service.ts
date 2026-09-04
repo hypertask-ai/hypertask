@@ -439,7 +439,9 @@ export async function createAgentRunActivity(
     where: { id: persistenceInput.id },
   });
   if (!activity) throw new Error("Agent run activity was not persisted");
-  broadcastActivityChange(run, principal.userId);
+  if (!run.task || input.type !== "RESPONSE") {
+    broadcastActivityChange(run, principal.userId);
+  }
   return { activity: serializeAgentRunActivity(activity), duplicate: false };
 }
 
@@ -587,6 +589,6 @@ export async function selectAgentRunActivity(
     where: { id: activity.id },
   });
   if (!selected) throw new Error("Agent run activity selection was not persisted");
-  broadcastActivityChange(run, principal.userId);
+  if (!run.task) broadcastActivityChange(run, principal.userId);
   return { activity: serializeAgentRunActivity(selected), duplicate: false };
 }
