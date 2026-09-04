@@ -1,5 +1,64 @@
 import prisma from "@/lib/prisma";
+import {
+  PRIVATE_AGENT_DISPLAY_NAME,
+  redactAgentIdentitiesForPublicShare,
+} from "@/lib/agents/publicAgent";
 import { IComment } from "@/models/model";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function sharedAssignmentWasSelf(
+  comment: Record<string, unknown>
+): boolean | undefined {
+  if (!isRecord(comment.activity) || comment.activity.type !== "TaskAssigned") {
+    return undefined;
+  }
+  const data = comment.activity.data;
+  if (!isRecord(data) || !isRecord(data.fromAgent) || !isRecord(data.toAgent)) {
+    return undefined;
+  }
+  const fromAgentId = data.fromAgent.id;
+  const toAgentId = data.toAgent.id;
+  return typeof fromAgentId === "string" && typeof toAgentId === "string"
+    ? fromAgentId === toAgentId
+    : undefined;
+}
+
+export const redactSharedComments = <T extends Record<string, unknown>>(
+  comments: T[]
+): T[] =>
+  comments.map((comment) => {
+    const agentAuthored = Boolean(
+      comment.agentId || comment.agent || comment.agentDisplayName
+    );
+    const isSelfAssignment = sharedAssignmentWasSelf(comment);
+    const redacted = redactAgentIdentitiesForPublicShare(comment) as Record<
+      string,
+      unknown
+    >;
+
+    if (
+      isSelfAssignment !== undefined &&
+      isRecord(redacted.activity) &&
+      isRecord(redacted.activity.data)
+    ) {
+      redacted.activity = {
+        ...redacted.activity,
+        data: { ...redacted.activity.data, isSelfAssignment },
+      };
+    }
+
+    return (agentAuthored
+      ? {
+          ...redacted,
+          agentId: null,
+          agent: null,
+          agentDisplayName: PRIVATE_AGENT_DISPLAY_NAME,
+        }
+      : redacted) as T;
+  });
 
 export const getSharedComments = async (
   taskId: string | string[] | undefined
@@ -70,7 +129,7 @@ export const getSharedComments = async (
       `;
     return {
       status: 200,
-      json: comments,
+      json: redactSharedComments(comments),
     };
   } catch (error) {
     console.log(error);
@@ -129,7 +188,7 @@ export const getSharedTaskInfo = async (shareId: string) => {
     },
   });
 
-  return shared;
+  return redactAgentIdentitiesForPublicShare(shared);
 };
 
 export const processSharedComments = (comments: IComment[]) => {

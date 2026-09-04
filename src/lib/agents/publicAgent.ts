@@ -25,6 +25,43 @@ const agentRelationKeys = new Set([
   "addedByAgent",
 ]);
 
+export const PRIVATE_AGENT_DISPLAY_NAME = "Private agent";
+
+const privateAgentAttribution = {
+  displayName: PRIVATE_AGENT_DISPLAY_NAME,
+  photoURL: null,
+};
+
+function isAgentRelationKey(key: string): boolean {
+  return (
+    agentRelationKeys.has(key) ||
+    key.endsWith("Agent") ||
+    key.endsWith("_agent")
+  );
+}
+
+function isAgentCollectionKey(key: string): boolean {
+  return (
+    key === "agents" || key.endsWith("Agents") || key.endsWith("_agents")
+  );
+}
+
+function isAgentIdentifierKey(key: string): boolean {
+  return (
+    key === "agentId" ||
+    key.endsWith("AgentId") ||
+    key.endsWith("_agent_id")
+  );
+}
+
+function isAgentDisplayNameKey(key: string): boolean {
+  return (
+    key === "agentDisplayName" ||
+    key.endsWith("AgentDisplayName") ||
+    key.endsWith("_agent_display_name")
+  );
+}
+
 const agentCredentialKeys = new Set([
   // "mcpToken" is gone from the schema, but historical activity JSON can still
   // hold rows captured while it existed, so it stays on this list.
@@ -47,6 +84,31 @@ export function projectPublicAgent(value: unknown): Record<string, unknown> | nu
     if (key in value) projected[key] = value[key];
   }
   return projected;
+}
+
+export function redactAgentIdentitiesForPublicShare<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(redactAgentIdentitiesForPublicShare) as T;
+  }
+  if (!isRecord(value) || value instanceof Date) return value;
+
+  const redacted: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (isAgentIdentifierKey(key)) {
+      redacted[key] = null;
+    } else if (isAgentDisplayNameKey(key)) {
+      redacted[key] = nested ? privateAgentAttribution.displayName : nested;
+    } else if (isAgentRelationKey(key)) {
+      redacted[key] = nested == null ? nested : { ...privateAgentAttribution };
+    } else if (isAgentCollectionKey(key)) {
+      redacted[key] = Array.isArray(nested)
+        ? nested.map(() => ({ ...privateAgentAttribution }))
+        : [];
+    } else {
+      redacted[key] = redactAgentIdentitiesForPublicShare(nested);
+    }
+  }
+  return redacted as T;
 }
 
 /**

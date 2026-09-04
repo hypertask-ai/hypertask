@@ -289,11 +289,12 @@ const TaskAssignedActivity = ({
   };
 
   const isSelf =
-    activity.data.fromAgent && activity.data.toAgent
+    activity.data.isSelfAssignment ??
+    (activity.data.fromAgent && activity.data.toAgent
       ? activity.data.fromAgent.id === activity.data.toAgent.id
       : !activity.data.fromAgent && !activity.data.toAgent
       ? activity.data.fromUser.userId === activity.data.toUser.userId
-      : false;
+      : false);
 
   if (isSelf) {
     return (
