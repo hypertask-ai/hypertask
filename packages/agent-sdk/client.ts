@@ -157,7 +157,15 @@ export class AgentClient {
       );
     }
 
-    const text = await response.text();
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (error) {
+      throw new AgentSdkError(
+        error instanceof Error ? error.message : "Failed to read Hypertask response",
+        response.status,
+      );
+    }
     let parsed: unknown = null;
     if (text) {
       try {
@@ -260,11 +268,14 @@ export class AgentClient {
       let cancelAutoThought = () => {};
       if (event !== "stop") {
         autoThoughtDone = new Promise<void>((resolve, reject) => {
+          let started = false;
           const timer = setTimeout(() => {
+            started = true;
             run.thought("Working on this.").then(() => resolve(), reject);
           }, AUTO_THOUGHT_MS);
           (timer as unknown as { unref?: () => void }).unref?.();
           cancelAutoThought = () => {
+            if (started) return;
             clearTimeout(timer);
             resolve();
           };
@@ -281,6 +292,7 @@ export class AgentClient {
         if (autoThoughtFailed) throw autoThoughtError;
       } catch (error) {
         cancelAutoThought();
+        await autoThoughtDone;
         throw error;
       }
     } finally {
@@ -522,6 +534,7 @@ class AgentRunImpl implements AgentRun {
     const operationController = new AbortController();
     const abortOperation = () => operationController.abort(this.signal.reason);
     this.signal.addEventListener("abort", abortOperation, { once: true });
+    if (this.signal.aborted) abortOperation();
     let heartbeatError: unknown;
     let heartbeatPromise: Promise<void> | null = null;
     const heartbeat = setInterval(() => {
@@ -629,10 +642,11 @@ class AgentRunImpl implements AgentRun {
                 : { agent_id: matches[0].id };
           }
         }
-        return this.withTaskLease("assign", (signal) =>
+        return this.withTaskLease("assign", (signal, key) =>
           this.client.request("/mcp/assignees/assign", {
             method: "POST",
             body: { task_id: ticket.id, intent: "assign", ...assignment },
+            idempotencyKey: key,
             signal,
           }),
         );

@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import {
   createAgent,
+  AgentSdkError,
   MemoryDeliveryStore,
   nodeHttpAdapter,
   verifyWebhookSignature,
@@ -346,6 +347,28 @@ test("Node adapters do not expose unexpected handler errors", async () => {
   assert.match(responseBody, /Webhook request failed/);
 });
 
+test("client wraps response body read failures", async () => {
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: async () => {
+      const response = new Response(null, { status: 200 });
+      response.text = async () => {
+        throw new Error("response stream failed");
+      };
+      return response;
+    },
+  });
+
+  await assert.rejects(agent.client.request("/mcp/test"), (error) => {
+    assert.equal(error instanceof AgentSdkError, true);
+    assert.equal((error as AgentSdkError).message, "response stream failed");
+    assert.equal((error as AgentSdkError).status, 200);
+    return true;
+  });
+});
+
 test("handler rejects mismatched headers and unsafe runtime capabilities", async () => {
   const api = apiFixture();
   const agent = createAgent({
@@ -573,6 +596,10 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
     updates.map((call) => call.headers.get("idempotency-key")),
     ["delivery-1:2:move", "delivery-1:5:update"],
   );
+  const assignment = mutations.find((call) =>
+    call.path.endsWith("/mcp/assignees/assign"),
+  );
+  assert.equal(assignment?.headers.get("idempotency-key"), "delivery-1:3:assign");
   const comment = mutations.find((call) => call.path.endsWith("/mcp/comments"));
   assert.equal(comment?.headers.get("idempotency-key"), "delivery-1:4:comment");
   const attachment = mutations.find((call) =>
@@ -614,6 +641,66 @@ test("task helpers release the lease when a write fails", async () => {
     "/api/mcp/tasks/update",
     "/api/mcp/tasks/lease/release",
   ]);
+  assert.equal(errors.length, 1);
+});
+
+test("task helper propagates a stop that lands while claiming its lease", async () => {
+  const api = apiFixture();
+  let claimStarted!: () => void;
+  const startedClaim = new Promise<void>((resolve) => {
+    claimStarted = resolve;
+  });
+  let finishClaim!: () => void;
+  const claimGate = new Promise<void>((resolve) => {
+    finishClaim = resolve;
+  });
+  let updateSignalAborted: boolean | undefined;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
+      claimStarted();
+      await claimGate;
+      return Response.json({ success: true });
+    }
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/update")) {
+      updateSignalAborted = init.signal?.aborted;
+    }
+    return api.fetch(input, init);
+  };
+  const errors: unknown[] = [];
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: (error) => errors.push(error),
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Claiming a task lease.");
+    await received.task?.update({ title: "Must not be written" });
+  });
+  agent.on("stop", () => {});
+
+  const activeWork = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), activeWork.context)).status, 202);
+  await startedClaim;
+
+  const stopWork = background();
+  const stopPayload = payload({
+    event: "run.stopped",
+    deliveryId: "delivery-stop-during-claim",
+  });
+  assert.equal(
+    (await agent.handler(webhookRequest(stopPayload), stopWork.context)).status,
+    202,
+  );
+  await stopWork.drain();
+
+  finishClaim();
+  await assert.rejects(activeWork.drain());
+  assert.equal(updateSignalAborted, true);
   assert.equal(errors.length, 1);
 });
 
@@ -905,6 +992,83 @@ test("automatic acknowledgement failures stay observed until the handler settles
     await assert.rejects(work.drain(), /Activity failed/);
     assert.equal(errors.length, 1);
   } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("dispatch waits for an automatic thought already in flight", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  const api = apiFixture();
+  let activityStarted!: () => void;
+  const startedActivity = new Promise<void>((resolve) => {
+    activityStarted = resolve;
+  });
+  let finishActivity!: () => void;
+  const activityGate = new Promise<void>((resolve) => {
+    finishActivity = resolve;
+  });
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (
+      init.method === "POST" &&
+      url.pathname.endsWith("/mcp/agents/runs/run-1/activities")
+    ) {
+      activityStarted();
+      await activityGate;
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  let handlerStarted!: () => void;
+  const startedHandler = new Promise<void>((resolve) => {
+    handlerStarted = resolve;
+  });
+  let finishHandler!: () => void;
+  const handlerGate = new Promise<void>((resolve) => {
+    finishHandler = resolve;
+  });
+  agent.on("mention", async () => {
+    handlerStarted();
+    await handlerGate;
+    throw new Error("handler failed while thought was pending");
+  });
+
+  try {
+    const work = background();
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await startedHandler;
+    context.mock.timers.tick(8_000);
+    await startedActivity;
+
+    let drainSettled = false;
+    const drainResult = work
+      .drain()
+      .then(
+        () => ({ status: "fulfilled" as const, error: null }),
+        (error: unknown) => ({ status: "rejected" as const, error }),
+      )
+      .finally(() => {
+        drainSettled = true;
+      });
+    finishHandler();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(drainSettled, false);
+
+    finishActivity();
+    const result = await drainResult;
+    assert.equal(result.status, "rejected");
+    assert.match(String(result.error), /handler failed while thought was pending/);
+  } finally {
+    finishHandler();
+    finishActivity();
     context.mock.timers.reset();
   }
 });
