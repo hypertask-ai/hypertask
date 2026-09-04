@@ -73,7 +73,10 @@ function objectValue(value: unknown, label: string): JsonObject {
 }
 
 function arrayValue<T>(value: unknown, label: string): T[] {
-  if (!Array.isArray(value)) {
+  if (
+    !Array.isArray(value) ||
+    value.some((item) => !item || typeof item !== "object" || Array.isArray(item))
+  ) {
     throw new AgentSdkError(`${label} returned an invalid response`);
   }
   return value as T[];
@@ -716,10 +719,20 @@ class AgentRunImpl implements AgentRun {
             }),
             "Project sections",
           );
-          const matches = arrayValue<{ id: number; section_title: string }>(
+          const sections = arrayValue<{ id: number; section_title: string }>(
             response.sections,
             "Project sections",
-          ).filter(
+          );
+          if (
+            sections.some(
+              (candidate) =>
+                typeof candidate.id !== "number" ||
+                typeof candidate.section_title !== "string",
+            )
+          ) {
+            throw new AgentSdkError("Project sections returned an invalid response");
+          }
+          const matches = sections.filter(
             (candidate) =>
               candidate.section_title.trim().toLowerCase() ===
               section.trim().toLowerCase(),
@@ -761,11 +774,22 @@ class AgentRunImpl implements AgentRun {
               "Project members",
             );
             const normalized = reference.toLowerCase();
-            const matches = arrayValue<{
+            const members = arrayValue<{
               id: number | string;
               displayName: string;
               email?: string;
-            }>(response.members, "Project members").filter(
+            }>(response.members, "Project members");
+            if (
+              members.some(
+                (member) =>
+                  (typeof member.id !== "number" && typeof member.id !== "string") ||
+                  typeof member.displayName !== "string" ||
+                  (member.email !== undefined && typeof member.email !== "string"),
+              )
+            ) {
+              throw new AgentSdkError("Project members returned an invalid response");
+            }
+            const matches = members.filter(
               (member) =>
                 member.displayName.trim().toLowerCase() === normalized ||
                 member.email?.trim().toLowerCase() === normalized,

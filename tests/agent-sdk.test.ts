@@ -704,7 +704,7 @@ test("malformed hydrated collections fail with AgentSdkError", async () => {
       (init.method ?? "GET") === "GET" &&
       url.pathname.endsWith("/mcp/agents/runs/run-1/activities")
     ) {
-      return Response.json({ success: true, activities: null });
+      return Response.json({ success: true, activities: [null] });
     }
     return api.fetch(input, init);
   };
