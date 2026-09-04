@@ -13,6 +13,7 @@ process.env.FIGMA_CLIENT_SECRET = "figma-secret";
 const root = path.resolve(__dirname, "..");
 const originalFetch = global.fetch;
 let rows;
+let operationRows;
 let failTransactionAfterAction;
 let lockCalls;
 let lockTail;
@@ -46,11 +47,32 @@ const figmaConnectionStore = {
     return { count };
   },
 };
+const figmaConnectionOperationStore = {
+  findUnique: async ({ where }) => operationRows.get(where.userId) ?? null,
+  upsert: async ({ where, create, update }) => {
+    const next = operationRows.has(where.userId) ? update : create;
+    operationRows.set(where.userId, next);
+    return next;
+  },
+  update: async ({ where, data }) => {
+    const next = { ...operationRows.get(where.userId), ...data };
+    operationRows.set(where.userId, next);
+    return next;
+  },
+  updateMany: async ({ where, data }) => {
+    const current = operationRows.get(where.userId);
+    if (!current || current.operationId !== where.operationId) return { count: 0 };
+    operationRows.set(where.userId, { ...current, ...data });
+    return { count: 1 };
+  },
+};
 const prisma = {
   figmaConnection: figmaConnectionStore,
+  figmaConnectionOperation: figmaConnectionOperationStore,
   $transaction: async (action) => {
     let releaseLock;
     const rowsBeforeTransaction = new Map(rows);
+    const operationsBeforeTransaction = new Map(operationRows);
     const tx = {
       $executeRaw: async (query) => {
         assert.match(
@@ -65,12 +87,14 @@ const prisma = {
         lockCalls += 1;
       },
       figmaConnection: figmaConnectionStore,
+      figmaConnectionOperation: figmaConnectionOperationStore,
     };
     try {
       const result = await action(tx);
       if (failTransactionAfterAction) {
         failTransactionAfterAction = false;
         rows = rowsBeforeTransaction;
+        operationRows = operationsBeforeTransaction;
         throw new Error("transaction commit failed");
       }
       return result;
@@ -105,6 +129,7 @@ const connection = jiti(path.join(root, "src/lib/figma/connection.ts"));
 test.beforeEach(() => {
   global.fetch = originalFetch;
   rows = new Map();
+  operationRows = new Map();
   failTransactionAfterAction = false;
   lockCalls = 0;
   lockTail = Promise.resolve();
@@ -130,10 +155,30 @@ test("connection tokens are encrypted at rest and decrypted for their owner", as
     figmaUserName: "Valentin",
   }));
 
-  assert.equal(lockCalls, 1);
+  assert.equal(lockCalls, 2);
   assert.notEqual(currentRow().encryptedAccessToken, "plain-access-token");
   assert.notEqual(currentRow().encryptedRefreshToken, "plain-refresh-token");
   assert.equal(await connection.getFigmaAccessToken(6), "plain-access-token");
+});
+
+test("persists an issued connection after a transaction commit failure without reissuing", async () => {
+  let issueCalls = 0;
+  const connected = await connection.connectFigmaUser(6, async () => {
+    issueCalls += 1;
+    failTransactionAfterAction = true;
+    return {
+      accessToken: "plain-access-token",
+      refreshToken: "plain-refresh-token",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      userId: "figma-user",
+      figmaUserName: "Valentin",
+    };
+  });
+
+  assert.equal(connected.figmaUserId, "figma-user");
+  assert.equal(await connection.getFigmaAccessToken(6), "plain-access-token");
+  assert.equal(issueCalls, 1);
+  assert.equal(lockCalls, 3);
 });
 
 test("connection reads and disconnects stay scoped to one Hypertask user", async () => {
@@ -151,7 +196,7 @@ test("connection reads and disconnects stay scoped to one Hypertask user", async
   assert.equal(await connection.getFigmaAccessToken(6), "owner-access");
 });
 
-test("expired access tokens refresh once while holding the connection lock", async () => {
+test("expired access tokens refresh once through the durable lease", async () => {
   await connection.connectFigmaUser(6, async () => ({
     accessToken: "expired-access",
     refreshToken: "refresh-token",
@@ -169,8 +214,44 @@ test("expired access tokens refresh once while holding the connection lock", asy
 
   assert.equal(await connection.getFigmaAccessToken(6, 10_000), "fresh-access");
   assert.equal(refreshCalls, 1);
-  assert.equal(lockCalls, 2);
+  assert.equal(lockCalls, 4);
   assert.notEqual(currentRow().encryptedAccessToken, "fresh-access");
+});
+
+test("a durable refresh lease prevents concurrent token rotation", async () => {
+  await connection.connectFigmaUser(6, async () => ({
+    accessToken: "expired-access",
+    refreshToken: "refresh-token",
+    expiresAt: new Date(0),
+    userId: "figma-user",
+    figmaUserName: null,
+  }));
+  let signalRefreshStarted;
+  const refreshStarted = new Promise((resolve) => {
+    signalRefreshStarted = resolve;
+  });
+  let releaseRefresh;
+  const refreshGate = new Promise((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let refreshCalls = 0;
+  global.fetch = async () => {
+    refreshCalls += 1;
+    signalRefreshStarted();
+    await refreshGate;
+    return Response.json({ access_token: "fresh-access", expires_in: 3600 });
+  };
+
+  const first = connection.getFigmaAccessToken(6, 10_000);
+  await refreshStarted;
+  await assert.rejects(
+    connection.getFigmaAccessToken(6, 10_000),
+    /refresh is already in progress/,
+  );
+  assert.equal(refreshCalls, 1);
+  releaseRefresh();
+  assert.equal(await first, "fresh-access");
+  assert.equal(lockCalls, 5);
 });
 
 test("persists a rotated token after a transaction commit failure without refreshing twice", async () => {
@@ -181,10 +262,10 @@ test("persists a rotated token after a transaction commit failure without refres
     userId: "figma-user",
     figmaUserName: null,
   }));
-  failTransactionAfterAction = true;
   let refreshCalls = 0;
   global.fetch = async () => {
     refreshCalls += 1;
+    failTransactionAfterAction = true;
     return Response.json({
       access_token: "fresh-access",
       expires_in: 3600,
@@ -195,7 +276,7 @@ test("persists a rotated token after a transaction commit failure without refres
   assert.equal(await connection.getFigmaAccessToken(6, 10_000), "fresh-access");
   assert.equal(await connection.getFigmaAccessToken(6, 10_000), "fresh-access");
   assert.equal(refreshCalls, 1);
-  assert.equal(lockCalls, 3);
+  assert.equal(lockCalls, 5);
 });
 
 test("invalid refresh credentials remove the unusable local connection", async () => {
@@ -234,7 +315,7 @@ test("client authentication failures preserve the refresh token", async () => {
   assert.notEqual(currentRow(), null);
 });
 
-test("disconnect waits for an in-flight connect and wins without token resurrection", async () => {
+test("disconnect supersedes an in-flight connect without token resurrection", async () => {
   let issueStarted;
   const started = new Promise((resolve) => {
     issueStarted = resolve;
@@ -256,11 +337,11 @@ test("disconnect waits for an in-flight connect and wins without token resurrect
   });
   await started;
   const disconnecting = connection.disconnectFigmaUser(6);
-  await Promise.resolve();
+  await disconnecting;
   assert.equal(currentRow(), null);
 
   releaseIssue();
-  await Promise.all([connecting, disconnecting]);
+  assert.equal(await connecting, null);
   assert.equal(currentRow(), null);
-  assert.equal(lockCalls, 2);
+  assert.equal(lockCalls, 3);
 });

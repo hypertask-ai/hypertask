@@ -14,20 +14,36 @@ import {
   FIGMA_OAUTH_ATTEMPT_MAX_AGE_SECONDS,
 } from "@/lib/figma/oauth";
 
-export type FigmaRequestUser =
+export type FigmaAuthenticatedUser =
   | { status: "allowed"; userId: number }
-  | { status: "disabled" }
   | { status: "error" }
   | { status: "unauthorized" };
+
+export type FigmaRequestUser =
+  | FigmaAuthenticatedUser
+  | { status: "disabled" };
+
+export async function getFigmaAuthenticatedUser(
+  request: NextRequest,
+): Promise<FigmaAuthenticatedUser> {
+  try {
+    const session = await getSessionUser(request.headers);
+    return session
+      ? { status: "allowed", userId: session.userId }
+      : { status: "unauthorized" };
+  } catch {
+    return { status: "error" };
+  }
+}
 
 export async function getFigmaRequestUser(
   request: NextRequest,
 ): Promise<FigmaRequestUser> {
+  const principal = await getFigmaAuthenticatedUser(request);
+  if (principal.status !== "allowed") return principal;
   try {
-    const session = await getSessionUser(request.headers);
-    if (!session) return { status: "unauthorized" };
-    return (await figmaConnectEnabledFor(session.userId))
-      ? { status: "allowed", userId: session.userId }
+    return (await figmaConnectEnabledFor(principal.userId))
+      ? principal
       : { status: "disabled" };
   } catch {
     return { status: "error" };

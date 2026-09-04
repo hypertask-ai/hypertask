@@ -15,6 +15,19 @@ ALTER TABLE "FigmaConnection"
 ADD CONSTRAINT "FigmaConnection_userId_fkey"
 FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+CREATE TABLE "FigmaConnectionOperation" (
+    "userId" INTEGER NOT NULL,
+    "operationId" TEXT NOT NULL,
+    "pendingUntil" TIMESTAMP(3),
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "FigmaConnectionOperation_pkey" PRIMARY KEY ("userId")
+);
+
+ALTER TABLE "FigmaConnectionOperation"
+ADD CONSTRAINT "FigmaConnectionOperation_userId_fkey"
+FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
 INSERT INTO "FeatureFlag" ("key", "mode", "updatedAt")
 VALUES ('htpr-6136-figma-connect', 'OWNER_ONLY', CURRENT_TIMESTAMP)
 ON CONFLICT ("key") DO NOTHING;

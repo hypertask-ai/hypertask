@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 
 import {
   clearFigmaConnectionVersion,
-  getFigmaRequestUser,
+  getFigmaAuthenticatedUser,
   noStore,
   trustedMutationOrigin,
 } from "@/app/api/figma/_lib";
@@ -12,12 +12,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function DELETE(request: NextRequest) {
-  const principal = await getFigmaRequestUser(request);
+  const principal = await getFigmaAuthenticatedUser(request);
   if (principal.status === "unauthorized") {
     return noStore({ error: "Unauthorized" }, 401);
-  }
-  if (principal.status === "disabled") {
-    return noStore({ error: "Not found" }, 404);
   }
   if (principal.status === "error") {
     return noStore({ error: "Figma connection is unavailable" }, 503);

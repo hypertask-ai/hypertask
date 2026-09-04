@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
   if (!code || code.length > 4096) return fail(request, "missing_code");
 
   try {
-    await connectFigmaUser(principal.userId, async () => {
+    const connection = await connectFigmaUser(principal.userId, async () => {
       const token = await exchangeFigmaCode(
         {
           code,
@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
         userId: string;
       };
     });
+    if (!connection) throw new Error("Figma connection was superseded");
     return finish(request, attempt.returnTo, true);
   } catch (error) {
     console.error(

@@ -334,6 +334,7 @@ model User {
   slackInstalls             SlackInstall[]
   slackUserLinks            SlackUserLink[]
   figmaConnection           FigmaConnection?
+  figmaConnectionOperation  FigmaConnectionOperation?
   reportsCreated            Report[]                    @relation("ReportCreator")
   projectMilestonesCreated  ProjectMilestone[]          @relation("ProjectMilestoneCreator")
   projectStatusUpdates      ProjectStatusUpdate[]       @relation("ProjectStatusUpdateAuthor")
@@ -502,6 +503,14 @@ model FigmaConnection {
   figmaUserName         String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model FigmaConnectionOperation {
+  userId       Int       @id
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operationId  String
+  pendingUntil DateTime?
+  updatedAt    DateTime  @updatedAt
 }
 
 model UserSetting {

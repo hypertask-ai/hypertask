@@ -275,6 +275,7 @@ test("connection reads and disconnects only the signed user's row", async () => 
   assert.equal(foreignOrigin.status, 403);
   assert.equal(disconnectedUserId, null);
 
+  enabled = false;
   const response = await disconnectRoute.DELETE(
     appRequest("/api/figma/disconnect", {
       method: "DELETE",
