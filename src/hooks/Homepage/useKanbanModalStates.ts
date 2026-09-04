@@ -1,8 +1,9 @@
 import { getAllSubTasks } from "@/app/[...boardURL]/serverActions";
 import { ITask } from "@/models/model";
 import { boardSearchAtom, currentProjectAtom } from "@/store";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
+import toast from "react-hot-toast";
 
 export interface ITaskDeleteInfo {
   id: number;
@@ -15,6 +16,12 @@ const useKanbanModalStates = () => {
   const [showViewsModal, setShowViewsModal] = useState<boolean>(false);
   const [showManageViewsModal, setManageViewsModal] = useState<boolean>(false);
   const [currentProject] = useRecoilState(currentProjectAtom);
+  // HTPR-6072: reading currentProject.id after an await inside the same async
+  // call still returns the closure-captured value, not a fresh one, so a
+  // plain variable comparison can never catch a project change that happened
+  // during the await. A ref is the only thing that reads as current.
+  const currentProjectIdRef = useRef(currentProject?.id);
+  currentProjectIdRef.current = currentProject?.id;
   const [boardSearch, setBoardSearch] = useRecoilState(boardSearchAtom);
   const showSearchTasks =
     boardSearch.open && boardSearch.projectId === currentProject?.id;
@@ -65,13 +72,22 @@ const useKanbanModalStates = () => {
         setTaskInfo(task)
         // HTPR-6072: SectionComp stays mounted across a board switch, so this
         // await can resolve after the user has already moved to another
-        // board. Ignore a stale lookup instead of reopening the delete flow
+        // board. currentProject is a closure-captured value that would stay
+        // stale across the whole call, so compare against the ref instead,
+        // which is refreshed on every render and reads as current after the
+        // await. Ignore a stale lookup instead of reopening the delete flow
         // on the wrong board.
-        const lookupProjectId = currentProject?.id
-        const allTasks : number[] | undefined = await getAllSubTasks(task.id)
-        if (currentProject?.id !== lookupProjectId) return
-        setTasksToDelete(allTasks)
-        setShowDeleteTaskModal(true)
+        const lookupProjectId = currentProjectIdRef.current
+        try {
+          const allTasks : number[] | undefined = await getAllSubTasks(task.id)
+          if (currentProjectIdRef.current !== lookupProjectId) return
+          setTasksToDelete(allTasks)
+          setShowDeleteTaskModal(true)
+        } catch (error: any) {
+          if (currentProjectIdRef.current !== lookupProjectId) return
+          setTaskInfo(undefined)
+          toast.error(error?.message ?? "Unable to load sub-tasks for delete")
+        }
     }else{
         setShowDeleteTaskModal(false)
         setTaskInfo(undefined)

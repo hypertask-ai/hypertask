@@ -1199,6 +1199,9 @@ const kanbanContainerRef = useRef<HTMLDivElement>(null);
 const restoredScrollForProject = useRef<number | null>(null);
 const restoringScroll = useRef(false);
 const readinessFrameRef = useRef<number | null>(null);
+// HTPR-6072: bumped by every handleStateChangesOnBoardChange call so an
+// overlapping, slower switch can detect it's no longer the latest one.
+const boardSwitchGenerationRef = useRef(0);
 const readinessPaintFrameRef = useRef<number | null>(null);
 const readinessEntryKey = `${_currentUser.id}:${_readinessProjectId}:${_readinessRouteEntryId}`;
 const readinessCompletionRef = useRef({
@@ -1213,8 +1216,11 @@ const readinessCompletionRef = useRef({
 // HTPR-6072: SectionComp no longer remounts on a board switch, so this ref's
 // one-time useRef initializer would otherwise stay pinned to the first
 // board forever. Recreate it whenever the readiness entry changes, but
-// leave it untouched (frozen) for re-renders within the same entry.
-if (readinessCompletionRef.current.entryKey !== readinessEntryKey) {
+// leave it untouched (frozen) for re-renders within the same entry. A
+// layout effect (not a render-time write) so it runs once per entry,
+// before the readiness completion effect below reads it.
+useLayoutEffect(() => {
+  if (readinessCompletionRef.current.entryKey === readinessEntryKey) return;
   readinessCompletionRef.current = {
     entryKey: readinessEntryKey,
     accountId: _currentUser.id,
@@ -1224,7 +1230,8 @@ if (readinessCompletionRef.current.entryKey !== readinessEntryKey) {
     readinessSource: _readinessSource,
     viewSurface: boardLayout,
   };
-}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [readinessEntryKey]);
 const boardReadinessTraceScope = useCommittedBoardReadinessTrace({
   accountId: _currentUser.id,
   projectId: _readinessProjectId,
@@ -1424,8 +1431,15 @@ const ensureBoardLoaded = async (index:number):Promise<IProject|null> => {
 }
 
 async function handleStateChangesOnBoardChange (index:number, saveBackSections?:ISection[]){
+  // HTPR-6072: SectionComp stays mounted across a switch now, so an
+  // overlapping switch (a second click before the first one's fetch
+  // resolves) can no longer rely on the old instance being torn down to
+  // drop a stale result. Tag each call and bail if a newer switch has
+  // started by the time this one's fetch comes back.
+  const switchGeneration = ++boardSwitchGenerationRef.current;
   const loaded = await ensureBoardLoaded(index);
   if (!loaded) return;
+  if (switchGeneration !== boardSwitchGenerationRef.current) return;
   const updatedProjects = deepCopy(projects);
   if (saveBackSections) updatedProjects[currentIndex].sections = saveBackSections;
   updatedProjects[index] = deepCopy(loaded);

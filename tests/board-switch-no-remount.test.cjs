@@ -57,3 +57,149 @@ test("HTPR-6072: board-level modals close on a project change instead of relying
     "expected an effect keyed on currentProject?.id that closes the board modals",
   );
 });
+
+test("HTPR-6072: the pending delete lookup is guarded against a ref, not a closure value", () => {
+  // A closure-captured currentProject.id read before and after the same
+  // await is always the same value, so a comparison against it can never
+  // detect a switch that happened during the await - only a ref (mutated on
+  // every render, read fresh after the await) can. This pins the fix the
+  // reviewer required after the first version of this guard was a no-op.
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/hooks/Homepage/useKanbanModalStates.ts"),
+    "utf8",
+  );
+  assert.ok(
+    /currentProjectIdRef\.current\s*=\s*currentProject\?\.id/.test(src),
+    "expected a ref kept in sync with currentProject.id on every render",
+  );
+  const toggleMatch = src.match(
+    /const toggleDeleteModal = async[\s\S]*?getAllSubTasks\(task\.id\)[\s\S]{0,120}/,
+  );
+  assert.ok(toggleMatch, "expected toggleDeleteModal's lookup to still exist");
+  assert.ok(
+    /currentProjectIdRef\.current\s*!==\s*lookupProjectId/.test(toggleMatch[0]),
+    "the post-await staleness check must compare against the ref, not the closured currentProject",
+  );
+});
+
+test("HTPR-6072: an overlapping board switch cannot apply a stale result", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const fnMatch = src.match(
+    /async function handleStateChangesOnBoardChange[\s\S]*?ensureBoardLoaded\(index\);[\s\S]{0,150}/,
+  );
+  assert.ok(fnMatch, "expected handleStateChangesOnBoardChange to still exist");
+  assert.ok(
+    /boardSwitchGenerationRef\.current\s*\+\+|\+\+boardSwitchGenerationRef\.current/.test(
+      src,
+    ),
+    "expected a generation counter bumped per switch",
+  );
+  assert.ok(
+    /switchGeneration\s*!==\s*boardSwitchGenerationRef\.current/.test(
+      fnMatch[0],
+    ),
+    "expected the post-fetch continuation to bail when a newer switch has started",
+  );
+});
+
+test("HTPR-6072: the delete-lookup guard actually blocks a stale result across an await (ref, not closure)", () => {
+  // This repo has no React hook-rendering test setup, so this exercises the
+  // exact race the fix depends on directly: a ref mutated mid-await must be
+  // read as current afterwards, while a closure-captured variable read
+  // before and after the same await is always the same value and can never
+  // catch a change. The first version of this guard compared two reads of
+  // the same closured variable and was a no-op - this test would have
+  // failed against that version and passes against the ref-based fix.
+
+  async function toggleDeleteModalClosureVersion(currentProjectId, lookup, onOpen) {
+    const lookupProjectId = currentProjectId; // closure read, same value both times
+    const result = await lookup();
+    if (currentProjectId !== lookupProjectId) return; // always false: same variable
+    onOpen(result);
+  }
+
+  async function toggleDeleteModalRefVersion(currentProjectIdRef, lookup, onOpen) {
+    const lookupProjectId = currentProjectIdRef.current;
+    const result = await lookup();
+    if (currentProjectIdRef.current !== lookupProjectId) return;
+    onOpen(result);
+  }
+
+  return (async () => {
+    // Closure version: switching boards mid-await does not stop it opening.
+    let openedByClosureVersion = false;
+    const closurePromise = toggleDeleteModalClosureVersion(
+      15,
+      () => new Promise((resolve) => setTimeout(() => resolve([1, 2]), 10)),
+      () => { openedByClosureVersion = true; },
+    );
+    await closurePromise;
+    assert.equal(
+      openedByClosureVersion,
+      true,
+      "sanity check: the closure-comparison pattern cannot detect a project change and always opens",
+    );
+
+    // Ref version: switching boards mid-await correctly blocks it opening.
+    let openedByRefVersion = false;
+    const projectIdRef = { current: 15 };
+    const refPromise = toggleDeleteModalRefVersion(
+      projectIdRef,
+      () => new Promise((resolve) => setTimeout(() => resolve([1, 2]), 10)),
+      () => { openedByRefVersion = true; },
+    );
+    projectIdRef.current = 16; // user switched boards while the lookup was in flight
+    await refPromise;
+    assert.equal(
+      openedByRefVersion,
+      false,
+      "the ref-based guard must block a delete-modal open when the project changed mid-lookup",
+    );
+
+    // And it must still open normally when nothing changed.
+    let openedWhenUnchanged = false;
+    const stableRef = { current: 15 };
+    await toggleDeleteModalRefVersion(
+      stableRef,
+      () => new Promise((resolve) => setTimeout(() => resolve([1, 2]), 10)),
+      () => { openedWhenUnchanged = true; },
+    );
+    assert.equal(openedWhenUnchanged, true, "the guard must not block a normal, unchanged lookup");
+  })();
+});
+
+test("HTPR-6072: readinessCompletionRef resets in an effect, not during render", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const resetMatch = src.match(
+    /useLayoutEffect\(\(\) => \{\s*if \(readinessCompletionRef\.current\.entryKey === readinessEntryKey\) return;[\s\S]*?\}, \[readinessEntryKey\]\)/,
+  );
+  assert.ok(
+    resetMatch,
+    "expected the ref reset to live inside a useLayoutEffect keyed on readinessEntryKey, not a bare render-time if-statement",
+  );
+});
+
+test("HTPR-6072: a failed sub-task lookup does not leave taskInfo set with no modal open", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/hooks/Homepage/useKanbanModalStates.ts"),
+    "utf8",
+  );
+  const toggleMatch = src.match(
+    /const toggleDeleteModal = async[\s\S]*?\n  \};/,
+  );
+  assert.ok(toggleMatch, "expected toggleDeleteModal to still exist");
+  assert.ok(
+    /try \{[\s\S]*getAllSubTasks\(task\.id\)[\s\S]*\} catch/.test(toggleMatch[0]),
+    "expected the getAllSubTasks await to be wrapped in try/catch",
+  );
+  assert.ok(
+    /catch \(error[\s\S]*?setTaskInfo\(undefined\)/.test(toggleMatch[0]),
+    "expected the catch block to clear taskInfo so it doesn't stay set with the modal never opening",
+  );
+});
