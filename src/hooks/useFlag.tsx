@@ -19,7 +19,7 @@ import {
 
 const FeatureFlagsContext = createContext<Record<string, boolean>>({});
 const FLAGS_ROUTE = "/api/flags";
-const FLAGS_REFRESH_MS = 5_000;
+const FLAGS_REFRESH_MS = 60_000;
 export const FEATURE_FLAGS_QUERY_PREFIX = ["feature-flags"] as const;
 export const ADMIN_FEATURE_FLAGS_QUERY_KEY = ["admin-feature-flags"] as const;
 export const featureFlagsQueryKey = (userId: number) => [...FEATURE_FLAGS_QUERY_PREFIX, userId] as const;
