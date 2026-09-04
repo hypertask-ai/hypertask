@@ -8,7 +8,6 @@ export const metadata: Metadata = { title: "Feature flags" };
 export const dynamic = "force-dynamic";
 
 export default async function FeatureFlagsPage() {
-  // HTPR-6133 is intentionally not self-gated: this server-only owner page is the rollout control.
   if (!(await isFeatureFlagOwner(await headers()))) notFound();
   return <FeatureFlagsAdmin />;
 }

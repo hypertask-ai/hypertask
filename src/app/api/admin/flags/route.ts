@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  FEATURE_FLAG_DETAILS_FLAG,
   FEATURE_FLAG_MODES,
+  FEATURE_FLAG_OWNER_USER_ID,
   FeatureFlagInputError,
+  isFeatureEnabled,
   isFeatureFlagOwner,
   listFeatureFlagModes,
   setFeatureFlagMode,
@@ -35,7 +38,11 @@ export async function GET(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    return noStore({ flags: await listFeatureFlagModes() });
+    const [flags, detailsEnabled] = await Promise.all([
+      listFeatureFlagModes(),
+      isFeatureEnabled(FEATURE_FLAG_DETAILS_FLAG, FEATURE_FLAG_OWNER_USER_ID),
+    ]);
+    return noStore({ flags, detailsEnabled });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);

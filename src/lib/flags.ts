@@ -5,8 +5,9 @@ import type {
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
+export const FEATURE_FLAG_OWNER_USER_ID = 6;
 const FEATURE_FLAG_OWNER = {
-  userId: 6,
+  userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
 } as const;
 const FEATURE_FLAG_QA_USER = {
@@ -14,6 +15,7 @@ const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
+export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 
 const FEATURE_FLAG_DEFINITIONS = [
@@ -68,6 +70,10 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Keeps the mobile reminder time selector aligned and clear of bottom controls.",
   },
   {
+    key: FEATURE_FLAG_DETAILS_FLAG,
+    description: "Shows a plain-language description and ticket link for every feature flag.",
+  },
+  {
     key: FIGMA_CONNECT_FLAG,
     description: "Lets each user connect a Figma account so linked frames render as previews.",
   },
@@ -83,6 +89,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6122-agent-run-activities",
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
+  FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
   "htpr-6141-ai-first-task-writer",
 ]);

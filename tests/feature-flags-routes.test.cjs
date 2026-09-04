@@ -15,11 +15,15 @@ let writes = 0;
 let broadcasts = 0;
 let broadcastFails = false;
 let authFails = false;
+let detailsEnabled = true;
 class FeatureFlagInputError extends Error {}
 
 stubModule("src/lib/flags.ts", {
+  FEATURE_FLAG_DETAILS_FLAG: "htpr-6133-feature-flag-details",
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
+  FEATURE_FLAG_OWNER_USER_ID: 6,
   FeatureFlagInputError,
+  isFeatureEnabled: async () => detailsEnabled,
   isFeatureFlagOwner: async () => {
     if (authFails) throw new Error("auth unavailable");
     return userId === 6;
@@ -92,6 +96,7 @@ test.beforeEach(() => {
   broadcasts = 0;
   broadcastFails = false;
   authFails = false;
+  detailsEnabled = true;
 });
 
 test("non-owners receive 404 before flag metadata is read or changed", async () => {
@@ -126,6 +131,7 @@ test("the owner can list and change a declared flag with server-owned metadata",
   userId = 6;
   const listed = await json(await admin.GET(request()));
   assert.equal(listed.status, 200);
+  assert.equal(listed.body.detailsEnabled, true);
   assert.deepEqual(listed.body.flags[0], {
     key: "htpr-6091-feature-flags",
     mode: "OWNER_ONLY",
@@ -149,6 +155,14 @@ test("the owner can list and change a declared flag with server-owned metadata",
   assert.equal(result.body.flag.ticketUrl, "https://app.hypertask.ai/detail/project-15/6091");
   assert.equal(writes, 1);
   assert.equal(broadcasts, 1);
+});
+
+test("the owner response disables ticket details when the rollout flag is off", async () => {
+  userId = 6;
+  detailsEnabled = false;
+  const listed = await json(await admin.GET(request()));
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.detailsEnabled, false);
 });
 
 test("committed updates still succeed when realtime delivery fails", async (t) => {
