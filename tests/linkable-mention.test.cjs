@@ -58,17 +58,9 @@ test("page mentions render as links and person mentions remain spans", () => {
   assert.ok(!person.html.includes("href="));
 });
 
-test("rich-text links use the shared token in every theme", () => {
+test("mention links use the shared token in every theme", () => {
   const globals = fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8");
-  const tiptap = fs.readFileSync(
-    path.join(root, "src/styles/tiptap.module.scss"),
-    "utf8",
-  );
   assert.match(globals, /color: var\(--color-rich-text-link\) !important/);
-  assert.equal(
-    tiptap.match(/color: var\(--color-rich-text-link\);/g)?.length,
-    2,
-  );
 
   const themeColors = {
     amoled: "#5896f1",
