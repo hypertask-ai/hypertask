@@ -28,6 +28,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 50
+
       - name: Wait for deploy, health-check, rollback if broken
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -79,6 +83,36 @@ jobs:
             exit 1
           fi
 
+          HC_DIR=$(mktemp -d) || { echo "::error::mktemp -d failed"; exit 1; }
+          trap 'rm -rf "$HC_DIR"' EXIT
+
+          version_code=$(curl -s -o "$HC_DIR/version.json" -D "$HC_DIR/version.h" -w '%{http_code}' --max-time 30 \
+            "https://app.hypertask.ai/api/version") || version_code=000
+          version_challenged=no
+          if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/version.h" 2>/dev/null; then
+            version_challenged=yes
+          fi
+          LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null)
+
+          if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ -z "$LIVE_BUILD" ]; then
+            notify "⚠️ hypertasks: could not verify live build id for $SHA (status $version_code, challenged=$version_challenged); skipping health check"
+            echo "::error::Could not verify live build id; skipping health check"
+            exit 1
+          fi
+
+          if [ "$LIVE_BUILD" != "$SHA" ]; then
+            if ! git cat-file -e "$LIVE_BUILD^{commit}" 2>/dev/null; then
+              git fetch --depth=50 origin "$LIVE_BUILD" || true
+            fi
+            if git merge-base --is-ancestor "$SHA" "$LIVE_BUILD" 2>/dev/null; then
+              echo "Superseded: production already serves newer build $LIVE_BUILD; nothing to check for $SHA"
+              exit 0
+            fi
+            notify "🔴 hypertasks: production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back, investigate Vercel aliasing"
+            echo "::error::Production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back"
+            exit 1
+          fi
+
           # ── 2. Health-check the live app (3 attempts, 20s apart) ───────────
           # Vercel sometimes bot-challenges the hosted runner's IP
           # (x-vercel-mitigated: challenge). A challenged response proves nothing
@@ -89,9 +123,6 @@ jobs:
           # into this attempt's verdict. A unique per-run dir + per-attempt
           # filenames make each attempt read only what this attempt actually
           # wrote and keeps each attempt isolated in this job.
-          HC_DIR=$(mktemp -d) || { echo "::error::mktemp -d failed"; exit 1; }
-          trap 'rm -rf "$HC_DIR"' EXIT
-
           healthy=false
           unchallenged_failure=false
           earlier_unchallenged_failure=false
@@ -198,26 +229,8 @@ jobs:
           done
 
           if $healthy; then
-            version_code=$(curl -s -o "$HC_DIR/version.json" -D "$HC_DIR/version.h" -w '%{http_code}' --max-time 30 \
-              "https://app.hypertask.ai/api/version") || version_code=000
-            version_challenged=no
-            if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/version.h" 2>/dev/null; then
-              version_challenged=yes
-            fi
-            LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null)
-            if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ -z "$LIVE_BUILD" ]; then
-              notify "⚠️ hypertasks: could not verify live build id for $SHA (status $version_code, challenged=$version_challenged); no rollback"
-              echo "::error::Could not verify live build id; skipping rollback"
-              exit 1
-            elif [ "$LIVE_BUILD" != "$SHA" ]; then
-              notify "🔴 hypertasks: production build id mismatch: live $LIVE_BUILD != expected $SHA"
-              echo "::error::live build $LIVE_BUILD != expected $SHA"
-              healthy=false
-              unchallenged_failure=true
-            else
-              echo "Production healthy on $SHA"
-              exit 0
-            fi
+            echo "Production healthy on $SHA"
+            exit 0
           fi
 
           # The FINAL attempt decides rollback (HTPR-5467). An unchallenged
