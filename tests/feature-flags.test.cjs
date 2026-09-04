@@ -126,12 +126,17 @@ test("declared flags without rows default to owner and QA", async () => {
     "htpr-6091-feature-flags",
     "htpr-6115-agent-sdk",
     "htpr-6116-figma-node-preview",
-    "htpr-6130-mobile-reminder-safe-area",
   ]) {
     assert.equal(await flags.isFeatureEnabled(key, 6), true);
     assert.equal(await flags.isFeatureEnabled(key, 985), true);
     assert.equal(await flags.isFeatureEnabled(key, 7), false);
   }
+});
+
+test("the mobile reminder safe-area fix starts owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6130-mobile-reminder-safe-area", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6130-mobile-reminder-safe-area", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6130-mobile-reminder-safe-area", 7), false);
 });
 
 test("per-user flag responses distinguish QA from normal members", async () => {
@@ -168,7 +173,7 @@ test("declared flags remain listed without a row and can be changed", async () =
     { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
-    { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_AND_QA", updatedAt: null },
+    { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");

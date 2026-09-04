@@ -34,6 +34,11 @@ export const FEATURE_FLAG_MODES = [
 ] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
+const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+  key === "htpr-6130-mobile-reminder-safe-area"
+    ? "OWNER_ONLY"
+    : "OWNER_AND_QA";
+
 export class FeatureFlagInputError extends Error {}
 
 type FeatureFlagDatabase = {
@@ -97,7 +102,7 @@ export async function isFeatureEnabled(
   });
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
-  const mode = row?.mode ?? "OWNER_AND_QA";
+  const mode = row?.mode ?? defaultFeatureFlagMode(key);
   const includesOwner = mode === "OWNER_ONLY" || mode === "OWNER_AND_QA";
   return featureFlagModeEnabled(
     mode,
@@ -114,7 +119,7 @@ export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      { key, mode: "OWNER_AND_QA", updatedAt: null },
+      { key, mode: defaultFeatureFlagMode(key), updatedAt: null },
     ]),
   );
   stored.forEach((row) => byKey.set(row.key, row));
