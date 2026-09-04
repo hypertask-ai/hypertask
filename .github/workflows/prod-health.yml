@@ -198,8 +198,18 @@ jobs:
           done
 
           if $healthy; then
-            LIVE_BUILD=$(curl -s --max-time 30 "https://app.hypertask.ai/api/version" | jq -r '.buildId // empty')
-            if [ "$LIVE_BUILD" != "$SHA" ]; then
+            version_code=$(curl -s -o "$HC_DIR/version.json" -D "$HC_DIR/version.h" -w '%{http_code}' --max-time 30 \
+              "https://app.hypertask.ai/api/version") || version_code=000
+            version_challenged=no
+            if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/version.h" 2>/dev/null; then
+              version_challenged=yes
+            fi
+            LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null)
+            if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ -z "$LIVE_BUILD" ]; then
+              notify "⚠️ hypertasks: could not verify live build id for $SHA (status $version_code, challenged=$version_challenged); no rollback"
+              echo "::error::Could not verify live build id; skipping rollback"
+              exit 1
+            elif [ "$LIVE_BUILD" != "$SHA" ]; then
               notify "🔴 hypertasks: production build id mismatch: live $LIVE_BUILD != expected $SHA"
               echo "::error::live build $LIVE_BUILD != expected $SHA"
               healthy=false
