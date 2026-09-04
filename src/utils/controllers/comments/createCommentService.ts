@@ -972,6 +972,7 @@ export async function createCommentService(params: CreateCommentParams) {
     inboundProcessingStartedAt,
   } = transactionResult;
   if (inboundCompleted) return comment;
+  const committedText = comment.text;
   const isAgentRunComment = Boolean(
     agentRunActivity || agentRunSelection || agentRunReplayComment,
   );
@@ -1189,10 +1190,12 @@ export async function createCommentService(params: CreateCommentParams) {
     if (resolvedDirectReplyUserId != null) {
       recipientUserIds.push(resolvedDirectReplyUserId);
     }
-    const mentionedUserIds = new Set(getMentionedUserIdsFromCommentText(text));
+    const mentionedUserIds = new Set(
+      getMentionedUserIdsFromCommentText(committedText),
+    );
     const runMentionProcessing = () =>
       processMentionsFromCommentText({
-        text,
+        text: committedText,
         commentId: comment.id,
         taskId,
         projectId: task.projectId,
@@ -1272,7 +1275,7 @@ export async function createCommentService(params: CreateCommentParams) {
       mentionProcessing,
       processTaskReferences
         ? processTaskReferencesFromCommentText(
-            text,
+            committedText,
             taskId,
             currentUser.id,
           ).catch((err) =>
@@ -1350,7 +1353,7 @@ export async function createCommentService(params: CreateCommentParams) {
       if (!agentRunCommentNotificationState.commentEmailsAttemptedAt) {
         await sendCommentEmails({
           task,
-          text,
+          text: committedText,
           creatorId,
           currentUser,
           recipientUserIds,
@@ -1417,7 +1420,7 @@ export async function createCommentService(params: CreateCommentParams) {
         await fcmDelivery;
         await sendCommentEmails({
           task,
-          text,
+          text: committedText,
           creatorId,
           currentUser,
           recipientUserIds,
@@ -1441,7 +1444,7 @@ export async function createCommentService(params: CreateCommentParams) {
         );
         await sendCommentEmails({
           task,
-          text,
+          text: committedText,
           creatorId,
           currentUser,
           recipientUserIds,

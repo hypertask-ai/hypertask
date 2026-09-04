@@ -1502,6 +1502,7 @@ test("failed activity mention handoffs remain retryable", async () => {
   harness.setFailure(null);
   await harness.createCommentService({
     ...input,
+    text: "<p>Stale replay text</p>",
     agentRunReplayComment: {
       id: harness.comments[0].id,
       activityId: harness.elicitation.id,
@@ -1520,6 +1521,7 @@ test("failed activity mention handoffs remain retryable", async () => {
     harness.sideEffectOrder.filter((effect) => effect === "mentions").length,
     2,
   );
+  assert.equal(harness.mentionCalls[1].text, "<p>Yes</p>");
   assert.equal(harness.comments.length, 1);
 });
 
