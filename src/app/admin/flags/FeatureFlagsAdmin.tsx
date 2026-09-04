@@ -10,6 +10,7 @@ import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
 const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "OWNER_ONLY", label: "Only me" },
+  { mode: "OWNER_AND_QA", label: "Owner + QA" },
   { mode: "EVERYONE", label: "Everyone" },
   { mode: "OFF", label: "Off" },
 ];
@@ -70,7 +71,7 @@ export default function FeatureFlagsAdmin() {
       <div className="mx-auto max-w-4xl">
         <h1 className="text-heading font-semibold">Feature flags</h1>
         <p className="mt-2 text-content text-text-light-gray">
-          New features start with Only me. Release or hide them without a deploy.
+          New features start with Owner + QA. Release or hide them without a deploy.
         </p>
 
         <div className="mt-6 overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">

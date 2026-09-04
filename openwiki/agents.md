@@ -33,7 +33,7 @@ Bugs → In Progress → AI Review → QA → Done
 ```
 
 - The shipping agent fixes the ticket, merges its pull request, verifies production, adds the plain-language closing comment, moves the ticket to **QA**, and unassigns itself.
-- The **QA** column is owned by the QA Agent as the only agent assignee. The QA Agent verifies the shipped change on production on desktop and mobile, including the reported behavior and regressions.
+- The **QA** column is owned by the QA Agent as the only agent assignee. The QA Agent verifies the shipped change on production on desktop and mobile, including the reported behavior and regressions. When a ticket names a feature flag, QA verifies the flagged behavior is available in its allow-listed account and unavailable in a normal member account before release to Everyone.
 - A passing check adds evidence and moves the ticket to **Done**.
 - A failing check adds the exact reproduction steps, moves the ticket back to **Bugs**, and assigns it to the shipping agent for repair.
 - Nothing moves to **Done** without QA evidence.
