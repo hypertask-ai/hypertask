@@ -514,6 +514,7 @@ export class AgentClient {
 }
 
 class AgentRunImpl implements AgentRun {
+  // Lease ownership is agent-scoped, so same-process operations for one task cannot overlap.
   private static readonly taskLeaseTails = new Map<number, Promise<void>>();
 
   readonly id: string;
@@ -643,6 +644,28 @@ class AgentRunImpl implements AgentRun {
     }
   }
 
+  private async releaseTaskLease(taskId: number): Promise<void> {
+    const releaseController = new AbortController();
+    let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+    const releaseTimeout = new Promise<never>((_, reject) => {
+      releaseTimer = setTimeout(() => {
+        releaseController.abort();
+        reject(new AgentSdkError("Task lease release timed out"));
+      }, TASK_LEASE_RELEASE_TIMEOUT_MS);
+      (releaseTimer as unknown as { unref?: () => void }).unref?.();
+    });
+    await Promise.race([
+      this.client.request("/mcp/tasks/lease/release", {
+        method: "POST",
+        body: { task_id: taskId },
+        signal: releaseController.signal,
+      }),
+      releaseTimeout,
+    ])
+      .catch((error) => this.client.reportError(error))
+      .finally(() => clearTimeout(releaseTimer));
+  }
+
   private async withTaskLease<T>(kind: string, work: (signal: AbortSignal, key: string) => Promise<T>): Promise<T> {
     if (this.taskId === null) throw new AgentSdkError("Run is not attached to a task");
     const taskId = this.taskId;
@@ -650,11 +673,24 @@ class AgentRunImpl implements AgentRun {
     const previous = AgentRunImpl.taskLeaseTails.get(taskId) ?? Promise.resolve();
     const operation = previous.then(async () => {
       await this.assertServerRunActive(this.signal);
-      await this.client.request("/mcp/tasks/lease/claim", {
-        method: "POST",
-        body: { task_id: taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
-        signal: this.signal,
-      });
+      try {
+        await this.client.request("/mcp/tasks/lease/claim", {
+          method: "POST",
+          body: { task_id: taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
+          signal: this.signal,
+        });
+      } catch (error) {
+        // A 2xx response proves the claim committed even when its body was unreadable.
+        if (
+          error instanceof AgentSdkError &&
+          error.status !== undefined &&
+          error.status >= 200 &&
+          error.status < 300
+        ) {
+          await this.releaseTaskLease(taskId);
+        }
+        throw error;
+      }
 
       const operationController = new AbortController();
       const abortOperation = () => operationController.abort(this.signal.reason);
@@ -691,25 +727,7 @@ class AgentRunImpl implements AgentRun {
         operationController.abort();
         await heartbeatPromise;
         this.signal.removeEventListener("abort", abortOperation);
-        const releaseController = new AbortController();
-        let releaseTimer: ReturnType<typeof setTimeout> | undefined;
-        const releaseTimeout = new Promise<never>((_, reject) => {
-          releaseTimer = setTimeout(() => {
-            releaseController.abort();
-            reject(new AgentSdkError("Task lease release timed out"));
-          }, TASK_LEASE_RELEASE_TIMEOUT_MS);
-          (releaseTimer as unknown as { unref?: () => void }).unref?.();
-        });
-        await Promise.race([
-          this.client.request("/mcp/tasks/lease/release", {
-            method: "POST",
-            body: { task_id: taskId },
-            signal: releaseController.signal,
-          }),
-          releaseTimeout,
-        ])
-          .catch((error) => this.client.reportError(error))
-          .finally(() => clearTimeout(releaseTimer));
+        await this.releaseTaskLease(taskId);
       }
     });
     const tail = operation.then(

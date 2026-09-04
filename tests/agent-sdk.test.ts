@@ -309,6 +309,7 @@ test("handler cancels a webhook stream that exceeds its read deadline", async (c
     pull() {},
     cancel() {
       cancelled = true;
+      return new Promise<void>(() => {});
     },
   });
   const timestamp = Math.floor(now / 1000).toString();
@@ -974,6 +975,48 @@ test("task helpers release the lease when a write fails", async () => {
     "/api/mcp/tasks/lease/release",
   ]);
   assert.equal(errors.length, 1);
+});
+
+test("task helpers release a claim after an unreadable success response", async () => {
+  const api = apiFixture();
+  const events: string[] = [];
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
+      events.push("claim");
+      const response = new Response(null, { status: 200 });
+      response.text = async () => {
+        throw new Error("claim response stream failed");
+      };
+      return response;
+    }
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/release")) {
+      events.push("release");
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Claiming task.");
+    await received.task?.update({ title: "Must not run" });
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), /claim response stream failed/);
+  assert.deepEqual(events, ["claim", "release"]);
+  assert.equal(
+    api.calls.some((call) => call.path.endsWith("/mcp/tasks/update")),
+    false,
+  );
 });
 
 test("a stalled task lease release cannot block later operations", async (context) => {

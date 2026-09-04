@@ -222,7 +222,7 @@ async function readRawBody(request: Request): Promise<Uint8Array> {
       chunks.push(result.value);
     }
   } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
+    void reader.cancel(error).catch(() => undefined);
     throw error;
   } finally {
     reader.releaseLock();
