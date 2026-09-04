@@ -1304,32 +1304,6 @@ test("activity comment links and task counters commit once across replay", async
   harness.elicitation.commentNotificationsProcessingAt = null;
 
   harness.setFailure("fcm");
-  await assert.rejects(
-    harness.createCommentService({
-      ...commentInput,
-      agentRunReplayComment: {
-        id: comment.id,
-        activityId: harness.elicitation.id,
-        agentWebhookDeliveryIds: ["delivery-1"],
-        boardWebhookDeliveryIds: [],
-        notificationsCompletedAt: null,
-      },
-    }),
-    /FCM handoff failed/,
-  );
-  assert.ok(harness.elicitation.commentFcmAttemptedAt instanceof Date);
-  assert.deepEqual(harness.sideEffectOrder, [
-    "mentions",
-    "agent webhook",
-    "board webhook",
-    "fcm",
-  ]);
-  assert.equal(harness.elicitation.commentEmailsAttemptedAt, null);
-  assert.equal(harness.elicitation.commentNotificationsCompletedAt, null);
-  assert.equal(harness.getDraftDeleteCalls(), 2);
-  assert.equal(harness.getTaskReferenceParseCalls(), 2);
-
-  harness.setFailure(null);
   const replay = await harness.createCommentService({
     ...commentInput,
     agentRunReplayComment: {
@@ -1341,25 +1315,30 @@ test("activity comment links and task counters commit once across replay", async
     },
   });
   assert.equal(replay.id, comment.id);
+  assert.ok(harness.elicitation.commentFcmAttemptedAt instanceof Date);
+  assert.ok(harness.elicitation.commentEmailsAttemptedAt instanceof Date);
   assert.ok(
     harness.elicitation.commentNotificationsCompletedAt instanceof Date,
   );
+  assert.deepEqual(harness.sideEffectOrder, [
+    "mentions",
+    "agent webhook",
+    "board webhook",
+    "fcm",
+  ]);
   assert.equal(harness.comments.length, 1);
   assert.equal(harness.task.totalComments, 1);
-  assert.deepEqual(harness.publishedAgentWebhookIds, [
-    ["delivery-1"],
-    ["delivery-1"],
-  ]);
-  assert.deepEqual(harness.publishedBoardWebhookIds, [[], []]);
+  assert.deepEqual(harness.publishedAgentWebhookIds, [["delivery-1"]]);
+  assert.deepEqual(harness.publishedBoardWebhookIds, [[]]);
   assert.equal(harness.fcmCalls.length, 1);
   assert.equal(
     harness.sideEffectOrder.filter((effect) => effect === "mentions").length,
     1,
   );
-  assert.ok(harness.elicitation.commentEmailsAttemptedAt instanceof Date);
-  assert.equal(harness.getDraftDeleteCalls(), 3);
-  assert.equal(harness.getTaskReferenceParseCalls(), 3);
+  assert.equal(harness.getDraftDeleteCalls(), 2);
+  assert.equal(harness.getTaskReferenceParseCalls(), 2);
 
+  harness.setFailure(null);
   await harness.createCommentService({
     ...commentInput,
     agentRunReplayComment: {
@@ -1371,8 +1350,8 @@ test("activity comment links and task counters commit once across replay", async
     },
   });
   assert.equal(harness.fcmCalls.length, 1);
-  assert.equal(harness.publishedAgentWebhookIds.length, 3);
-  assert.equal(harness.getDraftDeleteCalls(), 3);
-  assert.equal(harness.getTaskReferenceParseCalls(), 3);
+  assert.equal(harness.publishedAgentWebhookIds.length, 2);
+  assert.equal(harness.getDraftDeleteCalls(), 2);
+  assert.equal(harness.getTaskReferenceParseCalls(), 2);
   assert.equal(harness.updateTaskCalls.length, 0);
 });

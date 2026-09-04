@@ -1228,6 +1228,8 @@ export async function createCommentService(params: CreateCommentParams) {
           task.projectId,
           creatorId,
           comment,
+        ).catch((error) =>
+          console.warn("[createCommentService] FCM delivery failed:", error),
         );
       }
       if (!agentRunCommentNotificationState.commentEmailsAttemptedAt) {
@@ -1251,7 +1253,12 @@ export async function createCommentService(params: CreateCommentParams) {
           recipientUserIds,
           mentionedUserIds,
           fromAgentId: agentId ?? null,
-        });
+        }).catch((error) =>
+          console.warn(
+            "[createCommentService] comment email delivery failed:",
+            error,
+          ),
+        );
       }
       const completed = await prisma.agentRunActivity.updateMany({
         where: {
