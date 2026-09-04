@@ -955,6 +955,7 @@ export async function createCommentService(params: CreateCommentParams) {
     await publishAgentWebhookDeliveries(webhookDeliveryIds);
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
   }
+  if (agentRunReplayComment?.notificationsSentAt) return comment;
   let agentRunCommentNotificationClaim: {
     activityId: string;
     processingAt: Date;
@@ -1066,13 +1067,15 @@ export async function createCommentService(params: CreateCommentParams) {
     const mentionedUserIds = new Set(getMentionedUserIdsFromCommentText(text));
 
     const [_, __, ___, ____, commentCreator, userIds] = await Promise.all([
-      prisma.drafts.deleteMany({
-        where: {
-          type: "Comment",
-          taskId,
-          userId: creatorId,
-        },
-      }),
+      agentRunReplayComment
+        ? Promise.resolve()
+        : prisma.drafts.deleteMany({
+            where: {
+              type: "Comment",
+              taskId,
+              userId: creatorId,
+            },
+          }),
       createNotificationForComment(
         task,
         comment,
@@ -1082,19 +1085,23 @@ export async function createCommentService(params: CreateCommentParams) {
         resolvedDirectReplyUserId,
         Boolean(inboundEmailId || agentRunReplayComment),
       ),
-      processMentionsFromCommentText({
-        text,
-        commentId: comment.id,
-        taskId,
-        projectId: task.projectId,
-        mentionedBy: creatorIdNum,
-        fromAgentId: agentId ?? null,
-        skipUserIds:
-          resolvedDirectReplyUserId == null ? [] : [resolvedDirectReplyUserId],
-      }).catch((err) =>
-        console.warn("[createCommentService] processMentions failed:", err),
-      ),
-      processTaskReferences
+      agentRunReplayComment
+        ? Promise.resolve()
+        : processMentionsFromCommentText({
+            text,
+            commentId: comment.id,
+            taskId,
+            projectId: task.projectId,
+            mentionedBy: creatorIdNum,
+            fromAgentId: agentId ?? null,
+            skipUserIds:
+              resolvedDirectReplyUserId == null
+                ? []
+                : [resolvedDirectReplyUserId],
+          }).catch((err) =>
+            console.warn("[createCommentService] processMentions failed:", err),
+          ),
+      processTaskReferences && !agentRunReplayComment
         ? processTaskReferencesFromCommentText(
             text,
             taskId,
@@ -1119,7 +1126,6 @@ export async function createCommentService(params: CreateCommentParams) {
       await publishAgentWebhookDeliveries(webhookDeliveryIds);
       await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     }
-    if (agentRunReplayComment?.notificationsSentAt) return comment;
     if (isAgentRunComment) {
       const activityId =
         agentRunActivity?.id ??
@@ -1143,58 +1149,71 @@ export async function createCommentService(params: CreateCommentParams) {
         },
         data: { commentNotificationsProcessingAt: processingAt },
       });
-      if (claimed.count === 0) return comment;
+      if (claimed.count === 0) {
+        const completed = await prisma.agentRunActivity.findUnique({
+          where: { id: activityId },
+          select: { commentNotificationsSentAt: true },
+        });
+        if (completed?.commentNotificationsSentAt) return comment;
+        throw new Error("Run activity comment notifications are still processing");
+      }
       agentRunCommentNotificationClaim = { activityId, processingAt };
     }
 
-    const devices = await prisma.subscribedDevices.findMany({
-      where: { userId: { in: userIds } },
-    });
-
-    const fcmDelivery = sendDataOnlyFcm(
-      devices,
-      commentCreator!,
-      task.title,
-      task.uniqueIndex,
-      task.projectId,
-      creatorId,
-      comment,
-    );
-    if (inboundEmailId) {
-      await fcmDelivery;
-      await sendCommentEmails({
-        task,
-        text,
-        creatorId,
-        currentUser,
-        recipientUserIds,
-        mentionedUserIds,
-        fromAgentId: agentId ?? null,
-      }).catch((err) =>
-        console.warn("[createCommentService] sendCommentEmails failed:", err),
-      );
-      if (!inboundProcessingStartedAt) {
-        throw new Error("Inbound email processing lease is missing");
-      }
-      await completeInboundEmailProcessing(
-        prisma,
-        inboundEmailId,
-        comment.id,
-        inboundProcessingStartedAt,
-      );
-    } else if (isAgentRunComment) {
-      await fcmDelivery;
-      await sendCommentEmails({
-        task,
-        text,
-        creatorId,
-        currentUser,
-        recipientUserIds,
-        mentionedUserIds,
-        fromAgentId: agentId ?? null,
-      });
+    if (isAgentRunComment) {
       if (!agentRunCommentNotificationClaim) {
         throw new Error("Run activity notification claim is missing");
+      }
+      const notificationState =
+        await prisma.agentRunActivity.findUniqueOrThrow({
+          where: { id: agentRunCommentNotificationClaim.activityId },
+          select: {
+            commentFcmSentAt: true,
+            commentEmailsSentAt: true,
+          },
+        });
+      if (!notificationState.commentFcmSentAt) {
+        const devices = await prisma.subscribedDevices.findMany({
+          where: { userId: { in: userIds } },
+        });
+        await sendDataOnlyFcm(
+          devices,
+          commentCreator!,
+          task.title,
+          task.uniqueIndex,
+          task.projectId,
+          creatorId,
+          comment,
+        );
+        await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentFcmSentAt: null,
+          },
+          data: { commentFcmSentAt: new Date() },
+        });
+      }
+      if (!notificationState.commentEmailsSentAt) {
+        await sendCommentEmails({
+          task,
+          text,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+        });
+        await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentEmailsSentAt: null,
+          },
+          data: { commentEmailsSentAt: new Date() },
+        });
       }
       await prisma.agentRunActivity.updateMany({
         where: {
@@ -1210,20 +1229,56 @@ export async function createCommentService(params: CreateCommentParams) {
       });
       agentRunCommentNotificationClaim = null;
     } else {
-      void fcmDelivery.catch((error) =>
-        console.warn("[createCommentService] FCM delivery failed:", error),
-      );
-      await sendCommentEmails({
-        task,
-        text,
+      const devices = await prisma.subscribedDevices.findMany({
+        where: { userId: { in: userIds } },
+      });
+      const fcmDelivery = sendDataOnlyFcm(
+        devices,
+        commentCreator!,
+        task.title,
+        task.uniqueIndex,
+        task.projectId,
         creatorId,
-        currentUser,
-        recipientUserIds,
-        mentionedUserIds,
-        fromAgentId: agentId ?? null,
-      }).catch((err) =>
-        console.warn("[createCommentService] sendCommentEmails failed:", err),
+        comment,
       );
+      if (inboundEmailId) {
+        await fcmDelivery;
+        await sendCommentEmails({
+          task,
+          text,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+        }).catch((err) =>
+          console.warn("[createCommentService] sendCommentEmails failed:", err),
+        );
+        if (!inboundProcessingStartedAt) {
+          throw new Error("Inbound email processing lease is missing");
+        }
+        await completeInboundEmailProcessing(
+          prisma,
+          inboundEmailId,
+          comment.id,
+          inboundProcessingStartedAt,
+        );
+      } else {
+        void fcmDelivery.catch((error) =>
+          console.warn("[createCommentService] FCM delivery failed:", error),
+        );
+        await sendCommentEmails({
+          task,
+          text,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+        }).catch((err) =>
+          console.warn("[createCommentService] sendCommentEmails failed:", err),
+        );
+      }
     }
 
     return comment;

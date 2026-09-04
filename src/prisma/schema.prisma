@@ -2257,6 +2257,8 @@ model AgentRunActivity {
   commentAgentWebhookDeliveryIds String[]  @default([])
   commentBoardWebhookDeliveryIds String[]  @default([])
   commentNotificationsProcessingAt DateTime?
+  commentFcmSentAt               DateTime?
+  commentEmailsSentAt            DateTime?
   commentNotificationsSentAt     DateTime?
   createdAt                      DateTime   @default(now())
 
