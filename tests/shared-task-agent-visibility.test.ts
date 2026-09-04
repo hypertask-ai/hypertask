@@ -46,7 +46,7 @@ async function main() {
       type: "TaskAssigned",
       data: {
         fromAgentId: "agent-active-id",
-        fromAgent: agentRecord("agent-active-id", "Active Agent"),
+        fromAgent: null,
         toAgent: agentRecord("agent-target-id", "Target Agent"),
         agentAssigner: agentRecord("agent-assigner-id", "Assigner Agent"),
         assignedAgents: [agentRecord("agent-target-id", "Target Agent")],
@@ -110,7 +110,7 @@ async function main() {
         ...activeAgentComment.activity,
         data: {
           ...activeAgentComment.activity.data,
-          toAgent: activeAgentComment.activity.data.fromAgent,
+          toAgent: agentRecord("agent-active-id", "Active Agent"),
         },
       },
     },

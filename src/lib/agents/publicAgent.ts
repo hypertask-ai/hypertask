@@ -91,12 +91,10 @@ export function redactAgentIdentitiesForPublicShare<T>(value: T): T {
   }
   if (!isRecord(value) || value instanceof Date) return value;
 
-  const fromAgentId = isRecord(value.fromAgent) ? value.fromAgent.id : undefined;
-  const toAgentId = isRecord(value.toAgent) ? value.toAgent.id : undefined;
-  const hasFromAgentId =
-    typeof fromAgentId === "string" || typeof fromAgentId === "number";
-  const hasToAgentId =
-    typeof toAgentId === "string" || typeof toAgentId === "number";
+  const fromAgentId = isRecord(value.fromAgent) ? value.fromAgent.id : value.fromAgentId ?? value.from_agent_id;
+  const toAgentId = isRecord(value.toAgent) ? value.toAgent.id : value.toAgentId ?? value.to_agent_id;
+  const hasFromAgentId = typeof fromAgentId === "string" || typeof fromAgentId === "number";
+  const hasToAgentId = typeof toAgentId === "string" || typeof toAgentId === "number";
   const isSelfAssignment =
     hasFromAgentId && hasToAgentId ? fromAgentId === toAgentId : undefined;
   const redacted: Record<string, unknown> = {};
@@ -118,6 +116,8 @@ export function redactAgentIdentitiesForPublicShare<T>(value: T): T {
       redacted[key] = redactAgentIdentitiesForPublicShare(nested);
     }
   }
+  if (hasFromAgentId && !redacted.fromAgent) redacted.fromAgent = { ...privateAgentAttribution };
+  if (hasToAgentId && !redacted.toAgent) redacted.toAgent = { ...privateAgentAttribution };
   if (isSelfAssignment !== undefined) {
     redacted.isSelfAssignment = isSelfAssignment;
   }
