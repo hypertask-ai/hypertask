@@ -65,6 +65,7 @@ import {
 import { serializeAgentRun } from "@/lib/agentRuns/model";
 
 const INBOUND_PROCESSING_LEASE_MS = 5 * 60_000;
+const AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS = 5 * 60_000;
 
 export interface CreateCommentParams {
   text: string;
@@ -954,6 +955,10 @@ export async function createCommentService(params: CreateCommentParams) {
     await publishAgentWebhookDeliveries(webhookDeliveryIds);
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
   }
+  let agentRunCommentNotificationClaim: {
+    activityId: string;
+    processingAt: Date;
+  } | null = null;
   try {
     if (resolvedDirectReplyUserId != null) {
       void broadcastInboxChange(resolvedDirectReplyUserId, {
@@ -1115,6 +1120,32 @@ export async function createCommentService(params: CreateCommentParams) {
       await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     }
     if (agentRunReplayComment?.notificationsSentAt) return comment;
+    if (isAgentRunComment) {
+      const activityId =
+        agentRunActivity?.id ??
+        agentRunSelection?.activityId ??
+        agentRunReplayComment?.activityId;
+      if (!activityId) {
+        throw new Error("Run activity comment is missing its activity");
+      }
+      const processingAt = new Date();
+      const staleBefore = new Date(
+        processingAt.getTime() - AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS,
+      );
+      const claimed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: activityId,
+          commentNotificationsSentAt: null,
+          OR: [
+            { commentNotificationsProcessingAt: null },
+            { commentNotificationsProcessingAt: { lte: staleBefore } },
+          ],
+        },
+        data: { commentNotificationsProcessingAt: processingAt },
+      });
+      if (claimed.count === 0) return comment;
+      agentRunCommentNotificationClaim = { activityId, processingAt };
+    }
 
     const devices = await prisma.subscribedDevices.findMany({
       where: { userId: { in: userIds } },
@@ -1162,17 +1193,22 @@ export async function createCommentService(params: CreateCommentParams) {
         mentionedUserIds,
         fromAgentId: agentId ?? null,
       });
-      const commentActivityId =
-        agentRunActivity?.id ??
-        agentRunSelection?.activityId ??
-        agentRunReplayComment?.activityId;
-      if (!commentActivityId) {
-        throw new Error("Run activity comment is missing its activity");
+      if (!agentRunCommentNotificationClaim) {
+        throw new Error("Run activity notification claim is missing");
       }
-      await prisma.agentRunActivity.update({
-        where: { id: commentActivityId },
-        data: { commentNotificationsSentAt: new Date() },
+      await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsSentAt: null,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: {
+          commentNotificationsSentAt: new Date(),
+          commentNotificationsProcessingAt: null,
+        },
       });
+      agentRunCommentNotificationClaim = null;
     } else {
       void fcmDelivery.catch((error) =>
         console.warn("[createCommentService] FCM delivery failed:", error),
@@ -1192,6 +1228,24 @@ export async function createCommentService(params: CreateCommentParams) {
 
     return comment;
   } catch (error) {
+    if (agentRunCommentNotificationClaim) {
+      const claim = agentRunCommentNotificationClaim;
+      await prisma.agentRunActivity
+        .updateMany({
+          where: {
+            id: claim.activityId,
+            commentNotificationsSentAt: null,
+            commentNotificationsProcessingAt: claim.processingAt,
+          },
+          data: { commentNotificationsProcessingAt: null },
+        })
+        .catch((releaseError) =>
+          console.error(
+            "[createCommentService] run notification claim release failed:",
+            releaseError,
+          ),
+        );
+    }
     if (inboundEmailId && inboundProcessingStartedAt) {
       await releaseInboundEmailProcessing(
         prisma,

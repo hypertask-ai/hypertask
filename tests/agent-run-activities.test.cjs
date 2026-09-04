@@ -68,6 +68,7 @@ function activityRow(overrides = {}) {
     selectionCommentId: null,
     commentAgentWebhookDeliveryIds: [],
     commentBoardWebhookDeliveryIds: [],
+    commentNotificationsProcessingAt: null,
     commentNotificationsSentAt: null,
     createdAt: new Date("2026-09-04T10:01:00.000Z"),
     ...overrides,
@@ -779,6 +780,10 @@ test("migration constrains retry keys and elicitation selections", () => {
   );
   assert.match(replayMigration, /ADD COLUMN "responseCommentId" INTEGER/);
   assert.match(replayMigration, /"commentAgentWebhookDeliveryIds" TEXT\[\]/);
+  assert.match(
+    replayMigration,
+    /"commentNotificationsProcessingAt" TIMESTAMP\(3\)/,
+  );
   assert.match(replayMigration, /"commentNotificationsSentAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /AgentRunActivity_selectionCommentId_fkey/);
 });
@@ -944,6 +949,29 @@ function atomicCommentHarness() {
         return activity;
       },
       updateMany: async ({ where, data }) => {
+        if (where.commentNotificationsSentAt === null) {
+          const activity = activities.find(({ id }) => id === where.id);
+          if (!activity || activity.commentNotificationsSentAt !== null) {
+            return { count: 0 };
+          }
+          if (where.OR) {
+            const canClaim = where.OR.some((condition) => {
+              const processing = condition.commentNotificationsProcessingAt;
+              return processing === null
+                ? activity.commentNotificationsProcessingAt === null
+                : activity.commentNotificationsProcessingAt <= processing.lte;
+            });
+            if (!canClaim) return { count: 0 };
+          } else if (
+            where.commentNotificationsProcessingAt &&
+            activity.commentNotificationsProcessingAt?.getTime() !==
+              where.commentNotificationsProcessingAt.getTime()
+          ) {
+            return { count: 0 };
+          }
+          Object.assign(activity, data);
+          return { count: 1 };
+        }
         const activity = activities.find(
           (candidate) =>
             candidate.id === where.id &&
@@ -1178,6 +1206,20 @@ test("activity comment links and task counters commit once across replay", async
   assert.equal(harness.updateTaskCalls.length, 0);
 
   harness.setFailure(null);
+  harness.elicitation.commentNotificationsProcessingAt = new Date();
+  await harness.createCommentService({
+    ...commentInput,
+    agentRunReplayComment: {
+      id: comment.id,
+      activityId: harness.elicitation.id,
+      agentWebhookDeliveryIds: ["delivery-1"],
+      boardWebhookDeliveryIds: [],
+      notificationsSentAt: null,
+    },
+  });
+  assert.equal(harness.fcmCalls.length, 0);
+  harness.elicitation.commentNotificationsProcessingAt = null;
+
   const replay = await harness.createCommentService({
     ...commentInput,
     agentRunReplayComment: {
@@ -1197,8 +1239,9 @@ test("activity comment links and task counters commit once across replay", async
   assert.deepEqual(harness.publishedAgentWebhookIds, [
     ["delivery-1"],
     ["delivery-1"],
+    ["delivery-1"],
   ]);
-  assert.deepEqual(harness.publishedBoardWebhookIds, [[], []]);
+  assert.deepEqual(harness.publishedBoardWebhookIds, [[], [], []]);
   assert.equal(harness.fcmCalls.length, 1);
 
   await harness.createCommentService({
@@ -1212,6 +1255,6 @@ test("activity comment links and task counters commit once across replay", async
     },
   });
   assert.equal(harness.fcmCalls.length, 1);
-  assert.equal(harness.publishedAgentWebhookIds.length, 3);
+  assert.equal(harness.publishedAgentWebhookIds.length, 4);
   assert.equal(harness.updateTaskCalls.length, 0);
 });
