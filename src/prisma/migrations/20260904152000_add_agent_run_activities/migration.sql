@@ -19,7 +19,8 @@ CREATE TABLE "AgentRunActivity" (
         "type" = 'ACTION' OR "link" IS NULL
     ),
     CONSTRAINT "AgentRunActivity_options_type_check" CHECK (
-        "type" = 'ELICITATION' OR "options" IS NULL
+        ("type" = 'ELICITATION' AND "options" IS NOT NULL)
+        OR ("type" <> 'ELICITATION' AND "options" IS NULL)
     ),
     CONSTRAINT "AgentRunActivity_selection_check" CHECK (
         ("selectedAt" IS NULL AND "selectedValue" IS NULL AND "selectedLabel" IS NULL AND "selectedById" IS NULL)

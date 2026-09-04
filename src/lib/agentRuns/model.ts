@@ -214,6 +214,11 @@ export function parseAgentRunActivityInput(value: unknown): AgentRunActivityInpu
   }
   const options =
     body.options === undefined ? null : parseActivityOptions(body.options);
+  if (type === "ELICITATION" && !options) {
+    throw new AgentRunActivityInputError(
+      "options are required for elicitation activities",
+    );
+  }
   if (options && type !== "ELICITATION") {
     throw new AgentRunActivityInputError(
       "options are only valid for elicitation activities",

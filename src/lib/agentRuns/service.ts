@@ -32,7 +32,6 @@ import {
   type AgentRunActivityPersistenceInput,
   type AgentRunSelectionPersistenceInput,
 } from "./persistence";
-import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import {
   AGENT_CHAT_EVENT,
@@ -352,6 +351,9 @@ export async function createAgentRunActivity(
   let activity: AgentRunActivity | null = null;
   try {
     if (input.type === "RESPONSE" && run.task) {
+      const { createCommentService } = await import(
+        "@/utils/controllers/comments/createCommentService",
+      );
       await createCommentService({
         text: toStoredHtml(input.text),
         creatorId: principal.userId,
@@ -450,6 +452,9 @@ export async function selectAgentRunActivity(
     selectedAt: now,
   };
   if (run.task) {
+    const { createCommentService } = await import(
+      "@/utils/controllers/comments/createCommentService",
+    );
     await createCommentService({
       text: toStoredHtml(option.label),
       creatorId: principal.userId,
