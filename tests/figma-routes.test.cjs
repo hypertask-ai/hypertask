@@ -291,3 +291,19 @@ test("connection reads and disconnects only the signed user's row", async () => 
   assert.match(clearedConnectionCookie, /Max-Age=0/);
   assert.doesNotMatch(clearedConnectionCookie, /HttpOnly/i);
 });
+
+test("disconnect stays gated when the flag is disabled without a connection", async () => {
+  enabled = false;
+  connectionSummary = null;
+
+  const response = await disconnectRoute.DELETE(
+    appRequest("/api/figma/disconnect", {
+      method: "DELETE",
+      headers: { origin: "https://app.hypertask.ai" },
+    }),
+  );
+
+  assert.equal(response.status, 404);
+  assert.equal(connectionUserId, 6);
+  assert.equal(disconnectedUserId, null);
+});

@@ -1,6 +1,7 @@
 import { InputRule, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
+import { getActiveAccountId } from '@/lib/auth/accounts';
 import {
   FIGMA_CONNECTION_VERSION_COOKIE,
   FIGMA_OAUTH_START_PATH,
@@ -45,8 +46,9 @@ const getFigmaConnectionVersion = () => {
 export const fetchFigmaOembed = (
   figmaUrl: string,
 ): Promise<FigmaPreviewData> => {
+  const accountId = getActiveAccountId();
   const connectionVersion = getFigmaConnectionVersion();
-  const cacheKey = `${connectionVersion}:${figmaUrl}`;
+  const cacheKey = `${accountId ?? 'unknown'}:${connectionVersion}:${figmaUrl}`;
   const inFlight = oembedRequests.get(cacheKey);
   if (inFlight) return inFlight;
 
@@ -55,8 +57,11 @@ export const fetchFigmaOembed = (
   ).then(async (response) => {
     if (!response.ok) throw new Error('Figma preview unavailable');
     const data: FigmaPreviewData = await response.json();
-    if (getFigmaConnectionVersion() !== connectionVersion) {
-      throw new Error('Figma connection changed');
+    if (
+      getActiveAccountId() !== accountId ||
+      getFigmaConnectionVersion() !== connectionVersion
+    ) {
+      throw new Error('Figma authorization changed');
     }
     return data;
   });

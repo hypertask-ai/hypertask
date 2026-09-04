@@ -5,6 +5,14 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
+let activeAccountId = null;
+const accountsFilename = path.join(root, "src/lib/auth/accounts.ts");
+require.cache[accountsFilename] = {
+  id: accountsFilename,
+  filename: accountsFilename,
+  loaded: true,
+  exports: { getActiveAccountId: () => activeAccountId },
+};
 const jiti = require("jiti")(path.join(root, "tests/figma-comment-preview.test.cjs"), {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
@@ -159,6 +167,7 @@ test("deduplicates only in-flight previews within one connection version", async
   const originalDocument = global.document;
   const originalFetch = global.fetch;
   global.document = dom.window.document;
+  activeAccountId = 6;
   document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-one; Path=/`;
 
   const responses = [];
@@ -183,32 +192,46 @@ test("deduplicates only in-flight previews within one connection version", async
     responses.shift()(Response.json({ title: "Second" }));
     assert.deepEqual(await settled, { title: "Second" });
   } finally {
+    activeAccountId = null;
     global.document = originalDocument;
     global.fetch = originalFetch;
   }
 });
 
-test("rejects an in-flight preview after the connection version changes", async () => {
+test("partitions and rejects previews after account or connection changes", async () => {
   const dom = new JSDOM("<!doctype html><body></body>", {
     url: "https://app.hypertask.ai/detail/project-15/6136",
   });
   const originalDocument = global.document;
   const originalFetch = global.fetch;
   global.document = dom.window.document;
+  activeAccountId = 6;
   document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-one; Path=/`;
 
-  let resolveFetch;
-  global.fetch = async () =>
-    new Promise((resolve) => {
-      resolveFetch = resolve;
-    });
+  const responses = [];
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    return new Promise((resolve) => responses.push(resolve));
+  };
 
   try {
-    const preview = fetchFigmaOembed("https://www.figma.com/design/stale");
+    const oldAccount = fetchFigmaOembed("https://www.figma.com/design/stale");
+    activeAccountId = 7;
+    const newAccount = fetchFigmaOembed("https://www.figma.com/design/stale");
+    assert.notEqual(oldAccount, newAccount);
+    assert.equal(fetchCalls, 2);
+    responses.shift()(Response.json({ title: "Old account" }));
+    responses.shift()(Response.json({ title: "New account" }));
+    await assert.rejects(oldAccount, /Figma authorization changed/);
+    assert.deepEqual(await newAccount, { title: "New account" });
+
+    const oldConnection = fetchFigmaOembed("https://www.figma.com/design/stale");
     document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-two; Path=/`;
-    resolveFetch(Response.json({ title: "Stale" }));
-    await assert.rejects(preview, /Figma connection changed/);
+    responses.shift()(Response.json({ title: "Old connection" }));
+    await assert.rejects(oldConnection, /Figma authorization changed/);
   } finally {
+    activeAccountId = null;
     global.document = originalDocument;
     global.fetch = originalFetch;
   }

@@ -6,7 +6,11 @@ import {
   noStore,
   trustedMutationOrigin,
 } from "@/app/api/figma/_lib";
-import { disconnectFigmaUser } from "@/lib/figma/connection";
+import {
+  disconnectFigmaUser,
+  figmaConnectEnabledFor,
+  getFigmaConnection,
+} from "@/lib/figma/connection";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,6 +28,11 @@ export async function DELETE(request: NextRequest) {
   }
 
   try {
+    const connection = await getFigmaConnection(principal.userId);
+    if (!connection && !(await figmaConnectEnabledFor(principal.userId))) {
+      return noStore({ error: "Not found" }, 404);
+    }
+
     await disconnectFigmaUser(principal.userId);
     const response = noStore({ success: true });
     clearFigmaConnectionVersion(response);
