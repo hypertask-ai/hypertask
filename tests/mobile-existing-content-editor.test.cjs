@@ -139,7 +139,7 @@ test("DONE is single-flight and only clears local state after a successful save"
   const callback = sliceBetween(
     tiptap,
     "const handleCallback = async",
-    "const sendComment = () =>",
+    "const sendComment =",
   );
   assert.match(callback, /mobileEditSavingRef\.current\) return/);
   assert.match(callback, /saveInFlightRef\.current\) return/);

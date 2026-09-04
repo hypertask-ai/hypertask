@@ -5,7 +5,10 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-const jiti = createJiti(__filename, { interopDefault: true });
+const jiti = createJiti(__filename, {
+  interopDefault: true,
+  alias: { "@": path.join(root, "src") },
+});
 const {
   isInternalTaskDetailHref,
   preserveInboxFlowOnTaskHref,
@@ -14,6 +17,9 @@ const {
 } = jiti(path.join(root, "src/lib/taskDetailInboxFlow.ts"));
 const { inboxConfig } = jiti(
   path.join(root, "src/lib/configs/inbox.config.ts"),
+);
+const { getKeyboardShortcuts } = jiti(
+  path.join(root, "src/lib/constants/shortcuts.ts"),
 );
 
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
@@ -126,12 +132,52 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
     key: "Enter",
     shiftKey: false,
     altKey: false,
+    consistentCommentShortcuts: false,
     isInboxFlow: true,
     isCommentMode: true,
     inInbox: true,
   };
   const cases = [
     { name: "ordinary send", changes: {}, expected: "send" },
+    {
+      name: "consistent send and move outside Inbox",
+      changes: {
+        consistentCommentShortcuts: true,
+        isInboxFlow: false,
+        inInbox: false,
+      },
+      expected: "send-and-move",
+    },
+    {
+      name: "consistent send and stay without Inbox lineage",
+      changes: {
+        consistentCommentShortcuts: true,
+        shiftKey: true,
+        isInboxFlow: false,
+        inInbox: false,
+      },
+      expected: "send-and-stay",
+    },
+    {
+      name: "consistent shortcuts leave Ctrl Alt Enter unchanged",
+      changes: {
+        consistentCommentShortcuts: true,
+        altKey: true,
+        isInboxFlow: false,
+        inInbox: false,
+      },
+      expected: "send",
+    },
+    {
+      name: "consistent shortcuts leave description saves unchanged",
+      changes: {
+        consistentCommentShortcuts: true,
+        isCommentMode: false,
+        isInboxFlow: false,
+        inInbox: false,
+      },
+      expected: "send",
+    },
     {
       name: "Inbox send and stay",
       changes: { shiftKey: true, inInbox: false },
@@ -148,8 +194,12 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
       expected: "send",
     },
     {
-      name: "Inbox send and complete",
-      changes: { shiftKey: true, altKey: true },
+      name: "Inbox send and complete remains unchanged by consistent shortcuts",
+      changes: {
+        consistentCommentShortcuts: true,
+        shiftKey: true,
+        altKey: true,
+      },
       expected: "send-and-complete",
     },
     {
@@ -177,6 +227,61 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
       name,
     );
   }
+});
+
+test("comment shortcut discovery follows the owner-only flag", () => {
+  const taskView = (enabled, isApple = false) =>
+    getKeyboardShortcuts(isApple, false, enabled).find(
+      (group) => group.title === "Task View",
+    ).sub;
+
+  assert.ok(
+    taskView(false).some(
+      (shortcut) => shortcut.shortTitle === "Save/edit text entry",
+    ),
+  );
+  assert.ok(
+    !taskView(false).some((shortcut) =>
+      shortcut.shortTitle.startsWith("Send comment"),
+    ),
+  );
+  assert.deepEqual(
+    taskView(true).filter((shortcut) =>
+      shortcut.shortTitle.startsWith("Send comment"),
+    ),
+    [
+      {
+        shortTitle: "Send comment and move to next task",
+        pressKey: ["CTRL", "ENTER"],
+      },
+      {
+        shortTitle: "Send comment and stay on task",
+        pressKey: ["CTRL", "SHIFT", "ENTER"],
+      },
+    ],
+  );
+  assert.deepEqual(
+    taskView(true, true).find(
+      (shortcut) => shortcut.shortTitle === "Send comment and move to next task",
+    ).pressKey,
+    ["CMD", "ENTER"],
+  );
+
+  for (const file of [
+    "src/components/sidebars/keyboardShortcuts.tsx",
+    "src/components/Modals/Settings/ShortcutsSection.tsx",
+  ]) {
+    const source = read(file);
+    assert.match(source, /useFlag\(\s*"htpr-5913-consistent-comment-shortcuts"/);
+    assert.match(
+      source,
+      /getKeyboardShortcuts\([\s\S]*?consistentCommentShortcuts/,
+    );
+  }
+
+  const registry = read("docs/keyboard-shortcuts-registry.md");
+  assert.match(registry, /`Mod\+ENTER` \| With the owner-only/);
+  assert.match(registry, /`Mod\+Shift\+ENTER` \| With the same flag/);
 });
 
 test("all nested task links apply the Inbox marker to their navigation target", () => {

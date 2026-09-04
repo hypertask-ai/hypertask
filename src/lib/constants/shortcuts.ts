@@ -23,7 +23,8 @@ export const isFavoriteBoardShortcut = (
 
 export const getKeyboardShortcuts = (
   isApple: boolean,
-  appShellRailOn = false
+  appShellRailOn = false,
+  consistentCommentShortcuts = false,
 ): IShortcut[] => {
   const cmdControl = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
@@ -146,7 +147,14 @@ export const getKeyboardShortcuts = (
       title: "Task View",
       sub: [
         { shortTitle: "Activate description/comment or reply to comment", pressKey: ["ENTER"] },
-        { shortTitle: "Save/edit text entry", pressKey: [cmdControl, "ENTER"] },
+        ...(consistentCommentShortcuts
+          ? [
+              { shortTitle: "Send comment and move to next task", pressKey: [cmdControl, "ENTER"] },
+              { shortTitle: "Send comment and stay on task", pressKey: [cmdControl, "SHIFT", "ENTER"] },
+            ]
+          : [
+              { shortTitle: "Save/edit text entry", pressKey: [cmdControl, "ENTER"] },
+            ]),
         { shortTitle: "Write with AI", pressKey: [cmdControl, "J"] },
         { shortTitle: "Assign a user", pressKey: ["A"] },
         { shortTitle: "Blocked by person", pressKey: ["SHIFT", "B"] },

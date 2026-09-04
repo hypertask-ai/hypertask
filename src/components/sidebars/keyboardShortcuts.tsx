@@ -10,14 +10,22 @@ import {
 } from "@/lib/configs/general.config";
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useFlag } from "@/hooks/useFlag";
 
 const KeyboardShortcuts = () => {
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
+  const consistentCommentShortcuts = useFlag(
+    "htpr-5913-consistent-comment-shortcuts",
+  );
   const [_showShortcuts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
   const [keyword, setKeyword] = useState("");
-  const mainData = getKeyboardShortcuts(isApple, appShellRailOn);
+  const mainData = getKeyboardShortcuts(
+    isApple,
+    appShellRailOn,
+    consistentCommentShortcuts,
+  );
   const [filteredShortcuts, setFilteredShortcuts] = useState(mainData);
 
   // ====================== ON INPUT KEY CHANGE
