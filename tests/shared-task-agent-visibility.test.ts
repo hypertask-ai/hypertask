@@ -107,7 +107,9 @@ async function main() {
     assert.equal(comment.agentDisplayName, PRIVATE_AGENT_DISPLAY_NAME);
   }
   const redactedActivity = (
-    redactedComments[1] as typeof activeAgentComment
+    redactedComments[1] as unknown as {
+      activity: typeof activeAgentComment.activity;
+    }
   ).activity;
   assert.deepEqual(redactedActivity.data.fromAgent, {
     displayName: PRIVATE_AGENT_DISPLAY_NAME,

@@ -5,23 +5,38 @@ import {
 } from "@/lib/agents/publicAgent";
 import { IComment } from "@/models/model";
 
-export const redactSharedComments = <T extends Record<string, unknown>>(
+type SharedCommentWithAgentAttribution = Record<string, unknown> & {
+  agentId: unknown;
+  agent: unknown;
+  agentDisplayName: unknown;
+};
+
+type RedactedSharedComment<T extends SharedCommentWithAgentAttribution> = Omit<
+  T,
+  "agentId" | "agent" | "agentDisplayName"
+> & {
+  agentId: null;
+  agent: null;
+  agentDisplayName: string | null;
+};
+
+export const redactSharedComments = <
+  T extends SharedCommentWithAgentAttribution,
+>(
   comments: T[]
-): T[] =>
+): RedactedSharedComment<T>[] =>
   comments.map((comment) => {
     const agentAuthored = Boolean(
       comment.agentId || comment.agent || comment.agentDisplayName
     );
     const redacted = redactAgentIdentitiesForPublicShare(comment);
 
-    return (agentAuthored
-      ? {
-          ...redacted,
-          agentId: null,
-          agent: null,
-          agentDisplayName: PRIVATE_AGENT_DISPLAY_NAME,
-        }
-      : redacted) as T;
+    return {
+      ...redacted,
+      agentId: null,
+      agent: null,
+      agentDisplayName: agentAuthored ? PRIVATE_AGENT_DISPLAY_NAME : null,
+    };
   });
 
 export const getSharedComments = async (
