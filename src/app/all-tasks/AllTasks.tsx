@@ -130,9 +130,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     const activeTag = document.activeElement?.tagName;
     const inFormControl =
       activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT";
-    const activatingButton =
-      activeTag === "BUTTON" &&
-      (event.keyCode === KeyCodes.ENTER || event.keyCode === KeyCodes.SPACE);
     if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show && !inFormControl) {
       event.preventDefault();
       return router.back();
@@ -153,7 +150,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     }
     if (
       (inFormControl && activeTag !== "SELECT") ||
-      activatingButton ||
       returnIfModalOrInputActive()
     )
       return;
