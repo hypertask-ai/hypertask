@@ -158,4 +158,15 @@ test("refresh uses Figma's refresh endpoint and rejects failed credentials", asy
     ),
     { message: "Figma OAuth returned an invalid response" },
   );
+
+  const transportCause = new TypeError("fetch failed");
+  await assert.rejects(
+    oauth.refreshFigmaToken("offline", config, 0, async () => {
+      throw transportCause;
+    }),
+    (error) =>
+      error instanceof oauth.FigmaOAuthTransportError &&
+      error.message === "Figma OAuth request failed" &&
+      error.cause === transportCause,
+  );
 });
