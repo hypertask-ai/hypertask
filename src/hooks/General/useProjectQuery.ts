@@ -3,8 +3,9 @@ import { IComment, IDraft, IProject, ITask, IUser } from "@/models/model";
 import { activeItemAtom, currentUserAtom, inViewObjectAtom, lastUsedBoardsAtom } from "@/store";
 import { buildProjectSurfaceUrl, getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import nookies from "nookies";
+import { useFlag } from "@/hooks/useFlag";
 import {
   useRecoilValue,
   useResetRecoilState,
@@ -20,6 +21,10 @@ export const useProjectQuery = () => {
   const resetInViewObject = useResetRecoilState(inViewObjectAtom);
   const setLastUsedBoards = useSetRecoilState(lastUsedBoardsAtom);
   const router = useRouter();
+  const pathname = usePathname();
+  const shallowBoardSwitchEnabled = useFlag(
+    "htpr-6072-shallow-board-switch",
+  );
   const hyperAI: IUser | undefined = queryClient.getQueryData(["hyper-ai"]);
 
   const updateActiveItemAndItemInView = (task: ITask | null) => {
@@ -53,10 +58,10 @@ export const useProjectQuery = () => {
 
     const allProjects: IProject[] =
       queryClient.getQueryData(["projectsAllMinimal"]) ?? [];
-    const project = allProjects.filter(
+    const project = allProjects.find(
       (item: IProject) => item.id === projectId
     );
-    const activeView = getViewFromProject(project[0]);
+    const activeView = getViewFromProject(project);
 
     if (updateBoardCookie) {
       nookies.destroy(null, "previousBoard");
@@ -83,7 +88,13 @@ export const useProjectQuery = () => {
       return;
     }
 
-    // Normal navigation behavior
+    if (shallowBoardSwitchEnabled && pathname === "/project" && project) {
+      window.history.pushState(window.history.state, "", destination);
+      return;
+    }
+
+    // Missing cache entries and navigation from other routes retain the
+    // server-side project access check.
     router.push(destination);
   };
 

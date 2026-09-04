@@ -66,7 +66,7 @@ test("on-demand board payload restores full metadata before hydration", () => {
   assert.match(clientSource, /\{ \.\.\.project, \.\.\.payload\.project \}/);
   assert.match(
     landingSource,
-    /isBoardPayloadHydrated\(data\.updatedProjects\[projectIndex\]\)/
+    /readyProject && isBoardPayloadHydrated\(readyProject\)/
   );
   assert.match(landingSource, /failedAttempts <= 2/);
   assert.match(landingSource, /setHydrationRetryToken/);

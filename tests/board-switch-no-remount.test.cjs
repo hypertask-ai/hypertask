@@ -242,23 +242,50 @@ test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) f
   );
 });
 
-test("HTPR-6072: the surface-readiness gate does not unmount SectionComp on a second switch", () => {
-  // surfaceInitializedFor is set by a passive effect, so surfaceInitializationKey
-  // (which changes synchronously on every switch) outruns it by one render.
-  // Gating SectionComp's render on that comparison alone unmounts and
-  // remounts the whole board tree on every switch, even a warm one. Once
-  // SectionComp has rendered for real, sectionCompEverRenderedRef must let
-  // it keep rendering while the surface effect catches up.
+test("HTPR-6072: a pending shallow switch keeps the committed board mounted", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
-  const gateMatch = src.match(
-    /\) : data && data\.updatedProjects && boardDataReady &&\s*\n\s*\(surfaceInitializedFor === surfaceInitializationKey \|\| sectionCompEverRenderedRef\.current\) \? \(\s*\n\s*<SectionComp/,
+  assert.match(
+    src,
+    /const \[committedBoardRender, setCommittedBoardRender\][\s\S]*useLayoutEffect\(\(\) => \{\s*if \(readyBoardRender\) setCommittedBoardRender\(readyBoardRender\)\s*\}, \[readyBoardRender\]\)/,
+    "expected a ready board to replace the committed render atomically before paint",
   );
-  assert.ok(
-    gateMatch,
-    "expected the SectionComp render gate to accept either a fresh surface match or sectionCompEverRenderedRef",
+  assert.match(
+    src,
+    /const boardRender =\s*shallowBoardSwitchEnabled &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: readyBoardRender/,
+    "expected a shallow switch to retain the previous committed snapshot only while the target is pending",
+  );
+  assert.match(
+    src,
+    /<SectionComp\s+_allProjects=\{boardRender\.projects\}[\s\S]{0,900}_readinessRouteEntryId=\{boardRender\.readinessRouteEntryId\}/,
+    "expected SectionComp to receive one internally consistent committed snapshot",
+  );
+});
+
+test("HTPR-6072: flagged keyboard switches wait for parent authorization", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const switchHandler = src.match(
+    /async function handleStateChangesOnBoardChange[\s\S]*?\n}\n\n\nconst handleBoardChange/,
+  );
+  assert.ok(switchHandler, "expected the board switch handler to exist");
+  assert.match(
+    switchHandler[0],
+    /if \(_shallowBoardSwitchEnabled\) \{\s*const target = projects\[index\]\s*if \(target\) goToProjectShortcut\(target\.id, true\)\s*return\s*\}[\s\S]*const loaded = await ensureBoardLoaded\(index\)/,
+    "expected shallow switches to navigate before loading or publishing target state locally",
+  );
+  const guardedBranch = switchHandler[0].slice(
+    switchHandler[0].indexOf("if (_shallowBoardSwitchEnabled)"),
+    switchHandler[0].indexOf("const switchGeneration"),
+  );
+  assert.doesNotMatch(
+    guardedBranch,
+    /setProjects|setCurrentProject|setSections|setRecoilCurrentProject/,
+    "the target must be published only by the parent's authorized snapshot",
   );
 });
 
@@ -274,4 +301,56 @@ test("HTPR-6072: sectionCompEverRenderedRef arms in an effect, not during render
     armMatch,
     "expected sectionCompEverRenderedRef to be armed inside a useLayoutEffect keyed on boardDataReady",
   );
+});
+
+test("HTPR-6072: shallow navigation is flag, route, and cache guarded", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/hooks/General/useProjectQuery.ts"),
+    "utf8",
+  );
+  assert.match(src, /useFlag\(\s*"htpr-6072-shallow-board-switch"/);
+  assert.match(
+    src,
+    /if \(shallowBoardSwitchEnabled && pathname === "\/project" && project\) \{\s*window\.history\.pushState\(window\.history\.state, "", destination\);\s*return;\s*\}[\s\S]{0,180}router\.push\(destination\)/,
+    "expected non-board, cache-miss, and flag-off navigation to retain router.push",
+  );
+});
+
+test("HTPR-6072: the live URL selects a board only behind the flag", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  assert.match(
+    src,
+    /const routedProjectId = normalizeRequestedProjectId\(searchParams\?\.get\("id"\)\)\s*const slugs = shallowBoardSwitchEnabled && routedProjectId !== null\s*\? String\(routedProjectId\)\s*: slugsProp/,
+  );
+  assert.match(
+    src,
+    /if \(shallowBoardSwitchEnabled && pathname === "\/project"\) \{\s*window\.history\.replaceState\(window\.history\.state, "", newUrl\)\s*\} else \{\s*router\.replace/,
+    "expected canonicalization to preserve Next history state and retain the router fallback",
+  );
+});
+
+test("HTPR-6072: the target layout is part of the atomic render snapshot", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  assert.match(
+    src,
+    /const boardLayoutForRender =[\s\S]{0,450}resolveBoardLayoutFromSurface\(\s*requestedSurface,\s*getActiveBoardLayoutPreferenceFromProject\(pinnedProject\),\s*boardLayoutPreference/,
+  );
+  assert.match(src, /boardLayout: boardLayoutForRender/);
+  assert.match(src, /_boardLayout=\{boardRender\.boardLayout\}/);
+});
+
+test("HTPR-6072: the mobile board switcher uses shared guarded navigation", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/components/Global/MobileTitleSheet.tsx"),
+    "utf8",
+  );
+  assert.match(src, /const \{ goToProjectShortcut \} = useProjectQuery\(\)/);
+  assert.match(src, /goToProjectShortcut\(board\.id, true\)/);
+  assert.doesNotMatch(src, /router\.push\(`\/project\?id=\$\{board\.id\}`\)/);
 });
