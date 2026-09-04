@@ -1110,19 +1110,20 @@ const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
     user.id,
   ],
 )
-const [committedBoardRender, setCommittedBoardRender] =
-  useState<BoardRenderSnapshot | null>(null)
+const committedBoardRenderRef = useRef<BoardRenderSnapshot | null>(null)
 useLayoutEffect(() => {
-  if (readyBoardRender) setCommittedBoardRender(readyBoardRender)
+  if (readyBoardRender) committedBoardRenderRef.current = readyBoardRender
 }, [readyBoardRender])
+const committedBoardRender = committedBoardRenderRef.current
 const boardRender =
-  shallowBoardSwitchEnabled &&
-  committedBoardRender?.accountId === user.id &&
-  currentBoardAccessStatus !== "denied" &&
-  !projectLookupFailed &&
-  hydrationFailedProjectId !== requestedProjectId
-    ? committedBoardRender
-    : readyBoardRender
+  readyBoardRender ??
+  (shallowBoardSwitchEnabled &&
+    committedBoardRender?.accountId === user.id &&
+    currentBoardAccessStatus !== "denied" &&
+    !projectLookupFailed &&
+    hydrationFailedProjectId !== requestedProjectId
+      ? committedBoardRender
+      : null)
 
 // HTPR-6072: arms sectionCompEverRenderedRef the moment the board data
 // itself is ready, one tick ahead of the render that actually picks the

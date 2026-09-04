@@ -254,13 +254,18 @@ test("HTPR-6072: a pending shallow switch keeps the committed board mounted", ()
   );
   assert.match(
     src,
-    /const \[committedBoardRender, setCommittedBoardRender\][\s\S]*useLayoutEffect\(\(\) => \{\s*if \(readyBoardRender\) setCommittedBoardRender\(readyBoardRender\)\s*\}, \[readyBoardRender\]\)/,
-    "expected a ready board to replace the committed render atomically before paint",
+    /const committedBoardRenderRef = useRef<BoardRenderSnapshot \| null>\(null\)[\s\S]*useLayoutEffect\(\(\) => \{\s*if \(readyBoardRender\) committedBoardRenderRef\.current = readyBoardRender\s*\}, \[readyBoardRender\]\)/,
+    "expected only committed ready boards to become the pending fallback",
+  );
+  assert.doesNotMatch(
+    src,
+    /setCommittedBoardRender/,
+    "recording the ready board must not force a second synchronous parent render",
   );
   assert.match(
     src,
-    /const boardRender =\s*shallowBoardSwitchEnabled &&\s*committedBoardRender\?\.accountId === user\.id &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: readyBoardRender/,
-    "expected a shallow switch to retain the previous committed snapshot only while the target is pending",
+    /const boardRender =\s*readyBoardRender \?\?\s*\(shallowBoardSwitchEnabled &&\s*committedBoardRender\?\.accountId === user\.id &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: null\)/,
+    "expected a ready target to render immediately and the previous committed snapshot only while it is pending",
   );
   assert.match(
     src,
