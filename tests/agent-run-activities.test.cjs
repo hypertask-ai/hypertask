@@ -38,6 +38,7 @@ function runRow(overrides = {}) {
     createdAt: new Date("2026-09-04T10:00:00.000Z"),
     lastActivityAt: new Date("2026-09-04T10:00:00.000Z"),
     stoppedById: null,
+    agent: { userId: 6 },
     task: {
       id: 42,
       projectId: 15,
@@ -65,6 +66,8 @@ function activityRow(overrides = {}) {
     selectedById: null,
     responseCommentId: null,
     selectionCommentId: null,
+    commentAgentWebhookDeliveryIds: [],
+    commentBoardWebhookDeliveryIds: [],
     createdAt: new Date("2026-09-04T10:01:00.000Z"),
     ...overrides,
   };
@@ -508,7 +511,7 @@ test("only the matching agent creates an idempotent task response and visible co
   assert.equal(harness.commentCalls.length, 2);
   assert.equal(harness.commentCalls[0].text, "<p>Done</p>");
   assert.equal(harness.commentCalls[0].agentRunActivity.runId, run.id);
-  assert.equal(harness.commentCalls[1].agentRunReplayCommentId, 1);
+  assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
   assert.equal(run.status, "ACTIVE");
   await assert.rejects(
     harness.service.createAgentRunActivity(
@@ -549,7 +552,7 @@ test("a task response retry resumes side effects after its comment commits", asy
   assert.equal(harness.db.activities.length, 1);
   assert.equal(harness.db.activities[0].responseCommentId, 1);
   assert.equal(harness.commentCalls.length, 2);
-  assert.equal(harness.commentCalls[1].agentRunReplayCommentId, 1);
+  assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
 });
 
 test("an idempotency unique race replays every non-null service key", async () => {
@@ -639,7 +642,7 @@ test("one browser selection wins and its retry does not post twice", async () =>
   assert.equal(elicitation.selectedById, 6);
   assert.equal(harness.commentCalls.length, 2);
   assert.equal(harness.commentCalls[0].text, "<p>Docs</p>");
-  assert.equal(harness.commentCalls[1].agentRunReplayCommentId, 1);
+  assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
   assert.equal(
     await harness.service.selectAgentRunActivity(
       agentPrincipal,
@@ -691,7 +694,7 @@ test("a task selection retry resumes side effects after its comment commits", as
   assert.equal(replay.duplicate, true);
   assert.equal(elicitation.selectionCommentId, 1);
   assert.equal(harness.commentCalls.length, 2);
-  assert.equal(harness.commentCalls[1].agentRunReplayCommentId, 1);
+  assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
 });
 
 test("a stopped run rejects a late elicitation selection", async () => {
@@ -760,12 +763,24 @@ test("migration constrains retry keys and elicitation selections", () => {
   assert.match(migration, /UNIQUE INDEX "AgentRunActivity_runId_idempotencyKey_key"/);
   assert.match(migration, /AgentRunActivity_selection_check/);
   assert.match(migration, /AgentRunActivity_options_type_check/);
+  const replayMigration = require("node:fs").readFileSync(
+    path.join(
+      root,
+      "src/prisma/migrations/20260904184500_add_agent_run_activity_comment_replay/migration.sql",
+    ),
+    "utf8",
+  );
+  assert.match(replayMigration, /ADD COLUMN "responseCommentId" INTEGER/);
+  assert.match(replayMigration, /"commentAgentWebhookDeliveryIds" TEXT\[\]/);
+  assert.match(replayMigration, /AgentRunActivity_selectionCommentId_fkey/);
 });
 
 function loadAtomicCommentService(
   prisma,
   persistAgentWebhookEvent,
   updateTaskSingle,
+  publishAgentWebhookDeliveries,
+  publishBoardWebhookDeliveries,
 ) {
   const noop = async () => {};
   const modules = {
@@ -818,11 +833,11 @@ function loadAtomicCommentService(
       persistAgentTaskRunPromptWebhooks: async () => [],
       persistAgentWebhookEvent,
       persistAgentWebhookEvents: async () => [],
-      publishAgentWebhookDeliveries: noop,
+      publishAgentWebhookDeliveries,
     },
     "src/lib/mcp/webhooks/outbox.ts": {
       persistBoardWebhookEvents: async () => [],
-      publishBoardWebhookDeliveries: noop,
+      publishBoardWebhookDeliveries,
     },
     "src/lib/configs/general.config.ts": {
       generalConfig: { hyperAiId: 332 },
@@ -871,6 +886,8 @@ function atomicCommentHarness() {
   const activities = [elicitation];
   const comments = [];
   const webhookWrites = [];
+  const publishedAgentWebhookIds = [];
+  const publishedBoardWebhookIds = [];
   const updateTaskCalls = [];
   let failure = "comment";
 
@@ -953,7 +970,14 @@ function atomicCommentHarness() {
   };
   const prisma = {
     ...tx,
-    drafts: { deleteMany: async () => ({ count: 0 }) },
+    drafts: {
+      deleteMany: async () => {
+        if (failure === "post-commit") {
+          throw new Error("post-commit side effect failed");
+        }
+        return { count: 0 };
+      },
+    },
     follower: { findMany: async () => [] },
     notification: {
       findFirst: async () => null,
@@ -997,6 +1021,8 @@ function atomicCommentHarness() {
       updateTaskCalls.push(args);
       return { status: 200, json: {} };
     },
+    async (ids) => publishedAgentWebhookIds.push([...ids]),
+    async (ids) => publishedBoardWebhookIds.push([...ids]),
   );
   return {
     run,
@@ -1005,6 +1031,8 @@ function atomicCommentHarness() {
     activities,
     comments,
     webhookWrites,
+    publishedAgentWebhookIds,
+    publishedBoardWebhookIds,
     updateTaskCalls,
     createCommentService,
     setFailure: (value) => {
@@ -1104,34 +1132,54 @@ test("activity comment links and task counters commit once across replay", async
     currentUser: { id: 6, displayName: "Valentin" },
     accessUserId: 6,
   };
-  harness.setFailure(null);
+  harness.setFailure("post-commit");
 
-  const comment = await harness.createCommentService({
-    ...commentInput,
-    agentRunSelection: {
-      runId: "run-1",
-      agentId: "agent-1",
-      activityId: harness.elicitation.id,
-      context: { taskId: 42, chatSessionId: null },
-      option: { value: "yes", label: "Yes" },
-      selectedById: 6,
-      selectedAt: new Date("2026-09-04T10:03:00.000Z"),
-    },
-  });
+  await assert.rejects(
+    harness.createCommentService({
+      ...commentInput,
+      agentRunSelection: {
+        runId: "run-1",
+        agentId: "agent-1",
+        activityId: harness.elicitation.id,
+        context: { taskId: 42, chatSessionId: null },
+        option: { value: "yes", label: "Yes" },
+        selectedById: 6,
+        selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+      },
+    }),
+    /post-commit side effect failed/,
+  );
+  const [comment] = harness.comments;
 
   assert.equal(harness.elicitation.selectionCommentId, comment.id);
+  assert.deepEqual(harness.elicitation.commentAgentWebhookDeliveryIds, [
+    "delivery-1",
+  ]);
+  assert.deepEqual(harness.elicitation.commentBoardWebhookDeliveryIds, []);
   assert.equal(harness.comments.length, 1);
   assert.equal(harness.task.totalComments, 1);
   assert.deepEqual(harness.task.updatedByUserIds, [6]);
   assert.notEqual(harness.task.updatedAt, originalTaskUpdatedAt);
+  assert.deepEqual(harness.publishedAgentWebhookIds, [["delivery-1"]]);
+  assert.deepEqual(harness.publishedBoardWebhookIds, [[]]);
   assert.equal(harness.updateTaskCalls.length, 0);
 
+  harness.setFailure(null);
   const replay = await harness.createCommentService({
     ...commentInput,
-    agentRunReplayCommentId: comment.id,
+    agentRunReplayComment: {
+      id: comment.id,
+      agentWebhookDeliveryIds: ["delivery-1"],
+      boardWebhookDeliveryIds: [],
+    },
   });
   assert.equal(replay.id, comment.id);
   assert.equal(harness.comments.length, 1);
   assert.equal(harness.task.totalComments, 1);
+  assert.deepEqual(harness.publishedAgentWebhookIds, [
+    ["delivery-1"],
+    ["delivery-1"],
+  ]);
+  assert.deepEqual(harness.publishedBoardWebhookIds, [[], []]);
   assert.equal(harness.updateTaskCalls.length, 0);
 });

@@ -226,6 +226,9 @@ export async function stopAgentRun(
 }
 
 type ActivityRunWithContext = AgentRun & {
+  agent: {
+    userId: number;
+  };
   task: {
     id: number;
     userId: number;
@@ -253,6 +256,7 @@ async function findActivityRun(
   return prisma.agentRun.findFirst({
     where: accessibleRunWhere(principal, id),
     include: {
+      agent: { select: { userId: true } },
       task: { select: { id: true, userId: true } },
       chatSession: { select: { id: true, userId: true } },
     },
@@ -297,7 +301,7 @@ async function replayCreatedActivity(
     );
     await createCommentService({
       text: toStoredHtml(activity.text),
-      creatorId: principal.userId,
+      creatorId: run.agent.userId,
       taskId: run.task.id,
       ownerId: run.task.userId,
       currentUser: {
@@ -306,7 +310,11 @@ async function replayCreatedActivity(
       },
       agentId: run.agentId,
       accessUserId: principal.userId,
-      agentRunReplayCommentId: activity.responseCommentId,
+      agentRunReplayComment: {
+        id: activity.responseCommentId,
+        agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
+        boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
+      },
     });
   }
   broadcastActivityChange(run, principal.userId);
@@ -382,7 +390,7 @@ export async function createAgentRunActivity(
       );
       await createCommentService({
         text: toStoredHtml(input.text),
-        creatorId: principal.userId,
+        creatorId: run.agent.userId,
         taskId: run.task.id,
         ownerId: run.task.userId,
         currentUser: {
@@ -463,7 +471,7 @@ export async function selectAgentRunActivity(
       );
     }
     if (run.task) {
-      if (!activity.selectionCommentId) {
+      if (!activity.selectionCommentId || !activity.selectedById) {
         throw new Error("Agent run selection comment was not persisted");
       }
       const { createCommentService } = await import(
@@ -471,7 +479,7 @@ export async function selectAgentRunActivity(
       );
       await createCommentService({
         text: toStoredHtml(activity.selectedLabel ?? option.label),
-        creatorId: principal.userId,
+        creatorId: activity.selectedById,
         taskId: run.task.id,
         ownerId: run.task.userId,
         currentUser: {
@@ -479,7 +487,11 @@ export async function selectAgentRunActivity(
           displayName: principal.displayName,
         },
         accessUserId: principal.userId,
-        agentRunReplayCommentId: activity.selectionCommentId,
+        agentRunReplayComment: {
+          id: activity.selectionCommentId,
+          agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
+          boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
+        },
       });
     }
     broadcastActivityChange(run, principal.userId);
