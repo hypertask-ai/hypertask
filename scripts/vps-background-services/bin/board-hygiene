@@ -36,9 +36,15 @@ for t in d["tasks"]:
   fi
   next_cursor=$(jq -er 'if .success == true then (.nextCursor // "") else error(.error // "task list failed") end' <<<"$page")
   [ -z "$next_cursor" ] && break
-  if grep -Fxq "$next_cursor" <<<"$seen_cursors"; then
+  if grep -Fxq -- "$next_cursor" <<<"$seen_cursors"; then
     echo "board-hygiene: repeated task cursor, refusing a partial run" >&2
     exit 1
+  else
+    cursor_check_status=$?
+    if [ "$cursor_check_status" -ne 1 ]; then
+      echo "board-hygiene: task cursor check failed" >&2
+      exit 1
+    fi
   fi
   seen_cursors+="${seen_cursors:+$'\n'}$next_cursor"
   cursor="$next_cursor"
