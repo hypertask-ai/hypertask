@@ -303,7 +303,6 @@ async function replayCreatedActivity(
       "Idempotency-Key was already used with different activity data",
     );
   }
-  let resumedNotifications = false;
   // Older activities have no comment link, so they retain duplicate-only replay.
   if (input.type === "RESPONSE" && run.task && activity.responseCommentId) {
     const { createCommentService } = await import(
@@ -323,13 +322,9 @@ async function replayCreatedActivity(
         agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
         boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
         notificationsCompletedAt: activity.commentNotificationsCompletedAt,
-        onNotificationsCompleted: () => {
-          resumedNotifications = true;
-        },
       },
     });
   }
-  if (resumedNotifications) broadcastActivityChange(run, principal.userId);
   return { activity: serializeAgentRunActivity(activity), duplicate: true };
 }
 
@@ -479,7 +474,6 @@ export async function selectAgentRunActivity(
         "This elicitation already has a different selection",
       );
     }
-    let resumedNotifications = false;
     // Older selections have no comment link, so they retain duplicate-only replay.
     if (run.task && activity.selectionCommentId) {
       if (!activity.selectedById) {
@@ -508,13 +502,9 @@ export async function selectAgentRunActivity(
           agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
           boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
           notificationsCompletedAt: activity.commentNotificationsCompletedAt,
-          onNotificationsCompleted: () => {
-            resumedNotifications = true;
-          },
         },
       });
     }
-    if (resumedNotifications) broadcastActivityChange(run, principal.userId);
     return { activity: serializeAgentRunActivity(activity), duplicate: true };
   }
   if (!NONTERMINAL_AGENT_RUN_STATUSES.includes(run.status)) {

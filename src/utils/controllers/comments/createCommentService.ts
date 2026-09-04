@@ -7,6 +7,7 @@ import idsToSendNotificationsTo from "@/utils/controllers/notifications/IdsToSen
 import {
   broadcastBoardChange,
   broadcastInboxChange,
+  broadcastTaskComment,
 } from "@/lib/realtime/server";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import {
@@ -111,7 +112,6 @@ export interface CreateCommentParams {
     agentWebhookDeliveryIds: string[];
     boardWebhookDeliveryIds: string[];
     notificationsCompletedAt: Date | null;
-    onNotificationsCompleted?: () => void;
   };
   /**
    * Extra board events to persist in the same transaction as the comment, so a
@@ -1296,7 +1296,11 @@ export async function createCommentService(params: CreateCommentParams) {
         throw new Error("Run activity notification claim was lost");
       }
       agentRunCommentNotificationClaim = null;
-      agentRunReplayComment?.onNotificationsCompleted?.();
+      if (agentRunReplayComment) {
+        void broadcastTaskComment(taskId, {
+          originUserId: accessUserId ?? currentUser.id,
+        });
+      }
     } else {
       const devices = await prisma.subscribedDevices.findMany({
         where: { userId: { in: userIds } },

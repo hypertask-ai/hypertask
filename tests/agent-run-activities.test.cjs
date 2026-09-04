@@ -424,7 +424,6 @@ function loadService({
       const activity = db.activities.find(({ id }) => id === activityId);
       if (activity && !activity.commentNotificationsCompletedAt) {
         activity.commentNotificationsCompletedAt = new Date();
-        input.agentRunReplayComment?.onNotificationsCompleted?.();
       }
       return { id: commentId, text: input.text };
     },
@@ -595,7 +594,6 @@ test("a task response retry resumes side effects after its comment commits", asy
   assert.equal(harness.db.activities[0].responseCommentId, 1);
   assert.equal(harness.commentCalls.length, 2);
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
-  assert.equal(harness.broadcasts.length, 1);
 });
 
 test("legacy task activities without comment links keep duplicate-only replay", async () => {
@@ -780,7 +778,6 @@ test("a task selection retry resumes side effects after its comment commits", as
   assert.equal(elicitation.selectionCommentId, 1);
   assert.equal(harness.commentCalls.length, 2);
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
-  assert.equal(harness.broadcasts.length, 1);
 });
 
 test("a stopped run rejects a late elicitation selection", async () => {
@@ -873,6 +870,7 @@ function loadAtomicCommentService(
   prisma,
   persistAgentWebhookEvent,
   updateTaskSingle,
+  broadcastTaskComment,
   publishAgentWebhookDeliveries,
   publishBoardWebhookDeliveries,
   sendDataOnlyFcm,
@@ -888,6 +886,7 @@ function loadAtomicCommentService(
     "src/lib/realtime/server.ts": {
       broadcastBoardChange: noop,
       broadcastInboxChange: noop,
+      broadcastTaskComment,
     },
     "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts":
       { default: noop },
@@ -986,6 +985,7 @@ function atomicCommentHarness() {
   const publishedAgentWebhookIds = [];
   const publishedBoardWebhookIds = [];
   const fcmCalls = [];
+  const taskCommentBroadcasts = [];
   const sideEffectOrder = [];
   const draftDeleteWheres = [];
   const updateTaskCalls = [];
@@ -1191,6 +1191,9 @@ function atomicCommentHarness() {
       updateTaskCalls.push(args);
       return { status: 200, json: {} };
     },
+    async (...args) => {
+      taskCommentBroadcasts.push(args);
+    },
     async (ids) => {
       publishedAgentWebhookIds.push([...ids]);
       sideEffectOrder.push("agent webhook");
@@ -1228,6 +1231,7 @@ function atomicCommentHarness() {
     publishedAgentWebhookIds,
     publishedBoardWebhookIds,
     fcmCalls,
+    taskCommentBroadcasts,
     sideEffectOrder,
     draftDeleteWheres,
     updateTaskCalls,
@@ -1413,6 +1417,7 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.deepEqual(harness.sideEffectOrder, ["mentions"]);
   assert.ok(harness.elicitation.commentMentionsAttemptedAt instanceof Date);
   assert.equal(harness.fcmCalls.length, 0);
+  assert.equal(harness.taskCommentBroadcasts.length, 0);
   assert.equal(harness.updateTaskCalls.length, 0);
   assert.equal(harness.getDraftDeleteCalls(), 0);
   assert.equal(harness.getTaskReferenceParseCalls(), 1);
@@ -1448,6 +1453,7 @@ test("activity comments commit once across replay without consuming drafts", asy
     taskReferenceParsesBeforeConcurrentReplay,
   );
   assert.equal(harness.elicitation.commentNotificationsProcessingAt, null);
+  assert.equal(harness.taskCommentBroadcasts.length, 0);
 
   harness.setFailure("fcm");
   const replay = await harness.createCommentService({
@@ -1477,6 +1483,9 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.deepEqual(harness.publishedAgentWebhookIds, [["delivery-1"]]);
   assert.deepEqual(harness.publishedBoardWebhookIds, [[]]);
   assert.equal(harness.fcmCalls.length, 1);
+  assert.deepEqual(harness.taskCommentBroadcasts, [
+    [42, { originUserId: 6 }],
+  ]);
   assert.equal(
     harness.sideEffectOrder.filter((effect) => effect === "mentions").length,
     1,
@@ -1500,6 +1509,7 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.equal(harness.getDraftDeleteCalls(), 0);
   assert.equal(harness.getTaskReferenceParseCalls(), 2);
   assert.equal(harness.updateTaskCalls.length, 0);
+  assert.equal(harness.taskCommentBroadcasts.length, 1);
 });
 
 test("activity routes expose notification lease contention as retryable", async () => {
