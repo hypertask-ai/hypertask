@@ -74,7 +74,7 @@ async function moveTaskWithDestinationIdentity({
   currentUser: IUser;
   agentId?: string | null;
 }) {
-  for (let attempt = 0; attempt < TASK_IDENTITY_ALLOCATION_ATTEMPTS; attempt++) {
+  for (let attempt = 0; ; attempt++) {
     const [taskCount, ranking] = await Promise.all([
       getUniqueTaskCount(projectId),
       getNewTaskRanking(sectionId, projectId),
@@ -111,7 +111,6 @@ async function moveTaskWithDestinationIdentity({
       return result;
     }
   }
-  throw new Error("Task identity allocation attempts must be positive");
 }
 
 async function moveAllSubtasksRecursively(
