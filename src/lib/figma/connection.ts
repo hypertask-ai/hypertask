@@ -93,22 +93,15 @@ export async function connectFigmaUser(
     ),
   );
 
-  let token: ConnectedToken;
   try {
-    token = await issueToken();
-  } catch (error) {
-    await clearPendingOperation(userId, operationId).catch(() => {});
-    throw error;
-  }
-
-  const data = {
-    encryptedAccessToken: encryptSecret(token.accessToken),
-    encryptedRefreshToken: encryptSecret(token.refreshToken),
-    expiresAt: token.expiresAt,
-    figmaUserId: token.userId,
-    figmaUserName: token.figmaUserName,
-  };
-  try {
+    const token = await issueToken();
+    const data = {
+      encryptedAccessToken: encryptSecret(token.accessToken),
+      encryptedRefreshToken: encryptSecret(token.refreshToken),
+      expiresAt: token.expiresAt,
+      figmaUserId: token.userId,
+      figmaUserName: token.figmaUserName,
+    };
     return await retryFigmaPersistence(() =>
       withFigmaConnectionLock(userId, async (tx) => {
         const operation = await tx.figmaConnectionOperation.findUnique({
