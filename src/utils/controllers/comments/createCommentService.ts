@@ -1203,7 +1203,7 @@ export async function createCommentService(params: CreateCommentParams) {
       }),
       idsToSendNotificationsTo(taskId, creatorId, task.userId, task.projectId),
     ] as const;
-    const [_, __, ___, ____, commentCreator, userIds] = await Promise.all(
+    const [, , , , commentCreator, userIds] = await Promise.all(
       notificationWork,
     ).catch(async (error) => {
       await Promise.allSettled(notificationWork);
@@ -1297,7 +1297,7 @@ export async function createCommentService(params: CreateCommentParams) {
       }
       agentRunCommentNotificationClaim = null;
       if (agentRunReplayComment) {
-        void broadcastTaskComment(taskId, {
+        await broadcastTaskComment(taskId, {
           originUserId: accessUserId ?? currentUser.id,
         });
       }
