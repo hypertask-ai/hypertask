@@ -961,6 +961,40 @@ export async function createCommentService(params: CreateCommentParams) {
     processingAt: Date;
   } | null = null;
   try {
+    if (isAgentRunComment) {
+      const activityId =
+        agentRunActivity?.id ??
+        agentRunSelection?.activityId ??
+        agentRunReplayComment?.activityId;
+      if (!activityId) {
+        throw new Error("Run activity comment is missing its activity");
+      }
+      const processingAt = new Date();
+      const staleBefore = new Date(
+        processingAt.getTime() - AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS,
+      );
+      const claimed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: activityId,
+          commentNotificationsSentAt: null,
+          OR: [
+            { commentNotificationsProcessingAt: null },
+            { commentNotificationsProcessingAt: { lte: staleBefore } },
+          ],
+        },
+        data: { commentNotificationsProcessingAt: processingAt },
+      });
+      if (claimed.count === 0) {
+        const completed = await prisma.agentRunActivity.findUnique({
+          where: { id: activityId },
+          select: { commentNotificationsSentAt: true },
+        });
+        if (completed?.commentNotificationsSentAt) return comment;
+        throw new Error("Run activity comment notifications are still processing");
+      }
+      agentRunCommentNotificationClaim = { activityId, processingAt };
+    }
+
     if (resolvedDirectReplyUserId != null) {
       void broadcastInboxChange(resolvedDirectReplyUserId, {
         originUserId: creatorId,
@@ -1126,40 +1160,6 @@ export async function createCommentService(params: CreateCommentParams) {
       await publishAgentWebhookDeliveries(webhookDeliveryIds);
       await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     }
-    if (isAgentRunComment) {
-      const activityId =
-        agentRunActivity?.id ??
-        agentRunSelection?.activityId ??
-        agentRunReplayComment?.activityId;
-      if (!activityId) {
-        throw new Error("Run activity comment is missing its activity");
-      }
-      const processingAt = new Date();
-      const staleBefore = new Date(
-        processingAt.getTime() - AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS,
-      );
-      const claimed = await prisma.agentRunActivity.updateMany({
-        where: {
-          id: activityId,
-          commentNotificationsSentAt: null,
-          OR: [
-            { commentNotificationsProcessingAt: null },
-            { commentNotificationsProcessingAt: { lte: staleBefore } },
-          ],
-        },
-        data: { commentNotificationsProcessingAt: processingAt },
-      });
-      if (claimed.count === 0) {
-        const completed = await prisma.agentRunActivity.findUnique({
-          where: { id: activityId },
-          select: { commentNotificationsSentAt: true },
-        });
-        if (completed?.commentNotificationsSentAt) return comment;
-        throw new Error("Run activity comment notifications are still processing");
-      }
-      agentRunCommentNotificationClaim = { activityId, processingAt };
-    }
-
     if (isAgentRunComment) {
       if (!agentRunCommentNotificationClaim) {
         throw new Error("Run activity notification claim is missing");

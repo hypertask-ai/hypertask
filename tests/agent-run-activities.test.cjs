@@ -908,6 +908,7 @@ function atomicCommentHarness() {
   const publishedBoardWebhookIds = [];
   const fcmCalls = [];
   const updateTaskCalls = [];
+  let assigneeLookupCalls = 0;
   let failure = "comment";
 
   const tx = {
@@ -1028,7 +1029,12 @@ function atomicCommentHarness() {
             (comment.agentId ?? null) === where.agentId,
         ) ?? null,
     },
-    assignees: { findMany: async () => [] },
+    assignees: {
+      findMany: async () => {
+        assigneeLookupCalls += 1;
+        return [];
+      },
+    },
   };
   const prisma = {
     ...tx,
@@ -1098,6 +1104,7 @@ function atomicCommentHarness() {
     publishedBoardWebhookIds,
     fcmCalls,
     updateTaskCalls,
+    getAssigneeLookupCalls: () => assigneeLookupCalls,
     createCommentService,
     setFailure: (value) => {
       failure = value;
@@ -1231,6 +1238,7 @@ test("activity comment links and task counters commit once across replay", async
 
   harness.setFailure(null);
   harness.elicitation.commentNotificationsProcessingAt = new Date();
+  const assigneeLookupsBeforeBlockedReplay = harness.getAssigneeLookupCalls();
   await assert.rejects(
     harness.createCommentService({
       ...commentInput,
@@ -1245,6 +1253,10 @@ test("activity comment links and task counters commit once across replay", async
     /notifications are still processing/,
   );
   assert.equal(harness.fcmCalls.length, 0);
+  assert.equal(
+    harness.getAssigneeLookupCalls(),
+    assigneeLookupsBeforeBlockedReplay,
+  );
   harness.elicitation.commentNotificationsProcessingAt = null;
 
   const replay = await harness.createCommentService({
