@@ -38,8 +38,8 @@ async function workflowScript() {
     .replaceAll("${{ github.repository }}", "test/repo");
 }
 
-// A stateful curl stub. Health-check calls to app.hypertask.ai consume one token
-// each from HC_SEQUENCE; Vercel/Telegram calls are served deterministically.
+// A stateful curl stub. Probe calls to app.hypertask.ai consume one token each
+// from HC_SEQUENCE; version/Vercel/Telegram calls are served deterministically.
 const CURL_STUB = `#!/usr/bin/env bash
 set -u
 out=""
@@ -80,6 +80,9 @@ case "$url" in
     ;;
   https://api.telegram.org/*)
     body='{"ok":true}'
+    ;;
+  https://app.hypertask.ai/api/version*)
+    body=\$(printf '{"buildId":"%s"}' "\$SHA")
     ;;
   https://app.hypertask.ai/api/ops/task-write-probe*|https://app.hypertask.ai/api/mcp/projects*|https://app.hypertask.ai/)
     count_file="\$RUNNER_TEMP/hc-count"
