@@ -36,7 +36,7 @@ export function agentRunContextForEvent(
   }
   if (
     (input.event === "comment.mention" || input.event === "task.assigned") &&
-    input.taskId != null
+    input.taskId !== null
   ) {
     return { taskId: input.taskId, chatSessionId: null };
   }
