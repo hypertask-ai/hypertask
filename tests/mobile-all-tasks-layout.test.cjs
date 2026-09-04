@@ -20,11 +20,15 @@ const allTasksSource = ts.createSourceFile(
   ts.ScriptKind.TSX,
 );
 const jsxElements = [];
-const collectJsxElements = (node) => {
+const ifStatements = [];
+const variableDeclarations = [];
+const collectNodes = (node) => {
   if (ts.isJsxElement(node)) jsxElements.push(node);
-  ts.forEachChild(node, collectJsxElements);
+  if (ts.isIfStatement(node)) ifStatements.push(node);
+  if (ts.isVariableDeclaration(node)) variableDeclarations.push(node);
+  ts.forEachChild(node, collectNodes);
 };
-collectJsxElements(allTasksSource);
+collectNodes(allTasksSource);
 
 const attributeNamed = (element, name) =>
   element.openingElement.attributes.properties.find(
@@ -126,6 +130,41 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
     allTasks,
     /mobileRedesignEnabled \? "mt-1 @md:mt-3" : "mt-3"/,
   );
+});
+
+test("buttons defer task shortcuts without changing Escape navigation", () => {
+  const activatingButton = variableDeclarations.find(
+    (declaration) =>
+      declaration.name.getText(allTasksSource) === "activatingButton",
+  );
+  const activationCondition =
+    activatingButton?.initializer?.getText(allTasksSource) ?? "";
+  assert.match(activationCondition, /activeTag === "BUTTON"/);
+  assert.match(activationCondition, /KeyCodes\.ENTER/);
+  assert.match(activationCondition, /KeyCodes\.SPACE/);
+  assert.doesNotMatch(activationCondition, /KeyCodes\.K(?:\W|$)/);
+
+  const escapeGuard = ifStatements.find((statement) =>
+    statement.expression.getText(allTasksSource).includes("KeyCodes.ESCAPE"),
+  );
+  assert.ok(escapeGuard);
+  assert.match(escapeGuard.expression.getText(allTasksSource), /!inFormControl/);
+  assert.doesNotMatch(
+    escapeGuard.expression.getText(allTasksSource),
+    /activatingButton/,
+  );
+
+  const buttonShortcutGuard = ifStatements.find(
+    (statement) =>
+      statement.expression.getText(allTasksSource).includes("activatingButton") &&
+      ts.isReturnStatement(statement.thenStatement),
+  );
+  const taskEnterShortcut = ifStatements.find((statement) =>
+    statement.expression.getText(allTasksSource).includes("KeyCodes.ENTER"),
+  );
+  assert.ok(buttonShortcutGuard);
+  assert.ok(taskEnterShortcut);
+  assert.ok(buttonShortcutGuard.pos < taskEnterShortcut.pos);
 });
 
 test("All Tasks opts into compact mobile rows without changing shared desktop rows", () => {
