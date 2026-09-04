@@ -206,10 +206,10 @@
     }
     a {
       cursor: pointer;
-      color: #5896f1;
+      color: var(--color-rich-text-link);
       overflow-wrap: break-word;
       &:hover {
-        color: #5896f1;
+        color: var(--color-rich-text-link);
         text-decoration: underline;
       }
     }
