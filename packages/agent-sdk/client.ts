@@ -514,8 +514,11 @@ export class AgentClient {
 }
 
 class AgentRunImpl implements AgentRun {
-  // Lease ownership is agent-scoped, so same-process operations for one task cannot overlap.
-  private static readonly taskLeaseTails = new Map<number, Promise<void>>();
+  // Same-client operations for one task cannot overlap because lease ownership is agent-scoped.
+  private static readonly taskLeaseTails = new WeakMap<
+    AgentClient,
+    Map<number, Promise<void>>
+  >();
 
   readonly id: string;
   readonly agentId: string;
@@ -670,7 +673,12 @@ class AgentRunImpl implements AgentRun {
     if (this.taskId === null) throw new AgentSdkError("Run is not attached to a task");
     const taskId = this.taskId;
     const idempotencyKey = this.nextOperationKey(kind);
-    const previous = AgentRunImpl.taskLeaseTails.get(taskId) ?? Promise.resolve();
+    let leaseTails = AgentRunImpl.taskLeaseTails.get(this.client);
+    if (!leaseTails) {
+      leaseTails = new Map<number, Promise<void>>();
+      AgentRunImpl.taskLeaseTails.set(this.client, leaseTails);
+    }
+    const previous = leaseTails.get(taskId) ?? Promise.resolve();
     const operation = previous.then(async () => {
       await this.assertServerRunActive(this.signal);
       try {
@@ -734,12 +742,12 @@ class AgentRunImpl implements AgentRun {
       () => undefined,
       () => undefined,
     );
-    AgentRunImpl.taskLeaseTails.set(taskId, tail);
+    leaseTails.set(taskId, tail);
     try {
       return await operation;
     } finally {
-      if (AgentRunImpl.taskLeaseTails.get(taskId) === tail) {
-        AgentRunImpl.taskLeaseTails.delete(taskId);
+      if (leaseTails.get(taskId) === tail) {
+        leaseTails.delete(taskId);
       }
     }
   }
