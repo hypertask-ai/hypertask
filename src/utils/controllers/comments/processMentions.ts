@@ -58,6 +58,7 @@ export interface ProcessMentionsParams {
   fromAgentId?: string | null;
   /** Mentions already delivered through a stronger direct-reply notification. */
   skipUserIds?: readonly number[];
+  failOnError?: boolean;
 }
 
 export interface McpMention {
@@ -123,6 +124,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     mentionedBy,
     fromAgentId,
     skipUserIds = [],
+    failOnError = false,
   } = params;
   const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332", 10);
 
@@ -134,6 +136,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
   const uniqueMentionIds = getMentionedUserIdsFromCommentText(mentionSource);
   const uniqueAgentMentionIds = getMentionedAgentIdsFromCommentText(mentionSource);
   const skippedUsers = new Set(skipUserIds);
+  const errors: unknown[] = [];
 
   const baseUrl = getBaseUrl();
 
@@ -170,8 +173,9 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
           userId,
           result.body,
         );
+        errors.push(new Error(`Mention follower failed for user ${userId}`));
       } else if (task?.title && mentionedByActor?.displayName) {
-        sendMentionEmail(
+        const sent = await sendMentionEmail(
           userId,
           mentionedByActor.displayName,
           task.title,
@@ -180,9 +184,11 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
           text,
           taskId
         );
+        if (!sent) errors.push(new Error(`Mention email failed for user ${userId}`));
       }
     } catch (err) {
       console.warn("[processMentions] createFollower failed for user", userId, err);
+      errors.push(err);
     }
 
     try {
@@ -202,6 +208,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
       );
     } catch (err) {
       console.warn("[processMentions] createMention failed for user", userId, err);
+      errors.push(err);
     }
 
   }
@@ -222,9 +229,15 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
           agentIdStr,
           result.body,
         );
+        errors.push(new Error(`Mention follower failed for agent ${agentIdStr}`));
       }
     } catch (err) {
       console.warn("[processMentions] createFollower failed for agent", agentIdStr, err);
+      errors.push(err);
     }
+  }
+
+  if (failOnError && errors.length > 0) {
+    throw new AggregateError(errors, "Mention processing failed");
   }
 }

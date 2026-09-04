@@ -358,7 +358,7 @@ async function sendCommentEmails({
       // per-category matrix, so the old call ignored "comments off" entirely.
       if (!(await shouldNotify(recipient.id, "Comment", "email"))) return;
 
-      await sendEmailNotification("Comment", {
+      const sent = await sendEmailNotification("Comment", {
         sender: senderName,
         recipient: recipient.email,
         title: task.title,
@@ -367,6 +367,7 @@ async function sendCommentEmails({
         userId: recipient.id,
         taskId: task.id,
       });
+      if (!sent) throw new Error("Comment email delivery failed");
     }),
   );
 }
@@ -1129,13 +1130,12 @@ export async function createCommentService(params: CreateCommentParams) {
         projectId: task.projectId,
         mentionedBy: creatorIdNum,
         fromAgentId: agentId ?? null,
+        failOnError: isAgentRunComment,
         skipUserIds:
           resolvedDirectReplyUserId === null
             ? []
             : [resolvedDirectReplyUserId],
-      }).catch((err) =>
-        console.warn("[createCommentService] processMentions failed:", err),
-      );
+      });
     let mentionProcessing: Promise<void> = Promise.resolve();
     if (isAgentRunComment) {
       if (
@@ -1145,22 +1145,25 @@ export async function createCommentService(params: CreateCommentParams) {
         throw new Error("Run activity notification claim is missing");
       }
       if (!agentRunCommentNotificationState.commentMentionsAttemptedAt) {
-        const reserved = await prisma.agentRunActivity.updateMany({
-          where: {
-            id: agentRunCommentNotificationClaim.activityId,
-            commentNotificationsProcessingAt:
-              agentRunCommentNotificationClaim.processingAt,
-            commentMentionsAttemptedAt: null,
-          },
-          data: { commentMentionsAttemptedAt: new Date() },
+        const claim = agentRunCommentNotificationClaim;
+        mentionProcessing = runMentionProcessing().then(async () => {
+          const checkpointed = await prisma.agentRunActivity.updateMany({
+            where: {
+              id: claim.activityId,
+              commentNotificationsProcessingAt: claim.processingAt,
+              commentMentionsAttemptedAt: null,
+            },
+            data: { commentMentionsAttemptedAt: new Date() },
+          });
+          if (checkpointed.count === 0) {
+            throw new Error("Run activity mention notification claim was lost");
+          }
         });
-        if (reserved.count === 0) {
-          throw new Error("Run activity mention notification claim was lost");
-        }
-        mentionProcessing = runMentionProcessing();
       }
     } else {
-      mentionProcessing = runMentionProcessing();
+      mentionProcessing = runMentionProcessing().catch((err) =>
+        console.warn("[createCommentService] processMentions failed:", err),
+      );
     }
 
     const notificationWork = [
@@ -1221,25 +1224,13 @@ export async function createCommentService(params: CreateCommentParams) {
       ) {
         throw new Error("Run activity notification claim is missing");
       }
-      // ponytail: these channels retain the ordinary comment path's best-effort
-      // contract. Reserve one attempt before handoff so a process exit cannot
-      // duplicate it; guaranteed delivery needs a provider-idempotent outbox.
+      // ponytail: channel checkpoints follow successful handoff, so a process
+      // exit can duplicate delivery. Exactly-once needs provider-idempotent
+      // outboxes.
       if (!agentRunCommentNotificationState.commentFcmAttemptedAt) {
         const devices = await prisma.subscribedDevices.findMany({
           where: { userId: { in: userIds } },
         });
-        const reserved = await prisma.agentRunActivity.updateMany({
-          where: {
-            id: agentRunCommentNotificationClaim.activityId,
-            commentNotificationsProcessingAt:
-              agentRunCommentNotificationClaim.processingAt,
-            commentFcmAttemptedAt: null,
-          },
-          data: { commentFcmAttemptedAt: new Date() },
-        });
-        if (reserved.count === 0) {
-          throw new Error("Run activity FCM notification claim was lost");
-        }
         await sendDataOnlyFcm(
           devices,
           commentCreator!,
@@ -1248,23 +1239,22 @@ export async function createCommentService(params: CreateCommentParams) {
           task.projectId,
           creatorId,
           comment,
-        ).catch((error) =>
-          console.warn("[createCommentService] FCM delivery failed:", error),
+          true,
         );
-      }
-      if (!agentRunCommentNotificationState.commentEmailsAttemptedAt) {
-        const reserved = await prisma.agentRunActivity.updateMany({
+        const checkpointed = await prisma.agentRunActivity.updateMany({
           where: {
             id: agentRunCommentNotificationClaim.activityId,
             commentNotificationsProcessingAt:
               agentRunCommentNotificationClaim.processingAt,
-            commentEmailsAttemptedAt: null,
+            commentFcmAttemptedAt: null,
           },
-          data: { commentEmailsAttemptedAt: new Date() },
+          data: { commentFcmAttemptedAt: new Date() },
         });
-        if (reserved.count === 0) {
-          throw new Error("Run activity email notification claim was lost");
+        if (checkpointed.count === 0) {
+          throw new Error("Run activity FCM notification claim was lost");
         }
+      }
+      if (!agentRunCommentNotificationState.commentEmailsAttemptedAt) {
         await sendCommentEmails({
           task,
           text,
@@ -1273,12 +1263,19 @@ export async function createCommentService(params: CreateCommentParams) {
           recipientUserIds,
           mentionedUserIds,
           fromAgentId: agentId ?? null,
-        }).catch((error) =>
-          console.warn(
-            "[createCommentService] comment email delivery failed:",
-            error,
-          ),
-        );
+        });
+        const checkpointed = await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentEmailsAttemptedAt: null,
+          },
+          data: { commentEmailsAttemptedAt: new Date() },
+        });
+        if (checkpointed.count === 0) {
+          throw new Error("Run activity email notification claim was lost");
+        }
       }
       // Keep the realtime handoff inside the lease so an interrupted request
       // can retry it, while completed duplicate requests remain side-effect free.

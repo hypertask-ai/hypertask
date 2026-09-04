@@ -202,8 +202,10 @@ export const sendDataOnlyFcm = async (
   uniqueIndex: number,
   projectId: number,
   creatorId: number,
-  comment: any
+  comment: any,
+  failOnDeliveryError = false
 ) => {
+  const deliveryErrors: unknown[] = [];
   const link = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${projectId}/${uniqueIndex}?commentId=comment-${comment.id}`;
 
   const userPreferenceMap = await filterDevicesByPreferences({
@@ -262,7 +264,17 @@ export const sendDataOnlyFcm = async (
       // the caller goes on to log success (HTPR-4668).
       console.error("🚀 ~ sendDataOnlyFcm ~ send failed:", error);
       await removeDeadDeviceToken(error, device.firebaseId);
+      if (
+        failOnDeliveryError &&
+        (error as any)?.errorInfo?.code !==
+          "messaging/registration-token-not-registered"
+      ) {
+        deliveryErrors.push(error);
+      }
     }
+  }
+  if (deliveryErrors.length > 0) {
+    throw new AggregateError(deliveryErrors, "FCM delivery failed");
   }
 };
 
