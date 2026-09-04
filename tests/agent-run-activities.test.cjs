@@ -38,7 +38,14 @@ function runRow(overrides = {}) {
     createdAt: new Date("2026-09-04T10:00:00.000Z"),
     lastActivityAt: new Date("2026-09-04T10:00:00.000Z"),
     stoppedById: null,
-    agent: { userId: 6 },
+    agent: {
+      user: {
+        id: 6,
+        email: "agent-owner@example.com",
+        displayName: "Persisted agent owner",
+        photoURL: null,
+      },
+    },
     task: {
       id: 42,
       projectId: 15,
@@ -506,15 +513,20 @@ test("only the matching agent creates an idempotent task response and visible co
   const run = runRow({ status: "STALE" });
   const harness = loadService({ runs: [run] });
   const input = activityInput({ type: "RESPONSE", text: "Done" });
+  const requestingAgent = {
+    ...agentPrincipal,
+    userId: 7,
+    displayName: "Requesting principal",
+  };
 
   const first = await harness.service.createAgentRunActivity(
-    agentPrincipal,
+    requestingAgent,
     run.id,
     input,
     "response-1",
   );
   const replay = await harness.service.createAgentRunActivity(
-    agentPrincipal,
+    requestingAgent,
     run.id,
     input,
     "response-1",
@@ -532,8 +544,12 @@ test("only the matching agent creates an idempotent task response and visible co
   assert.equal(harness.db.activities.length, 1);
   assert.equal(harness.commentCalls.length, 2);
   assert.equal(harness.commentCalls[0].text, "<p>Done</p>");
-  assert.equal(harness.commentCalls[0].agentRunActivity.runId, run.id);
+  assert.equal(harness.commentCalls[0].creatorId, run.agent.user.id);
+  assert.deepEqual(harness.commentCalls[0].currentUser, run.agent.user);
+  assert.equal(harness.commentCalls[0].accessUserId, requestingAgent.userId);
+  assert.deepEqual(harness.commentCalls[1].currentUser, run.agent.user);
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
+  assert.equal(harness.commentCalls[0].agentRunActivity.runId, run.id);
   assert.equal(run.status, "ACTIVE");
   await assert.rejects(
     harness.service.createAgentRunActivity(

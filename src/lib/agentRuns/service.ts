@@ -227,7 +227,12 @@ export async function stopAgentRun(
 
 type ActivityRunWithContext = AgentRun & {
   agent: {
-    userId: number;
+    user: {
+      id: number;
+      email: string;
+      displayName: string | null;
+      photoURL: string | null;
+    };
   };
   task: {
     id: number;
@@ -256,7 +261,13 @@ async function findActivityRun(
   return prisma.agentRun.findFirst({
     where: accessibleRunWhere(principal, id),
     include: {
-      agent: { select: { userId: true } },
+      agent: {
+        select: {
+          user: {
+            select: { id: true, email: true, displayName: true, photoURL: true },
+          },
+        },
+      },
       task: { select: { id: true, userId: true } },
       chatSession: { select: { id: true, userId: true } },
     },
@@ -301,13 +312,10 @@ async function replayCreatedActivity(
     );
     await createCommentService({
       text: toStoredHtml(activity.text),
-      creatorId: run.agent.userId,
+      creatorId: run.agent.user.id,
       taskId: run.task.id,
       ownerId: run.task.userId,
-      currentUser: {
-        id: principal.userId,
-        displayName: principal.displayName,
-      },
+      currentUser: run.agent.user,
       agentId: run.agentId,
       accessUserId: principal.userId,
       agentRunReplayComment: {
@@ -392,13 +400,10 @@ export async function createAgentRunActivity(
       );
       await createCommentService({
         text: toStoredHtml(input.text),
-        creatorId: run.agent.userId,
+        creatorId: run.agent.user.id,
         taskId: run.task.id,
         ownerId: run.task.userId,
-        currentUser: {
-          id: principal.userId,
-          displayName: principal.displayName,
-        },
+        currentUser: run.agent.user,
         agentId: run.agentId,
         accessUserId: principal.userId,
         agentRunActivity: persistenceInput,
