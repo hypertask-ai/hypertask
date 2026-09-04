@@ -133,24 +133,30 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
 });
 
 test("buttons defer task shortcuts without changing Escape navigation", () => {
-  const inButton = variableDeclarations.find(
-    (declaration) => declaration.name.getText(allTasksSource) === "inButton",
+  const activatingButton = variableDeclarations.find(
+    (declaration) =>
+      declaration.name.getText(allTasksSource) === "activatingButton",
   );
-  assert.equal(
-    inButton?.initializer?.getText(allTasksSource),
-    'activeTag === "BUTTON"',
-  );
+  const activationCondition =
+    activatingButton?.initializer?.getText(allTasksSource) ?? "";
+  assert.match(activationCondition, /activeTag === "BUTTON"/);
+  assert.match(activationCondition, /KeyCodes\.ENTER/);
+  assert.match(activationCondition, /KeyCodes\.SPACE/);
+  assert.doesNotMatch(activationCondition, /KeyCodes\.K(?:\W|$)/);
 
   const escapeGuard = ifStatements.find((statement) =>
     statement.expression.getText(allTasksSource).includes("KeyCodes.ESCAPE"),
   );
   assert.ok(escapeGuard);
   assert.match(escapeGuard.expression.getText(allTasksSource), /!inFormControl/);
-  assert.doesNotMatch(escapeGuard.expression.getText(allTasksSource), /inButton/);
+  assert.doesNotMatch(
+    escapeGuard.expression.getText(allTasksSource),
+    /activatingButton/,
+  );
 
   const buttonShortcutGuard = ifStatements.find(
     (statement) =>
-      statement.expression.getText(allTasksSource).includes("inButton") &&
+      statement.expression.getText(allTasksSource).includes("activatingButton") &&
       ts.isReturnStatement(statement.thenStatement),
   );
   const taskEnterShortcut = ifStatements.find((statement) =>
