@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFigmaRequestUser } from "@/app/api/figma/_lib";
-import { getFigmaAccessToken } from "@/lib/figma/connection";
-import { FIGMA_API_BASE_URL } from "@/lib/figma/paths";
+import { cookies } from "next/headers";
+import { isFeatureEnabled } from "@/lib/flags";
+import { isValidUser } from "@/utils/edgeHelpers";
 
-const CACHE_CONTROL = "private, max-age=3600";
-const FRAME_CACHE_CONTROL = "private, max-age=86400";
-const NO_STORE_CACHE_CONTROL = "private, no-store";
+const CACHE_CONTROL = "private, s-maxage=3600, stale-while-revalidate=86400";
+const NO_STORE = "private, no-store";
+const PREVIEW_FLAG = "htpr-6116-figma-node-preview";
 const UPSTREAM_TIMEOUT_MS = 5000;
 const MAX_OEMBED_BYTES = 64 * 1024;
 const MAX_FILE_BYTES = 1024 * 1024;
@@ -99,7 +99,7 @@ const fetchJson = async (
     cache: "no-store",
     headers: {
       Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token ? { "X-Figma-Token": token } : {}),
     },
     redirect: "error",
     signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
@@ -159,7 +159,7 @@ const getRenderedImages = async (
     nodes = [{ id: target.nodeId, name: "Figma frame" }];
   } else {
     const fileUrl = new URL(
-      `${FIGMA_API_BASE_URL}/files/${encodeURIComponent(target.fileKey)}`,
+      `https://api.figma.com/v1/files/${encodeURIComponent(target.fileKey)}`,
     );
     fileUrl.searchParams.set("depth", "2");
     const file = (await fetchJson(fileUrl, MAX_FILE_BYTES, token)) as {
@@ -195,7 +195,7 @@ const getRenderedImages = async (
   if (nodes.length === 0) return { title, previewImages: [] };
 
   const imagesUrl = new URL(
-    `${FIGMA_API_BASE_URL}/images/${encodeURIComponent(target.fileKey)}`,
+    `https://api.figma.com/v1/images/${encodeURIComponent(target.fileKey)}`,
   );
   imagesUrl.searchParams.set("ids", nodes.map(({ id }) => id).join(","));
   imagesUrl.searchParams.set("format", "png");
@@ -216,20 +216,12 @@ const getRenderedImages = async (
   };
 };
 
-function previewResponse(body: unknown, cacheControl = CACHE_CONTROL) {
-  // Connect rotates and disconnect clears the client-readable, non-secret
-  // connection version, so cached previews cannot cross authorization states.
-  return NextResponse.json(body, {
-    headers: {
-      "Cache-Control": cacheControl,
-      Vary: "Cookie",
-    },
-  });
-}
-
 export async function GET(request: NextRequest) {
-  const principal = await getFigmaRequestUser(request);
-  if (principal.status === "unauthorized") {
+  // Embeds only render for signed-in users, so this must not be an open
+  // fetch proxy for anonymous callers.
+  const cookieStore = await cookies();
+  const { isValid, user } = isValidUser(cookieStore.get("nookies_user")?.value);
+  if (!isValid || !user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -241,56 +233,48 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const target = parseFigmaTarget(figmaUrl);
-  const fallbackPromise = getOembed(figmaUrl).catch(() => null);
-  if (principal.status !== "allowed" || !target) {
-    const fallback = await fallbackPromise;
-    const cacheControl =
-      principal.status === "error" ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL;
-    return fallback
-      ? previewResponse(fallback, cacheControl)
-      : NextResponse.json(
-          { error: "Figma preview is unavailable" },
-          { status: 502 },
-        );
-  }
-
-  let token: string | null | undefined;
-  let rendered: Awaited<ReturnType<typeof getRenderedImages>> | null = null;
-  let degraded = false;
   try {
-    token = await getFigmaAccessToken(principal.userId);
-    if (token) rendered = await getRenderedImages(target, token);
-  } catch {
-    degraded = true;
-    // A connection or Figma failure keeps the cover and the live embed click.
-  }
+    // Besides supplying the fallback, a successful public oEmbed lookup keeps
+    // the company token from exposing a private file through this route.
+    const fallback = await getOembed(figmaUrl);
+    const token = process.env.FIGMA_ACCESS_TOKEN?.trim();
+    const enabled = token
+      ? await isFeatureEnabled(PREVIEW_FLAG, Number(user.id)).catch(() => false)
+      : false;
+    const target = enabled ? parseFigmaTarget(figmaUrl) : null;
+    const fileAllowed = process.env.FIGMA_PREVIEW_FILE_KEYS?.split(",").some(
+      (fileKey) => fileKey.trim() === target?.fileKey,
+    );
+    if (!token || !target || !fileAllowed) {
+      return NextResponse.json(fallback, {
+        headers: { "Cache-Control": CACHE_CONTROL },
+      });
+    }
 
-  const fallback = await fallbackPromise;
-  const basePreview = fallback ?? {
-    thumbnailUrl: "",
-    title: "Figma design",
-    width: 16,
-    height: 9,
-  };
-  if (rendered && rendered.previewImages.length > 0) {
-    return previewResponse(
-      {
-        ...basePreview,
-        thumbnailUrl: rendered.previewImages[0].url,
-        title: rendered.title ?? basePreview.title,
-        previewImages: rendered.previewImages,
-      },
-      FRAME_CACHE_CONTROL,
+    try {
+      const rendered = await getRenderedImages(target, token);
+      if (rendered.previewImages.length > 0) {
+        return NextResponse.json(
+          {
+            ...fallback,
+            title: rendered.title ?? fallback.title,
+            previewImages: rendered.previewImages,
+          },
+          { headers: { "Cache-Control": NO_STORE } },
+        );
+      }
+    } catch {
+      // Files outside the token's access and Figma quota failures keep the
+      // existing cover rather than breaking the embed.
+    }
+
+    return NextResponse.json(fallback, {
+      headers: { "Cache-Control": CACHE_CONTROL },
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "Figma preview is unavailable" },
+      { status: 502 },
     );
   }
-
-  return previewResponse(
-    {
-      ...basePreview,
-      ...(fallback ? {} : { previewUnavailable: true }),
-      ...(token === null ? { canConnectFigma: true } : {}),
-    },
-    degraded || !fallback ? NO_STORE_CACHE_CONTROL : CACHE_CONTROL,
-  );
 }
