@@ -122,9 +122,10 @@ async function toRequest(request: NodeRequest, useParsedBody: boolean): Promise<
 }
 
 async function sendResponse(response: Response, target: NodeResponse): Promise<void> {
+  const body = await response.text();
   target.statusCode = response.status;
   response.headers.forEach((value, name) => target.setHeader(name, value));
-  target.end(await response.text());
+  target.end(body);
 }
 
 function processContext(): BackgroundContext {

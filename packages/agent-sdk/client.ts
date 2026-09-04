@@ -344,6 +344,9 @@ export class AgentClient {
     record: AgentRunRecord,
     signal?: AbortSignal,
   ): Promise<HydratedContext> {
+    if (record.taskId === null && record.chatSessionId === null) {
+      throw new AgentSdkError("Agent run has no task or chat context");
+    }
     const activitiesPromise = this.request<{ activities: AgentActivity[] }>(
       `/mcp/agents/runs/${encodeURIComponent(record.id)}/activities`,
       { signal },

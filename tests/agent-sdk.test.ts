@@ -354,6 +354,43 @@ test("Node adapters do not expose unexpected handler errors", async () => {
   assert.match(responseBody, /Webhook request failed/);
 });
 
+test("Node adapters do not copy response headers before reading the body", async () => {
+  const handler: WebhookHandler = Object.assign(
+    async () => {
+      const response = new Response("unused", {
+        status: 201,
+        headers: { "content-length": "6", "x-result": "success" },
+      });
+      response.text = async () => {
+        throw new Error("response body failed");
+      };
+      return response;
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const adapter = nodeHttpAdapter(handler);
+  const request = {
+    method: "POST",
+    url: "/webhook",
+    headers: {},
+    async *[Symbol.asyncIterator]() {},
+  };
+  const headers = new Map<string, string>();
+  const response = {
+    statusCode: 0,
+    setHeader(name: string, value: string) {
+      headers.set(name, value);
+    },
+    end() {},
+  };
+
+  await adapter(request, response);
+  assert.equal(response.statusCode, 500);
+  assert.equal(headers.has("content-length"), false);
+  assert.equal(headers.has("x-result"), false);
+  assert.equal(headers.get("content-type"), "application/json");
+});
+
 test("Node adapters omit bodies from GET requests", async () => {
   let receivedMethod: string | undefined;
   const handler: WebhookHandler = Object.assign(
@@ -930,6 +967,26 @@ test("task helper settles an in-flight heartbeat before releasing its lease", as
   } finally {
     context.mock.timers.reset();
   }
+});
+
+test("contextless runs fail before starting hydration requests", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  const contextlessRun = { ...run, taskId: null, chatSessionId: null };
+
+  await assert.rejects(
+    agent.client.dispatch(
+      payload({ taskId: null, run: contextlessRun }),
+      contextlessRun,
+    ),
+    /Agent run has no task or chat context/,
+  );
+  assert.equal(api.calls.length, 0);
 });
 
 test("inactive run snapshots cannot dispatch delayed work", async () => {
