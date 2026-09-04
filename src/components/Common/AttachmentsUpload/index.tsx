@@ -1011,7 +1011,9 @@ const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           dictationCoordinator={dictationCoordinator}
           ariaLabel="Dictate description"
           mobilePresentation="prominent"
-          mobilePrimaryTone="primary"
+          // Canonical exception: openwiki/style-guide.md approves the white buttons for
+          // https://app.hypertask.ai/detail/project-15/5995.
+          mobilePrimaryTone="default"
           className={isDictating ? undefined : MOBILE_TARGET}
           // order lives on the wrapper: only the .audio-recorder root is a
           // direct child of this flex row, so order on className is a no-op.

@@ -175,11 +175,11 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
     assert.equal(titleMics[0].getAttribute("aria-label"), "Dictate task title");
     assert.equal(titleMics[0].getAttribute("aria-disabled"), "false");
     assert.match(titleMics[0].className, /h-11 w-11/);
-    assert.match(titleMics[0].className, /bg-shadcn-primary/);
-    assert.match(titleMics[0].className, /text-primary-foreground/);
+    assert.match(titleMics[0].className, /bg-white-black/);
+    assert.match(titleMics[0].className, /text-white-black-inverted/);
     assert.match(
       titleMics[0].querySelector("svg").className.baseVal,
-      /text-primary-foreground/,
+      /text-white-black-inverted/,
     );
 
     createTaskModalValue = {
@@ -188,7 +188,7 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
     };
     await act(async () => reactRoot.render(renderTitle(true)));
     const populatedMic = container.querySelector("#create-task-title-audio-button");
-    assert.doesNotMatch(populatedMic.className, /bg-shadcn-primary/);
+    assert.doesNotMatch(populatedMic.className, /bg-white-black/);
     assert.match(
       populatedMic.querySelector("svg").className.baseVal,
       /text-icon-dark-gray/,
@@ -201,7 +201,7 @@ test("new-task title renders one accessible mobile recorder and none on desktop"
     await act(async () => reactRoot.render(renderTitle(true)));
     assert.doesNotMatch(
       container.querySelector("#create-task-title-audio-button").className,
-      /bg-shadcn-primary/,
+      /bg-white-black/,
     );
 
     createTaskModalValue = {

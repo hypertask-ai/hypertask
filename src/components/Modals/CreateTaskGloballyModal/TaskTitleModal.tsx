@@ -181,7 +181,9 @@ const TaskTitleModal = () => {
                                         disabled={isGeneratingTitle}
                                         ariaLabel="Dictate task title"
                                         mobilePresentation="prominent"
-                                        mobilePrimaryTone="primary"
+                                        // Canonical exception: openwiki/style-guide.md approves the white buttons for
+                                        // https://app.hypertask.ai/detail/project-15/5995.
+                                        mobilePrimaryTone="default"
                                         className="h-11 w-11 shrink-0 justify-center"
                                         wrapperClassName="shrink-0"
                                     />
