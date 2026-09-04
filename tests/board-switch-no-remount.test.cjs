@@ -355,29 +355,118 @@ test("HTPR-6072: only the sidebar switcher passes shallow=true to goToProjectSho
     path.join(__dirname, "..", "src/components/sidebars/leftSidebar.tsx"),
     "utf8",
   );
-  const shallowCalls = src.match(/goToProjectShortcut\([^)]*true\)/g) || [];
+  // Match the full 5-arg shallow form specifically - a bare (id, true) call
+  // (updateBoardCookie=true, shallow defaulted false) would also match a
+  // looser pattern and silently pass this test without going shallow.
+  const shallowCalls = src.match(
+    /goToProjectShortcut\([^,]+, true, false, undefined, true\)/g,
+  ) || [];
   assert.strictEqual(
     shallowCalls.length,
     3,
-    "expected exactly the 3 sidebar board-switcher call sites to pass shallow=true",
+    "expected exactly the 3 sidebar board-switcher call sites to pass shallow=true via the 5-arg form",
   );
 });
 
-test("HTPR-6072: a project the client can't find falls back to a full navigation, not the homepage", () => {
-  // A shallow switch that lands on a project the client's own project list
-  // rejects (access revoked, bad id) must re-navigate for real so the
-  // server-side access gate can render Unauthorized/NoBoardsEmptyState,
-  // rather than silently bouncing to "/".
+test("HTPR-6072: a shallow switch that finds no accessible project falls back only when it was shallow", () => {
+  // Re-pushing the current URL on project-not-found is only safe when the
+  // failure followed a shallow switch page.tsx never validated. On a hard
+  // load (or any full navigation) page.tsx already validated this id, so
+  // re-pushing the same URL would repeat the same client-side miss forever -
+  // that path must keep bouncing to "/" instead.
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
   assert.ok(
-    !/router\.push\('\/'\)/.test(src),
-    "expected the project-not-found fallback to no longer hard-redirect to the homepage",
+    /\} else if \(switchedShallowly\) \{[\s\S]{0,900}?router\.push\(`\$\{pathname\}\$\{currentSearch \? `\?\$\{currentSearch\}` : ""\}`\)/.test(src),
+    "expected the re-push-current-URL fallback to be gated on switchedShallowly",
   );
   assert.ok(
-    /router\.push\(`\$\{pathname\}\$\{currentSearch \? `\?\$\{currentSearch\}` : ""\}`\)/.test(src),
-    "expected the project-not-found fallback to re-push the current URL as a real navigation",
+    /\} else \{[\s\S]{0,600}?router\.push\('\/'\)/.test(src),
+    "expected the non-shallow branch to still bounce to the homepage",
   );
+});
+
+test("HTPR-6072: the URL-normalization effect patches the URL in place on a shallow switch", () => {
+  // router.replace is a real navigation like router.push - using it here
+  // would remount LandingPage on every shallow switch to a project without
+  // an Applied view (the common case), since this effect fires to backfill
+  // a missing view param. window.history.replaceState keeps the same
+  // resolved URL without the round trip.
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  assert.ok(
+    /if \(switchedShallowly\) \{\s*window\.history\.replaceState\(null, "", newUrl\);\s*\} else \{\s*router\.replace\(newUrl, \{ scroll: false \}\);\s*\}/.test(src),
+    "expected the URL-normalization effect to use replaceState for a shallow switch and router.replace otherwise",
+  );
+});
+
+test("HTPR-6072: switchedShallowly compares the live searchParams-derived id against the server prop", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  assert.ok(
+    /const switchedShallowly = slugs !== slugsProp/.test(src),
+    "expected switchedShallowly to compare the derived slugs against the original server-rendered slugsProp",
+  );
+});
+
+// Superseded by "a shallow switch that finds no accessible project falls back
+// only when it was shallow" below, which pins the conditional version of
+// this fallback (shallow -> re-push current URL, non-shallow -> "/").
+
+test("HTPR-6072: a project with no Applied view patches the URL shallowly, not via router.replace", () => {
+  // Mirrors getViewFromProject's real resolution order (unsaved > applied >
+  // default) and the URL-normalization effect's own branch: a project with
+  // no Applied view (the common case - only a default_view) is exactly the
+  // case that needs a view= param backfilled after a switch, which is the
+  // scenario fix 2 targets. Real behavior, not source-shape.
+  function getViewFromProject(project) {
+    if (!project) return undefined;
+    const view = project.project_view?.user_project_views[0];
+    const unsaved = view?.unsavedView;
+    const applied = view?.appliedView;
+    const defaultView = project.project_view?.default_view;
+    if (unsaved) return { view: unsaved, type: "Unsaved" };
+    if (applied) return { view: applied, type: "Applied" };
+    if (defaultView) return { view: defaultView, type: "Default" };
+    return undefined;
+  }
+
+  // Same decision the effect makes: resolvedViewSlug from a non-Applied view,
+  // then whether to patch the URL via history.replaceState (shallow) or
+  // router.replace (full nav), matching this PR's LandingPage.tsx branch.
+  function resolveAndApplyUrlFix(currentProject, switchedShallowly, calls) {
+    const resolvedView = getViewFromProject(currentProject);
+    const resolvedViewSlug =
+      resolvedView?.type === "Applied"
+        ? resolvedView.view.slug
+        : resolvedView?.type === "Unsaved"
+          ? currentProject.project_view?.user_project_views[0]?.appliedView?.slug ?? "default"
+          : resolvedView?.type === "Default"
+            ? "default"
+            : undefined;
+    if (!resolvedViewSlug) return;
+    if (switchedShallowly) calls.push(["replaceState", resolvedViewSlug]);
+    else calls.push(["router.replace", resolvedViewSlug]);
+  }
+
+  const projectWithNoAppliedView = {
+    project_view: {
+      user_project_views: [{ unsavedView: null, appliedView: null }],
+      default_view: { id: 1, slug: "board" },
+    },
+  };
+
+  const shallowCalls = [];
+  resolveAndApplyUrlFix(projectWithNoAppliedView, true, shallowCalls);
+  assert.deepStrictEqual(shallowCalls, [["replaceState", "default"]]);
+
+  const fullNavCalls = [];
+  resolveAndApplyUrlFix(projectWithNoAppliedView, false, fullNavCalls);
+  assert.deepStrictEqual(fullNavCalls, [["router.replace", "default"]]);
 });

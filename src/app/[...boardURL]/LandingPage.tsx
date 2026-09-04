@@ -169,6 +169,13 @@ const searchParams = useSearchParams()
 // render from page.tsx; slugsProp (the server-rendered id) is only used
 // pre-hydration, before searchParams has a value.
 const slugs = searchParams?.get('id') ?? slugsProp
+// HTPR-6072: true only while the URL reflects a shallow (pushState) switch
+// page.tsx hasn't re-rendered for yet - slugsProp only changes on a real
+// server round trip, so it still lags the routed id. Any code below that
+// wants to patch the URL or retry client-side must check this before
+// treating page.tsx's own server-side validation as having run for the
+// current id.
+const switchedShallowly = slugs !== slugsProp
 const pilotParameter = searchParams?.get("local_db")
 const currentView = searchParams?.get('view')
 const requestedSurface = searchParams?.get('tutorial') === '1'
@@ -917,9 +924,18 @@ useEffect(() => {
     const search = params.toString();
     const newUrl = `/project${search ? `?${search}` : ""}`;
     console.log('🔄 Updating URL:', { from: pathname + (searchParams.toString() ? `?${searchParams.toString()}` : ''), to: newUrl, slugs });
-    router.replace(newUrl, { scroll: false });
+    // HTPR-6072: router.replace is a real navigation (server round trip,
+    // remounts LandingPage), which would defeat a shallow switch every time
+    // it lands on a project with no view param yet (any project without an
+    // Applied view). Patch the URL in place instead when the current state
+    // came from a shallow switch - same resolved URL, no server round trip.
+    if (switchedShallowly) {
+      window.history.replaceState(null, "", newUrl);
+    } else {
+      router.replace(newUrl, { scroll: false });
+    }
   }
-}, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId]);
+}, [slugs, slugsProp, switchedShallowly, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId]);
 
 // Retry fetching projects if project not found (might be a race condition with instant signup)
 const retryCountRef = useRef(0)
@@ -935,19 +951,26 @@ useEffect(() => {
         refetchProjects()
       }, 1000)
       return () => clearTimeout(retryTimer)
-    } else {
-      // Max retries reached - project likely doesn't exist or user doesn't have
-      // access. This also catches a shallow sidebar switch (HTPR-6072) landing
-      // on a project the client's own project list rejects: re-push the
-      // current URL as a real navigation so page.tsx's server-side access gate
-      // (getProjectForValidation) renders Unauthorized/NoBoardsEmptyState
-      // instead of leaving the client stuck retrying.
-      console.error(`❌ Project not found after ${MAX_RETRIES} retries. Falling back to a full navigation.`, { slugs })
-      // Reset retry counter for next navigation
+    } else if (switchedShallowly) {
+      // HTPR-6072: a shallow sidebar switch landed on a project the client's
+      // own project list rejects, and page.tsx's server-side access gate
+      // (getProjectForValidation) never ran for this id - re-push the current
+      // URL as a real navigation so it does, rendering
+      // Unauthorized/NoBoardsEmptyState if the project truly isn't accessible.
+      console.error(`❌ Project not found after ${MAX_RETRIES} retries on a shallow switch. Falling back to a full navigation.`, { slugs })
       retryCountRef.current = 0
       setProjectLookupFailed(true)
       const currentSearch = searchParams?.toString()
       router.push(`${pathname}${currentSearch ? `?${currentSearch}` : ""}`)
+    } else {
+      // page.tsx already validated this id server-side (a hard load or any
+      // other full navigation) and the client list still lacks the project -
+      // re-pushing the same URL would just repeat the same server render and
+      // loop forever. Bounce home instead, same as before HTPR-6072.
+      console.error(`❌ Project not found after ${MAX_RETRIES} retries. Redirecting to homepage.`, { slugs })
+      retryCountRef.current = 0
+      setProjectLookupFailed(true)
+      router.push('/')
     }
   } else if (projectIndex >= 0) {
     // Project found - reset retry counter
