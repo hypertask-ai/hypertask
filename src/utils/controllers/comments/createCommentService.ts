@@ -111,6 +111,7 @@ export interface CreateCommentParams {
     agentWebhookDeliveryIds: string[];
     boardWebhookDeliveryIds: string[];
     notificationsCompletedAt: Date | null;
+    onNotificationsCompleted?: () => void;
   };
   /**
    * Extra board events to persist in the same transaction as the comment, so a
@@ -1162,7 +1163,7 @@ export async function createCommentService(params: CreateCommentParams) {
       mentionProcessing = runMentionProcessing();
     }
 
-    const [_, __, ___, ____, commentCreator, userIds] = await Promise.all([
+    const notificationWork = [
       // Run-generated comments are not composer submissions, so they must not
       // consume the user's draft.
       isAgentRunComment
@@ -1201,7 +1202,13 @@ export async function createCommentService(params: CreateCommentParams) {
         where: { id: creatorId },
       }),
       idsToSendNotificationsTo(taskId, creatorId, task.userId, task.projectId),
-    ]);
+    ] as const;
+    const [_, __, ___, ____, commentCreator, userIds] = await Promise.all(
+      notificationWork,
+    ).catch(async (error) => {
+      await Promise.allSettled(notificationWork);
+      throw error;
+    });
 
     // Publish only after mention notifications exist. Agent replies can then
     // claim the persisted invocation identified by reply_to_comment_id.
@@ -1289,6 +1296,7 @@ export async function createCommentService(params: CreateCommentParams) {
         throw new Error("Run activity notification claim was lost");
       }
       agentRunCommentNotificationClaim = null;
+      agentRunReplayComment?.onNotificationsCompleted?.();
     } else {
       const devices = await prisma.subscribedDevices.findMany({
         where: { userId: { in: userIds } },

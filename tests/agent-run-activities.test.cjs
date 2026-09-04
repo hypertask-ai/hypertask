@@ -422,7 +422,10 @@ function loadService({
         input.agentRunSelection?.activityId ??
         input.agentRunReplayComment?.activityId;
       const activity = db.activities.find(({ id }) => id === activityId);
-      if (activity) activity.commentNotificationsCompletedAt = new Date();
+      if (activity && !activity.commentNotificationsCompletedAt) {
+        activity.commentNotificationsCompletedAt = new Date();
+        input.agentRunReplayComment?.onNotificationsCompleted?.();
+      }
       return { id: commentId, text: input.text };
     },
   });
@@ -551,6 +554,7 @@ test("only the matching agent creates an idempotent task response and visible co
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
   assert.equal(harness.commentCalls[0].agentRunActivity.runId, run.id);
   assert.equal(run.status, "ACTIVE");
+  assert.equal(harness.broadcasts.length, 1);
   await assert.rejects(
     harness.service.createAgentRunActivity(
       agentPrincipal,
@@ -591,6 +595,7 @@ test("a task response retry resumes side effects after its comment commits", asy
   assert.equal(harness.db.activities[0].responseCommentId, 1);
   assert.equal(harness.commentCalls.length, 2);
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
+  assert.equal(harness.broadcasts.length, 1);
 });
 
 test("legacy task activities without comment links keep duplicate-only replay", async () => {
@@ -627,6 +632,7 @@ test("legacy task activities without comment links keep duplicate-only replay", 
   assert.equal(responseReplay.duplicate, true);
   assert.equal(selectionReplay.duplicate, true);
   assert.equal(harness.commentCalls.length, 0);
+  assert.equal(harness.broadcasts.length, 0);
 });
 
 test("an idempotency unique race replays every non-null service key", async () => {
@@ -721,6 +727,7 @@ test("one browser selection wins and its retry does not post twice", async () =>
     harness.commentCalls[1].currentUser.displayName,
     "Persisted selector",
   );
+  assert.equal(harness.broadcasts.length, 1);
   assert.equal(
     await harness.service.selectAgentRunActivity(
       agentPrincipal,
@@ -773,6 +780,7 @@ test("a task selection retry resumes side effects after its comment commits", as
   assert.equal(elicitation.selectionCommentId, 1);
   assert.equal(harness.commentCalls.length, 2);
   assert.equal(harness.commentCalls[1].agentRunReplayComment.id, 1);
+  assert.equal(harness.broadcasts.length, 1);
 });
 
 test("a stopped run rejects a late elicitation selection", async () => {
@@ -985,6 +993,11 @@ function atomicCommentHarness() {
   let draftDeleteCalls = 0;
   let taskReferenceParseCalls = 0;
   let failure = "comment";
+  let releaseHeldMention;
+  let markMentionProcessingStarted;
+  const mentionProcessingStarted = new Promise((resolve) => {
+    markMentionProcessingStarted = resolve;
+  });
 
   const tx = {
     $queryRaw: async () => [{ id: task.id }],
@@ -1136,7 +1149,7 @@ function atomicCommentHarness() {
     subscribedDevices: { findMany: async () => [] },
     user: {
       findFirst: async () => {
-        if (failure === "post-commit") {
+        if (failure === "post-commit" || failure === "parallel-race") {
           throw new Error("post-commit side effect failed");
         }
         return { id: 6, displayName: "Valentin" };
@@ -1193,6 +1206,12 @@ function atomicCommentHarness() {
     },
     async () => {
       sideEffectOrder.push("mentions");
+      if (failure === "parallel-race") {
+        markMentionProcessingStarted();
+        await new Promise((resolve) => {
+          releaseHeldMention = resolve;
+        });
+      }
     },
     () => {
       taskReferenceParseCalls += 1;
@@ -1215,6 +1234,8 @@ function atomicCommentHarness() {
     getAssigneeLookupCalls: () => assigneeLookupCalls,
     getDraftDeleteCalls: () => draftDeleteCalls,
     getTaskReferenceParseCalls: () => taskReferenceParseCalls,
+    waitForMentionProcessing: () => mentionProcessingStarted,
+    releaseMentionProcessing: () => releaseHeldMention(),
     createCommentService,
     setFailure: (value) => {
       failure = value;
@@ -1300,6 +1321,52 @@ test("activity comments and selection prompts roll back as one transaction", asy
   assert.equal(harness.task.totalComments, 0);
   assert.equal(harness.task.updatedAt, originalTaskUpdatedAt);
   assert.equal(harness.updateTaskCalls.length, 0);
+});
+
+test("activity notification leases stay claimed until parallel work settles", async () => {
+  const harness = atomicCommentHarness();
+  harness.setFailure("parallel-race");
+  let settled = false;
+  const outcome = harness
+    .createCommentService({
+      text: "<p>Yes</p>",
+      creatorId: 6,
+      taskId: 42,
+      ownerId: 6,
+      currentUser: { id: 6, displayName: "Valentin" },
+      accessUserId: 6,
+      agentRunSelection: {
+        runId: "run-1",
+        agentId: "agent-1",
+        activityId: harness.elicitation.id,
+        context: { taskId: 42, chatSessionId: null },
+        option: { value: "yes", label: "Yes" },
+        selectedById: 6,
+        selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+      },
+    })
+    .then(
+      () => {
+        settled = true;
+        return null;
+      },
+      (error) => {
+        settled = true;
+        return error;
+      },
+    );
+
+  await harness.waitForMentionProcessing();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false);
+  assert.ok(
+    harness.elicitation.commentNotificationsProcessingAt instanceof Date,
+  );
+
+  harness.releaseMentionProcessing();
+  const error = await outcome;
+  assert.match(error.message, /post-commit side effect failed/);
+  assert.equal(harness.elicitation.commentNotificationsProcessingAt, null);
 });
 
 test("activity comments commit once across replay without consuming drafts", async () => {
