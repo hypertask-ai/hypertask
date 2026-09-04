@@ -128,6 +128,20 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
   );
 });
 
+test("native project-tab keyboard activation wins over task shortcuts", () => {
+  const buttonGuard = allTasks.indexOf('activeTag === "BUTTON"');
+  const controlReturn = allTasks.indexOf(
+    '(inFormControl && activeTag !== "SELECT")',
+  );
+  const taskEnterShortcut = allTasks.indexOf(
+    "event.keyCode === KeyCodes.ENTER",
+    controlReturn,
+  );
+  assert.notEqual(buttonGuard, -1);
+  assert.ok(buttonGuard < controlReturn);
+  assert.ok(controlReturn < taskEnterShortcut);
+});
+
 test("All Tasks opts into compact mobile rows without changing shared desktop rows", () => {
   const taskRowTag = allTasks.match(/<TaskListRow\b([\s\S]*?)\/>/);
   assert.ok(taskRowTag);
