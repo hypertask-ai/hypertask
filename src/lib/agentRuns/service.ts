@@ -226,15 +226,11 @@ export async function stopAgentRun(
 type ActivityRunWithContext = AgentRun & {
   task: {
     id: number;
-    projectId: number;
-    ticketNumber: string | null;
-    title: string;
     userId: number;
   } | null;
   chatSession: {
     id: string;
     userId: number;
-    agentId: string | null;
   } | null;
 };
 
@@ -255,16 +251,8 @@ async function findActivityRun(
   return prisma.agentRun.findFirst({
     where: accessibleRunWhere(principal, id),
     include: {
-      task: {
-        select: {
-          id: true,
-          projectId: true,
-          ticketNumber: true,
-          title: true,
-          userId: true,
-        },
-      },
-      chatSession: { select: { id: true, userId: true, agentId: true } },
+      task: { select: { id: true, userId: true } },
+      chatSession: { select: { id: true, userId: true } },
     },
   }) as Promise<ActivityRunWithContext | null>;
 }
