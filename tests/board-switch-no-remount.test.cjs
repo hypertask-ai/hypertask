@@ -242,64 +242,36 @@ test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) f
   );
 });
 
-test("HTPR-6072: SectionComp renders on boardDataReady alone, with no surface-resolution gate", () => {
-  // #264 gated on sectionCompEverRenderedRef ("ever rendered"); a later fix
-  // tightened that to surfaceResolutionRef.current.key === surfaceInitializationKey,
-  // which was safer but reintroduced the exact remount it was meant to
-  // prevent: a key change again swapped SectionComp out for the loading
-  // branch for a frame, once the shallow switch (HTPR-6072) stopped giving a
-  // fresh server render to reset that state. The real fix removes the gate
-  // entirely - see the useLayoutEffect test below for why that's still safe.
+test("HTPR-6072: the surface-readiness gate does not unmount SectionComp on a second switch", () => {
+  // surfaceInitializedFor is set by a passive effect, so surfaceInitializationKey
+  // (which changes synchronously on every switch) outruns it by one render.
+  // Gating SectionComp's render on that comparison alone unmounts and
+  // remounts the whole board tree on every switch, even a warm one. Once
+  // SectionComp has rendered for real, sectionCompEverRenderedRef must let
+  // it keep rendering while the surface effect catches up.
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
   const gateMatch = src.match(
-    /\) : data && data\.updatedProjects && boardDataReady \? \([\s\S]{0,700}<SectionComp/,
+    /\) : data && data\.updatedProjects && boardDataReady &&\s*\n\s*\(surfaceInitializedFor === surfaceInitializationKey \|\| sectionCompEverRenderedRef\.current\) \? \(\s*\n\s*<SectionComp/,
   );
   assert.ok(
     gateMatch,
-    "expected SectionComp to render whenever boardDataReady, with nothing else gating it",
-  );
-  assert.ok(
-    !/surfaceResolutionRef\.current\?\.key === surfaceInitializationKey \? \(/.test(src),
-    "expected the surfaceResolutionRef render gate to be removed, not left as dead code",
-  );
-  assert.ok(
-    !/sectionCompEverRenderedRef/.test(src),
-    "expected the sectionCompEverRenderedRef bypass to stay removed",
+    "expected the SectionComp render gate to accept either a fresh surface match or sectionCompEverRenderedRef",
   );
 });
 
-test("HTPR-6072: the surface-resolution effect runs before paint (useLayoutEffect, not useEffect)", () => {
-  // boardLayout is a single shared Recoil atom with no per-project memory,
-  // so it still holds the previous project's value the instant this
-  // component re-renders for a newly switched project. Dropping the render
-  // gate (above) is only safe because this effect is a useLayoutEffect: it
-  // corrects boardLayout before the browser paints, so a changed
-  // surfaceInitializationKey never paints the previous project's layout mode
-  // - a plain useEffect would let that stale frame paint first.
+test("HTPR-6072: sectionCompEverRenderedRef arms in an effect, not during render", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
     "utf8",
   );
-  const effectMatch = src.match(
-    /(useLayoutEffect|useEffect)\(\(\) => \{\s*if \(!pinnedProject\) return[\s\S]{0,1800}?\}, \[\s*\n\s*boardLayout,/,
+  const armMatch = src.match(
+    /useLayoutEffect\(\(\) => \{\s*if \(boardDataReady\) sectionCompEverRenderedRef\.current = true\s*\}, \[boardDataReady\]\)/,
   );
-  assert.ok(effectMatch, "expected to find the surface resolution effect");
-  assert.equal(
-    effectMatch[1],
-    "useLayoutEffect",
-    "the surface resolution effect must be useLayoutEffect so a switch never paints the previous board's layout mode",
-  );
-  const body = effectMatch[0];
-  const freshResolutionBlock = body.match(
-    /if \(!previous \|\| previous\.key !== surfaceInitializationKey\) \{[\s\S]*?\n  \}/,
-  );
-  assert.ok(freshResolutionBlock, "expected the fresh-resolution branch");
   assert.ok(
-    /surfaceResolutionRef\.current = \{[\s\S]*?key: surfaceInitializationKey,/.test(freshResolutionBlock[0]) &&
-    /setSurfaceInitializedFor\(surfaceInitializationKey\)/.test(freshResolutionBlock[0]),
-    "expected surfaceResolutionRef and surfaceInitializedFor to still be set together in the fresh-resolution branch",
+    armMatch,
+    "expected sectionCompEverRenderedRef to be armed inside a useLayoutEffect keyed on boardDataReady",
   );
 });
