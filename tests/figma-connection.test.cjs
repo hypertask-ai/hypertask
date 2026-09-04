@@ -13,6 +13,7 @@ process.env.FIGMA_CLIENT_SECRET = "figma-secret";
 const root = path.resolve(__dirname, "..");
 const originalFetch = global.fetch;
 let rows;
+let failTransactionAfterAction;
 let lockCalls;
 let lockTail;
 const currentRow = () => rows.get(6) ?? null;
@@ -49,6 +50,7 @@ const prisma = {
   figmaConnection: figmaConnectionStore,
   $transaction: async (action) => {
     let releaseLock;
+    const rowsBeforeTransaction = new Map(rows);
     const tx = {
       $executeRaw: async (query) => {
         assert.match(
@@ -65,7 +67,13 @@ const prisma = {
       figmaConnection: figmaConnectionStore,
     };
     try {
-      return await action(tx);
+      const result = await action(tx);
+      if (failTransactionAfterAction) {
+        failTransactionAfterAction = false;
+        rows = rowsBeforeTransaction;
+        throw new Error("transaction commit failed");
+      }
+      return result;
     } finally {
       releaseLock?.();
     }
@@ -97,6 +105,7 @@ const connection = jiti(path.join(root, "src/lib/figma/connection.ts"));
 test.beforeEach(() => {
   global.fetch = originalFetch;
   rows = new Map();
+  failTransactionAfterAction = false;
   lockCalls = 0;
   lockTail = Promise.resolve();
 });
@@ -162,6 +171,31 @@ test("expired access tokens refresh once while holding the connection lock", asy
   assert.equal(refreshCalls, 1);
   assert.equal(lockCalls, 2);
   assert.notEqual(currentRow().encryptedAccessToken, "fresh-access");
+});
+
+test("persists a rotated token after a transaction commit failure without refreshing twice", async () => {
+  await connection.connectFigmaUser(6, async () => ({
+    accessToken: "expired-access",
+    refreshToken: "refresh-token",
+    expiresAt: new Date(0),
+    userId: "figma-user",
+    figmaUserName: null,
+  }));
+  failTransactionAfterAction = true;
+  let refreshCalls = 0;
+  global.fetch = async () => {
+    refreshCalls += 1;
+    return Response.json({
+      access_token: "fresh-access",
+      expires_in: 3600,
+      refresh_token: "rotated-refresh",
+    });
+  };
+
+  assert.equal(await connection.getFigmaAccessToken(6, 10_000), "fresh-access");
+  assert.equal(await connection.getFigmaAccessToken(6, 10_000), "fresh-access");
+  assert.equal(refreshCalls, 1);
+  assert.equal(lockCalls, 3);
 });
 
 test("invalid refresh credentials remove the unusable local connection", async () => {
