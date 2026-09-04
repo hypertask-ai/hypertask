@@ -188,7 +188,10 @@ test("automatic description UI exists only in the new-task form", () => {
 
   assert.match(createForm, /id="create-task-auto-description-writer"/);
   assert.match(createForm, /requestKind="auto-description"/);
-  assert.match(createForm, /CreateTaskAndDescription\(descriptionAtSave, titleAtSave\)/);
+  assert.match(
+    createForm,
+    /CreateTaskAndDescription\(\s*descriptionAtSave,\s*titleAtSave,\s*formValuesAtSave,?\s*\)/,
+  );
   assert.match(
     createForm,
     /if \(takeover && description !== takeover\.inserted\) \{[\s\S]*?setAutoDescriptionTakeover\(null\)/,

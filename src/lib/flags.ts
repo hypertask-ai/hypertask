@@ -23,6 +23,7 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-6115-agent-sdk",
   "htpr-6116-figma-node-preview",
   "htpr-6118-comment-reactions-api",
+  "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
 ] as const;
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
@@ -35,6 +36,7 @@ export const FEATURE_FLAG_MODES = [
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+  key === "htpr-6129-mobile-agent-chat-viewport" ||
   key === "htpr-6130-mobile-reminder-safe-area"
     ? "OWNER_ONLY"
     : "OWNER_AND_QA";
