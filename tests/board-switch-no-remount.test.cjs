@@ -241,3 +241,37 @@ test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) f
     "expected the readiness effect to bail when local currentProject still lags the routed project",
   );
 });
+
+test("HTPR-6072: the surface-readiness gate does not unmount SectionComp on a second switch", () => {
+  // surfaceInitializedFor is set by a passive effect, so surfaceInitializationKey
+  // (which changes synchronously on every switch) outruns it by one render.
+  // Gating SectionComp's render on that comparison alone unmounts and
+  // remounts the whole board tree on every switch, even a warm one. Once
+  // SectionComp has rendered for real, sectionCompEverRenderedRef must let
+  // it keep rendering while the surface effect catches up.
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const gateMatch = src.match(
+    /\) : data && data\.updatedProjects && boardDataReady &&\s*\n\s*\(surfaceInitializedFor === surfaceInitializationKey \|\| sectionCompEverRenderedRef\.current\) \? \(\s*\n\s*<SectionComp/,
+  );
+  assert.ok(
+    gateMatch,
+    "expected the SectionComp render gate to accept either a fresh surface match or sectionCompEverRenderedRef",
+  );
+});
+
+test("HTPR-6072: sectionCompEverRenderedRef arms in an effect, not during render", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const armMatch = src.match(
+    /useLayoutEffect\(\(\) => \{\s*if \(boardDataReady\) sectionCompEverRenderedRef\.current = true\s*\}, \[boardDataReady\]\)/,
+  );
+  assert.ok(
+    armMatch,
+    "expected sectionCompEverRenderedRef to be armed inside a useLayoutEffect keyed on boardDataReady",
+  );
+});
