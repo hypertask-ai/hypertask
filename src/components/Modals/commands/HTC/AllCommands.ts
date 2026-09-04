@@ -1588,7 +1588,8 @@ const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => {
   const taskProps = commandOptions?.taskOptions;
   const browsableTaskCommands = commandOptions?.context === "Task"
     ? baseTaskCommands.filter((command) =>
-        (["addSubTask", "viewSubTask", "openAiTaskWriter"].includes(command.key) ||
+        (["addSubTask", "viewSubTask"].includes(command.key) ||
+          (command.key === "openAiTaskWriter" && !taskProps?.isKanban) ||
           // Summarize ticket only works on the detail page (the AI chat sends
           // default_context.task_id there); hide it on a Kanban-focused task.
           (command.key === "summarizeTicket" && !taskProps?.isKanban))
