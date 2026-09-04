@@ -40,15 +40,13 @@ function isAgentRelationKey(key: string, value: unknown): boolean {
 }
 
 function isAgentCollectionKey(key: string): boolean {
-  return (
-    key === "agents" || key.endsWith("Agents") || key.endsWith("_agents")
-  );
+  return key === "agents" || key.endsWith("Agents") || key.endsWith("_agents");
 }
 
 function isAgentIdentifierOrPhotoKey(key: string): boolean {
   return (
-    /(?:^agent|Agent)(?:Id|PhotoURL)$/.test(key) ||
-    /(?:^agent|_agent)_(?:id|photo_url)$/.test(key)
+    /(?:^agent|Agent)(?:Id|PhotoURL)s?$/.test(key) ||
+    /(?:^agent|_agent)_(?:id|photo_url)s?$/.test(key)
   );
 }
 
@@ -100,7 +98,7 @@ export function redactAgentIdentitiesForPublicShare<T>(value: T): T {
   const redacted: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value)) {
     if (isAgentIdentifierOrPhotoKey(key)) {
-      redacted[key] = null;
+      redacted[key] = Array.isArray(nested) ? [] : null;
     } else if (isAgentDisplayNameKey(key)) {
       redacted[key] = nested ? privateAgentAttribution.displayName : nested;
     } else if (isAgentRelationKey(key, nested)) {
