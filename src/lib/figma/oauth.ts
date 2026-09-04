@@ -76,6 +76,7 @@ export function safeFigmaReturnTo(value: string | null | undefined): string {
     const pathname = decodeURIComponent(target.pathname);
     if (
       target.origin !== base.origin ||
+      target.pathname.startsWith("//") ||
       pathname.includes("\\") ||
       pathname.includes("\0") ||
       pathname === "/api" ||

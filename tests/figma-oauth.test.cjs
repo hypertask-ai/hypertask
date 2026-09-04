@@ -70,6 +70,7 @@ test("OAuth return paths reject external, API, and ambiguous destinations", () =
   for (const value of [
     "https://evil.example/task",
     "//evil.example/task",
+    "/%2e%2e//evil.example/task",
     "/\\evil.example/task",
     "/api",
     "/api/figma/disconnect",
