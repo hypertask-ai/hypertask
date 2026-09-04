@@ -200,11 +200,14 @@ jobs:
           if $healthy; then
             LIVE_BUILD=$(curl -s --max-time 30 "https://app.hypertask.ai/api/version" | jq -r '.buildId // empty')
             if [ "$LIVE_BUILD" != "$SHA" ]; then
+              notify "🔴 hypertasks: production build id mismatch: live $LIVE_BUILD != expected $SHA"
               echo "::error::live build $LIVE_BUILD != expected $SHA"
-              exit 1
+              healthy=false
+              unchallenged_failure=true
+            else
+              echo "Production healthy on $SHA"
+              exit 0
             fi
-            echo "Production healthy on $SHA"
-            exit 0
           fi
 
           # The FINAL attempt decides rollback (HTPR-5467). An unchallenged
