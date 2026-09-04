@@ -699,22 +699,40 @@ class AgentRunImpl implements AgentRun {
     const previous = leaseTails.get(taskId) ?? Promise.resolve();
     const operation = previous.then(async () => {
       await this.assertServerRunActive(this.signal);
+      let claimResponse: unknown;
       try {
-        await this.client.request("/mcp/tasks/lease/claim", {
+        claimResponse = await this.client.request("/mcp/tasks/lease/claim", {
           method: "POST",
           body: { task_id: taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
           signal: this.signal,
         });
       } catch (error) {
-        // A 2xx response proves the claim committed even when its body was unreadable.
+        const logicalFailure =
+          error instanceof AgentSdkError &&
+          error.response !== null &&
+          typeof error.response === "object" &&
+          !Array.isArray(error.response) &&
+          (error.response as JsonObject).success === false;
+        // An unreadable 2xx response may have committed the claim, unlike a declared failure.
         if (
           error instanceof AgentSdkError &&
           error.status !== undefined &&
           error.status >= 200 &&
-          error.status < 300
+          error.status < 300 &&
+          !logicalFailure
         ) {
           await this.releaseTaskLease(taskId);
         }
+        throw error;
+      }
+      try {
+        const response = objectValue(claimResponse, "Task lease claim");
+        const lease = objectValue(response.lease, "Task lease claim");
+        if (response.success !== true || lease.taskId !== taskId) {
+          throw new AgentSdkError("Task lease claim returned an invalid response");
+        }
+      } catch (error) {
+        await this.releaseTaskLease(taskId);
         throw error;
       }
 

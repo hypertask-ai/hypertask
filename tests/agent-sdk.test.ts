@@ -213,6 +213,17 @@ function apiFixture(
         { status: 500 },
       );
     }
+    if (url.pathname.endsWith("/mcp/tasks/lease/claim")) {
+      return Response.json({
+        success: true,
+        lease: {
+          taskId: task.id,
+          holder: "agent-1",
+          agentId: "agent-1",
+          expiresAt: new Date(now + 60_000).toISOString(),
+        },
+      });
+    }
     return Response.json({ success: true });
   };
   return { calls, fetch };
@@ -1094,6 +1105,47 @@ test("task helpers release a claim after an unreadable success response", async 
   );
 });
 
+test("task helpers do not release after a logical claim failure", async () => {
+  const api = apiFixture();
+  const events: string[] = [];
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
+      events.push("claim");
+      return Response.json(
+        { success: false, error: "Lease denied" },
+        { status: 200 },
+      );
+    }
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/release")) {
+      events.push("release");
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Claiming task.");
+    await received.task?.update({ title: "Must not run" });
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), /Lease denied/);
+  assert.deepEqual(events, ["claim"]);
+  assert.equal(
+    api.calls.some((call) => call.path.endsWith("/mcp/tasks/update")),
+    false,
+  );
+});
+
 test("a stalled task lease release cannot block later operations", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"], now });
   const api = apiFixture();
@@ -1233,7 +1285,15 @@ test("task helper propagates a stop that lands while claiming its lease", async 
     if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
       claimStarted();
       await claimGate;
-      return Response.json({ success: true });
+      return Response.json({
+        success: true,
+        lease: {
+          taskId: task.id,
+          holder: "agent-1",
+          agentId: "agent-1",
+          expiresAt: new Date(now + 60_000).toISOString(),
+        },
+      });
     }
     if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/update")) {
       updateSignalAborted = init.signal?.aborted;
