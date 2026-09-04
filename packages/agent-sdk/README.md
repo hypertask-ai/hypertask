@@ -37,7 +37,7 @@ app.post(
 app.listen(3000);
 ```
 
-The server-side `htpr-6115-agent-sdk` and activity flags must be enabled for the token owner. Until then, run APIs intentionally answer as not found.
+`createAgent` only constructs local objects and performs no network work. Every delivery is preflighted through the run API before callbacks can execute; that API enforces the owner-approved `htpr-6115-agent-sdk` epic flag server-side, and activity writes enforce it again alongside the activity flag. Until those flags are enabled for the token owner, run APIs intentionally answer as not found. HTPR-6123 deliberately shares the epic flag rather than introducing a second rollout switch.
 
 ## API
 
