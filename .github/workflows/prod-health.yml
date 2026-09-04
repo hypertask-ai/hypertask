@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 50
+          fetch-depth: 200
 
       - name: Wait for deploy, health-check, rollback if broken
         env:
@@ -86,7 +86,7 @@ jobs:
           HC_DIR=$(mktemp -d) || { echo "::error::mktemp -d failed"; exit 1; }
           trap 'rm -rf "$HC_DIR"' EXIT
 
-          for i in 1 2 3 4 5 6; do
+          fetch_live_build() {
             rm -f "$HC_DIR/version.json" "$HC_DIR/version.h"
             version_code=$(curl -s -o "$HC_DIR/version.json" -D "$HC_DIR/version.h" -w '%{http_code}' --max-time 30 \
               "https://app.hypertask.ai/api/version") || version_code=000
@@ -95,6 +95,10 @@ jobs:
               version_challenged=yes
             fi
             LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null)
+          }
+
+          for i in 1 2 3 4 5 6; do
+            fetch_live_build
             echo "[$i] live build: ${LIVE_BUILD:-none} (status $version_code)"
 
             if [ "$version_code" = "200" ] && [ "$version_challenged" = "no" ] && [ -n "$LIVE_BUILD" ]; then
@@ -297,6 +301,14 @@ jobs:
             notify "⚠️ hypertasks: health check INCONCLUSIVE for $SHA — Vercel bot-challenged the runner IP. NOT rolling back. Verify manually: https://app.hypertask.ai"
             echo "::warning::Bot-challenged responses only; skipping rollback"
             exit 0
+          fi
+
+          fetch_live_build
+          if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ "$LIVE_BUILD" != "$SHA" ]; then
+            MSG="⚠️ hypertasks: probes failed for $SHA but production now serves ${LIVE_BUILD:-none} (status $version_code); skipping rollback"
+            notify "$MSG"
+            echo "::error::$MSG"
+            exit 1
           fi
 
           # ── 3. Rollback: promote the previous READY production deployment ──
