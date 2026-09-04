@@ -16,7 +16,7 @@ const jiti = require("jiti")(__filename, {
 const limits = jiti(path.join(root, "src/lib/storage/uploadLimits.ts"));
 const direct = jiti(path.join(root, "src/lib/storage/directUpload.ts"));
 const uploadRoute = jiti(path.join(root, "src/pages/api/tasks/n8nUpload.ts"));
-const { uploadFilesViaApi } = jiti(
+const { uploadFilesViaApi, uploadSingleTaskAttachment } = jiti(
   path.join(root, "src/lib/storage/uploadViaApi.ts")
 );
 const axios = require("axios");
@@ -224,6 +224,41 @@ test("a file far above the buffered cap uploads straight to storage", async () =
     assert.equal(xhr.sent.length, 1);
     assert.equal(xhr.sent[0].headers["Content-Type"], "video/mp4");
     assert.match(xhr.sent[0].url, /^https:\/\/storage\.example\//);
+  } finally {
+    axios.post = originalPost;
+    xhr.restore();
+  }
+});
+
+test("a task-link upload requests and returns a server receipt", async () => {
+  const originalPost = axios.post;
+  const calls = [];
+  axios.post = async (url, body) => {
+    calls.push({ url, body });
+    if (url === "/api/tasks/uploadUrl") {
+      return { data: { uploads: [ticketFor("linked.png")], grant: "g" } };
+    }
+    if (url === "/api/tasks/uploadFinalize") {
+      return { data: { success: true, taskLinkReceipts: ["signed-receipt"] } };
+    }
+    throw new Error(`Unexpected upload URL: ${url}`);
+  };
+  const xhr = stubXhr((request) => {
+    request.status = 200;
+    request.onload();
+  });
+  try {
+    const result = await uploadSingleTaskAttachment(tinyFile("linked.png"));
+    assert.deepEqual(result, {
+      url: "https://files.hypertask.app/tasks/attachments/1_linked.png",
+      receipt: "signed-receipt",
+    });
+    assert.deepEqual(
+      calls.map((call) => call.url),
+      ["/api/tasks/uploadUrl", "/api/tasks/uploadFinalize"],
+    );
+    assert.equal(calls[0].body.purpose, "task-attachment-link");
+    assert.equal(calls[1].body.issueTaskLinkReceipts, true);
   } finally {
     axios.post = originalPost;
     xhr.restore();

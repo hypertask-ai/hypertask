@@ -157,6 +157,16 @@ export default async function handler(
   }
 
   try {
+    const taskLinkRequested = req.body?.purpose === "task-attachment-link";
+    if (req.body?.purpose !== undefined && !taskLinkRequested) {
+      throw new UploadUrlRequestError("Invalid upload purpose", 400);
+    }
+    if (taskLinkRequested) {
+      const { isFeatureEnabled } = await import("@/lib/flags");
+      if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.id))) {
+        throw new UploadUrlRequestError("Background task uploads are disabled", 403);
+      }
+    }
     const files = parseRequestedFiles(req.body);
 
     const uploads: DirectUploadTicket[] = await Promise.all(
@@ -179,7 +189,19 @@ export default async function handler(
     // The grant names exactly these keys for exactly this user, so finalizing
     // or discarding them is a capability rather than a bucket-wide permission.
     const grant = signUploadGrant(
-      { userId: session.id, keys: uploads.map((upload) => upload.key) },
+      {
+        userId: session.id,
+        keys: uploads.map((upload) => upload.key),
+        ...(taskLinkRequested
+          ? {
+              taskLinkFiles: uploads.map((upload) => ({
+                key: upload.key,
+                fileName: upload.fileName,
+                contentType: upload.contentType,
+              })),
+            }
+          : {}),
+      },
       DIRECT_UPLOAD_URL_TTL_SECONDS
     );
 

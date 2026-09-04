@@ -46,6 +46,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { SendArrow } from "@/components/Common/SendArrow";
 import type { DictationCoordinator } from "@/lib/dictationCoordinator";
+import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 
 interface IProps {
   /** create-task-modal only: the modal's title field has text. Save must
@@ -82,6 +83,7 @@ interface IProps {
   mobileExistingEdit?: boolean;
   mobileEditSaving?: boolean;
   onCancelMobileEdit?: () => void;
+  backgroundTaskUploads?: boolean;
 }
 
 const AttachmentsUpload = (props: IProps) => {
@@ -110,6 +112,7 @@ const AttachmentsUpload = (props: IProps) => {
     mobileExistingEdit = false,
     mobileEditSaving: mobileEditSavingProp = false,
     onCancelMobileEdit,
+    backgroundTaskUploads = false,
   } = props;
   const _mbl = useContext(MobileViewContext);
   // Reactive: Tiptap v3 useEditor does not re-render on typing, so subscribe
@@ -141,6 +144,14 @@ const AttachmentsUpload = (props: IProps) => {
     resetFiles,
     setFileItems,
   } = useFileUpload(props.filesFromParent);
+  const removeAttachment = (name: string) => {
+    if (backgroundTaskUploads) {
+      discardUnboundCreateTaskUploads(
+        fileItems.filter(({ file }) => file.name === name),
+      );
+    }
+    removeFile(name);
+  };
   const mobileCommentActionsRef = useRef<HTMLDetailsElement>(null);
   const mobileCommentActionsTriggerRef = useRef<HTMLElement>(null);
   const mobileEditWasOpenRef = useRef(false);
@@ -834,9 +845,10 @@ const AttachmentsUpload = (props: IProps) => {
               images={[]}
               allowDelete={true}
               shouldUpload={true}
-              handleRemove={removeFile}
+              handleRemove={removeAttachment}
               mode="Creating task"
               callbackAttachments={returnUploadedAttachments}
+              backgroundTaskUploads={backgroundTaskUploads}
             />
           ) : (
             <ImageGallery
