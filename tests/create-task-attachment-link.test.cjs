@@ -18,6 +18,7 @@ function stubModule(relativePath, exports) {
 function loadLinker({
   authorized = true,
   storageAvailable = true,
+  storageError,
   deleteFails = false,
 } = {}) {
   const events = [];
@@ -99,7 +100,13 @@ function loadLinker({
     getHypertasksS3Client: () => ({
       headObject: () => ({
         promise: async () => {
-          if (!storageAvailable) throw new Error("object missing");
+          if (storageError) throw storageError;
+          if (!storageAvailable) {
+            throw Object.assign(new Error("object missing"), {
+              code: "NotFound",
+              statusCode: 404,
+            });
+          }
         },
       }),
       deleteObject: ({ Key }) => ({
@@ -246,6 +253,20 @@ test("linking rejects an upload that cancellation already removed", async () => 
   await assert.rejects(
     linker.linkTaskAttachment(99, 6, receipt),
     (error) => error.name === "TaskAttachmentLinkError" && error.status === 409,
+  );
+  assert.equal(linker.creates, 0);
+});
+
+test("linking surfaces transient storage failures for retry", async () => {
+  const storageError = Object.assign(new Error("storage unavailable"), {
+    code: "ServiceUnavailable",
+    statusCode: 503,
+  });
+  const linker = loadLinker({ storageError });
+
+  await assert.rejects(
+    linker.linkTaskAttachment(99, 6, receipt),
+    (error) => error === storageError,
   );
   assert.equal(linker.creates, 0);
 });

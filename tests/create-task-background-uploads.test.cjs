@@ -25,6 +25,19 @@ const attachment = (id, source) => ({
   taskId: 99,
 });
 
+test("a source-backed preview preserves its gallery id", () => {
+  const fs = require("node:fs");
+  const source = fs.readFileSync(
+    path.join(
+      root,
+      "src/components/Common/AttachmentsUpload/SingleFileInputPreview.tsx",
+    ),
+    "utf8",
+  );
+
+  assert.match(source, /if \(file\.source\)[\s\S]*callback\?\.\(\{ id, file \}\)/);
+});
+
 test("one file object starts one upload promise across remounts", async () => {
   const selected = file("promise-reuse.txt");
   let calls = 0;
@@ -145,6 +158,46 @@ test("failed discard remains queued on a bounded retry timer", async () => {
   } finally {
     canDiscard = true;
     global.setTimeout = originalSetTimeout;
+    if (originalWindow === undefined) delete global.window;
+    else global.window = originalWindow;
+  }
+});
+
+test("a permanent discard rejection is not retried", async () => {
+  const originalFetch = global.fetch;
+  const originalWindow = global.window;
+  const selected = file("rejected-discard.txt");
+  const scheduled = [];
+  let attempts = 0;
+  global.fetch = async () => {
+    attempts += 1;
+    return { ok: false, status: 403 };
+  };
+  global.window = {
+    addEventListener: () => undefined,
+    clearTimeout: () => undefined,
+    setTimeout: (callback, delay) => {
+      scheduled.push({ callback, delay });
+      return scheduled.length;
+    },
+  };
+  try {
+    const started = uploads.startCreateTaskUpload(
+      selected,
+      async () => ({
+        url: "https://files.example/rejected-discard",
+        receipt: "rejected-discard-receipt",
+      }),
+    );
+    await started.promise;
+    await nextTurn();
+    uploads.discardUnboundCreateTaskUploads([selected]);
+    await nextTurn();
+
+    assert.equal(attempts, 1);
+    assert.equal(scheduled.length, 0);
+  } finally {
+    global.fetch = originalFetch;
     if (originalWindow === undefined) delete global.window;
     else global.window = originalWindow;
   }

@@ -34,6 +34,12 @@ type Link = (
 ) => Promise<IAttachment>;
 type Discard = (receipt: string) => Promise<void>;
 
+class DiscardRequestError extends Error {
+  constructor(readonly retryable: boolean) {
+    super("Could not discard attachment");
+  }
+}
+
 type UploadJob = CreateTaskUploadSnapshot & {
   receipt?: string;
   reserved: boolean;
@@ -109,7 +115,11 @@ async function defaultDiscard(receipt: string): Promise<void> {
     }),
     keepalive: true,
   });
-  if (!response.ok) throw new Error("Could not discard attachment");
+  if (!response.ok) {
+    throw new DiscardRequestError(
+      response.status >= 500 || [408, 425, 429].includes(response.status),
+    );
+  }
 }
 
 async function runPendingDiscard(pending: PendingDiscard) {
@@ -128,7 +138,12 @@ async function runPendingDiscard(pending: PendingDiscard) {
       pendingDiscards.delete(pending.receipt);
       pending.running = false;
       return;
-    } catch {
+    } catch (error) {
+      if (error instanceof DiscardRequestError && !error.retryable) {
+        pendingDiscards.delete(pending.receipt);
+        pending.running = false;
+        return;
+      }
       // Keep the receipt queued after these immediate-session retries fail.
     }
   }

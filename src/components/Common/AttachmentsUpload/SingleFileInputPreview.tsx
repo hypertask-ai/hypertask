@@ -73,7 +73,7 @@ interface ISingleFile {
         if (!shouldUpload || !hasCallback) return;
         if (file.source) {
           setProgressBar(100);
-          latestHandlersRef.current.callback?.({ id: file.id, file });
+          latestHandlersRef.current.callback?.({ id, file });
           return;
         }
 

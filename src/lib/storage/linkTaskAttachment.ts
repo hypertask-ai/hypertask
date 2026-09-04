@@ -29,6 +29,16 @@ async function lockAttachmentReceipt(
   );
 }
 
+function isStorageNotFound(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const storageError = error as { code?: unknown; statusCode?: unknown };
+  return (
+    storageError.statusCode === 404 ||
+    storageError.code === "NotFound" ||
+    storageError.code === "NoSuchKey"
+  );
+}
+
 export async function linkTaskAttachment(
   taskId: number,
   userId: number,
@@ -99,8 +109,11 @@ export async function linkTaskAttachment(
         await getHypertasksS3Client()
           .headObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: receipt.key })
           .promise();
-      } catch {
-        throw new TaskAttachmentLinkError("This upload is no longer available", 409);
+      } catch (error) {
+        if (isStorageNotFound(error)) {
+          throw new TaskAttachmentLinkError("This upload is no longer available", 409);
+        }
+        throw error;
       }
 
       await persistAttachmentRows(
