@@ -244,16 +244,27 @@ export class AgentClient {
     claimSignal?: AbortSignal,
   ): Promise<void> {
     const event = eventForPayload(payload);
+    if (
+      event !== "stop" &&
+      (preflightRun.status === "stopped" || preflightRun.status === "done")
+    ) {
+      throw new AgentSdkError("Run is no longer active");
+    }
     if (event === "stop") this.activeRuns.get(preflightRun.id)?.controller.abort();
     const execution = this.acquireRun(preflightRun.id, event === "stop");
-    const abortForLostClaim = () => execution.controller.abort(claimSignal?.reason);
+    const dispatchController = new AbortController();
+    const abortForRunStop = () =>
+      dispatchController.abort(execution.controller.signal.reason);
+    const abortForLostClaim = () => dispatchController.abort(claimSignal?.reason);
+    execution.controller.signal.addEventListener("abort", abortForRunStop, { once: true });
     claimSignal?.addEventListener("abort", abortForLostClaim, { once: true });
+    if (execution.controller.signal.aborted) abortForRunStop();
     if (claimSignal?.aborted) abortForLostClaim();
 
     try {
       const context = await this.hydrateContext(
         preflightRun,
-        event === "stop" ? claimSignal : execution.controller.signal,
+        event === "stop" ? claimSignal : dispatchController.signal,
       );
       const run = new AgentRunImpl(
         this,
@@ -262,7 +273,7 @@ export class AgentClient {
         typeof payload.prompt === "string" ? payload.prompt : null,
         payload.signal === "select" && payload.selection ? payload.selection : null,
         payload.deliveryId,
-        execution.controller.signal,
+        dispatchController.signal,
       );
       const handlers = [
         ...(this.handlers.get(event) ?? []),
@@ -304,6 +315,7 @@ export class AgentClient {
         throw error;
       }
     } finally {
+      execution.controller.signal.removeEventListener("abort", abortForRunStop);
       claimSignal?.removeEventListener("abort", abortForLostClaim);
       execution.release();
     }
@@ -700,7 +712,7 @@ class AgentRunImpl implements AgentRun {
         this.withTaskLease("update", (signal, key) =>
           this.client.request("/mcp/tasks/update", {
             method: "POST",
-            body: { task_id: ticket.id, ...fields },
+            body: { ...fields, task_id: ticket.id },
             idempotencyKey: key,
             signal,
           }),

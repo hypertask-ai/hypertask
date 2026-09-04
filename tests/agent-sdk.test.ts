@@ -668,7 +668,8 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
     await received.task?.move("QA");
     await received.task?.assign("me");
     await received.task?.comment("A comment");
-    await received.task?.update({ title: "Updated" });
+    const update = { title: "Updated", task_id: 999 };
+    await received.task?.update(update);
     await received.task?.attach("https://files.example.test/report.pdf");
   });
   const work = background();
@@ -700,6 +701,7 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
     updates.map((call) => call.headers.get("idempotency-key")),
     ["delivery-1:2:move", "delivery-1:5:update"],
   );
+  assert.equal(updates.at(-1)?.body?.task_id, task.id);
   const assignment = mutations.find((call) =>
     call.path.endsWith("/mcp/assignees/assign"),
   );
@@ -874,6 +876,92 @@ test("task helper settles an in-flight heartbeat before releasing its lease", as
   } finally {
     context.mock.timers.reset();
   }
+});
+
+test("inactive run snapshots cannot dispatch delayed work", async () => {
+  const api = apiFixture();
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (url.pathname.endsWith("/mcp/agents/runs/run-1")) {
+      return Response.json({ success: true, run: { ...run, status: "stopped" } });
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  agent.on("mention", () => {
+    assert.fail("inactive runs must not reach handlers");
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), /Run is no longer active/);
+  assert.equal(
+    api.calls.some((call) => call.path.endsWith("/mcp/agents/runs/run-1/activities")),
+    false,
+  );
+});
+
+test("losing one delivery claim does not cancel a sibling delivery", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let firstStarted!: () => void;
+  const startedFirst = new Promise<void>((resolve) => {
+    firstStarted = resolve;
+  });
+  let secondStarted!: () => void;
+  const startedSecond = new Promise<void>((resolve) => {
+    secondStarted = resolve;
+  });
+  let finishSecond!: () => void;
+  const secondGate = new Promise<void>((resolve) => {
+    finishSecond = resolve;
+  });
+  let secondSignal: AbortSignal | undefined;
+  agent.on("mention", async (received) => {
+    if (received.prompt === "first") {
+      firstStarted();
+      await new Promise<void>((resolve) => {
+        received.signal.addEventListener("abort", () => resolve(), { once: true });
+      });
+      return;
+    }
+    secondSignal = received.signal;
+    secondStarted();
+    await secondGate;
+  });
+  const firstClaim = new AbortController();
+  const secondClaim = new AbortController();
+  const firstDispatch = agent.client.dispatch(
+    payload({ deliveryId: "delivery-first", prompt: "first" }),
+    run,
+    firstClaim.signal,
+  );
+  const secondDispatch = agent.client.dispatch(
+    payload({ deliveryId: "delivery-second", prompt: "second" }),
+    run,
+    secondClaim.signal,
+  );
+
+  await Promise.all([startedFirst, startedSecond]);
+  firstClaim.abort(new Error("first claim lost"));
+  await firstDispatch;
+  const siblingWasAborted = secondSignal?.aborted;
+  finishSecond();
+  await secondDispatch;
+  assert.equal(siblingWasAborted, false);
 });
 
 test("a stop delivery aborts active work and still reaches stop handlers", async () => {
