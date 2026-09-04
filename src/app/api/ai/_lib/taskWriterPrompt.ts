@@ -89,10 +89,11 @@ export function createTaskWriterSystemPromptTemplate(houseOutputStyle: string) {
             - If web search results are used, include their URLs in References.
 
             <h3>MEDIA PLACEHOLDERS (CRITICAL)</h3>
-            - Media from the Original Description or conversation and standalone image URLs in the current request are replaced with tokens like [[HT_MEDIA_1]].
-            - Keep every media token exactly once, unchanged, where its media belongs in the rewritten description.
+            - Media from the Original Description or conversation and standalone image URLs in the current request may already be replaced with tokens like [[HT_MEDIA_1]].
+            - A media token is valid ONLY when that exact token appears in the input. Keep every input media token exactly once, unchanged, where its media belongs in the rewritten description.
+            - A raw screenshot or image URL is a link, not a media token. Preserve its exact URL in an <a> element; NEVER replace a raw URL with an HT_MEDIA token.
             - NEVER alter, drop, or invent a media token.
-            - NEVER replace a media token with a link or an HTML media tag. The application restores the original HTML after your response.
+            - NEVER replace an input media token with a link or an HTML media tag. The application restores the original HTML after your response.
             - If the input has no media tokens, do not create any.
             - If a client sends raw <img>, video, iframe, audio, or embed HTML instead, reproduce every such node verbatim and never copy media from related context.
             - ${BOARD_TEMPLATE_FINAL_CHECK}
