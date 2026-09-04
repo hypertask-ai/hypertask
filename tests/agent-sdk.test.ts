@@ -101,6 +101,7 @@ type ApiCall = {
   path: string;
   headers: Headers;
   body: Record<string, unknown> | null;
+  signal?: AbortSignal | null;
 };
 
 function apiFixture(options: { failActivity?: boolean; failUpdate?: boolean } = {}) {
@@ -116,7 +117,13 @@ function apiFixture(options: { failActivity?: boolean; failUpdate?: boolean } = 
     const method = init.method ?? "GET";
     const headers = new Headers(init.headers);
     const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
-    calls.push({ method, path: `${url.pathname}${url.search}`, headers, body });
+    calls.push({
+      method,
+      path: `${url.pathname}${url.search}`,
+      headers,
+      body,
+      signal: init.signal,
+    });
 
     if (method === "HEAD") {
       return new Response(null, {
@@ -557,6 +564,46 @@ test("malformed hydrated collections fail with AgentSdkError", async () => {
   });
 });
 
+test("malformed task status checks fail with AgentSdkError", async () => {
+  const api = apiFixture();
+  let runRequests = 0;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (url.pathname.endsWith("/mcp/agents/runs/run-1")) {
+      runRequests += 1;
+      if (runRequests === 2) {
+        return Response.json({ success: true, run: null });
+      }
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Checking task status.");
+    await received.task?.update({ title: "Must not be written" });
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), (error) => {
+    assert.equal(error instanceof AgentSdkError, true);
+    assert.match((error as AgentSdkError).message, /Agent run/);
+    return true;
+  });
+  assert.equal(
+    api.calls.some((call) => call.path.endsWith("/mcp/tasks/lease/claim")),
+    false,
+  );
+});
+
 test("run records cannot overwrite SDK internals", async () => {
   const api = apiFixture();
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {
@@ -666,7 +713,7 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
   agent.on("mention", async (received) => {
     await received.thought("Starting task writes.");
     await received.task?.move("QA");
-    await received.task?.assign("me");
+    await received.task?.assign("test@example.test");
     await received.task?.comment("A comment");
     const update = { title: "Updated", task_id: 999 };
     await received.task?.update(update);
@@ -676,6 +723,13 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
   assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
   await work.drain();
 
+  const lookups = api.calls.filter(
+    (call) =>
+      call.path.endsWith("/mcp/projects/15/sections") ||
+      call.path.endsWith("/mcp/projects/15/members"),
+  );
+  assert.equal(lookups.length, 2);
+  assert.equal(lookups.every((call) => call.signal instanceof AbortSignal), true);
   const mutations = api.calls.filter((call) => call.method === "POST");
   const paths = mutations.map((call) => call.path.replace("/api", ""));
   assert.deepEqual(paths, [

@@ -561,11 +561,14 @@ class AgentRunImpl implements AgentRun {
 
   private async assertServerRunActive(signal: AbortSignal): Promise<void> {
     this.assertNotStopped();
-    const response = await this.client.request<{ run: AgentRunRecord }>(
-      `/mcp/agents/runs/${encodeURIComponent(this.id)}`,
-      { signal },
+    const response = objectValue(
+      await this.client.request(`/mcp/agents/runs/${encodeURIComponent(this.id)}`, {
+        signal,
+      }),
+      "Agent run",
     );
-    if (response.run.status === "stopped" || response.run.status === "done") {
+    const run = objectValue(response.run, "Agent run");
+    if (run.status === "stopped" || run.status === "done") {
       throw new AgentSdkError("Run is no longer active");
     }
   }
@@ -626,10 +629,16 @@ class AgentRunImpl implements AgentRun {
       move: async (section) => {
         let sectionId = section;
         if (typeof section === "string") {
-          const response = await this.client.request<{
-            sections: Array<{ id: number; section_title: string }>;
-          }>(`/mcp/projects/${ticket.projectId}/sections`);
-          const matches = response.sections.filter(
+          const response = objectValue(
+            await this.client.request(`/mcp/projects/${ticket.projectId}/sections`, {
+              signal: this.signal,
+            }),
+            "Project sections",
+          );
+          const matches = arrayValue<{ id: number; section_title: string }>(
+            response.sections,
+            "Project sections",
+          ).filter(
             (candidate) =>
               candidate.section_title.trim().toLocaleLowerCase() ===
               section.trim().toLocaleLowerCase(),
@@ -664,15 +673,18 @@ class AgentRunImpl implements AgentRun {
           } else if (UUID_PATTERN.test(reference)) {
             assignment = { agent_id: reference };
           } else {
-            const response = await this.client.request<{
-              members: Array<{
-                id: number | string;
-                displayName: string;
-                email?: string;
-              }>;
-            }>(`/mcp/projects/${ticket.projectId}/members`);
+            const response = objectValue(
+              await this.client.request(`/mcp/projects/${ticket.projectId}/members`, {
+                signal: this.signal,
+              }),
+              "Project members",
+            );
             const normalized = reference.toLocaleLowerCase();
-            const matches = response.members.filter(
+            const matches = arrayValue<{
+              id: number | string;
+              displayName: string;
+              email?: string;
+            }>(response.members, "Project members").filter(
               (member) =>
                 member.displayName.trim().toLocaleLowerCase() === normalized ||
                 member.email?.trim().toLocaleLowerCase() === normalized,
