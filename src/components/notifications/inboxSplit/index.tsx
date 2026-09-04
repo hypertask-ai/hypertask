@@ -723,6 +723,7 @@ const InboxSplit = ({
 
     // pressing r for reply
     if (e.keyCode === KeyCodes.R && cmdControl) {
+      e.preventDefault();
       if (selectedKeyboardRow?.item.kind === "draft") {
         openDraft(selectedKeyboardRow.item.draft);
         return;

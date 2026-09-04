@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -125,6 +126,19 @@ test("mixed inbox focus initializes and reconciles by stable row identity", () =
     )?.key,
     "notification-8",
   );
+});
+
+test("the inbox reply shortcut suppresses the browser reload default", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/components/notifications/inboxSplit/index.tsx"),
+    "utf8",
+  );
+  const replyBranch = source.match(
+    /if \(e\.keyCode === KeyCodes\.R && cmdControl\) \{([\s\S]*?)\n    \}/,
+  );
+
+  assert.ok(replyBranch, "reply shortcut branch not found");
+  assert.match(replyBranch[1], /e\.preventDefault\(\);/);
 });
 
 test("the caller can restrict scrolling to the active split", () => {
