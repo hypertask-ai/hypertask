@@ -142,6 +142,8 @@ async function main() {
     fallbackAgent: { id: "fallback-agent-id", displayName: "Fallback Agent" },
     agent_id: "snake-agent-id",
     agent_display_name: "Snake Agent",
+    agentPhotoURL: "https://example.test/agent.png",
+    fromAgentPhotoURL: "https://example.test/from-agent.png",
     task: {
       id: 99,
       agentId: "task-agent-id",
@@ -160,6 +162,8 @@ async function main() {
     photoURL: null,
   });
   assert.equal(redactedSharedTask.agent_id, null);
+  assert.equal(redactedSharedTask.agentPhotoURL, null);
+  assert.equal(redactedSharedTask.fromAgentPhotoURL, null);
   assert.equal(
     redactedSharedTask.agent_display_name,
     PRIVATE_AGENT_DISPLAY_NAME,
