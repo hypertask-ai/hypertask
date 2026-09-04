@@ -106,13 +106,16 @@ test("clipboard writes resolve only after the browser accepts the URL", async ()
   assert.equal(copied, "https://app.hypertask.ai/project?id=15&view=mine#task");
 });
 
-test("clipboard denial returns failure after the browser fallback", async () => {
+test("a successful legacy copy is not overridden when element.remove is unavailable", async () => {
   let removed = false;
   console.error = () => {};
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
     value: { clipboard: { writeText: async () => { throw new Error("denied"); } } },
   });
+  const parentNode = {
+    removeChild: () => { removed = true; },
+  };
   Object.defineProperty(globalThis, "document", {
     configurable: true,
     value: {
@@ -122,7 +125,36 @@ test("clipboard denial returns failure after the browser fallback", async () => 
         style: {},
         focus: () => {},
         select: () => {},
-        remove: () => { removed = true; },
+        parentNode,
+      }),
+      execCommand: () => true,
+    },
+  });
+
+  assert.equal(await writeTextToClipboard("https://app.hypertask.ai/project"), true);
+  assert.equal(removed, true);
+});
+
+test("clipboard denial returns failure after the browser fallback", async () => {
+  let removed = false;
+  console.error = () => {};
+  Object.defineProperty(globalThis, "navigator", {
+    configurable: true,
+    value: { clipboard: { writeText: async () => { throw new Error("denied"); } } },
+  });
+  const parentNode = {
+    removeChild: () => { removed = true; },
+  };
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      body: { appendChild: () => {} },
+      createElement: () => ({
+        setAttribute: () => {},
+        style: {},
+        focus: () => {},
+        select: () => {},
+        parentNode,
       }),
       execCommand: () => false,
     },

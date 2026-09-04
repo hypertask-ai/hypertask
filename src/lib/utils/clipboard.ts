@@ -25,7 +25,7 @@ export const writeTextToClipboard = async (text: string): Promise<boolean> => {
       textarea.select();
       return document.execCommand("copy");
     } finally {
-      textarea.remove();
+      if (textarea.parentNode) textarea.parentNode.removeChild(textarea);
     }
   } catch (err) {
     console.error("execCommand copy fallback failed:", err);
