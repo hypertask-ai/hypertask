@@ -1,44 +1,8 @@
 import toast from "react-hot-toast";
+import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
 type UseCopyURLOptions = {
   plainTextOnly?: boolean;
-};
-
-// Robust plain-text copy. navigator.clipboard is unavailable or blocked in
-// some mobile / in-app-webview contexts, so fall back to the execCommand path
-// before giving up. Returns whether the copy succeeded.
-const writeTextToClipboard = async (text: string): Promise<boolean> => {
-  if (!text) return false;
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch (err) {
-    console.error("clipboard.writeText failed, falling back:", err);
-  }
-
-  // Legacy fallback for browsers without (or blocking) the async Clipboard API.
-  try {
-    const textarea = document.createElement("textarea");
-    try {
-      textarea.value = text;
-      textarea.setAttribute("readonly", "");
-      textarea.style.position = "fixed";
-      textarea.style.top = "0";
-      textarea.style.left = "0";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      return document.execCommand("copy");
-    } finally {
-      textarea.remove();
-    }
-  } catch (err) {
-    console.error("execCommand copy fallback failed:", err);
-    return false;
-  }
 };
 
 // Rich (HTML + plain) copy with graceful degradation. The ClipboardItem/HTML
