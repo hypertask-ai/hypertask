@@ -13,6 +13,7 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-6091-feature-flags",
   "htpr-6112-copy-current-url",
   "htpr-6116-figma-node-preview",
+  "htpr-6118-comment-reactions-api",
 ] as const;
 export const FEATURE_FLAG_MODES = ["OWNER_ONLY", "EVERYONE", "OFF"] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;

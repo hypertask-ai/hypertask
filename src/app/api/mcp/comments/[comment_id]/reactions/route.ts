@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
+import { isFeatureEnabled } from '@/lib/flags';
 import prisma from '@/lib/prisma';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
 import {
@@ -139,6 +140,7 @@ export const POST = createCommentReactionHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   authorizeWrite: async (ctx) => ctx.agentId ? requireRole(ctx, 'write') : null,
+  featureEnabled: (ctx) => isFeatureEnabled('htpr-6118-comment-reactions-api', ctx.user.id),
   actorUserId: (ctx) => ctx.user.id,
   findTarget: async (ctx, commentId) => {
     const comment = await prisma.comment.findUnique({

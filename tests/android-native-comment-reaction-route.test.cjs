@@ -36,6 +36,7 @@ function handler(overrides = {}) {
     checkRateLimit: async () => null,
     validateAuth: async () => context,
     authorizeWrite: async () => null,
+    featureEnabled: async () => true,
     actorUserId: () => 6,
     findTarget: async (_context, commentId) => { calls.target.push(commentId); return target },
     setReaction: async (...args) => {
@@ -71,6 +72,29 @@ test('enforces managed-agent write scope before resolving the comment', async ()
   assert.deepEqual(calls.target, [])
 })
 
+test('conceals the endpoint while the feature is disabled before parsing input', async () => {
+  const { POST, props, calls } = handler({ featureEnabled: async () => false })
+  const response = await POST(request({ emoji: '👍', active: 'yes' }), props)
+  assert.equal(response.status, 404)
+  assert.deepEqual(calls.target, [])
+  assert.deepEqual(calls.mutation, [])
+})
+
+test('fails closed when the feature flag cannot be read', async () => {
+  const originalError = console.error
+  console.error = () => {}
+  try {
+    const { POST, props, calls } = handler({
+      featureEnabled: async () => { throw new Error('flag unavailable') },
+    })
+    assert.equal((await POST(request(), props)).status, 404)
+    assert.deepEqual(calls.target, [])
+    assert.deepEqual(calls.mutation, [])
+  } finally {
+    console.error = originalError
+  }
+})
+
 test('rejects malformed reaction state without mutating', async () => {
   const { POST, props, calls } = handler()
   assert.equal((await POST(request({ emoji: '👍', active: 'yes' }), props)).status, 400)
@@ -98,6 +122,17 @@ test('applies deterministic active state and returns the canonical reaction list
   assert.equal(calls.mutation[0][2], '👍')
   assert.equal(calls.mutation[0][3], true)
   assert.equal(calls.after.length, 1)
+})
+
+test('removes a reaction by setting its active state to false', async () => {
+  const { POST, props, calls } = handler()
+  const response = await POST(request({ emoji: '✅', active: false }), props)
+  const body = await response.json()
+
+  assert.equal(response.status, 200)
+  assert.equal(body.active, false)
+  assert.equal(calls.mutation[0][2], '✅')
+  assert.equal(calls.mutation[0][3], false)
 })
 
 test('returns the committed reaction when post-commit notification work fails', async () => {
