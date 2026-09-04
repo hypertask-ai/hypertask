@@ -147,6 +147,21 @@ function processContext(options: AdapterOptions): BackgroundContext {
   };
 }
 
+async function invokeHandler(
+  handler: WebhookHandler,
+  request: Request,
+  context: BackgroundContext,
+): Promise<Response> {
+  try {
+    return await handler(request, context);
+  } catch {
+    return new Response(
+      JSON.stringify({ success: false, error: "Webhook request failed" }),
+      { status: 500, headers: { "content-type": "application/json" } },
+    );
+  }
+}
+
 function sendAdapterError(error: unknown, response: NodeResponse): void {
   const message = error instanceof Error ? error.message : "";
   let status = 500;
@@ -201,7 +216,8 @@ export function honoAdapter(
 ) {
   return (context: HonoContext): Promise<Response> => {
     const waitUntil = options.waitUntil ?? context.executionCtx?.waitUntil.bind(context.executionCtx);
-    return handler(
+    return invokeHandler(
+      handler,
       context.req.raw,
       processContext({ ...options, waitUntil }),
     );
@@ -213,7 +229,7 @@ export function nextRouteAdapter(
   waitUntil: (task: Promise<void>) => void,
 ) {
   return (request: Request): Promise<Response> =>
-    handler(request, { waitUntil, distributed: true });
+    invokeHandler(handler, request, { waitUntil, distributed: true });
 }
 
 export function cloudflareWorkerAdapter(handler: WebhookHandler) {
@@ -222,7 +238,7 @@ export function cloudflareWorkerAdapter(handler: WebhookHandler) {
     _environment: unknown,
     context: { waitUntil(task: Promise<void>): void },
   ): Promise<Response> =>
-    handler(request, {
+    invokeHandler(handler, request, {
       waitUntil: context.waitUntil.bind(context),
       distributed: true,
     });

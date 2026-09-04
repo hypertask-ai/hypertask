@@ -479,6 +479,21 @@ test("Hono adapter preserves single-process mode without an execution context", 
   });
   assert.equal(receivedContext?.distributed, false);
   assert.equal(typeof receivedContext?.waitUntil, "function");
+
+  const failingHandler: WebhookHandler = Object.assign(
+    async () => {
+      throw new Error("private adapter failure");
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const failure = await honoAdapter(failingHandler)({
+    req: { raw: new Request("https://agent.example.test/webhook") },
+  });
+  assert.equal(failure.status, 500);
+  assert.deepEqual(await failure.json(), {
+    success: false,
+    error: "Webhook request failed",
+  });
 });
 
 test("Node adapters omit bodies from GET requests", async () => {
