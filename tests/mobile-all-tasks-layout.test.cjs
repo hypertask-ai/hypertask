@@ -30,8 +30,14 @@ test("the mobile redesign is gated behind its declared feature flag", () => {
     allTasks,
     /useFlag\("htpr-5992-mobile-all-tasks"\)/,
   );
-  assert.match(allTasks, /\{mobileRedesignEnabled && \(/);
-  assert.match(allTasks, /\{!mobileRedesignEnabled && \(/);
+  assert.match(
+    allTasks,
+    /\{mobileRedesignEnabled && \(\s*<div[^>]+>[\s\S]*?mobile-split-alltasks-/,
+  );
+  assert.match(
+    allTasks,
+    /\{!mobileRedesignEnabled && \(\s*<div className="flex inbox_footer/,
+  );
 });
 
 test("the redesigned project tabs are inline, scrollable, and selectable", () => {
