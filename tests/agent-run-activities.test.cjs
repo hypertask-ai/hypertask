@@ -1155,8 +1155,8 @@ function atomicCommentHarness() {
               comment.taskId === where.taskId &&
               comment.creatorId === where.creatorId &&
               (comment.agentId ?? null) === where.agentId &&
-              (!linkedActivityId ||
-                linkedActivity?.responseCommentId === comment.id ||
+              Boolean(linkedActivityId) &&
+              (linkedActivity?.responseCommentId === comment.id ||
                 linkedActivity?.selectionCommentId === comment.id),
           ) ?? null
         );
