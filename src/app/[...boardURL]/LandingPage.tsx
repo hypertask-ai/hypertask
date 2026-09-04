@@ -1107,9 +1107,13 @@ const [committedBoardRender, setCommittedBoardRender] =
 useLayoutEffect(() => {
   if (readyBoardRender) setCommittedBoardRender(readyBoardRender)
 }, [readyBoardRender])
-const boardRender = shallowBoardSwitchEnabled
-  ? committedBoardRender
-  : readyBoardRender
+const boardRender =
+  shallowBoardSwitchEnabled &&
+  currentBoardAccessStatus !== "denied" &&
+  !projectLookupFailed &&
+  hydrationFailedProjectId !== requestedProjectId
+    ? committedBoardRender
+    : readyBoardRender
 
 // HTPR-6072: arms sectionCompEverRenderedRef the moment the board data
 // itself is ready, one tick ahead of the render that actually picks the

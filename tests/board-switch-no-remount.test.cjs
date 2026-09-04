@@ -254,8 +254,8 @@ test("HTPR-6072: a pending shallow switch keeps the committed board mounted", ()
   );
   assert.match(
     src,
-    /const boardRender = shallowBoardSwitchEnabled\s*\? committedBoardRender\s*: readyBoardRender/,
-    "expected a shallow switch to retain the previous committed snapshot while the target is pending",
+    /const boardRender =\s*shallowBoardSwitchEnabled &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: readyBoardRender/,
+    "expected a shallow switch to retain the previous committed snapshot only while the target is pending",
   );
   assert.match(
     src,
