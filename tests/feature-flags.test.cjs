@@ -120,6 +120,12 @@ test("comment reaction API starts with owner and QA access", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 7), false);
 });
 
+test("shallow board switching starts owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6072-shallow-board-switch", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6072-shallow-board-switch", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6072-shallow-board-switch", 7), false);
+});
+
 test("agent run activities start owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 6), true);
   assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 985), false);
@@ -195,6 +201,7 @@ test("declared flags remain listed without a row and can be changed", async () =
     },
     { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
+    { key: "htpr-6072-shallow-board-switch", mode: "OWNER_ONLY", updatedAt: null },
     { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },

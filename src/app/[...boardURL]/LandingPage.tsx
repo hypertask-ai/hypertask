@@ -14,6 +14,7 @@ import {
   PROJECTS_ALL_QUERY_KEY,
   purgeRevokedBoardTaskQueries,
   isRevocationStillActiveBoard,
+  normalizeRequestedProjectId,
   type ProjectsAuthorizationContext,
   revokeBoardAccess,
   useGetAllBoards,
@@ -73,6 +74,7 @@ import {
   markBoardSwitchIntent,
   resolveBoardSwitchIntent,
 } from "@/lib/analytics/boardSwitchLatency";
+import { useFlag } from "@/hooks/useFlag";
 import {
   shouldReleaseSecondaryStartupForTerminalBoard,
   shouldReleaseSecondaryStartupOnBoardRequest,
@@ -112,6 +114,16 @@ const GuestAuthLinks = lazy(
 
 const EMPTY_NOTIFICATION_COUNT = { all: 0, unseen: 0 } as const
 
+type BoardRenderSnapshot = {
+  projects: IProject[];
+  projectIndex: number;
+  activeSortingMode: TBoardSortingViewMode;
+  boardLayout: "board" | "table";
+  readinessSource: "indexeddb" | "network" | "unknown";
+  readinessProjectId: number;
+  readinessRouteEntryId: number;
+};
+
 const useCommittedBoardReadinessTrace = ({
   accountId,
   projectId,
@@ -147,8 +159,8 @@ const useCommittedBoardReadinessTrace = ({
 const  LandingPage= ({
   user,
   authenticated,
-  slugs
-    }: { 
+  slugs: slugsProp
+    }: {
   slugs:any,
   user: IUser,
   authenticated: boolean,
@@ -162,6 +174,11 @@ const {
 } = useBoardStartup();
 const isMblForChat = useContext(MobileViewContext)
 const searchParams = useSearchParams()
+const shallowBoardSwitchEnabled = useFlag("htpr-6072-shallow-board-switch")
+const routedProjectId = normalizeRequestedProjectId(searchParams?.get("id"))
+const slugs = shallowBoardSwitchEnabled && routedProjectId !== null
+  ? String(routedProjectId)
+  : slugsProp
 const pilotParameter = searchParams?.get("local_db")
 const currentView = searchParams?.get('view')
 const requestedSurface = searchParams?.get('tutorial') === '1'
@@ -757,6 +774,16 @@ const projectsForSection = useMemo(() => {
 }, [data?.updatedProjects, projectIndex, currentView])
 
 const pinnedProject = projectsForSection[projectIndex]
+const boardLayoutForRender =
+  shallowBoardSwitchEnabled &&
+  pinnedProject &&
+  surfaceResolutionRef.current?.key !== surfaceInitializationKey
+    ? resolveBoardLayoutFromSurface(
+        requestedSurface,
+        getActiveBoardLayoutPreferenceFromProject(pinnedProject),
+        boardLayoutPreference,
+      )
+    : boardLayout
 
 // Pinning always opens chat. Otherwise, the default setting opens it unless
 // a manual close suppressed auto-open or the board is shown on mobile.
@@ -902,9 +929,13 @@ useEffect(() => {
     const search = params.toString();
     const newUrl = `/project${search ? `?${search}` : ""}`;
     console.log('🔄 Updating URL:', { from: pathname + (searchParams.toString() ? `?${searchParams.toString()}` : ''), to: newUrl, slugs });
-    router.replace(newUrl, { scroll: false });
+    if (shallowBoardSwitchEnabled && pathname === "/project") {
+      window.history.replaceState(window.history.state, "", newUrl)
+    } else {
+      router.replace(newUrl, { scroll: false });
+    }
   }
-}, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId]);
+}, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId, shallowBoardSwitchEnabled]);
 
 // Retry fetching projects if project not found (might be a race condition with instant signup)
 const retryCountRef = useRef(0)
@@ -1043,13 +1074,42 @@ useEffect(() => {
   addLastActivityAt(undefined, user?.id);
 }, [secondaryStartupEnabled, user?.id])
 
+const readyProject = data?.updatedProjects?.[projectIndex]
 const boardDataReady = Boolean(
-  data &&
-  data.updatedProjects &&
-  projectIndex >= 0 &&
-  data.updatedProjects[projectIndex] &&
-  isBoardPayloadHydrated(data.updatedProjects[projectIndex]),
+  readyProject && isBoardPayloadHydrated(readyProject),
 )
+const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
+  () =>
+    boardDataReady && readyProject
+      ? {
+          projects: projectsForSection,
+          projectIndex,
+          activeSortingMode,
+          boardLayout: boardLayoutForRender,
+          readinessSource: data?.dataOrigin ?? "unknown",
+          readinessProjectId: readyProject.id,
+          readinessRouteEntryId,
+        }
+      : null,
+  [
+    activeSortingMode,
+    boardDataReady,
+    boardLayoutForRender,
+    data?.dataOrigin,
+    projectIndex,
+    projectsForSection,
+    readinessRouteEntryId,
+    readyProject,
+  ],
+)
+const [committedBoardRender, setCommittedBoardRender] =
+  useState<BoardRenderSnapshot | null>(null)
+useLayoutEffect(() => {
+  if (readyBoardRender) setCommittedBoardRender(readyBoardRender)
+}, [readyBoardRender])
+const boardRender = shallowBoardSwitchEnabled
+  ? committedBoardRender
+  : readyBoardRender
 
 // HTPR-6072: arms sectionCompEverRenderedRef the moment the board data
 // itself is ready, one tick ahead of the render that actually picks the
@@ -1065,20 +1125,23 @@ return (
       Array.isArray(data.updatedProjects) &&
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
-      ) : data && data.updatedProjects && boardDataReady &&
-        (surfaceInitializedFor === surfaceInitializationKey || sectionCompEverRenderedRef.current) ? (
+      ) : boardRender &&
+        (shallowBoardSwitchEnabled ||
+          surfaceInitializedFor === surfaceInitializationKey ||
+          sectionCompEverRenderedRef.current) ? (
            <SectionComp
-            _allProjects={projectsForSection}
-            _projectCount={data.updatedProjects.length}
+            _allProjects={boardRender.projects}
+            _projectCount={boardRender.projects.length}
             _currentUser={user}
             _notifications={notificationCount ?? EMPTY_NOTIFICATION_COUNT}
-            _projectIndex={projectIndex}       
-            _activeSortingMode={activeSortingMode} 
+            _projectIndex={boardRender.projectIndex}
+            _activeSortingMode={boardRender.activeSortingMode}
             _authenticated={authenticated && !isGuest}
             _localDatabasePilotEnabled={localDatabasePilotEnabled}
-            _readinessSource={data.dataOrigin ?? "unknown"}
-            _readinessProjectId={data.updatedProjects[projectIndex].id}
-            _readinessRouteEntryId={readinessRouteEntryId}
+            _boardLayout={boardRender.boardLayout}
+            _readinessSource={boardRender.readinessSource}
+            _readinessProjectId={boardRender.readinessProjectId}
+            _readinessRouteEntryId={boardRender.readinessRouteEntryId}
             />   
       ) : data?.updatedProjects?.[projectIndex] ? (
         hydrationFailedProjectId === data.updatedProjects[projectIndex].id ? (
@@ -1115,6 +1178,7 @@ const SectionComp = ({
   _activeSortingMode,
   _authenticated,
   _localDatabasePilotEnabled,
+  _boardLayout,
   _readinessSource,
   _readinessProjectId,
   _readinessRouteEntryId,
@@ -1127,6 +1191,7 @@ const SectionComp = ({
   _activeSortingMode: TBoardSortingViewMode,
   _authenticated:boolean,
   _localDatabasePilotEnabled:boolean,
+  _boardLayout:"board" | "table",
   _readinessSource:"indexeddb" | "network" | "unknown",
   _readinessProjectId:number,
   _readinessRouteEntryId:number,
@@ -1142,7 +1207,7 @@ const {
 // const _allProjects = JSON.parse(_allStringifiedProjects)
 const [projects, setProjects]= useState<IProject[]>(_allProjects)
 const [showBoardManager, setShowBoardManager] = useRecoilState(showBoardManagerAtom);
-const boardLayout = useRecoilValue(boardLayoutAtom);
+const boardLayout = _boardLayout;
 const isMbl = useContext(MobileViewContext);
 const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
 const showQuickTips = useRecoilValue(showQuickTipsAtom);

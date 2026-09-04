@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import {
   type ChangeEvent,
   type KeyboardEvent,
@@ -23,6 +22,7 @@ import {
 } from "@/lib/mobileBoardSwitcher";
 import type { BoardLastActivity } from "@/lib/boardSwitcherOrder";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
+import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 
 const EMPTY_BOARDS: IProject[] = [];
 
@@ -32,7 +32,7 @@ const EMPTY_BOARDS: IProject[] = [];
  * between COLUMNS. One concept per surface.
  */
 const MobileTitleSheet = ({ onClose }: { onClose: () => void }) => {
-  const router = useRouter();
+  const { goToProjectShortcut } = useProjectQuery();
   const currentProject = useRecoilValue(currentProjectAtom);
   const currentUser = useRecoilValue(currentUserAtom);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -105,7 +105,7 @@ const MobileTitleSheet = ({ onClose }: { onClose: () => void }) => {
   const openBoard = (board: IProject) => {
     onClose();
     markBoardSwitchIntent({ surface: "mobile", projectId: board.id });
-    router.push(`/project?id=${board.id}`);
+    goToProjectShortcut(board.id, true);
   };
 
   const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {

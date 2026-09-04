@@ -18,6 +18,7 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-5913-consistent-comment-shortcuts",
   "htpr-5992-mobile-all-tasks",
   "htpr-5993-optimistic-task-uploads",
+  "htpr-6072-shallow-board-switch",
   "htpr-6091-feature-flags",
   "htpr-6112-copy-current-url",
   "htpr-6115-agent-sdk",
@@ -38,6 +39,7 @@ export const FEATURE_FLAG_MODES = [
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+  key === "htpr-6072-shallow-board-switch" ||
   key === "htpr-6122-agent-run-activities" ||
   key === "htpr-6129-mobile-agent-chat-viewport" ||
   key === "htpr-6130-mobile-reminder-safe-area" ||

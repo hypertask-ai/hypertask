@@ -97,7 +97,7 @@ test("mobile switcher wires focus, filtering, selection, and Enter navigation", 
   assert.match(sheet, /getMobileBoardSwitcherOptions\(/);
   assert.match(sheet, /getNextMobileBoardSelection\(/);
   assert.match(sheet, /event\.key === "Enter"/);
-  assert.match(sheet, /router\.push\(`\/project\?id=\$\{board\.id\}`\)/);
+  assert.match(sheet, /goToProjectShortcut\(board\.id, true\)/);
   assert.match(sheet, /role="option"/);
   assert.match(sheet, /aria-selected=\{index === selectedIndex\}/);
 });
