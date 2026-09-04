@@ -16,7 +16,6 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
-export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -74,10 +73,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Shows a plain-language description and ticket link for every feature flag.",
   },
   {
-    key: FIGMA_CONNECT_FLAG,
-    description: "Lets each user connect a Figma account so linked frames render as previews.",
-  },
-  {
     key: "htpr-6141-ai-first-task-writer",
     description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
   },
@@ -90,7 +85,6 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
   FEATURE_FLAG_DETAILS_FLAG,
-  FIGMA_CONNECT_FLAG,
   "htpr-6141-ai-first-task-writer",
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
