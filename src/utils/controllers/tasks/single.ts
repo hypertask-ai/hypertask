@@ -72,6 +72,22 @@ type UpdateTaskSingleOptions = {
 
 class TaskDescriptionChangedError extends Error {}
 
+export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
+
+function isTaskIdentityConflict(error: unknown): boolean {
+  const target =
+    error instanceof Prisma.PrismaClientKnownRequestError
+      ? error.meta?.target
+      : undefined;
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2002" &&
+    Array.isArray(target) &&
+    target.includes("projectId") &&
+    target.includes("uniqueIndex")
+  );
+}
+
 type UpdateTaskSingleResult = {
   status: number;
   json: any;
@@ -653,6 +669,15 @@ export async function updateTaskSingle(
       return {
         status: error.status,
         json: { message: error.message },
+      };
+    }
+    if (isTaskIdentityConflict(error)) {
+      return {
+        status: 409,
+        json: {
+          message: "Task identity is already in use",
+          code: TASK_IDENTITY_CONFLICT_CODE,
+        },
       };
     }
     console.log("🤔 ~ updateTaskSingle ~ error:", error);

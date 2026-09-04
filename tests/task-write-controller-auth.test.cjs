@@ -18,6 +18,8 @@ const FOREIGN_PROJECT = 99;
 const TASK_ID = 101;
 const SECTION_ID = 201;
 
+class PrismaClientKnownRequestError extends Error {}
+
 const knownProjects = new Set([
   SOURCE_PROJECT,
   OWNER_PROJECT,
@@ -80,6 +82,8 @@ function loadUpdateController(
     moveShouldNotify = false,
     serializeTaskWrites = false,
     initialSectionId = SECTION_ID - 1,
+    updateErrorCode = null,
+    updateErrorTarget = ["projectId", "uniqueIndex"],
   } = {},
 ) {
   const calls = { transaction: 0, sideEffects: 0 };
@@ -110,6 +114,12 @@ function loadUpdateController(
     task: {
       findUnique: async () => ({ ...currentTask }),
       update: async ({ data }) => {
+        if (updateErrorCode) {
+          const error = new PrismaClientKnownRequestError("Update failed");
+          error.code = updateErrorCode;
+          error.meta = { target: updateErrorTarget };
+          throw error;
+        }
         if (data.section == null) {
           throw new Error("Task requires a section name");
         }
@@ -197,7 +207,10 @@ function loadUpdateController(
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/models/ActivityModels.ts": {},
     "@/models/model": {},
-    "@prisma/client": { Status: { Archive: "Archive" } },
+    "@prisma/client": {
+      Prisma: { PrismaClientKnownRequestError },
+      Status: { Archive: "Archive" },
+    },
     "../activities/createActivity": noop,
     "../activities/createTaskMovedActivity": {
       createTaskMovedActivityInTransaction,
@@ -288,6 +301,41 @@ test("the shared update controller rejects project changes outside the dedicated
 
   assert.equal(result.status, 400);
   assert.deepEqual(calls, { transaction: 0, sideEffects: 0 });
+});
+
+test("the shared update controller identifies task index collisions", async () => {
+  const { updateTaskSingle } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+    { updateErrorCode: "P2002" },
+  );
+
+  const result = await updateTaskSingle(
+    { id: TASK_ID, title: "Updated" },
+    { id: USER_ID },
+  );
+
+  assert.equal(result.status, 409);
+  assert.equal(result.json.code, "TASK_IDENTITY_CONFLICT");
+});
+
+test("the shared update controller does not misclassify other uniqueness failures", async () => {
+  const { updateTaskSingle } = loadUpdateController(
+    OWNER_PROJECT,
+    OWNER_PROJECT,
+    {
+      updateErrorCode: "P2002",
+      updateErrorTarget: ["userId", "teamId"],
+    },
+  );
+
+  const result = await updateTaskSingle(
+    { id: TASK_ID, title: "Updated" },
+    { id: USER_ID },
+  );
+
+  assert.equal(result.status, 500);
+  assert.equal(result.json.code, undefined);
 });
 
 test("cycle assignment validates against the effective destination board", async () => {
@@ -522,6 +570,7 @@ function loadMoveController({
   sectionProjectId,
   agentId,
   projectIdentifier = "T",
+  identityConflicts = 0,
 }) {
   const calls = { downstream: 0, queue: 0 };
   const currentTask = {
@@ -570,15 +619,25 @@ function loadMoveController({
     follower: { findMany: async () => [] },
     taskLabel: { findMany: async () => [] },
   };
+  let remainingIdentityConflicts = identityConflicts;
   const updateTaskSingle = async (task, _user, _agentId, options) => {
     calls.downstream += 1;
+    calls.updateAttempts = (calls.updateAttempts ?? 0) + 1;
     calls.allowProjectChange = options?.allowProjectChange;
     calls.updatedTask = task;
+    if (remainingIdentityConflicts > 0) {
+      remainingIdentityConflicts -= 1;
+      return {
+        status: 409,
+        json: { code: "TASK_IDENTITY_CONFLICT" },
+      };
+    }
     const projectChanged = task.projectId !== undefined && task.projectId !== currentTask.projectId;
     return !projectChanged || options?.allowProjectChange
       ? { status: 200, json: { ...currentTask, ...task } }
       : { status: 400, json: { message: "Project change denied" } };
   };
+  let taskCount = 0;
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
@@ -587,7 +646,7 @@ function loadMoveController({
     "@/utils/controllers/tasks/create": {
       getUniqueTaskCount: async () => {
         calls.downstream += 1;
-        return 0;
+        return taskCount++;
       },
     },
     "@/pages/api/queues/duedateQueue": {
@@ -599,7 +658,10 @@ function loadMoveController({
       },
     },
     "date-fns": { subMinutes: (date) => date },
-    "@/utils/controllers/tasks/single": { updateTaskSingle },
+    "@/utils/controllers/tasks/single": {
+      TASK_IDENTITY_CONFLICT_CODE: "TASK_IDENTITY_CONFLICT",
+      updateTaskSingle,
+    },
     "@/models/model": {},
     "@/utils/controllers/assignees/autoAssignForSection": {
       autoAssignForSection: async () => "ready",
@@ -639,6 +701,38 @@ test("cross-board moves adopt the destination ticket identity", async () => {
   assert.equal(calls.updatedTask.ticketNumber, "T-1");
   assert.equal(calls.updatedTask.cycleId, null);
   assert.equal(calls.allowProjectChange, true);
+});
+
+test("cross-board moves retry a conflicting destination identity with a fresh index", async () => {
+  const { move, calls } = loadMoveController({
+    targetProjectId: OWNER_PROJECT,
+    sectionProjectId: OWNER_PROJECT,
+    agentId: null,
+    identityConflicts: 1,
+  });
+
+  const result = await move();
+
+  assert.equal(result.success, true);
+  assert.equal(result.task.uniqueIndex, 2);
+  assert.equal(result.task.ticketNumber, "T-2");
+  assert.equal(calls.updateAttempts, 2);
+});
+
+test("cross-board move identity retries are bounded", async () => {
+  const { move, calls } = loadMoveController({
+    targetProjectId: OWNER_PROJECT,
+    sectionProjectId: OWNER_PROJECT,
+    agentId: null,
+    identityConflicts: 3,
+  });
+
+  const result = await move();
+
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 409);
+  assert.equal(calls.updateAttempts, 3);
+  assert.equal(calls.queue, 0);
 });
 
 test("cross-board moves reject a destination without a ticket identifier", async () => {

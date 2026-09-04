@@ -11,11 +11,16 @@ import {
   scheduleDueDateJob,
 } from "@/pages/api/queues/duedateQueue";
 import { subMinutes } from "date-fns";
-import { updateTaskSingle } from "@/utils/controllers/tasks/single";
+import {
+  TASK_IDENTITY_CONFLICT_CODE,
+  updateTaskSingle,
+} from "@/utils/controllers/tasks/single";
 import { IUser } from "@/models/model";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+
+const TASK_IDENTITY_ALLOCATION_ATTEMPTS = 3;
 
 async function getTaskWithNestedSubtasks(taskId: number): Promise<any> {
   const task = await prisma.task.findUnique({
@@ -50,6 +55,65 @@ async function getNewTaskRanking(sectionId: number, projectId: number) {
   return generateRank(undefined, lastTask?.ranking);
 }
 
+async function moveTaskWithDestinationIdentity({
+  taskId,
+  projectId,
+  sectionId,
+  sectionTitle,
+  projectIdentifier,
+  parentTaskId,
+  currentUser,
+  agentId,
+}: {
+  taskId: number;
+  projectId: number;
+  sectionId: number;
+  sectionTitle: string;
+  projectIdentifier: string;
+  parentTaskId: number | null;
+  currentUser: IUser;
+  agentId?: string | null;
+}) {
+  let result: any;
+  for (let attempt = 0; attempt < TASK_IDENTITY_ALLOCATION_ATTEMPTS; attempt++) {
+    const [taskCount, ranking] = await Promise.all([
+      getUniqueTaskCount(projectId),
+      getNewTaskRanking(sectionId, projectId),
+    ]);
+    result = await updateTaskSingle(
+      {
+        id: taskId,
+        projectId,
+        cycleId: null,
+        sectionId,
+        ranking,
+        section: sectionTitle,
+        uniqueIndex: taskCount + 1,
+        ticketNumber: `${projectIdentifier}-${taskCount + 1}`,
+        updatedAt: new Date(),
+        parentTaskId,
+      },
+      currentUser,
+      agentId,
+      {
+        allowProjectChange: true,
+        skipAutoAssign: true,
+        // Relocating a task is not completing it: without this, moving a
+        // recurring task into another board's done column would fork a copy
+        // onto the destination board (HTPR-4885).
+        skipRecurrence: true,
+      },
+    );
+    if (
+      result.status === 200 ||
+      result.json?.code !== TASK_IDENTITY_CONFLICT_CODE
+    ) {
+      return result;
+    }
+  }
+  return result;
+}
+
 async function moveAllSubtasksRecursively(
   subtasks: any[],
   projectId: number,
@@ -61,28 +125,19 @@ async function moveAllSubtasksRecursively(
 ) {
   const section = await prisma.section.findUnique({ where: { id: sectionId } });
   for (const subtask of subtasks) {
-    const taskCount = await getUniqueTaskCount(projectId);
-    const ranking = await getNewTaskRanking(sectionId, projectId);
-    const newTask = {
-      id: subtask.id,
+    const result = await moveTaskWithDestinationIdentity({
+      taskId: subtask.id,
       projectId,
-      cycleId: null,
       sectionId,
-      ranking,
-      section: section?.section_title ?? "",
-      uniqueIndex: taskCount + 1,
-      ticketNumber: `${projectIdentifier}-${taskCount + 1}`,
-      updatedAt: new Date(),
+      sectionTitle: section?.section_title ?? "",
+      projectIdentifier,
       parentTaskId,
-    };
-    await updateTaskSingle(newTask, currentUser, agentId, {
-      allowProjectChange: true,
-      skipAutoAssign: true,
-      // Relocating a task is not completing it: without this, moving a
-      // recurring task into another board's done column would fork a copy
-      // onto the destination board (HTPR-4885).
-      skipRecurrence: true,
+      currentUser,
+      agentId,
     });
+    if (result.status !== 200) {
+      throw new Error(toErrorMessage(result.json, "Failed to move subtask"));
+    }
     if (subtask.subTasks?.length > 0) {
       await moveAllSubtasksRecursively(
         subtask.subTasks,
@@ -368,46 +423,31 @@ export async function moveTaskToDifferentBoard(
     };
   }
 
-  const [taskCount, ranking, parentAlreadyInTarget] = await Promise.all([
-    getUniqueTaskCount(targetProjectId),
-    getNewTaskRanking(targetSectionId, targetProjectId),
-    // Moving a sub-task on its own has to drop the parent link, or the child
-    // would point at a task on another board. But when the parent has ALREADY
-    // moved to the same board, dropping it orphans a family that is being moved
-    // one member at a time, which is exactly how a whole tree gets moved by
-    // hand (HTPR-4580). Keep the link in that case.
-    taskToMove.parentTaskId
-      ? prisma.task.findFirst({
-          where: {
-            id: taskToMove.parentTaskId,
-            projectId: targetProjectId,
-            status: { not: "Deleted" as const },
-          },
-          select: { id: true },
-        })
-      : Promise.resolve(null),
-  ]);
+  // Moving a sub-task on its own has to drop the parent link, or the child
+  // would point at a task on another board. But when the parent has ALREADY
+  // moved to the same board, dropping it orphans a family that is being moved
+  // one member at a time, which is exactly how a whole tree gets moved by
+  // hand (HTPR-4580). Keep the link in that case.
+  const parentAlreadyInTarget = taskToMove.parentTaskId
+    ? await prisma.task.findFirst({
+        where: {
+          id: taskToMove.parentTaskId,
+          projectId: targetProjectId,
+          status: { not: "Deleted" as const },
+        },
+        select: { id: true },
+      })
+    : null;
 
-  const newTask = {
-    id: taskToMove.id,
+  const result = await moveTaskWithDestinationIdentity({
+    taskId: taskToMove.id,
     projectId: targetProjectId,
-    cycleId: null,
     sectionId: targetSectionId,
-    ranking,
-    section: section?.section_title ?? "",
-    uniqueIndex: taskCount + 1,
-    ticketNumber: `${projectIdentifier}-${taskCount + 1}`,
-    updatedAt: new Date(),
+    sectionTitle: section?.section_title ?? "",
+    projectIdentifier,
     parentTaskId: parentAlreadyInTarget ? taskToMove.parentTaskId : null,
-  };
-
-  const result: any = await updateTaskSingle(newTask, currentUser, agentId, {
-    allowProjectChange: true,
-    skipAutoAssign: true,
-    // Relocating a task is not completing it: without this, moving a
-    // recurring task into another board's done column would fork a copy
-    // onto the destination board (HTPR-4885).
-    skipRecurrence: true,
+    currentUser,
+    agentId,
   });
   if (result.status !== 200) {
     // Preserve the write's own status. Flattening every failure to 500 turned a
