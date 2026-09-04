@@ -14,6 +14,7 @@ interface MobileBottomSheetProps {
   labelledBy?: string;
   contentClassName?: string;
   bottomSlotClassName?: string;
+  bottomSafeAreaFloor?: boolean;
   fullHeight?: boolean;
   keyboardAware?: boolean;
   zIndex?: number;
@@ -32,6 +33,7 @@ export const MobileBottomSheet = ({
   labelledBy,
   contentClassName,
   bottomSlotClassName,
+  bottomSafeAreaFloor = false,
   fullHeight = false,
   keyboardAware = false,
   zIndex = 10000,
@@ -54,6 +56,13 @@ export const MobileBottomSheet = ({
       ? { height: sheetHeight > 0 ? `${sheetHeight}px` : "82svh" }
       : {}),
   };
+  let bottomSlotPadding: CSSProperties["paddingBottom"] = keyboardAware
+    ? 0
+    : "env(safe-area-inset-bottom)";
+  if (bottomSafeAreaFloor) {
+    bottomSlotPadding = "max(0.75rem, env(safe-area-inset-bottom))";
+  }
+  if (keyboardOpen) bottomSlotPadding = 0;
 
   return (
     <AppSheet
@@ -83,11 +92,7 @@ export const MobileBottomSheet = ({
       {bottomSlot ? (
         <div
           className={cn("shrink-0", bottomSlotClassName)}
-          style={{
-            paddingBottom: keyboardAware
-              ? 0
-              : "env(safe-area-inset-bottom)",
-          }}
+          style={{ paddingBottom: bottomSlotPadding }}
         >
           {bottomSlot}
         </div>

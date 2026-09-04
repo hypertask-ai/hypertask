@@ -23,6 +23,8 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-6115-agent-sdk",
   "htpr-6116-figma-node-preview",
   "htpr-6118-comment-reactions-api",
+  "htpr-6129-mobile-agent-chat-viewport",
+  "htpr-6130-mobile-reminder-safe-area",
 ] as const;
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
@@ -32,6 +34,12 @@ export const FEATURE_FLAG_MODES = [
   "OFF",
 ] as const;
 export type FeatureFlagMode = PrismaFeatureFlagMode;
+
+const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+  key === "htpr-6129-mobile-agent-chat-viewport" ||
+  key === "htpr-6130-mobile-reminder-safe-area"
+    ? "OWNER_ONLY"
+    : "OWNER_AND_QA";
 
 export class FeatureFlagInputError extends Error {}
 
@@ -96,7 +104,7 @@ export async function isFeatureEnabled(
   });
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
-  const mode = row?.mode ?? "OWNER_AND_QA";
+  const mode = row?.mode ?? defaultFeatureFlagMode(key);
   const includesOwner = mode === "OWNER_ONLY" || mode === "OWNER_AND_QA";
   return featureFlagModeEnabled(
     mode,
@@ -113,7 +121,7 @@ export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      { key, mode: "OWNER_AND_QA", updatedAt: null },
+      { key, mode: defaultFeatureFlagMode(key), updatedAt: null },
     ]),
   );
   stored.forEach((row) => byKey.set(row.key, row));

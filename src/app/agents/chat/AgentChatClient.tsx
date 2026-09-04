@@ -51,6 +51,8 @@ import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { useFlag } from "@/hooks/useFlag";
+import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
@@ -228,6 +230,12 @@ const AgentChatClient = (props: IProp) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
+  const mobileAgentChatViewportEnabled = useFlag(
+    "htpr-6129-mobile-agent-chat-viewport",
+  );
+  const mobileAgentChatViewport = useMobileVisualViewport(
+    isMbl && mobileAgentChatViewportEnabled,
+  );
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
 
   const [agents, setAgents] = useState<TAgent[] | null>(null);
@@ -1636,6 +1644,13 @@ const AgentChatClient = (props: IProp) => {
     </ModalContainerCustom>
   ) : null;
 
+  let mobileAgentChatHeight: string | undefined;
+  if (isMbl && mobileAgentChatViewportEnabled) {
+    mobileAgentChatHeight = mobileAgentChatViewport
+      ? `${mobileAgentChatViewport.visibleHeight}px`
+      : "100dvh";
+  }
+
   if (isNarrow) {
     return (
       <div
@@ -1649,6 +1664,7 @@ const AgentChatClient = (props: IProp) => {
           isMbl &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[var(--mobile-dock-h,64px)]",
         )}
+        style={{ height: mobileAgentChatHeight }}
       >
         {selectedAgent ? chatPane : rosterPane}
         {detailsSheet}
