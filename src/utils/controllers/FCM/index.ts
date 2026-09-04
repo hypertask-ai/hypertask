@@ -191,6 +191,17 @@ const fcmCommentPayload = (comment: any, creator: any) => {
   });
 };
 
+function firebaseMessagingErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("errorInfo" in error)) {
+    return undefined;
+  }
+  const errorInfo = error.errorInfo;
+  if (!errorInfo || typeof errorInfo !== "object" || !("code" in errorInfo)) {
+    return undefined;
+  }
+  return typeof errorInfo.code === "string" ? errorInfo.code : undefined;
+}
+
 /**
  * Sends FCM push notifications for new comments to assignees, followers, and task owner.
  * Used by both Pages API and MCP via createCommentService.
@@ -203,9 +214,14 @@ export const sendDataOnlyFcm = async (
   projectId: number,
   creatorId: number,
   comment: any,
-  failOnDeliveryError = false
+  deliveryOptions?: {
+    failOnError?: boolean;
+    deliveredDeviceIds?: ReadonlySet<string>;
+    markDelivered?: (firebaseId: string) => Promise<void>;
+  },
 ) => {
   const deliveryErrors: unknown[] = [];
+  const deliveredDeviceIds = new Set(deliveryOptions?.deliveredDeviceIds);
   const link = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${projectId}/${uniqueIndex}?commentId=comment-${comment.id}`;
 
   const userPreferenceMap = await filterDevicesByPreferences({
@@ -229,6 +245,7 @@ export const sendDataOnlyFcm = async (
   }
 
   for (const device of validDevices) {
+    if (deliveredDeviceIds.has(device.firebaseId)) continue;
     const shouldSend = userPreferenceMap.get(device.userId);
 
     if (!shouldSend) {
@@ -256,21 +273,28 @@ export const sendDataOnlyFcm = async (
       },
     };
 
+    let deliveryResolved = false;
     try {
       const response = await admin.messaging().send(body);
       console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
+      deliveryResolved = true;
     } catch (error) {
       // Loud: a swallowed rejection here is a push nobody ever receives, and
       // the caller goes on to log success (HTPR-4668).
       console.error("🚀 ~ sendDataOnlyFcm ~ send failed:", error);
       await removeDeadDeviceToken(error, device.firebaseId);
       if (
-        failOnDeliveryError &&
-        (error as any)?.errorInfo?.code !==
-          "messaging/registration-token-not-registered"
+        firebaseMessagingErrorCode(error) ===
+        "messaging/registration-token-not-registered"
       ) {
+        deliveryResolved = true;
+      } else if (deliveryOptions?.failOnError) {
         deliveryErrors.push(error);
       }
+    }
+    if (deliveryResolved) {
+      await deliveryOptions?.markDelivered?.(device.firebaseId);
+      deliveredDeviceIds.add(device.firebaseId);
     }
   }
   if (deliveryErrors.length > 0) {
@@ -281,8 +305,12 @@ export const sendDataOnlyFcm = async (
 // FCM says the token no longer exists (app reinstalled, browser data cleared),
 // so the row is permanent garbage: every future send to it would fail too.
 const removeDeadDeviceToken = async (error: unknown, firebaseId: string) => {
-  const code = (error as any)?.errorInfo?.code;
-  if (code !== "messaging/registration-token-not-registered") return;
+  if (
+    firebaseMessagingErrorCode(error) !==
+    "messaging/registration-token-not-registered"
+  ) {
+    return;
+  }
   try {
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
     console.log("🚀 ~ removed dead device token", firebaseId.slice(0, 12));

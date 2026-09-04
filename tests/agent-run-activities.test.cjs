@@ -76,6 +76,7 @@ function activityRow(overrides = {}) {
     commentAgentWebhookDeliveryIds: [],
     commentBoardWebhookDeliveryIds: [],
     commentNotificationsProcessingAt: null,
+    commentNotificationDeliveryKeys: [],
     commentMentionsAttemptedAt: null,
     commentFcmAttemptedAt: null,
     commentEmailsAttemptedAt: null,
@@ -861,6 +862,7 @@ test("migration constrains retry keys and elicitation selections", () => {
     replayMigration,
     /"commentNotificationsProcessingAt" TIMESTAMP\(3\)/,
   );
+  assert.match(replayMigration, /"commentNotificationDeliveryKeys" TEXT\[\]/);
   assert.match(replayMigration, /"commentMentionsAttemptedAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /"commentFcmAttemptedAt" TIMESTAMP\(3\)/);
   assert.match(replayMigration, /"commentEmailsAttemptedAt" TIMESTAMP\(3\)/);
@@ -878,6 +880,7 @@ function loadAtomicCommentService(
   sendDataOnlyFcm,
   processMentionsFromCommentText,
   extractTaskReferencesFromCommentText,
+  sendEmailNotification = async () => true,
 ) {
   const noop = async () => {};
   const modules = {
@@ -917,7 +920,7 @@ function loadAtomicCommentService(
       shouldNotify: async () => true,
     },
     "src/utils/controllers/notifications/sendNotification.ts": {
-      sendEmailNotification: noop,
+      sendEmailNotification,
     },
     "src/pages/api/queues/FAST/generateCommentSummary.ts": { default: noop },
     "src/utils/controllers/projects/getAllIncludes.ts": {
@@ -987,6 +990,9 @@ function atomicCommentHarness() {
   const publishedAgentWebhookIds = [];
   const publishedBoardWebhookIds = [];
   const fcmCalls = [];
+  const mentionCalls = [];
+  const emailCalls = [];
+  const commentRecipientUserIds = [];
   const taskCommentBroadcasts = [];
   const runCommentCompletionOrder = [];
   const sideEffectOrder = [];
@@ -1093,7 +1099,13 @@ function atomicCommentHarness() {
           ) {
             return { count: 0 };
           }
-          Object.assign(activity, data);
+          if (data.commentNotificationDeliveryKeys?.push) {
+            activity.commentNotificationDeliveryKeys.push(
+              data.commentNotificationDeliveryKeys.push,
+            );
+          } else {
+            Object.assign(activity, data);
+          }
           if (data.commentNotificationsCompletedAt) {
             runCommentCompletionOrder.push("complete");
           }
@@ -1132,9 +1144,11 @@ function atomicCommentHarness() {
         ) ?? null,
     },
     assignees: {
-      findMany: async () => {
+      findMany: async ({ where }) => {
         assigneeLookupCalls += 1;
-        return [];
+        return where.agentId === null
+          ? commentRecipientUserIds.map((userId) => ({ userId }))
+          : [];
       },
     },
   };
@@ -1160,6 +1174,13 @@ function atomicCommentHarness() {
         }
         return { id: 6, displayName: "Valentin" };
       },
+      findMany: async ({ where }) =>
+        where.id.in.map((id) => ({
+          id,
+          email: `user-${id}@example.com`,
+          displayName: `User ${id}`,
+          UserSetting: { notification: true },
+        })),
     },
     $transaction: async (callback) => {
       const runSnapshot = { ...run };
@@ -1212,10 +1233,19 @@ function atomicCommentHarness() {
     async (...args) => {
       fcmCalls.push(args);
       sideEffectOrder.push("fcm");
+      if (failure === "fcm-partial") {
+        await args[7].markDelivered("device-1");
+        throw new Error("FCM handoff failed");
+      }
       if (failure === "fcm") throw new Error("FCM handoff failed");
     },
-    async () => {
+    async (params) => {
+      mentionCalls.push(params);
       sideEffectOrder.push("mentions");
+      if (failure === "mentions-partial") {
+        await params.deliveryProgress.mark("email:user", 7);
+        throw new Error("mention handoff failed");
+      }
       if (failure === "mentions") {
         throw new Error("mention handoff failed");
       }
@@ -1230,6 +1260,10 @@ function atomicCommentHarness() {
       taskReferenceParseCalls += 1;
       return [];
     },
+    async (_type, body) => {
+      emailCalls.push(body.userId);
+      return failure !== "email-partial" || body.userId !== 8;
+    },
   );
   return {
     run,
@@ -1241,6 +1275,8 @@ function atomicCommentHarness() {
     publishedAgentWebhookIds,
     publishedBoardWebhookIds,
     fcmCalls,
+    mentionCalls,
+    emailCalls,
     taskCommentBroadcasts,
     runCommentCompletionOrder,
     sideEffectOrder,
@@ -1252,6 +1288,9 @@ function atomicCommentHarness() {
     waitForMentionProcessing: () => mentionProcessingStarted,
     releaseMentionProcessing: () => releaseHeldMention(),
     createCommentService,
+    setCommentRecipientUserIds: (userIds) => {
+      commentRecipientUserIds.splice(0, commentRecipientUserIds.length, ...userIds);
+    },
     setFailure: (value) => {
       failure = value;
     },
@@ -1422,6 +1461,162 @@ test("failed activity mention handoffs remain retryable", async () => {
     2,
   );
   assert.equal(harness.comments.length, 1);
+});
+
+test("activity retries skip completed mention recipient handoffs", async () => {
+  const harness = atomicCommentHarness();
+  harness.setFailure("mentions-partial");
+  const input = {
+    text: "<p>Yes</p>",
+    creatorId: 6,
+    taskId: 42,
+    ownerId: 6,
+    currentUser: { id: 6, displayName: "Valentin" },
+    accessUserId: 6,
+  };
+
+  await assert.rejects(
+    harness.createCommentService({
+      ...input,
+      agentRunSelection: {
+        runId: "run-1",
+        agentId: "agent-1",
+        activityId: harness.elicitation.id,
+        context: { taskId: 42, chatSessionId: null },
+        option: { value: "yes", label: "Yes" },
+        selectedById: 6,
+        selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+      },
+    }),
+    /mention handoff failed/,
+  );
+  assert.deepEqual(harness.elicitation.commentNotificationDeliveryKeys, [
+    "mention:email:user:7",
+  ]);
+
+  harness.setFailure(null);
+  await harness.createCommentService({
+    ...input,
+    agentRunReplayComment: {
+      id: harness.comments[0].id,
+      activityId: harness.elicitation.id,
+      agentWebhookDeliveryIds: [],
+      boardWebhookDeliveryIds: [],
+      notificationsCompletedAt: null,
+    },
+  });
+  assert.equal(
+    harness.mentionCalls[1].deliveryProgress.has("email:user", 7),
+    true,
+  );
+  assert.equal(
+    harness.elicitation.commentNotificationDeliveryKeys.filter(
+      (key) => key === "mention:email:user:7",
+    ).length,
+    1,
+  );
+});
+
+test("activity retries skip completed FCM device handoffs", async () => {
+  const harness = atomicCommentHarness();
+  harness.setFailure("fcm-partial");
+  const input = {
+    text: "<p>Yes</p>",
+    creatorId: 6,
+    taskId: 42,
+    ownerId: 6,
+    currentUser: { id: 6, displayName: "Valentin" },
+    accessUserId: 6,
+  };
+
+  await assert.rejects(
+    harness.createCommentService({
+      ...input,
+      agentRunSelection: {
+        runId: "run-1",
+        agentId: "agent-1",
+        activityId: harness.elicitation.id,
+        context: { taskId: 42, chatSessionId: null },
+        option: { value: "yes", label: "Yes" },
+        selectedById: 6,
+        selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+      },
+    }),
+    /FCM handoff failed/,
+  );
+  assert.deepEqual(harness.elicitation.commentNotificationDeliveryKeys, [
+    "fcm:device-1",
+  ]);
+
+  harness.setFailure(null);
+  await harness.createCommentService({
+    ...input,
+    agentRunReplayComment: {
+      id: harness.comments[0].id,
+      activityId: harness.elicitation.id,
+      agentWebhookDeliveryIds: [],
+      boardWebhookDeliveryIds: [],
+      notificationsCompletedAt: null,
+    },
+  });
+  assert.equal(harness.fcmCalls[1][7].deliveredDeviceIds.has("device-1"), true);
+  assert.equal(
+    harness.elicitation.commentNotificationDeliveryKeys.filter(
+      (key) => key === "fcm:device-1",
+    ).length,
+    1,
+  );
+});
+
+test("activity retries send comment email only to failed recipients", async () => {
+  const harness = atomicCommentHarness();
+  harness.setCommentRecipientUserIds([7, 8]);
+  harness.setFailure("email-partial");
+  const input = {
+    text: "<p>Yes</p>",
+    creatorId: 6,
+    taskId: 42,
+    ownerId: 6,
+    currentUser: { id: 6, displayName: "Valentin" },
+    accessUserId: 6,
+  };
+
+  await assert.rejects(
+    harness.createCommentService({
+      ...input,
+      agentRunSelection: {
+        runId: "run-1",
+        agentId: "agent-1",
+        activityId: harness.elicitation.id,
+        context: { taskId: 42, chatSessionId: null },
+        option: { value: "yes", label: "Yes" },
+        selectedById: 6,
+        selectedAt: new Date("2026-09-04T10:03:00.000Z"),
+      },
+    }),
+    /Comment email delivery failed/,
+  );
+  assert.deepEqual(harness.emailCalls, [7, 8]);
+  assert.deepEqual(harness.elicitation.commentNotificationDeliveryKeys, [
+    "email:7",
+  ]);
+
+  harness.setFailure(null);
+  await harness.createCommentService({
+    ...input,
+    agentRunReplayComment: {
+      id: harness.comments[0].id,
+      activityId: harness.elicitation.id,
+      agentWebhookDeliveryIds: [],
+      boardWebhookDeliveryIds: [],
+      notificationsCompletedAt: null,
+    },
+  });
+  assert.deepEqual(harness.emailCalls, [7, 8, 8]);
+  assert.deepEqual(harness.elicitation.commentNotificationDeliveryKeys, [
+    "email:7",
+    "email:8",
+  ]);
 });
 
 test("activity notification leases stay claimed until parallel work settles", async () => {

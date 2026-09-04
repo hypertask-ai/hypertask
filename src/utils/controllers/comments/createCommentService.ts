@@ -317,6 +317,8 @@ async function sendCommentEmails({
   recipientUserIds,
   mentionedUserIds,
   fromAgentId,
+  deliveredUserIds,
+  markDelivered,
 }: {
   task: any;
   text: string;
@@ -325,6 +327,8 @@ async function sendCommentEmails({
   recipientUserIds: number[];
   mentionedUserIds: Set<number>;
   fromAgentId?: string | null;
+  deliveredUserIds?: ReadonlySet<number>;
+  markDelivered?: (userId: number) => Promise<void>;
 }): Promise<void> {
   const emailRecipientIds = recipientUserIds.filter(
     (userId) => !mentionedUserIds.has(userId),
@@ -351,25 +355,32 @@ async function sendCommentEmails({
       : "http://localhost:3000");
   const taskLink = `${baseUrl}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-  await Promise.all(
-    recipients.map(async (recipient) => {
-      if (!recipient.email || !recipient.UserSetting?.notification) return;
+  const sendToRecipient = async (recipient: (typeof recipients)[number]) => {
+    if (deliveredUserIds?.has(recipient.id)) return;
+    if (recipient.email && recipient.UserSetting?.notification) {
       // shouldNotify, not the legacy preference helper: only the former reads the
       // per-category matrix, so the old call ignored "comments off" entirely.
-      if (!(await shouldNotify(recipient.id, "Comment", "email"))) return;
+      if (await shouldNotify(recipient.id, "Comment", "email")) {
+        const sent = await sendEmailNotification("Comment", {
+          sender: senderName,
+          recipient: recipient.email,
+          title: task.title,
+          link: taskLink,
+          commentText: text,
+          userId: recipient.id,
+          taskId: task.id,
+        });
+        if (!sent) throw new Error("Comment email delivery failed");
+      }
+    }
+    await markDelivered?.(recipient.id);
+  };
 
-      const sent = await sendEmailNotification("Comment", {
-        sender: senderName,
-        recipient: recipient.email,
-        title: task.title,
-        link: taskLink,
-        commentText: text,
-        userId: recipient.id,
-        taskId: task.id,
-      });
-      if (!sent) throw new Error("Comment email delivery failed");
-    }),
-  );
+  if (markDelivered) {
+    for (const recipient of recipients) await sendToRecipient(recipient);
+  } else {
+    await Promise.all(recipients.map(sendToRecipient));
+  }
 }
 
 /**
@@ -965,6 +976,7 @@ export async function createCommentService(params: CreateCommentParams) {
     processingAt: Date;
   } | null = null;
   let agentRunCommentNotificationState: {
+    commentNotificationDeliveryKeys: string[];
     commentMentionsAttemptedAt: Date | null;
     commentFcmAttemptedAt: Date | null;
     commentEmailsAttemptedAt: Date | null;
@@ -1011,12 +1023,35 @@ export async function createCommentService(params: CreateCommentParams) {
         await prisma.agentRunActivity.findUniqueOrThrow({
           where: { id: activityId },
           select: {
+            commentNotificationDeliveryKeys: true,
             commentMentionsAttemptedAt: true,
             commentFcmAttemptedAt: true,
             commentEmailsAttemptedAt: true,
           },
         });
     }
+
+    const notificationDeliveryKeys = new Set(
+      agentRunCommentNotificationState?.commentNotificationDeliveryKeys ?? [],
+    );
+    const checkpointNotificationDelivery = async (key: string) => {
+      if (notificationDeliveryKeys.has(key)) return;
+      if (!agentRunCommentNotificationClaim) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      const checkpointed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: { commentNotificationDeliveryKeys: { push: key } },
+      });
+      if (checkpointed.count === 0) {
+        throw new Error("Run activity notification delivery claim was lost");
+      }
+      notificationDeliveryKeys.add(key);
+    };
 
     if (resolvedDirectReplyUserId != null) {
       void broadcastInboxChange(resolvedDirectReplyUserId, {
@@ -1135,6 +1170,18 @@ export async function createCommentService(params: CreateCommentParams) {
           resolvedDirectReplyUserId === null
             ? []
             : [resolvedDirectReplyUserId],
+        ...(isAgentRunComment
+          ? {
+              deliveryProgress: {
+                has: (stage: string, recipient: number | string) =>
+                  notificationDeliveryKeys.has(`mention:${stage}:${recipient}`),
+                mark: (stage: string, recipient: number | string) =>
+                  checkpointNotificationDelivery(
+                    `mention:${stage}:${recipient}`,
+                  ),
+              },
+            }
+          : {}),
       });
     let mentionProcessing: Promise<void> = Promise.resolve();
     if (isAgentRunComment) {
@@ -1224,9 +1271,9 @@ export async function createCommentService(params: CreateCommentParams) {
       ) {
         throw new Error("Run activity notification claim is missing");
       }
-      // ponytail: channel checkpoints follow successful handoff, so a process
-      // exit can duplicate delivery. Exactly-once needs provider-idempotent
-      // outboxes.
+      // ponytail: per-target checkpoints follow successful handoff, so a process
+      // exit between handoff and checkpoint can still duplicate that target.
+      // Exactly-once needs provider-idempotent outboxes.
       if (!agentRunCommentNotificationState.commentFcmAttemptedAt) {
         const devices = await prisma.subscribedDevices.findMany({
           where: { userId: { in: userIds } },
@@ -1239,7 +1286,16 @@ export async function createCommentService(params: CreateCommentParams) {
           task.projectId,
           creatorId,
           comment,
-          true,
+          {
+            failOnError: true,
+            deliveredDeviceIds: new Set(
+              [...notificationDeliveryKeys]
+                .filter((key) => key.startsWith("fcm:"))
+                .map((key) => key.slice("fcm:".length)),
+            ),
+            markDelivered: (firebaseId) =>
+              checkpointNotificationDelivery(`fcm:${firebaseId}`),
+          },
         );
         const checkpointed = await prisma.agentRunActivity.updateMany({
           where: {
@@ -1263,6 +1319,13 @@ export async function createCommentService(params: CreateCommentParams) {
           recipientUserIds,
           mentionedUserIds,
           fromAgentId: agentId ?? null,
+          deliveredUserIds: new Set(
+            [...notificationDeliveryKeys]
+              .filter((key) => key.startsWith("email:"))
+              .map((key) => Number(key.slice("email:".length))),
+          ),
+          markDelivered: (userId) =>
+            checkpointNotificationDelivery(`email:${userId}`),
         });
         const checkpointed = await prisma.agentRunActivity.updateMany({
           where: {

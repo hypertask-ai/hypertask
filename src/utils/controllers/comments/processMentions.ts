@@ -49,6 +49,12 @@ const getBaseUrl = () =>
   process.env.NEXT_PUBLIC_BASEURL ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
+type MentionDeliveryStage =
+  | "follower:user"
+  | "email:user"
+  | "notification:user"
+  | "follower:agent";
+
 export interface ProcessMentionsParams {
   text: string;
   commentId: number;
@@ -59,6 +65,13 @@ export interface ProcessMentionsParams {
   /** Mentions already delivered through a stronger direct-reply notification. */
   skipUserIds?: readonly number[];
   failOnError?: boolean;
+  deliveryProgress?: {
+    has: (stage: MentionDeliveryStage, recipient: number | string) => boolean;
+    mark: (
+      stage: MentionDeliveryStage,
+      recipient: number | string,
+    ) => Promise<void>;
+  };
 }
 
 export interface McpMention {
@@ -125,6 +138,7 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     fromAgentId,
     skipUserIds = [],
     failOnError = false,
+    deliveryProgress,
   } = params;
   const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332", 10);
 
@@ -159,61 +173,82 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
     if (skippedUsers.has(userId)) continue;
     if (shouldSkipMentionRecipient({ userId, mentionedBy, hyperAiId, fromAgentId })) continue;
 
-    try {
-      // Add user as follower (if not already assignee)
-      const result = await createFollowerService({
-        userId,
-        taskId,
-        mentionById: mentionedBy,
-      });
-
-      if (result.status !== 200 && result.status !== 201) {
-        console.warn(
-          "[processMentions] createFollower failed for user",
-          userId,
-          result.body,
-        );
-        errors.push(new Error(`Mention follower failed for user ${userId}`));
-      } else if (task?.title && mentionedByActor?.displayName) {
-        const sent = await sendMentionEmail(
-          userId,
-          mentionedByActor.displayName,
-          task.title,
-          `${baseUrl}/detail/project-${projectId}/${task.uniqueIndex}`,
-          "mention",
-          text,
-          taskId
-        );
-        if (!sent) errors.push(new Error(`Mention email failed for user ${userId}`));
-      }
-    } catch (err) {
-      console.warn("[processMentions] createFollower failed for user", userId, err);
-      errors.push(err);
-    }
-
-    try {
-      await axios.post(
-        `${baseUrl}/api/comments/createMention`,
-        {
+    if (!deliveryProgress?.has("follower:user", userId)) {
+      try {
+        // Add user as follower (if not already assignee)
+        const result = await createFollowerService({
           userId,
           taskId,
-          commentId,
-          projectId,
-          ...(fromAgentId ? { fromAgentId } : {}),
-        },
-        {
-          // HTPR-4667: present the trusted server-side actor as a signed session.
-          headers: { Cookie: `${SESSION_COOKIE}=${signSession({ id: mentionedBy }, 60)}` },
-        },
-      );
-    } catch (err) {
-      console.warn("[processMentions] createMention failed for user", userId, err);
-      errors.push(err);
+          mentionById: mentionedBy,
+        });
+
+        if (result.status !== 200 && result.status !== 201) {
+          console.warn(
+            "[processMentions] createFollower failed for user",
+            userId,
+            result.body,
+          );
+          errors.push(new Error(`Mention follower failed for user ${userId}`));
+        } else {
+          await deliveryProgress?.mark("follower:user", userId);
+        }
+      } catch (err) {
+        console.warn("[processMentions] createFollower failed for user", userId, err);
+        errors.push(err);
+      }
     }
 
+    if (!deliveryProgress?.has("email:user", userId)) {
+      try {
+        const sent =
+          !task?.title || !mentionedByActor?.displayName
+            ? true
+            : await sendMentionEmail(
+                userId,
+                mentionedByActor.displayName,
+                task.title,
+                `${baseUrl}/detail/project-${projectId}/${task.uniqueIndex}`,
+                "mention",
+                text,
+                taskId,
+              );
+        if (sent) {
+          await deliveryProgress?.mark("email:user", userId);
+        } else {
+          errors.push(new Error(`Mention email failed for user ${userId}`));
+        }
+      } catch (err) {
+        console.warn("[processMentions] mention email failed for user", userId, err);
+        errors.push(err);
+      }
+    }
+
+    if (!deliveryProgress?.has("notification:user", userId)) {
+      try {
+        await axios.post(
+          `${baseUrl}/api/comments/createMention`,
+          {
+            userId,
+            taskId,
+            commentId,
+            projectId,
+            ...(fromAgentId ? { fromAgentId } : {}),
+          },
+          {
+            // HTPR-4667: present the trusted server-side actor as a signed session.
+            headers: { Cookie: `${SESSION_COOKIE}=${signSession({ id: mentionedBy }, 60)}` },
+          },
+        );
+        await deliveryProgress?.mark("notification:user", userId);
+      } catch (err) {
+        console.warn("[processMentions] createMention failed for user", userId, err);
+        errors.push(err);
+      }
+    }
   }
 
   for (const agentIdStr of uniqueAgentMentionIds) {
+    if (deliveryProgress?.has("follower:agent", agentIdStr)) continue;
     try {
       const result = await createFollowerService({
         taskId,
@@ -230,6 +265,8 @@ export async function processMentionsFromCommentText(params: ProcessMentionsPara
           result.body,
         );
         errors.push(new Error(`Mention follower failed for agent ${agentIdStr}`));
+      } else {
+        await deliveryProgress?.mark("follower:agent", agentIdStr);
       }
     } catch (err) {
       console.warn("[processMentions] createFollower failed for agent", agentIdStr, err);
