@@ -94,7 +94,9 @@ jobs:
             if grep -qi '^x-vercel-mitigated: *challenge' "$HC_DIR/version.h" 2>/dev/null; then
               version_challenged=yes
             fi
-            LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null)
+            # A challenge page or truncated body is not JSON; with set -e a failing
+            # jq would abort the step before the "unverifiable" alert below runs.
+            LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null) || LIVE_BUILD=""
           }
 
           for i in 1 2 3 4 5 6; do
