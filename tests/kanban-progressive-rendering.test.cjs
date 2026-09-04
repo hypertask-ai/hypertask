@@ -52,6 +52,16 @@ test("large boards progressively mount cards near the viewport", () => {
   assert.match(section, /renderMode === "placeholder"/);
 });
 
+test("loading cards do not render transient full outlines", () => {
+  const taskSkeleton = section.match(
+    /const TaskSkeleton[\s\S]*?\n};\n\nconst Section/,
+  )?.[0];
+
+  assert.ok(taskSkeleton);
+  assert.doesNotMatch(taskSkeleton, /xs:border-\[1px\]/);
+  assert.doesNotMatch(taskSkeleton, /xs:border-light-black-border-1/);
+});
+
 test("progressive placeholders preserve navigation and focus identity", () => {
   assert.match(placeholder, /id={`task-\$\{task\.id\}`}/);
   assert.match(

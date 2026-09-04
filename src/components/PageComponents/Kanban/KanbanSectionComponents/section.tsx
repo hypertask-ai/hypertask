@@ -47,7 +47,7 @@ const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
       ref={provided?.innerRef}
       {...provided?.draggableProps}
       style={provided?.draggableProps.style}
-      className="outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1"
+      className="outline-none rounded-[5px]"
     >
       <div className="shadow-md border-l-4 border-transparent bg-cardBackground rounded-[5px] outline-none min-h-[100px]">
         <div className="flex items-start p-2 gap-2 flex-col animate-pulse">
