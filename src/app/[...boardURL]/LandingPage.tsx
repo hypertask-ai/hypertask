@@ -1142,6 +1142,7 @@ return (
             _activeSortingMode={boardRender.activeSortingMode}
             _authenticated={authenticated && !isGuest}
             _localDatabasePilotEnabled={localDatabasePilotEnabled}
+            _shallowBoardSwitchEnabled={shallowBoardSwitchEnabled}
             _boardLayout={boardRender.boardLayout}
             _readinessSource={boardRender.readinessSource}
             _readinessProjectId={boardRender.readinessProjectId}
@@ -1182,6 +1183,7 @@ const SectionComp = ({
   _activeSortingMode,
   _authenticated,
   _localDatabasePilotEnabled,
+  _shallowBoardSwitchEnabled,
   _boardLayout,
   _readinessSource,
   _readinessProjectId,
@@ -1195,6 +1197,7 @@ const SectionComp = ({
   _activeSortingMode: TBoardSortingViewMode,
   _authenticated:boolean,
   _localDatabasePilotEnabled:boolean,
+  _shallowBoardSwitchEnabled:boolean,
   _boardLayout:"board" | "table",
   _readinessSource:"indexeddb" | "network" | "unknown",
   _readinessProjectId:number,
@@ -1530,6 +1533,12 @@ const ensureBoardLoaded = async (index:number):Promise<IProject|null> => {
 }
 
 async function handleStateChangesOnBoardChange (index:number, saveBackSections?:ISection[]){
+  if (_shallowBoardSwitchEnabled) {
+    const target = projects[index]
+    if (target) goToProjectShortcut(target.id, true)
+    return
+  }
+
   // HTPR-6072: SectionComp stays mounted across a switch now, so an
   // overlapping switch (a second click before the first one's fetch
   // resolves) can no longer rely on the old instance being torn down to

@@ -264,6 +264,31 @@ test("HTPR-6072: a pending shallow switch keeps the committed board mounted", ()
   );
 });
 
+test("HTPR-6072: flagged keyboard switches wait for parent authorization", () => {
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
+    "utf8",
+  );
+  const switchHandler = src.match(
+    /async function handleStateChangesOnBoardChange[\s\S]*?\n}\n\n\nconst handleBoardChange/,
+  );
+  assert.ok(switchHandler, "expected the board switch handler to exist");
+  assert.match(
+    switchHandler[0],
+    /if \(_shallowBoardSwitchEnabled\) \{\s*const target = projects\[index\]\s*if \(target\) goToProjectShortcut\(target\.id, true\)\s*return\s*\}[\s\S]*const loaded = await ensureBoardLoaded\(index\)/,
+    "expected shallow switches to navigate before loading or publishing target state locally",
+  );
+  const guardedBranch = switchHandler[0].slice(
+    switchHandler[0].indexOf("if (_shallowBoardSwitchEnabled)"),
+    switchHandler[0].indexOf("const switchGeneration"),
+  );
+  assert.doesNotMatch(
+    guardedBranch,
+    /setProjects|setCurrentProject|setSections|setRecoilCurrentProject/,
+    "the target must be published only by the parent's authorized snapshot",
+  );
+});
+
 test("HTPR-6072: sectionCompEverRenderedRef arms in an effect, not during render", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
