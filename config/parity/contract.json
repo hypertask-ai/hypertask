@@ -35,25 +35,47 @@
         "api": [
           "^GET /api/mcp/agents($|/\\[agentId\\]$|/analytics$|/presence$)",
           "^POST /api/mcp/agents/runtime-heartbeat$",
-          "^GET /api/mcp/agents/runs/\\[id\\]$"
+          "^GET /api/mcp/agents/runs/\\[id\\]$",
+          "^GET /api/mcp/agents/runs/\\[id\\]/activities$"
         ],
         "mcp": ["^hypertask_(agent_presence|list_agents)$"],
         "cli": ["^presence$", "^agents list$"],
         "ai_chat": ["^hypertask_(agent_presence|ask_agent)$", "^hypertask_list_agents$"],
         "hyperai": ["^hypertask_(agent_presence|list_agents)$"]
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/6122",
+          "expires": "2026-09-18",
+          "entries": ["GET /api/mcp/agents/runs/[id]/activities"]
+        }
       }
     },
     {
       "id": "agents.chat",
       "title": "Agent Chat: an agent runtime reads and answers its owner's chat",
       "matches": {
-        "api": ["^(GET|POST) /api/mcp/chat/sessions/\\[sessionId\\]/messages$"]
+        "api": [
+          "^(GET|POST) /api/mcp/chat/sessions/\\[sessionId\\]/messages$",
+          "^POST /api/mcp/agents/runs/\\[id\\]/activities$",
+          "^POST /api/mcp/agents/runs/\\[id\\]/activities/\\[activityId\\]/select$"
+        ]
       },
       "exclusions": {
         "mcp": "Only the chatted agent's runtime token may read or answer its session; MCP clients act as the human, not as the agent.",
         "cli": "The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command.",
         "ai_chat": "Agent Chat is the surface itself; native agents answer in-process without this route.",
         "hyperai": "HyperAI inherits the human session and never speaks as an external agent."
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/6122",
+          "expires": "2026-09-18",
+          "entries": [
+            "POST /api/mcp/agents/runs/[id]/activities",
+            "POST /api/mcp/agents/runs/[id]/activities/[activityId]/select"
+          ]
+        }
       }
     },
     {
