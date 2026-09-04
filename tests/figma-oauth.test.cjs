@@ -78,6 +78,7 @@ test("OAuth return paths reject external, API, and ambiguous destinations", () =
     "/_next",
     "/_next/data/build/page.json",
     `/${"a".repeat(2001)}`,
+    `/${"é".repeat(1500)}`,
   ]) {
     assert.equal(oauth.safeFigmaReturnTo(value), "/settings/accounts");
   }

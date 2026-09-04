@@ -12,6 +12,7 @@ import {
 } from "@/lib/figma/oauth";
 import {
   FIGMA_AUTHORIZE_URL,
+  FIGMA_OAUTH_SCOPE,
   FIGMA_SETTINGS_PATH,
 } from "@/lib/figma/paths";
 
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
   const authorizeUrl = new URL(FIGMA_AUTHORIZE_URL);
   authorizeUrl.searchParams.set("client_id", config.clientId);
   authorizeUrl.searchParams.set("redirect_uri", figmaRedirectUri(request));
-  authorizeUrl.searchParams.set("scope", "file_content:read");
+  authorizeUrl.searchParams.set("scope", FIGMA_OAUTH_SCOPE);
   authorizeUrl.searchParams.set("state", attempt.state);
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("code_challenge", attempt.codeChallenge);

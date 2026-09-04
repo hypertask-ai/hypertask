@@ -86,7 +86,10 @@ export function safeFigmaReturnTo(value: string | null | undefined): string {
     ) {
       return fallback;
     }
-    return `${target.pathname}${target.search}${target.hash}`;
+    const normalized = `${target.pathname}${target.search}${target.hash}`;
+    return Buffer.byteLength(normalized, "utf8") <= MAX_RETURN_TO_LENGTH
+      ? normalized
+      : fallback;
   } catch {
     return fallback;
   }

@@ -1,7 +1,10 @@
 import { InputRule, Node, mergeAttributes } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
-import { FIGMA_OAUTH_START_PATH } from '@/lib/figma/paths';
+import {
+  FIGMA_OAUTH_START_PATH,
+  FIGMA_OEMBED_PATH,
+} from '@/lib/figma/paths';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -25,7 +28,7 @@ type FigmaPreviewData = {
 };
 
 const fetchFigmaOembed = (figmaUrl: string): Promise<FigmaPreviewData> =>
-  fetch(`/api/figma/oembed?url=${encodeURIComponent(figmaUrl)}`).then(
+  fetch(`${FIGMA_OEMBED_PATH}?url=${encodeURIComponent(figmaUrl)}`).then(
     (response) => {
       if (!response.ok) throw new Error('Figma preview unavailable');
       return response.json();
