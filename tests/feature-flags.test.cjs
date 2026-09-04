@@ -73,9 +73,12 @@ test("feature flag modes enforce owner-only, everyone, and off", () => {
   assert.equal(flags.featureFlagModeEnabled("OFF", true), false);
 });
 
-test("a missing row defaults to owner only", async () => {
+test("the mobile All Tasks redesign starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 6), true);
   assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 7), false);
+});
+
+test("a missing row defaults to owner only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 6), true);
   assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), false);
 });

@@ -42,6 +42,9 @@ export const TaskListRow = (props: IProps) => {
     task.notifications && task.notifications.length > 0
       ? task.notifications[0].seen
       : true;
+  let mobileDotColor = "bg-transparent";
+  if (!isSeen) mobileDotColor = "bg-[#5896F1]";
+  else if (isStarred) mobileDotColor = "bg-[#FFCB33]";
 
   // Get assignee name or task owner name
   const assigneeName =
@@ -84,11 +87,7 @@ export const TaskListRow = (props: IProps) => {
             aria-hidden="true"
             className={cn(
               "h-[7px] w-[7px] shrink-0 self-center rounded-full",
-              !isSeen
-                ? "bg-[#5896F1]"
-                : isStarred
-                  ? "bg-[#FFCB33]"
-                  : "bg-transparent"
+              mobileDotColor
             )}
           />
           <span className="shrink-0 text-[13px] font-bold text-icon-dark-gray">

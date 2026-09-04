@@ -24,7 +24,7 @@ test("All Tasks owns one mobile horizontal inset around its header and rows", ()
   assert.match(taskRowTag[1], /\bflushMobilePadding\b/);
 });
 
-test("the mobile redesign is owner-only until its feature flag is released", () => {
+test("the mobile redesign is gated behind its declared feature flag", () => {
   assert.match(flags, /"htpr-5992-mobile-all-tasks"/);
   assert.match(
     allTasks,
@@ -43,7 +43,7 @@ test("the redesigned project tabs are inline, scrollable, and selectable", () =>
     allTasks,
     /overflow-x-auto border-b border-border-light-gray-thin pb-2 @md:hidden/,
   );
-  assert.match(allTasks, /tabs\[activeSplit\] === "All"/);
+  assert.match(allTasks, /activeSplit === 0/);
 });
 
 test("All Tasks opts into compact mobile rows without changing shared desktop rows", () => {

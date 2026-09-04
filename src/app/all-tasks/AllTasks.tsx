@@ -558,7 +558,7 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
                 tasks.map((task: ITask, index: number) => {
                   const showProjectHeading =
                     mobileRedesignEnabled &&
-                    tabs[activeSplit] === "All" &&
+                    activeSplit === 0 &&
                     task.project?.title &&
                     task.project.title !== tasks[index - 1]?.project?.title;
                   return (
