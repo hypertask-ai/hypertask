@@ -1064,7 +1064,12 @@ function atomicCommentHarness() {
                 ? activity.commentNotificationsProcessingAt === null
                 : activity.commentNotificationsProcessingAt <= processing.lte;
             });
-            if (!canClaim) return { count: 0 };
+            if (!canClaim) {
+              if (failure === "lease-release-race") {
+                activity.commentNotificationsProcessingAt = null;
+              }
+              return { count: 0 };
+            }
           } else if (
             where.commentNotificationsProcessingAt &&
             activity.commentNotificationsProcessingAt?.getTime() !==
@@ -1345,7 +1350,7 @@ test("activity comments commit once across replay without consuming drafts", asy
   assert.equal(harness.getDraftDeleteCalls(), 0);
   assert.equal(harness.getTaskReferenceParseCalls(), 1);
 
-  harness.setFailure(null);
+  harness.setFailure("lease-release-race");
   harness.elicitation.commentNotificationsProcessingAt = new Date();
   const assigneeLookupsBeforeConcurrentReplay = harness.getAssigneeLookupCalls();
   const draftDeletesBeforeConcurrentReplay = harness.getDraftDeleteCalls();
@@ -1375,7 +1380,7 @@ test("activity comments commit once across replay without consuming drafts", asy
     harness.getTaskReferenceParseCalls(),
     taskReferenceParsesBeforeConcurrentReplay,
   );
-  harness.elicitation.commentNotificationsProcessingAt = null;
+  assert.equal(harness.elicitation.commentNotificationsProcessingAt, null);
 
   harness.setFailure("fcm");
   const replay = await harness.createCommentService({
