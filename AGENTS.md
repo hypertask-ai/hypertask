@@ -121,3 +121,4 @@ Before changing a feature, trace the entry point through middleware, route handl
 - The merge freeze for a required flag does not apply to tickets carrying the **AI CHAT 💬** label.
 - Reviewers must block feature or UI pull requests that omit the required flag.
 - After a flag has stayed on **Everyone** for 14 days, create a follow-up ticket to remove the flag and dead branch.
+- The moment a flagged feature is live on production, post a ticket comment that @mentions Valentin (`<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`) with the flag key, one line on what it does, and the link https://app.hypertask.ai/admin/flags. Without the mention he never learns the flag exists (Valentin, 2026-09-04, https://app.hypertask.ai/detail/project-15/6131).
