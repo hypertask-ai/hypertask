@@ -51,6 +51,7 @@ import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { useFlag } from "@/hooks/useFlag";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
@@ -228,6 +229,9 @@ const AgentChatClient = (props: IProp) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
+  const mobileAgentChatViewportEnabled = useFlag(
+    "htpr-6129-mobile-agent-chat-viewport",
+  );
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
 
   const [agents, setAgents] = useState<TAgent[] | null>(null);
@@ -1649,6 +1653,10 @@ const AgentChatClient = (props: IProp) => {
           isMbl &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[var(--mobile-dock-h,64px)]",
         )}
+        style={{
+          height:
+            isMbl && mobileAgentChatViewportEnabled ? "100dvh" : undefined,
+        }}
       >
         {selectedAgent ? chatPane : rosterPane}
         {detailsSheet}

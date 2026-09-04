@@ -120,6 +120,21 @@ test("comment reaction API starts with owner and QA access", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 7), false);
 });
 
+test("mobile Agent Chat viewport fix starts with owner and QA access", async () => {
+  assert.equal(
+    await flags.isFeatureEnabled("htpr-6129-mobile-agent-chat-viewport", 6),
+    true,
+  );
+  assert.equal(
+    await flags.isFeatureEnabled("htpr-6129-mobile-agent-chat-viewport", 985),
+    true,
+  );
+  assert.equal(
+    await flags.isFeatureEnabled("htpr-6129-mobile-agent-chat-viewport", 7),
+    false,
+  );
+});
+
 test("declared flags without rows default to owner and QA", async () => {
   for (const key of [
     "htpr-5913-consistent-comment-shortcuts",
@@ -173,6 +188,11 @@ test("declared flags remain listed without a row and can be changed", async () =
     { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
     { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
+    {
+      key: "htpr-6129-mobile-agent-chat-viewport",
+      mode: "OWNER_AND_QA",
+      updatedAt: null,
+    },
     { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
   ]);
   const changed = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
