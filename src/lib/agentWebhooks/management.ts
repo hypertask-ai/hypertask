@@ -200,14 +200,10 @@ export async function upsertAgentWebhook(input: {
       const url = requestedUrl ?? existing?.url ?? "";
       if (!url) throw new AgentWebhookInputError("url is required", "url");
 
-      const parsedEvents = parseAgentWebhookEvents(
-        input.body.events === undefined
-          ? existing?.events.filter((event) =>
-              availableEvents.includes(event as (typeof availableEvents)[number]),
-            )
-          : input.body.events,
-        availableEvents,
-      );
+      const parsedEvents =
+        input.body.events === undefined && existing
+          ? { ok: true as const, events: existing.events }
+          : parseAgentWebhookEvents(input.body.events, availableEvents);
       if (!parsedEvents.ok) {
         throw new AgentWebhookInputError(parsedEvents.error, "events");
       }
@@ -247,7 +243,12 @@ export async function upsertAgentWebhook(input: {
   );
 
   return {
-    subscription: serializeAgentWebhookSubscription(subscription),
+    subscription: {
+      ...serializeAgentWebhookSubscription(subscription),
+      events: subscription.events.filter((event) =>
+        availableEvents.includes(event as (typeof availableEvents)[number]),
+      ),
+    },
     ...(rotateSecret ? { secret } : {}),
     availableEvents,
     eventDefinitions,

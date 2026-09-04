@@ -20,6 +20,7 @@ CREATE INDEX "AgentRun_agentId_status_idx" ON "AgentRun"("agentId", "status");
 CREATE INDEX "AgentRun_taskId_status_idx" ON "AgentRun"("taskId", "status");
 CREATE INDEX "AgentRun_chatSessionId_status_idx" ON "AgentRun"("chatSessionId", "status");
 CREATE INDEX "AgentRun_lastActivityAt_status_idx" ON "AgentRun"("lastActivityAt", "status");
+CREATE INDEX "AgentRun_stoppedById_idx" ON "AgentRun"("stoppedById");
 
 -- Prisma cannot express partial unique indexes. These make first-interaction
 -- creation race-safe while allowing any number of stopped or completed runs.

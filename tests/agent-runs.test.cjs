@@ -225,6 +225,33 @@ test("lifecycle-only subscriptions can create a run", async () => {
   assert.equal(tx.deliveries[0].payload.runId, tx.runs[0].id);
 });
 
+test("task comments do not reactivate runs without run.prompted delivery", async () => {
+  const { persistAgentRunTriggerWebhooks, persistAgentTaskRunPromptWebhooks } =
+    loadOutbox(true);
+  const tx = fakeRunTransaction(["comment.mention", "run.created"]);
+  const firstAt = new Date("2026-09-04T10:00:00.000Z");
+
+  await persistAgentRunTriggerWebhooks(tx, mention, firstAt);
+  tx.runs[0].status = "STALE";
+  const ids = await persistAgentTaskRunPromptWebhooks(
+    tx,
+    {
+      projectId: 15,
+      taskId: 42,
+      ticketNumber: "HTPR-42",
+      taskTitle: "Run lifecycle",
+      commentId: 11,
+      commentHtml: "<p>This agent did not subscribe to prompts</p>",
+      actor,
+    },
+    new Date("2026-09-04T10:06:00.000Z"),
+  );
+
+  assert.deepEqual(ids, []);
+  assert.equal(tx.runs[0].status, "STALE");
+  assert.equal(tx.runs[0].lastActivityAt, firstAt);
+});
+
 test("feature-off trigger preserves the legacy payload and creates no run", async () => {
   const { persistAgentRunTriggerWebhooks } = loadOutbox(false);
   const tx = fakeRunTransaction();
@@ -466,6 +493,7 @@ test("the migration enforces one nonterminal run and exactly one context", () =>
   assert.match(migration, /num_nonnulls\("taskId", "chatSessionId"\) = 1/);
   assert.match(migration, /AgentRun_nonterminal_task_key[\s\S]*WHERE[\s\S]*'ACTIVE', 'STALE'/);
   assert.match(migration, /AgentRun_nonterminal_chat_key[\s\S]*WHERE[\s\S]*'ACTIVE', 'STALE'/);
+  assert.match(migration, /AgentRun_stoppedById_idx[\s\S]*\("stoppedById"\)/);
 });
 
 test("run event discovery is hidden and rejected when the flag is off", () => {
@@ -501,4 +529,68 @@ test("the MCP webhook tool accepts chat and lifecycle event names", () => {
     "run.prompted",
     "run.stopped",
   ]);
+});
+
+test("flag-off webhook updates preserve hidden run subscriptions", async () => {
+  const managementPath = path.join(root, "src/lib/agentWebhooks/management.ts");
+  delete require.cache[managementPath];
+  const existing = {
+    id: "subscription-1",
+    agentId: "agent-1",
+    projectId: null,
+    url: "https://agent.example/webhook",
+    secret: "whsec_existing",
+    events: ["run.created"],
+    active: true,
+    createdAt: new Date("2026-09-04T10:00:00.000Z"),
+    updatedAt: new Date("2026-09-04T10:00:00.000Z"),
+    lastDeliveryAt: null,
+    lastDeliveryOk: null,
+  };
+  let persisted;
+  const transaction = {
+    $executeRaw: async () => 1,
+    agentWebhookSubscription: {
+      findUnique: async () => existing,
+      upsert: async ({ update }) => {
+        persisted = { ...existing, ...update };
+        return persisted;
+      },
+    },
+  };
+  stub("src/lib/prisma.ts", {
+    default: {
+      agent: { findFirst: async () => ({ id: "agent-1" }) },
+      $transaction: async (callback) => callback(transaction),
+    },
+  });
+  stub("src/lib/flags.ts", { isFeatureEnabled: async () => false });
+  stub("src/lib/mcp/webhooks/ssrfGuard.ts", {
+    assertSafeWebhookTarget: async () => ({ ok: true }),
+  });
+  stub("src/utils/controllers/agents/boardMembers.ts", {
+    isAgentOnBoard: async () => true,
+  });
+  stub("src/utils/controllers/projects/getAllIncludes.ts", {
+    getProjectWhere: () => ({}),
+  });
+  stub("src/lib/agentWebhooks/outbox.ts", {});
+  const jiti = createJiti(
+    path.join(root, `tests/agent-runs-management-${++loadId}.cjs`),
+    {
+      alias: { "@": path.join(root, "src") },
+      interopDefault: true,
+    },
+  );
+  const { upsertAgentWebhook } = jiti(managementPath);
+
+  const result = await upsertAgentWebhook({
+    userId: 6,
+    agentId: "agent-1",
+    body: { active: false },
+  });
+
+  assert.deepEqual(persisted.events, ["run.created"]);
+  assert.deepEqual(result.subscription.events, []);
+  assert.equal(result.subscription.active, false);
 });

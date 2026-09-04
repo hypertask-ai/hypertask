@@ -454,11 +454,12 @@ export async function persistAgentRunTriggerWebhooks(
       ]
     : [];
   const prompt = agentRunPromptForEvent(input);
-  const lifecycleEvent = created
-    ? "run.created"
-    : prompt != null
-      ? "run.prompted"
-      : null;
+  let lifecycleEvent: "run.created" | "run.prompted" | null = null;
+  if (created) {
+    lifecycleEvent = "run.created";
+  } else if (prompt != null) {
+    lifecycleEvent = "run.prompted";
+  }
   if (lifecycleEvent && subscription.events.includes(lifecycleEvent)) {
     deliveryIds.push(
       await createAgentWebhookDelivery(tx, subscription.id, input.agentId, {
@@ -531,6 +532,7 @@ export async function persistAgentTaskRunPromptWebhooks(
       run.agent.revokedAt != null ||
       run.agent.members.length === 0 ||
       !subscription?.active ||
+      !subscription.events.includes("run.prompted") ||
       (subscription.projectId != null &&
         subscription.projectId !== input.projectId) ||
       !(await isFeatureEnabled(
@@ -550,7 +552,6 @@ export async function persistAgentTaskRunPromptWebhooks(
       data: { status: "ACTIVE", lastActivityAt: now },
     });
     if (updated.count === 0) continue;
-    if (!subscription.events.includes("run.prompted")) continue;
 
     const activeRun = {
       ...run,

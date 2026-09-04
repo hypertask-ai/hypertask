@@ -2220,6 +2220,7 @@ model AgentRun {
   @@index([taskId, status])
   @@index([chatSessionId, status])
   @@index([lastActivityAt, status])
+  @@index([stoppedById])
 }
 
 /// Agent-scoped BYOK secrets (ciphertext), same shape as TeamByokApiKey.
