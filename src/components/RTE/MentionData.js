@@ -67,7 +67,6 @@ export default {
           editor: props.editor,
         });
 
-        const isMobile = window.innerWidth <= 768;
         getClientRect = props.clientRect;
 
         popup = tippy("body", {
@@ -77,8 +76,24 @@ export default {
           showOnCreate: true,
           interactive: true,
           trigger: "manual",
-          placement: isMobile ? "top-start" : "bottom-start",
-          flipBehavior: isMobile ? [] : ["flip"],
+          placement: "auto-start",
+          popperOptions: {
+            strategy: "fixed",
+            modifiers: [
+              {
+                name: "flip",
+                options: {
+                  allowedAutoPlacements: ["bottom-start", "top-start"],
+                  fallbackPlacements: ["bottom-start", "top-start"],
+                  padding: 12,
+                },
+              },
+              {
+                name: "preventOverflow",
+                options: { padding: 12, altAxis: true },
+              },
+            ],
+          },
         });
       },
 
