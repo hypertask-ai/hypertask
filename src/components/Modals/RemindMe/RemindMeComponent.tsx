@@ -17,7 +17,6 @@ import { ChevronDown, CircleCheck, Clock, Search } from "lucide-react";
 
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useQueryState from "@/hooks/MultiPages/useQueryState";
-import { useFlag } from "@/hooks/useFlag";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 
 // Bulk action interface for better type safety
@@ -63,7 +62,6 @@ const RemindMeComponent = (props: Props) => {
   const [modal, ___] = useState<boolean>(true);
   const [filteredOptions, setFilteredOptions] = useState<(DisplayDate | undefined)[]>(defaultOptions);
   const _mbl = useContext(MobileViewContext);
-  const mobileSafeAreaEnabled = useFlag("htpr-6130-mobile-reminder-safe-area");
   
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target.value;
@@ -254,7 +252,6 @@ const RemindMeComponent = (props: Props) => {
         ariaLabel={getHeaderText()}
         fullHeight
         keyboardAware
-        bottomSafeAreaFloor={mobileSafeAreaEnabled}
         bottomSlot={mobileSearchInput}
       >
         <h3 className="px-4 pb-1 pt-2 text-micro font-semibold uppercase tracking-wider text-text-light-gray">
