@@ -18,6 +18,7 @@ interface InboxDraftRowProps {
   activeDrafts: IUserDraft[];
   userId: number;
   selected: boolean;
+  onFocus: () => void;
   onOpen: (draft: IUserDraft) => void;
 }
 
@@ -26,6 +27,7 @@ const InboxDraftRow = ({
   activeDrafts,
   userId,
   selected,
+  onFocus,
   onOpen,
 }: InboxDraftRowProps) => {
   const queryClient = useQueryClient();
@@ -68,6 +70,7 @@ const InboxDraftRow = ({
     <div
       className="group/draft-row relative flex min-w-0 items-center gap-[8px] hover:bg-hoverCardBackground focus-within:bg-hoverCardBackground sm:p-inbox-horizontal md:gap-0 md:border-l-4 md:border-l-transparent md:p-0 data-[selected=true]:md:border-l-selected-item-border data-[selected=true]:md:bg-active-elementBg"
       data-selected={selected}
+      onFocusCapture={onFocus}
     >
       <div
         aria-hidden="true"

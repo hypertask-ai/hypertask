@@ -1141,6 +1141,7 @@ const InboxSplit = ({
                           activeDrafts={activeDrafts}
                           userId={currentUser!.id}
                           selected={selectedKeyboardRow?.key === rowKey}
+                          onFocus={() => setActiveKeyboardRowKey(rowKey)}
                           onOpen={openDraft}
                         />
                         <div className="message_divider block md:hidden"> </div>
