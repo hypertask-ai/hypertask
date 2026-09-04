@@ -101,7 +101,7 @@ const TaskDueDateActivity = ({
 }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   if (!activity.data.fromDueDate && activity.data.toDueDate) {
@@ -154,7 +154,7 @@ const TaskDueDateActivity = ({
 const TaskMovedActivity = ({ activity }: { activity: ITaskMoveActivity }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   if (activity.data.statusFlipCount) {
@@ -191,7 +191,7 @@ const TaskDescriptionUpdateActivity = ({
 }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   return (
@@ -281,19 +281,28 @@ const TaskAssignedActivity = ({
 }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName,
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.user.photoURL,
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.user.photoURL,
   };
   const toObj = {
     displayName: activity.data.toAgent?.displayName ?? activity.data.toUser?.displayName,
-    photoURL: activity.data.toAgent?.photoURL ?? activity.data.toUser?.user.photoURL,
+    photoURL: activity.data.toAgent ? activity.data.toAgent.photoURL ?? "" : activity.data.toUser?.user.photoURL,
   };
 
-  const isSelf =
-    activity.data.fromAgent && activity.data.toAgent
-      ? activity.data.fromAgent.id === activity.data.toAgent.id
-      : !activity.data.fromAgent && !activity.data.toAgent
-      ? activity.data.fromUser.userId === activity.data.toUser.userId
-      : false;
+  const fromAgentId = activity.data.fromAgent?.id;
+  const toAgentId = activity.data.toAgent?.id;
+  let inferredSelfAssignment = false;
+  if (
+    fromAgentId !== null &&
+    fromAgentId !== undefined &&
+    toAgentId !== null &&
+    toAgentId !== undefined
+  ) {
+    inferredSelfAssignment = fromAgentId === toAgentId;
+  } else if (!activity.data.fromAgent && !activity.data.toAgent) {
+    inferredSelfAssignment =
+      activity.data.fromUser.userId === activity.data.toUser.userId;
+  }
+  const isSelf = activity.data.isSelfAssignment ?? inferredSelfAssignment;
 
   if (isSelf) {
     return (
@@ -330,7 +339,7 @@ const TaskPriorityActivity = ({
 }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   // if priority was created, from would be missing
@@ -385,7 +394,7 @@ const TaskEstimateActivity = ({
 }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   if (!activity.data.fromEstimate?.estimate) {
@@ -422,7 +431,7 @@ const TaskEstimateActivity = ({
 const TaskLabelActivity = ({ activity }: { activity: ITaskLabelActivity }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   if (!activity?.data.toLabel.label?.value) return <></>;
@@ -477,7 +486,7 @@ const TaskArchivedActivity = ({
 }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
-    photoURL: activity.data.fromAgent?.photoURL ?? activity.data.fromUser?.photoURL ?? "",
+    photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
   const archivebody =

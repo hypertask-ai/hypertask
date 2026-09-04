@@ -1,5 +1,43 @@
 import prisma from "@/lib/prisma";
+import {
+  PRIVATE_AGENT_DISPLAY_NAME,
+  redactAgentIdentitiesForPublicShare,
+} from "@/lib/agents/publicAgent";
 import { IComment } from "@/models/model";
+
+type SharedCommentWithAgentAttribution = Record<string, unknown> & {
+  agentId: unknown;
+  agent: unknown;
+  agentDisplayName: unknown;
+};
+
+type RedactedSharedComment<T extends SharedCommentWithAgentAttribution> = Omit<
+  T,
+  "agentId" | "agent" | "agentDisplayName"
+> & {
+  agentId: null;
+  agent: null;
+  agentDisplayName: string | null;
+};
+
+export const redactSharedComments = <
+  T extends SharedCommentWithAgentAttribution,
+>(
+  comments: T[]
+): RedactedSharedComment<T>[] =>
+  comments.map((comment) => {
+    const agentAuthored = Boolean(
+      comment.agentId || comment.agent || comment.agentDisplayName
+    );
+    const redacted = redactAgentIdentitiesForPublicShare(comment);
+
+    return {
+      ...redacted,
+      agentId: null,
+      agent: null,
+      agentDisplayName: agentAuthored ? PRIVATE_AGENT_DISPLAY_NAME : null,
+    };
+  });
 
 export const getSharedComments = async (
   taskId: string | string[] | undefined
@@ -70,7 +108,7 @@ export const getSharedComments = async (
       `;
     return {
       status: 200,
-      json: comments,
+      json: redactSharedComments(comments),
     };
   } catch (error) {
     console.log(error);
@@ -129,7 +167,7 @@ export const getSharedTaskInfo = async (shareId: string) => {
     },
   });
 
-  return shared;
+  return redactAgentIdentitiesForPublicShare(shared);
 };
 
 export const processSharedComments = (comments: IComment[]) => {

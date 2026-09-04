@@ -1,4 +1,5 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { redactAgentIdentitiesForPublicShare } from "@/lib/agents/publicAgent";
 import prisma from "@/lib/prisma";
 
 const handler: NextApiHandler = async (
@@ -19,7 +20,7 @@ const handler: NextApiHandler = async (
 
       if (taskShared)
         return res.status(200).json({
-          taskShared,
+          taskShared: redactAgentIdentitiesForPublicShare(taskShared),
         });
       else return res.status(400).json({});
     } catch (error) {

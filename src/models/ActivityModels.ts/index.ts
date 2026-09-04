@@ -150,6 +150,7 @@ export interface ITaskAssignedActivity {
     };
     updatedStatus: "Assigned" | "Unassigned";
     fromUserId: number;
+    isSelfAssignment?: boolean;
   };
 }
 
