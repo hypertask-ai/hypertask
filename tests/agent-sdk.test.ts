@@ -1,0 +1,827 @@
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { test } from "node:test";
+import {
+  createAgent,
+  MemoryDeliveryStore,
+  verifyWebhookSignature,
+  type AgentRunRecord,
+  type AgentWebhookPayload,
+  type BackgroundContext,
+  type DeliveryClaim,
+  type DeliveryStore,
+} from "../packages/agent-sdk/index.js";
+
+const secret = "unit-test-signing-key";
+const apiUrl = "https://api.example.test/api";
+const now = Date.now();
+const run: AgentRunRecord = {
+  id: "run-1",
+  agentId: "agent-1",
+  taskId: 101,
+  chatSessionId: null,
+  trigger: "mention",
+  status: "active",
+  createdAt: new Date(now - 1_000).toISOString(),
+  lastActivityAt: new Date(now - 1_000).toISOString(),
+  stoppedBy: null,
+};
+const task = {
+  id: 101,
+  ticketNumber: "TEST-101",
+  title: "SDK test",
+  description: "Test the SDK",
+  section: "Backlog",
+  sectionId: 1,
+  boardId: 15,
+  boardTitle: "Test board",
+  projectId: 15,
+  status: "Normal" as const,
+  assignees: [],
+  labels: [],
+  createdAt: new Date(now - 1_000).toISOString(),
+};
+
+function payload(
+  overrides: Partial<AgentWebhookPayload> = {},
+): AgentWebhookPayload {
+  const event = overrides.event ?? "run.created";
+  const record = {
+    ...run,
+    ...(overrides.run ?? {}),
+  };
+  return {
+    event,
+    deliveryId: "delivery-1",
+    occurredAt: new Date(now).toISOString(),
+    agentId: record.agentId,
+    projectId: 15,
+    taskId: record.taskId,
+    ticketNumber: task.ticketNumber,
+    taskTitle: task.title,
+    runId: record.id,
+    run: record,
+    prompt: "Please investigate",
+    ...overrides,
+  };
+}
+
+function signature(timestamp: string, body: string): string {
+  return `sha256=${createHmac("sha256", secret)
+    .update(`${timestamp}.${body}`)
+    .digest("hex")}`;
+}
+
+function webhookRequest(
+  bodyPayload: AgentWebhookPayload,
+  headerOverrides: Record<string, string> = {},
+): Request {
+  const body = JSON.stringify(bodyPayload);
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  return new Request("https://agent.example.test/webhook", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-hypertask-event": bodyPayload.event,
+      "x-hypertask-delivery": bodyPayload.deliveryId,
+      "x-hypertask-timestamp": timestamp,
+      "x-hypertask-signature": signature(timestamp, body),
+      ...headerOverrides,
+    },
+    body,
+  });
+}
+
+type ApiCall = {
+  method: string;
+  path: string;
+  headers: Headers;
+  body: Record<string, unknown> | null;
+};
+
+function apiFixture(options: { failUpdate?: boolean } = {}) {
+  const calls: ApiCall[] = [];
+  let activityId = 0;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    if (init.signal?.aborted) {
+      throw init.signal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    const method = init.method ?? "GET";
+    const headers = new Headers(init.headers);
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
+    calls.push({ method, path: `${url.pathname}${url.search}`, headers, body });
+
+    if (method === "HEAD") {
+      return new Response(null, {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      });
+    }
+    if (url.pathname.endsWith("/mcp/agents/runs/run-1/activities")) {
+      if (method === "GET") return Response.json({ success: true, activities: [] });
+      activityId += 1;
+      return Response.json({
+        success: true,
+        activity: {
+          id: `activity-${activityId}`,
+          runId: run.id,
+          type: body.type,
+          text: body.text,
+          link: body.link ?? null,
+          options: body.options ?? null,
+          selectedOption: null,
+          selectedAt: null,
+          selectedBy: null,
+          createdAt: new Date().toISOString(),
+        },
+        duplicate: false,
+      });
+    }
+    if (url.pathname.endsWith("/mcp/agents/runs/run-1")) {
+      return Response.json({ success: true, run });
+    }
+    if (url.pathname.endsWith("/mcp/tasks") && method === "GET") {
+      return Response.json({ success: true, tasks: [task] });
+    }
+    if (url.pathname.endsWith("/mcp/comments") && method === "GET") {
+      return Response.json({
+        success: true,
+        comments: [
+          {
+            id: 1,
+            text: "Earlier comment",
+            commentText: "Earlier comment",
+            createdAt: new Date(now - 500).toISOString(),
+          },
+        ],
+      });
+    }
+    if (url.pathname.endsWith("/mcp/projects/15/sections")) {
+      return Response.json({
+        success: true,
+        sections: [
+          { id: 1, section_title: "Backlog" },
+          { id: 2, section_title: "QA" },
+        ],
+      });
+    }
+    if (url.pathname.endsWith("/mcp/projects/15/members")) {
+      return Response.json({
+        success: true,
+        members: [{ id: 6, displayName: "Test User", email: "test@example.test" }],
+      });
+    }
+    if (url.pathname.endsWith("/mcp/tasks/update") && options.failUpdate) {
+      return Response.json(
+        { success: false, error: "Update failed" },
+        { status: 500 },
+      );
+    }
+    return Response.json({ success: true });
+  };
+  return { calls, fetch };
+}
+
+function background(distributed = false) {
+  const tasks: Promise<void>[] = [];
+  const context: BackgroundContext = {
+    distributed,
+    waitUntil(work) {
+      tasks.push(work);
+    },
+  };
+  return {
+    context,
+    async drain() {
+      await Promise.all(tasks);
+    },
+  };
+}
+
+class DurableTestStore implements DeliveryStore {
+  readonly durable = true;
+  private readonly memory = new MemoryDeliveryStore();
+  claim(claim: DeliveryClaim) {
+    return this.memory.claim(claim);
+  }
+  renew(claim: DeliveryClaim) {
+    return this.memory.renew(claim);
+  }
+  complete(claim: DeliveryClaim, retainUntil: number) {
+    return this.memory.complete(claim, retainUntil);
+  }
+  release(claim: DeliveryClaim) {
+    return this.memory.release(claim);
+  }
+}
+
+test("webhook signatures cover timestamp and exact UTF-8 body bytes", async () => {
+  const timestamp = Math.floor(now / 1000).toString();
+  const rawBody = new TextEncoder().encode('{"text":"café"}');
+  const expected = `sha256=${createHmac("sha256", secret)
+    .update(Buffer.concat([Buffer.from(`${timestamp}.`), Buffer.from(rawBody)]))
+    .digest("hex")}`;
+
+  assert.equal(
+    await verifyWebhookSignature({ secret, timestamp, signature: expected, rawBody, now }),
+    true,
+  );
+  assert.equal(
+    await verifyWebhookSignature({
+      secret,
+      timestamp: String(Number(timestamp) + 1),
+      signature: expected,
+      rawBody,
+      now,
+    }),
+    false,
+    "a fresh timestamp cannot be substituted onto a captured signature",
+  );
+  assert.equal(
+    await verifyWebhookSignature({
+      secret,
+      timestamp,
+      signature: expected,
+      rawBody: new TextEncoder().encode('{"text":"changed"}'),
+      now,
+    }),
+    false,
+  );
+  assert.equal(
+    await verifyWebhookSignature({
+      secret,
+      timestamp,
+      signature: expected,
+      rawBody,
+      now: now + 301_000,
+    }),
+    false,
+  );
+});
+
+test("handler cancels a webhook stream that exceeds its read deadline", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    pull() {},
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const timestamp = Math.floor(now / 1000).toString();
+  const request = new Request("https://agent.example.test/webhook", {
+    method: "POST",
+    headers: {
+      "x-hypertask-event": "run.created",
+      "x-hypertask-delivery": "delivery-timeout",
+      "x-hypertask-timestamp": timestamp,
+      "x-hypertask-signature": `sha256=${"0".repeat(64)}`,
+    },
+    body,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+
+  try {
+    const responsePromise = agent.handler(request, background().context);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    context.mock.timers.tick(2_000);
+    const response = await responsePromise;
+    assert.equal(response.status, 408);
+    assert.equal(cancelled, true);
+    assert.equal(api.calls.length, 0);
+  } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("handler rejects mismatched headers and unsafe runtime capabilities", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  assert.equal(
+    (await agent.handler(webhookRequest(payload(), { "x-hypertask-event": "run.stopped" }), background().context)).status,
+    400,
+  );
+  assert.equal((await agent.handler(webhookRequest(payload()))).status, 503);
+  assert.equal(
+    (await agent.handler(webhookRequest(payload()), background(true).context)).status,
+    503,
+    "distributed runtimes require a durable store",
+  );
+  assert.equal(api.calls.length, 0, "capability failures happen before API access");
+});
+
+test("legacy trigger deliveries are verified but do not dispatch a run twice", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let handled = 0;
+  agent.on("mention", () => {
+    handled += 1;
+  });
+  const legacy = payload({
+    event: "comment.mention",
+    run: undefined,
+  });
+  assert.equal((await agent.handler(webhookRequest(legacy), background().context)).status, 204);
+  assert.equal(handled, 0);
+  assert.equal(api.calls.length, 0);
+});
+
+test("prompted handlers receive validated elicitation selection data", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let selection: unknown = null;
+  agent.on("prompted", async (received) => {
+    selection = received.selection;
+    await received.thought("Selection received.");
+  });
+  const selected = payload({
+    event: "run.prompted",
+    deliveryId: "delivery-selection",
+    signal: "select",
+    selection: {
+      activityId: "activity-question",
+      value: "safe",
+      label: "Safe path",
+    },
+    prompt: "Safe path",
+  });
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(selected), work.context)).status, 202);
+  await work.drain();
+  assert.deepEqual(selection, selected.selection);
+
+  const invalid = payload({
+    event: "run.prompted",
+    deliveryId: "delivery-invalid-selection",
+    selection: selected.selection,
+  });
+  assert.equal(
+    (await agent.handler(webhookRequest(invalid), background().context)).status,
+    400,
+  );
+});
+
+test("run events bind the token, hydrate context, and use stable activity keys", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let seen = false;
+  agent.on("mention", async (received) => {
+    seen = true;
+    assert.equal(received.prompt, "Please investigate");
+    assert.equal(received.ticket?.ticketNumber, "TEST-101");
+    assert.equal(received.thread[0].kind, "comment");
+    await received.thought("Starting now.");
+    await received.respond("Done.");
+  });
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await work.drain();
+  assert.equal(seen, true);
+  assert.equal(
+    api.calls.some(
+      (call) =>
+        call.path === "/api/mcp/comments?task_id=101&limit=100&sort_order=desc",
+    ),
+    true,
+    "hydration requests the latest bounded comment page",
+  );
+  const activityCalls = api.calls.filter(
+    (call) =>
+      call.method === "POST" &&
+      call.path.endsWith("/mcp/agents/runs/run-1/activities"),
+  );
+  assert.deepEqual(
+    activityCalls.map((call) => call.headers.get("idempotency-key")),
+    [
+      "delivery-1:1:activity-thought",
+      "delivery-1:2:activity-response",
+    ],
+  );
+});
+
+test("delivery claims dedupe concurrent work and retain completion", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  let start!: () => void;
+  let finish!: () => void;
+  const started = new Promise<void>((resolve) => {
+    start = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let handled = 0;
+  agent.on("mention", async (received) => {
+    handled += 1;
+    await received.thought("Claimed.");
+    start();
+    await gate;
+  });
+
+  const firstWork = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), firstWork.context)).status, 202);
+  await started;
+  assert.equal((await agent.handler(webhookRequest(payload()), background().context)).status, 204);
+  finish();
+  await firstWork.drain();
+  assert.equal((await agent.handler(webhookRequest(payload()), background().context)).status, 204);
+  assert.equal(handled, 1);
+});
+
+test("failed background work releases its owner-fenced delivery claim", async () => {
+  const api = apiFixture();
+  const errors: unknown[] = [];
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    onError: (error) => errors.push(error),
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Attempting.");
+    throw new Error("Handler failed");
+  });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const work = background();
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await work.drain();
+  }
+  assert.equal(errors.length, 2);
+});
+
+test("task helpers claim, mutate, heartbeat-compatible, and release in order", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Starting task writes.");
+    await received.task?.move("QA");
+    await received.task?.assign("me");
+    await received.task?.comment("A comment");
+    await received.task?.update({ title: "Updated" });
+    await received.task?.attach({
+      url: "https://files.example.test/report.pdf",
+      filename: "report.pdf",
+      contentType: "application/pdf",
+    });
+  });
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await work.drain();
+
+  const mutations = api.calls.filter((call) => call.method === "POST");
+  const paths = mutations.map((call) => call.path.replace("/api", ""));
+  assert.deepEqual(paths, [
+    "/mcp/agents/runs/run-1/activities",
+    "/mcp/tasks/lease/claim",
+    "/mcp/tasks/update",
+    "/mcp/tasks/lease/release",
+    "/mcp/tasks/lease/claim",
+    "/mcp/assignees/assign",
+    "/mcp/tasks/lease/release",
+    "/mcp/tasks/lease/claim",
+    "/mcp/comments",
+    "/mcp/tasks/lease/release",
+    "/mcp/tasks/lease/claim",
+    "/mcp/tasks/update",
+    "/mcp/tasks/lease/release",
+    "/mcp/tasks/lease/claim",
+    "/mcp/tasks/attachments",
+    "/mcp/tasks/lease/release",
+  ]);
+  const updates = mutations.filter((call) => call.path.endsWith("/mcp/tasks/update"));
+  assert.deepEqual(
+    updates.map((call) => call.headers.get("idempotency-key")),
+    ["delivery-1:2:move", "delivery-1:5:update"],
+  );
+  const comment = mutations.find((call) => call.path.endsWith("/mcp/comments"));
+  assert.equal(comment?.headers.get("idempotency-key"), "delivery-1:4:comment");
+});
+
+test("task helpers release the lease when a write fails", async () => {
+  const api = apiFixture({ failUpdate: true });
+  const errors: unknown[] = [];
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    onError: (error) => errors.push(error),
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Updating.");
+    await received.task?.update({ title: "Will fail" });
+  });
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await work.drain();
+  const postPaths = api.calls
+    .filter((call) => call.method === "POST")
+    .map((call) => call.path);
+  assert.deepEqual(postPaths.slice(-3), [
+    "/api/mcp/tasks/lease/claim",
+    "/api/mcp/tasks/update",
+    "/api/mcp/tasks/lease/release",
+  ]);
+  assert.equal(errors.length, 1);
+});
+
+test("a stop delivery aborts active work and still reaches stop handlers", async () => {
+  const api = apiFixture();
+  const errors: unknown[] = [];
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    onError: (error) => errors.push(error),
+  });
+  let started!: () => void;
+  const handlerStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let activeRunAborted = false;
+  let stopHandled = false;
+  agent.on("mention", async (received) => {
+    await received.thought("Waiting for stop.");
+    started();
+    await new Promise<void>((resolve) => {
+      const onAbort = () => {
+        activeRunAborted = true;
+        resolve();
+      };
+      received.signal.addEventListener("abort", onAbort, { once: true });
+      if (received.signal.aborted) onAbort();
+    });
+  });
+  agent.on("stop", (received) => {
+    stopHandled = true;
+    assert.equal(received.signal.aborted, true);
+  });
+
+  const activeWork = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), activeWork.context)).status, 202);
+  await handlerStarted;
+
+  const stopWork = background();
+  const stopPayload = payload({
+    event: "run.stopped",
+    deliveryId: "delivery-stop",
+  });
+  assert.equal(
+    (await agent.handler(webhookRequest(stopPayload), stopWork.context)).status,
+    202,
+  );
+  await Promise.all([activeWork.drain(), stopWork.drain()]);
+
+  assert.equal(activeRunAborted, true);
+  assert.equal(stopHandled, true);
+  assert.equal(errors.length, 0);
+});
+
+test("stopping during hydration prevents the cancelled handler from starting", async () => {
+  const api = apiFixture();
+  let holdComments = true;
+  let hydrationStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    hydrationStarted = resolve;
+  });
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (holdComments && url.pathname.endsWith("/mcp/comments")) {
+      hydrationStarted();
+      return new Promise<Response>((_, reject) => {
+        const rejectAbort = () =>
+          reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+        init.signal?.addEventListener("abort", rejectAbort, { once: true });
+        if (init.signal?.aborted) rejectAbort();
+      });
+    }
+    return api.fetch(input, init);
+  };
+  const errors: unknown[] = [];
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: (error) => errors.push(error),
+  });
+  let mentionHandled = false;
+  let stopHandled = false;
+  agent.on("mention", () => {
+    mentionHandled = true;
+  });
+  agent.on("stop", () => {
+    stopHandled = true;
+  });
+
+  const activeWork = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), activeWork.context)).status, 202);
+  await started;
+  holdComments = false;
+
+  const stopWork = background();
+  const stopPayload = payload({
+    event: "run.stopped",
+    deliveryId: "delivery-stop-hydration",
+  });
+  assert.equal(
+    (await agent.handler(webhookRequest(stopPayload), stopWork.context)).status,
+    202,
+  );
+  await Promise.all([activeWork.drain(), stopWork.drain()]);
+
+  assert.equal(mentionHandled, false);
+  assert.equal(stopHandled, true);
+  assert.equal(errors.length, 1, "the cancelled delivery reports its aborted work");
+});
+
+test("completion waits for an in-flight delivery claim renewal", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "setInterval"], now });
+  const api = apiFixture();
+  const events: string[] = [];
+  let claimed: DeliveryClaim | null = null;
+  let renewalStarted!: () => void;
+  const startedRenewal = new Promise<void>((resolve) => {
+    renewalStarted = resolve;
+  });
+  let finishRenewal!: () => void;
+  const renewalGate = new Promise<void>((resolve) => {
+    finishRenewal = resolve;
+  });
+  const store: DeliveryStore = {
+    durable: true,
+    async claim(value) {
+      claimed = value;
+      events.push("claim");
+      return "claimed";
+    },
+    async renew(value) {
+      events.push("renew");
+      renewalStarted();
+      await renewalGate;
+      return claimed?.owner === value.owner;
+    },
+    async complete(value) {
+      events.push("complete");
+      return claimed?.owner === value.owner;
+    },
+    async release() {
+      events.push("release");
+      return true;
+    },
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    deliveryStore: store,
+  });
+  let finishHandler!: () => void;
+  const handlerGate = new Promise<void>((resolve) => {
+    finishHandler = resolve;
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Long-running work.");
+    await handlerGate;
+  });
+
+  try {
+    const work = background(true);
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    context.mock.timers.tick(120_000);
+    await startedRenewal;
+    finishHandler();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(events.includes("complete"), false);
+    finishRenewal();
+    await work.drain();
+    assert.deepEqual(events, ["claim", "renew", "complete"]);
+  } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("automatic acknowledgement posts a thought before ten seconds", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  agent.on("mention", () => {});
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  context.mock.timers.tick(8_000);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  await work.drain();
+  const activity = api.calls.find(
+    (call) =>
+      call.method === "POST" &&
+      call.path.endsWith("/mcp/agents/runs/run-1/activities"),
+  );
+  assert.deepEqual(activity?.body, { type: "thought", text: "Working on this." });
+  context.mock.timers.reset();
+});
+
+test("memory delivery claims expire and fence stale owners", async () => {
+  let clock = 1_000;
+  const store = new MemoryDeliveryStore({ now: () => clock });
+  const first = { deliveryId: "one", owner: "first", leaseUntil: 2_000 };
+  assert.equal(await store.claim(first), "claimed");
+  assert.equal(
+    await store.complete({ ...first, owner: "wrong" }, 5_000),
+    false,
+  );
+  assert.equal(await store.claim({ ...first, owner: "second" }), "processing");
+  clock = 2_001;
+  assert.equal(await store.renew({ ...first, leaseUntil: 3_000 }), false);
+  assert.equal(await store.complete(first, 5_000), false);
+  const second = { deliveryId: "one", owner: "second", leaseUntil: 3_000 };
+  assert.equal(await store.claim(second), "claimed");
+  assert.equal(await store.complete(first, 5_000), false);
+  assert.equal(await store.renew(second), true);
+  assert.equal(await store.complete(second, 5_000), true);
+  assert.equal(await store.claim({ ...second, owner: "third" }), "completed");
+});
+
+test("distributed handlers accept an explicitly durable store", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    deliveryStore: new DurableTestStore(),
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Durably claimed.");
+  });
+  const work = background(true);
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await work.drain();
+});
+
+test("package manifest exports only dependency-free runtime entry points", async () => {
+  const manifest = JSON.parse(
+    await readFile(new URL("../packages/agent-sdk/package.json", import.meta.url), "utf8"),
+  );
+  assert.equal(manifest.name, "@hypertask/agent-sdk");
+  assert.equal(manifest.dependencies, undefined);
+  assert.deepEqual(Object.keys(manifest.exports), [
+    ".",
+    "./adapters",
+    "./templates",
+    "./templates/*",
+  ]);
+});
