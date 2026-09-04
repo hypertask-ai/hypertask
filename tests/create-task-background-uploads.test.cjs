@@ -48,6 +48,30 @@ test("one file object starts one upload promise across remounts", async () => {
   uploads.discardUnboundCreateTaskUploads([selected]);
 });
 
+test("a marked attachment resolves its upload job without a wrapper", async () => {
+  const selected = file("direct-marker.txt");
+  const started = uploads.startCreateTaskUpload(
+    selected,
+    async () => ({
+      url: "https://files.example/direct-marker",
+      receipt: "direct-marker-receipt",
+    }),
+    async () => attachment(4, "https://files.example/direct-marker"),
+  );
+  const uploaded = await started.promise;
+  const marked = uploads.markedCreateTaskAttachment(
+    started.id,
+    selected,
+    uploaded.url,
+  );
+
+  assert.equal(uploads.createTaskUploadCount([marked]), 1);
+  assert.equal(uploads.bindCreateTaskUploads(99, [marked]), 1);
+  await nextTurn();
+  assert.equal(uploads.createTaskUploadById(started.id).status, "complete");
+  uploads.acknowledgeCreateTaskUpload(started.id);
+});
+
 test("a reserved upload binds and finishes after the composer unmounts", async () => {
   const selected = file("survives-unmount.txt");
   let finish;

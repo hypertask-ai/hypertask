@@ -569,11 +569,10 @@ const TiptapCreateTaskModal = () => {
     if (backgroundUploadCount) {
       reserveCreateTaskUploads(attachmentsAtSave ?? []);
     }
+    const uploadingFileNoun = backgroundUploadCount === 1 ? "file" : "files";
     const savedMessage = backgroundUploadCount
-      ? `Task saved. ${backgroundUploadCount} ${
-          backgroundUploadCount === 1 ? "file" : "files"
-        } uploading`
-      : "Succesfully created the task";
+      ? `Task saved. ${backgroundUploadCount} ${uploadingFileNoun} uploading`
+      : "Successfully created the task";
 
     // TipTap owns the freshest editor document. React state can still contain
     // the previous render when someone types and immediately saves, so every

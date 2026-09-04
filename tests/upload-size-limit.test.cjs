@@ -238,7 +238,10 @@ test("a task-link upload requests and returns a server receipt", async () => {
     if (url === "/api/tasks/uploadUrl") {
       return { data: { uploads: [ticketFor("linked.png")], grant: "g" } };
     }
-    return { data: { success: true, taskLinkReceipts: ["signed-receipt"] } };
+    if (url === "/api/tasks/uploadFinalize") {
+      return { data: { success: true, taskLinkReceipts: ["signed-receipt"] } };
+    }
+    throw new Error(`Unexpected upload URL: ${url}`);
   };
   const xhr = stubXhr((request) => {
     request.status = 200;
@@ -250,6 +253,10 @@ test("a task-link upload requests and returns a server receipt", async () => {
       url: "https://files.hypertask.app/tasks/attachments/1_linked.png",
       receipt: "signed-receipt",
     });
+    assert.deepEqual(
+      calls.map((call) => call.url),
+      ["/api/tasks/uploadUrl", "/api/tasks/uploadFinalize"],
+    );
     assert.equal(calls[0].body.purpose, "task-attachment-link");
     assert.equal(calls[1].body.issueTaskLinkReceipts, true);
   } finally {

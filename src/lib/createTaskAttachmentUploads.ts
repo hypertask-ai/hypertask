@@ -169,9 +169,9 @@ function jobForAttachment(attachment: unknown): UploadJob | undefined {
   if (typeof File !== "undefined" && nestedFile instanceof File) {
     return jobsByFile.get(nestedFile);
   }
-  const id = (nestedFile as MarkedAttachment | undefined)?.[
-    CREATE_TASK_UPLOAD_ID
-  ];
+  const id =
+    (attachment as MarkedAttachment)[CREATE_TASK_UPLOAD_ID] ??
+    (nestedFile as MarkedAttachment | undefined)?.[CREATE_TASK_UPLOAD_ID];
   return id ? jobs.get(id) : undefined;
 }
 
