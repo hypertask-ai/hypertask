@@ -147,4 +147,14 @@ test("refresh uses Figma's refresh endpoint and rejects failed credentials", asy
       error.status === 401 &&
       error.oauthError === "invalid_client",
   );
+
+  await assert.rejects(
+    oauth.refreshFigmaToken(
+      "malformed",
+      config,
+      0,
+      async () => new Response("{"),
+    ),
+    { message: "Figma OAuth returned an invalid response" },
+  );
 });

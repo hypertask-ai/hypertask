@@ -63,6 +63,7 @@ test("excludes Figma control thumbnails from the content-image carousel", () => 
 
 test("renders at most six returned Figma frames side by side", () => {
   const dom = new JSDOM("<!doctype html><body></body>");
+  const originalDocument = global.document;
   global.document = dom.window.document;
   try {
     const createdImages = [];
@@ -94,7 +95,7 @@ test("renders at most six returned Figma frames side by side", () => {
     images = preview.querySelectorAll("img");
     assert.equal(images.length, 5);
   } finally {
-    delete global.document;
+    global.document = originalDocument;
   }
 });
 

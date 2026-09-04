@@ -194,7 +194,12 @@ async function readBoundedJson(response: Response): Promise<Record<string, unkno
     chunks.push(value);
   }
   const body = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
-  const parsed = JSON.parse(body.toString("utf8"));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf8"));
+  } catch {
+    throw new Error("Figma OAuth returned an invalid response");
+  }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Figma OAuth returned an invalid response");
   }
