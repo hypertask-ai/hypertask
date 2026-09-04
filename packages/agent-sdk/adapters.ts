@@ -68,7 +68,8 @@ async function collectBody(request: AsyncIterable<Uint8Array | string>): Promise
     }
   } catch (error) {
     try {
-      await iterator.return?.();
+      const cleanup = iterator.return?.();
+      if (cleanup) void cleanup.catch(() => undefined);
     } catch {
       // Preserve the body limit or timeout error.
     }

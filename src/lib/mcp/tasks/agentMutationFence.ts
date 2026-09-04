@@ -17,6 +17,7 @@ const AGENT_MUTATION_LOCK_NAMESPACE = 1213482324
 type ActiveTaskLeaseRow = {
   agentId: string | null
   token: string | null
+  adoptionCount: number
 }
 
 export class AgentMutationLeaseConflictError extends Error {
@@ -166,7 +167,7 @@ export async function assertAgentAssignmentChangeAllowed(
   // Leases are issued with PostgreSQL now(), so expiry must use that same
   // clock. Comparing with the API host clock can open the fence under skew.
   const [lease] = await tx.$queryRaw<ActiveTaskLeaseRow[]>`
-    SELECT "agentId", "token"
+    SELECT "agentId", "token", "adoptionCount"
     FROM "TaskLease"
     WHERE "taskId" = ${taskId}
       AND "expiresAt" > now()
@@ -196,7 +197,7 @@ export async function assertAgentAssignmentChangeAllowed(
     // rejected instead of treating the missing lease as permission.
     if (activeLease && lease.agentId === verifiedActingAgentId) {
       if (verifiedActingAgentId && actingUserId != null) {
-        if (lease.token) {
+        if (lease.token && lease.adoptionCount > 0) {
           // Internal child requests run outside the parent AsyncLocalStorage
           // scope. The parent cannot hand back until that request returns, so
           // it is safe for the child to use the parent's still-live reference.
@@ -232,8 +233,8 @@ export async function assertAgentAssignmentChangeAllowed(
           throw new AgentMutationLeaseConflictError()
         }
 
-        // An explicit claim has no adoption token. Spend this request's grant
-        // so cancellation still prevents a later transaction from re-adopting.
+        // Explicit claims have no active adoption references. Spend this
+        // request's grant so cancellation still prevents a later re-adoption.
         consumeAgentMutationLeaseAdoption(
           verifiedActingAgentId,
           actingUserId,

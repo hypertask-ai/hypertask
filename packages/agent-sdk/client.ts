@@ -665,7 +665,7 @@ class AgentRunImpl implements AgentRun {
     }
   }
 
-  private async releaseTaskLease(taskId: number): Promise<void> {
+  private async releaseTaskLease(taskId: number, leaseToken: string): Promise<void> {
     const releaseController = new AbortController();
     let releaseTimer: ReturnType<typeof setTimeout> | undefined;
     const releaseTimeout = new Promise<never>((_, reject) => {
@@ -678,7 +678,7 @@ class AgentRunImpl implements AgentRun {
     await Promise.race([
       this.client.request("/mcp/tasks/lease/release", {
         method: "POST",
-        body: { task_id: taskId },
+        body: { task_id: taskId, lease_token: leaseToken },
         signal: releaseController.signal,
       }),
       releaseTimeout,
@@ -691,6 +691,7 @@ class AgentRunImpl implements AgentRun {
     if (this.taskId === null) throw new AgentSdkError("Run is not attached to a task");
     const taskId = this.taskId;
     const idempotencyKey = this.nextOperationKey(kind);
+    const leaseToken = globalThis.crypto.randomUUID();
     let leaseTails = AgentRunImpl.taskLeaseTails.get(this.client);
     if (!leaseTails) {
       leaseTails = new Map<number, Promise<void>>();
@@ -703,7 +704,11 @@ class AgentRunImpl implements AgentRun {
       try {
         claimResponse = await this.client.request("/mcp/tasks/lease/claim", {
           method: "POST",
-          body: { task_id: taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
+          body: {
+            task_id: taskId,
+            ttl_seconds: TASK_LEASE_TTL_SECONDS,
+            lease_token: leaseToken,
+          },
           signal: this.signal,
         });
       } catch (error) {
@@ -713,26 +718,29 @@ class AgentRunImpl implements AgentRun {
           typeof error.response === "object" &&
           !Array.isArray(error.response) &&
           (error.response as JsonObject).success === false;
-        // An unreadable 2xx response may have committed the claim, unlike a declared failure.
+        // The per-claim token makes cleanup safe when commit status is unknown.
         if (
           error instanceof AgentSdkError &&
-          error.status !== undefined &&
-          error.status >= 200 &&
-          error.status < 300 &&
+          (error.status === undefined ||
+            (error.status >= 200 && error.status < 300)) &&
           !logicalFailure
         ) {
-          await this.releaseTaskLease(taskId);
+          await this.releaseTaskLease(taskId, leaseToken);
         }
         throw error;
       }
       try {
         const response = objectValue(claimResponse, "Task lease claim");
         const lease = objectValue(response.lease, "Task lease claim");
-        if (response.success !== true || lease.taskId !== taskId) {
+        if (
+          response.success !== true ||
+          lease.taskId !== taskId ||
+          lease.leaseToken !== leaseToken
+        ) {
           throw new AgentSdkError("Task lease claim returned an invalid response");
         }
       } catch (error) {
-        await this.releaseTaskLease(taskId);
+        await this.releaseTaskLease(taskId, leaseToken);
         throw error;
       }
 
@@ -747,7 +755,11 @@ class AgentRunImpl implements AgentRun {
         heartbeatPromise = this.client
           .request("/mcp/tasks/lease/heartbeat", {
             method: "POST",
-            body: { task_id: taskId, ttl_seconds: TASK_LEASE_TTL_SECONDS },
+            body: {
+              task_id: taskId,
+              ttl_seconds: TASK_LEASE_TTL_SECONDS,
+              lease_token: leaseToken,
+            },
             signal: operationController.signal,
           })
           .then(() => undefined)
@@ -771,7 +783,7 @@ class AgentRunImpl implements AgentRun {
         operationController.abort();
         await heartbeatPromise;
         this.signal.removeEventListener("abort", abortOperation);
-        await this.releaseTaskLease(taskId);
+        await this.releaseTaskLease(taskId, leaseToken);
       }
     });
     const tail = operation.then(

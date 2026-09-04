@@ -5,6 +5,7 @@ import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
 import {
   canManageLease,
   clampLeaseTtlSeconds,
+  isValidLeaseToken,
   isValidTaskId,
 } from '@/lib/mcp/tasks/lease';
 import { lockAgentMutationFence } from '@/lib/mcp/tasks/agentMutationFence';
@@ -13,6 +14,7 @@ type LeaseRow = {
   taskId: number;
   holder: number;
   agentId: string | null;
+  token: string | null;
   expiresAt: Date;
   heartbeatAt: Date;
 };
@@ -57,12 +59,14 @@ export async function POST(request: NextRequest) {
   const {
     task_id,
     ttl_seconds,
+    lease_token,
     require_assignment,
     require_unassigned,
     require_no_agent_assignment,
   } = body as {
     task_id?: unknown;
     ttl_seconds?: unknown;
+    lease_token?: unknown;
     require_assignment?: unknown;
     require_unassigned?: unknown;
     require_no_agent_assignment?: unknown;
@@ -79,6 +83,12 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json(
       { success: false, error: 'ttl_seconds must be a finite number' },
+      { status: 400 }
+    );
+  }
+  if (lease_token !== undefined && !isValidLeaseToken(lease_token)) {
+    return NextResponse.json(
+      { success: false, error: 'lease_token must be a UUID' },
       { status: 400 }
     );
   }
@@ -115,6 +125,7 @@ export async function POST(request: NextRequest) {
   }
 
   const ttlSeconds = clampLeaseTtlSeconds(ttl_seconds as number | undefined);
+  const leaseToken = lease_token ?? null;
 
   try {
     const leases = await prisma.$transaction(async (tx) => {
@@ -154,19 +165,19 @@ export async function POST(request: NextRequest) {
       }
 
       return tx.$queryRaw<LeaseRow[]>`
-        INSERT INTO "TaskLease" ("taskId", "holder", "agentId", "expiresAt", "heartbeatAt")
-        VALUES (${task.id}, ${ctx.user.id}, ${ctx.agentId}, now() + (${ttlSeconds} * INTERVAL '1 second'), now())
+        INSERT INTO "TaskLease" ("taskId", "holder", "agentId", "token", "expiresAt", "heartbeatAt")
+        VALUES (${task.id}, ${ctx.user.id}, ${ctx.agentId}, ${leaseToken}, now() + (${ttlSeconds} * INTERVAL '1 second'), now())
         ON CONFLICT ("taskId") DO UPDATE SET
           "holder" = EXCLUDED."holder",
           "agentId" = EXCLUDED."agentId",
           -- An explicit claim never inherits adopted-lease ownership state.
-          "token" = NULL,
+          "token" = EXCLUDED."token",
           "adoptionCount" = 0,
           "adoptionRefs" = ARRAY[]::TEXT[],
           "expiresAt" = EXCLUDED."expiresAt",
           "heartbeatAt" = EXCLUDED."heartbeatAt"
         WHERE "TaskLease"."expiresAt" <= now()
-        RETURNING "taskId", "holder", "agentId", "expiresAt", "heartbeatAt"
+        RETURNING "taskId", "holder", "agentId", "token", "expiresAt", "heartbeatAt"
       `;
     });
 
@@ -247,6 +258,7 @@ export async function POST(request: NextRequest) {
           taskId: lease.taskId,
           holder: lease.holder,
           agentId: lease.agentId,
+          leaseToken: lease.token,
           expiresAt: lease.expiresAt,
         },
       },

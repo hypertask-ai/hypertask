@@ -1,6 +1,6 @@
 # `@hypertask/agent-sdk`
 
-Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies.
+Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies. This workspace remains private and unpublished while the owner-approved `htpr-6115-agent-sdk` flag is restricted.
 
 ## Hello world in under 30 minutes
 
@@ -131,7 +131,7 @@ export default { fetch: agent.adapters.cloudflare };
 
 The SDK verifies HMAC-SHA256 over `timestamp.rawBody`, rejects timestamps outside five minutes, compares signatures in constant time, limits request bodies, and requires event and delivery headers to match their signed body fields. Before acknowledging a run event, it reads that run with the configured token and verifies the agent/task binding.
 
-The built-in `MemoryDeliveryStore` is deliberately single-process only. It has expiring owner-fenced claims and bounded retention, which is suitable for plain Node and local development. Next, Cloudflare, and other distributed adapters fail with 503 unless `deliveryStore.durable === true`. A durable implementation must make `claim`, `renew`, `complete`, and `release` atomic, reject expired or stale owners, and honor the supplied expiry values.
+The built-in `MemoryDeliveryStore` is deliberately single-process only. It has expiring owner-fenced claims and bounded retention, which is suitable for plain Node and local development. Next, Cloudflare, and other distributed adapters fail with 503 unless `deliveryStore.durable === true`. A durable implementation must make `claim`, `renew`, `complete`, and `release` atomic, reject expired or stale owners, and honor the supplied expiry values. Task writes use a unique lease token so delayed heartbeats or releases cannot affect a replacement lease.
 
 `waitUntil` keeps accepted work alive but is not a durable job queue. Background failures reject the scheduled promise and release the delivery claim so a durable scheduler can observe and retry them. If the hosting platform needs crash-proof execution, its adapter should enqueue the verified delivery before returning 2xx and invoke the SDK worker from that queue.
 

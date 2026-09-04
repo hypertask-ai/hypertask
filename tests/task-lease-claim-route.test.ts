@@ -53,7 +53,7 @@ async function main() {
   let conflictAgentId: string | null = AGENT_A;
   let claimSucceeds = false;
 
-  function request(agentId: string) {
+  function request(agentId: string, leaseToken?: string) {
     const token = tokens.get(agentId)?.token;
     assert.ok(token);
     return new NextRequest("http://localhost/api/mcp/tasks/lease/claim", {
@@ -62,7 +62,11 @@ async function main() {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ task_id: TASK_ID, ttl_seconds: 300 }),
+      body: JSON.stringify({
+        task_id: TASK_ID,
+        ttl_seconds: 300,
+        ...(leaseToken ? { lease_token: leaseToken } : {}),
+      }),
     });
   }
 
@@ -106,12 +110,13 @@ async function main() {
           findMany: async () => [],
           findFirst: async () => null,
         },
-        $queryRaw: async () =>
+        $queryRaw: async (_strings: TemplateStringsArray, ...values: unknown[]) =>
           claimSucceeds
             ? [{
                 taskId: TASK_ID,
                 holder: USER_ID,
                 agentId: AGENT_A,
+                token: values[3] ?? null,
                 expiresAt: new Date("2026-09-01T02:00:00.000Z"),
                 heartbeatAt: new Date("2026-09-01T01:55:00.000Z"),
               }]
@@ -170,6 +175,21 @@ async function main() {
     assert.equal(response.status, 200);
     assert.equal(payload.success, true);
     assert.equal(payload.lease.agentId, AGENT_A);
+  });
+
+  test("lease claims return the caller's instance token", async () => {
+    claimSucceeds = true;
+    const response = await POST(request(AGENT_A, AGENT_C));
+    const payload = await responseJson(response);
+    assert.equal(response.status, 200);
+    assert.equal(payload.lease.leaseToken, AGENT_C);
+  });
+
+  test("lease claims reject malformed instance tokens", async () => {
+    const response = await POST(request(AGENT_A, "not-a-token"));
+    const payload = await responseJson(response);
+    assert.equal(response.status, 400);
+    assert.match(payload.error, /lease_token/);
   });
 
   test("an archived task can still acquire a lease so an agent can restore it", async () => {

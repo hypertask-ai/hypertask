@@ -220,6 +220,7 @@ function apiFixture(
           taskId: task.id,
           holder: "agent-1",
           agentId: "agent-1",
+          leaseToken: body?.lease_token,
           expiresAt: new Date(now + 60_000).toISOString(),
         },
       });
@@ -344,6 +345,51 @@ test("handler cancels a webhook stream that exceeds its read deadline", async (c
     assert.equal(response.status, 408);
     assert.equal(cancelled, true);
     assert.equal(api.calls.length, 0);
+  } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("Node adapters do not wait for stalled request cleanup", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"], now });
+  let cleanupStarted = false;
+  let handlerCalled = false;
+  const handler: WebhookHandler = Object.assign(
+    async () => {
+      handlerCalled = true;
+      return new Response(null, { status: 202 });
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const adapter = nodeHttpAdapter(handler);
+  const request = {
+    method: "POST",
+    url: "/webhook",
+    headers: {},
+    [Symbol.asyncIterator]() {
+      return {
+        next: () => new Promise<IteratorResult<Uint8Array>>(() => {}),
+        return: () => {
+          cleanupStarted = true;
+          return new Promise<IteratorResult<Uint8Array>>(() => {});
+        },
+      };
+    },
+  };
+  const response = {
+    statusCode: 0,
+    setHeader() {},
+    end() {},
+  };
+
+  try {
+    const responsePromise = adapter(request, response);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    context.mock.timers.tick(2_000);
+    await responsePromise;
+    assert.equal(response.statusCode, 408);
+    assert.equal(cleanupStarted, true);
+    assert.equal(handlerCalled, false);
   } finally {
     context.mock.timers.reset();
   }
@@ -1045,6 +1091,18 @@ test("task helpers claim, mutate, heartbeat-compatible, and release in order", a
     "/mcp/tasks/attachments",
     "/mcp/tasks/lease/release",
   ]);
+  const claims = mutations.filter((call) =>
+    call.path.endsWith("/mcp/tasks/lease/claim"),
+  );
+  const releases = mutations.filter((call) =>
+    call.path.endsWith("/mcp/tasks/lease/release"),
+  );
+  assert.equal(claims.length, releases.length);
+  assert.equal(new Set(claims.map((call) => call.body?.lease_token)).size, claims.length);
+  for (const [index, claim] of claims.entries()) {
+    assert.match(String(claim.body?.lease_token), /^[0-9a-f-]{36}$/i);
+    assert.equal(releases[index].body?.lease_token, claim.body?.lease_token);
+  }
   const updates = mutations.filter((call) => call.path.endsWith("/mcp/tasks/update"));
   assert.deepEqual(
     updates.map((call) => call.headers.get("idempotency-key")),
@@ -1139,6 +1197,43 @@ test("task helpers release a claim after an unreadable success response", async 
     api.calls.some((call) => call.path.endsWith("/mcp/tasks/update")),
     false,
   );
+});
+
+test("task helpers safely clean up an uncertain claim", async () => {
+  const api = apiFixture();
+  let claimToken: unknown;
+  let releaseToken: unknown;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
+      claimToken = body?.lease_token;
+      throw new Error("claim connection closed");
+    }
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/release")) {
+      releaseToken = body?.lease_token;
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Claiming task.");
+    await received.task?.update({ title: "Must not run" });
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), /claim connection closed/);
+  assert.match(String(claimToken), /^[0-9a-f-]{36}$/i);
+  assert.equal(releaseToken, claimToken);
 });
 
 test("task helpers do not release after a logical claim failure", async () => {
@@ -1321,12 +1416,14 @@ test("task helper propagates a stop that lands while claiming its lease", async 
     if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
       claimStarted();
       await claimGate;
+      const claimBody = JSON.parse(String(init.body));
       return Response.json({
         success: true,
         lease: {
           taskId: task.id,
           holder: "agent-1",
           agentId: "agent-1",
+          leaseToken: claimBody.lease_token,
           expiresAt: new Date(now + 60_000).toISOString(),
         },
       });
@@ -2280,6 +2377,7 @@ test("package manifest exports only dependency-free runtime entry points", async
     await readFile(new URL("../packages/agent-sdk/package.json", import.meta.url), "utf8"),
   );
   assert.equal(manifest.name, "@hypertask/agent-sdk");
+  assert.equal(manifest.private, true);
   assert.equal(manifest.dependencies, undefined);
   assert.deepEqual(Object.keys(manifest.exports), [
     ".",

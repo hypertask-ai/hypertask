@@ -133,7 +133,11 @@ function leaseStore() {
       }
       if (!sql.includes('FROM "TaskLease"')) return [];
       return live()
-        ? [{ agentId: store.lease.agentId, token: store.lease.token }]
+        ? [{
+            agentId: store.lease.agentId,
+            token: store.lease.token,
+            adoptionCount: store.lease.adoptionCount,
+          }]
         : [];
     },
     task: { findUnique: async () => ({ status: 'Normal' }) },

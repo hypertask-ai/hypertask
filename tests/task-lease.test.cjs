@@ -23,6 +23,7 @@ const {
   canManageLease,
   clampLeaseTtlSeconds,
   isLeaseLive,
+  isValidLeaseToken,
 } = loadTs('src/lib/mcp/tasks/lease.ts');
 const {
   AgentMutationLeaseConflictError,
@@ -51,6 +52,15 @@ test('sibling agents cannot manage each other\'s leases, while their human can',
   assert.equal(canManageLease(42, null, 7, null), false);
 });
 
+test('lease instance tokens require UUIDs', () => {
+  assert.equal(
+    isValidLeaseToken('11111111-1111-4111-8111-111111111111'),
+    true,
+  );
+  assert.equal(isValidLeaseToken('shared-agent-token'), false);
+  assert.equal(isValidLeaseToken(null), false);
+});
+
 test('TTL values are defaulted and clamped to the supported range', () => {
   assert.equal(clampLeaseTtlSeconds(), DEFAULT_LEASE_TTL_SECONDS);
   assert.equal(clampLeaseTtlSeconds(MIN_LEASE_TTL_SECONDS - 1), MIN_LEASE_TTL_SECONDS);
@@ -67,7 +77,11 @@ function mutationTx(lease, ownedAgent = true) {
       if (!sql.includes('FROM "TaskLease"')) return [];
       const currentLease = readLease();
       if (!currentLease || currentLease.expiresAt <= new Date()) return [];
-      return [{ agentId: currentLease.agentId }];
+      return [{
+        agentId: currentLease.agentId,
+        token: currentLease.token ?? null,
+        adoptionCount: currentLease.adoptionCount ?? 0,
+      }];
     },
     taskLease: {
       deleteMany: async () => ({ count: readLease() ? 1 : 0 }),
@@ -106,6 +120,22 @@ test('agent writes require a live matching lease in every transaction', async ()
     assertAgentAssignmentChangeAllowed(
       mutationTx({
         agentId: 'agent-a',
+        expiresAt: new Date(Date.now() + 60_000),
+      }),
+      42,
+      'agent-a',
+      7,
+    ),
+  );
+});
+
+test('agent writes accept a matching explicit lease instance token', async () => {
+  await assert.doesNotReject(
+    assertAgentAssignmentChangeAllowed(
+      mutationTx({
+        agentId: 'agent-a',
+        token: '11111111-1111-4111-8111-111111111111',
+        adoptionCount: 0,
         expiresAt: new Date(Date.now() + 60_000),
       }),
       42,

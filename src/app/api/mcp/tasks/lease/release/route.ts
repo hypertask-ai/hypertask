@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
-import { isValidTaskId } from '@/lib/mcp/tasks/lease';
+import { isValidLeaseToken, isValidTaskId } from '@/lib/mcp/tasks/lease';
 
 export async function POST(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
@@ -35,10 +35,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { task_id } = body as { task_id?: unknown };
+  const { task_id, lease_token } = body as {
+    task_id?: unknown;
+    lease_token?: unknown;
+  };
   if (!isValidTaskId(task_id)) {
     return NextResponse.json(
       { success: false, error: 'task_id must be a positive integer' },
+      { status: 400 }
+    );
+  }
+  if (lease_token !== undefined && !isValidLeaseToken(lease_token)) {
+    return NextResponse.json(
+      { success: false, error: 'lease_token must be a UUID' },
       { status: 400 }
     );
   }
@@ -54,6 +63,7 @@ export async function POST(request: NextRequest) {
       { status: 404 }
     );
   }
+  const leaseToken = lease_token ?? null;
 
   try {
     const deleted = await prisma.$executeRaw`
@@ -61,6 +71,7 @@ export async function POST(request: NextRequest) {
       WHERE "taskId" = ${task.id}
         AND "holder" = ${ctx.user.id}
         AND (${ctx.agentId}::text IS NULL OR "agentId" = ${ctx.agentId})
+        AND (${ctx.agentId}::text IS NULL OR "token" IS NOT DISTINCT FROM ${leaseToken})
         AND "expiresAt" > now()
     `;
 
