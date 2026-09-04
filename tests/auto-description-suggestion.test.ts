@@ -204,3 +204,26 @@ test("automatic description UI exists only in the new-task form", () => {
   assert.doesNotMatch(taskDetail, /requestKind="auto-description"/);
   assert.match(taskDetail, /shouldTriggerAiTaskWriter/);
 });
+
+test("NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION=0 turns off the create-form suggestion", () => {
+  const root = resolve(import.meta.dirname, "..");
+  const createForm = readFileSync(
+    resolve(root, "src/components/RTE/TiptapCreateTaskModal.tsx"),
+    "utf8",
+  );
+
+  assert.match(
+    createForm,
+    /NEW_TASK_AUTO_DESCRIPTION_ENABLED\s*=\s*\n?\s*process\.env\.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION !== "0"/,
+  );
+  // Every place autoDescriptionEligible is computed, or an existing takeover/
+  // timeout is re-checked, must fold the kill switch into `enabled` so it is
+  // impossible to fire the suggestion or take over the description with the
+  // flag off.
+  const enabledSites = createForm.match(/NEW_TASK_AUTO_DESCRIPTION_ENABLED &&/g) ?? [];
+  assert.equal(
+    enabledSites.length,
+    3,
+    "expected the kill switch on shouldSuggestCreateDescription and both canApplyCreateDescriptionSuggestion checks",
+  );
+});
