@@ -117,11 +117,11 @@ export class AgentClient {
   >();
   private readonly onErrorCallback?: AgentClientOptions["onError"];
 
-  constructor(
-    private readonly token: string,
-    options: Omit<AgentClientOptions, "token"> = {},
-  ) {
-    if (!token.trim()) throw new AgentSdkError("token is required");
+  private readonly token: string;
+
+  constructor(token: string, options: Omit<AgentClientOptions, "token"> = {}) {
+    this.token = token.trim();
+    if (!this.token) throw new AgentSdkError("token is required");
     this.baseUrl = (options.apiUrl ?? DEFAULT_API_URL).replace(/\/+$/, "");
     this.requestFetch = options.fetch ?? globalThis.fetch;
     if (typeof this.requestFetch !== "function") {
@@ -300,15 +300,14 @@ export class AgentClient {
     (statusMonitor as unknown as { unref?: () => void } | null)?.unref?.();
 
     try {
-      const context =
+      const contextlessStop =
         event === "stop" &&
         runRecord.taskId === null &&
-        runRecord.chatSessionId === null
-          ? { record: runRecord, ticket: null, thread: [] }
-          : await this.hydrateContext(
-              runRecord,
-              event === "stop" ? claimSignal : dispatchController.signal,
-            );
+        runRecord.chatSessionId === null;
+      const hydrationSignal = event === "stop" ? claimSignal : dispatchController.signal;
+      const context = contextlessStop
+        ? { record: runRecord, ticket: null, thread: [] }
+        : await this.hydrateContext(runRecord, hydrationSignal);
       const run = new AgentRunImpl(
         this,
         context,

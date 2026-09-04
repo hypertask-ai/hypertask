@@ -418,8 +418,18 @@ export function createWebhookHandler(options: {
             ...claim,
             leaseUntil: Date.now() + PROCESSING_LEASE_MS,
           };
-          renewalPromise = deliveryStore
-            .renew(renewalClaim)
+          let renewalTimer: ReturnType<typeof setTimeout> | undefined;
+          const renewalTimeout = new Promise<never>((_, reject) => {
+            renewalTimer = setTimeout(
+              () => reject(new AgentSdkError("Webhook delivery claim renewal timed out")),
+              PROCESSING_HEARTBEAT_MS,
+            );
+            (renewalTimer as unknown as { unref?: () => void }).unref?.();
+          });
+          renewalPromise = Promise.race([
+            Promise.resolve().then(() => deliveryStore.renew(renewalClaim)),
+            renewalTimeout,
+          ])
             .then((renewed) => {
               if (!renewed) throw new AgentSdkError("Webhook delivery claim was lost");
               claim.leaseUntil = renewalClaim.leaseUntil;
@@ -429,6 +439,7 @@ export function createWebhookHandler(options: {
               claimController.abort(error);
             })
             .finally(() => {
+              clearTimeout(renewalTimer);
               renewalPromise = null;
             });
         }, PROCESSING_HEARTBEAT_MS);

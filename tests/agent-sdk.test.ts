@@ -483,6 +483,22 @@ test("client wraps response body read failures", async () => {
   });
 });
 
+test("client trims accepted tokens before authorizing requests", async () => {
+  let authorization: string | null = null;
+  const agent = createAgent({
+    token: "  unit-test-token  ",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: async (_input, init = {}) => {
+      authorization = new Headers(init.headers).get("authorization");
+      return Response.json({ success: true });
+    },
+  });
+
+  await agent.client.request("/mcp/test");
+  assert.equal(authorization, "Bearer unit-test-token");
+});
+
 test("async onError failures stay observed", async () => {
   const reported: unknown[][] = [];
   const originalConsoleError = console.error;
@@ -1539,6 +1555,73 @@ test("completion waits for an in-flight delivery claim renewal", async (context)
     finishRenewal();
     await work.drain();
     assert.deepEqual(events, ["claim", "renew", "complete"]);
+  } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("a stalled delivery renewal aborts before the processing lease expires", async (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout", "setInterval"], now });
+  const api = apiFixture();
+  const events: string[] = [];
+  const errors: unknown[] = [];
+  let renewalStarted!: () => void;
+  const startedRenewal = new Promise<void>((resolve) => {
+    renewalStarted = resolve;
+  });
+  const store: DeliveryStore = {
+    durable: true,
+    async claim() {
+      events.push("claim");
+      return "claimed";
+    },
+    async renew() {
+      events.push("renew");
+      renewalStarted();
+      await new Promise(() => {});
+      return true;
+    },
+    async complete() {
+      events.push("complete");
+      return true;
+    },
+    async release() {
+      events.push("release");
+      return true;
+    },
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    deliveryStore: store,
+    onError: (error) => errors.push(error),
+  });
+  let handlerStarted!: () => void;
+  const startedHandler = new Promise<void>((resolve) => {
+    handlerStarted = resolve;
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Waiting for the delivery lease.");
+    handlerStarted();
+    await new Promise<void>((_resolve, reject) => {
+      const rejectForAbort = () => reject(received.signal.reason);
+      received.signal.addEventListener("abort", rejectForAbort, { once: true });
+      if (received.signal.aborted) rejectForAbort();
+    });
+  });
+
+  try {
+    const work = background(true);
+    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+    await startedHandler;
+    context.mock.timers.tick(120_000);
+    await startedRenewal;
+    context.mock.timers.tick(120_000);
+    await assert.rejects(work.drain(), /delivery claim renewal timed out/);
+    assert.deepEqual(events, ["claim", "renew", "release"]);
+    assert.equal(errors.length, 1);
   } finally {
     context.mock.timers.reset();
   }
