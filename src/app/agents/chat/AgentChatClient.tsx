@@ -1644,6 +1644,13 @@ const AgentChatClient = (props: IProp) => {
     </ModalContainerCustom>
   ) : null;
 
+  let mobileAgentChatHeight: string | undefined;
+  if (isMbl && mobileAgentChatViewportEnabled) {
+    mobileAgentChatHeight = mobileAgentChatViewport
+      ? `${mobileAgentChatViewport.visibleHeight}px`
+      : "100dvh";
+  }
+
   if (isNarrow) {
     return (
       <div
@@ -1657,14 +1664,7 @@ const AgentChatClient = (props: IProp) => {
           isMbl &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[var(--mobile-dock-h,64px)]",
         )}
-        style={{
-          height:
-            isMbl && mobileAgentChatViewportEnabled
-              ? mobileAgentChatViewport
-                ? `${mobileAgentChatViewport.visibleHeight}px`
-                : "100dvh"
-              : undefined,
-        }}
+        style={{ height: mobileAgentChatHeight }}
       >
         {selectedAgent ? chatPane : rosterPane}
         {detailsSheet}
