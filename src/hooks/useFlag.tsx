@@ -45,7 +45,7 @@ export function FeatureFlagProvider({
     queryFn: fetchFeatureFlags,
     enabled: userId !== null,
     refetchInterval: realtimeConnected ? false : FLAGS_REFRESH_MS,
-    refetchIntervalInBackground: false,
+    refetchIntervalInBackground: !realtimeConnected,
     retry: false,
   });
 
