@@ -344,7 +344,8 @@ export class AgentClient {
     record: AgentRunRecord,
     signal?: AbortSignal,
   ): Promise<HydratedContext> {
-    if (record.taskId === null && record.chatSessionId === null) {
+    const { taskId, chatSessionId } = record;
+    if (taskId === null && chatSessionId === null) {
       throw new AgentSdkError("Agent run has no task or chat context");
     }
     const activitiesPromise = this.request<{ activities: AgentActivity[] }>(
@@ -360,10 +361,10 @@ export class AgentClient {
       })),
     );
 
-    if (record.taskId !== null) {
+    if (taskId !== null) {
       const [taskResponse, commentResponse, activities] = await Promise.all([
         this.request<{ task?: AgentTask; tasks?: AgentTask[] }>(
-          `/mcp/tasks?task_id=${record.taskId}`,
+          `/mcp/tasks?task_id=${taskId}`,
           { signal },
         ),
         this.request<{
@@ -376,7 +377,7 @@ export class AgentClient {
             agent?: unknown;
           }>;
         }>(
-          `/mcp/comments?task_id=${record.taskId}&limit=${THREAD_ITEM_LIMIT}&sort_order=desc`,
+          `/mcp/comments?task_id=${taskId}&limit=${THREAD_ITEM_LIMIT}&sort_order=desc`,
           { signal },
         ),
         activitiesPromise,
@@ -386,7 +387,7 @@ export class AgentClient {
         (taskBody.task as AgentTask | undefined) ??
         arrayValue<AgentTask>(taskBody.tasks ?? [], "Run task list")[0] ??
         null;
-      if (!ticket || ticket.id !== record.taskId) {
+      if (!ticket || ticket.id !== taskId) {
         throw new AgentSdkError("Run task is unavailable to this agent token");
       }
       const comments: AgentThreadItem[] = arrayValue<
@@ -416,46 +417,41 @@ export class AgentClient {
       };
     }
 
-    if (record.chatSessionId !== null) {
-      const [chatResponse, activities] = await Promise.all([
-        this.request<{
-          messages: Array<{
-            id: string;
-            role: "human" | "assistant";
-            content: string;
-            createdAt: string;
-          }>;
-        }>(
-          `/mcp/chat/sessions/${encodeURIComponent(record.chatSessionId)}/messages`,
-          { signal },
-        ),
-        activitiesPromise,
-      ]);
-      const messages: AgentThreadItem[] = arrayValue<
-        {
+    const [chatResponse, activities] = await Promise.all([
+      this.request<{
+        messages: Array<{
           id: string;
           role: "human" | "assistant";
           content: string;
           createdAt: string;
-        }
-      >(
-        objectValue(chatResponse, "Chat messages").messages,
-        "Chat messages",
-      ).map((message) => ({
-        kind: "message",
-        id: message.id,
-        text: message.content,
-        role: message.role,
-        createdAt: message.createdAt,
-      }));
-      return {
-        record,
-        ticket: null,
-        thread: [...messages, ...activities].sort(chronological),
-      };
-    }
-
-    throw new AgentSdkError("Agent run has no task or chat context");
+        }>;
+      }>(`/mcp/chat/sessions/${encodeURIComponent(chatSessionId!)}/messages`, {
+        signal,
+      }),
+      activitiesPromise,
+    ]);
+    const messages: AgentThreadItem[] = arrayValue<
+      {
+        id: string;
+        role: "human" | "assistant";
+        content: string;
+        createdAt: string;
+      }
+    >(
+      objectValue(chatResponse, "Chat messages").messages,
+      "Chat messages",
+    ).map((message) => ({
+      kind: "message",
+      id: message.id,
+      text: message.content,
+      role: message.role,
+      createdAt: message.createdAt,
+    }));
+    return {
+      record,
+      ticket: null,
+      thread: [...messages, ...activities].sort(chronological),
+    };
   }
 }
 
@@ -544,16 +540,19 @@ class AgentRunImpl implements AgentRun {
       this.activityRecorded = true;
       this.firstActivityCallback?.();
     }
-    const response = await this.client.request<{ activity: AgentActivity }>(
-      `/mcp/agents/runs/${encodeURIComponent(this.id)}/activities`,
-      {
-        method: "POST",
-        body: { type, text, ...extra },
-        idempotencyKey: this.nextOperationKey(`activity-${type}`),
-        signal: this.signal,
-      },
+    const response = objectValue(
+      await this.client.request(
+        `/mcp/agents/runs/${encodeURIComponent(this.id)}/activities`,
+        {
+          method: "POST",
+          body: { type, text, ...extra },
+          idempotencyKey: this.nextOperationKey(`activity-${type}`),
+          signal: this.signal,
+        },
+      ),
+      "Agent activity",
     );
-    return response.activity;
+    return objectValue(response.activity, "Agent activity") as AgentActivity;
   }
 
   private assertNotStopped(): void {

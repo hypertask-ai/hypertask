@@ -104,7 +104,13 @@ type ApiCall = {
   signal?: AbortSignal | null;
 };
 
-function apiFixture(options: { failActivity?: boolean; failUpdate?: boolean } = {}) {
+function apiFixture(
+  options: {
+    failActivity?: boolean;
+    failUpdate?: boolean;
+    malformedActivity?: boolean;
+  } = {},
+) {
   const calls: ApiCall[] = [];
   let activityId = 0;
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {
@@ -138,6 +144,9 @@ function apiFixture(options: { failActivity?: boolean; failUpdate?: boolean } = 
           { success: false, error: "Activity failed" },
           { status: 500 },
         );
+      }
+      if (options.malformedActivity) {
+        return Response.json({ success: true, activity: null });
       }
       activityId += 1;
       return Response.json({
@@ -438,6 +447,28 @@ test("client wraps response body read failures", async () => {
     assert.equal(error instanceof AgentSdkError, true);
     assert.equal((error as AgentSdkError).message, "response stream failed");
     assert.equal((error as AgentSdkError).status, 200);
+    return true;
+  });
+});
+
+test("malformed activity responses fail with AgentSdkError", async () => {
+  const api = apiFixture({ malformedActivity: true });
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    onError: () => {},
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("This response is malformed.");
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), (error) => {
+    assert.equal(error instanceof AgentSdkError, true);
+    assert.match((error as AgentSdkError).message, /Agent activity/);
     return true;
   });
 });
