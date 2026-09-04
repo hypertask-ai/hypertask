@@ -54,6 +54,7 @@ type PendingDiscard = {
   receipt: string;
   discard: Discard;
   running: boolean;
+  retryTimer?: number;
 };
 
 let nextId = 0;
@@ -113,6 +114,10 @@ async function defaultDiscard(receipt: string): Promise<void> {
 
 async function runPendingDiscard(pending: PendingDiscard) {
   if (pending.running) return;
+  if (pending.retryTimer !== undefined && typeof window !== "undefined") {
+    window.clearTimeout(pending.retryTimer);
+    pending.retryTimer = undefined;
+  }
   pending.running = true;
   for (const delay of [0, 1_000, 5_000]) {
     if (delay) {
@@ -128,6 +133,12 @@ async function runPendingDiscard(pending: PendingDiscard) {
     }
   }
   pending.running = false;
+  if (typeof window !== "undefined") {
+    pending.retryTimer = window.setTimeout(() => {
+      pending.retryTimer = undefined;
+      void runPendingDiscard(pending);
+    }, 30_000);
+  }
 }
 
 function retryPendingDiscards() {
@@ -140,6 +151,7 @@ function queueDiscard(job: UploadJob, receipt: string) {
       receipt,
       discard: job.discard,
       running: false,
+      retryTimer: undefined,
     });
   }
   if (!discardOnlineListenerRegistered && typeof window !== "undefined") {
@@ -263,23 +275,30 @@ function jobForAttachment(attachment: unknown): UploadJob | undefined {
 }
 
 export function reserveCreateTaskUploads(attachments: unknown[]) {
+  let changed = false;
   attachments.forEach((attachment) => {
     const job = jobForAttachment(attachment);
-    if (job) job.reserved = true;
+    if (!job || job.reserved) return;
+    job.reserved = true;
+    changed = true;
   });
+  if (changed) emit();
 }
 
 export function releaseCreateTaskUploadReservations(attachments: unknown[]) {
-  let discarded = false;
+  let changed = false;
   attachments.forEach((attachment) => {
     const job = jobForAttachment(attachment);
     if (!job || job.taskId) return;
-    job.reserved = false;
+    if (job.reserved) {
+      job.reserved = false;
+      changed = true;
+    }
     if (!job.discardWhenReleased) return;
     discardJob(job);
-    discarded = true;
+    changed = true;
   });
-  if (discarded) emit();
+  if (changed) emit();
 }
 
 export function createTaskUploadIsReserved(id: string) {

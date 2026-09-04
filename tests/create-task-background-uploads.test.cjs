@@ -99,15 +99,24 @@ test("discard cleans up completed and still-uploading objects by receipt", async
   assert.equal(uploads.createTaskUploadById(pending.id), undefined);
 });
 
-test("failed discard remains queued until later network activity", async () => {
+test("failed discard remains queued on a bounded retry timer", async () => {
   const originalSetTimeout = global.setTimeout;
+  const originalWindow = global.window;
   const selected = file("queued-discard.txt");
-  const triggerFile = file("retry-discard.txt");
+  const scheduled = [];
   let canDiscard = false;
   let attempts = 0;
   global.setTimeout = (callback) => {
     queueMicrotask(callback);
     return 0;
+  };
+  global.window = {
+    addEventListener: () => undefined,
+    clearTimeout: () => undefined,
+    setTimeout: (callback, delay) => {
+      scheduled.push({ callback, delay });
+      return scheduled.length;
+    },
   };
   try {
     const started = uploads.startCreateTaskUpload(
@@ -127,20 +136,17 @@ test("failed discard remains queued until later network activity", async () => {
     uploads.discardUnboundCreateTaskUploads([selected]);
     await nextTurn();
     assert.equal(attempts, 3);
+    assert.equal(scheduled[0].delay, 30_000);
 
     canDiscard = true;
-    uploads.startCreateTaskUpload(
-      triggerFile,
-      async () => new Promise(() => undefined),
-      undefined,
-      ignoreDiscard,
-    );
+    scheduled[0].callback();
     await nextTurn();
     assert.equal(attempts, 4);
   } finally {
     canDiscard = true;
-    uploads.discardUnboundCreateTaskUploads([triggerFile]);
     global.setTimeout = originalSetTimeout;
+    if (originalWindow === undefined) delete global.window;
+    else global.window = originalWindow;
   }
 });
 
@@ -275,6 +281,23 @@ test("a cancelled reserved upload is discarded when its save releases", () => {
 
   uploads.releaseCreateTaskUploadReservations([selected]);
   assert.equal(uploads.createTaskUploadById(started.id), undefined);
+});
+
+test("reservation changes notify upload-store subscribers", () => {
+  const selected = file("reservation-events.txt");
+  uploads.startCreateTaskUpload(
+    selected,
+    async () => new Promise(() => undefined),
+    undefined,
+    ignoreDiscard,
+  );
+  const beforeReserve = uploads.createTaskUploadsVersion();
+
+  uploads.reserveCreateTaskUploads([selected]);
+  assert.equal(uploads.createTaskUploadsVersion(), beforeReserve + 1);
+  uploads.releaseCreateTaskUploadReservations([selected]);
+  assert.equal(uploads.createTaskUploadsVersion(), beforeReserve + 2);
+  uploads.discardUnboundCreateTaskUploads([selected]);
 });
 
 test("Retry uploads again only for upload failure and reuses a receipt for link failure", async () => {
