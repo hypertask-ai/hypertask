@@ -47,6 +47,8 @@ export type AgentRunPrincipal = {
   source: "agent" | "browser";
 };
 
+const AGENT_RUN_ACTIVITY_LIST_LIMIT = 500;
+
 export async function authenticateAgentRunRequest(
   request: NextRequest,
 ): Promise<AgentRunPrincipal | null> {
@@ -311,10 +313,13 @@ export async function listAgentRunActivities(
   const run = await prisma.agentRun.findFirst({
     where: accessibleRunWhere(principal, id),
     select: {
-      activities: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+      activities: {
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: AGENT_RUN_ACTIVITY_LIST_LIMIT,
+      },
     },
   });
-  return run?.activities.map(serializeAgentRunActivity) ?? null;
+  return run?.activities.reverse().map(serializeAgentRunActivity) ?? null;
 }
 
 export async function createAgentRunActivity(

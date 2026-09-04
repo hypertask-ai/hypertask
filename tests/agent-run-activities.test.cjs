@@ -104,13 +104,16 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
         const run = runs.find((candidate) => matchesRun(candidate, where));
         if (!run) return null;
         if (select?.activities) {
+          const direction = select.activities.orderBy[0].createdAt === "desc" ? -1 : 1;
           return {
             activities: activities
               .filter(({ runId }) => runId === run.id)
               .sort(
                 (a, b) =>
-                  a.createdAt - b.createdAt || a.id.localeCompare(b.id),
-              ),
+                  direction *
+                  (a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
+              )
+              .slice(0, select.activities.take),
           };
         }
         return run;
@@ -416,11 +419,35 @@ test("only the owner browser and matching agent can list run activities", async 
   );
   assert.equal(
     await harness.service.listAgentRunActivities(
+      { ...agentPrincipal, agentId: "agent-2" },
+      run.id,
+    ),
+    null,
+  );
+  assert.equal(
+    await harness.service.listAgentRunActivities(
       { ...browserPrincipal, userId: 7 },
       run.id,
     ),
     null,
   );
+});
+
+test("activity lists keep the newest 500 rows in chronological order", async () => {
+  const run = runRow();
+  const activities = Array.from({ length: 502 }, (_, index) =>
+    activityRow({
+      id: `activity-${String(index).padStart(3, "0")}`,
+      createdAt: new Date(index),
+    }),
+  );
+  const harness = loadService({ runs: [run], activities });
+
+  const listed = await harness.service.listAgentRunActivities(browserPrincipal, run.id);
+
+  assert.equal(listed.length, 500);
+  assert.equal(listed[0].id, "activity-002");
+  assert.equal(listed[499].id, "activity-501");
 });
 
 test("only the matching agent creates an idempotent task response and visible comment", async () => {
