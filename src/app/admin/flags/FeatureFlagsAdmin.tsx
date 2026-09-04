@@ -86,7 +86,7 @@ export default function FeatureFlagsAdmin() {
                 {flag.ticketUrl ? (
                   <a
                     href={flag.ticketUrl}
-                    className="text-white-black underline-offset-2 hover:underline focus-visible:outline-none"
+                    className="text-white-black underline-offset-2 hover:underline focus-visible:underline"
                   >
                     <code className="break-all text-dense">{flag.key}</code>
                   </a>
