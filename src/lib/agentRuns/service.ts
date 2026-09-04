@@ -330,7 +330,7 @@ export async function createAgentRunActivity(
   const run = await findActivityRun(principal, id);
   if (!run) return null;
 
-  if (idempotencyKey) {
+  if (idempotencyKey !== null) {
     const existing = await findIdempotentActivity(run.id, idempotencyKey);
     if (existing) return replayCreatedActivity(existing, input);
   }
@@ -389,7 +389,7 @@ export async function createAgentRunActivity(
       );
     }
   } catch (error) {
-    if (idempotencyKey && isUniqueConstraintError(error)) {
+    if (idempotencyKey !== null && isUniqueConstraintError(error)) {
       const existing = await findIdempotentActivity(run.id, idempotencyKey);
       if (existing) return replayCreatedActivity(existing, input);
     }

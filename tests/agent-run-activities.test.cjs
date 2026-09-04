@@ -421,7 +421,7 @@ test("only the matching agent creates an idempotent task response and visible co
   );
 });
 
-test("an idempotency unique race replays the winning activity", async () => {
+test("an idempotency unique race replays every non-null service key", async () => {
   const run = runRow();
   const harness = loadService({ runs: [run] });
   const input = activityInput();
@@ -440,7 +440,7 @@ test("an idempotency unique race replays the winning activity", async () => {
     agentPrincipal,
     run.id,
     input,
-    "racing-key",
+    "",
   );
 
   assert.equal(result.duplicate, true);
