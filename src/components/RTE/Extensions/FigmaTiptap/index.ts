@@ -90,10 +90,15 @@ export const renderFigmaPreview = (
       affordance.classList.replace('opacity-100', 'opacity-0');
     });
   };
+  const markPreviewUnavailable = () => {
+    if (!isCurrent()) return;
+    affordance.textContent = 'Preview unavailable — click to load live Figma';
+  };
 
   if (images.length > 0) {
     const gallery = document.createElement('span');
     let activated = false;
+    let failedImages = 0;
     gallery.className =
       'absolute inset-0 flex items-center justify-center gap-1 overflow-hidden bg-cardBackground p-1';
     images.forEach(({ name, url }) => {
@@ -106,7 +111,13 @@ export const renderFigmaPreview = (
         preview.prepend(gallery);
         markPreviewReady();
       };
-      image.onerror = () => image.remove();
+      image.onerror = () => {
+        image.remove();
+        failedImages += 1;
+        if (!activated && failedImages === images.length) {
+          markPreviewUnavailable();
+        }
+      };
       gallery.append(image);
       image.src = url;
     });
@@ -124,6 +135,7 @@ export const renderFigmaPreview = (
       preview.prepend(image);
       markPreviewReady();
     };
+    image.onerror = markPreviewUnavailable;
     image.src = data.thumbnailUrl;
   }
 };

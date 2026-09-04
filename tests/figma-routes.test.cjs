@@ -118,7 +118,10 @@ test("OAuth start sends minimum scope, PKCE, and a secure HttpOnly attempt cooki
   assert.equal(location.origin, "https://www.figma.com");
   assert.equal(location.pathname, "/oauth");
   assert.equal(location.searchParams.get("client_id"), "figma-client");
-  assert.equal(location.searchParams.get("scope"), "file_content:read");
+  assert.equal(
+    location.searchParams.get("scope"),
+    "file_content:read current_user:read",
+  );
   assert.equal(location.searchParams.get("response_type"), "code");
   assert.equal(location.searchParams.get("code_challenge_method"), "S256");
   assert.match(location.searchParams.get("code_challenge"), /^[A-Za-z0-9_-]{43}$/);

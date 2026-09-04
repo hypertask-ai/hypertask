@@ -14,8 +14,7 @@ import {
 const FIGMA_LOCK_NAMESPACE = 1_179_207_757;
 const FIGMA_OPERATION_TTL_MS = 30_000;
 const REFRESH_SKEW_MS = 60_000;
-const REFRESH_WAIT_ATTEMPTS = 60;
-const REFRESH_WAIT_INTERVAL_MS = 100;
+const REFRESH_WAIT_INTERVAL_MS = 250;
 
 type ConnectedToken = FigmaToken & {
   figmaUserName: string | null;
@@ -157,7 +156,8 @@ async function waitForPendingRefresh(
   nowMs: number,
 ): Promise<string | null | undefined> {
   const startedAt = Date.now();
-  for (let attempt = 0; attempt < REFRESH_WAIT_ATTEMPTS; attempt += 1) {
+  const waitUntilMs = nowMs + FIGMA_OPERATION_TTL_MS;
+  while (true) {
     await new Promise((resolve) => setTimeout(resolve, REFRESH_WAIT_INTERVAL_MS));
     const checkNowMs = nowMs + (Date.now() - startedAt);
     const [connection, operation] = await Promise.all([
@@ -180,8 +180,8 @@ async function waitForPendingRefresh(
     ) {
       return getFigmaAccessToken(userId, checkNowMs);
     }
+    if (checkNowMs >= waitUntilMs) return undefined;
   }
-  return undefined;
 }
 
 export async function getFigmaAccessToken(

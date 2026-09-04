@@ -99,6 +99,49 @@ test("renders at most six returned Figma frames side by side", () => {
   }
 });
 
+test("keeps a live-file fallback when every preview image fails", () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const originalDocument = global.document;
+  global.document = dom.window.document;
+  try {
+    const createdImages = [];
+    const createElement = document.createElement.bind(document);
+    document.createElement = (tagName, options) => {
+      const element = createElement(tagName, options);
+      if (tagName === "img") createdImages.push(element);
+      return element;
+    };
+
+    const galleryPreview = document.createElement("button");
+    const galleryAffordance = document.createElement("span");
+    renderFigmaPreview(galleryPreview, galleryAffordance, {
+      previewImages: [
+        { name: "One", url: "https://s3-alpha.figma.com/one.png" },
+        { name: "Two", url: "https://s3-alpha.figma.com/two.png" },
+      ],
+    });
+    createdImages[0].onerror();
+    createdImages[1].onerror();
+    assert.equal(
+      galleryAffordance.textContent,
+      "Preview unavailable — click to load live Figma",
+    );
+
+    const coverPreview = document.createElement("button");
+    const coverAffordance = document.createElement("span");
+    renderFigmaPreview(coverPreview, coverAffordance, {
+      thumbnailUrl: "https://s3-alpha.figma.com/cover.png",
+    });
+    createdImages[2].onerror();
+    assert.equal(
+      coverAffordance.textContent,
+      "Preview unavailable — click to load live Figma",
+    );
+  } finally {
+    global.document = originalDocument;
+  }
+});
+
 test("deduplicates only in-flight previews within one connection version", async () => {
   const dom = new JSDOM("<!doctype html><body></body>", {
     url: "https://app.hypertask.ai/detail/project-15/6136",
