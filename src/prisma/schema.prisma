@@ -242,6 +242,7 @@ model User {
   displayName        String?
   photoURL           String?        @default("https://files.hypertask.app/tasks/attachments/1757584422625image.png")
   email              String
+  canManageFeatureFlags Boolean @default(false)
   joinedAt           DateTime       @default(now())
   // HTPR-4146: Better Auth phase 0 columns, unused until BETTER_AUTH_ENABLED=1.
   emailVerified      Boolean        @default(false)
