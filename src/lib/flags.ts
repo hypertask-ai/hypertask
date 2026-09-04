@@ -36,6 +36,7 @@ export const FEATURE_FLAG_MODES = [
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+  key === "htpr-6129-mobile-agent-chat-viewport" ||
   key === "htpr-6130-mobile-reminder-safe-area"
     ? "OWNER_ONLY"
     : "OWNER_AND_QA";
