@@ -30,7 +30,8 @@ import scheduleCommentSummaryGeneration from "@/pages/api/queues/FAST/generateCo
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { recordHyperAiCommentOrigin } from "@/lib/ai/hyperAiConfirmation";
 import {
-  persistAgentWebhookEvent,
+  persistAgentRunTriggerWebhooks,
+  persistAgentTaskRunPromptWebhooks,
   persistAgentWebhookEvents,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
@@ -730,9 +731,30 @@ export async function createCommentService(params: CreateCommentParams) {
           broadcast: false,
         })),
       );
+      const agentWebhookActor = {
+        userId: creatorId,
+        agentId: agentId ?? null,
+        displayName: actorDisplayName || "Hypertask user",
+      };
+      // Only human comments continue active runs. Agent-authored replies must
+      // not wake the same agent and create a webhook feedback loop.
+      if (!agentId) {
+        webhookDeliveryIds.push(
+          ...(await persistAgentTaskRunPromptWebhooks(tx, {
+            projectId: currentTask.projectId,
+            taskId,
+            ticketNumber: currentTask.ticketNumber,
+            taskTitle: currentTask.title,
+            commentId: comment.id,
+            commentHtml: text,
+            actor: agentWebhookActor,
+            excludeAgentIds: mentionedAgentIds,
+          })),
+        );
+      }
       for (const mentionedAgentId of mentionedAgentIds) {
         webhookDeliveryIds.push(
-          await persistAgentWebhookEvent(tx, {
+          ...(await persistAgentRunTriggerWebhooks(tx, {
             event: "comment.mention",
             agentId: mentionedAgentId,
             projectId: currentTask.projectId,
@@ -741,12 +763,8 @@ export async function createCommentService(params: CreateCommentParams) {
             taskTitle: currentTask.title,
             commentId: comment.id,
             commentHtml: text,
-            actor: {
-              userId: creatorId,
-              agentId: agentId ?? null,
-              displayName: actorDisplayName || "Hypertask user",
-            },
-          }),
+            actor: agentWebhookActor,
+          })),
         );
       }
       return {

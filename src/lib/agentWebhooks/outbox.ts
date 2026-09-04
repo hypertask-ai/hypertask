@@ -1,6 +1,16 @@
 import crypto from "crypto";
-import type { Prisma } from "@prisma/client";
+import type { AgentRun, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import {
+  AGENT_RUN_FEATURE_FLAG,
+  NONTERMINAL_AGENT_RUN_STATUSES,
+  type AgentRunContext,
+  agentRunContextForEvent,
+  agentRunPromptForEvent,
+  agentRunTriggerForEvent,
+  serializeAgentRun,
+} from "@/lib/agentRuns/model";
 import type {
   AgentWebhookEventInput,
   AgentWebhookPayload,
@@ -14,16 +24,27 @@ import { queueAgentWebhookDelivery } from "./queue";
 
 type AgentWebhookTransaction = Pick<
   Prisma.TransactionClient,
-  "agentWebhookSubscription" | "agentWebhookDelivery"
+  | "agentWebhookSubscription"
+  | "agentWebhookDelivery"
+  | "agentRun"
+  | "featureFlag"
+  | "user"
 >;
 
-/** Persist one event inside the caller's domain transaction. */
-export async function persistAgentWebhookEvent(
+type EligibleAgentWebhookSubscription = {
+  id: string;
+  projectId: number | null;
+  events: string[];
+  agent: { userId: number };
+};
+
+async function findEligibleAgentWebhookSubscription(
   tx: AgentWebhookTransaction,
-  input: AgentWebhookEventInput,
-): Promise<string | null> {
+  agentId: string,
+  projectId: number | null,
+): Promise<EligibleAgentWebhookSubscription | null> {
   const subscription = await tx.agentWebhookSubscription.findUnique({
-    where: { agentId: input.agentId },
+    where: { agentId },
     select: {
       id: true,
       active: true,
@@ -31,12 +52,10 @@ export async function persistAgentWebhookEvent(
       events: true,
       agent: {
         select: {
+          userId: true,
           revokedAt: true,
           members: {
-            // A chat.message carries no board, so membership cannot be
-            // narrowed to one: any board of the owner grants the same
-            // "sits on a board of this owner" bar the task events apply.
-            where: input.projectId === null ? {} : { projectId: input.projectId },
+            where: projectId === null ? {} : { projectId },
             select: { id: true },
             take: 1,
           },
@@ -49,31 +68,28 @@ export async function persistAgentWebhookEvent(
     !subscription?.active ||
     subscription.agent.revokedAt != null ||
     subscription.agent.members.length === 0 ||
-    // A board-scoped subscription still receives board-free chat events.
-    (input.projectId !== null &&
+    (projectId !== null &&
       subscription.projectId != null &&
-      subscription.projectId !== input.projectId) ||
-    !subscription.events.includes(input.event)
+      subscription.projectId !== projectId)
   ) {
     return null;
   }
+  return subscription;
+}
 
-  const deliveryId = crypto.randomUUID();
-  const payload: AgentWebhookPayload = {
-    ...input,
-    deliveryId,
-    occurredAt: new Date().toISOString(),
-  };
+/** Persist one event inside the caller's domain transaction. */
+export async function persistAgentWebhookEvent(
+  tx: AgentWebhookTransaction,
+  input: AgentWebhookEventInput,
+): Promise<string | null> {
+  const subscription = await findEligibleAgentWebhookSubscription(
+    tx,
+    input.agentId,
+    input.projectId,
+  );
+  if (!subscription?.events.includes(input.event)) return null;
 
-  await tx.agentWebhookDelivery.create({
-    data: {
-      id: deliveryId,
-      subscriptionId: subscription.id,
-      event: input.event,
-      payload: payload as unknown as Prisma.InputJsonValue,
-    },
-  });
-  return deliveryId;
+  return createAgentWebhookDelivery(tx, subscription.id, input.agentId, input);
 }
 
 /** Publish only after the transaction commits; a failure remains sweepable. */
@@ -318,6 +334,254 @@ async function createAgentWebhookDelivery(
     },
   });
   return deliveryId;
+}
+
+type AgentRunTriggerEventInput = AgentWebhookEventInput & {
+  event: "comment.mention" | "task.assigned" | "chat.message";
+};
+
+function nonterminalRunWhere(
+  agentId: string,
+  context: AgentRunContext,
+) {
+  return {
+    agentId,
+    ...context,
+    status: { in: NONTERMINAL_AGENT_RUN_STATUSES },
+  } as const;
+}
+
+async function createOrReactivateAgentRun(
+  tx: AgentWebhookTransaction,
+  input: AgentRunTriggerEventInput,
+  now: Date,
+): Promise<{ created: boolean; run: AgentRun }> {
+  const trigger = agentRunTriggerForEvent(input.event);
+  const context = agentRunContextForEvent(input);
+  if (!trigger || !context) {
+    throw new Error(`Agent run trigger ${input.event} is missing its context`);
+  }
+
+  const data = {
+    id: crypto.randomUUID(),
+    agentId: input.agentId,
+    ...context,
+    trigger,
+    status: "ACTIVE" as const,
+    createdAt: now,
+    lastActivityAt: now,
+  };
+  let inserted = await tx.agentRun.createMany({ data: [data], skipDuplicates: true });
+  let created = inserted.count === 1;
+
+  if (!created) {
+    const reactivated = await tx.agentRun.updateMany({
+      where: nonterminalRunWhere(input.agentId, context),
+      data: { status: "ACTIVE", lastActivityAt: now },
+    });
+    if (reactivated.count === 0) {
+      // A stop can win between the skipped insert and guarded update. In that
+      // ordering this interaction starts a new run rather than reviving STOPPED.
+      inserted = await tx.agentRun.createMany({ data: [data], skipDuplicates: true });
+      created = inserted.count === 1;
+      if (!created) {
+        const retry = await tx.agentRun.updateMany({
+          where: nonterminalRunWhere(input.agentId, context),
+          data: { status: "ACTIVE", lastActivityAt: now },
+        });
+        if (retry.count === 0) {
+          throw new Error("Agent run changed while recording its interaction");
+        }
+      }
+    }
+  }
+
+  const run = await tx.agentRun.findFirst({
+    where: nonterminalRunWhere(input.agentId, context),
+  });
+  if (!run) throw new Error("Agent run was not persisted");
+  return { created, run };
+}
+
+/**
+ * Persist a trigger plus its run lifecycle event in the source transaction.
+ * Feature-off callers retain the legacy payload and one-delivery return shape.
+ */
+export async function persistAgentRunTriggerWebhooks(
+  tx: AgentWebhookTransaction,
+  input: AgentRunTriggerEventInput,
+  now = new Date(),
+): Promise<string[]> {
+  const subscription = await findEligibleAgentWebhookSubscription(
+    tx,
+    input.agentId,
+    input.projectId,
+  );
+  if (!subscription) return [];
+
+  const triggerSubscribed = subscription.events.includes(input.event);
+  const runsEnabled = await isFeatureEnabled(
+    AGENT_RUN_FEATURE_FLAG,
+    subscription.agent.userId,
+    tx,
+  );
+  if (!runsEnabled) {
+    return triggerSubscribed
+      ? [
+          await createAgentWebhookDelivery(
+            tx,
+            subscription.id,
+            input.agentId,
+            input,
+          ),
+        ]
+      : [];
+  }
+
+  const lifecycleSubscribed = subscription.events.some((event) =>
+    event.startsWith("run."),
+  );
+  if (!triggerSubscribed && !lifecycleSubscribed) return [];
+
+  const { created, run } = await createOrReactivateAgentRun(tx, input, now);
+  const runPayload = serializeAgentRun(run);
+  const deliveryIds = triggerSubscribed
+    ? [
+        await createAgentWebhookDelivery(tx, subscription.id, input.agentId, {
+          ...input,
+          runId: run.id,
+        }),
+      ]
+    : [];
+  const prompt = agentRunPromptForEvent(input);
+  const lifecycleEvent = created
+    ? "run.created"
+    : prompt != null
+      ? "run.prompted"
+      : null;
+  if (lifecycleEvent && subscription.events.includes(lifecycleEvent)) {
+    deliveryIds.push(
+      await createAgentWebhookDelivery(tx, subscription.id, input.agentId, {
+        ...input,
+        event: lifecycleEvent,
+        runId: run.id,
+        run: runPayload,
+        prompt,
+      }),
+    );
+  }
+  return deliveryIds;
+}
+
+export type AgentTaskRunPromptInput = {
+  projectId: number;
+  taskId: number;
+  ticketNumber: string | null;
+  taskTitle: string;
+  commentId: number;
+  commentHtml: string;
+  actor: AgentWebhookActor;
+  excludeAgentIds?: readonly string[];
+};
+
+/** Prompt every still-addressable run on a task after a human follow-up. */
+export async function persistAgentTaskRunPromptWebhooks(
+  tx: AgentWebhookTransaction,
+  input: AgentTaskRunPromptInput,
+  now = new Date(),
+): Promise<string[]> {
+  const excluded = new Set(input.excludeAgentIds ?? []);
+  const runs = await tx.agentRun.findMany({
+    where: {
+      taskId: input.taskId,
+      status: { in: NONTERMINAL_AGENT_RUN_STATUSES },
+    },
+    select: {
+      id: true,
+      agentId: true,
+      taskId: true,
+      chatSessionId: true,
+      trigger: true,
+      status: true,
+      createdAt: true,
+      lastActivityAt: true,
+      stoppedById: true,
+      agent: {
+        select: {
+          userId: true,
+          revokedAt: true,
+          members: {
+            where: { projectId: input.projectId },
+            select: { id: true },
+            take: 1,
+          },
+          agentWebhookSubscription: {
+            select: { id: true, projectId: true, active: true, events: true },
+          },
+        },
+      },
+    },
+  });
+
+  const deliveryIds: string[] = [];
+  for (const run of runs) {
+    if (excluded.has(run.agentId)) continue;
+    const subscription = run.agent.agentWebhookSubscription;
+    if (
+      run.agent.revokedAt != null ||
+      run.agent.members.length === 0 ||
+      !subscription?.active ||
+      (subscription.projectId != null &&
+        subscription.projectId !== input.projectId) ||
+      !(await isFeatureEnabled(
+        AGENT_RUN_FEATURE_FLAG,
+        run.agent.userId,
+        tx,
+      ))
+    ) {
+      continue;
+    }
+
+    const updated = await tx.agentRun.updateMany({
+      where: {
+        id: run.id,
+        status: { in: NONTERMINAL_AGENT_RUN_STATUSES },
+      },
+      data: { status: "ACTIVE", lastActivityAt: now },
+    });
+    if (updated.count === 0) continue;
+    if (!subscription.events.includes("run.prompted")) continue;
+
+    const activeRun = {
+      ...run,
+      status: "ACTIVE" as const,
+      lastActivityAt: now,
+    };
+    deliveryIds.push(
+      await createAgentWebhookDelivery(tx, subscription.id, run.agentId, {
+        event: "run.prompted",
+        projectId: input.projectId,
+        taskId: input.taskId,
+        ticketNumber: input.ticketNumber,
+        taskTitle: input.taskTitle,
+        commentId: input.commentId,
+        commentHtml: input.commentHtml,
+        actor: input.actor,
+        runId: run.id,
+        run: serializeAgentRun(activeRun),
+        prompt: input.commentHtml,
+      }),
+    );
+  }
+  return deliveryIds;
+}
+
+/** Persist the terminal lifecycle callback after a guarded stop update. */
+export async function persistAgentRunStoppedWebhook(
+  tx: AgentWebhookTransaction,
+  input: Omit<AgentWebhookEventInput, "event">,
+): Promise<string | null> {
+  return persistAgentWebhookEvent(tx, { ...input, event: "run.stopped" });
 }
 
 /** Persist one event for every active agent subscription in the task's board scope. */

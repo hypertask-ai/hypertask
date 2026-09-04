@@ -152,6 +152,8 @@ function loadCreateRoute() {
       publishBoardWebhookDeliveries: async () => undefined,
     },
     "@/lib/agentWebhooks/outbox": {
+      persistAgentRunTriggerWebhooks: async () => [],
+      persistAgentWebhookEvent: async () => null,
       persistAgentTaskCreatedPending: async () => undefined,
       markAgentTaskCreatedReady: async () => undefined,
       emitAgentTaskCreatedWebhook: async () => undefined,

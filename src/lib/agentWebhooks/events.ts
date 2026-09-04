@@ -6,6 +6,15 @@ export const AGENT_WEBHOOK_EVENTS = [
   "task.updated",
   "task.created",
   "chat.message",
+  "run.created",
+  "run.prompted",
+  "run.stopped",
+] as const;
+
+export const AGENT_RUN_WEBHOOK_EVENTS = [
+  "run.created",
+  "run.prompted",
+  "run.stopped",
 ] as const;
 
 export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {
@@ -60,6 +69,32 @@ export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {
       chat: "Chat object with sessionId, messageId, text, and userName.",
     },
   },
+  "run.created": {
+    subscribable: true,
+    label: "Run created",
+    description: "A mention, assignment, or chat message started a run.",
+    payload: {
+      run: "The newly created run.",
+      prompt: "Initial text for mention and chat triggers; null for assignment.",
+    },
+  },
+  "run.prompted": {
+    subscribable: true,
+    label: "Run prompted",
+    description: "A user sent another message to an active or stale run.",
+    payload: {
+      run: "The reactivated run.",
+      prompt: "The new comment HTML or chat text.",
+    },
+  },
+  "run.stopped": {
+    subscribable: true,
+    label: "Run stopped",
+    description: "A user or the addressed agent stopped a run.",
+    payload: {
+      run: "The stopped run.",
+    },
+  },
   "webhook.test": {
     subscribable: false,
     description: "Sent only when a customer explicitly requests a signed test delivery.",
@@ -97,7 +132,8 @@ export const AGENT_WEBHOOK_DELIVERY_CONTRACT = {
     taskId: "Task-only numeric task ID.",
     ticketNumber: "Task-only human-readable ticket number when available.",
     taskTitle: "Task-only task title.",
-    actor: "Task-only object with userId, optional agentId, and displayName.",
+    actor: "Object with userId, optional agentId, and displayName.",
+    runId: "Run UUID on agent-run-enabled interaction and lifecycle events.",
   },
 } as const;
 
@@ -148,6 +184,18 @@ export type AgentWebhookChat = {
   userName: string | null;
 };
 
+export type AgentWebhookRun = {
+  id: string;
+  agentId: string;
+  taskId: number | null;
+  chatSessionId: string | null;
+  trigger: "mention" | "assigned" | "chat";
+  status: "active" | "stale" | "stopped" | "done";
+  createdAt: string;
+  lastActivityAt: string;
+  stoppedBy: number | null;
+};
+
 export type AgentWebhookEventInput = {
   event: AgentWebhookEventType;
   agentId: string;
@@ -157,6 +205,9 @@ export type AgentWebhookEventInput = {
   ticketNumber: string | null;
   taskTitle: string | null;
   actor: AgentWebhookActor;
+  runId?: string;
+  run?: AgentWebhookRun;
+  prompt?: string | null;
   chat?: AgentWebhookChat;
   commentId?: number;
   commentHtml?: string;
@@ -171,11 +222,36 @@ export type AgentWebhookPayload = AgentWebhookEventInput & {
   occurredAt: string;
 };
 
-export function parseAgentWebhookEvents(value: unknown):
+export function availableAgentWebhookEvents(
+  agentRunsEnabled: boolean,
+): AgentWebhookEventType[] {
+  return agentRunsEnabled
+    ? [...AGENT_WEBHOOK_EVENTS]
+    : AGENT_WEBHOOK_EVENTS.filter(
+        (event) =>
+          !(AGENT_RUN_WEBHOOK_EVENTS as readonly string[]).includes(event),
+      );
+}
+
+export function availableAgentWebhookEventDefinitions(
+  agentRunsEnabled: boolean,
+): Partial<typeof AGENT_WEBHOOK_EVENT_DEFINITIONS> {
+  const available = new Set(availableAgentWebhookEvents(agentRunsEnabled));
+  return Object.fromEntries(
+    Object.entries(AGENT_WEBHOOK_EVENT_DEFINITIONS).filter(
+      ([event]) => event === "webhook.test" || available.has(event as AgentWebhookEventType),
+    ),
+  ) as Partial<typeof AGENT_WEBHOOK_EVENT_DEFINITIONS>;
+}
+
+export function parseAgentWebhookEvents(
+  value: unknown,
+  availableEvents: readonly AgentWebhookEventType[] = AGENT_WEBHOOK_EVENTS,
+):
   | { ok: true; events: AgentWebhookEventType[] }
   | { ok: false; error: string } {
   if (value === undefined || value === null) {
-    return { ok: true, events: [...AGENT_WEBHOOK_EVENTS] };
+    return { ok: true, events: [...availableEvents] };
   }
   if (!Array.isArray(value) || value.length === 0) {
     return { ok: false, error: "events must be a non-empty array" };
@@ -186,12 +262,12 @@ export function parseAgentWebhookEvents(value: unknown):
     unique.some(
       (event) =>
         typeof event !== "string" ||
-        !(AGENT_WEBHOOK_EVENTS as readonly string[]).includes(event),
+        !(availableEvents as readonly string[]).includes(event),
     )
   ) {
     return {
       ok: false,
-      error: `events may only contain: ${AGENT_WEBHOOK_EVENTS.join(", ")}`,
+      error: `events may only contain: ${availableEvents.join(", ")}`,
     };
   }
   return { ok: true, events: unique as AgentWebhookEventType[] };
