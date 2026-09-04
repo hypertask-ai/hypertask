@@ -24,7 +24,7 @@ export const FEATURE_FLAG_KEYS = [
   "htpr-6116-figma-node-preview",
   "htpr-6118-comment-reactions-api",
 ] as const;
-// HTPR-6128 changes flag infrastructure itself, so OWNER_AND_QA cannot be gated by itself.
+// HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
   "OWNER_ONLY",
   "OWNER_AND_QA",
