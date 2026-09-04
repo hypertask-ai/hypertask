@@ -40,109 +40,101 @@ interface ISingleFile {
     variant = "default",
     backgroundTaskUpload = false,
   }) => {
-    // if upload is true, we will display a progress bar here, and show its progress. 
-    // upon 100 percent completion, we will do a callback and send it back. 
-    const [uploadString, setUploadString] = useState<string>(file.source??"");
-
-
+    // if upload is true, we will display a progress bar here, and show its progress.
+    // upon 100 percent completion, we will do a callback and send it back.
     const [progressPercentage, setProgressBar] = useState<number>(0);
+    const previewImageRef = useRef<HTMLImageElement>(null);
     const backgroundUploadIdRef = useRef<string | undefined>(undefined);
-    const onMountUploadIfFile = async (
-      isActive: () => boolean,
-      registerUnsubscribe: (unsubscribe: () => void) => void,
-    ) => {
+    const latestHandlersRef = useRef({
+      callback,
+      handleRemove,
+      reportUploadFailure,
+    });
+    useEffect(() => {
+      latestHandlersRef.current = {
+        callback,
+        handleRemove,
+        reportUploadFailure,
+      };
+    }, [callback, handleRemove, reportUploadFailure]);
 
-      // is this not an uploading component then return
-      if (!shouldUpload || !callback )return 
-      else{
-        // is the file already added? meaning we're editing something, then just make a callback.
-        if (uploadString && shouldUpload){
-          setProgressBar(100)
-          callback({id:file.id, file})
-        }
-  
-        else{
+    useEffect(() => {
+      if (!file.type?.startsWith("image/") || file.source) return;
+      const url = URL.createObjectURL(file);
+      if (previewImageRef.current) previewImageRef.current.src = url;
+      return () => URL.revokeObjectURL(url);
+    }, [file]);
 
-          // ================== we will upload and THEN make the callback
-          if (backgroundTaskUpload) {
-            const started = startCreateTaskUpload(file);
-            backgroundUploadIdRef.current = started.id;
-            const syncProgress = () => {
-              const job = createTaskUploadById(started.id);
-              if (job) setProgressBar(job.progress);
-            };
-            const unsubscribe = subscribeCreateTaskUploads(syncProgress);
-            registerUnsubscribe(unsubscribe);
-            try {
-              syncProgress();
-              const uploaded = await started.promise;
-              if (!isActive()) return;
-              setUploadString(uploaded.url);
-              callback({
-                id,
-                file: markedCreateTaskAttachment(started.id, file, uploaded.url),
-              });
-            } finally {
-              unsubscribe();
-            }
-            return;
-          }
-          const source = await uploadSingleFileViaApi(file, (progress) => {
-            if (isActive()) setProgressBar(progress);
-          });
-          if (!isActive()) return;
-          console.log("🚀 ~ onMountUploadIfFile ~ result:", source)
-          setUploadString(source)
-          // console.log("🚀 ~ onMountUploadIfFile ~ file:", file)
-          // Manually extracting properties
-          const extractedFile = {
-            name: file.name,
-            size: file.size,
-            type: file.type,
-            // Add other properties as needed
-          };
-          const ItemToReturn = {id,file:{...extractedFile,source} }
-          console.log("🚀 ~ onMountUploadIfFile ~ ItemToReturn:", ItemToReturn)
-          callback(ItemToReturn)
-        }
-
-      }
-      
-    }
-
-    
-    // A failed upload must surface as a message, not an unhandled rejection that
-    // leaves the progress ring spinning forever (HTPR-5516).
-    const onUploadFailed = (error: unknown) => {
-      const message =
-        error instanceof UploadTooLargeError
-          ? error.message
-          : `Could not upload "${file.name}". Please try again.`;
-      toast.error(message);
-      const reservedForSave =
-        backgroundTaskUpload &&
-        backgroundUploadIdRef.current &&
-        createTaskUploadIsReserved(backgroundUploadIdRef.current);
-      if (!reservedForSave) handleRemove?.(file.name);
-      reportUploadFailure?.(file.name);
-    };
-
+    const hasCallback = Boolean(callback);
     useEffect(() => {
       let active = true;
       let unsubscribe: () => void = () => undefined;
-      void onMountUploadIfFile(
-        () => active,
-        (listener) => {
-          unsubscribe = listener;
-        },
-      ).catch((error) => {
-        if (active) onUploadFailed(error);
+      const uploadFile = async () => {
+        if (!shouldUpload || !hasCallback) return;
+        if (file.source) {
+          setProgressBar(100);
+          latestHandlersRef.current.callback?.({ id: file.id, file });
+          return;
+        }
+
+        if (backgroundTaskUpload) {
+          const started = startCreateTaskUpload(file);
+          backgroundUploadIdRef.current = started.id;
+          const syncProgress = () => {
+            const job = createTaskUploadById(started.id);
+            if (active && job) setProgressBar(job.progress);
+          };
+          unsubscribe = subscribeCreateTaskUploads(syncProgress);
+          try {
+            syncProgress();
+            const uploaded = await started.promise;
+            if (!active) return;
+            latestHandlersRef.current.callback?.({
+              id,
+              file: markedCreateTaskAttachment(started.id, file, uploaded.url),
+            });
+          } finally {
+            unsubscribe();
+          }
+          return;
+        }
+
+        const source = await uploadSingleFileViaApi(file, (progress) => {
+          if (active) setProgressBar(progress);
+        });
+        if (!active) return;
+        console.log("🚀 ~ uploadFile ~ result:", source);
+        const extractedFile = {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        };
+        const itemToReturn = { id, file: { ...extractedFile, source } };
+        console.log("🚀 ~ uploadFile ~ itemToReturn:", itemToReturn);
+        latestHandlersRef.current.callback?.(itemToReturn);
+      };
+
+      void uploadFile().catch((error: unknown) => {
+        if (!active) return;
+        const message =
+          error instanceof UploadTooLargeError
+            ? error.message
+            : `Could not upload "${file.name}". Please try again.`;
+        toast.error(message);
+        const reservedForSave =
+          backgroundTaskUpload &&
+          backgroundUploadIdRef.current &&
+          createTaskUploadIsReserved(backgroundUploadIdRef.current);
+        if (!reservedForSave) {
+          latestHandlersRef.current.handleRemove?.(file.name);
+        }
+        latestHandlersRef.current.reportUploadFailure?.(file.name);
       });
       return () => {
         active = false;
         unsubscribe();
       };
-    },[])
+    }, [backgroundTaskUpload, file, hasCallback, id, shouldUpload]);
 
     const isImage = file.type?.startsWith("image/");
     const isChat = variant === "chat";
@@ -172,12 +164,13 @@ interface ISingleFile {
           >
             {isImage ? (
               <img
+                ref={previewImageRef}
                 className={
                   isChat
                     ? "h-full w-full rounded-md object-contain"
                     : "h-[28px] w-[28px] object-contain sm:h-full sm:w-[60px]"
                 }
-                src={file.source ? file.source : URL.createObjectURL(file)}
+                src={file.source}
                 alt={file.name}
                 onClick={() => showModalImage(index)}
               />

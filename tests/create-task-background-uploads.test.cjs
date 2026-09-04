@@ -99,6 +99,51 @@ test("discard cleans up completed and still-uploading objects by receipt", async
   assert.equal(uploads.createTaskUploadById(pending.id), undefined);
 });
 
+test("failed discard remains queued until later network activity", async () => {
+  const originalSetTimeout = global.setTimeout;
+  const selected = file("queued-discard.txt");
+  const triggerFile = file("retry-discard.txt");
+  let canDiscard = false;
+  let attempts = 0;
+  global.setTimeout = (callback) => {
+    queueMicrotask(callback);
+    return 0;
+  };
+  try {
+    const started = uploads.startCreateTaskUpload(
+      selected,
+      async () => ({
+        url: "https://files.example/queued-discard",
+        receipt: "queued-discard-receipt",
+      }),
+      async () => attachment(9, "https://files.example/queued-discard"),
+      async () => {
+        attempts += 1;
+        if (!canDiscard) throw new Error("cleanup unavailable");
+      },
+    );
+    await started.promise;
+    await nextTurn();
+    uploads.discardUnboundCreateTaskUploads([selected]);
+    await nextTurn();
+    assert.equal(attempts, 3);
+
+    canDiscard = true;
+    uploads.startCreateTaskUpload(
+      triggerFile,
+      async () => new Promise(() => undefined),
+      undefined,
+      ignoreDiscard,
+    );
+    await nextTurn();
+    assert.equal(attempts, 4);
+  } finally {
+    canDiscard = true;
+    uploads.discardUnboundCreateTaskUploads([triggerFile]);
+    global.setTimeout = originalSetTimeout;
+  }
+});
+
 test("a synchronous uploader failure becomes a retryable job", async () => {
   const selected = file("sync-failure.txt");
   let calls = 0;

@@ -50,9 +50,17 @@ type MarkedAttachment = {
   source?: string;
 };
 
+type PendingDiscard = {
+  receipt: string;
+  discard: Discard;
+  running: boolean;
+};
+
 let nextId = 0;
 let version = 0;
+let discardOnlineListenerRegistered = false;
 const jobs = new Map<string, UploadJob>();
+const pendingDiscards = new Map<string, PendingDiscard>();
 const jobsByFile = new WeakMap<File, UploadJob>();
 const listeners = new Set<() => void>();
 
@@ -103,18 +111,43 @@ async function defaultDiscard(receipt: string): Promise<void> {
   if (!response.ok) throw new Error("Could not discard attachment");
 }
 
-async function discardReceipt(job: UploadJob, receipt: string) {
+async function runPendingDiscard(pending: PendingDiscard) {
+  if (pending.running) return;
+  pending.running = true;
   for (const delay of [0, 1_000, 5_000]) {
     if (delay) {
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
     try {
-      await job.discard(receipt);
+      await pending.discard(pending.receipt);
+      pendingDiscards.delete(pending.receipt);
+      pending.running = false;
       return;
     } catch {
-      // Best-effort cleanup gets two delayed retries during this JS document.
+      // Keep the receipt queued after these immediate-session retries fail.
     }
   }
+  pending.running = false;
+}
+
+function retryPendingDiscards() {
+  pendingDiscards.forEach((pending) => void runPendingDiscard(pending));
+}
+
+function queueDiscard(job: UploadJob, receipt: string) {
+  if (!pendingDiscards.has(receipt)) {
+    pendingDiscards.set(receipt, {
+      receipt,
+      discard: job.discard,
+      running: false,
+    });
+  }
+  if (!discardOnlineListenerRegistered && typeof window !== "undefined") {
+    window.addEventListener("online", retryPendingDiscards);
+    discardOnlineListenerRegistered = true;
+  }
+  const pending = pendingDiscards.get(receipt);
+  if (pending) void runPendingDiscard(pending);
 }
 
 function discardJob(job: UploadJob) {
@@ -122,7 +155,7 @@ function discardJob(job: UploadJob) {
   job.discarded = true;
   jobs.delete(job.id);
   jobsByFile.delete(job.file);
-  if (job.receipt) void discardReceipt(job, job.receipt);
+  if (job.receipt) queueDiscard(job, job.receipt);
 }
 
 function runUpload(job: UploadJob) {
@@ -145,7 +178,7 @@ function runUpload(job: UploadJob) {
     ({ url, receipt }) => {
       if (job.discarded) {
         job.receipt = receipt;
-        void discardReceipt(job, receipt);
+        queueDiscard(job, receipt);
         return;
       }
       patch(job, { status: "uploaded", progress: 100, source: url, receipt });
@@ -177,6 +210,7 @@ export function startCreateTaskUpload(
   link: Link = defaultLink,
   discard: Discard = defaultDiscard,
 ) {
+  retryPendingDiscards();
   const existing = jobsByFile.get(file);
   if (existing) return { id: existing.id, promise: existing.promise };
 

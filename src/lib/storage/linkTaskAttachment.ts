@@ -134,6 +134,7 @@ export async function linkTaskAttachment(
           fileType: true,
           fileSize: true,
           fileSource: true,
+          commentId: true,
           descriptionId: true,
           taskId: true,
         },
