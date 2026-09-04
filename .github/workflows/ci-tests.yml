@@ -303,6 +303,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
+      actions: read
       contents: write
       pull-requests: write
     steps:
@@ -317,12 +318,23 @@ jobs:
       - name: Revert the failing commit
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          BEFORE_SHA: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -euo pipefail
+
+          send_alert() {
+            local message="$1" code
+            code=$(curl -s --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/telegram.json" -w '%{http_code}' \
+              -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d chat_id="$TG_CHAT" --data-urlencode text="$message" 2>/dev/null) || true
+            if [ "${code:-}" != "200" ]; then
+              echo "::error::Telegram alert failed (HTTP ${code:-none}): $(cat "$RUNNER_TEMP/telegram.json" 2>/dev/null || true)"
+            fi
+          }
 
           # Emergency path: git couldn't undo the bad commit (dirty revert or
           # a refused push), so production gets an instant Vercel rollback
@@ -366,12 +378,49 @@ jobs:
             else
               MSG="🔴 hypertasks: production red for $GITHUB_SHA, auto-revert could not apply ($1). $ROLLBACK_TEXT $RUN_URL"
             fi
-            TG_CODE=$(curl -s --connect-timeout 10 --max-time 60 -o /tmp/tg.json -w '%{http_code}' -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-              -d chat_id="$TG_CHAT" --data-urlencode text="$MSG" 2>/dev/null) || true
-            if [ "${TG_CODE:-}" != "200" ]; then
-              echo "::error::Emergency rollback: Telegram alert failed (HTTP ${TG_CODE:-none}): $(cat /tmp/tg.json 2>/dev/null || true)"
-            fi
+            send_alert "$MSG"
           }
+
+          stop_without_revert() {
+            local reason="$1"
+            local run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            send_alert "🔴 hypertasks: production tests are red for $GITHUB_SHA, but auto-revert skipped it: $reason. $run_url"
+            echo "::error::Auto-revert skipped $GITHUB_SHA: $reason"
+            exit 1
+          }
+
+          # The push payload records the exact prior production head. Git's
+          # first parent is not equivalent for force-pushes or multi-commit
+          # updates, so reject those shapes rather than guessing a culprit.
+          ZERO_SHA=0000000000000000000000000000000000000000
+          if [ "$BEFORE_SHA" = "$ZERO_SHA" ] \
+            || ! git cat-file -e "$BEFORE_SHA^{commit}" \
+            || ! git merge-base --is-ancestor "$BEFORE_SHA" "$GITHUB_SHA"; then
+            stop_without_revert "the prior production revision was not one verifiable commit behind"
+          fi
+          if ! COMMIT_COUNT=$(git rev-list --count "$BEFORE_SHA..$GITHUB_SHA") \
+            || ! [[ "$COMMIT_COUNT" =~ ^[0-9]+$ ]] \
+            || [ "$COMMIT_COUNT" -ne 1 ]; then
+            stop_without_revert "the production update did not contain exactly one commit"
+          fi
+
+          if ! PREFLIGHT=$(node .github/scripts/should-auto-revert.mjs "$GITHUB_REPOSITORY" "$BEFORE_SHA"); then
+            stop_without_revert "the previous test lookup process failed"
+          fi
+          PREFLIGHT_ACTION=$(printf '%s' "$PREFLIGHT" | jq -r '.action // "skip"' 2>/dev/null || true)
+          PREFLIGHT_REASON=$(printf '%s' "$PREFLIGHT" | jq -r '.reason // "the previous test result was malformed"' 2>/dev/null || true)
+          if [ "$PREFLIGHT_ACTION" != "proceed" ]; then
+            stop_without_revert "$PREFLIGHT_REASON"
+          fi
+
+          # Close the API-check race before creating a local revert. The
+          # force-with-lease below repeats this guard at the eventual push.
+          if ! git fetch --quiet origin "$GITHUB_REF_NAME"; then
+            stop_without_revert "the current production revision could not be fetched"
+          fi
+          if [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
+            stop_without_revert "production moved to a newer revision during the check"
+          fi
 
           # Our own revert commits are committed by this identity. A commit
           # merged through GitHub's PR flow never is, so this cannot be forged
