@@ -182,12 +182,11 @@ function authoredCommentText(row: TimelineRow, selectedAgentId: string): string 
 
   if (row.agentId === selectedAgentId) {
     if (/^(?:Model|Switched|Live):(?:\s|$)/.test(text)) return text;
-    if (/^AI review concerns(?:\s|:|$)/i.test(text)) {
-      return `Review: ${text}`.slice(0, MAX_TIMELINE_TEXT);
-    }
   }
 
-  const qa = /^(PASS|FAIL):(?:\s*)(.*)$/i.exec(text);
+  // QA agents write the verdict freely: "PASS:", "FAIL:", "QA passed on
+  // production:", "QA fail:". Accept every shape, reject "QA is blocked".
+  const qa = /^(?:QA[:\s]+)?(pass|fail)(?:ed|s|ing)?\b[:\s]*(.*)$/i.exec(text);
   if (!qa) return null;
   const detail = qa[2].trim();
   return `QA: ${qa[1].toUpperCase()}${detail ? ` — ${detail}` : ""}`.slice(
@@ -320,14 +319,15 @@ export async function listAgentChatActivity(
       { task: visibleTask },
     ],
   } satisfies Prisma.AgentRunWhereInput;
+  // ponytail: the app records no deployment, so a "Live" row only exists when an
+  // agent writes a "Live:" comment. Add a durable deploy signal to guarantee it.
   const selectedCommentWhere = prefixedCommentWhere([
     "Model:",
     "Switched:",
     "Live:",
-    "AI review concerns",
     "🚨 Agent escalation — needs a human.",
   ]);
-  const qaCommentWhere = prefixedCommentWhere(["PASS:", "FAIL:"]);
+  const qaCommentWhere = prefixedCommentWhere(["PASS", "FAIL", "QA "]);
   const timelineTaskSelect = {
     ...taskSelect,
     agentRuns: {

@@ -385,6 +385,14 @@ test("server projection derives durable task milestones after agent involvement"
             agentId: "qa-agent",
             commentText: "PASS: all milestones appeared within 10 seconds",
           }),
+          timeline("qa-prose", "2026-09-04T10:10:30.000Z", {
+            agentId: "qa-agent",
+            text: "<p><strong>QA passed on production: rows appear in seconds.</strong></p>",
+          }),
+          timeline("qa-not-a-verdict", "2026-09-04T10:10:45.000Z", {
+            agentId: "qa-agent",
+            commentText: "QA is blocked because the preview never deployed",
+          }),
           timeline("spoof", "2026-09-04T10:11:00.000Z", {
             commentText: "FAIL: human-authored spoof",
           }),
@@ -432,6 +440,7 @@ test("server projection derives durable task milestones after agent involvement"
       "Switched: gpt-5.6-sol for escalation",
       "Live: passive rows are deployed.",
       "QA: PASS — all milestones appeared within 10 seconds",
+      "QA: PASS — on production: rows appear in seconds.",
       "Review: APPROVE",
       "Merged, deploying",
     ],
@@ -444,4 +453,20 @@ test("server projection derives durable task milestones after agent involvement"
     { id: "desc" },
   ]);
   assert.deepEqual(queries.timeline.where.task.project, projectWhere);
+  // The database filter must be a superset of what the projection accepts, or
+  // milestones are dropped before they are ever parsed.
+  const prefixes = queries.timeline.where.OR.flatMap((branch) =>
+    (branch.OR ?? []).map(
+      (clause) => (clause.text ?? clause.commentText).startsWith,
+    ),
+  );
+  for (const prefix of ["Model:", "Switched:", "Live:", "PASS", "FAIL", "QA "]) {
+    assert.ok(
+      prefixes.includes(prefix),
+      `missing timeline prefix ${prefix}`,
+    );
+  }
+  assert.ok(
+    prefixes.includes("<p><strong>🚨 Agent escalation — needs a human."),
+  );
 });
