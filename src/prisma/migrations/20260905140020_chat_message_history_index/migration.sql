@@ -8,16 +8,15 @@
 -- (20260901120000_comment_task_created_at_index,
 -- 20260903120000_index_taskid_delete_sweep_targets): a plain build holds a
 -- SHARE lock for its whole duration and blocks every chat message insert.
+-- IF NOT EXISTS keeps the migration a no-op when the index was pre-applied by
+-- hand against prod, which is the pattern those two files document.
 --
--- Each build is preceded by a concurrent drop rather than guarded with
--- IF NOT EXISTS alone: an interrupted concurrent build leaves an INVALID index
--- under the same name, and IF NOT EXISTS would then skip the rebuild forever
--- while the planner ignored it and writes still paid for it.
-DROP INDEX CONCURRENTLY IF EXISTS "ChatMessage_sessionId_createdAt_id_idx";
-CREATE INDEX CONCURRENTLY "ChatMessage_sessionId_createdAt_id_idx" ON "ChatMessage"("sessionId", "createdAt", "id");
-
-DROP INDEX CONCURRENTLY IF EXISTS "ChatMessage_authorUserId_idx";
-CREATE INDEX CONCURRENTLY "ChatMessage_authorUserId_idx" ON "ChatMessage"("authorUserId");
-
-DROP INDEX CONCURRENTLY IF EXISTS "ChatMessage_authorAgentId_idx";
-CREATE INDEX CONCURRENTLY "ChatMessage_authorAgentId_idx" ON "ChatMessage"("authorAgentId");
+-- ponytail: a DROP INDEX CONCURRENTLY before each build would also clear the
+-- INVALID index an interrupted concurrent build leaves behind, but Postgres
+-- refuses DROP INDEX CONCURRENTLY in any migration file holding a second
+-- statement, so it cannot live here. Ceiling: if a build is interrupted, its
+-- INVALID index must be dropped and rebuilt by hand before this migration can
+-- do anything again.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_sessionId_createdAt_id_idx" ON "ChatMessage"("sessionId", "createdAt", "id");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_authorUserId_idx" ON "ChatMessage"("authorUserId");
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_authorAgentId_idx" ON "ChatMessage"("authorAgentId");
