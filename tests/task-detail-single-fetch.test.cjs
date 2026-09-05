@@ -75,7 +75,7 @@ test("task detail uses the shared seen-request helper exactly once", () => {
   );
 });
 
-test("task seen requests choose one endpoint and preserve failures", async (t) => {
+test("task seen requests choose one endpoint", async (t) => {
   const originalPost = axios.post;
   const calls = [];
   t.after(() => {
@@ -86,21 +86,90 @@ test("task seen requests choose one endpoint and preserve failures", async (t) =
     return { status: 200 };
   };
 
-  await markTaskSeen(42, []);
-  await markTaskSeen(42, [10, 11]);
+  const state = { key: null, request: null };
+  await markTaskSeen(state, 7, 42, []);
+  await markTaskSeen(state, 7, 42, [10, 11]);
 
   assert.deepEqual(calls, [
     ["/api/notifications/getByTask", { taskId: 42 }],
     ["/api/comments/updateSeen", { commentIds: [10, 11], taskId: 42 }],
   ]);
+});
+
+test("duplicate task seen requests share one write per screen state", async (t) => {
+  const originalPost = axios.post;
+  const calls = [];
+  let releaseFirst;
+  let holdFirst = true;
+  t.after(() => {
+    axios.post = originalPost;
+  });
+  axios.post = (...args) => {
+    calls.push(args);
+    if (!holdFirst) return Promise.resolve({ status: 200 });
+    return new Promise((resolve) => {
+      releaseFirst = () => resolve({ status: 200 });
+    });
+  };
+
+  const firstState = { key: null, request: null };
+  const secondState = { key: null, request: null };
+  const first = markTaskSeen(firstState, 7, 42, [11, 10]);
+  const duplicate = markTaskSeen(secondState, "7", 42, ["10", "11"]);
+
+  assert.equal(calls.length, 1, "parallel owners must share the network write");
+  holdFirst = false;
+  releaseFirst();
+  await Promise.all([first, duplicate]);
+
+  await markTaskSeen(firstState, 7, 42, [10, 11]);
+  assert.equal(calls.length, 1, "the same screen state must retain success");
+
+  await markTaskSeen({ key: null, request: null }, 7, 42, [10, 11]);
+  await markTaskSeen(firstState, 7, 43, [10, 11]);
+  await markTaskSeen(firstState, 7, 42, [10, 11]);
+  await markTaskSeen(firstState, 8, 42, [10, 11]);
+  assert.equal(
+    calls.length,
+    5,
+    "new screens, task navigation, and account changes must start fresh writes",
+  );
+});
+
+test("failed task seen requests retry without clearing newer state", async (t) => {
+  const originalPost = axios.post;
+  const calls = [];
+  let rejectFirst;
+  t.after(() => {
+    axios.post = originalPost;
+  });
+  axios.post = (...args) => {
+    calls.push(args);
+    if (calls.length > 1) return Promise.resolve({ status: 200 });
+    return new Promise((_, reject) => {
+      rejectFirst = reject;
+    });
+  };
+
+  const state = { key: null, request: null };
+  const failed = markTaskSeen(state, 7, 42, [10]);
+  const failedAssertion = assert.rejects(
+    failed,
+    (error) => error?.code === "ECONNABORTED",
+  );
+  await markTaskSeen(state, 7, 43, [10]);
 
   const timeout = Object.assign(new Error("timeout exceeded"), {
     code: "ECONNABORTED",
   });
-  axios.post = async () => {
-    throw timeout;
-  };
-  await assert.rejects(markTaskSeen(42, []), (error) => error === timeout);
+  rejectFirst(timeout);
+  await failedAssertion;
+
+  await markTaskSeen(state, 7, 43, [10]);
+  assert.equal(calls.length, 2, "an older failure must not clear newer success");
+
+  await markTaskSeen(state, 7, 42, [10]);
+  assert.equal(calls.length, 3, "the failed identity must remain retryable");
 });
 
 test("HTPR-6047: FollowersProvider mounts inside the task-detail Suspense boundary", () => {
