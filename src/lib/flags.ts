@@ -66,6 +66,10 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Enables typed thought, action, response, error, and question updates for agent runs.",
   },
   {
+    key: "htpr-6123-add-typescript-agent-sdk",
+    description: "Allows the TypeScript Agent SDK to read and update agent runs.",
+  },
+  {
     key: "htpr-6129-mobile-agent-chat-viewport",
     description: "Keeps the full Agent Chat visible on mobile when the keyboard is open.",
   },
@@ -93,6 +97,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6072-shallow-board-switch",
   "htpr-6094-agent-activity-rows",
   "htpr-6122-agent-run-activities",
+  "htpr-6123-add-typescript-agent-sdk",
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
   FEATURE_FLAG_DETAILS_FLAG,

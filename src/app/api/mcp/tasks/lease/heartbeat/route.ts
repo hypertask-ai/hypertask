@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
 import {
   clampLeaseTtlSeconds,
+  isValidLeaseToken,
   isValidTaskId,
 } from '@/lib/mcp/tasks/lease';
 
@@ -11,6 +12,7 @@ type LeaseRow = {
   taskId: number;
   holder: number;
   agentId: string | null;
+  token: string | null;
   expiresAt: Date;
   heartbeatAt: Date;
 };
@@ -46,9 +48,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { task_id, ttl_seconds } = body as {
+  const { task_id, ttl_seconds, lease_token } = body as {
     task_id?: unknown;
     ttl_seconds?: unknown;
+    lease_token?: unknown;
   };
   if (!isValidTaskId(task_id)) {
     return NextResponse.json(
@@ -62,6 +65,12 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json(
       { success: false, error: 'ttl_seconds must be a finite number' },
+      { status: 400 }
+    );
+  }
+  if (lease_token !== undefined && !isValidLeaseToken(lease_token)) {
+    return NextResponse.json(
+      { success: false, error: 'lease_token must be a UUID' },
       { status: 400 }
     );
   }
@@ -79,6 +88,7 @@ export async function POST(request: NextRequest) {
   }
 
   const ttlSeconds = clampLeaseTtlSeconds(ttl_seconds as number | undefined);
+  const leaseToken = lease_token ?? null;
 
   try {
     const leases = await prisma.$queryRaw<LeaseRow[]>`
@@ -89,8 +99,9 @@ export async function POST(request: NextRequest) {
       WHERE "taskId" = ${task.id}
         AND "holder" = ${ctx.user.id}
         AND (${ctx.agentId}::text IS NULL OR "agentId" = ${ctx.agentId})
+        AND (${ctx.agentId}::text IS NULL OR "token" IS NOT DISTINCT FROM ${leaseToken})
         AND "expiresAt" > now()
-      RETURNING "taskId", "holder", "agentId", "expiresAt", "heartbeatAt"
+      RETURNING "taskId", "holder", "agentId", "token", "expiresAt", "heartbeatAt"
     `;
 
     if (leases.length === 0) {
@@ -111,6 +122,7 @@ export async function POST(request: NextRequest) {
           taskId: lease.taskId,
           holder: lease.holder,
           agentId: lease.agentId,
+          leaseToken: lease.token,
           expiresAt: lease.expiresAt,
         },
       },

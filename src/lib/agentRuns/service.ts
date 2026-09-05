@@ -13,6 +13,7 @@ import prisma from "@/lib/prisma";
 import {
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
+  AGENT_SDK_FEATURE_FLAG,
   AGENT_RUN_STALE_AFTER_MS,
   AgentRunActivityConflictError,
   AgentRunActivityInputError,
@@ -45,6 +46,7 @@ export type AgentRunPrincipal = {
   agentId: string | null;
   displayName: string;
   source: "agent" | "browser";
+  sdk?: "typescript";
 };
 
 const AGENT_RUN_ACTIVITY_LIST_LIMIT = 500;
@@ -52,6 +54,10 @@ const AGENT_RUN_ACTIVITY_LIST_LIMIT = 500;
 export async function authenticateAgentRunRequest(
   request: NextRequest,
 ): Promise<AgentRunPrincipal | null> {
+  const sdk =
+    request.headers.get("X-Hypertask-Agent-SDK") === "typescript"
+      ? ("typescript" as const)
+      : undefined;
   if (request.headers.has("Authorization")) {
     const context = await validateMcpAuth(request);
     if (!context?.agentId) return null;
@@ -60,6 +66,7 @@ export async function authenticateAgentRunRequest(
       agentId: context.agentId,
       displayName: context.user.displayName?.trim() || "Hypertask agent",
       source: "agent",
+      ...(sdk ? { sdk } : {}),
     };
   }
 
@@ -75,6 +82,7 @@ export async function authenticateAgentRunRequest(
     agentId: null,
     displayName: user.displayName?.trim() || "Hypertask user",
     source: "browser",
+    ...(sdk ? { sdk } : {}),
   };
 }
 
@@ -95,7 +103,11 @@ function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
 export async function agentRunsEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
-  return isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId);
+  if (!(await isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId))) return false;
+  return (
+    principal.sdk !== "typescript" ||
+    isFeatureEnabled(AGENT_SDK_FEATURE_FLAG, principal.userId)
+  );
 }
 
 export async function agentRunActivitiesEnabledFor(

@@ -11,6 +11,7 @@ import type {
 } from "@/lib/agentWebhooks/events";
 
 export const AGENT_RUN_FEATURE_FLAG = "htpr-6115-agent-sdk";
+export const AGENT_SDK_FEATURE_FLAG = "htpr-6123-add-typescript-agent-sdk";
 export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
 export const NONTERMINAL_AGENT_RUN_STATUSES: AgentRunStatus[] = [

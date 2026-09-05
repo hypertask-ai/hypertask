@@ -1161,8 +1161,8 @@ model TaskLease {
   holder      Int
   holderUser  User     @relation(fields: [holder], references: [id], onDelete: Cascade)
   agentId     String?
-  // HTPR-5656: per-lease instance identity. Explicit claims leave it null;
-  // only adoptions mint one, so a release can prove it deletes its own lease.
+  // Per-lease instance identity. SDK claims and implicit adoptions mint one so
+  // delayed cleanup can prove it only changes the lease instance it acquired.
   token       String?
   // Active in-process adoption scopes sharing this token. Explicit claims stay 0.
   adoptionCount Int      @default(0)

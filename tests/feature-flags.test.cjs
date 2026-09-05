@@ -141,6 +141,21 @@ test("agent run activities start owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 7), false);
 });
 
+test("TypeScript Agent SDK starts owner-only", async () => {
+  assert.equal(
+    await flags.isFeatureEnabled("htpr-6123-add-typescript-agent-sdk", 6),
+    true,
+  );
+  assert.equal(
+    await flags.isFeatureEnabled("htpr-6123-add-typescript-agent-sdk", 985),
+    false,
+  );
+  assert.equal(
+    await flags.isFeatureEnabled("htpr-6123-add-typescript-agent-sdk", 7),
+    false,
+  );
+});
+
 test("mobile Agent Chat viewport fix starts owner-only", async () => {
   assert.equal(
     await flags.isFeatureEnabled("htpr-6129-mobile-agent-chat-viewport", 6),
@@ -236,6 +251,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6122-agent-run-activities", mode: "OWNER_ONLY", updatedAt: null },
+      {
+        key: "htpr-6123-add-typescript-agent-sdk",
+        mode: "OWNER_ONLY",
+        updatedAt: null,
+      },
       {
         key: "htpr-6129-mobile-agent-chat-viewport",
         mode: "OWNER_ONLY",

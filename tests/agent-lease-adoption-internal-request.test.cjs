@@ -43,7 +43,11 @@ function leaseStoreTx(store) {
       }
       if (!sql.includes('FROM "TaskLease"')) return [];
       if (!store.lease || store.lease.expiresAt <= new Date()) return [];
-      return [{ agentId: store.lease.agentId, token: store.lease.token }];
+      return [{
+        agentId: store.lease.agentId,
+        token: store.lease.token,
+        adoptionCount: store.lease.adoptionCount,
+      }];
     },
     task: { findUnique: async () => ({ status: 'Normal' }) },
     taskLease: {
