@@ -226,6 +226,14 @@ export async function stopAgentRun(
 }
 
 type ActivityRunWithContext = AgentRun & {
+  agent: {
+    user: {
+      id: number;
+      email: string;
+      displayName: string | null;
+      photoURL: string | null;
+    };
+  };
   task: {
     id: number;
     userId: number;
@@ -253,6 +261,13 @@ async function findActivityRun(
   return prisma.agentRun.findFirst({
     where: accessibleRunWhere(principal, id),
     include: {
+      agent: {
+        select: {
+          user: {
+            select: { id: true, email: true, displayName: true, photoURL: true },
+          },
+        },
+      },
       task: { select: { id: true, userId: true } },
       chatSession: { select: { id: true, userId: true } },
     },
@@ -277,7 +292,9 @@ async function findIdempotentActivity(
   });
 }
 
-function replayCreatedActivity(
+async function replayCreatedActivity(
+  run: ActivityRunWithContext,
+  principal: AgentRunPrincipal,
   activity: AgentRunActivity,
   input: AgentRunActivityInput,
 ) {
@@ -285,6 +302,28 @@ function replayCreatedActivity(
     throw new AgentRunActivityConflictError(
       "Idempotency-Key was already used with different activity data",
     );
+  }
+  // Older activities have no comment link, so they retain duplicate-only replay.
+  if (input.type === "RESPONSE" && run.task && activity.responseCommentId) {
+    const { createCommentService } = await import(
+      "@/utils/controllers/comments/createCommentService",
+    );
+    await createCommentService({
+      text: toStoredHtml(activity.text),
+      creatorId: run.agent.user.id,
+      taskId: run.task.id,
+      ownerId: run.task.userId,
+      currentUser: run.agent.user,
+      agentId: run.agentId,
+      accessUserId: principal.userId,
+      agentRunReplayComment: {
+        id: activity.responseCommentId,
+        activityId: activity.id,
+        agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
+        boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
+        notificationsCompletedAt: activity.commentNotificationsCompletedAt,
+      },
+    });
   }
   return { activity: serializeAgentRunActivity(activity), duplicate: true };
 }
@@ -335,7 +374,7 @@ export async function createAgentRunActivity(
 
   if (idempotencyKey !== null) {
     const existing = await findIdempotentActivity(run.id, idempotencyKey);
-    if (existing) return replayCreatedActivity(existing, input);
+    if (existing) return replayCreatedActivity(run, principal, existing, input);
   }
   if (!NONTERMINAL_AGENT_RUN_STATUSES.includes(run.status)) {
     throw new AgentRunNotActiveError("Run is no longer active");
@@ -358,13 +397,10 @@ export async function createAgentRunActivity(
       );
       await createCommentService({
         text: toStoredHtml(input.text),
-        creatorId: principal.userId,
+        creatorId: run.agent.user.id,
         taskId: run.task.id,
         ownerId: run.task.userId,
-        currentUser: {
-          id: principal.userId,
-          displayName: principal.displayName,
-        },
+        currentUser: run.agent.user,
         agentId: run.agentId,
         accessUserId: principal.userId,
         agentRunActivity: persistenceInput,
@@ -394,7 +430,7 @@ export async function createAgentRunActivity(
   } catch (error) {
     if (idempotencyKey !== null && isUniqueConstraintError(error)) {
       const existing = await findIdempotentActivity(run.id, idempotencyKey);
-      if (existing) return replayCreatedActivity(existing, input);
+      if (existing) return replayCreatedActivity(run, principal, existing, input);
     }
     throw error;
   }
@@ -403,7 +439,9 @@ export async function createAgentRunActivity(
     where: { id: persistenceInput.id },
   });
   if (!activity) throw new Error("Agent run activity was not persisted");
-  broadcastActivityChange(run, principal.userId);
+  if (!run.task || input.type !== "RESPONSE") {
+    broadcastActivityChange(run, principal.userId);
+  }
   return { activity: serializeAgentRunActivity(activity), duplicate: false };
 }
 
@@ -437,6 +475,37 @@ export async function selectAgentRunActivity(
       throw new AgentRunSelectionConflictError(
         "This elicitation already has a different selection",
       );
+    }
+    // Older selections have no comment link, so they retain duplicate-only replay.
+    if (run.task && activity.selectionCommentId) {
+      if (!activity.selectedById) {
+        throw new Error("Agent run selection creator was not persisted");
+      }
+      const selectedBy = await prisma.user.findUnique({
+        where: { id: activity.selectedById },
+        select: { id: true, email: true, displayName: true, photoURL: true },
+      });
+      if (!selectedBy) {
+        throw new Error("Agent run selection creator was not found");
+      }
+      const { createCommentService } = await import(
+        "@/utils/controllers/comments/createCommentService",
+      );
+      await createCommentService({
+        text: toStoredHtml(activity.selectedLabel ?? option.label),
+        creatorId: selectedBy.id,
+        taskId: run.task.id,
+        ownerId: run.task.userId,
+        currentUser: selectedBy,
+        accessUserId: principal.userId,
+        agentRunReplayComment: {
+          id: activity.selectionCommentId,
+          activityId: activity.id,
+          agentWebhookDeliveryIds: activity.commentAgentWebhookDeliveryIds,
+          boardWebhookDeliveryIds: activity.commentBoardWebhookDeliveryIds,
+          notificationsCompletedAt: activity.commentNotificationsCompletedAt,
+        },
+      });
     }
     return { activity: serializeAgentRunActivity(activity), duplicate: true };
   }
@@ -520,6 +589,6 @@ export async function selectAgentRunActivity(
     where: { id: activity.id },
   });
   if (!selected) throw new Error("Agent run activity selection was not persisted");
-  broadcastActivityChange(run, principal.userId);
+  if (!run.task) broadcastActivityChange(run, principal.userId);
   return { activity: serializeAgentRunActivity(selected), duplicate: false };
 }

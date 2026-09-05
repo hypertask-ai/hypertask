@@ -1576,8 +1576,10 @@ model Comment {
   reactions     Reaction[] //normally dont use
   savedContent  SavedContent[]
   decisionRequests DecisionRequest[]
-  activity      Json?
-  inboundEmailReceipt InboundEmailReceipt?
+  activity                  Json?
+  inboundEmailReceipt       InboundEmailReceipt?
+  agentRunResponseActivity  AgentRunActivity? @relation("AgentRunActivityResponseComment")
+  agentRunSelectionActivity AgentRunActivity? @relation("AgentRunActivitySelectionComment")
 
   @@index([agentId, createdAt])
   // comment_Reactions Comment_Reactions[]
@@ -2245,10 +2247,22 @@ model AgentRunActivity {
   idempotencyKey String?              @db.VarChar(256)
   selectedValue  String?              @db.VarChar(256)
   selectedLabel  String?              @db.VarChar(256)
-  selectedAt     DateTime?
-  selectedById   Int?
-  selectedBy     User?                @relation("AgentRunActivitySelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
-  createdAt      DateTime             @default(now())
+  selectedAt        DateTime?
+  selectedById      Int?
+  selectedBy        User?                @relation("AgentRunActivitySelectedBy", fields: [selectedById], references: [id], onDelete: SetNull)
+  responseCommentId              Int?      @unique
+  responseComment                Comment?  @relation("AgentRunActivityResponseComment", fields: [responseCommentId], references: [id], onDelete: SetNull)
+  selectionCommentId             Int?      @unique
+  selectionComment               Comment?  @relation("AgentRunActivitySelectionComment", fields: [selectionCommentId], references: [id], onDelete: SetNull)
+  commentAgentWebhookDeliveryIds String[]  @default([])
+  commentBoardWebhookDeliveryIds String[]  @default([])
+  commentNotificationsProcessingAt DateTime?
+  commentNotificationDeliveryKeys     String[]  @default([])
+  commentMentionsAttemptedAt          DateTime?
+  commentFcmAttemptedAt               DateTime?
+  commentEmailsAttemptedAt            DateTime?
+  commentNotificationsCompletedAt     DateTime?
+  createdAt                      DateTime   @default(now())
 
   @@unique([runId, idempotencyKey])
   @@index([runId, createdAt, id])

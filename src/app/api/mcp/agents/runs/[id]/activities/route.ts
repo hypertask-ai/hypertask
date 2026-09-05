@@ -7,6 +7,7 @@ import {
 } from "@/lib/agentRuns/service";
 import {
   AgentRunActivityConflictError,
+  AgentRunActivityInProgressError,
   AgentRunActivityInputError,
   AgentRunNotActiveError,
   parseAgentRunActivityInput,
@@ -17,10 +18,19 @@ import { normalizeIdempotencyKey } from "@/lib/mcp/idempotency/idempotencyStore"
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const noStore = (body: Record<string, unknown>, status = 200) =>
+const noStore = (
+  body: Record<string, unknown>,
+  status = 200,
+  retryAfterSeconds?: number,
+) =>
   NextResponse.json(body, {
     status,
-    headers: { "Cache-Control": "private, no-store" },
+    headers: {
+      "Cache-Control": "private, no-store",
+      ...(retryAfterSeconds
+        ? { "Retry-After": String(retryAfterSeconds) }
+        : {}),
+    },
   });
 
 async function authorize(request: NextRequest) {
@@ -105,6 +115,13 @@ export async function POST(
   } catch (error) {
     if (error instanceof AgentRunActivityInputError) {
       return noStore({ success: false, error: error.message }, 400);
+    }
+    if (error instanceof AgentRunActivityInProgressError) {
+      return noStore(
+        { success: false, error: error.message, retryable: true },
+        503,
+        1,
+      );
     }
     if (
       error instanceof AgentRunActivityConflictError ||

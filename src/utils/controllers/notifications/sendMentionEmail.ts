@@ -24,16 +24,19 @@ export async function sendMentionEmail(
     const type =
       mentionType === "mention" ? "Mentioned" : "AddedToFollowerInTask";
     if (useremail && (await shouldNotify(receiver, type, "email"))) {
-      sendEmailNotification(mentionType === "mention" ? "Mention" : "Follower", {
-        sender,
-        recipient: useremail.email,
-        recipientName: useremail.displayName ?? undefined,
-        title: taskTitle,
-        link: taskLink,
-        commentText,
-        userId: receiver,
-        taskId,
-      });
+      return await sendEmailNotification(
+        mentionType === "mention" ? "Mention" : "Follower",
+        {
+          sender,
+          recipient: useremail.email,
+          recipientName: useremail.displayName ?? undefined,
+          title: taskTitle,
+          link: taskLink,
+          commentText,
+          userId: receiver,
+          taskId,
+        },
+      );
     }
     return true;
   } catch (error) {

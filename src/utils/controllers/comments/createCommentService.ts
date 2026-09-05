@@ -7,6 +7,7 @@ import idsToSendNotificationsTo from "@/utils/controllers/notifications/IdsToSen
 import {
   broadcastBoardChange,
   broadcastInboxChange,
+  broadcastTaskComment,
 } from "@/lib/realtime/server";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import {
@@ -62,9 +63,13 @@ import {
   type AgentRunActivityPersistenceInput,
   type AgentRunSelectionPersistenceInput,
 } from "@/lib/agentRuns/persistence";
-import { serializeAgentRun } from "@/lib/agentRuns/model";
+import {
+  AgentRunActivityInProgressError,
+  serializeAgentRun,
+} from "@/lib/agentRuns/model";
 
 const INBOUND_PROCESSING_LEASE_MS = 5 * 60_000;
+const AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS = 5 * 60_000;
 
 export interface CreateCommentParams {
   text: string;
@@ -100,6 +105,14 @@ export interface CreateCommentParams {
   agentRunActivity?: AgentRunActivityPersistenceInput;
   /** Human elicitation choice that must commit with its visible task comment. */
   agentRunSelection?: AgentRunSelectionPersistenceInput;
+  /** Existing run comment and outbox rows whose side effects need resuming. */
+  agentRunReplayComment?: {
+    id: number;
+    activityId: string;
+    agentWebhookDeliveryIds: string[];
+    boardWebhookDeliveryIds: string[];
+    notificationsCompletedAt: Date | null;
+  };
   /**
    * Extra board events to persist in the same transaction as the comment, so a
    * caller whose domain change IS this comment (escalation) never has a
@@ -304,6 +317,9 @@ async function sendCommentEmails({
   recipientUserIds,
   mentionedUserIds,
   fromAgentId,
+  deliveredUserIds,
+  beforeDelivery,
+  markDelivered,
 }: {
   task: any;
   text: string;
@@ -312,6 +328,9 @@ async function sendCommentEmails({
   recipientUserIds: number[];
   mentionedUserIds: Set<number>;
   fromAgentId?: string | null;
+  deliveredUserIds?: ReadonlySet<number>;
+  beforeDelivery?: () => Promise<void>;
+  markDelivered?: (userId: number) => Promise<void>;
 }): Promise<void> {
   const emailRecipientIds = recipientUserIds.filter(
     (userId) => !mentionedUserIds.has(userId),
@@ -338,24 +357,33 @@ async function sendCommentEmails({
       : "http://localhost:3000");
   const taskLink = `${baseUrl}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-  await Promise.all(
-    recipients.map(async (recipient) => {
-      if (!recipient.email || !recipient.UserSetting?.notification) return;
+  const sendToRecipient = async (recipient: (typeof recipients)[number]) => {
+    if (deliveredUserIds?.has(recipient.id)) return;
+    if (recipient.email && recipient.UserSetting?.notification) {
       // shouldNotify, not the legacy preference helper: only the former reads the
       // per-category matrix, so the old call ignored "comments off" entirely.
-      if (!(await shouldNotify(recipient.id, "Comment", "email"))) return;
+      if (await shouldNotify(recipient.id, "Comment", "email")) {
+        await beforeDelivery?.();
+        const sent = await sendEmailNotification("Comment", {
+          sender: senderName,
+          recipient: recipient.email,
+          title: task.title,
+          link: taskLink,
+          commentText: text,
+          userId: recipient.id,
+          taskId: task.id,
+        });
+        if (!sent) throw new Error("Comment email delivery failed");
+      }
+    }
+    await markDelivered?.(recipient.id);
+  };
 
-      await sendEmailNotification("Comment", {
-        sender: senderName,
-        recipient: recipient.email,
-        title: task.title,
-        link: taskLink,
-        commentText: text,
-        userId: recipient.id,
-        taskId: task.id,
-      });
-    }),
-  );
+  if (markDelivered) {
+    for (const recipient of recipients) await sendToRecipient(recipient);
+  } else {
+    await Promise.all(recipients.map(sendToRecipient));
+  }
 }
 
 /**
@@ -387,6 +415,41 @@ async function processTaskReferencesFromCommentText(
   }
 }
 
+async function loadAgentRunReplayComment(
+  comments: Pick<typeof prisma.comment, "findFirst">,
+  input: {
+    commentId: number;
+    activityId: string;
+    taskId: number;
+    creatorId: number;
+    agentId?: string | null;
+    agentWebhookDeliveryIds: string[];
+    boardWebhookDeliveryIds: string[];
+  },
+) {
+  const comment = await comments.findFirst({
+    where: {
+      id: input.commentId,
+      taskId: input.taskId,
+      creatorId: input.creatorId,
+      agentId: input.agentId ?? null,
+      OR: [
+        { agentRunResponseActivity: { is: { id: input.activityId } } },
+        { agentRunSelectionActivity: { is: { id: input.activityId } } },
+      ],
+    },
+  });
+  if (!comment) throw new Error("Run activity comment not found");
+  return {
+    comment,
+    webhookDeliveryIds: input.agentWebhookDeliveryIds,
+    boardWebhookDeliveryIds: input.boardWebhookDeliveryIds,
+    resolvedDirectReplyUserId: null,
+    inboundCompleted: false,
+    inboundProcessingStartedAt: null,
+  };
+}
+
 /**
  * Creates a comment with full side effects: notifications, mentions, FCM.
  * Returns the created comment.
@@ -408,10 +471,14 @@ export async function createCommentService(params: CreateCommentParams) {
     inboundEmailId,
     agentRunActivity,
     agentRunSelection,
+    agentRunReplayComment,
     extraBoardWebhookEvents = [],
   } = params;
   if (agentRunActivity && agentRunSelection) {
     throw new Error("A comment cannot create and select an agent activity together");
+  }
+  if (agentRunReplayComment && (agentRunActivity || agentRunSelection)) {
+    throw new Error("A run comment replay cannot persist an activity");
   }
   if (
     agentRunActivity &&
@@ -502,7 +569,8 @@ export async function createCommentService(params: CreateCommentParams) {
     !hasInvocationCorrelation &&
     !inboundEmailId &&
     !agentRunActivity &&
-    !agentRunSelection
+    !agentRunSelection &&
+    !agentRunReplayComment
       ? await prisma.comment.findFirst({
           where: {
             taskId,
@@ -520,7 +588,12 @@ export async function createCommentService(params: CreateCommentParams) {
 
   // A replay must resume the original comment's unfinished work without
   // updating the task a second time.
-  if (!existingInboundReceipt) {
+  if (
+    !existingInboundReceipt &&
+    !agentRunActivity &&
+    !agentRunSelection &&
+    !agentRunReplayComment
+  ) {
     // Access was established above before the duplicate lookup or any write.
     await updateTaskSingle(
       { id: task.id, updatedAt: new Date() },
@@ -540,6 +613,19 @@ export async function createCommentService(params: CreateCommentParams) {
   let transactionResult;
   try {
     transactionResult = await prisma.$transaction(async (tx) => {
+      if (agentRunReplayComment) {
+        return loadAgentRunReplayComment(tx.comment, {
+          commentId: agentRunReplayComment.id,
+          activityId: agentRunReplayComment.activityId,
+          taskId,
+          creatorId,
+          agentId,
+          agentWebhookDeliveryIds:
+            agentRunReplayComment.agentWebhookDeliveryIds,
+          boardWebhookDeliveryIds:
+            agentRunReplayComment.boardWebhookDeliveryIds,
+        });
+      }
       const lockedTask = await tx.$queryRaw<Array<{ id: number }>>`
         SELECT "id"
         FROM "Task"
@@ -634,11 +720,16 @@ export async function createCommentService(params: CreateCommentParams) {
           comment.id,
           inboundProcessingStartedAt,
         );
+      }
+      if (inboundEmailId || agentRunActivity || agentRunSelection) {
         await tx.task.update({
           where: { id: taskId },
           data: {
             totalComments: { increment: 1 },
             lastCommentAt: new Date(),
+            ...(agentRunActivity || agentRunSelection
+              ? { updatedAt: new Date() }
+              : {}),
             ...(creatorIdNum !== hyperAiId &&
             !currentTask.updatedByUserIds.includes(creatorIdNum)
               ? { updatedByUserIds: { push: creatorIdNum } }
@@ -839,6 +930,22 @@ export async function createCommentService(params: CreateCommentParams) {
           })),
         );
       }
+      const commentActivityId =
+        agentRunActivity?.id ?? agentRunSelection?.activityId;
+      if (commentActivityId) {
+        await tx.agentRunActivity.update({
+          where: { id: commentActivityId },
+          data: {
+            ...(agentRunActivity
+              ? { responseCommentId: comment.id }
+              : { selectionCommentId: comment.id }),
+            commentAgentWebhookDeliveryIds: webhookDeliveryIds.filter(
+              (id): id is string => Boolean(id),
+            ),
+            commentBoardWebhookDeliveryIds: boardWebhookDeliveryIds,
+          },
+        });
+      }
       return {
         comment,
         webhookDeliveryIds,
@@ -865,7 +972,121 @@ export async function createCommentService(params: CreateCommentParams) {
     inboundProcessingStartedAt,
   } = transactionResult;
   if (inboundCompleted) return comment;
+  const committedText = comment.text;
+  const isAgentRunComment = Boolean(
+    agentRunActivity || agentRunSelection || agentRunReplayComment,
+  );
+  if (agentRunReplayComment?.notificationsCompletedAt) {
+    await publishAgentWebhookDeliveries(webhookDeliveryIds);
+    await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
+    return comment;
+  }
+  let agentRunCommentNotificationClaim: {
+    activityId: string;
+    processingAt: Date;
+  } | null = null;
+  let agentRunCommentNotificationState: {
+    commentNotificationDeliveryKeys: string[];
+    commentMentionsAttemptedAt: Date | null;
+    commentFcmAttemptedAt: Date | null;
+    commentEmailsAttemptedAt: Date | null;
+  } | null = null;
   try {
+    if (isAgentRunComment) {
+      const activityId =
+        agentRunActivity?.id ??
+        agentRunSelection?.activityId ??
+        agentRunReplayComment?.activityId;
+      if (!activityId) {
+        throw new Error("Run activity comment is missing its activity");
+      }
+      const processingAt = new Date();
+      const staleBefore = new Date(
+        processingAt.getTime() - AGENT_RUN_COMMENT_NOTIFICATION_LEASE_MS,
+      );
+      const claimed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: activityId,
+          commentNotificationsCompletedAt: null,
+          OR: [
+            { commentNotificationsProcessingAt: null },
+            { commentNotificationsProcessingAt: { lte: staleBefore } },
+          ],
+        },
+        data: { commentNotificationsProcessingAt: processingAt },
+      });
+      if (claimed.count === 0) {
+        const state = await prisma.agentRunActivity.findUnique({
+          where: { id: activityId },
+          select: { commentNotificationsCompletedAt: true },
+        });
+        if (state?.commentNotificationsCompletedAt) return comment;
+        if (state) {
+          throw new AgentRunActivityInProgressError(
+            "Run activity comment notifications are still processing",
+          );
+        }
+        throw new Error("Run activity comment was not found");
+      }
+      agentRunCommentNotificationClaim = { activityId, processingAt };
+      agentRunCommentNotificationState =
+        await prisma.agentRunActivity.findUniqueOrThrow({
+          where: { id: activityId },
+          select: {
+            commentNotificationDeliveryKeys: true,
+            commentMentionsAttemptedAt: true,
+            commentFcmAttemptedAt: true,
+            commentEmailsAttemptedAt: true,
+          },
+        });
+    }
+
+    const notificationDeliveryKeys = new Set(
+      agentRunCommentNotificationState?.commentNotificationDeliveryKeys ?? [],
+    );
+    const checkpointNotificationDelivery = async (key: string) => {
+      if (notificationDeliveryKeys.has(key)) return;
+      if (!agentRunCommentNotificationClaim) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      const checkpointed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: { commentNotificationDeliveryKeys: { push: key } },
+      });
+      if (checkpointed.count === 0) {
+        throw new Error("Run activity notification delivery claim was lost");
+      }
+      notificationDeliveryKeys.add(key);
+    };
+    const renewNotificationClaim = async () => {
+      if (!agentRunCommentNotificationClaim) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      const renewedAt = new Date(
+        Math.max(
+          Date.now(),
+          agentRunCommentNotificationClaim.processingAt.getTime() + 1,
+        ),
+      );
+      const renewed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsCompletedAt: null,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: { commentNotificationsProcessingAt: renewedAt },
+      });
+      if (renewed.count === 0) {
+        throw new Error("Run activity notification claim was lost");
+      }
+      agentRunCommentNotificationClaim.processingAt = renewedAt;
+    };
+
     if (resolvedDirectReplyUserId != null) {
       void broadcastInboxChange(resolvedDirectReplyUserId, {
         originUserId: creatorId,
@@ -899,7 +1120,12 @@ export async function createCommentService(params: CreateCommentParams) {
 
     // Keep totalComments in sync — avoids a COUNT join on every board load.
     // creatorId is always set in this service (unlike activity comments).
-    if (!inboundEmailId) {
+    if (
+      !inboundEmailId &&
+      !agentRunActivity &&
+      !agentRunSelection &&
+      !agentRunReplayComment
+    ) {
       await prisma.task.update({
         where: { id: taskId },
         data: {
@@ -964,16 +1190,79 @@ export async function createCommentService(params: CreateCommentParams) {
     if (resolvedDirectReplyUserId != null) {
       recipientUserIds.push(resolvedDirectReplyUserId);
     }
-    const mentionedUserIds = new Set(getMentionedUserIdsFromCommentText(text));
+    const mentionedUserIds = new Set(
+      getMentionedUserIdsFromCommentText(committedText),
+    );
+    const runMentionProcessing = () =>
+      processMentionsFromCommentText({
+        text: committedText,
+        commentId: comment.id,
+        taskId,
+        projectId: task.projectId,
+        mentionedBy: creatorIdNum,
+        fromAgentId: agentId ?? null,
+        failOnError: isAgentRunComment,
+        skipUserIds:
+          resolvedDirectReplyUserId === null
+            ? []
+            : [resolvedDirectReplyUserId],
+        ...(isAgentRunComment
+          ? {
+              deliveryProgress: {
+                has: (stage: string, recipient: number | string) =>
+                  notificationDeliveryKeys.has(`mention:${stage}:${recipient}`),
+                beforeDelivery: renewNotificationClaim,
+                mark: (stage: string, recipient: number | string) =>
+                  checkpointNotificationDelivery(
+                    `mention:${stage}:${recipient}`,
+                  ),
+              },
+            }
+          : {}),
+      });
+    let mentionProcessing: Promise<void> = Promise.resolve();
+    if (isAgentRunComment) {
+      if (
+        !agentRunCommentNotificationClaim ||
+        !agentRunCommentNotificationState
+      ) {
+        throw new Error("Run activity notification claim is missing");
+      }
+      if (!agentRunCommentNotificationState.commentMentionsAttemptedAt) {
+        const claim = agentRunCommentNotificationClaim;
+        mentionProcessing = runMentionProcessing().then(async () => {
+          const checkpointed = await prisma.agentRunActivity.updateMany({
+            where: {
+              id: claim.activityId,
+              commentNotificationsProcessingAt: claim.processingAt,
+              commentMentionsAttemptedAt: null,
+            },
+            data: { commentMentionsAttemptedAt: new Date() },
+          });
+          if (checkpointed.count === 0) {
+            throw new Error("Run activity mention notification claim was lost");
+          }
+        });
+      }
+    } else {
+      mentionProcessing = runMentionProcessing().catch((err) =>
+        console.warn("[createCommentService] processMentions failed:", err),
+      );
+    }
 
-    const [_, __, ___, ____, commentCreator, userIds] = await Promise.all([
-      prisma.drafts.deleteMany({
-        where: {
-          type: "Comment",
-          taskId,
-          userId: creatorId,
-        },
-      }),
+    const notificationWork = [
+      // Run-generated comments are not composer submissions, so they must not
+      // consume the user's draft.
+      isAgentRunComment
+        ? Promise.resolve()
+        : prisma.drafts.deleteMany({
+            where: {
+              type: "Comment",
+              taskId,
+              userId: creatorId,
+              updatedAt: { lte: comment.createdAt },
+            },
+          }),
       createNotificationForComment(
         task,
         comment,
@@ -981,23 +1270,12 @@ export async function createCommentService(params: CreateCommentParams) {
         recipientUserIds,
         agentId ?? null,
         resolvedDirectReplyUserId,
-        Boolean(inboundEmailId),
+        Boolean(inboundEmailId || agentRunReplayComment),
       ),
-      processMentionsFromCommentText({
-        text,
-        commentId: comment.id,
-        taskId,
-        projectId: task.projectId,
-        mentionedBy: creatorIdNum,
-        fromAgentId: agentId ?? null,
-        skipUserIds:
-          resolvedDirectReplyUserId == null ? [] : [resolvedDirectReplyUserId],
-      }).catch((err) =>
-        console.warn("[createCommentService] processMentions failed:", err),
-      ),
+      mentionProcessing,
       processTaskReferences
         ? processTaskReferencesFromCommentText(
-            text,
+            committedText,
             taskId,
             currentUser.id,
           ).catch((err) =>
@@ -1011,67 +1289,193 @@ export async function createCommentService(params: CreateCommentParams) {
         where: { id: creatorId },
       }),
       idsToSendNotificationsTo(taskId, creatorId, task.userId, task.projectId),
-    ]);
-
-    // Publish only after mention notifications exist. Agent replies can then
-    // claim the exact persisted invocation identified by reply_to_comment_id.
-    await publishAgentWebhookDeliveries(webhookDeliveryIds);
-    await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
-
-    const devices = await prisma.subscribedDevices.findMany({
-      where: { userId: { in: userIds } },
+    ] as const;
+    const [, , , , commentCreator, userIds] = await Promise.all(
+      notificationWork,
+    ).catch(async (error) => {
+      await Promise.allSettled(notificationWork);
+      throw error;
     });
 
-    const fcmDelivery = sendDataOnlyFcm(
-      devices,
-      commentCreator!,
-      task.title,
-      task.uniqueIndex,
-      task.projectId,
-      creatorId,
-      comment,
-    );
-    if (inboundEmailId) {
-      await fcmDelivery;
-      await sendCommentEmails({
-        task,
-        text,
-        creatorId,
-        currentUser,
-        recipientUserIds,
-        mentionedUserIds,
-        fromAgentId: agentId ?? null,
-      }).catch((err) =>
-        console.warn("[createCommentService] sendCommentEmails failed:", err),
-      );
-      if (!inboundProcessingStartedAt) {
-        throw new Error("Inbound email processing lease is missing");
+    // Publish only after mention notifications exist. Agent replies can then
+    // claim the persisted invocation identified by reply_to_comment_id.
+    if (isAgentRunComment) await renewNotificationClaim();
+    await publishAgentWebhookDeliveries(webhookDeliveryIds);
+    if (isAgentRunComment) await renewNotificationClaim();
+    await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
+    if (isAgentRunComment) {
+      if (
+        !agentRunCommentNotificationClaim ||
+        !agentRunCommentNotificationState
+      ) {
+        throw new Error("Run activity notification claim is missing");
       }
-      await completeInboundEmailProcessing(
-        prisma,
-        inboundEmailId,
-        comment.id,
-        inboundProcessingStartedAt,
-      );
+      // ponytail: per-target checkpoints follow successful handoff, so a process
+      // exit between handoff and checkpoint can still duplicate that target.
+      // Exactly-once needs provider-idempotent outboxes.
+      if (!agentRunCommentNotificationState.commentFcmAttemptedAt) {
+        const devices = await prisma.subscribedDevices.findMany({
+          where: { userId: { in: userIds } },
+        });
+        await sendDataOnlyFcm(
+          devices,
+          commentCreator!,
+          task.title,
+          task.uniqueIndex,
+          task.projectId,
+          creatorId,
+          comment,
+          {
+            failOnError: true,
+            deliveredDeviceIds: new Set(
+              [...notificationDeliveryKeys]
+                .filter((key) => key.startsWith("fcm:"))
+                .map((key) => key.slice("fcm:".length)),
+            ),
+            beforeDelivery: renewNotificationClaim,
+            markDelivered: (firebaseId) =>
+              checkpointNotificationDelivery(`fcm:${firebaseId}`),
+          },
+        );
+        const checkpointed = await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentFcmAttemptedAt: null,
+          },
+          data: { commentFcmAttemptedAt: new Date() },
+        });
+        if (checkpointed.count === 0) {
+          throw new Error("Run activity FCM notification claim was lost");
+        }
+      }
+      if (!agentRunCommentNotificationState.commentEmailsAttemptedAt) {
+        await sendCommentEmails({
+          task,
+          text: committedText,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+          deliveredUserIds: new Set(
+            [...notificationDeliveryKeys]
+              .filter((key) => key.startsWith("email:"))
+              .map((key) => Number(key.slice("email:".length))),
+          ),
+          beforeDelivery: renewNotificationClaim,
+          markDelivered: (userId) =>
+            checkpointNotificationDelivery(`email:${userId}`),
+        });
+        const checkpointed = await prisma.agentRunActivity.updateMany({
+          where: {
+            id: agentRunCommentNotificationClaim.activityId,
+            commentNotificationsProcessingAt:
+              agentRunCommentNotificationClaim.processingAt,
+            commentEmailsAttemptedAt: null,
+          },
+          data: { commentEmailsAttemptedAt: new Date() },
+        });
+        if (checkpointed.count === 0) {
+          throw new Error("Run activity email notification claim was lost");
+        }
+      }
+      // Keep the realtime handoff inside the lease so an interrupted request
+      // can retry it, while completed duplicate requests remain side-effect free.
+      await renewNotificationClaim();
+      await broadcastTaskComment(taskId, {
+        originUserId: accessUserId ?? currentUser.id,
+      });
+      const completed = await prisma.agentRunActivity.updateMany({
+        where: {
+          id: agentRunCommentNotificationClaim.activityId,
+          commentNotificationsCompletedAt: null,
+          commentNotificationsProcessingAt:
+            agentRunCommentNotificationClaim.processingAt,
+        },
+        data: {
+          commentNotificationsCompletedAt: new Date(),
+          commentNotificationsProcessingAt: null,
+        },
+      });
+      if (completed.count === 0) {
+        throw new Error("Run activity notification claim was lost");
+      }
+      agentRunCommentNotificationClaim = null;
     } else {
-      void fcmDelivery.catch((error) =>
-        console.warn("[createCommentService] FCM delivery failed:", error),
-      );
-      await sendCommentEmails({
-        task,
-        text,
+      const devices = await prisma.subscribedDevices.findMany({
+        where: { userId: { in: userIds } },
+      });
+      const fcmDelivery = sendDataOnlyFcm(
+        devices,
+        commentCreator!,
+        task.title,
+        task.uniqueIndex,
+        task.projectId,
         creatorId,
-        currentUser,
-        recipientUserIds,
-        mentionedUserIds,
-        fromAgentId: agentId ?? null,
-      }).catch((err) =>
-        console.warn("[createCommentService] sendCommentEmails failed:", err),
+        comment,
       );
+      if (inboundEmailId) {
+        await fcmDelivery;
+        await sendCommentEmails({
+          task,
+          text: committedText,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+        }).catch((err) =>
+          console.warn("[createCommentService] sendCommentEmails failed:", err),
+        );
+        if (!inboundProcessingStartedAt) {
+          throw new Error("Inbound email processing lease is missing");
+        }
+        await completeInboundEmailProcessing(
+          prisma,
+          inboundEmailId,
+          comment.id,
+          inboundProcessingStartedAt,
+        );
+      } else {
+        void fcmDelivery.catch((error) =>
+          console.warn("[createCommentService] FCM delivery failed:", error),
+        );
+        await sendCommentEmails({
+          task,
+          text: committedText,
+          creatorId,
+          currentUser,
+          recipientUserIds,
+          mentionedUserIds,
+          fromAgentId: agentId ?? null,
+        }).catch((err) =>
+          console.warn("[createCommentService] sendCommentEmails failed:", err),
+        );
+      }
     }
 
     return comment;
   } catch (error) {
+    if (agentRunCommentNotificationClaim) {
+      const claim = agentRunCommentNotificationClaim;
+      await prisma.agentRunActivity
+        .updateMany({
+          where: {
+            id: claim.activityId,
+            commentNotificationsCompletedAt: null,
+            commentNotificationsProcessingAt: claim.processingAt,
+          },
+          data: { commentNotificationsProcessingAt: null },
+        })
+        .catch((releaseError) =>
+          console.error(
+            "[createCommentService] run notification claim release failed:",
+            releaseError,
+          ),
+        );
+    }
     if (inboundEmailId && inboundProcessingStartedAt) {
       await releaseInboundEmailProcessing(
         prisma,
