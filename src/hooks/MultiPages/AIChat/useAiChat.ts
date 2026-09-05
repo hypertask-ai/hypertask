@@ -298,6 +298,11 @@ export function useAiChat() {
     scopedProjectId ?? "all",
     currentProject?.id ?? "no-board",
     currentUser?.id ?? "anonymous",
+    // Navigating to a different ticket must bump the generation too, so an
+    // in-flight ensureSessionForCurrentBoard() poll for the old ticket can't
+    // land a send into a conversation the user has since navigated away
+    // from (HTPR-6100).
+    taskId ?? "no-task",
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {
@@ -427,15 +432,24 @@ export function useAiChat() {
       // No signed-in user yet means no session can ever match; don't spin
       // for the full timeout waiting on a predicate that can't succeed.
       if (userId === undefined) return undefined;
-      const matchesTask = (session: IChatSession) =>
-        session.taskId === taskId && session.userId === userId;
+      // Match on taskId alone, same as the find-or-create init effect in
+      // useSessionAndChatHistory - sessions are already scoped to the
+      // signed-in user server-side, so requiring userId here too just adds
+      // a second, easy-to-drift copy of that rule.
+      const matchesTask = (session: IChatSession) => session.taskId === taskId;
+      // Ticket switches and explicit session picks bump this generation, so
+      // a send that outlives the user's navigation away from this ticket
+      // doesn't land in a conversation they can no longer see (HTPR-6100).
+      const generation = sessionIntentGenerationRef.current;
       const deadline = Date.now() + timeoutMs;
       while (
         !sessionsRef.current.some(matchesTask) &&
         Date.now() < deadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 50));
+        if (sessionIntentGenerationRef.current !== generation) return undefined;
       }
+      if (sessionIntentGenerationRef.current !== generation) return undefined;
       return sessionsRef.current.find(matchesTask);
     }
 
@@ -1141,7 +1155,10 @@ export function useAiChat() {
       scopedProjectId
     );
 
-    if (!isFullScreenChat && dockedProjectId !== undefined) {
+    // A task-scoped send (the ticket detail page) must never enter the
+    // project-wide board map, or opening the docked chat on the board later
+    // would resume this ticket's session instead of starting fresh (HTPR-6100).
+    if (!isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
       setAiChatBoardSessionMap((previousMap) => ({
         ...previousMap,
         [dockedProjectId]: session.id,

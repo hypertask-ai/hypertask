@@ -124,6 +124,12 @@ export const ChatHeader = () => {
   );
 
   const activeSessionId = activeSession ?? null;
+  // Delete targets the same session rename/title already do (currentSession,
+  // falling back to activeSession) so the three don't disagree about which
+  // chat is "the one on screen" (HTPR-6100). Highlighting above stays keyed
+  // strictly off activeSession, since currentSession can be a display-only
+  // fallback during a refetch that shouldn't paint as the selected item.
+  const resolvedSessionId = currentSession?.id ?? activeSessionId;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -438,8 +444,8 @@ export const ChatHeader = () => {
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
                 onClick={() => {
-                  if (activeSessionId) {
-                    void deleteSession(activeSessionId);
+                  if (resolvedSessionId) {
+                    void deleteSession(resolvedSessionId);
                   }
                   setIsOverflowOpen(false);
                 }}
