@@ -10,14 +10,7 @@ import { Sparkles, X } from "lucide-react";
 
 export const ChatWindow = () => {
   const isMbl = useContext(MobileViewContext);
-  const { activeSession, currentSession, minimized, restoreChat, togglePopover } =
-    useAiChatContext();
-  // While activeSession is set but `currentSession` hasn't resolved yet (a
-  // stale/mid-refetch sessions list, HTPR-6100), keep showing the message
-  // list instead of flashing the welcome screen over an open conversation.
-  const showWelcomeScreen = activeSession
-    ? currentSession !== undefined && currentSession.messages.length === 0
-    : (currentSession?.messages?.length ?? 0) === 0;
+  const { currentSession, minimized, restoreChat, togglePopover } = useAiChatContext();
 
   // Minimized: collapse to a small tab pinned bottom-right (the parent wrapper
   // is fixed bottom-right). Click the tab to reopen, the X to close for good.
@@ -65,7 +58,7 @@ export const ChatWindow = () => {
           stays visible. Without min-h-0/flex-1 the welcome screen forced full
           height and pushed the input out of the overflow-hidden window. */}
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-        {showWelcomeScreen ? (
+        {(currentSession?.messages ?? []).length === 0 ? (
           <WelcomeScreen />
         ) : (
           <MessageList />

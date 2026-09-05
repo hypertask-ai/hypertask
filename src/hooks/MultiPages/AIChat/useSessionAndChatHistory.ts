@@ -51,6 +51,11 @@ export const useSessionAndChatHistory = (
   // has switched tickets, instead of committing its session as active.
   const currentTaskIdRef = useRef<number | undefined>(taskId);
   currentTaskIdRef.current = taskId;
+  // Caches the last session resolved for the current activeSession id, so a
+  // stale/mid-refetch sessions list (activeSession set, lookup momentarily
+  // misses) keeps showing that same session instead of dropping to
+  // undefined - see currentSession below (HTPR-6100).
+  const lastKnownSessionRef = useRef<IChatSession | undefined>(undefined);
 
   const hasRequiredData = !!currentUser?.uid;
 
@@ -538,14 +543,20 @@ export const useSessionAndChatHistory = (
   // Sessions are reordered to the front on select/write, so `sessions[0]` is
   // usually right, but a session can become active (the per-task init effect
   // above) without being reordered yet - resolve by id so every consumer
-  // agrees (HTPR-6100). `sessions` is a fresh array each render, so this is
-  // not worth memoizing. Only fall back to `sessions[0]` when nothing is
+  // agrees (HTPR-6100). Only fall back to `sessions[0]` when nothing is
   // active at all: if `activeSession` is set but a stale/mid-refetch
-  // `sessions` list doesn't have it yet, showing nothing beats showing
-  // whatever session another ticket last wrote to.
-  const currentSession = activeSession
+  // `sessions` list doesn't have it yet, showing whatever another ticket
+  // last wrote to would be wrong, so keep showing this same active id's
+  // last resolved session (not any other id's) until the list catches up.
+  const resolvedSession = activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
+  if (resolvedSession) {
+    lastKnownSessionRef.current = resolvedSession;
+  } else if (lastKnownSessionRef.current?.id !== activeSession) {
+    lastKnownSessionRef.current = undefined;
+  }
+  const currentSession = resolvedSession ?? lastKnownSessionRef.current;
 
   return {
     isLoading: isDemo ? false : isLoadingSessions,

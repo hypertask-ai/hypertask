@@ -427,12 +427,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
       : []),
     ...sessionGroups,
   ];
-  // While activeSession is set but `currentSession` hasn't resolved yet (a
-  // stale/mid-refetch sessions list, HTPR-6100), keep showing the message
-  // list instead of flashing the welcome screen over an open conversation.
-  const hasMessages = activeSession
-    ? currentSession === undefined || currentSession.messages.length > 0
-    : (currentSession?.messages?.length ?? 0) > 0;
+  const hasMessages = (currentSession?.messages?.length ?? 0) > 0;
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
