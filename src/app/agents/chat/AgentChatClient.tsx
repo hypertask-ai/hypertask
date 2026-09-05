@@ -1625,7 +1625,7 @@ const AgentChatClient = (props: IProp) => {
                 <ActivityGroup key={item.id} group={item} />
               ),
             )}
-            {chatStopAndTimeoutEnabled &&
+            {chatStopAndTimeoutEnabled && activeFeedFilter !== "activity" &&
               queuedMessages.map((item) => (
                 <div key={item.id} className="flex flex-col items-end">
                   <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground whitespace-pre-wrap break-words opacity-70">

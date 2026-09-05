@@ -49,7 +49,7 @@ stub("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => ({ userId: 6 }),
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
-stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaiting: messageRows[0]?.role !== "human" }) });
+stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaiting: true, messageId: "message-1" }) });
 stub("src/lib/flags.ts", {
   isFeatureEnabled: async (key, userId) => {
     assert.equal(key, "htpr-6094-agent-activity-rows");

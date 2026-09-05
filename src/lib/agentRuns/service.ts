@@ -270,12 +270,12 @@ async function reconcileAgentChatTurn(
     });
     if (!session) return null;
     const message = session.messages[0];
-    if (message?.role !== "human") return stop ? null : { awaiting: false };
+    if (message?.role !== "human") return stop ? null : { awaiting: false, messageId: message?.id ?? null };
     const [candidateRun] = session.agentRuns;
     const run = candidateRun && candidateRun.lastActivityAt >= message.createdAt ? candidateRun : null;
     const expired = now.getTime() - message.createdAt.getTime() >= AGENT_RUN_STALE_AFTER_MS;
     if (!stop && (!expired || run?.activities.some((activity) => activity.createdAt >= message.createdAt))) {
-      return { awaiting: true, run: run ? { id: run.id } : null };
+      return { awaiting: true, messageId: message.id, run: run ? { id: run.id } : null };
     }
     const marker = await tx.chatMessage.createMany({
       data: [{
@@ -288,7 +288,7 @@ async function reconcileAgentChatTurn(
       }],
       skipDuplicates: true,
     });
-    if (marker.count === 0) return stop ? null : { awaiting: false };
+    if (marker.count === 0) return stop ? null : { awaiting: false, messageId: message.id };
 
     let deliveryId: string | null = null;
     if (run) {
@@ -316,7 +316,7 @@ async function reconcileAgentChatTurn(
       });
     }
     await tx.chatSession.update({ where: { id: sessionId }, data: { updatedAt: now } });
-    return { awaiting: false, changed: true, deliveryId };
+    return { awaiting: false, messageId: message.id, changed: true, deliveryId };
   });
 
   if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
@@ -326,7 +326,7 @@ async function reconcileAgentChatTurn(
 
 export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   const result = await reconcileAgentChatTurn(principal, sessionId, false, now);
-  return result ? { awaiting: result.awaiting, run: result.awaiting ? result.run : null } : null;
+  return result ? { awaiting: result.awaiting, messageId: result.messageId, run: result.awaiting ? result.run : null } : null;
 }
 export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   return (await reconcileAgentChatTurn(principal, sessionId, true, now))?.changed || null;
@@ -589,7 +589,7 @@ export async function createAgentRunActivity(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           select: { id: true, role: true },
         });
-        if (target?.role !== "human" || (exactChatReply && target.id !== input.replyToMessageId)) {
+        if (target?.role !== "human" || (input.replyToMessageId && target.id !== input.replyToMessageId)) {
           throw new AgentRunNotActiveError("Chat response does not target the current turn");
         }
         await tx.chatMessage.create({

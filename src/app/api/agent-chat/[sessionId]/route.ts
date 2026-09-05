@@ -48,7 +48,7 @@ export async function GET(
       userId,
     );
     // Last 200, oldest first: page desc from the tail, then flip.
-    const [messageRows, activity] = await Promise.all([
+    const [messageRows, activity, turn] = await Promise.all([
       prisma.chatMessage.findMany({
         where: { sessionId: session.id },
         orderBy: { createdAt: "desc" },
@@ -83,7 +83,7 @@ export async function GET(
         createdAt: message.createdAt,
       })),
       activity,
-      awaiting: messages[messages.length - 1]?.role === "human",
+      awaiting: turn?.messageId === messages[messages.length - 1]?.id ? turn.awaiting : messages[messages.length - 1]?.role === "human",
       chatEnabled,
     });
   } catch (error: any) {
