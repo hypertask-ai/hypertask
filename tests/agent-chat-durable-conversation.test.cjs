@@ -497,25 +497,17 @@ test("the turn event log stays append-only, ordered and duplicate-proof", () => 
   );
 });
 
+// Migration SQL minus its comment lines, so an assertion about the statements
+// is not satisfied or broken by prose describing them.
+function statementsOf(migrationSql) {
+  return migrationSql
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("--"));
+}
+
 test("history has an index that matches how it is read", () => {
   assert.match(schema, /@@index\(\[sessionId, createdAt, id\]\)/);
-  assert.match(
-    indexMigration,
-    /CREATE INDEX CONCURRENTLY "ChatMessage_sessionId_createdAt_id_idx"/,
-    "a plain build holds a SHARE lock and blocks chat inserts for its duration",
-  );
-  for (const column of ["authorUserId", "authorAgentId"]) {
-    assert.match(
-      indexMigration,
-      new RegExp(`CREATE INDEX CONCURRENTLY "ChatMessage_${column}_idx"`),
-      "an unindexed referencing column makes every parent delete scan ChatMessage",
-    );
-  }
-  assert.doesNotMatch(
-    indexMigration,
-    /CREATE INDEX CONCURRENTLY IF NOT EXISTS/,
-    "IF NOT EXISTS would skip rebuilding an index left INVALID by an interrupted build",
-  );
   for (const index of [
     "ChatMessage_sessionId_createdAt_id_idx",
     "ChatMessage_authorUserId_idx",
@@ -523,10 +515,19 @@ test("history has an index that matches how it is read", () => {
   ]) {
     assert.match(
       indexMigration,
-      new RegExp(`DROP INDEX CONCURRENTLY IF EXISTS "${index}";\\nCREATE INDEX`),
-      `${index} must be dropped before it is rebuilt, so a retry is clean`,
+      new RegExp(
+        `CREATE INDEX CONCURRENTLY IF NOT EXISTS "${index}"`,
+      ),
+      "a plain build holds a SHARE lock and blocks chat inserts for its duration; IF NOT EXISTS keeps a hand-applied index a no-op here",
     );
   }
+  // Postgres refuses DROP INDEX CONCURRENTLY in any file carrying a second
+  // statement, so one here aborts the whole deploy with SQLSTATE 25001.
+  assert.doesNotMatch(
+    statementsOf(indexMigration).join("\n"),
+    /DROP INDEX CONCURRENTLY/,
+    "a DROP INDEX CONCURRENTLY beside these builds fails the deploy, not just this file",
+  );
   assert.doesNotMatch(
     modelBlock("ChatMessage"),
     /@@index\(\[sessionId\]\)/,
@@ -536,5 +537,11 @@ test("history has an index that matches how it is read", () => {
     dropIndexMigration,
     /DROP INDEX CONCURRENTLY IF EXISTS "ChatMessage_sessionId_idx"/,
     "the prefix index is dropped only after its replacement exists",
+  );
+  // Same SQLSTATE 25001 rule: this drop only applies because it is alone.
+  assert.equal(
+    statementsOf(dropIndexMigration).length,
+    1,
+    "DROP INDEX CONCURRENTLY only applies when it is the sole statement in its file",
   );
 });
