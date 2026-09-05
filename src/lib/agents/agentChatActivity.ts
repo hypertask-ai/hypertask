@@ -114,7 +114,9 @@ export async function listAgentChatActivity(
         run: { select: { task: { select: taskSelect } } },
       },
     }),
-  ]);
+  ]).catch((cause: unknown) => {
+    throw new Error("Failed to load Agent Chat activity", { cause });
+  });
 
   const feed: AgentChatActivity[] = runs.flatMap((run) => {
     const task = activityTask(run.task);

@@ -258,4 +258,20 @@ test("server projection scopes queries before limits and emits safe chronologica
   );
   assert.equal(queries.runs.take, 200);
   assert.equal(queries.activities.take, 200);
+
+  const cause = new Error("database unavailable");
+  db.agentRun.findMany = async () => {
+    throw cause;
+  };
+  await assert.rejects(
+    server.listAgentChatActivity(
+      { agentId: "agent-1", sessionId: "session-1", userId: 6 },
+      db,
+    ),
+    (error) => {
+      assert.equal(error.message, "Failed to load Agent Chat activity");
+      assert.equal(error.cause, cause);
+      return true;
+    },
+  );
 });
