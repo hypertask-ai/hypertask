@@ -87,6 +87,22 @@ test("the recorded payload only reaches an author whose local dev loop is on", a
   );
 });
 
+test("only a run delivery carries its payload", async () => {
+  const runPayload = state.delivery.payload;
+  state.delivery = {
+    ...state.delivery,
+    event: "comment.mention",
+    payload: { event: "comment.mention", commentHtml: "<p>hello</p>" },
+  };
+  const result = await getWebhook([RUNS_FLAG, DEV_LOOP_FLAG]);
+  assert.equal(
+    "payload" in result.deliveries[0],
+    false,
+    "replay reads run deliveries only, so comment body text never travels",
+  );
+  state.delivery = { ...state.delivery, event: "run.created", payload: runPayload };
+});
+
 test("the payload never travels without the agent run flag that records it", async () => {
   const devLoopOnly = await getWebhook([DEV_LOOP_FLAG]);
   assert.deepEqual(
