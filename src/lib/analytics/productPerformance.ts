@@ -146,6 +146,11 @@ export type RealtimeLatencyPerformanceEvent = {
     receipt_to_render_ms: number | null;
     receipt_to_request_p75_ms: number | null;
     receipt_to_request_budget_met: boolean | null;
+    // HTPR-6166: fetch time vs main-thread blocking, split out of
+    // receipt_to_render_ms. null means unmeasurable (API unsupported), not 0.
+    network_ms: number | null;
+    long_task_ms: number | null;
+    realtime_project_id: number | null;
     production_commit: string;
   };
 };
