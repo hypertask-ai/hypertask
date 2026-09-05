@@ -274,9 +274,8 @@ async function reconcileAgentChatTurn(
     if (message?.role !== "human") {
       return stop ? null : { awaiting: false, run: null, changed: false, deliveryId: null };
     }
-    const run = session.agentRuns[0]?.lastActivityAt >= message.createdAt
-      ? session.agentRuns[0]
-      : null;
+    const [candidateRun] = session.agentRuns;
+    const run = candidateRun && candidateRun.lastActivityAt >= message.createdAt ? candidateRun : null;
     const expired = now.getTime() - message.createdAt.getTime() >= AGENT_RUN_STALE_AFTER_MS;
     if (!stop && !expired) {
       return { awaiting: true, run: run ? { id: run.id } : null, changed: false, deliveryId: null };
@@ -337,7 +336,6 @@ export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId:
   return result ? { awaiting: result.awaiting, run: result.awaiting ? result.run : null } : null;
 }
 
-/** Stop only the current unanswered turn in a browser-owned chat session. */
 export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   const result = await reconcileAgentChatTurn(principal, sessionId, true, now);
   return result?.run ? { run: result.run } : null;

@@ -1109,9 +1109,10 @@ const AgentChatClient = (props: IProp) => {
       const data = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || !data.success) throw new Error(data.error ?? "Failed to stop agent");
       if (sessionIdRef.current !== targetSessionId) return;
+      await loadMessages(targetSessionId);
+      if (sessionIdRef.current !== targetSessionId) return;
       setAwaiting(false);
       setStoppable(false);
-      void loadMessages(targetSessionId);
     } catch (error) {
       if (sessionIdRef.current === targetSessionId) {
         toast.error(error instanceof Error ? error.message : "Failed to stop agent");

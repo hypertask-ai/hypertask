@@ -262,7 +262,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
       findFirst: async () => messages.at(-1) ?? { id: "human-1", role: "human" },
       createMany: async ({ data }) => {
         const created = data.filter((row) => !messages.some((item) => item.replyToMessageId === row.replyToMessageId));
-        messages.push(...created.map((row) => ({ id: `message-${messages.length + 1}`, ...row })));
+        messages.push(...created.map((row, index) => ({ id: `message-${messages.length + index + 1}`, ...row })));
         return { count: created.length };
       },
       create: async ({ data }) => {
