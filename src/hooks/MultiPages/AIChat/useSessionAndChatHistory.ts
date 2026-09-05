@@ -5,7 +5,7 @@ import {
   type TAllChatSessionsResponse,
 } from "@/utils/api/ai_chat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
@@ -35,6 +35,16 @@ export const useSessionAndChatHistory = (
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
   const queryClient = useQueryClient();
+  // Tracks the taskId we've already asked the API to create a fresh session
+  // for, so the init effect below doesn't fire createSessionNext twice while
+  // the first request is still in flight (sessionsData changes as soon as it
+  // resolves, re-running the effect).
+  const startingSessionForTaskRef = useRef<number | null>(null);
+  // Always holds the taskId as of the most recent render, so an in-flight
+  // create started for an earlier ticket can tell it's stale once the user
+  // has switched tickets, instead of committing its session as active.
+  const currentTaskIdRef = useRef<number | undefined>(taskId);
+  currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
 
@@ -461,8 +471,39 @@ export const useSessionAndChatHistory = (
 
       try {
         // Wait for the latestSessionQuery to complete
-        if (isSuccessSessions) {
-          setActiveSession(sessionsData?.data?.sessions?.[0]?.id);
+        if (!isSuccessSessions) return;
+
+        const sessions = sessionsData?.data?.sessions ?? [];
+
+        if (taskId === undefined) {
+          setActiveSession(sessions[0]?.id);
+          return;
+        }
+
+        // Sessions are reordered to the front on every read/write (see
+        // selectSession/addMessageToSessionQuery), so the first match for
+        // this task is always its most recently active session.
+        const existingTaskSession = sessions.find(
+          (session) => session.taskId === taskId
+        );
+        if (existingTaskSession) {
+          setActiveSession(existingTaskSession.id);
+          return;
+        }
+
+        // No session for this task yet: start a fresh one automatically
+        // instead of reusing whatever session another task last used.
+        if (startingSessionForTaskRef.current === taskId) return;
+        const requestedTaskId = taskId;
+        startingSessionForTaskRef.current = requestedTaskId;
+        const created = await startNewSession(
+          () => currentTaskIdRef.current === requestedTaskId
+        );
+        // Only clear the guard if nothing has claimed it for a newer ticket
+        // since we set it, so a failed/skipped create can retry later
+        // without letting a stale response race a fresh in-flight one.
+        if (!created && startingSessionForTaskRef.current === requestedTaskId) {
+          startingSessionForTaskRef.current = null;
         }
       } catch (error) {
         console.error("Error initializing session:", error);
@@ -478,6 +519,8 @@ export const useSessionAndChatHistory = (
     isDemo,
     isSuccessSessions,
     sessionsData,
+    taskId,
+    startNewSession,
   ]);
 
   return {
