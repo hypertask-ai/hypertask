@@ -4,6 +4,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
+import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";
+import {
+  chatTicketProposalSelect,
+  serializeChatTicketProposal,
+} from "@/lib/agents/chatTicketProposal";
 
 export const runtime = "nodejs";
 
@@ -45,12 +50,19 @@ export async function GET(
       "htpr-6094-agent-activity-rows",
       userId,
     );
+    const ticketConfirmEnabled = await isFeatureEnabled(
+      AGENT_CHAT_TICKET_CONFIRM_FLAG,
+      userId,
+    );
     // Last 200, oldest first: page desc from the tail, then flip.
     const [messageRows, activity] = await Promise.all([
       prisma.chatMessage.findMany({
         where: { sessionId: session.id },
         orderBy: { createdAt: "desc" },
         take: 200,
+        include: ticketConfirmEnabled
+          ? { ticketProposal: { select: chatTicketProposalSelect } }
+          : undefined,
       }),
       activityRowsEnabled
         ? listAgentChatActivity({
@@ -78,6 +90,12 @@ export async function GET(
         role,
         content,
         createdAt,
+      // Second pass over the same array, so index i is the same row in both.
+      })).map((message, index) => ({
+        ...message,
+        proposal: serializeChatTicketProposal(
+          (messages[index] as { ticketProposal?: any }).ticketProposal,
+        ),
       })),
       activity,
       awaiting: messages[messages.length - 1]?.role === "human",

@@ -15,7 +15,7 @@ const ROLE_RANK: Record<AgentRole, number> = {
 }
 
 export async function getAgentRole(
-  ctx: McpAuthContext
+  ctx: Pick<McpAuthContext, 'agentId'>
 ): Promise<AgentRole> {
   if (!ctx.agentId) return 'write'
 

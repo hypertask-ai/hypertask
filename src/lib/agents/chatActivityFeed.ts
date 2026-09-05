@@ -1,8 +1,12 @@
+import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketProposal";
+
 export type AgentChatMessage = {
   id: string;
   role: "human" | "assistant";
   content: string;
   createdAt: string;
+  /** Set when this reply asks for a ticket instead of doing the work. */
+  proposal?: SerializedChatTicketProposal | null;
 };
 
 export type AgentChatActivity = {
