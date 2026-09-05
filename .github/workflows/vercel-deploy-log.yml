@@ -36,8 +36,11 @@ jobs:
           DEPLOYMENT: ${{ inputs.deployment }}
           TICKET: ${{ inputs.ticket }}
         run: |
-          set -uo pipefail
-          api() { curl -s -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+          set -euo pipefail
+          api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+          # Manual inputs are untrusted: pin both to their expected shapes before use.
+          [[ "$TICKET" =~ ^[0-9]{1,7}$ ]] || { echo "ticket must be a board-15 unique index"; exit 1; }
+          [[ -z "$DEPLOYMENT" || "$DEPLOYMENT" =~ ^dpl_[A-Za-z0-9]{1,64}$ ]] || { echo "deployment must look like dpl_..."; exit 1; }
 
           if [ -z "$DEPLOYMENT" ]; then
             DEPLOYMENT=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=1" \
@@ -54,12 +57,13 @@ jobs:
             | jq -r '.[]? | select(.type=="stdout" or .type=="stderr" or .type=="error" or .type=="command" or .type=="fatal")
                      | "\((.created // .date // 0) | tostring) \(.payload.text // .text // "")"' \
             | tail -80 \
-            | sed -E 's#postgres(ql)?://[^[:space:]]+#<db-url>#g')
+            | sed -E -e 's#[a-z]+://[^[:space:]]*@[^[:space:]]+#<url-with-credentials>#g' \
+                     -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig')
           echo "fetched $(printf '%s\n' "$EVENTS" | wc -l) event lines"
 
           BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" \
             '{unique_index: ($t|tonumber), project_id: 15, content_type: "html",
-              text: ("<p><strong>Vercel build log for " + $d + "</strong> (last 80 lines, vercel-deploy-log workflow).</p><p>"
+              text: ("<p><strong>Vercel build log for " + ($d|@html) + "</strong> (last 80 lines, vercel-deploy-log workflow).</p><p>"
                      + ($meta|@html) + "</p><pre>" + ($ev|@html) + "</pre>")}')
           code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/comments" \
             -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" -d "$BODY")
