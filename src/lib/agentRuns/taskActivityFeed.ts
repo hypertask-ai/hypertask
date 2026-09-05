@@ -15,6 +15,18 @@ const timestamp = (value: string | Date) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+export function safeAgentRunActivityLink(link: string | null): string | null {
+  if (!link) return null;
+  try {
+    const parsed = new URL(link);
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? parsed.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function mergeTaskThreadFeed(
   comments: IComment[],
   activities: SerializedAgentRunActivity[],

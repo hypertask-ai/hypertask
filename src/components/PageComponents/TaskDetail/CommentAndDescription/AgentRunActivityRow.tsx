@@ -13,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import RelativeTime from "@/components/Common/RelativeTime";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
+import { safeAgentRunActivityLink } from "@/lib/agentRuns/taskActivityFeed";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
@@ -66,11 +67,12 @@ const AgentRunActivityRow = ({
   const type = activity.type;
   if (type === "response") return null;
   const Icon = ACTIVITY_ICONS[type];
+  const link = safeAgentRunActivityLink(activity.link);
 
   return (
     <div className="px-3 py-1">
       <div
-        className="rounded-[4px] bg-cardBackground px-3 py-2 text-meta text-text-light-gray"
+        className="rounded-[5px] bg-cardBackground px-3 py-2 text-meta text-text-light-gray"
         role="group"
         aria-label={`Agent ${activity.type}`}
       >
@@ -83,9 +85,9 @@ const AgentRunActivityRow = ({
             strokeWidth={1.75}
             aria-hidden
           />
-          {activity.link ? (
+          {link ? (
             <a
-              href={activity.link}
+              href={link}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex min-w-0 items-start gap-1 text-white-black hover:text-hypertasks-purple"
@@ -102,7 +104,7 @@ const AgentRunActivityRow = ({
           )}
           <time
             dateTime={activity.createdAt}
-            className="ml-auto shrink-0 text-[10px]"
+            className="ml-auto shrink-0 text-micro"
             title={new Date(activity.createdAt).toLocaleString()}
           >
             <RelativeTime date={activity.createdAt} />

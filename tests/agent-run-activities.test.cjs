@@ -157,7 +157,11 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
         );
         const direction = orderBy[0].createdAt === "desc" ? -1 : 1;
         return activities
-          .filter(({ runId }) => matchingRunIds.has(runId))
+          .filter(
+            ({ runId, type }) =>
+              matchingRunIds.has(runId) &&
+              (!where.type?.not || type !== where.type.not),
+          )
           .sort(
             (a, b) =>
               direction *
@@ -401,6 +405,11 @@ function loadService({
   });
   stub("src/lib/mcp/auth.ts", { validateMcpAuth: async () => null });
   stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
+  stub("src/utils/controllers/projects/getAllIncludes.ts", {
+    projectContentAccessWhere: (userId) => ({
+      OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+    }),
+  });
   stub("src/lib/agentWebhooks/outbox.ts", {
     persistAgentRunStoppedWebhook: async () => null,
     persistAgentWebhookEvent: async (_tx, event) => {
@@ -581,6 +590,7 @@ test("task activity feed only returns flag-enabled runs owned by an authorized v
     activityRow(),
     activityRow({ id: "activity-2", runId: otherRun.id }),
     activityRow({ id: "activity-3", runId: inaccessibleRun.id }),
+    activityRow({ id: "activity-4", type: "RESPONSE" }),
   ];
   const harness = loadService({
     runs: [ownedRun, otherRun, inaccessibleRun],

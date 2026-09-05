@@ -11,7 +11,7 @@ const load = (relativePath) =>
     interopDefault: true,
   })(path.join(root, relativePath));
 
-const { mergeTaskThreadFeed } = load(
+const { mergeTaskThreadFeed, safeAgentRunActivityLink } = load(
   "src/lib/agentRuns/taskActivityFeed.ts",
 );
 
@@ -67,6 +67,15 @@ test("task thread feed merges chronologically without changing comment indexes",
       "comment-12",
     ],
   );
+});
+
+test("task activity links allow only http and https", () => {
+  assert.equal(
+    safeAgentRunActivityLink("https://example.com/result"),
+    "https://example.com/result",
+  );
+  assert.equal(safeAgentRunActivityLink("javascript:alert(1)"), null);
+  assert.equal(safeAgentRunActivityLink("not a url"), null);
 });
 
 test("passive activity row keeps selection accessible and reconciles through comments", () => {

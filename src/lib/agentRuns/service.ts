@@ -34,6 +34,7 @@ import {
   type AgentRunSelectionPersistenceInput,
 } from "./persistence";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_CHAT_EVENT,
   broadcast,
@@ -392,6 +393,7 @@ export async function listTaskAgentRunActivities(
 
   const activities = await prisma.agentRunActivity.findMany({
     where: {
+      type: { not: "RESPONSE" },
       run: {
         taskId,
         agent: { userId },
@@ -399,10 +401,7 @@ export async function listTaskAgentRunActivities(
           status: { not: "Deleted" },
           project: {
             status: { not: "Deleted" },
-            OR: [
-              { ownerId: userId },
-              { members: { some: { userId } } },
-            ],
+            ...projectContentAccessWhere(userId),
           },
         },
       },
