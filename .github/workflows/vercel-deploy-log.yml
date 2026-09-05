@@ -60,6 +60,8 @@ jobs:
             | sed -E -e 's#[a-z]+://[^[:space:]]*@[^[:space:]]+#<url-with-credentials>#g' \
                      -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig')
           echo "fetched $(printf '%s\n' "$EVENTS" | wc -l) event lines"
+          # Ticket comments are capped at 5000 characters: keep the newest 3800 bytes.
+          EVENTS=$(printf '%s' "$EVENTS" | cut -c1-240 | tail -c 3800)
 
           BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" \
             '{unique_index: ($t|tonumber), project_id: 15, content_type: "html",
