@@ -21,6 +21,11 @@ export async function GET(request: NextRequest) {
     const sessions = await prisma.chatSession.findMany({
       where: {
         userId: user.id,
+        // External agents (self-hosted runtimes) are only chatted with from
+        // Agent Chat, which sends through /api/agent-chat, not this general
+        // AI chat surface. Listing their sessions here lets a user open one
+        // and hit the /api/ai/chat/stream guard that rejects the send.
+        OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" } } }],
       },
       include: {
         messages: {
