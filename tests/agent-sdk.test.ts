@@ -473,6 +473,37 @@ test("Node adapters do not expose unexpected handler errors", async () => {
   assert.match(responseBody, /Webhook request failed/);
 });
 
+test("Node adapters do not classify handler messages as request errors", async () => {
+  const handler: WebhookHandler = Object.assign(
+    async () => {
+      throw new Error("Webhook body is too large");
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  let responseBody = "";
+  const response = {
+    statusCode: 0,
+    setHeader() {},
+    end(body: string | Uint8Array = "") {
+      responseBody =
+        typeof body === "string" ? body : new TextDecoder().decode(body);
+    },
+  };
+
+  await nodeHttpAdapter(handler)(
+    {
+      method: "POST",
+      url: "/webhook",
+      headers: {},
+      async *[Symbol.asyncIterator]() {},
+    },
+    response,
+  );
+  assert.equal(response.statusCode, 500);
+  assert.equal(responseBody.includes("Webhook body is too large"), false);
+  assert.match(responseBody, /Webhook request failed/);
+});
+
 test("Node adapters do not copy response headers before reading the body", async () => {
   const handler: WebhookHandler = Object.assign(
     async () => {

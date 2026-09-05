@@ -5,6 +5,16 @@ const BODY_READ_TIMEOUT_MS = 2_000;
 const RAW_BODY_ERROR =
   "Raw webhook bytes are unavailable; mount this adapter before body-parsing middleware";
 
+class AdapterInputError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AdapterInputError";
+  }
+}
+
 type HeaderValue = string | string[] | undefined;
 type NodeRequest = AsyncIterable<Uint8Array | string> & {
   method?: string;
@@ -51,21 +61,26 @@ async function collectBody(request: AsyncIterable<Uint8Array | string>): Promise
   try {
     while (true) {
       const remaining = deadline - Date.now();
-      if (remaining <= 0) throw new Error("Webhook body timed out");
+      if (remaining <= 0) throw new AdapterInputError(408, "Webhook body timed out");
       let timer: ReturnType<typeof setTimeout> | undefined;
       const result = await Promise.race([
         iterator.next(),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("Webhook body timed out")), remaining);
+          timer = setTimeout(
+            () => reject(new AdapterInputError(408, "Webhook body timed out")),
+            remaining,
+          );
         }),
       ]).finally(() => clearTimeout(timer));
       if (result.done) break;
       if (typeof result.value === "string") {
-        throw new Error(RAW_BODY_ERROR);
+        throw new AdapterInputError(400, RAW_BODY_ERROR);
       }
       const chunk = result.value;
       size += chunk.length;
-      if (size > MAX_WEBHOOK_BYTES) throw new Error("Webhook body is too large");
+      if (size > MAX_WEBHOOK_BYTES) {
+        throw new AdapterInputError(413, "Webhook body is too large");
+      }
       chunks.push(chunk);
     }
   } catch (error) {
@@ -100,13 +115,15 @@ async function toRequest(request: NodeRequest, useParsedBody: boolean): Promise<
     if (useParsedBody && request.body !== undefined) {
       const bytes = byteBody(request.body);
       if (!bytes) {
-        throw new Error(RAW_BODY_ERROR);
+        throw new AdapterInputError(400, RAW_BODY_ERROR);
       }
       body = bytes;
     } else {
       body = await collectBody(request);
     }
-    if (body.length > MAX_WEBHOOK_BYTES) throw new Error("Webhook body is too large");
+    if (body.length > MAX_WEBHOOK_BYTES) {
+      throw new AdapterInputError(413, "Webhook body is too large");
+    }
     requestBody = new ArrayBuffer(body.byteLength);
     new Uint8Array(requestBody).set(body);
   }
@@ -167,19 +184,9 @@ async function invokeHandler(
 }
 
 function sendAdapterError(error: unknown, response: NodeResponse): void {
-  const message = error instanceof Error ? error.message : "";
-  let status = 500;
-  let publicMessage = "Webhook request failed";
-  if (message === "Webhook body is too large") {
-    status = 413;
-    publicMessage = message;
-  } else if (message === "Webhook body timed out") {
-    status = 408;
-    publicMessage = message;
-  } else if (message === RAW_BODY_ERROR) {
-    status = 400;
-    publicMessage = message;
-  }
+  const status = error instanceof AdapterInputError ? error.status : 500;
+  const publicMessage =
+    error instanceof AdapterInputError ? error.message : "Webhook request failed";
   response.statusCode = status;
   response.setHeader("content-type", "application/json");
   response.end(JSON.stringify({ success: false, error: publicMessage }));
