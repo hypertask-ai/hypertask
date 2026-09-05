@@ -721,9 +721,10 @@ const AgentChatClient = (props: IProp) => {
       ),
     [messages, activity, activityRowsEnabled],
   );
+  const activeFeedFilter = activityRowsEnabled ? feedFilter : "all";
   const visibleFeed = useMemo(
-    () => displayAgentChatFeed(feed, feedFilter),
-    [feed, feedFilter],
+    () => displayAgentChatFeed(feed, activeFeedFilter),
+    [feed, activeFeedFilter],
   );
   const visibleFeedRevision = useMemo(
     () =>
@@ -768,7 +769,7 @@ const AgentChatClient = (props: IProp) => {
     if (changed && !showScrollToBottom) scrollMessagesToBottom("smooth");
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleFeedRevision, feedFilter]);
+  }, [visibleFeedRevision, activeFeedFilter]);
   useLayoutEffect(() => {
     // A different chat's feed identity has nothing to do with this one's;
     // don't let it suppress the next genuine feed update.
@@ -1580,7 +1581,7 @@ const AgentChatClient = (props: IProp) => {
             )}
             {messages && visibleFeed.length === 0 && (
               <p className="text-meta text-text-light-gray">
-                {emptyFeedText(feedFilter, selectedAgent.displayName)}
+                {emptyFeedText(activeFeedFilter, selectedAgent.displayName)}
               </p>
             )}
             {visibleFeed.map((item) =>
@@ -1594,7 +1595,7 @@ const AgentChatClient = (props: IProp) => {
                 <ActivityGroup key={item.id} group={item} />
               ),
             )}
-            {awaiting && feedFilter !== "activity" && !deliveryNotice && (
+            {awaiting && activeFeedFilter !== "activity" && !deliveryNotice && (
               <div
                 className="flex items-center gap-2 text-meta text-text-light-gray"
                 role="status"
