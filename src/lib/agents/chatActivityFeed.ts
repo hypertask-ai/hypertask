@@ -96,6 +96,21 @@ export function displayAgentChatFeed(
   return grouped;
 }
 
+/**
+ * Whether the chat's feed view should auto-follow to the bottom on a feed
+ * update. The user's own scroll-up always wins, except for a session's very
+ * first content paint: the user cannot have legitimately scrolled away from
+ * messages that were never on screen, so that first paint always lands at
+ * the bottom regardless of any (possibly mis-measured) scroll state.
+ */
+export function shouldAutoScrollToBottom(args: {
+  feedChanged: boolean;
+  isFirstContent: boolean;
+  userScrolledAway: boolean;
+}): boolean {
+  return args.feedChanged && (args.isFirstContent || !args.userScrolledAway);
+}
+
 export function lastAgentChatMessage(
   feed: AgentChatFeedItem[],
 ): AgentChatMessage | null {
