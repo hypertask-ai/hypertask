@@ -123,13 +123,12 @@ export const ChatHeader = () => {
     [sessions]
   );
 
-  const activeSessionId = activeSession ?? null;
   // Delete targets the same session rename/title already do (currentSession,
   // falling back to activeSession) so the three don't disagree about which
-  // chat is "the one on screen" (HTPR-6100). Highlighting above stays keyed
+  // chat is "the one on screen" (HTPR-6100). Highlighting below stays keyed
   // strictly off activeSession, since currentSession can be a display-only
   // fallback during a refetch that shouldn't paint as the selected item.
-  const resolvedSessionId = currentSession?.id ?? activeSessionId;
+  const resolvedSessionId = currentSession?.id ?? activeSession;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -182,7 +181,7 @@ export const ChatHeader = () => {
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
-                  isActive={chat.id === activeSessionId}
+                  isActive={chat.id === activeSession}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     selectSession(chat.id);
@@ -205,7 +204,7 @@ export const ChatHeader = () => {
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
-                  isActive={chat.id === activeSessionId}
+                  isActive={chat.id === activeSession}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     selectSession(chat.id);
