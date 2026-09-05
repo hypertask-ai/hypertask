@@ -4,7 +4,8 @@ import prisma from '@/lib/prisma'
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from '@/lib/realtime/server'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
-import { AGENT_CHAT_TICKET_CONFIRM_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { isFeatureEnabled } from '@/lib/flags'
+import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from '@/lib/flags'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import { getSectionForTask, validateProjectAccess } from '@/lib/mcp/tasks/services'
 import {
@@ -196,14 +197,9 @@ export async function POST(
       role: 'human' | 'assistant'
       content: string
       createdAt: Date
-      ticketProposal?: any
-    }) => ({
-      id,
-      role,
-      content,
-      createdAt,
-      proposal: serializeChatTicketProposal(ticketProposal),
-    })
+      ticketProposal?: unknown
+    }) => ({ id, role, content, createdAt,
+      proposal: serializeChatTicketProposal(ticketProposal as any) })
 
     // A proposal is the whole point of the confirm-before-side-effects boundary:
     // the agent asks for a ticket instead of doing the work. Everything is
@@ -296,6 +292,7 @@ export async function POST(
     }
 
     let message
+    let createdProposal: any = null
     try {
       message = await prisma.$transaction(async (tx) => {
         const created = await tx.chatMessage.create({
@@ -309,9 +306,8 @@ export async function POST(
         })
         // Same transaction, and messageId is unique: one reply carries at most
         // one proposal, and a retried POST can never add a second.
-        let ticketProposal = null
         if (proposalData) {
-          ticketProposal = await tx.chatTicketProposal.create({
+          createdProposal = await tx.chatTicketProposal.create({
             data: { messageId: created.id, ...proposalData },
             select: chatTicketProposalSelect,
           })
@@ -320,7 +316,7 @@ export async function POST(
           where: { id: session.id },
           data: { updatedAt: new Date() },
         })
-        return { ...created, ticketProposal }
+        return created
       })
     } catch (error: any) {
       // Lost a race against a concurrent reply with the same idempotency key.
@@ -335,6 +331,10 @@ export async function POST(
         message: serialize(existing),
         duplicate: true,
       })
+    }
+
+    if (createdProposal) {
+      ;(message as { ticketProposal?: unknown }).ticketProposal = createdProposal
     }
 
     // The user's open Agent Chat tab refetches the thread; fire and forget.

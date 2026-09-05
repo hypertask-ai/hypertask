@@ -3,7 +3,8 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
-import { AGENT_CHAT_TICKET_CONFIRM_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
+import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";
 import {
   chatTicketProposalSelect,
   serializeChatTicketProposal,
@@ -45,10 +46,14 @@ export async function GET(
       );
     }
 
-    const [activityRowsEnabled, ticketConfirmEnabled] = await Promise.all([
-      isFeatureEnabled("htpr-6094-agent-activity-rows", userId),
-      isFeatureEnabled(AGENT_CHAT_TICKET_CONFIRM_FLAG, userId),
-    ]);
+    const activityRowsEnabled = await isFeatureEnabled(
+      "htpr-6094-agent-activity-rows",
+      userId,
+    );
+    const ticketConfirmEnabled = await isFeatureEnabled(
+      AGENT_CHAT_TICKET_CONFIRM_FLAG,
+      userId,
+    );
     // Last 200, oldest first: page desc from the tail, then flip.
     const [messageRows, activity] = await Promise.all([
       prisma.chatMessage.findMany({
@@ -80,13 +85,15 @@ export async function GET(
     return NextResponse.json({
       success: true,
       session: { id: session.id, agentId: session.agentId },
-      messages: messages.map(({ id, role, content, createdAt, ...rest }) => ({
+      messages: messages.map(({ id, role, content, createdAt }) => ({
         id,
         role,
         content,
         createdAt,
+      })).map((message, index) => ({
+        ...message,
         proposal: serializeChatTicketProposal(
-          (rest as { ticketProposal?: any }).ticketProposal,
+          (messages[index] as { ticketProposal?: any }).ticketProposal,
         ),
       })),
       activity,

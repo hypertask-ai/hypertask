@@ -832,9 +832,8 @@ const AgentChatClient = (props: IProp) => {
   useEffect(() => {
     if (!agents || !agentParam || selectedIdRef.current) return;
     const match = agents.find(
-      (a) =>
-        !a.revokedAt && ((a.slug ?? a.id) === agentParam || a.id === agentParam),
-    );
+      (a) => !a.revokedAt && (a.slug ?? a.id) === agentParam,
+    ) ?? agents.find((a) => !a.revokedAt && a.id === agentParam);
     if (match) selectAgent(match);
   }, [agents, agentParam, selectAgent]);
 
