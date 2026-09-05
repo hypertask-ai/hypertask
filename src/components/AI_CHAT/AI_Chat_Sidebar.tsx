@@ -73,7 +73,7 @@ export const AI_Chat_Sidebar = ({
         {!minimized && (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-              {(currentSession?.messages ?? []).length === 0 ? (
+              {currentSession && currentSession.messages.length === 0 ? (
                 <WelcomeScreen />
               ) : (
                 <MessageList />
