@@ -80,6 +80,7 @@ import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import {
   displayAgentChatFeed,
   mergeAgentChatFeed,
+  shouldAutoScrollToBottom,
   type AgentChatActivity,
   type AgentChatActivityGroup,
   type AgentChatFilter,
@@ -946,25 +947,41 @@ const AgentChatClient = (props: IProp) => {
   // poll, or realtime nudge), including when the capped feed stays the same
   // length. Filter changes still need a fresh overflow measurement.
   const prevFeedRevisionRef = useRef("");
+  // The first time a session's real content paints, force the landing to the
+  // bottom no matter what showScrollToBottom says: the user cannot have
+  // legitimately scrolled away from content that has never been on screen.
+  // Without this, a reload that loads messages then activity back-to-back
+  // could mis-measure scroll distance on the very first (still-empty) pass,
+  // latch showScrollToBottom to true, and then stay stuck there forever --
+  // every later update honors "user scrolled up" and skips the auto-scroll,
+  // and the button never clears itself without a manual scroll.
+  const initialScrollDoneRef = useRef(false);
   useLayoutEffect(() => {
     const changed = visibleFeedRevision !== prevFeedRevisionRef.current;
     prevFeedRevisionRef.current = visibleFeedRevision;
-    // Only follow an update when the user was already at (or near) the bottom;
-    // background activity must not yank them away from older content.
+    const isFirstContent = !initialScrollDoneRef.current && visibleFeed.length > 0;
     // "auto" (instant), not "smooth": handleMessageListScroll below reads
     // scrollTop synchronously right after, and a smooth scroll hasn't moved
-    // yet at that point, so it would misjudge distance-from-bottom and leave
-    // showScrollToBottom stuck true after the very next update (e.g. the
-    // initial load after a page reload, where messages then activity land
-    // back-to-back).
-    if (changed && !showScrollToBottom) scrollMessagesToBottom("auto");
+    // yet at that point, so it would misjudge distance-from-bottom.
+    if (
+      shouldAutoScrollToBottom({
+        feedChanged: changed,
+        isFirstContent,
+        userScrolledAway: showScrollToBottom,
+      })
+    ) {
+      scrollMessagesToBottom("auto");
+    }
+    if (visibleFeed.length > 0) initialScrollDoneRef.current = true;
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleFeedRevision, activeFeedFilter]);
   useLayoutEffect(() => {
     // A different chat's feed identity has nothing to do with this one's;
-    // don't let it suppress the next genuine feed update.
+    // don't let it suppress the next genuine feed update, and don't let it
+    // borrow this new session's "have we shown its first content yet" state.
     prevFeedRevisionRef.current = "";
+    initialScrollDoneRef.current = false;
     scrollMessagesToBottom("auto");
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
