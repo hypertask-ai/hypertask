@@ -53,6 +53,10 @@ function runRow(overrides = {}) {
       title: "Run activities",
       userId: 6,
     },
+    taskStatus: "Normal",
+    projectStatus: "Normal",
+    projectOwnerId: 6,
+    projectMemberIds: [],
     chatSession: null,
     ...overrides,
   };
@@ -107,6 +111,25 @@ function matchesRun(run, where) {
   );
 }
 
+function matchesTaskAccess(run, where) {
+  if (!where) return true;
+  if (where.status?.not && run.taskStatus === where.status.not) return false;
+
+  const projectWhere = where.project;
+  if (!projectWhere) return true;
+  if (projectWhere.status?.not && run.projectStatus === projectWhere.status.not) {
+    return false;
+  }
+  if (!projectWhere.OR) return true;
+
+  return projectWhere.OR.some(
+    (condition) =>
+      condition.ownerId === run.projectOwnerId ||
+      (condition.members?.some?.userId !== undefined &&
+        run.projectMemberIds.includes(condition.members.some.userId)),
+  );
+}
+
 function fakeDatabase(initialRuns = [], initialActivities = []) {
   const runs = initialRuns;
   const activities = initialActivities;
@@ -151,7 +174,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
               (run) =>
                 run.taskId === runWhere.taskId &&
                 run.ownerId === runWhere.agent.userId &&
-                run.taskAccessible !== false,
+                matchesTaskAccess(run, runWhere.task),
             )
             .map(({ id }) => id),
         );
@@ -585,7 +608,7 @@ test("task activity refreshes Agent Chat without creating a chat message", async
 test("task activity feed only returns flag-enabled runs owned by an authorized viewer", async () => {
   const ownedRun = runRow();
   const otherRun = runRow({ id: "run-2", ownerId: 7 });
-  const inaccessibleRun = runRow({ id: "run-3", taskAccessible: false });
+  const inaccessibleRun = runRow({ id: "run-3", projectOwnerId: 7 });
   const activities = [
     activityRow(),
     activityRow({ id: "activity-2", runId: otherRun.id }),

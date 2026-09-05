@@ -2,7 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const ts = require("typescript");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
@@ -16,29 +15,29 @@ const { mergeTaskThreadFeed, safeAgentRunActivityLink } = load(
   "src/lib/agentRuns/taskActivityFeed.ts",
 );
 
+let routeLoadId = 0;
+const stub = (relativePath, exports) => {
+  const filename = path.join(root, relativePath);
+  require.cache[filename] = {
+    id: filename,
+    filename,
+    loaded: true,
+    exports,
+  };
+};
+
 const loadCommentsRoute = ({ getSessionUser, commentsGetByTask }) => {
+  stub("src/lib/auth/getSessionUser.ts", { getSessionUser });
+  stub("src/utils/controllers/comments/getByTask.ts", {
+    __esModule: true,
+    default: commentsGetByTask,
+  });
   const filename = path.join(root, "src/pages/api/comments/getByTask.ts");
-  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-    fileName: filename,
-  }).outputText;
-  const loadedModule = { exports: {} };
-  new Function("module", "exports", "require", javascript)(
-    loadedModule,
-    loadedModule.exports,
-    (request) => {
-      if (request === "@/lib/auth/getSessionUser") return { getSessionUser };
-      if (request === "@/utils/controllers/comments/getByTask") {
-        return { __esModule: true, default: commentsGetByTask };
-      }
-      throw new Error(`Unexpected route import: ${request}`);
-    },
-  );
-  return loadedModule.exports.default;
+  delete require.cache[filename];
+  return createJiti(
+    path.join(root, `tests/task-agent-run-activity-feed-${++routeLoadId}.cjs`),
+    { alias: { "@": path.join(root, "src") }, interopDefault: true },
+  )(filename).default;
 };
 
 const responseRecorder = () => {
