@@ -8,6 +8,7 @@ import type {
   ScrollSetting,
 } from "@prisma/client";
 import type { CalendarViewsPreference } from "@/models/Calendar/model";
+import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 
 export interface IUserPreferences {
   displayAvatar: DisplayAvatar;
@@ -99,6 +100,10 @@ export const fetchUserPreference = async (
   useDefaultOnError = true,
 ): Promise<IUserPreferences> => {
   try {
+    const bootstrapped =
+      await consumeEarlyAppShellBootstrapSlice<IUserPreferences>("preferences");
+    if (bootstrapped && !Array.isArray(bootstrapped)) return bootstrapped;
+
     const response = await axios.get("/api/users/preferences");
     if (response.status == 200) {
       return response.data.settings as IUserPreferences;

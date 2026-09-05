@@ -48,10 +48,14 @@ test("user profile fetching waits for a valid cookie user ID", () => {
   assert.equal(getUserProfileQueryOptions(Number.NaN).enabled, false);
 });
 
-test("AuthProvider uses the cache contract and retains explicit refresh", () => {
+test("AuthProvider uses the signed account for its cache and refresh", () => {
   assert.match(
     authSource,
-    /\.\.\.getUserProfileQueryOptions\(currentUserCookie\?\.id\)/,
+    /const authenticatedAccountId = authenticatedUserId \?\? currentUserCookie\?\.id/,
+  );
+  assert.match(
+    authSource,
+    /\.\.\.getUserProfileQueryOptions\(authenticatedAccountId\)/,
   );
   assert.match(authSource, /queryFn: fetchUserById/);
   assert.match(

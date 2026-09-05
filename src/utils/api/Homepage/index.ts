@@ -11,6 +11,7 @@ import {
     SIDEBAR_TEAMS_PATH,
 } from "@/utils/api/Homepage/sidebarTeamsResponse";
 import { consumeEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
+import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 import { resolveAuthorizedLocalFallback } from "@/lib/boardSync/startupRace";
 import {
     getBoardReadinessTraceScope,
@@ -20,6 +21,15 @@ import {
 // =================== GET ALL TEAMS FOR SIDEBAR
 export const getAllTeamsForLSidebar = async(body:any| null) => {
     if (body&&body.userId){
+        try {
+            const bootstrapped = await consumeEarlyAppShellBootstrapSlice<unknown[]>(
+                "teams",
+                body.userId,
+            );
+            if (Array.isArray(bootstrapped)) return requireSidebarTeams(bootstrapped);
+        } catch {
+            // Optional bootstrap failures fall through to the established request.
+        }
         // axiosClient, not bare axios: this route is one of the few gated on ht_session,
         // so a stale session 401s here while every userId-in-body route still succeeds.
         // Bare axios skips the SESSION_REQUIRED interceptor (HTPR-4182), the rejection is
