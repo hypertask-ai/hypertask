@@ -497,17 +497,8 @@ test("the turn event log stays append-only, ordered and duplicate-proof", () => 
   );
 });
 
-// Migration SQL minus its comment lines, so an assertion about the statements
-// is not satisfied or broken by prose describing them.
-function statementsOf(migrationSql) {
-  return migrationSql
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith("--"));
-}
-
 test("history has an index that matches how it is read", () => {
-  assert.match(schema, /@@index\(\[sessionId, createdAt, id\]\)/);
+  assert.match(modelBlock("ChatMessage"), /@@index\(\[sessionId, createdAt, id\]\)/);
   for (const index of [
     "ChatMessage_sessionId_createdAt_id_idx",
     "ChatMessage_authorUserId_idx",
@@ -524,7 +515,7 @@ test("history has an index that matches how it is read", () => {
   // Postgres refuses DROP INDEX CONCURRENTLY in any file carrying a second
   // statement, so one here aborts the whole deploy with SQLSTATE 25001.
   assert.doesNotMatch(
-    statementsOf(indexMigration).join("\n"),
+    statements(indexMigration),
     /DROP INDEX CONCURRENTLY/,
     "a DROP INDEX CONCURRENTLY beside these builds fails the deploy, not just this file",
   );
@@ -540,7 +531,9 @@ test("history has an index that matches how it is read", () => {
   );
   // Same SQLSTATE 25001 rule: this drop only applies because it is alone.
   assert.equal(
-    statementsOf(dropIndexMigration).length,
+    statements(dropIndexMigration)
+      .split(";")
+      .filter((statement) => statement.trim()).length,
     1,
     "DROP INDEX CONCURRENTLY only applies when it is the sole statement in its file",
   );

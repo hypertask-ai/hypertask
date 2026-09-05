@@ -11,12 +11,18 @@
 -- IF NOT EXISTS keeps the migration a no-op when the index was pre-applied by
 -- hand against prod, which is the pattern those two files document.
 --
--- ponytail: a DROP INDEX CONCURRENTLY before each build would also clear the
--- INVALID index an interrupted concurrent build leaves behind, but Postgres
--- refuses DROP INDEX CONCURRENTLY in any migration file holding a second
--- statement, so it cannot live here. Ceiling: if a build is interrupted, its
--- INVALID index must be dropped and rebuilt by hand before this migration can
--- do anything again.
+-- A DROP INDEX CONCURRENTLY before each build would also clear the INVALID
+-- index an interrupted concurrent build leaves behind, but it cannot live in
+-- this file. Verified against postgres:16 through `prisma migrate deploy`:
+-- several CREATE INDEX CONCURRENTLY statements in one migration file apply
+-- fine (20260903120000 in this folder has four and deploys clean), while a
+-- DROP INDEX CONCURRENTLY sharing a file with any second statement aborts the
+-- whole deploy with SQLSTATE 25001. A lone DROP in its own file is fine, which
+-- is what 20260905140030 is.
+--
+-- ponytail: no cleanup of an interrupted build. Ceiling: if one is
+-- interrupted, its INVALID index must be dropped and rebuilt by hand, because
+-- IF NOT EXISTS makes this migration skip a name that already exists.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_sessionId_createdAt_id_idx" ON "ChatMessage"("sessionId", "createdAt", "id");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_authorUserId_idx" ON "ChatMessage"("authorUserId");
 CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_authorAgentId_idx" ON "ChatMessage"("authorAgentId");
