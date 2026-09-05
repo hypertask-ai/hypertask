@@ -63,6 +63,7 @@ import {
 } from "@/lib/aiChat/chatOpenSession";
 import { useQueryClient } from "@tanstack/react-query";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
+import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 
 const aiOptionsWithoutOpenRouter = aiOptions.filter(
   (option) => option.source !== "openrouter"
@@ -1336,6 +1337,18 @@ export function useAiChat() {
                   case "done":
                     setAgentStatus(undefined);
                     console.log("🔥 Stream complete:", parsed);
+                    // HTPR-6095: chat-driven inbox changes (archive/unarchive)
+                    // only reach this tab via the Pusher broadcast, which
+                    // competes with token-by-token render work while the reply
+                    // streams in, so the badge can lag well after the turn
+                    // ends. Self-correct here with the same query key the
+                    // realtime handler uses; "active" keeps it to mounted
+                    // queries only.
+                    void queryClient
+                      .refetchQueries({ queryKey: INBOX_QUERY_KEY, type: "active" })
+                      .catch((error) =>
+                        console.warn("[AI chat] inbox refresh failed", error)
+                      );
                     if (parsed.status === "error") {
                       if (!streamErrorHandled) {
                         const rawDone =
