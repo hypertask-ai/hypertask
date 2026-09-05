@@ -266,6 +266,9 @@ export function useAiChat() {
   const {
     startNewSession: createSession,
     activeSession,
+    currentSession,
+    showWelcomeScreen,
+    isSessionPending,
     sessions,
     selectSession: selectSessionInHistory,
     isSuccess: chatHistoryReady,
@@ -295,6 +298,11 @@ export function useAiChat() {
     scopedProjectId ?? "all",
     currentProject?.id ?? "no-board",
     currentUser?.id ?? "anonymous",
+    // Navigating to a different ticket must bump the generation too, so an
+    // in-flight ensureSessionForCurrentBoard() poll for the old ticket can't
+    // land a send into a conversation the user has since navigated away
+    // from (HTPR-6100).
+    taskId ?? "no-task",
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {
@@ -414,6 +422,33 @@ export function useAiChat() {
   const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000) => {
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
+
+    // A task-scoped surface (the ticket detail page) already owns session
+    // selection via useSessionAndChatHistory's per-task init effect, which
+    // finds-or-creates that exact ticket's session. Falling through to the
+    // project-wide board session map below would let a session another
+    // ticket in the same project last sent from win here too (HTPR-6100).
+    if (taskId !== undefined) {
+      // Match on taskId alone, same as the find-or-create init effect in
+      // useSessionAndChatHistory - sessions are already scoped to the
+      // signed-in user server-side, so requiring userId here too just adds
+      // a second, easy-to-drift copy of that rule.
+      const matchesTask = (session: IChatSession) => session.taskId === taskId;
+      // Ticket switches and explicit session picks bump this generation, so
+      // a send that outlives the user's navigation away from this ticket
+      // doesn't land in a conversation they can no longer see (HTPR-6100).
+      const generation = sessionIntentGenerationRef.current;
+      const deadline = Date.now() + timeoutMs;
+      while (
+        !sessionsRef.current.some(matchesTask) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        if (sessionIntentGenerationRef.current !== generation) return undefined;
+      }
+      return sessionsRef.current.find(matchesTask);
+    }
+
     const needsBoardSession =
       typeof projectId === "number" &&
       !isFullScreenChat &&
@@ -542,6 +577,7 @@ export function useAiChat() {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
+    taskId,
   ]);
 
   useEffect(() => {
@@ -619,15 +655,11 @@ export function useAiChat() {
 
   // If message is provided, use it; otherwise, find latest human message
   function retryStream(message?: IChatMessage) {
-    const currentSession =
-      sessions.find((session) => session.id === activeSession) ?? sessions[0];
     const targetMsg =
-      message ||
-      [...currentSession.messages].reverse().find((msg) => msg.role === "human");
-
-    if (targetMsg && targetMsg.content) {
-      handleSendMessage(targetMsg.content);
-    }
+      message ??
+      [...(currentSession?.messages ?? [])].reverse().find((msg) => msg.role === "human");
+    if (!targetMsg?.content) return;
+    handleSendMessage(targetMsg.content);
   }
 
   // Load a sent message back into the composer so the user can rephrase and
@@ -1119,7 +1151,10 @@ export function useAiChat() {
       scopedProjectId
     );
 
-    if (!isFullScreenChat && dockedProjectId !== undefined) {
+    // A task-scoped send (the ticket detail page) must never enter the
+    // project-wide board map, or opening the docked chat on the board later
+    // would resume this ticket's session instead of starting fresh (HTPR-6100).
+    if (!isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
       setAiChatBoardSessionMap((previousMap) => ({
         ...previousMap,
         [dockedProjectId]: session.id,
@@ -1633,7 +1668,17 @@ export function useAiChat() {
   const toggleRenameChatModal = () => setShowRenameChatModal((prev) => !prev);
 
   const renameChat = (newTitle: string) => {
-    updateSessionTitle(activeSession ?? sessions[0].id, newTitle);
+    const sessionId = currentSession?.id;
+    // No resolved session means there's nothing to rename (a transient
+    // refetch gap, or the chat was deleted from under the open modal) -
+    // surface it the same way delete does rather than renaming a session id
+    // that may no longer exist.
+    if (!sessionId) {
+      toast.error("No chat selected yet. Please try again in a moment.");
+      setShowRenameChatModal(false);
+      return;
+    }
+    updateSessionTitle(sessionId, newTitle);
     setShowRenameChatModal(false);
   };
 
@@ -1648,6 +1693,9 @@ export function useAiChat() {
     isByokBlocked,
     sessions,
     activeSession,
+    currentSession,
+    showWelcomeScreen,
+    isSessionPending,
     chatHistoryReady,
     isSidebarMode,
     setIsSidebarMode,

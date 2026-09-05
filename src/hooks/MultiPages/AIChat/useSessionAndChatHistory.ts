@@ -60,6 +60,7 @@ export const useSessionAndChatHistory = (
   const {
     data: sessionsData,
     isLoading: isLoadingSessions,
+    isFetching: isFetchingSessions,
     isError: isErrorSessions,
     isSuccess: isSuccessSessions,
   } = useQuery({
@@ -533,6 +534,41 @@ export const useSessionAndChatHistory = (
     startNewSession,
   ]);
 
+  const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
+  // The single source of truth for "the session the user is looking at".
+  // Sessions are reordered to the front on select/write, so `sessions[0]` is
+  // usually right, but a session can become active (the per-task init effect
+  // above) without being reordered yet - resolve by id so every consumer
+  // agrees (HTPR-6100). Only fall back to `sessions[0]` when nothing is
+  // active at all; if `activeSession` is set but genuinely missing from
+  // `sessions` (deleted, or a transient refetch gap), report no session
+  // rather than keep showing a possibly-deleted one indefinitely.
+  const currentSession = activeSession
+    ? sessions.find((session) => session.id === activeSession)
+    : sessions[0];
+  // `currentSession` is `undefined` both when there is genuinely nothing to
+  // show yet (no session selected, no sessions exist) and, transiently,
+  // when `activeSession` is set but `sessions` hasn't caught up. Consumers
+  // decide "show the welcome screen" from this, so tell those two apart
+  // here once: a pending selection should keep showing the message area
+  // (empty, briefly) rather than flash the welcome screen over it.
+  // "Pending" must be bounded to an in-flight fetch, or a session that's
+  // genuinely gone (deleted server-side, fetch failed) would blank the
+  // message pane forever instead of falling through to the welcome screen.
+  // Two different "pending" states, both worth bridging with the message
+  // area instead of a welcome-screen flash: the very first load
+  // (isLoadingSessions) and an explicit selection still missing from a
+  // mid-flight refetch (isFetchingSessions with activeSession set). A bare
+  // isFetchingSessions would also cover an empty-sessions user's routine
+  // background refetches (window focus, post-delete invalidation), flashing
+  // the welcome screen off and back on for no reason. Demo mode never
+  // queries the real sessions endpoint, so it's excluded entirely.
+  const isSessionPending =
+    !isDemo &&
+    currentSession === undefined &&
+    (isLoadingSessions || (isFetchingSessions && Boolean(activeSession)));
+  const showWelcomeScreen = !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
+
   return {
     isLoading: isDemo ? false : isLoadingSessions,
     isError: isDemo ? false : isErrorSessions,
@@ -541,9 +577,12 @@ export const useSessionAndChatHistory = (
     // guard does not race it by creating a second demo conversation.
     isSuccess: isDemo ? demoSessions.length > 0 : isSuccessSessions,
     activeSession,
+    currentSession,
+    showWelcomeScreen,
+    isSessionPending,
     mounted: hasRequiredData ? mounted : false,
     hasRequiredData,
-    sessions: isDemo ? demoSessions : sessionsData?.data.sessions || [],
+    sessions,
     setActiveSession,
     startNewSession,
     selectSession,

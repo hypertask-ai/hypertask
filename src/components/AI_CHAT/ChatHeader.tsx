@@ -94,7 +94,8 @@ export const ChatHeader = () => {
     toggleSidebarMode,
     isSidebarMode,
     sessions,
-    activeSession,
+    currentSession,
+    isSessionPending,
     startNewSession,
     selectSession,
     toggleRenameChatModal,
@@ -121,11 +122,10 @@ export const ChatHeader = () => {
     [sessions]
   );
 
-  const activeSessionId = activeSession ?? sessions[0]?.id ?? null;
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.id === activeSessionId),
-    [sessions, activeSessionId]
-  );
+  // currentSession is the one canonical resolved session (title, messages,
+  // and now delete/highlight all read it) so none of them can disagree about
+  // which chat is on screen (HTPR-6100).
+  const resolvedSessionId = currentSession?.id;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -178,7 +178,7 @@ export const ChatHeader = () => {
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
-                  isActive={chat.id === activeSessionId}
+                  isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     selectSession(chat.id);
@@ -201,7 +201,7 @@ export const ChatHeader = () => {
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
-                  isActive={chat.id === activeSessionId}
+                  isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     selectSession(chat.id);
@@ -286,12 +286,12 @@ export const ChatHeader = () => {
       <div className="relative min-w-0 flex-1" ref={dropdownRef}>
         <button
           type="button"
-          title={sessions[0]?.title ?? undefined}
+          title={currentSession?.title ?? undefined}
           onClick={() => setIsDropdownOpen((prev) => !prev)}
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
         >
           <span className="min-w-0 truncate font-medium">
-            {sessions[0]?.title ?? "Loading..."}
+            {currentSession?.title ?? (isSessionPending ? "Loading..." : "AI Chat")}
           </span>
           <span
             style={{
@@ -439,11 +439,17 @@ export const ChatHeader = () => {
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
-                onClick={() => {
-                  if (activeSessionId) {
-                    void deleteSession(activeSessionId);
-                  }
+                onClick={async () => {
                   setIsOverflowOpen(false);
+                  if (!resolvedSessionId) {
+                    toast.error("No chat selected yet. Please try again in a moment.");
+                    return;
+                  }
+                  try {
+                    await deleteSession(resolvedSessionId);
+                  } catch {
+                    toast.error("Couldn't delete this chat. Please try again.");
+                  }
                 }}
               >
                 <Trash2 size={14} className="shrink-0" strokeWidth={1.75} />
