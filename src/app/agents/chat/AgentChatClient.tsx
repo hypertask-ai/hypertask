@@ -210,7 +210,7 @@ function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
     : "Agent activity";
   return (
     <div
-      className="rounded-[4px] bg-cardBackground px-3 py-2 text-meta text-text-light-gray"
+      className="rounded-[5px] bg-cardBackground px-3 py-2 text-meta text-text-light-gray"
       role="group"
       aria-label={label}
     >
@@ -257,7 +257,7 @@ function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
               {eventContent}
               <time
                 dateTime={event.createdAt}
-                className="ml-auto shrink-0 text-[10px]"
+                className="ml-auto shrink-0 text-micro"
                 title={new Date(event.createdAt).toLocaleString()}
               >
                 {formatDateDifference(new Date(event.createdAt))}
@@ -297,7 +297,7 @@ function FeedFilter({
             aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "rounded-[3px] px-2 py-1 text-meta transition-colors",
+              "rounded-sm px-2 py-1 text-meta transition-colors",
               active
                 ? "bg-cardBackground text-white-black shadow-sm"
                 : "text-text-light-gray hover:text-white-black",

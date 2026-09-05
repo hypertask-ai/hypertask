@@ -128,7 +128,7 @@ export function activityContextMessages(
     .map((item) => ({
       id: `context-${item.id}`,
       kind: "event" as const,
-      role: "activity" as const,
+      role: "assistant" as const,
       content: JSON.stringify({
         ticket: item.task?.ticketNumber ?? null,
         status: item.text.replace(/\s+/g, " ").trim().slice(0, 500),

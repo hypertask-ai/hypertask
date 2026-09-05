@@ -173,10 +173,11 @@ test("MCP adds at most ten activity facts only for an explicit activity question
   const body = await response.json();
 
   assert.equal(body.messages.length, 50);
-  const context = body.messages.filter(({ role }) => role === "activity");
+  const context = body.messages.filter(({ kind }) => kind === "event");
   assert.equal(context.length, 10);
+  assert.equal(context.every(({ role }) => role === "assistant"), true);
   assert.equal(
-    body.messages.filter(({ role }) => role !== "activity").length,
+    body.messages.filter(({ kind }) => kind !== "event").length,
     40,
   );
   assert.equal(JSON.parse(context[0].content).ticket, "HTPR-42");

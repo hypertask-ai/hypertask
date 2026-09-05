@@ -122,8 +122,11 @@ test("activity context is opt-in, bounded, normalized, and limited to useful fac
   });
   assert.equal(JSON.parse(context[1].content).status.length, 500);
   assert.deepEqual(
-    context.map(({ role }) => role),
-    ["activity", "activity"],
+    context.map(({ role, kind }) => ({ role, kind })),
+    [
+      { role: "assistant", kind: "event" },
+      { role: "assistant", kind: "event" },
+    ],
   );
   assert.deepEqual(feed.activityContextMessages(rows, 0), []);
   assert.deepEqual(feed.activityContextMessages(rows, -1), []);
