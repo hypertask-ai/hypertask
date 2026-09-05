@@ -108,6 +108,7 @@ type ApiCall = {
 
 function apiFixture(
   options: {
+    activities?: unknown[];
     failActivity?: boolean;
     failUpdate?: boolean;
     malformedActivity?: boolean;
@@ -140,7 +141,9 @@ function apiFixture(
       });
     }
     if (url.pathname.endsWith("/mcp/agents/runs/run-1/activities")) {
-      if (method === "GET") return Response.json({ success: true, activities: [] });
+      if (method === "GET") {
+        return Response.json({ success: true, activities: options.activities ?? [] });
+      }
       if (options.failActivity) {
         return Response.json(
           { success: false, error: "Activity failed" },
@@ -932,7 +935,22 @@ test("prompted handlers receive validated elicitation selection data", async () 
 });
 
 test("run events bind the token, hydrate context, and use stable activity keys", async () => {
-  const api = apiFixture();
+  const api = apiFixture({
+    activities: [
+      {
+        id: "3",
+        runId: run.id,
+        type: "thought",
+        text: "Same-time activity",
+        link: null,
+        options: null,
+        selectedOption: null,
+        selectedAt: null,
+        selectedBy: null,
+        createdAt: new Date(now - 500).toISOString(),
+      },
+    ],
+  });
   const agent = createAgent({
     token: "unit-test-token",
     webhookSecret: secret,
@@ -948,6 +966,11 @@ test("run events bind the token, hydrate context, and use stable activity keys",
     assert.deepEqual(
       received.thread.filter((item) => item.kind === "comment").map((item) => item.id),
       [9, 10],
+    );
+    assert.deepEqual(
+      received.thread.map((item) => item.id),
+      [9, 10, "3"],
+      "mixed numeric and string IDs retain a transitive tie-break order",
     );
     await received.thought("Starting now.");
     await received.respond("Done.");

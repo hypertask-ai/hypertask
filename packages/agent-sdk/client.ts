@@ -106,9 +106,14 @@ function eventForPayload(payload: AgentWebhookPayload): AgentEventName {
 }
 
 function chronological(a: AgentThreadItem, b: AgentThreadItem): number {
-  const difference = Date.parse(a.createdAt) - Date.parse(b.createdAt);
-  if (Number.isFinite(difference) && difference !== 0) return difference;
+  const aTime = Date.parse(a.createdAt);
+  const bTime = Date.parse(b.createdAt);
+  if (Number.isFinite(aTime) !== Number.isFinite(bTime)) {
+    return Number.isFinite(aTime) ? -1 : 1;
+  }
+  if (Number.isFinite(aTime) && aTime !== bTime) return aTime - bTime;
   if (typeof a.id === "number" && typeof b.id === "number") return a.id - b.id;
+  if (typeof a.id !== typeof b.id) return typeof a.id === "number" ? -1 : 1;
   return String(a.id).localeCompare(String(b.id));
 }
 
