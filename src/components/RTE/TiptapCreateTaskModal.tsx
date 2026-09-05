@@ -94,6 +94,8 @@ const TiptapCreateTaskModal = () => {
   const backgroundTaskUploadsEnabled = useFlag(
     "htpr-5993-optimistic-task-uploads",
   );
+  // HTPR-6177: automatic description drafting is owner-only until it is ready.
+  const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const createSubmissionRef = useRef(false);
   const {
     editMode,
@@ -367,7 +369,9 @@ const TiptapCreateTaskModal = () => {
 
   const autoDescriptionTitle = formValues.title.trim();
   const autoDescriptionEligible = shouldSuggestCreateDescription({
-    enabled: userPreferences.autoDescriptionSuggestions ?? true,
+    enabled:
+      autoTaskDescriptionsEnabled &&
+      (userPreferences.autoDescriptionSuggestions ?? true),
     isDesktop: !isMbl,
     title: autoDescriptionTitle,
     description: taskWriterDescription,

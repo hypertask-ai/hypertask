@@ -19,6 +19,7 @@ import {
   ScrollSetting,
 } from "@prisma/client";
 import { userPreferencesRoute } from "@/lib/constants/APIRouteConstants";
+import { useFlag } from "@/hooks/useFlag";
 
 interface IUserPreferences {
   displayAvatar: DisplayAvatar;
@@ -44,6 +45,8 @@ const UserPreferenceSidebar = ({
 } = {}) => {
   const queryClient = useQueryClient();
   const { data, isFetching } = useGetUserPreferences();
+  // HTPR-6177: hide the control while automatic drafting is owner-only.
+  const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const autoDescriptionUpdateQueue = useRef(Promise.resolve());
   const autoDescriptionUpdateVersion = useRef(0);
   const autoDescriptionUpdatesPending = useRef(0);
@@ -266,14 +269,16 @@ const UserPreferenceSidebar = ({
         checked={playGifs}
         onChange={handlePlayGifsSetting}
       />
-      <ToggleComponent
-        label="Suggest descriptions from task titles"
-        description="Show an AI draft below empty task descriptions"
-        inputId="auto-description-suggestions-toggle"
-        value={autoDescriptionSuggestions}
-        checked={autoDescriptionSuggestions}
-        onChange={handleAutoDescriptionSuggestionsSetting}
-      />
+      {autoTaskDescriptionsEnabled && (
+        <ToggleComponent
+          label="Suggest descriptions from task titles"
+          description="Show an AI draft below empty task descriptions"
+          inputId="auto-description-suggestions-toggle"
+          value={autoDescriptionSuggestions}
+          checked={autoDescriptionSuggestions}
+          onChange={handleAutoDescriptionSuggestionsSetting}
+        />
+      )}
       <ToggleComponent
         label="Show task history"
         inputId="flexSwitchShowTaskHistory"
