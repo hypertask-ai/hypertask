@@ -37,6 +37,7 @@ import {
   Info,
   Lightbulb,
   Plus,
+  Ticket as TicketIcon,
   X,
 } from "lucide-react";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
@@ -82,6 +83,7 @@ import {
   type AgentChatActivityGroup,
   type AgentChatFilter,
 } from "@/lib/agents/chatActivityFeed";
+import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketProposal";
 
 
 // While we are waiting for an external agent to answer, the only way to see
@@ -98,7 +100,13 @@ type TChatMessage = {
   role: "human" | "assistant";
   content: string;
   createdAt: string;
+  proposal?: SerializedChatTicketProposal | null;
 };
+
+type TProposalAction = (
+  proposalId: string,
+  action: "confirm" | "dismiss",
+) => Promise<void>;
 
 type TAgentChatSession = { id: string; agentId: string };
 
@@ -125,12 +133,93 @@ const MARKDOWN_CLASS =
   "[&_pre]:bg-hoverCardBackground [&_pre]:rounded-[4px] [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto " +
   "[&_pre_code]:bg-transparent [&_pre_code]:p-0";
 
+/**
+ * The confirmation boundary, on screen. Until Create ticket is pressed the agent
+ * has done nothing but write; the card is the only way its request becomes work.
+ */
+function ProposalCard({
+  proposal,
+  onAction,
+}: {
+  proposal: SerializedChatTicketProposal;
+  onAction?: TProposalAction;
+}) {
+  const [busy, setBusy] = useState<"confirm" | "dismiss" | null>(null);
+  const run = async (action: "confirm" | "dismiss") => {
+    if (!onAction || busy) return;
+    setBusy(action);
+    try {
+      await onAction(proposal.id, action);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const open = proposal.status === "PENDING" || proposal.status === "FAILED";
+  return (
+    <div className="mt-1 max-w-[80%] rounded-[5px] bg-cardBackground px-3 py-2 text-meta">
+      <div className="mb-1 flex items-center gap-1.5 font-medium text-white-black">
+        <TicketIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+        <span>Ticket proposed, nothing done yet</span>
+      </div>
+      <p className="text-white-black">{proposal.ticketTitle}</p>
+      <p className="text-text-light-gray">{proposal.outcome}</p>
+      <p className="mt-1 text-text-light-gray">
+        {proposal.targetProjectTitle} · {proposal.targetSectionTitle}
+      </p>
+      {proposal.status === "FAILED" && proposal.failureMessage && (
+        <p className="mt-1 text-red-500">{proposal.failureMessage}</p>
+      )}
+      {proposal.status === "CONFIRMED" &&
+        (proposal.task ? (
+          <a
+            href={proposal.task.url}
+            className="mt-1 inline-flex items-center gap-1 text-hypertasks-purple hover:underline"
+          >
+            {proposal.task.ticketNumber}
+            <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+          </a>
+        ) : (
+          <p className="mt-1 text-text-light-gray">Creating the ticket…</p>
+        ))}
+      {proposal.status === "DISMISSED" && (
+        <p className="mt-1 text-text-light-gray">Dismissed, still discussing.</p>
+      )}
+      {open && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void run("confirm")}
+            className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy === "confirm"
+              ? "Creating…"
+              : proposal.status === "FAILED"
+                ? "Try again"
+                : "Create ticket"}
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void run("dismiss")}
+            className="text-dense text-text-light-gray hover:text-white-black disabled:opacity-50"
+          >
+            Keep discussing
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MessageBubble({
   message,
   projectIdForPrefix,
+  onProposalAction,
 }: {
   message: TChatMessage;
   projectIdForPrefix: TProjectIdForPrefix;
+  onProposalAction?: TProposalAction;
 }) {
   const router = useRouter();
   const isHuman = message.role === "human";
@@ -183,6 +272,12 @@ function MessageBubble({
           __html: wrapTablesInMessageHtml(markdownToHtml(message.content)),
         }}
       />
+      {message.proposal && (
+        <ProposalCard
+          proposal={message.proposal}
+          onAction={onProposalAction}
+        />
+      )}
       {timestamp}
     </div>
   );
@@ -608,6 +703,39 @@ const AgentChatClient = (props: IProp) => {
       }
     }
   }, []);
+
+  // Confirm or dismiss a proposed ticket. The server owns the decision; this
+  // just refetches so every tab lands on the state the server committed.
+  const handleProposalAction = useCallback<TProposalAction>(
+    async (proposalId, action) => {
+      const activeSessionId = sessionIdRef.current;
+      if (!activeSessionId) return;
+      try {
+        const res = await fetch(
+          `/api/agent-chat/${activeSessionId}/proposals/${proposalId}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          },
+        );
+        const data = (await res.json()) as {
+          success?: boolean;
+          error?: string;
+        };
+        if (!res.ok || !data.success) {
+          toast.error(data.error ?? "Could not update the proposal");
+        }
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Could not update the proposal",
+        );
+      } finally {
+        await loadMessages(activeSessionId);
+      }
+    },
+    [loadMessages],
+  );
 
   const openAgentSession = useCallback(
     async (agentId: string) => {
@@ -1590,6 +1718,7 @@ const AgentChatClient = (props: IProp) => {
                   key={item.id}
                   message={item}
                   projectIdForPrefix={projectIdForPrefix}
+                  onProposalAction={handleProposalAction}
                 />
               ) : (
                 <ActivityGroup key={item.id} group={item} />

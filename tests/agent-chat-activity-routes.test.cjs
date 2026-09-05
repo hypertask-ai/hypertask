@@ -50,9 +50,13 @@ stub("src/lib/auth/getSessionUser.ts", {
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
 stub("src/lib/flags.ts", {
+  AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
   isFeatureEnabled: async (key, userId) => {
-    assert.equal(key, "htpr-6094-agent-activity-rows");
     assert.equal(userId, 6);
+    // The history route also reads the ticket-confirmation flag; only the
+    // activity flag is under test here.
+    if (key === "htpr-6006-chat-confirm-ticket") return false;
+    assert.equal(key, "htpr-6094-agent-activity-rows");
     return flagEnabled;
   },
 });
