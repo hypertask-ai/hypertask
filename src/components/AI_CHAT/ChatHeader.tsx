@@ -96,6 +96,7 @@ export const ChatHeader = () => {
     sessions,
     activeSession,
     currentSession,
+    isSessionPending,
     startNewSession,
     selectSession,
     toggleRenameChatModal,
@@ -288,7 +289,7 @@ export const ChatHeader = () => {
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
         >
           <span className="min-w-0 truncate font-medium">
-            {currentSession?.title ?? "Loading..."}
+            {currentSession?.title ?? (isSessionPending ? "Loading..." : "AI Chat")}
           </span>
           <span
             style={{

@@ -556,9 +556,7 @@ export const useSessionAndChatHistory = (
   // genuinely gone (deleted server-side, fetch failed) would blank the
   // message pane forever instead of falling through to the welcome screen.
   const isSessionPending =
-    (isLoadingSessions || isFetchingSessions) &&
-    activeSession !== undefined &&
-    currentSession === undefined;
+    isFetchingSessions && activeSession !== undefined && currentSession === undefined;
   const showWelcomeScreen = !isSessionPending && (currentSession?.messages.length ?? 0) === 0;
 
   return {
@@ -571,6 +569,7 @@ export const useSessionAndChatHistory = (
     activeSession,
     currentSession,
     showWelcomeScreen,
+    isSessionPending,
     mounted: hasRequiredData ? mounted : false,
     hasRequiredData,
     sessions,
