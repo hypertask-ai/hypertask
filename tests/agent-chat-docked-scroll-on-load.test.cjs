@@ -166,6 +166,9 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
       messageCount = messages.length;
       context.sessions = [{ id: "session-6099", messages }];
       context.activeSession = "session-6099";
+      // MessageList reads currentSession directly (HTPR-6100) instead of
+      // resolving sessions/activeSession itself.
+      context.currentSession = { id: "session-6099", messages };
     };
 
     context.chatMounted = true;
