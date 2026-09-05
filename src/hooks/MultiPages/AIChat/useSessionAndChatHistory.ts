@@ -26,7 +26,13 @@ const createDemoSession = (user: IUser): IChatSession => {
 
 export const useSessionAndChatHistory = (
   taskId?: number,
-  historyEnabled = true
+  historyEnabled = true,
+  // True on pages that always resolve to a task (e.g. the ticket detail
+  // page). There, `taskId === undefined` only ever means "the task hasn't
+  // loaded into view yet", never "there is no task" - so the init effect
+  // below must wait for it instead of grabbing whatever session was last
+  // active on a different ticket (HTPR-6100).
+  isTaskScoped = false
 ) => {
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
@@ -476,6 +482,9 @@ export const useSessionAndChatHistory = (
         const sessions = sessionsData?.data?.sessions ?? [];
 
         if (taskId === undefined) {
+          // Task-scoped pages will get a real taskId shortly; don't commit
+          // another ticket's session in the meantime.
+          if (isTaskScoped) return;
           setActiveSession(sessions[0]?.id);
           return;
         }
@@ -518,6 +527,7 @@ export const useSessionAndChatHistory = (
     historyEnabled,
     isDemo,
     isSuccessSessions,
+    isTaskScoped,
     sessionsData,
     taskId,
     startNewSession,

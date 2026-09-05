@@ -18,16 +18,23 @@ export const MessageList: React.FC<MessageListProps> = () => {
     retryStream,
     editMessage,
     sessions,
+    activeSession,
     isTyping,
   } = useAiChatContext();
-  const messages = sessions[0]?.messages ?? [];
+  // Sessions are reordered to the front on select/write, so `sessions[0]` is
+  // usually the current one, but a session can become active (e.g. the
+  // per-task session-init effect) without being moved to the front yet.
+  // Resolve by id so the message list never shows a different task's chat.
+  const currentSession =
+    sessions.find((session) => session.id === activeSession) ?? sessions[0];
+  const messages = currentSession?.messages ?? [];
   const lastMessage = messages[messages.length - 1];
 
   // Auto-scroll to bottom when messages change
   useLayoutEffect(() => {
     scrollMessagesToBottom("smooth");
     handleMessageListScroll(messageListRef.current);
-  }, [sessions[0]?.messages]);
+  }, [currentSession?.messages]);
 
   useLayoutEffect(() => {
     scrollMessagesToBottom("auto");

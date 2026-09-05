@@ -273,7 +273,7 @@ export function useAiChat() {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory);
+  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const chatHistoryReadyRef = useRef(chatHistoryReady);
@@ -618,9 +618,11 @@ export function useAiChat() {
 
   // If message is provided, use it; otherwise, find latest human message
   function retryStream(message?: IChatMessage) {
+    const currentSession =
+      sessions.find((session) => session.id === activeSession) ?? sessions[0];
     const targetMsg =
       message ||
-      [...sessions[0].messages].reverse().find((msg) => msg.role === "human");
+      [...currentSession.messages].reverse().find((msg) => msg.role === "human");
 
     if (targetMsg && targetMsg.content) {
       handleSendMessage(targetMsg.content);
@@ -1618,7 +1620,7 @@ export function useAiChat() {
   const toggleRenameChatModal = () => setShowRenameChatModal((prev) => !prev);
 
   const renameChat = (newTitle: string) => {
-    updateSessionTitle(sessions[0].id, newTitle);
+    updateSessionTitle(activeSession ?? sessions[0].id, newTitle);
     setShowRenameChatModal(false);
   };
 
