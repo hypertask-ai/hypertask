@@ -81,12 +81,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function prefixedCommentWhere(prefixes: string[]): Prisma.CommentWhereInput[] {
+// The database filter has to be a superset of what the projection accepts, or a
+// milestone is dropped before anything parses it. The projection matches case
+// insensitively, so this must too.
+function prefixedCommentWhere(
+  prefixes: string[],
+  caseInsensitive = false,
+): Prisma.CommentWhereInput[] {
+  const mode = caseInsensitive ? ({ mode: "insensitive" } as const) : {};
   return prefixes.flatMap((prefix) =>
     (["text", "commentText"] as const).flatMap((field) => [
-      { [field]: { startsWith: prefix } },
-      { [field]: { startsWith: `<p>${prefix}` } },
-      { [field]: { startsWith: `<p><strong>${prefix}` } },
+      { [field]: { startsWith: prefix, ...mode } },
+      { [field]: { startsWith: `<p>${prefix}`, ...mode } },
+      { [field]: { startsWith: `<p><strong>${prefix}`, ...mode } },
     ]),
   );
 }
@@ -252,6 +259,9 @@ function projectTimelineRows(
           }),
         );
       } else {
+        // ponytail: the approve is inferred when no green row sits in this
+        // window, so a very old approval that paged out shows twice. Persist a
+        // per-task last-known PR state if that ever bites.
         if (!approvedPullRequests.has(key)) {
           feed.push(
             timelineEvent(row, {
@@ -327,7 +337,7 @@ export async function listAgentChatActivity(
     "Live:",
     "🚨 Agent escalation — needs a human.",
   ]);
-  const qaCommentWhere = prefixedCommentWhere(["PASS", "FAIL", "QA "]);
+  const qaCommentWhere = prefixedCommentWhere(["PASS", "FAIL", "QA "], true);
   const timelineTaskSelect = {
     ...taskSelect,
     agentRuns: {
@@ -443,9 +453,7 @@ export async function listAgentChatActivity(
       task: activityTask(row.run.task),
     });
   }
-  feed.push(
-    ...projectTimelineRows(timelineRows as unknown as TimelineRow[], input.agentId),
-  );
+  feed.push(...projectTimelineRows(timelineRows, input.agentId));
 
   return feed.sort(compareAgentChatFeedItems).slice(-limit);
 }

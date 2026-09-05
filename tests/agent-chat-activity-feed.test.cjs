@@ -469,4 +469,9 @@ test("server projection derives durable task milestones after agent involvement"
   assert.ok(
     prefixes.includes("<p><strong>🚨 Agent escalation — needs a human."),
   );
+  // QA agents do not all shout their verdict, so the fetch must ignore case.
+  const qaClauses = queries.timeline.where.OR.at(-1).OR;
+  for (const clause of qaClauses) {
+    assert.equal((clause.text ?? clause.commentText).mode, "insensitive");
+  }
 });

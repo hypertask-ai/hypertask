@@ -971,14 +971,33 @@ const AgentChatClient = (props: IProp) => {
 
   // Activity rows arrive without a chat reply, so they are not covered by the
   // reply poll above. loadMessages drops stale responses by generation, so an
-  // overlap with that poll is harmless.
+  // overlap with that poll is harmless. Nobody is reading a hidden tab, and the
+  // query behind each tick is not cheap, so pause while the tab is hidden and
+  // refetch once on the way back.
   useEffect(() => {
     if (!session || !activityRowsEnabled) return;
-    const id = setInterval(
-      () => void loadMessages(session.id),
-      ACTIVITY_POLL_MS,
-    );
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setInterval> | undefined;
+    const start = () => {
+      if (id === undefined) {
+        id = setInterval(() => void loadMessages(session.id), ACTIVITY_POLL_MS);
+      }
+    };
+    const stop = () => {
+      if (id !== undefined) clearInterval(id);
+      id = undefined;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return stop();
+      // Catch up on whatever happened while hidden instead of waiting 5s.
+      void loadMessages(session.id);
+      start();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
   }, [session, activityRowsEnabled, loadMessages]);
 
   // Realtime nudge: the send route broadcasts agent-chat:changed on this

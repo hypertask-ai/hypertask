@@ -233,6 +233,9 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
   // The reply poll stops once the agent answers, so it cannot carry the feed.
   assert.match(polling, /if \(!session \|\| !activityRowsEnabled\) return;/);
   assert.doesNotMatch(polling, /awaiting/);
-  assert.match(polling, /setInterval\([\s\S]*?ACTIVITY_POLL_MS,/);
-  assert.match(polling, /return \(\) => clearInterval\(id\);/);
+  assert.match(polling, /setInterval\([\s\S]*?ACTIVITY_POLL_MS\)/);
+  // A hidden tab reads nothing, and each tick is a 600-row timeline query.
+  assert.match(polling, /document\.visibilityState !== "visible"/);
+  assert.match(polling, /addEventListener\("visibilitychange", onVisibility\)/);
+  assert.match(polling, /removeEventListener\("visibilitychange", onVisibility\)/);
 });
