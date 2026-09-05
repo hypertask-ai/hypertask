@@ -36,7 +36,10 @@ import {
 import { usePathname } from "next/navigation";
 import { IShow } from "../useTaskDetailGlobalStates";
 import useDescriptionReactions from "./useDescriptionReactions";
-import { markTaskSeen } from "@/utils/api/Task Detail/markTaskSeen";
+import {
+  markTaskSeen,
+  type TaskSeenRequestState,
+} from "@/utils/api/Task Detail/markTaskSeen";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { LIKESHORTCUTEVENT, thumbsUpEmoji } from "@/lib/constants/constants";
 const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
@@ -150,6 +153,10 @@ const useDescriptionAndCommentsStates = () => {
   // that calls it. That fired updateSeen twice per task open, and with it the
   // 2s /api/comments/updateSeen and /api/notifications/getByTask.
   const mountedRef = useRef(false);
+  const taskSeenRequestRef = useRef<TaskSeenRequestState>({
+    key: null,
+    request: null,
+  });
   const [allStacked, setAllStacked] = useState<boolean>(true);
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
@@ -281,7 +288,12 @@ const useDescriptionAndCommentsStates = () => {
         if (!mountedRef.current) setStacked(initialMap);
         mountedRef.current = true;
       }
-      await markTaskSeen(currentTask.id, commentIds);
+      await markTaskSeen(
+        taskSeenRequestRef.current,
+        currentUser.id,
+        currentTask.id,
+        commentIds
+      );
     } catch (error) {
       console.log("🤔 ~ updateSeen ~ error:", error);
     }
