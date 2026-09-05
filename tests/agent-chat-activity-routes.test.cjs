@@ -1,9 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
+const chatClientSource = fs.readFileSync(
+  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
+  "utf8",
+);
 let loadId = 0;
 let flagEnabled = true;
 let activityCalls = [];
@@ -210,4 +215,21 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
     [{ id: "message-1", role: "human", content: "Please review HTPR-42" }],
   );
   assert.deepEqual(activityCalls, []);
+});
+
+test("activity-enabled chats poll uncached without overlapping requests", () => {
+  const polling = chatClientSource.slice(
+    chatClientSource.indexOf("const replyPollRemaining"),
+    chatClientSource.indexOf("// Realtime nudge"),
+  );
+
+  assert.match(chatClientSource, /const ACTIVITY_POLL_MS = 5000/);
+  assert.match(
+    chatClientSource,
+    /fetch\(`\/api\/agent-chat\/\$\{loadSessionId\}`,[\s\S]*?cache: "no-store"/,
+  );
+  assert.match(polling, /await loadMessages\(session\.id\)/);
+  assert.match(polling, /timer = setTimeout\(poll, delay\)/);
+  assert.doesNotMatch(polling, /setInterval/);
+  assert.match(polling, /!activityRowsEnabled && replyPollRemaining <= 0/);
 });

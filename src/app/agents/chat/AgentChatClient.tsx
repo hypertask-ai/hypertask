@@ -89,8 +89,9 @@ import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketPropos
 // While we are waiting for an external agent to answer, the only way to see
 // the reply arrive is to keep asking.
 const AWAITING_POLL_MS = 4000;
-// Realtime still refetches when the reply lands; the interval is only a
-// fallback, so stop it after this long waiting on the same session.
+const ACTIVITY_POLL_MS = 5000;
+// Realtime still refetches when the reply lands; the reply-only fallback stops
+// after this long, while an enabled passive activity feed keeps refreshing.
 const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 8000;
 const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
@@ -667,7 +668,9 @@ const AgentChatClient = (props: IProp) => {
   const loadMessages = useCallback(async (loadSessionId: string) => {
     const generation = ++loadGenRef.current;
     try {
-      const res = await fetch(`/api/agent-chat/${loadSessionId}`);
+      const res = await fetch(`/api/agent-chat/${loadSessionId}`, {
+        cache: "no-store",
+      });
       const data = (await res.json()) as {
         success?: boolean;
         messages?: TChatMessage[];
@@ -945,24 +948,38 @@ const AgentChatClient = (props: IProp) => {
   }, [awaiting, session]);
 
   useEffect(() => {
-    if (!awaiting || !session) return;
-    // The runtime has not enabled chat, so the message will never be
-    // delivered and polling cannot help.
-    if (deliveryNotice) return;
+    if (!session) return;
     const sinceAt =
       awaitingSince?.sessionId === session.id ? awaitingSince.at : Date.now();
-    const remaining = sinceAt + AWAITING_POLL_MAX_MS - Date.now();
-    if (remaining <= 0) return;
-    const id = setInterval(
-      () => void loadMessages(session.id),
-      AWAITING_POLL_MS,
-    );
-    const stop = setTimeout(() => clearInterval(id), remaining);
-    return () => {
-      clearInterval(id);
-      clearTimeout(stop);
+    const replyPollRemaining =
+      awaiting && !deliveryNotice
+        ? sinceAt + AWAITING_POLL_MAX_MS - Date.now()
+        : 0;
+    if (!activityRowsEnabled && replyPollRemaining <= 0) return;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const delay = replyPollRemaining > 0 ? AWAITING_POLL_MS : ACTIVITY_POLL_MS;
+    const poll = async () => {
+      await loadMessages(session.id);
+      const replyOnlyExpired =
+        !activityRowsEnabled &&
+        Date.now() >= sinceAt + AWAITING_POLL_MAX_MS;
+      if (!cancelled && !replyOnlyExpired) timer = setTimeout(poll, delay);
     };
-  }, [awaiting, session, deliveryNotice, awaitingSince, loadMessages]);
+    timer = setTimeout(poll, delay);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [
+    awaiting,
+    session,
+    deliveryNotice,
+    awaitingSince,
+    loadMessages,
+    activityRowsEnabled,
+  ]);
 
   // Realtime nudge: the send route broadcasts agent-chat:changed on this
   // user's private channel; refetch instead of waiting for the next poll.
