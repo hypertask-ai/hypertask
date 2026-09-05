@@ -2,7 +2,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const test = require("node:test");
 const read = (file) => fs.readFileSync(require.resolve(`../${file}`), "utf8");
-
 test("Agent Chat turn controls stay gated and visible", () => {
   const history = read("src/app/api/agent-chat/[sessionId]/route.ts");
   const stop = read("src/app/api/agent-chat/[sessionId]/stop/route.ts");

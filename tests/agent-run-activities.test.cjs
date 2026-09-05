@@ -259,7 +259,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
           : null,
     },
     chatMessage: {
-      findFirst: async () => messages.at(-1) ?? { id: "human-1", role: "human" },
+      findFirst: async ({ where }) => [...messages].reverse().find((message) => (!where.sessionId || message.sessionId === where.sessionId) && (!where.id || message.id === where.id) && (!where.role || message.role === where.role)) ?? null,
       createMany: async ({ data }) => {
         const created = data.filter((row) => !messages.some((item) => item.replyToMessageId === row.replyToMessageId));
         messages.push(...created.map((row, index) => ({ id: `message-${messages.length + index + 1}`, ...row })));
@@ -510,13 +510,13 @@ function loadService({
   };
 }
 
-function loadChatTurn() {
+function loadChatTurn(withRun = true) {
   const createdAt = new Date("2026-09-04T10:00:00.000Z");
   const run = runRow({
     taskId: null, task: null, trigger: "CHAT", chatSessionId: "chat-1",
     chatSession: { id: "chat-1", agentId: "agent-1", userId: 6 }, lastActivityAt: createdAt,
   });
-  const harness = loadService({ runs: [run] });
+  const harness = loadService({ runs: withRun ? [run] : [] });
   harness.db.messages.push({ id: "human-1", sessionId: "chat-1", role: "human", content: "hello", isDelivered: true, createdAt });
   return { ...harness, run };
 }
@@ -527,7 +527,9 @@ test("chat Stop and timeout persist one outcome against late replies", async () 
   assert.ok(await stopped.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
   assert.equal(stopped.run.status, "STOPPED");
   assert.equal(stopped.db.messages.at(-1).content, model.AGENT_CHAT_STOPPED_MESSAGE);
-
+  const queued = loadChatTurn(false);
+  assert.ok(await queued.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  assert.equal(queued.db.messages.at(-1).content, model.AGENT_CHAT_STOPPED_MESSAGE);
   const racing = loadChatTurn();
   const [, response] = await Promise.allSettled([
     racing.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z")), racing.service.createAgentRunActivity(agentPrincipal, racing.run.id, activityInput({ type: "RESPONSE", text: "late" }), null),
@@ -835,6 +837,7 @@ test("chat responses store the activity and assistant message together", async (
     trigger: "CHAT",
   });
   const harness = loadService({ runs: [run] });
+  harness.db.messages.push({ id: "human-1", sessionId: "session-1", role: "human", createdAt: new Date() });
 
   await harness.service.createAgentRunActivity(
     agentPrincipal,
@@ -845,7 +848,7 @@ test("chat responses store the activity and assistant message together", async (
 
   assert.equal(harness.db.activities.length, 1);
   assert.deepEqual(
-    harness.db.messages.map(({ role, content, sessionId }) => ({
+    harness.db.messages.filter(({ role }) => role === "assistant").map(({ role, content, sessionId }) => ({
       role,
       content,
       sessionId,

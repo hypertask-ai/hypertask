@@ -99,7 +99,7 @@ export async function GET(
       activity,
       awaiting:
         turn?.awaiting ?? messages[messages.length - 1]?.role === "human",
-      stoppable: Boolean(turn?.run),
+      stoppable: Boolean(turn?.awaiting),
       chatEnabled,
     });
   } catch (error: any) {

@@ -280,8 +280,6 @@ async function reconcileAgentChatTurn(
     if (!stop && !expired) {
       return { awaiting: true, run: run ? { id: run.id } : null, changed: false, deliveryId: null };
     }
-    if (stop && !run) return null;
-
     const marker = await tx.chatMessage.createMany({
       data: [{
         sessionId,
@@ -330,15 +328,13 @@ async function reconcileAgentChatTurn(
   return result;
 }
 
-/** Read the current turn and durably time it out after five minutes. */
 export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   const result = await reconcileAgentChatTurn(principal, sessionId, false, now);
   return result ? { awaiting: result.awaiting, run: result.awaiting ? result.run : null } : null;
 }
-
 export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   const result = await reconcileAgentChatTurn(principal, sessionId, true, now);
-  return result?.run ? { run: result.run } : null;
+  return result?.changed ? { run: result.run } : null;
 }
 
 type ActivityRunWithContext = AgentRun & {
