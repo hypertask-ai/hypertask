@@ -58,6 +58,8 @@ import useCommentAndDescriptionUploadingStates from "./CommentAndDescriptionHook
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useGetUserPreferences } from "../General/useGetUserPreferences";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
+import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
+import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
 
 // import useSetStickyHeight from "./useSetStickyHeight";
 export type TReturnFocusedEl =
@@ -85,9 +87,13 @@ const useTaskDetailGlobalStates = (
   // const{setStickyElementHeight} =useSetStickyHeight()
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
+  const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
   const [comments, setComments] = useState<IComment[]>(
-    JSON.parse(_comments).comments ?? []
+    initialCommentsPayload.comments ?? []
   );
+  const [agentRunActivities, setAgentRunActivities] = useState<
+    SerializedAgentRunActivity[]
+  >(initialCommentsPayload.agentRunActivities ?? []);
 
   const [currentId, setCurrentId] = useState<string>("");
   const [editState, setEditState] = useState<null | number>(null);
@@ -166,18 +172,20 @@ const useTaskDetailGlobalStates = (
     () => setShowHistory((prev) => !prev),
     [setShowHistory]
   );
-  // Feed-position -> original-comment-index map, dropping activity events when
-  // history is hidden. Keeping the ORIGINAL indices preserves all index-based
-  // addressing downstream (edit/react/stack/delete handlers + `comment-${i}` DOM
-  // ids), so only what renders changes, not how comments are referenced.
-  const visibleCommentIndices = useMemo(() => {
-    if (showHistory) return comments.map((_, i) => i);
-    const indices: number[] = [];
-    for (let i = 0; i < comments.length; i++) {
-      if (!comments[i]?.activity) indices.push(i);
-    }
-    return indices;
-  }, [comments, showHistory]);
+  // Feed references retain original comment indexes so edit/react/stack/delete
+  // handlers and `comment-${i}` DOM ids remain aligned while passive agent rows
+  // are interleaved chronologically.
+  const visibleFeedItems = useMemo(
+    () => mergeTaskThreadFeed(comments, agentRunActivities, showHistory),
+    [agentRunActivities, comments, showHistory],
+  );
+  const visibleCommentIndices = useMemo(
+    () =>
+      visibleFeedItems.flatMap((item) =>
+        item.kind === "comment" ? [item.commentIndex] : [],
+      ),
+    [visibleFeedItems],
+  );
 
   const virtualizeIndexes = useMemo(() => {
     let currentCount = 0;
@@ -191,11 +199,9 @@ const useTaskDetailGlobalStates = (
     // 3. Description Bottom Spacer: Appears at index 1 (non-mobile) or 2 (mobile)
     const descriptionBottomVirtualIndex = currentCount++;
 
-    // 4. Regular Comments: Start after the fixed header elements
-    // Count only VISIBLE comments so the virtualizer reserves no space for
-    // hidden activity events.
+    // 4. Stored thread rows: regular comments and passive agent activities.
     const commentsStartVirtualIndex = currentCount;
-    const commentsLength = visibleCommentIndices.length;
+    const commentsLength = visibleFeedItems.length;
     currentCount += commentsLength;
 
     // 5. Uploading Comments: Start after regular comments
@@ -215,15 +221,33 @@ const useTaskDetailGlobalStates = (
       numberOfComments: commentsLength,
       numberOfUploadingComments: uploadingCommentsLength,
     };
-  }, [_mbl, visibleCommentIndices, uploadingComments]);
+  }, [_mbl, visibleFeedItems, uploadingComments]);
 
   const _count = isShareView ? 0 : virtualizeIndexes.totalCount;
   const dynamicOverscan = Math.min(
     30,
     Math.max(5, Math.ceil(_count / (userPreferences.commentsStacked ? 4 : 10)))
   );
+  const virtualItemKey = useCallback(
+    (index: number) => {
+      if (index === virtualizeIndexes.taskInfoVirtualIndex) return "task-info";
+      if (index === virtualizeIndexes.descriptionVirtualIndex) return "description";
+      if (index === virtualizeIndexes.descriptionBottomVirtualIndex) {
+        return "description-bottom";
+      }
+      const feedPosition = index - virtualizeIndexes.commentsStartVirtualIndex;
+      if (feedPosition >= 0 && feedPosition < visibleFeedItems.length) {
+        return visibleFeedItems[feedPosition].id;
+      }
+      const uploadingPosition =
+        index - virtualizeIndexes.uploadingCommentsStartVirtualIndex;
+      return `uploading-comment-${uploadingComments[uploadingPosition]?.id ?? uploadingPosition}`;
+    },
+    [uploadingComments, virtualizeIndexes, visibleFeedItems],
+  );
 
   const virtualizerOptions = {
+    getItemKey: virtualItemKey,
     estimateSize: () => (_mbl ? 500 : 100),
     // Each mounted row is a live Tiptap/ProseMirror editor under a ResizeObserver.
     // Mobile was hardcoded to overscan 100 — for a commented ticket that keeps
@@ -737,12 +761,14 @@ const useTaskDetailGlobalStates = (
         : commentId;
       //If no index was found, focus on comment as fallback.
       if (commentIndex === -1) return defaultCommentFocus();
-      // Translate the original comment index to its position in the visible
-      // (history-filtered) feed so the virtualizer scrolls to the correct row.
-      const visiblePosition = visibleCommentIndices.indexOf(commentIndex);
+      const visiblePosition = visibleFeedItems.findIndex(
+        (item) => item.kind === "comment" && item.commentIndex === commentIndex,
+      );
       if (visiblePosition === -1) return defaultCommentFocus();
       focusOn(`comment-${commentIndex}`, false);
-      virtualizer.scrollToIndex(visiblePosition + 2, {
+      virtualizer.scrollToIndex(
+        visiblePosition + virtualizeIndexes.commentsStartVirtualIndex,
+        {
         align: "center",
         behavior: "auto",
       });
@@ -785,6 +811,8 @@ const useTaskDetailGlobalStates = (
     CTRL_J_ENTER_Handler,
     comments,
     setComments,
+    agentRunActivities,
+    setAgentRunActivities,
     showSubtaskLinkingModal,
     toggleSubtaskLinkingModal,
     showCommentDeleteModal,
@@ -826,6 +854,7 @@ const useTaskDetailGlobalStates = (
     showHistory,
     toggleHistory,
     visibleCommentIndices,
+    visibleFeedItems,
     carousalItems,
     setCarousalItems,
     showScrollToTop,

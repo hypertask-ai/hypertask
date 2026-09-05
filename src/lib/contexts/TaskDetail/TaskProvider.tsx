@@ -23,6 +23,8 @@ import useTaskDetailGlobalStates, {
 } from "@/hooks/Task Detail/useTaskDetailGlobalStates";
 import { ScrollSetting, ViewVisibility } from "@prisma/client";
 import { Virtualizer } from "@tanstack/react-virtual";
+import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
+import type { TaskThreadFeedItem } from "@/lib/agentRuns/taskActivityFeed";
 
 interface TaskContextProps {
   children?: ReactNode; // Add this line to include children
@@ -97,6 +99,10 @@ interface GlobalStates extends TaskContextProps {
   CTRL_J_ENTER_Handler: (shouldTriggerAi?: boolean) => void;
   comments: IComment[];
   setComments: React.Dispatch<React.SetStateAction<IComment[]>>;
+  agentRunActivities: SerializedAgentRunActivity[];
+  setAgentRunActivities: React.Dispatch<
+    React.SetStateAction<SerializedAgentRunActivity[]>
+  >;
   newCommentIds: number[];
   setNewCommentIds: React.Dispatch<React.SetStateAction<number[]>>;
   newCommentsSnapshotReady: boolean;
@@ -150,6 +156,7 @@ interface GlobalStates extends TaskContextProps {
   showHistory: boolean;
   toggleHistory: () => void;
   visibleCommentIndices: number[];
+  visibleFeedItems: TaskThreadFeedItem[];
   virtualizeIndexes: {
     totalCount: number;
     taskInfoVirtualIndex: number;

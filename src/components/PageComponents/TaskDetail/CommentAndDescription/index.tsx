@@ -25,6 +25,7 @@ import TaskInfo, { ITaskInfoContainer } from "../TaskInfoColumn/TaskInfo";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionContainer";
 import RichTextPersonHovercards from "@/components/Common/RichTextPersonHovercards";
+import AgentRunActivityRow from "./AgentRunActivityRow";
 
 const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const {
@@ -61,7 +62,8 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     virtualizeIndexes,
     showScrollToTop,
     draftsFromTQ,
-    visibleCommentIndices,
+    agentRunActivities,
+    visibleFeedItems,
     allowPerks,
   } = useTaskContext();
 
@@ -144,22 +146,29 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments
           ) {
-            // Regular comments section. Map the visible feed position back to the
-            // original comment index so handlers, stacking and DOM ids stay aligned
-            // even while history events are hidden.
             const visiblePosition = currentItemIndex - commentsStartVirtualIndex;
-            const commentIndex = visibleCommentIndices[visiblePosition];
-            const comment = comments[commentIndex];
-            if (comment) {
-              contentToRender = (
-                <CommentsProvider
-                  comment={comment}
-                  i={commentIndex}
-                  isStacked={stacked[commentIndex]}
-                >
-                  <CommentsContainer />
-                </CommentsProvider>
-              );
+            const feedItem = visibleFeedItems[visiblePosition];
+            if (feedItem?.kind === "comment") {
+              const commentIndex = feedItem.commentIndex;
+              const comment = comments[commentIndex];
+              if (comment) {
+                contentToRender = (
+                  <CommentsProvider
+                    comment={comment}
+                    i={commentIndex}
+                    isStacked={stacked[commentIndex]}
+                  >
+                    <CommentsContainer />
+                  </CommentsProvider>
+                );
+              }
+            } else if (feedItem?.kind === "agent-activity") {
+              const activity = agentRunActivities[feedItem.activityIndex];
+              if (activity && activity.type !== "response" && currentTask) {
+                contentToRender = (
+                  <AgentRunActivityRow activity={activity} taskId={currentTask.id} />
+                );
+              }
             }
           } else if (
             currentItemIndex >= uploadingCommentsStartVirtualIndex &&

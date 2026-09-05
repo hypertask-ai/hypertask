@@ -95,6 +95,9 @@ export const updateDraftHelper = async (projectId:number, taskId: number, userId
     const data = await response.json()
     const comments = Array.isArray(data) ? data : data?.comments ?? [];
     const lastReadAt = Array.isArray(data) ? null : data?.lastReadAt ?? null;
+    const agentRunActivities = Array.isArray(data?.agentRunActivities)
+      ? data.agentRunActivities
+      : [];
     const initialMap: any = {};
 
     comments.slice(0, -1).map((item: IComment, index: number) => {
@@ -107,7 +110,7 @@ export const updateDraftHelper = async (projectId:number, taskId: number, userId
       }
       initialMap[index] = pinned ?? item.seen?.includes(userId)? stack: false;
   })
-  return {comments,stacked:initialMap,lastReadAt}
+  return {comments,stacked:initialMap,lastReadAt,agentRunActivities}
   
 } 
 

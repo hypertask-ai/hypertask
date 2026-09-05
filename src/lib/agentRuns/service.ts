@@ -1,5 +1,10 @@
 import crypto from "crypto";
-import type { AgentRun, AgentRunActivity } from "@prisma/client";
+import {
+  AgentRunActivityType,
+  Status,
+  type AgentRun,
+  type AgentRunActivity,
+} from "@prisma/client";
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
@@ -34,6 +39,7 @@ import {
   type AgentRunSelectionPersistenceInput,
 } from "./persistence";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_CHAT_EVENT,
   broadcast,
@@ -376,6 +382,40 @@ export async function listAgentRunActivities(
     },
   });
   return run?.activities.reverse().map(serializeAgentRunActivity) ?? null;
+}
+
+export async function listTaskAgentRunActivities(
+  userId: number,
+  taskId: number,
+) {
+  const principal: AgentRunPrincipal = {
+    userId,
+    agentId: null,
+    displayName: "",
+    source: "browser",
+  };
+  if (!(await agentRunActivitiesEnabledFor(principal))) return [];
+
+  const activities = await prisma.agentRunActivity.findMany({
+    where: {
+      type: { not: AgentRunActivityType.RESPONSE },
+      run: {
+        taskId,
+        agent: { userId },
+        task: {
+          status: { not: Status.Deleted },
+          project: {
+            status: { not: Status.Deleted },
+            ...projectContentAccessWhere(userId),
+          },
+        },
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: AGENT_RUN_ACTIVITY_LIST_LIMIT,
+  });
+
+  return activities.reverse().map(serializeAgentRunActivity);
 }
 
 export async function createAgentRunActivity(

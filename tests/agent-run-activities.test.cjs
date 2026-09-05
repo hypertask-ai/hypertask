@@ -53,6 +53,10 @@ function runRow(overrides = {}) {
       title: "Run activities",
       userId: 6,
     },
+    taskStatus: "Normal",
+    projectStatus: "Normal",
+    projectOwnerId: 6,
+    projectMemberIds: [],
     chatSession: null,
     ...overrides,
   };
@@ -107,6 +111,25 @@ function matchesRun(run, where) {
   );
 }
 
+function matchesTaskAccess(run, where) {
+  if (!where) return true;
+  if (where.status?.not && run.taskStatus === where.status.not) return false;
+
+  const projectWhere = where.project;
+  if (!projectWhere) return true;
+  if (projectWhere.status?.not && run.projectStatus === projectWhere.status.not) {
+    return false;
+  }
+  if (!projectWhere.OR) return true;
+
+  return projectWhere.OR.some(
+    (condition) =>
+      condition.ownerId === run.projectOwnerId ||
+      (condition.members?.some?.userId !== undefined &&
+        run.projectMemberIds.includes(condition.members.some.userId)),
+  );
+}
+
 function fakeDatabase(initialRuns = [], initialActivities = []) {
   const runs = initialRuns;
   const activities = initialActivities;
@@ -143,6 +166,32 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
       },
     },
     agentRunActivity: {
+      findMany: async ({ where, orderBy, take }) => {
+        const runWhere = where.run;
+        const matchingRunIds = new Set(
+          runs
+            .filter(
+              (run) =>
+                run.taskId === runWhere.taskId &&
+                run.ownerId === runWhere.agent.userId &&
+                matchesTaskAccess(run, runWhere.task),
+            )
+            .map(({ id }) => id),
+        );
+        const direction = orderBy[0].createdAt === "desc" ? -1 : 1;
+        return activities
+          .filter(
+            ({ runId, type }) =>
+              matchingRunIds.has(runId) &&
+              (!where.type?.not || type !== where.type.not),
+          )
+          .sort(
+            (a, b) =>
+              direction *
+              (a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
+          )
+          .slice(0, take);
+      },
       create: async ({ data }) => {
         if (
           data.idempotencyKey &&
@@ -379,6 +428,11 @@ function loadService({
   });
   stub("src/lib/mcp/auth.ts", { validateMcpAuth: async () => null });
   stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
+  stub("src/utils/controllers/projects/getAllIncludes.ts", {
+    projectContentAccessWhere: (userId) => ({
+      OR: [{ ownerId: userId }, { members: { some: { userId } } }],
+    }),
+  });
   stub("src/lib/agentWebhooks/outbox.ts", {
     persistAgentRunStoppedWebhook: async () => null,
     persistAgentWebhookEvent: async (_tx, event) => {
@@ -549,6 +603,37 @@ test("task activity refreshes Agent Chat without creating a chat message", async
     ["user-6", "agent-chat:changed", { agentId: "agent-1" }],
   ]);
   assert.equal(harness.db.messages.length, 0);
+});
+
+test("task activity feed only returns flag-enabled runs owned by an authorized viewer", async () => {
+  const ownedRun = runRow();
+  const otherRun = runRow({ id: "run-2", ownerId: 7 });
+  const inaccessibleRun = runRow({ id: "run-3", projectOwnerId: 7 });
+  const activities = [
+    activityRow(),
+    activityRow({ id: "activity-2", runId: otherRun.id }),
+    activityRow({ id: "activity-3", runId: inaccessibleRun.id }),
+    activityRow({ id: "activity-4", type: "RESPONSE" }),
+  ];
+  const harness = loadService({
+    runs: [ownedRun, otherRun, inaccessibleRun],
+    activities,
+  });
+
+  assert.deepEqual(
+    await harness.service.listTaskAgentRunActivities(6, 42),
+    [model.serializeAgentRunActivity(activities[0])],
+  );
+
+  const disabled = loadService({
+    runs: [ownedRun],
+    activities: [activities[0]],
+    featureEnabled: (key) => key !== model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
+  });
+  assert.deepEqual(
+    await disabled.service.listTaskAgentRunActivities(6, 42),
+    [],
+  );
 });
 
 test("only the matching agent creates an idempotent task response and visible comment", async () => {
