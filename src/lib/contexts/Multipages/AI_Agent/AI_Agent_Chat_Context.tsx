@@ -61,6 +61,7 @@ interface ChatContextType {
   };
   sessions: IChatSession[];
   currentSession: IChatSession | undefined;
+  showWelcomeScreen: boolean;
   contextList: MentionItem[];
   agentStatus: string | undefined;
   showScrollUpIndicator: boolean;

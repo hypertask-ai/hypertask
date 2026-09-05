@@ -545,6 +545,14 @@ export const useSessionAndChatHistory = (
   const currentSession = activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
+  // `currentSession` is `undefined` both when there is genuinely nothing to
+  // show yet (no session selected, no sessions exist) and, transiently,
+  // when `activeSession` is set but `sessions` hasn't caught up. Consumers
+  // decide "show the welcome screen" from this, so tell those two apart
+  // here once: a pending selection should keep showing the message area
+  // (empty, briefly) rather than flash the welcome screen over it.
+  const isSessionPending = activeSession !== undefined && currentSession === undefined;
+  const showWelcomeScreen = !isSessionPending && (currentSession?.messages.length ?? 0) === 0;
 
   return {
     isLoading: isDemo ? false : isLoadingSessions,
@@ -555,6 +563,7 @@ export const useSessionAndChatHistory = (
     isSuccess: isDemo ? demoSessions.length > 0 : isSuccessSessions,
     activeSession,
     currentSession,
+    showWelcomeScreen,
     mounted: hasRequiredData ? mounted : false,
     hasRequiredData,
     sessions,
