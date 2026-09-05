@@ -51,11 +51,6 @@ export const useSessionAndChatHistory = (
   // has switched tickets, instead of committing its session as active.
   const currentTaskIdRef = useRef<number | undefined>(taskId);
   currentTaskIdRef.current = taskId;
-  // Caches the last session resolved for the current activeSession id, so a
-  // stale/mid-refetch sessions list (activeSession set, lookup momentarily
-  // misses) keeps showing that same session instead of dropping to
-  // undefined - see currentSession below (HTPR-6100).
-  const lastKnownSessionRef = useRef<IChatSession | undefined>(undefined);
 
   const hasRequiredData = !!currentUser?.uid;
 
@@ -544,19 +539,12 @@ export const useSessionAndChatHistory = (
   // usually right, but a session can become active (the per-task init effect
   // above) without being reordered yet - resolve by id so every consumer
   // agrees (HTPR-6100). Only fall back to `sessions[0]` when nothing is
-  // active at all: if `activeSession` is set but a stale/mid-refetch
-  // `sessions` list doesn't have it yet, showing whatever another ticket
-  // last wrote to would be wrong, so keep showing this same active id's
-  // last resolved session (not any other id's) until the list catches up.
-  const resolvedSession = activeSession
+  // active at all; if `activeSession` is set but genuinely missing from
+  // `sessions` (deleted, or a transient refetch gap), report no session
+  // rather than keep showing a possibly-deleted one indefinitely.
+  const currentSession = activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
-  if (resolvedSession) {
-    lastKnownSessionRef.current = resolvedSession;
-  } else if (lastKnownSessionRef.current?.id !== activeSession) {
-    lastKnownSessionRef.current = undefined;
-  }
-  const currentSession = resolvedSession ?? lastKnownSessionRef.current;
 
   return {
     isLoading: isDemo ? false : isLoadingSessions,
