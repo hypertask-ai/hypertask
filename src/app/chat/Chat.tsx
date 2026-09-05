@@ -343,6 +343,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const {
     activeSession,
+    currentSession,
+    showWelcomeScreen,
     deleteSession,
     selectSession,
     sessions,
@@ -352,9 +354,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
     setAiChatAutoOpenSuppressed,
     editor,
   } = useAiChatContext();
-  const activeSessionId = activeSession ?? sessions[0]?.id ?? null;
-  const currentSession =
-    sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
+  const activeSessionId = activeSession ?? null;
 
   useEffect(() => {
     if (
@@ -428,7 +428,6 @@ export default function Chat({ initialSessionId }: ChatProps) {
       : []),
     ...sessionGroups,
   ];
-  const hasMessages = (sessions[0]?.messages?.length ?? 0) > 0;
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
@@ -627,7 +626,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-hidden">
             <div className="mx-auto flex h-full w-full max-w-[800px] flex-col">
-              {hasMessages ? <MessageList /> : <WelcomeScreen />}
+              {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
             </div>
           </div>
           <div className="mx-auto w-full max-w-[800px] shrink-0">

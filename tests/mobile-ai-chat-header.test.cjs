@@ -124,6 +124,12 @@ test("mobile new chat blocks repeated requests and recovers after rejection", as
       },
     ],
     activeSession: "active",
+    currentSession: {
+      id: "active",
+      title: "Active chat",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
     startNewSession: () => {
       requestCount += 1;
       return request.promise;

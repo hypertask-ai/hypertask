@@ -265,6 +265,9 @@ export function useAiChat() {
   const {
     startNewSession: createSession,
     activeSession,
+    currentSession,
+    showWelcomeScreen,
+    isSessionPending,
     sessions,
     selectSession: selectSessionInHistory,
     isSuccess: chatHistoryReady,
@@ -413,6 +416,28 @@ export function useAiChat() {
   const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000) => {
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
+
+    // A task-scoped surface (the ticket detail page) already owns session
+    // selection via useSessionAndChatHistory's per-task init effect, which
+    // finds-or-creates that exact ticket's session. Falling through to the
+    // project-wide board session map below would let a session another
+    // ticket in the same project last sent from win here too (HTPR-6100).
+    if (taskId !== undefined) {
+      // No signed-in user yet means no session can ever match; don't spin
+      // for the full timeout waiting on a predicate that can't succeed.
+      if (userId === undefined) return undefined;
+      const matchesTask = (session: IChatSession) =>
+        session.taskId === taskId && session.userId === userId;
+      const deadline = Date.now() + timeoutMs;
+      while (
+        !sessionsRef.current.some(matchesTask) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return sessionsRef.current.find(matchesTask);
+    }
+
     const needsBoardSession =
       typeof projectId === "number" &&
       !isFullScreenChat &&
@@ -541,6 +566,7 @@ export function useAiChat() {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
+    taskId,
   ]);
 
   useEffect(() => {
@@ -618,15 +644,11 @@ export function useAiChat() {
 
   // If message is provided, use it; otherwise, find latest human message
   function retryStream(message?: IChatMessage) {
-    const currentSession =
-      sessions.find((session) => session.id === activeSession) ?? sessions[0];
     const targetMsg =
-      message ||
-      [...currentSession.messages].reverse().find((msg) => msg.role === "human");
-
-    if (targetMsg && targetMsg.content) {
-      handleSendMessage(targetMsg.content);
-    }
+      message ??
+      [...(currentSession?.messages ?? [])].reverse().find((msg) => msg.role === "human");
+    if (!targetMsg?.content) return;
+    handleSendMessage(targetMsg.content);
   }
 
   // Load a sent message back into the composer so the user can rephrase and
@@ -1620,7 +1642,12 @@ export function useAiChat() {
   const toggleRenameChatModal = () => setShowRenameChatModal((prev) => !prev);
 
   const renameChat = (newTitle: string) => {
-    updateSessionTitle(activeSession ?? sessions[0].id, newTitle);
+    const sessionId = currentSession?.id ?? activeSession;
+    if (!sessionId) {
+      setShowRenameChatModal(false);
+      return;
+    }
+    updateSessionTitle(sessionId, newTitle);
     setShowRenameChatModal(false);
   };
 
@@ -1635,6 +1662,9 @@ export function useAiChat() {
     isByokBlocked,
     sessions,
     activeSession,
+    currentSession,
+    showWelcomeScreen,
+    isSessionPending,
     chatHistoryReady,
     isSidebarMode,
     setIsSidebarMode,
