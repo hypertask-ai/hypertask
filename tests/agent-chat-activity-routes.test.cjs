@@ -1,9 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
+const chatClientSource = fs.readFileSync(
+  path.join(root, "src/app/agents/chat/AgentChatClient.tsx"),
+  "utf8",
+);
 let loadId = 0;
 let flagEnabled = true;
 let activityCalls = [];
@@ -210,4 +215,27 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
     [{ id: "message-1", role: "human", content: "Please review HTPR-42" }],
   );
   assert.deepEqual(activityCalls, []);
+});
+
+test("activity rows keep refreshing without a pending reply, and uncached", () => {
+  const polling = chatClientSource.slice(
+    chatClientSource.indexOf("// Activity rows arrive without a chat reply"),
+    chatClientSource.indexOf("// Realtime nudge"),
+  );
+
+  // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
+  assert.match(chatClientSource, /const ACTIVITY_POLL_MS = 5000/);
+  // Without this the browser can serve a cached history and the feed freezes.
+  assert.match(
+    chatClientSource,
+    /fetch\(`\/api\/agent-chat\/\$\{loadSessionId\}`,[\s\S]*?cache: "no-store"/,
+  );
+  // The reply poll stops once the agent answers, so it cannot carry the feed.
+  assert.match(polling, /if \(!session \|\| !activityRowsEnabled\) return;/);
+  assert.doesNotMatch(polling, /awaiting/);
+  assert.match(polling, /setInterval\([\s\S]*?ACTIVITY_POLL_MS\)/);
+  // A hidden tab reads nothing, and each tick is a 600-row timeline query.
+  assert.match(polling, /document\.visibilityState !== "visible"/);
+  assert.match(polling, /addEventListener\("visibilitychange", onVisibility\)/);
+  assert.match(polling, /removeEventListener\("visibilitychange", onVisibility\)/);
 });

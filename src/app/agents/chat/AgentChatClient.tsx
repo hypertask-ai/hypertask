@@ -89,6 +89,9 @@ import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketPropos
 // While we are waiting for an external agent to answer, the only way to see
 // the reply arrive is to keep asking.
 const AWAITING_POLL_MS = 4000;
+// The passive activity feed has no realtime channel of its own, so it needs a
+// poll of its own to meet the 10-second freshness the ticket asks for.
+const ACTIVITY_POLL_MS = 5000;
 // Realtime still refetches when the reply lands; the interval is only a
 // fallback, so stop it after this long waiting on the same session.
 const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
@@ -667,7 +670,9 @@ const AgentChatClient = (props: IProp) => {
   const loadMessages = useCallback(async (loadSessionId: string) => {
     const generation = ++loadGenRef.current;
     try {
-      const res = await fetch(`/api/agent-chat/${loadSessionId}`);
+      const res = await fetch(`/api/agent-chat/${loadSessionId}`, {
+        cache: "no-store",
+      });
       const data = (await res.json()) as {
         success?: boolean;
         messages?: TChatMessage[];
@@ -963,6 +968,37 @@ const AgentChatClient = (props: IProp) => {
       clearTimeout(stop);
     };
   }, [awaiting, session, deliveryNotice, awaitingSince, loadMessages]);
+
+  // Activity rows arrive without a chat reply, so they are not covered by the
+  // reply poll above. loadMessages drops stale responses by generation, so an
+  // overlap with that poll is harmless. Nobody is reading a hidden tab, and the
+  // query behind each tick is not cheap, so pause while the tab is hidden and
+  // refetch once on the way back.
+  useEffect(() => {
+    if (!session || !activityRowsEnabled) return;
+    let id: ReturnType<typeof setInterval> | undefined;
+    const start = () => {
+      if (id === undefined) {
+        id = setInterval(() => void loadMessages(session.id), ACTIVITY_POLL_MS);
+      }
+    };
+    const stop = () => {
+      if (id !== undefined) clearInterval(id);
+      id = undefined;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return stop();
+      // Catch up on whatever happened while hidden instead of waiting 5s.
+      void loadMessages(session.id);
+      start();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
+  }, [session, activityRowsEnabled, loadMessages]);
 
   // Realtime nudge: the send route broadcasts agent-chat:changed on this
   // user's private channel; refetch instead of waiting for the next poll.

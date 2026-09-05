@@ -202,6 +202,12 @@ test("server projection scopes queries before limits and emits safe chronologica
         ];
       },
     },
+    comment: {
+      findMany: async (query) => {
+        queries.timeline = query;
+        return [];
+      },
+    },
   };
   stub("src/lib/prisma.ts", { default: db });
   stub("src/utils/controllers/projects/getAllIncludes.ts", {
@@ -274,4 +280,198 @@ test("server projection scopes queries before limits and emits safe chronologica
       return true;
     },
   );
+});
+
+test("server projection derives durable task milestones after agent involvement", async () => {
+  const queries = {};
+  const projectWhere = { OR: [{ ownerId: 6 }], teamId: { not: null } };
+  const taskRow = {
+    id: 42,
+    projectId: 15,
+    uniqueIndex: 42,
+    ticketNumber: "HTPR-42",
+    title: "Passive activity",
+    agentRuns: [{ createdAt: new Date("2026-09-04T10:00:00.000Z") }],
+    taskSessions: [],
+    comments: [],
+  };
+  const timeline = (id, createdAt, overrides = {}) => ({
+    id,
+    createdAt: new Date(createdAt),
+    text: "",
+    commentText: "",
+    agentId: null,
+    activity: null,
+    task: taskRow,
+    ...overrides,
+  });
+  const pullRequest = (
+    displayState,
+    number = 314,
+    url = "https://github.com/hypertask-ai/hypertask/pull/314",
+  ) => ({
+    type: "TaskPullRequest",
+    data: {
+      action: displayState === "merged" ? "closed" : "state_changed",
+      pullRequest: {
+        url,
+        title: "Passive rows",
+        number,
+        repository: "hypertask-ai/hypertask",
+        displayState,
+      },
+    },
+  });
+  const db = {
+    agentRun: {
+      findMany: async () => [
+        {
+          id: "run-1",
+          createdAt: new Date("2026-09-04T10:00:00.000Z"),
+          task: taskRow,
+        },
+      ],
+    },
+    agentRunActivity: { findMany: async () => [] },
+    comment: {
+      findMany: async (query) => {
+        queries.timeline = query;
+        return [
+          timeline("before", "2026-09-04T09:59:00.000Z", {
+            activity: pullRequest("open"),
+          }),
+          timeline("model", "2026-09-04T10:01:00.000Z", {
+            agentId: "agent-1",
+            commentText: "Model: gpt-5.6-sol (ladder A, rung 2)",
+          }),
+          timeline("pr-open", "2026-09-04T10:02:00.000Z", {
+            activity: pullRequest("open"),
+          }),
+          timeline("concerns", "2026-09-04T10:03:00.000Z", {
+            activity: pullRequest("checks_red"),
+          }),
+          timeline("green", "2026-09-04T10:04:00.000Z", {
+            activity: pullRequest("green"),
+          }),
+          timeline("merged", "2026-09-04T10:05:00.000Z", {
+            activity: pullRequest("merged"),
+          }),
+          timeline("handoff", "2026-09-04T10:06:00.000Z", {
+            activity: {
+              type: "TaskMove",
+              data: { toSection: { sectionId: 2, sectionTitle: "AI Review" } },
+            },
+          }),
+          timeline("blocked", "2026-09-04T10:07:00.000Z", {
+            activity: {
+              type: "TaskMove",
+              data: { toSection: { sectionId: 3, sectionTitle: "Blocked" } },
+            },
+          }),
+          timeline("escalation", "2026-09-04T10:07:30.000Z", {
+            agentId: "agent-1",
+            text:
+              "<p><strong>🚨 Agent escalation — needs a human.</strong></p><p><strong>Reason:</strong> Preview access is unavailable.</p><p><strong>Already tried:</strong> refreshed credentials</p>",
+          }),
+          timeline("switch", "2026-09-04T10:08:00.000Z", {
+            agentId: "agent-1",
+            commentText: "Switched: gpt-5.6-sol for escalation",
+          }),
+          timeline("live", "2026-09-04T10:09:00.000Z", {
+            agentId: "agent-1",
+            text: "<p><strong>Live:</strong> passive rows are deployed.</p>",
+          }),
+          timeline("qa", "2026-09-04T10:10:00.000Z", {
+            agentId: "qa-agent",
+            commentText: "PASS: all milestones appeared within 10 seconds",
+          }),
+          timeline("qa-prose", "2026-09-04T10:10:30.000Z", {
+            agentId: "qa-agent",
+            text: "<p><strong>QA passed on production: rows appear in seconds.</strong></p>",
+          }),
+          timeline("qa-not-a-verdict", "2026-09-04T10:10:45.000Z", {
+            agentId: "qa-agent",
+            commentText: "QA is blocked because the preview never deployed",
+          }),
+          timeline("spoof", "2026-09-04T10:11:00.000Z", {
+            commentText: "FAIL: human-authored spoof",
+          }),
+          timeline("ordinary", "2026-09-04T10:12:00.000Z", {
+            agentId: "agent-1",
+            commentText: "Implementation detail without an approved prefix",
+          }),
+          timeline("unsafe", "2026-09-04T10:13:00.000Z", {
+            activity: pullRequest("open", 315, "javascript:alert(1)"),
+          }),
+          timeline("merged-no-green", "2026-09-04T10:14:00.000Z", {
+            activity: pullRequest(
+              "merged",
+              316,
+              "https://github.com/hypertask-ai/hypertask/pull/316",
+            ),
+          }),
+        ];
+      },
+    },
+  };
+  stub("src/lib/prisma.ts", { default: db });
+  stub("src/utils/controllers/projects/getAllIncludes.ts", {
+    getProjectWhere: () => projectWhere,
+  });
+  const server = load("src/lib/agents/agentChatActivity.ts");
+
+  const rows = await server.listAgentChatActivity(
+    { agentId: "agent-1", sessionId: "session-1", userId: 6, limit: 30 },
+    db,
+  );
+
+  assert.deepEqual(
+    rows.map(({ text }) => text),
+    [
+      "Started HTPR-42",
+      "Model: gpt-5.6-sol (ladder A, rung 2)",
+      "PR opened #314",
+      "Review: CONCERNS",
+      "Review: APPROVE",
+      "Merged, deploying",
+      "Handoff: AI Review",
+      "Blocked",
+      "Blocked: Preview access is unavailable.",
+      "Switched: gpt-5.6-sol for escalation",
+      "Live: passive rows are deployed.",
+      "QA: PASS — all milestones appeared within 10 seconds",
+      "QA: PASS — on production: rows appear in seconds.",
+      "Review: APPROVE",
+      "Merged, deploying",
+    ],
+  );
+  assert.equal(rows.at(-2).createdAt, rows.at(-1).createdAt);
+  assert.equal(rows.at(-2).link, rows.at(-1).link);
+  assert.equal(queries.timeline.take, 90);
+  assert.deepEqual(queries.timeline.orderBy, [
+    { createdAt: "desc" },
+    { id: "desc" },
+  ]);
+  assert.deepEqual(queries.timeline.where.task.project, projectWhere);
+  // The database filter must be a superset of what the projection accepts, or
+  // milestones are dropped before they are ever parsed.
+  const prefixes = queries.timeline.where.OR.flatMap((branch) =>
+    (branch.OR ?? []).map(
+      (clause) => (clause.text ?? clause.commentText).startsWith,
+    ),
+  );
+  for (const prefix of ["Model:", "Switched:", "Live:", "PASS", "FAIL", "QA "]) {
+    assert.ok(
+      prefixes.includes(prefix),
+      `missing timeline prefix ${prefix}`,
+    );
+  }
+  assert.ok(
+    prefixes.includes("<p><strong>🚨 Agent escalation — needs a human."),
+  );
+  // QA agents do not all shout their verdict, so the fetch must ignore case.
+  const qaClauses = queries.timeline.where.OR.at(-1).OR;
+  for (const clause of qaClauses) {
+    assert.equal((clause.text ?? clause.commentText).mode, "insensitive");
+  }
 });
