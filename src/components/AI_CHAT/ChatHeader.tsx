@@ -123,12 +123,12 @@ export const ChatHeader = () => {
     [sessions]
   );
 
-  // Delete targets the same session rename/title already do (currentSession,
-  // falling back to activeSession) so the three don't disagree about which
-  // chat is "the one on screen" (HTPR-6100). Highlighting below stays keyed
-  // strictly off activeSession, since currentSession can be a display-only
-  // fallback during a refetch that shouldn't paint as the selected item.
-  const resolvedSessionId = currentSession?.id ?? activeSession;
+  // Delete must target whichever session is highlighted below (activeSession),
+  // never a currentSession that's only a display-only fallback during a
+  // refetch - deleting is destructive, so it can't silently diverge from
+  // what the user sees selected. Only fall back to currentSession when
+  // nothing is explicitly selected yet (HTPR-6100).
+  const resolvedSessionId = activeSession ?? currentSession?.id;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

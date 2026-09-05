@@ -429,9 +429,6 @@ export function useAiChat() {
     // project-wide board session map below would let a session another
     // ticket in the same project last sent from win here too (HTPR-6100).
     if (taskId !== undefined) {
-      // No signed-in user yet means no session can ever match; don't spin
-      // for the full timeout waiting on a predicate that can't succeed.
-      if (userId === undefined) return undefined;
       // Match on taskId alone, same as the find-or-create init effect in
       // useSessionAndChatHistory - sessions are already scoped to the
       // signed-in user server-side, so requiring userId here too just adds
