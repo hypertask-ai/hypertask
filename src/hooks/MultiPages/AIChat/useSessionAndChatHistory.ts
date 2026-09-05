@@ -557,7 +557,7 @@ export const useSessionAndChatHistory = (
   // message pane forever instead of falling through to the welcome screen.
   const isSessionPending =
     isFetchingSessions && activeSession !== undefined && currentSession === undefined;
-  const showWelcomeScreen = !isSessionPending && (currentSession?.messages.length ?? 0) === 0;
+  const showWelcomeScreen = !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
 
   return {
     isLoading: isDemo ? false : isLoadingSessions,
