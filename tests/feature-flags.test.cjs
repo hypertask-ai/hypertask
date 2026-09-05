@@ -9,9 +9,10 @@ let listedRows = null;
 let readError = null;
 let sessionUserId = 6;
 let usersById = new Map();
+let taskRows = [];
 const prisma = {
   user: { findUnique: async ({ where }) => usersById.get(where.id) ?? null },
-  task: { findMany: async () => [] },
+  task: { findMany: async ({ where }) => taskRows.filter(({ uniqueIndex }) => where.uniqueIndex.in.includes(uniqueIndex)) },
   featureFlag: {
     findUnique: async () => {
       if (readError) throw readError;
@@ -48,6 +49,7 @@ test.beforeEach(() => {
   listedRows = null;
   readError = null;
   sessionUserId = 6;
+  taskRows = [];
   usersById = new Map([
     [6, { email: "valentin.yeo@gmail.com" }],
     [985, { email: "valentin@hypertask.ai" }],
@@ -274,6 +276,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6133-feature-flag-details", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6155-chat-agent-brief", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6176-flag-ticket-title", mode: "OWNER_ONLY", updatedAt: null },
       {
         key: "htpr-6177-auto-task-descriptions",
         mode: "OWNER_ONLY",
@@ -314,6 +317,23 @@ test("legacy database flags stay visible, safe, and updateable", async () => {
   const changed = await flags.setFeatureFlagMode("htpr-1111-aaa", "OWNER_ONLY");
   assert.equal(changed.mode, "OWNER_ONLY");
   assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/1111");
+});
+
+test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
+  listedRows = [{ key: "htpr-1111-aaa", mode: "OFF", updatedAt: null }];
+  taskRows = [
+    { uniqueIndex: 6091, title: "Add owner-controlled feature flags" },
+    { uniqueIndex: 1111, title: "Some legacy ticket" },
+  ];
+
+  const withoutTitles = await flags.listFeatureFlagModes();
+  withoutTitles.forEach(({ ticketTitle }) => assert.equal(ticketTitle, null));
+
+  const withTitles = await flags.listFeatureFlagModes({ includeTicketTitles: true });
+  const declared = withTitles.find(({ key }) => key === "htpr-6091-feature-flags");
+  assert.equal(declared.ticketTitle, "Add owner-controlled feature flags");
+  const undeclaredStored = withTitles.find(({ key }) => key === "htpr-1111-aaa");
+  assert.equal(undeclaredStored.ticketTitle, "Some legacy ticket");
 });
 
 test("unknown flags fail closed and cannot create rows", async () => {

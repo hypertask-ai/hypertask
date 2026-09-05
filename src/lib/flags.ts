@@ -19,6 +19,7 @@ export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
 export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
+export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -106,6 +107,10 @@ const FEATURE_FLAG_DEFINITIONS = [
     description:
       "Drafts a task description from the title while you type, below an empty description.",
   },
+  {
+    key: FLAG_TICKET_TITLE_FLAG,
+    description: "Shows the linked ticket's title as the primary label on the flags admin page.",
+  },
 ] as const satisfies readonly { key: string; description: string }[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
@@ -122,6 +127,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6141-ai-first-task-writer",
   AGENT_CHAT_BRIEF_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
+  FLAG_TICKET_TITLE_FLAG,
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
@@ -243,14 +249,18 @@ export async function isFeatureEnabled(
   );
 }
 
-export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
-  const [stored, ticketTitleByNumber] = await Promise.all([
-    prisma.featureFlag.findMany({
-      select: { key: true, mode: true, updatedAt: true },
-      orderBy: { key: "asc" },
-    }),
-    loadFeatureFlagTicketTitles(FEATURE_FLAG_KEYS),
-  ]);
+export async function listFeatureFlagModes(
+  options: { includeTicketTitles?: boolean } = {},
+): Promise<FeatureFlagRow[]> {
+  const stored = await prisma.featureFlag.findMany({
+    select: { key: true, mode: true, updatedAt: true },
+    orderBy: { key: "asc" },
+  });
+  const ticketTitleByNumber = options.includeTicketTitles
+    ? await loadFeatureFlagTicketTitles([
+        ...new Set([...FEATURE_FLAG_KEYS, ...stored.map(({ key }) => key)]),
+      ])
+    : new Map<number, string>();
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
