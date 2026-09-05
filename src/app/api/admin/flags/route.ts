@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       return noStore({ error: "Not found" }, 404);
     }
     const [flags, detailsEnabled] = await Promise.all([
-      listFeatureFlagModes(),
+      listFeatureFlagModes({ includeTicketTitles: true }),
       isFeatureEnabled(FEATURE_FLAG_DETAILS_FLAG, FEATURE_FLAG_OWNER_USER_ID),
     ]);
     return noStore({ flags, detailsEnabled });

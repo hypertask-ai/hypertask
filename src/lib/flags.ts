@@ -19,6 +19,7 @@ export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
 export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
+export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -106,6 +107,10 @@ const FEATURE_FLAG_DEFINITIONS = [
     description:
       "Drafts a task description from the title while you type, below an empty description.",
   },
+  {
+    key: FLAG_TICKET_TITLE_FLAG,
+    description: "Shows the linked ticket's title as the primary label on the flags admin page.",
+  },
 ] as const satisfies readonly { key: string; description: string }[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
@@ -122,6 +127,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6141-ai-first-task-writer",
   AGENT_CHAT_BRIEF_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
+  FLAG_TICKET_TITLE_FLAG,
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
@@ -173,22 +179,40 @@ export type FeatureFlagRow = {
   updatedAt: Date | null;
   description: string;
   ticketUrl: string | null;
+  ticketTitle: string | null;
 };
 
+const FEATURE_FLAG_TICKET_PROJECT_ID = 15;
 const FEATURE_FLAG_TICKET_BASE = "https://app.hypertask.ai/detail/project-15";
 const LEGACY_FEATURE_FLAG_DESCRIPTION =
   "This older feature flag has no description in this version of the app.";
+const FEATURE_FLAG_KEY_TICKET_NUMBER = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function withFeatureFlagMetadata(
   row: Pick<FeatureFlagRow, "key" | "mode" | "updatedAt">,
+  ticketTitleByNumber: Map<number, string>,
 ): FeatureFlagRow {
   const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === row.key);
-  const ticketNumber = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(row.key)?.[1];
+  const ticketNumber = FEATURE_FLAG_KEY_TICKET_NUMBER.exec(row.key)?.[1];
   return {
     ...row,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     ticketUrl: ticketNumber ? `${FEATURE_FLAG_TICKET_BASE}/${ticketNumber}` : null,
+    ticketTitle: ticketNumber ? (ticketTitleByNumber.get(Number(ticketNumber)) ?? null) : null,
   };
+}
+
+async function loadFeatureFlagTicketTitles(keys: readonly string[]): Promise<Map<number, string>> {
+  const ticketNumbers = keys
+    .map((key) => FEATURE_FLAG_KEY_TICKET_NUMBER.exec(key)?.[1])
+    .filter((value): value is string => value !== undefined)
+    .map(Number);
+  if (ticketNumbers.length === 0) return new Map();
+  const tickets = await prisma.task.findMany({
+    where: { projectId: FEATURE_FLAG_TICKET_PROJECT_ID, uniqueIndex: { in: ticketNumbers } },
+    select: { uniqueIndex: true, title: true },
+  });
+  return new Map(tickets.map((ticket) => [ticket.uniqueIndex, ticket.title]));
 }
 
 export function featureFlagModeEnabled(
@@ -225,18 +249,25 @@ export async function isFeatureEnabled(
   );
 }
 
-export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
+export async function listFeatureFlagModes(
+  options: { includeTicketTitles?: boolean } = {},
+): Promise<FeatureFlagRow[]> {
   const stored = await prisma.featureFlag.findMany({
     select: { key: true, mode: true, updatedAt: true },
     orderBy: { key: "asc" },
   });
+  const ticketTitleByNumber = options.includeTicketTitles
+    ? await loadFeatureFlagTicketTitles([
+        ...new Set([...FEATURE_FLAG_KEYS, ...stored.map(({ key }) => key)]),
+      ])
+    : new Map<number, string>();
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      withFeatureFlagMetadata({ key, mode: defaultFeatureFlagMode(key), updatedAt: null }),
+      withFeatureFlagMetadata({ key, mode: defaultFeatureFlagMode(key), updatedAt: null }, ticketTitleByNumber),
     ]),
   );
-  stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row)));
+  stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row, ticketTitleByNumber)));
   return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
@@ -277,11 +308,14 @@ export async function setFeatureFlagMode(
     : Boolean(await prisma.featureFlag.findUnique({ where: { key }, select: { key: true } }));
   if (!existing) throw new FeatureFlagInputError("Unknown feature flag");
 
-  const row = await prisma.featureFlag.upsert({
-    where: { key },
-    create: { key, mode },
-    update: { mode },
-    select: { key: true, mode: true, updatedAt: true },
-  });
-  return withFeatureFlagMetadata(row);
+  const [row, ticketTitleByNumber] = await Promise.all([
+    prisma.featureFlag.upsert({
+      where: { key },
+      create: { key, mode },
+      update: { mode },
+      select: { key: true, mode: true, updatedAt: true },
+    }),
+    loadFeatureFlagTicketTitles([key]),
+  ]);
+  return withFeatureFlagMetadata(row, ticketTitleByNumber);
 }

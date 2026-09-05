@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADMIN_FEATURE_FLAGS_QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX,
+  useFlag,
 } from "@/hooks/useFlag";
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 
@@ -44,6 +45,7 @@ async function updateFlag(input: { key: string; mode: FeatureFlagMode }) {
 
 export default function FeatureFlagsAdmin() {
   const queryClient = useQueryClient();
+  const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
   const flags = useQuery({
     queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY,
     queryFn: loadFlags,
@@ -100,7 +102,21 @@ export default function FeatureFlagsAdmin() {
               className="flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 sm:max-w-lg">
-                {flags.data.detailsEnabled && flag.ticketUrl ? (
+                {flags.data.detailsEnabled && ticketTitleEnabled && flag.ticketTitle ? (
+                  <>
+                    {flag.ticketUrl ? (
+                      <a
+                        href={flag.ticketUrl}
+                        className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline"
+                      >
+                        {flag.ticketTitle}
+                      </a>
+                    ) : (
+                      <p className="text-content font-medium text-white-black">{flag.ticketTitle}</p>
+                    )}
+                    <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
+                  </>
+                ) : flags.data.detailsEnabled && flag.ticketUrl ? (
                   <a
                     href={flag.ticketUrl}
                     className="text-white-black underline-offset-2 hover:underline focus-visible:underline"
