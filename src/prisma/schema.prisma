@@ -213,6 +213,13 @@ enum ChatRole {
   assistant
 }
 
+enum ChatTicketProposalStatus {
+  PENDING
+  FAILED
+  CONFIRMED
+  DISMISSED
+}
+
 enum AgentRuntimeType {
   EXTERNAL
   NATIVE
@@ -1060,6 +1067,7 @@ model Task {
   pages               Page[]
   taskLease           TaskLease?
   agentRuns           AgentRun[]
+  chatTicketProposal  ChatTicketProposal?
 
   // @@index([projectId, deletedAt, updatedAt]) // Composite index for your exact query
   // @@index([updatedAt]) // For ordering
@@ -2142,8 +2150,33 @@ model ChatMessage {
   // The human message an agent reply answers; doubles as the idempotency key
   // so a retried agent POST cannot duplicate a reply.
   replyToMessageId String? @unique
+  ticketProposal ChatTicketProposal?
 
   @@index([sessionId])
+}
+
+model ChatTicketProposal {
+  id                   String                   @id @default(cuid())
+  messageId            String                   @unique
+  message              ChatMessage              @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  snapshotVersion      Int                      @default(1)
+  outcome              String                   @db.Text
+  ticketTitle          String                   @db.VarChar(255)
+  targetProjectId      Int
+  targetProjectTitle   String                   @db.VarChar(255)
+  targetSectionId      Int
+  targetSectionTitle   String                   @db.VarChar(255)
+  status               ChatTicketProposalStatus @default(PENDING)
+  failureMessage       String?                  @db.VarChar(255)
+  taskId               Int?                     @unique
+  task                 Task?                    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  failedAt             DateTime?
+  confirmedAt          DateTime?
+  dismissedAt          DateTime?
+
+  @@index([targetProjectId, status])
 }
 
 enum AgentVisibility {
