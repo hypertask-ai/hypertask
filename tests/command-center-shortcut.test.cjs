@@ -26,7 +26,7 @@ test("Ctrl+K opens the Command Center from boards and task detail", () => {
   );
 });
 
-test("Ctrl+K stays global on agent and settings pages", () => {
+test("Ctrl+K stays global on agent, settings, and Page routes", () => {
   assert.equal(isCommandCenterShortcut(shortcut(), false, "/agents"), true);
   assert.equal(
     isCommandCenterShortcut(shortcut(), false, "/agents/ht-bug-fixer"),
@@ -41,6 +41,11 @@ test("Ctrl+K stays global on agent and settings pages", () => {
     isCommandCenterShortcut(shortcut(), false, "/settings/shortcuts"),
     true,
   );
+  assert.equal(
+    isCommandCenterShortcut(shortcut(), false, "/page/page-public-id"),
+    true,
+  );
+  assert.equal(isCommandCenterShortcut(shortcut(), false, "/pages"), false);
 });
 
 test("the signed-in shell renders the Command Center only on agent routes", () => {
@@ -70,6 +75,10 @@ test("Cmd+K is accepted on Apple devices on supported routes", () => {
   const commandK = shortcut({ ctrlKey: false, metaKey: true });
   assert.equal(
     isCommandCenterShortcut(commandK, true, "/detail/project-15/5057"),
+    true,
+  );
+  assert.equal(
+    isCommandCenterShortcut(commandK, true, "/page/page-public-id"),
     true,
   );
   assert.equal(isCommandCenterShortcut(commandK, true, "/inbox"), false);

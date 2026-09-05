@@ -2,6 +2,7 @@
 
 import { EditorContent } from "@tiptap/react";
 import { ChevronLeft, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { ChangeEvent, useContext, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
@@ -17,11 +18,12 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import {
   bindPageReturnEntry,
   returnFromPage,
+  shouldReturnFromPageOnEscape,
   type NavigationHistoryLike,
 } from "@/lib/navigation/pageReturn";
 import { useRecoilValue } from "@/lib/state";
 import type { IUser } from "@/models/model";
-import { appShellRailAtom } from "@/store";
+import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/tiptap.module.scss";
 
 type SerializedPage = {
@@ -46,6 +48,9 @@ type SaveKind = "title" | "content";
 type SaveStatus = "saving" | "saved" | "error";
 
 const SAVE_DELAY = 750;
+const HypertasksCommands = dynamic(() => import("@/components/commands"), {
+  ssr: false,
+});
 
 const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const page = JSON.parse(_page) as SerializedPage;
@@ -57,6 +62,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const [toggleHighlight, setToggleHighlight] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const railOn = useRecoilValue(appShellRailAtom);
+  const showCommands = useRecoilValue(showCommandsAtom);
   const isMobile = useContext(MobileViewContext);
   const showRail = railOn && !isMobile;
   const versionRef = useRef(page.version);
@@ -69,6 +75,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     title: false,
     content: false,
   });
+  const returningRef = useRef(false);
   const titleSaveChainRef = useRef(Promise.resolve());
   const contentSaveChainRef = useRef(Promise.resolve());
   const contentRef = useRef<HTMLDivElement>(null);
@@ -93,22 +100,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       // Direct Page visits still have the canonical task replacement below.
     }
   }, [taskHref]);
-
-  const returnToTask = () => {
-    try {
-      returnFromPage({
-        router,
-        navigation: (window as Window & { navigation?: NavigationHistoryLike })
-          .navigation,
-        historyState: window.history.state,
-        currentHref: window.location.href,
-        taskHref,
-        storage: window.sessionStorage,
-      });
-    } catch {
-      router.replace(taskHref);
-    }
-  };
 
   const markPending = (kind: SaveKind) => {
     generationRef.current[kind] += 1;
@@ -190,7 +181,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     }
   };
 
-  const [debouncedTitleSave, cancelTitleSave] = useDebounceWithCancel(() => {
+  const [debouncedTitleSave, cancelTitleSave, flushTitleSave] = useDebounceWithCancel(() => {
     const nextTitle = titleRef.current;
     const generation = generationRef.current.title;
 
@@ -199,7 +190,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     );
   }, SAVE_DELAY);
 
-  const [debouncedContentSave, cancelContentSave] = useDebounceWithCancel(() => {
+  const [debouncedContentSave, cancelContentSave, flushContentSave] = useDebounceWithCancel(() => {
     if (!editor) return;
 
     const content = editor.getHTML();
@@ -209,6 +200,28 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       saveContent(content, generation)
     );
   }, SAVE_DELAY);
+
+  const returnToTask = async () => {
+    if (returningRef.current) return;
+    returningRef.current = true;
+    flushTitleSave();
+    flushContentSave();
+    await Promise.all([titleSaveChainRef.current, contentSaveChainRef.current]);
+
+    try {
+      returnFromPage({
+        router,
+        navigation: (window as Window & { navigation?: NavigationHistoryLike })
+          .navigation,
+        historyState: window.history.state,
+        currentHref: window.location.href,
+        taskHref,
+        storage: window.sessionStorage,
+      });
+    } catch {
+      router.replace(taskHref);
+    }
+  };
 
   useEffect(() => {
     if (!editor) return;
@@ -277,7 +290,13 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     <main
       aria-label={`Page editor for ${currentUser.displayName || "current user"}`}
       className="min-h-SVH-full bg-taskDetailPage text-white-black"
+      onKeyDown={(event) => {
+        if (shouldReturnFromPageOnEscape(event.nativeEvent, showCommands.show)) {
+          void returnToTask();
+        }
+      }}
     >
+      {showCommands.show && <HypertasksCommands />}
       {showRail && <AppShellRail variant="global" currentUser={currentUser} />}
 
       <div className={showRail ? "pl-[var(--app-shell-rail-w,48px)]" : ""}>
@@ -290,7 +309,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
           >
             <button
               type="button"
-              onClick={returnToTask}
+              onClick={() => void returnToTask()}
               className="inline-flex items-center gap-1 border-0 bg-transparent p-0 transition-colors hover:text-white-black"
             >
               <ChevronLeft size={14} strokeWidth={1.75} />

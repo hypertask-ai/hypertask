@@ -68,6 +68,15 @@ const PAGE_RETURN_HISTORY_STATE_KEY = "__hypertaskPageReturn";
 export const PAGE_RETURN_CONTEXT_TTL_MS = 24 * 60 * 60 * 1000;
 const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
 
+export const shouldReturnFromPageOnEscape = (
+  event: Pick<KeyboardEvent, "defaultPrevented" | "isComposing" | "key">,
+  commandCenterOpen: boolean,
+) =>
+  event.key === "Escape" &&
+  !event.defaultPrevented &&
+  !event.isComposing &&
+  !commandCenterOpen;
+
 const contextKey = (nonce: string) => `${PAGE_RETURN_CONTEXT_PREFIX}${nonce}`;
 
 const pendingRuntimeProofs = (runtime: PageReturnRuntime, create: boolean) => {

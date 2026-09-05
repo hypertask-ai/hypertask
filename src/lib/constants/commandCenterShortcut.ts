@@ -18,6 +18,7 @@ export const isCommandCenterShortcut = (
   Boolean(
     pathname?.startsWith("/project") ||
       pathname?.startsWith("/detail/") ||
+      pathname?.startsWith("/page/") ||
       isAgentsRoute(pathname) ||
       pathname?.startsWith("/settings"),
   );
