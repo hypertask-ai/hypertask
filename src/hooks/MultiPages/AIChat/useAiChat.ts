@@ -1656,7 +1656,10 @@ export function useAiChat() {
 
   const renameChat = (newTitle: string) => {
     const sessionId = currentSession?.id ?? activeSession;
-    if (!sessionId) return;
+    if (!sessionId) {
+      setShowRenameChatModal(false);
+      return;
+    }
     updateSessionTitle(sessionId, newTitle);
     setShowRenameChatModal(false);
   };
