@@ -32,6 +32,6 @@ exec /home/aireviewer/.local/bin/claude \
   --disable-slash-commands \
   --no-session-persistence \
   --safe-mode \
-  --model sonnet \
+  --model opus \
   --effort high \
   <"$review_tmp/context.txt"
