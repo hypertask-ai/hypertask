@@ -129,6 +129,17 @@ export const POST = agent.adapters.next(scheduler);
 export default { fetch: agent.adapters.cloudflare(scheduler) };
 ```
 
+## Dry run
+
+Set `dryRun: true` on `createAgent` (or run the process with `HYPERTASK_DRY_RUN=1`) to develop against real tickets without touching them. Reads still hit the API, so the run, ticket, and thread are the real ones, while every write is printed and skipped:
+
+```ts
+const agent = createAgent({ token, webhookSecret, dryRun: true });
+// [dry-run] POST /mcp/comments {"task_id":101,"text":"<p>Work started.</p>"}
+```
+
+Pass `onDryRun` to collect the previews instead of printing them. Because nothing is written, a dry run may also replay a run that already finished, which is what `hypertask agent replay <runId>` re-sends into a local handler.
+
 ## Delivery safety
 
 The SDK verifies HMAC-SHA256 over `timestamp.rawBody`, rejects timestamps outside five minutes, compares signatures in constant time, limits request bodies, and requires event and delivery headers to match their signed body fields. It acknowledges a run event only after durable enqueue; the worker then reads that run with the configured token and verifies the agent/task binding before dispatch.

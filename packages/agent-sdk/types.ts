@@ -198,6 +198,22 @@ export type AgentOptions = {
   deliveryStore?: DeliveryStore;
   scheduler?: DeliveryScheduler;
   onError?: (error: unknown, payload?: AgentWebhookPayload) => void;
+  /**
+   * Preview mode: every write the SDK would send is printed and skipped, reads
+   * still hit the API. Defaults to true when HYPERTASK_DRY_RUN is set to 1 or
+   * true. Also lets a finished run be replayed locally, which the liveness
+   * guards would otherwise reject.
+   */
+  dryRun?: boolean;
+  /** Where dry-run previews go. Defaults to console.log. */
+  onDryRun?: (preview: DryRunWrite) => void;
+};
+
+export type DryRunWrite = {
+  method: string;
+  path: string;
+  body: unknown;
+  idempotencyKey?: string;
 };
 
 export type AgentClientOptions = Omit<

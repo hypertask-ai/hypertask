@@ -13,6 +13,7 @@ import type {
   AgentTaskUpdate,
   AgentThreadItem,
   AgentWebhookPayload,
+  DryRunWrite,
 } from "./types.js";
 
 const DEFAULT_API_URL = "https://api.hypertask.ai/api";
@@ -55,6 +56,48 @@ type HydratedContext = {
   ticket: AgentTask | null;
   thread: AgentThreadItem[];
 };
+
+function envDryRun(): boolean {
+  const value = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.HYPERTASK_DRY_RUN;
+  return value === "1" || value === "true";
+}
+
+/**
+ * A write is never sent in dry-run mode, so the SDK answers itself with the
+ * smallest response each caller accepts. Only the lease claim and the activity
+ * write read anything back; every other write ignores the body.
+ */
+function dryRunResponse(path: string, body: unknown): unknown {
+  const sent = (body && typeof body === "object" && !Array.isArray(body)
+    ? (body as JsonObject)
+    : {}) as JsonObject;
+  if (path.endsWith("/lease/claim")) {
+    return {
+      success: true,
+      lease: { taskId: sent.task_id, leaseToken: sent.lease_token },
+    };
+  }
+  if (path.endsWith("/activities")) {
+    const now = new Date().toISOString();
+    return {
+      success: true,
+      activity: {
+        id: `dry-run-${globalThis.crypto.randomUUID()}`,
+        runId: path.split("/").slice(-2)[0],
+        type: sent.type,
+        text: sent.text,
+        link: sent.link ?? null,
+        options: sent.options ?? null,
+        selectedOption: null,
+        selectedAt: null,
+        selectedBy: null,
+        createdAt: now,
+      },
+    };
+  }
+  return { success: true };
+}
 
 export class AgentSdkError extends Error {
   constructor(
@@ -130,6 +173,9 @@ export class AgentClient {
     }
   >();
   private readonly onErrorCallback?: AgentClientOptions["onError"];
+  private readonly onDryRunCallback?: AgentClientOptions["onDryRun"];
+  /** True while writes are previewed instead of sent. */
+  readonly dryRun: boolean;
 
   private readonly token: string;
 
@@ -144,6 +190,18 @@ export class AgentClient {
       throw new AgentSdkError("A Fetch API implementation is required");
     }
     this.onErrorCallback = options.onError;
+    this.onDryRunCallback = options.onDryRun;
+    this.dryRun = options.dryRun ?? envDryRun();
+  }
+
+  private previewWrite(write: DryRunWrite): void {
+    if (this.onDryRunCallback) {
+      this.onDryRunCallback(write);
+      return;
+    }
+    console.log(
+      `[dry-run] ${write.method} ${write.path} ${JSON.stringify(write.body ?? {})}`,
+    );
   }
 
   on(event: AgentEventSubscription, handler: AgentEventHandler): () => void {
@@ -154,6 +212,16 @@ export class AgentClient {
   }
 
   async request<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+    const method = options.method ?? "GET";
+    if (this.dryRun && method !== "GET") {
+      this.previewWrite({
+        method,
+        path,
+        body: options.body ?? null,
+        ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
+      });
+      return dryRunResponse(path, options.body) as T;
+    }
     const headers = new Headers({
       Accept: "application/json",
       Authorization: `Bearer ${this.token}`,
@@ -171,7 +239,7 @@ export class AgentClient {
     let response: Response;
     try {
       response = await this.requestFetch(`${this.baseUrl}${path}`, {
-        method: options.method ?? "GET",
+        method,
         headers,
         body,
         signal: options.signal,
@@ -275,7 +343,11 @@ export class AgentClient {
     }
     if (event !== "stop") {
       runRecord = await this.assertPayloadAccess(payload, claimSignal);
-      if (runRecord.status === "stopped" || runRecord.status === "done") {
+      // A dry run replays recorded work, so a finished run is the normal case.
+      if (
+        !this.dryRun &&
+        (runRecord.status === "stopped" || runRecord.status === "done")
+      ) {
         throw new AgentSdkError("Run is no longer active");
       }
     }
@@ -298,7 +370,7 @@ export class AgentClient {
     let statusCheckError: unknown;
     let statusCheckPromise: Promise<void> | null = null;
     const statusMonitor =
-      event === "stop"
+      event === "stop" || this.dryRun
         ? null
         : setInterval(() => {
             if (statusCheckPromise || dispatchController.signal.aborted) return;
@@ -658,13 +730,17 @@ class AgentRunImpl implements AgentRun {
   }
 
   private assertNotStopped(): void {
-    if (this.signal.aborted || this.status === "stopped" || this.status === "done") {
+    if (this.signal.aborted) throw new AgentSdkError("Run is no longer active");
+    // A dry run never writes, so a recorded run stays replayable after it ended.
+    if (this.client.dryRun) return;
+    if (this.status === "stopped" || this.status === "done") {
       throw new AgentSdkError("Run is no longer active");
     }
   }
 
   private async assertServerRunActive(signal: AbortSignal): Promise<void> {
     this.assertNotStopped();
+    if (this.client.dryRun) return;
     const response = objectValue(
       await this.client.request(`/mcp/agents/runs/${encodeURIComponent(this.id)}`, {
         signal,
