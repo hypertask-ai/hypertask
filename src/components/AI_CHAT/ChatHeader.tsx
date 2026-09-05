@@ -439,11 +439,14 @@ export const ChatHeader = () => {
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
-                onClick={() => {
-                  if (resolvedSessionId) {
-                    void deleteSession(resolvedSessionId);
-                  }
+                onClick={async () => {
                   setIsOverflowOpen(false);
+                  if (!resolvedSessionId) return;
+                  try {
+                    await deleteSession(resolvedSessionId);
+                  } catch {
+                    toast.error("Couldn't delete this chat. Please try again.");
+                  }
                 }}
               >
                 <Trash2 size={14} className="shrink-0" strokeWidth={1.75} />
