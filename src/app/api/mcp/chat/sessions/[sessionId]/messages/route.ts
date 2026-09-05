@@ -226,6 +226,7 @@ export async function POST(
     try {
       message = await prisma.$transaction(async (tx) => {
         await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
+        if (await tx.chatMessage.findUnique({ where: { replyToMessageId } })) throw Object.assign(new Error('Concurrent reply'), { code: 'P2002' })
         const latest = await tx.chatMessage.findFirst({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true, role: true } })
         if (latest?.id !== replyToMessageId || latest.role !== 'human') throw new Error('This chat turn is no longer active')
         const created = await tx.chatMessage.create({
