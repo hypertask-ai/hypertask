@@ -40,6 +40,11 @@ export const useSessionAndChatHistory = (
   // the first request is still in flight (sessionsData changes as soon as it
   // resolves, re-running the effect).
   const startingSessionForTaskRef = useRef<number | null>(null);
+  // Always holds the taskId as of the most recent render, so an in-flight
+  // create started for an earlier ticket can tell it's stale once the user
+  // has switched tickets, instead of committing its session as active.
+  const currentTaskIdRef = useRef<number | undefined>(taskId);
+  currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
 
@@ -489,8 +494,17 @@ export const useSessionAndChatHistory = (
         // No session for this task yet: start a fresh one automatically
         // instead of reusing whatever session another task last used.
         if (startingSessionForTaskRef.current === taskId) return;
-        startingSessionForTaskRef.current = taskId;
-        await startNewSession();
+        const requestedTaskId = taskId;
+        startingSessionForTaskRef.current = requestedTaskId;
+        const created = await startNewSession(
+          () => currentTaskIdRef.current === requestedTaskId
+        );
+        // Only clear the guard if nothing has claimed it for a newer ticket
+        // since we set it, so a failed/skipped create can retry later
+        // without letting a stale response race a fresh in-flight one.
+        if (!created && startingSessionForTaskRef.current === requestedTaskId) {
+          startingSessionForTaskRef.current = null;
+        }
       } catch (error) {
         console.error("Error initializing session:", error);
       }
