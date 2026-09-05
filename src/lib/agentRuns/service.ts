@@ -291,7 +291,6 @@ async function reconcileAgentChatTurn(
       skipDuplicates: true,
     });
     if (marker.count === 0) return stop ? null : { awaiting: false };
-
     let deliveryId: string | null = null;
     if (run) {
       const stoppedById = stop ? principal.userId : null;
@@ -437,7 +436,7 @@ async function replayCreatedActivity(
   }
   if (input.type === "RESPONSE" && run.chatSession && input.replyToMessageId) {
     const reply = await prisma.chatMessage.findUnique({ where: { replyToMessageId: input.replyToMessageId } });
-    if (reply?.sessionId !== run.chatSession.id || reply.content !== input.text || !reply.isDelivered) throw new AgentRunActivityConflictError("Idempotency-Key was already used for another chat turn");
+    if (reply?.sessionId !== run.chatSession.id || reply.content !== input.text || !reply.isDelivered || reply.createdAt.getTime() !== activity.createdAt.getTime()) throw new AgentRunActivityConflictError("Idempotency-Key was already used for another chat turn");
   }
   // Older activities have no comment link, so they retain duplicate-only replay.
   if (input.type === "RESPONSE" && run.task && activity.responseCommentId) {
@@ -601,6 +600,7 @@ export async function createAgentRunActivity(
             role: "assistant",
             isDelivered: true,
             replyToMessageId: target.id,
+            createdAt: now,
           },
         });
         const stored = await persistAgentRunActivity(tx, persistenceInput);

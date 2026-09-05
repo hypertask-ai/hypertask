@@ -875,6 +875,9 @@ test("chat responses store the activity and assistant message together", async (
   );
   assert.equal(harness.db.sessionUpdates.length, 1);
   assert.equal(harness.broadcasts.length, 1);
+  harness.db.messages.push({ id: "human-2", sessionId: "session-1", role: "human", createdAt: new Date() });
+  Object.assign(harness.db.messages.find(({ role }) => role === "assistant"), { replyToMessageId: "human-2", createdAt: new Date("2030-01-01") });
+  await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, { ...response, replyToMessageId: "human-2" }, "chat-response-1"), model.AgentRunActivityConflictError);
   const legacyRun = runRow({ id: "legacy-run", taskId: null, task: null, chatSessionId: "legacy-chat", chatSession: { id: "legacy-chat", userId: 6 }, trigger: "CHAT" });
   const legacy = loadService({ runs: [legacyRun], featureEnabled: () => false }); legacy.db.messages.push({ id: "legacy-human", sessionId: "legacy-chat", role: "human", createdAt: new Date() });
   await assert.rejects(legacy.service.createAgentRunActivity(agentPrincipal, legacyRun.id, activityInput({ type: "RESPONSE", text: "Stale answer", replyToMessageId: "other-human" }), null), model.AgentRunNotActiveError);

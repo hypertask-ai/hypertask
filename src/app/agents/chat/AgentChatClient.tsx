@@ -1633,9 +1633,7 @@ const AgentChatClient = (props: IProp) => {
                   </div>
                   <div className="mt-0.5 flex items-center gap-2 text-micro text-text-light-gray">
                     <span className="font-semibold uppercase tracking-wide">Queued</span>
-                    <button type="button" onClick={() => removeQueuedMessage(item.id)} className="hover:text-white-black" aria-label="Cancel queued message">
-                      Cancel
-                    </button>
+                    <button type="button" onClick={() => removeQueuedMessage(item.id)} className="hover:text-white-black" aria-label="Cancel queued message">Cancel</button>
                   </div>
                 </div>
               ))}
