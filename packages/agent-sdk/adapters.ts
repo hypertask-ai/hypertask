@@ -2,6 +2,8 @@ import type { BackgroundContext, WebhookHandler } from "./types.js";
 
 const MAX_WEBHOOK_BYTES = 1024 * 1024;
 const BODY_READ_TIMEOUT_MS = 2_000;
+const RAW_BODY_ERROR =
+  "Raw webhook bytes are unavailable; mount this adapter before body-parsing middleware";
 
 type HeaderValue = string | string[] | undefined;
 type NodeRequest = AsyncIterable<Uint8Array | string> & {
@@ -58,10 +60,10 @@ async function collectBody(request: AsyncIterable<Uint8Array | string>): Promise
         }),
       ]).finally(() => clearTimeout(timer));
       if (result.done) break;
-      const chunk =
-        typeof result.value === "string"
-          ? new TextEncoder().encode(result.value)
-          : result.value;
+      if (typeof result.value === "string") {
+        throw new Error(RAW_BODY_ERROR);
+      }
+      const chunk = result.value;
       size += chunk.length;
       if (size > MAX_WEBHOOK_BYTES) throw new Error("Webhook body is too large");
       chunks.push(chunk);
@@ -85,7 +87,6 @@ async function collectBody(request: AsyncIterable<Uint8Array | string>): Promise
 }
 
 function byteBody(value: unknown): Uint8Array | null {
-  if (typeof value === "string") return new TextEncoder().encode(value);
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   return null;
@@ -99,9 +100,7 @@ async function toRequest(request: NodeRequest, useParsedBody: boolean): Promise<
     if (useParsedBody && request.body !== undefined) {
       const bytes = byteBody(request.body);
       if (!bytes) {
-        throw new Error(
-          "Raw webhook bytes are unavailable; mount this adapter before JSON middleware",
-        );
+        throw new Error(RAW_BODY_ERROR);
       }
       body = bytes;
     } else {
@@ -177,10 +176,7 @@ function sendAdapterError(error: unknown, response: NodeResponse): void {
   } else if (message === "Webhook body timed out") {
     status = 408;
     publicMessage = message;
-  } else if (
-    message ===
-    "Raw webhook bytes are unavailable; mount this adapter before JSON middleware"
-  ) {
+  } else if (message === RAW_BODY_ERROR) {
     status = 400;
     publicMessage = message;
   }

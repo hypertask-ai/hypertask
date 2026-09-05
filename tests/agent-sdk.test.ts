@@ -6,6 +6,7 @@ import {
   createAgent,
   AgentSdkError,
   MemoryDeliveryStore,
+  expressAdapter,
   honoAdapter,
   nodeHttpAdapter,
   verifyWebhookSignature,
@@ -393,6 +394,49 @@ test("Node adapters do not wait for stalled request cleanup", async (context) =>
   } finally {
     context.mock.timers.reset();
   }
+});
+
+test("Node and Express adapters reject decoded webhook strings", async () => {
+  let handlerCalls = 0;
+  const handler: WebhookHandler = Object.assign(
+    async () => {
+      handlerCalls += 1;
+      return new Response(null, { status: 202 });
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+  const response = () => ({
+    statusCode: 0,
+    setHeader() {},
+    end() {},
+  });
+  const nodeResponse = response();
+  await nodeHttpAdapter(handler)(
+    {
+      method: "POST",
+      url: "/webhook",
+      headers: {},
+      async *[Symbol.asyncIterator]() {
+        yield "decoded";
+      },
+    },
+    nodeResponse,
+  );
+  const expressResponse = response();
+  await expressAdapter(handler)(
+    {
+      method: "POST",
+      url: "/webhook",
+      headers: {},
+      body: "decoded",
+      async *[Symbol.asyncIterator]() {},
+    },
+    expressResponse,
+  );
+
+  assert.equal(nodeResponse.statusCode, 400);
+  assert.equal(expressResponse.statusCode, 400);
+  assert.equal(handlerCalls, 0);
 });
 
 test("Node adapters do not expose unexpected handler errors", async () => {
@@ -1272,6 +1316,46 @@ test("task helpers safely clean up an uncertain claim", async () => {
   const work = background();
   assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
   await assert.rejects(work.drain(), /claim connection closed/);
+  assert.match(String(claimToken), /^[0-9a-f-]{36}$/i);
+  assert.equal(releaseToken, claimToken);
+});
+
+test("task helpers clean up after an ambiguous claim server error", async () => {
+  const api = apiFixture();
+  let claimToken: unknown;
+  let releaseToken: unknown;
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    const body = typeof init.body === "string" ? JSON.parse(init.body) : null;
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/claim")) {
+      claimToken = body?.lease_token;
+      return Response.json(
+        { success: false, error: "Claim outcome unknown" },
+        { status: 500 },
+      );
+    }
+    if (init.method === "POST" && url.pathname.endsWith("/mcp/tasks/lease/release")) {
+      releaseToken = body?.lease_token;
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+    onError: () => {},
+  });
+  agent.on("mention", async (received) => {
+    await received.thought("Claiming task.");
+    await received.task?.update({ title: "Must not run" });
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await assert.rejects(work.drain(), /Claim outcome unknown/);
   assert.match(String(claimToken), /^[0-9a-f-]{36}$/i);
   assert.equal(releaseToken, claimToken);
 });

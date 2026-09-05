@@ -718,12 +718,18 @@ class AgentRunImpl implements AgentRun {
           typeof error.response === "object" &&
           !Array.isArray(error.response) &&
           (error.response as JsonObject).success === false;
+        const explicitDenial =
+          logicalFailure &&
+          error instanceof AgentSdkError &&
+          error.status !== undefined &&
+          error.status < 500;
         // The per-claim token makes cleanup safe when commit status is unknown.
         if (
           error instanceof AgentSdkError &&
+          !explicitDenial &&
           (error.status === undefined ||
-            (error.status >= 200 && error.status < 300)) &&
-          !logicalFailure
+            (error.status >= 200 && error.status < 300) ||
+            error.status >= 500)
         ) {
           await this.releaseTaskLease(taskId, leaseToken);
         }
