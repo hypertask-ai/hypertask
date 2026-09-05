@@ -28,7 +28,7 @@ test("closed chat does not request session history", () => {
   );
   assert.match(
     chatSource,
-    /useSessionAndChatHistory\(taskId, shouldLoadChatHistory\)/
+    /useSessionAndChatHistory\(taskId, shouldLoadChatHistory, isDetailPage\)/
   );
 });
 
