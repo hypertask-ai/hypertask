@@ -76,6 +76,7 @@ import {
   ModalHeaderComp,
   ModalInput,
 } from "@/components/Common/CommonModalComponents";
+import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import {
   displayAgentChatFeed,
   mergeAgentChatFeed,
@@ -221,21 +222,36 @@ function MessageBubble({
   message,
   projectIdForPrefix,
   onProposalAction,
+  pending = false,
 }: {
   message: TChatMessage;
   projectIdForPrefix: TProjectIdForPrefix;
   onProposalAction?: TProposalAction;
+  /** Optimistic bubble whose POST is still in flight. */
+  pending?: boolean;
 }) {
   const router = useRouter();
   const isHuman = message.role === "human";
+  // Always on: a hover-only timestamp is unreadable on touch and invisible to
+  // a screen reader, and a message with no state at all reads as untrustworthy
+  // (HTPR-6005 QA).
   const timestamp = (
     <div
       className={cn(
-        "mt-0.5 text-[10px] text-text-light-gray opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100 max-md:opacity-100",
+        "mt-0.5 text-[10px] text-text-light-gray",
         isHuman ? "text-right" : "text-left",
       )}
     >
-      {formatDateDifference(new Date(message.createdAt))}
+      {pending ? (
+        <span>Sending…</span>
+      ) : (
+        <time
+          dateTime={message.createdAt}
+          title={new Date(message.createdAt).toLocaleString()}
+        >
+          {formatDateDifference(new Date(message.createdAt))}
+        </time>
+      )}
     </div>
   );
   if (isHuman) {
@@ -523,6 +539,7 @@ const AgentChatClient = (props: IProp) => {
   } | null>(null);
   const [detailsCollapsed, setDetailsCollapsed] = useState(false);
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
+  const detailsDialogRef = useRef<HTMLDialogElement>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   const [openingFullChat, setOpeningFullChat] = useState(false);
   // Auto-scroll + "scroll to bottom" indicator, same pattern as AI Chat's
@@ -658,7 +675,13 @@ const AgentChatClient = (props: IProp) => {
   // move behind an info button.
   useEffect(() => {
     const query = window.matchMedia("(max-width: 899px)");
-    const onChange = () => setIsNarrow(query.matches);
+    const onChange = () => {
+      setIsNarrow(query.matches);
+      // The details sheet only exists in the narrow layout; widening past the
+      // breakpoint would otherwise unmount it with the flag still set, leaving
+      // it to spring open on the way back.
+      if (!query.matches) setDetailsSheetOpen(false);
+    };
     onChange();
     query.addEventListener("change", onChange);
     return () => query.removeEventListener("change", onChange);
@@ -779,6 +802,11 @@ const AgentChatClient = (props: IProp) => {
   );
 
   const clearSelectionState = () => {
+    // Leaving the chat is not the same as discarding the message: keep it for
+    // when this agent is opened again.
+    if (selectedIdRef.current) {
+      writeDraft(currentUser.id, selectedIdRef.current, draftRef.current);
+    }
     selectedIdRef.current = null;
     sessionIdRef.current = null;
     setSelectedId(null);
@@ -794,6 +822,12 @@ const AgentChatClient = (props: IProp) => {
 
   const selectAgent = useCallback(
     (agent: TAgent) => {
+      // Read the outgoing agent off the ref before it is overwritten, or the
+      // draft lands under the agent being switched to.
+      const leaving = selectedIdRef.current;
+      if (leaving && leaving !== agent.id) {
+        writeDraft(currentUser.id, leaving, draftRef.current);
+      }
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
       // A queued follow-up belongs to the chat it was typed in, not whatever
@@ -812,7 +846,9 @@ const AgentChatClient = (props: IProp) => {
         setActivity([]);
         setMessagesError(null);
         setDeliveryNotice(false);
-        setDraft("");
+        // This same path runs for a reload (the ?agent= effect calls it), so
+        // restoring here covers both switching agents and coming back.
+        setDraft(readDraft(currentUser.id, agent.id));
         setQueuedMessages([]);
       });
       dismissMention();
@@ -827,7 +863,7 @@ const AgentChatClient = (props: IProp) => {
       if (agent.runtimeType !== "EXTERNAL") return;
       void openAgentSession(agent.id);
     },
-    [router, openAgentSession, isMbl],
+    [router, openAgentSession, isMbl, currentUser.id],
   );
 
   // Honor ?agent=<slug> once the roster is in (deep link, reload, palette).
@@ -1459,7 +1495,10 @@ const AgentChatClient = (props: IProp) => {
 
   useEffect(() => {
     draftRef.current = draft;
-  }, [draft]);
+    // Sending empties the composer, which clears the stored draft through the
+    // same write; a failed send puts the text back and re-saves it.
+    if (selectedId) writeDraft(currentUser.id, selectedId, draft);
+  }, [draft, selectedId, currentUser.id]);
 
   useEffect(() => {
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -1726,6 +1765,7 @@ const AgentChatClient = (props: IProp) => {
                   message={item}
                   projectIdForPrefix={projectIdForPrefix}
                   onProposalAction={handleProposalAction}
+                  pending={sending && item.id.startsWith("optimistic-")}
                 />
               ) : (
                 <ActivityGroup key={item.id} group={item} />
@@ -1834,33 +1874,53 @@ const AgentChatClient = (props: IProp) => {
     </section>
   );
 
-  const detailsSheet =
-    isNarrow && detailsSheetOpen && selectedAgent ? (
-      <div className="fixed inset-0 z-50">
-        <button
-          type="button"
-          aria-label="Close details"
-          onClick={() => setDetailsSheetOpen(false)}
-          className="absolute inset-0 bg-black/60"
-        />
-        <div className="absolute right-0 top-0 h-full w-[85%] max-w-[380px] overflow-y-auto bg-pageBackground shadow-md">
-          <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-dense font-medium text-text-light-gray">
-              Agent details
-            </span>
-            <button
-              type="button"
-              onClick={() => setDetailsSheetOpen(false)}
-              aria-label="Close details"
-              className="text-text-light-gray hover:text-white-black"
-            >
-              <X size={16} />
-            </button>
-          </div>
-          {detailsContent}
+  // A native modal <dialog> rather than a hand-rolled overlay: showModal()
+  // gives the focus trap, Escape-to-close, background inertness and focus
+  // restore that the plain div had none of (HTPR-6005 QA). ModalContainerCustom
+  // has trapFocus/keyboard too, but its reactstrap centering fights a
+  // full-height sheet pinned to the right edge.
+  const detailsSheetShown = Boolean(
+    isNarrow && detailsSheetOpen && selectedAgent,
+  );
+  useEffect(() => {
+    const el = detailsDialogRef.current;
+    // showModal() only works once the element is in the DOM, so this runs on
+    // the commit that mounts it. Closing happens through close(), which fires
+    // onClose and unmounts it.
+    if (detailsSheetShown && el && !el.open) el.showModal();
+  }, [detailsSheetShown]);
+
+  const closeDetailsSheet = () => detailsDialogRef.current?.close();
+  const detailsSheet = detailsSheetShown ? (
+    <dialog
+      ref={detailsDialogRef}
+      aria-label="Agent details"
+      onClose={() => setDetailsSheetOpen(false)}
+      onClick={(e) => {
+        // Clicks inside the panel land on the panel; a click that reaches the
+        // dialog itself is the strip beside it, i.e. the backdrop.
+        if (e.target === detailsDialogRef.current) closeDetailsSheet();
+      }}
+      className="m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-black/60"
+    >
+      <div className="ml-auto flex h-full w-[85%] max-w-[380px] flex-col overflow-y-auto bg-pageBackground shadow-md">
+        <div className="flex shrink-0 items-center justify-between px-4 py-3">
+          <span className="text-dense font-medium text-text-light-gray">
+            Agent details
+          </span>
+          <button
+            type="button"
+            onClick={closeDetailsSheet}
+            aria-label="Close details"
+            className="text-text-light-gray hover:text-white-black"
+          >
+            <X size={16} />
+          </button>
         </div>
+        {detailsContent}
       </div>
-    ) : null;
+    </dialog>
+  ) : null;
 
   const closeCreateAgent = () => {
     if (creatingAgent) return;
