@@ -396,7 +396,6 @@ const authorMigration = migration("20260905140000_chat_message_author");
 const backfillMigration = migration("20260905140010_chat_message_author_backfill");
 const validateMigration = migration("20260905140015_chat_message_author_validate");
 const indexMigration = migration("20260905140020_chat_message_history_index");
-const dropIndexMigration = migration("20260905140030_drop_chat_message_session_index");
 test("the migration adds attribution without touching stored history", () => {
   assert.match(authorMigration, /ADD COLUMN "authorUserId" INTEGER;/);
   assert.match(authorMigration, /ADD COLUMN "authorAgentId" TEXT;/);
@@ -543,29 +542,14 @@ test("history has an index that matches how it is read", () => {
       "a plain build holds a SHARE lock and blocks chat inserts for its duration; IF NOT EXISTS keeps a hand-applied index a no-op here",
     );
   }
-  // Postgres refuses DROP INDEX CONCURRENTLY in any file carrying a second
-  // statement, so one here aborts the whole deploy with SQLSTATE 25001.
   assert.doesNotMatch(
     statements(indexMigration),
-    /DROP INDEX CONCURRENTLY/,
-    "a DROP INDEX CONCURRENTLY beside these builds fails the deploy, not just this file",
-  );
-  assert.doesNotMatch(
-    modelBlock("ChatMessage"),
-    /@@index\(\[sessionId\]\)/,
-    "a prefix of the composite index is a second B-tree written for no read",
+    /^\s*(?!CREATE INDEX CONCURRENTLY)\S.*;/m,
+    "only concurrent builds belong here; anything else shares their file and their fate",
   );
   assert.match(
-    dropIndexMigration,
-    /DROP INDEX CONCURRENTLY IF EXISTS "ChatMessage_sessionId_idx"/,
-    "the prefix index is dropped only after its replacement exists",
-  );
-  // Same SQLSTATE 25001 rule: this drop only applies because it is alone.
-  assert.equal(
-    statements(dropIndexMigration)
-      .split(";")
-      .filter((statement) => statement.trim()).length,
-    1,
-    "DROP INDEX CONCURRENTLY only applies when it is the sole statement in its file",
+    modelBlock("ChatMessage"),
+    /@@index\(\[sessionId\]\)/,
+    "the pre-existing prefix index stays: removing it is not this change's mess to clean",
   );
 });

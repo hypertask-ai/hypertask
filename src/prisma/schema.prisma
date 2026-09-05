@@ -2168,8 +2168,10 @@ model ChatMessage {
 
   // Backs ordered, cursor-paginated history: createdAt alone ties for messages
   // stored in the same millisecond, so id breaks the tie and makes a page
-  // boundary reproducible. A plain [sessionId] index would be a prefix of this
-  // one, so it was dropped rather than maintained twice on every insert.
+  // boundary reproducible. The plain [sessionId] index above is now a prefix
+  // of this one and could be dropped, but it predates this change and removing
+  // it belongs to whoever measures that it is worth a migration.
+  @@index([sessionId])
   @@index([sessionId, createdAt, id])
   // Not for a query: Postgres does not index a referencing column, so without
   // these every User or Agent delete seq-scans ChatMessage to null its rows.
