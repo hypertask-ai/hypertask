@@ -7,6 +7,12 @@ import {
 import { projectPlanningQueryKey } from "@/lib/projectPlanning";
 import { BOARD_EVENT, boardChannel } from "@/lib/realtime/shared";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
+import {
+  BOARD_TASKS_KEY,
+  fetchBoardTasks,
+  patchProjectIntoCache,
+  type BoardTasksPayload,
+} from "@/utils/api/Homepage";
 import { runRealtimeReconciliation } from "@/lib/realtime/latencyCanary";
 
 export const createBoardRealtimeEventHandler = (
@@ -16,9 +22,13 @@ export const createBoardRealtimeEventHandler = (
 };
 
 // Subscribes the open board to its realtime channel. On any change event
-// (from another user, another tab, or the CLI/MCP acting as you) it immediately
-// expires the active board snapshot and refetches the ["projectsAll"] cache
-// that the whole board renders from.
+// (from another user, another tab, or the CLI/MCP acting as you) it fetches
+// just this project's tasks/views (fetchBoardTasks) and patches only its own
+// entry in the ["projectsAll"] cache (patchProjectIntoCache) - not the whole
+// list. HTPR-6166: the old path refetched every board the user belongs to on
+// every single-board change (p75 1.6s); this is the same per-project fetch
+// already used to lazy-load a board on open (loadBoardIntoCache), just always
+// run instead of skipped when already hydrated.
 // No echo suppression on purpose: the CLI acts as the same user, so your own
 // CLI edits must still refresh your own open board.
 export function useBoardRealtime(
@@ -39,19 +49,43 @@ export function useBoardRealtime(
     let unsubscribe: (() => void) | undefined;
 
     const refetch = (trigger: "event" | "reconnect" = "event") => {
-      const reconcile = () =>
-        Promise.all([
-          reconcileActiveBoardQuery(queryClient, projectId),
-          queryClient.refetchQueries({
-            exact: true,
-            queryKey: projectPlanningQueryKey(projectId),
-          }),
-        ]).then(() => undefined);
-      if (options?.accountId == null) {
+      const userId = options?.accountId;
+      // userId is required to call fetchBoardTasks (the request body needs a
+      // real account id for its membership check) and to key the boardTasks
+      // side cache. The one production caller always passes accountId; keep
+      // the old unscoped fallback for the case where it somehow isn't set,
+      // rather than fetching a board's tasks with no user to check against.
+      const reconcile =
+        userId == null
+          ? () =>
+              Promise.all([
+                reconcileActiveBoardQuery(queryClient, projectId),
+                queryClient.refetchQueries({
+                  exact: true,
+                  queryKey: projectPlanningQueryKey(projectId),
+                }),
+              ]).then(() => undefined)
+          : () =>
+              Promise.all([
+                queryClient
+                  .fetchQuery({
+                    queryKey: BOARD_TASKS_KEY(projectId, userId),
+                    queryFn: () => fetchBoardTasks(projectId, userId),
+                    staleTime: 0,
+                  })
+                  .then((payload: BoardTasksPayload) =>
+                    patchProjectIntoCache(queryClient, projectId, payload),
+                  ),
+                queryClient.refetchQueries({
+                  exact: true,
+                  queryKey: projectPlanningQueryKey(projectId),
+                }),
+              ]).then(() => undefined);
+      if (userId == null) {
         void reconcile().catch(() => undefined);
       } else {
         void runRealtimeReconciliation({
-          accountId: options.accountId,
+          accountId: userId,
           surface: "board",
           trigger,
           reconcile,
