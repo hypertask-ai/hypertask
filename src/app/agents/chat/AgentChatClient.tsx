@@ -830,6 +830,11 @@ const AgentChatClient = (props: IProp) => {
       }
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
+      // draftRef is normally refreshed by a passive effect, which can lag
+      // behind two switches in the same task (holding Ctrl+Tab). Setting it
+      // here means the next switch always writes the draft it actually left.
+      const restored = readDraft(currentUser.id, agent.id);
+      draftRef.current = restored;
       // A queued follow-up belongs to the chat it was typed in, not whatever
       // agent gets selected next.
       messageQueueRef.current = [];
@@ -848,7 +853,7 @@ const AgentChatClient = (props: IProp) => {
         setDeliveryNotice(false);
         // This same path runs for a reload (the ?agent= effect calls it), so
         // restoring here covers both switching agents and coming back.
-        setDraft(readDraft(currentUser.id, agent.id));
+        setDraft(restored);
         setQueuedMessages([]);
       });
       dismissMention();
@@ -1298,6 +1303,10 @@ const AgentChatClient = (props: IProp) => {
   // other autocomplete-style features).
   const handleComposerChange = (value: string, cursor: number) => {
     setDraft(value);
+    // Typing is the one path fast enough to outrun the passive effect that
+    // normally mirrors `draft`, and selectAgent reads this ref to decide what
+    // to save for the agent being left.
+    draftRef.current = value;
     const beforeCursor = value.slice(0, cursor);
     const match = beforeCursor.match(/(?:^|\s)@([^\s@]*)$/);
     if (!match) {

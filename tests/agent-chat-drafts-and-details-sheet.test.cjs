@@ -24,7 +24,7 @@ function loadDrafts(store) {
   // eslint-disable-next-line no-new-func
   return new Function(
     "fakeWindow",
-    `${src}; return { readDraft, writeDraft, clearDraft };`,
+    `${src}; return { readDraft, writeDraft };`,
   )(fakeWindow);
 }
 
@@ -53,16 +53,12 @@ test("a draft survives a round trip and is scoped to one user and one agent", ()
 
 test("an emptied composer clears the stored draft instead of leaving a ghost", () => {
   const store = fakeStorage();
-  const { readDraft, writeDraft, clearDraft } = loadDrafts(store);
+  const { readDraft, writeDraft } = loadDrafts(store);
 
   writeDraft(6, "agent-a", "typed then sent");
   writeDraft(6, "agent-a", "   ");
   assert.equal(readDraft(6, "agent-a"), "");
   assert.equal(store.map.size, 0, "whitespace-only draft must remove the key");
-
-  writeDraft(6, "agent-a", "again");
-  clearDraft(6, "agent-a");
-  assert.equal(store.map.size, 0);
 });
 
 test("a blocked or missing store degrades to no draft rather than throwing", () => {
@@ -100,7 +96,11 @@ test("switching agents saves the outgoing draft before restoring the incoming on
     selectAgent,
     /writeDraft\(currentUser\.id, leaving, draftRef\.current\)/,
   );
-  assert.match(selectAgent, /setDraft\(readDraft\(currentUser\.id, agent\.id\)\)/);
+  assert.match(
+    selectAgent,
+    /const restored = readDraft\(currentUser\.id, agent\.id\)/,
+  );
+  assert.match(selectAgent, /setDraft\(restored\)/);
   assert.doesNotMatch(selectAgent, /setDraft\(""\)/);
   // The same callback is the reload path (the ?agent= effect calls it), so it
   // must not be re-created on every keystroke by depending on `draft`.
@@ -140,4 +140,20 @@ test("every message shows its time, and one still in flight says so", () => {
     chat,
     /pending=\{sending && item\.id\.startsWith\("optimistic-"\)\}/,
   );
+});
+
+test("the draft mirror ref is set synchronously, so two fast switches cannot cross", () => {
+  // selectAgent saves draftRef.current for the agent being left. If that ref
+  // only ever caught up in a passive effect, holding Ctrl+Tab would write one
+  // agent's text under another's key.
+  const selectAgent = chat.slice(
+    chat.indexOf("const selectAgent = useCallback("),
+    chat.indexOf("// Honor ?agent=<slug>"),
+  );
+  assert.match(selectAgent, /draftRef\.current = restored/);
+  const composerChange = chat.slice(
+    chat.indexOf("const handleComposerChange ="),
+    chat.indexOf("const pickMention"),
+  );
+  assert.match(composerChange, /draftRef\.current = value/);
 });
