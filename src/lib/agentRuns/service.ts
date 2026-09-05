@@ -13,6 +13,7 @@ import prisma from "@/lib/prisma";
 import {
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
+  AGENT_SDK_FEATURE_FLAG,
   AGENT_RUN_STALE_AFTER_MS,
   AgentRunActivityConflictError,
   AgentRunActivityInputError,
@@ -95,7 +96,10 @@ function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
 export async function agentRunsEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
-  return isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId);
+  return (
+    (await isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId)) &&
+    (await isFeatureEnabled(AGENT_SDK_FEATURE_FLAG, principal.userId))
+  );
 }
 
 export async function agentRunActivitiesEnabledFor(

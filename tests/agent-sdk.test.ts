@@ -1195,11 +1195,27 @@ test("delivery claims dedupe concurrent work and retain completion", async () =>
   const firstWork = background();
   assert.equal((await agent.handler(webhookRequest(payload()), firstWork.context)).status, 202);
   await started;
+  const readsDuringWork = api.calls.filter((call) =>
+    call.path.endsWith("/mcp/agents/runs/run-1"),
+  ).length;
   assert.equal((await agent.handler(webhookRequest(payload()), background().context)).status, 204);
+  assert.equal(
+    api.calls.filter((call) => call.path.endsWith("/mcp/agents/runs/run-1")).length,
+    readsDuringWork,
+    "an in-flight duplicate skips the access check",
+  );
   finish();
   await firstWork.drain();
+  const readsAfterCompletion = api.calls.filter((call) =>
+    call.path.endsWith("/mcp/agents/runs/run-1"),
+  ).length;
   assert.equal((await agent.handler(webhookRequest(payload()), background().context)).status, 204);
   assert.equal(handled, 1);
+  assert.equal(
+    api.calls.filter((call) => call.path.endsWith("/mcp/agents/runs/run-1")).length,
+    readsAfterCompletion,
+    "a completed duplicate skips the access check",
+  );
 });
 
 test("failed background work releases its owner-fenced delivery claim", async () => {

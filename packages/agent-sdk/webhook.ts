@@ -372,23 +372,6 @@ export function createWebhookHandler(options: {
       return jsonError("A durable DeliveryStore is required for distributed runtimes", 503);
     }
 
-    const accessController = new AbortController();
-    const accessTimer = setTimeout(() => accessController.abort(), ACCESS_CHECK_TIMEOUT_MS);
-    let run: AgentRunRecord;
-    try {
-      run = await options.client.assertPayloadAccess(payload, accessController.signal);
-    } catch (error) {
-      options.client.reportError(error, payload);
-      return jsonError(
-        error instanceof AgentSdkError && error.status === 404
-          ? "Run is unavailable to this agent token"
-          : "Could not verify run access",
-        error instanceof AgentSdkError && error.status === 404 ? 403 : 503,
-      );
-    } finally {
-      clearTimeout(accessTimer);
-    }
-
     const claim: DeliveryClaim = {
       deliveryId: payload.deliveryId,
       owner: claimOwner(),
@@ -402,6 +385,24 @@ export function createWebhookHandler(options: {
       return jsonError("Could not claim webhook delivery", 503);
     }
     if (claimed !== "claimed") return new Response(null, { status: 204 });
+
+    const accessController = new AbortController();
+    const accessTimer = setTimeout(() => accessController.abort(), ACCESS_CHECK_TIMEOUT_MS);
+    let run: AgentRunRecord;
+    try {
+      run = await options.client.assertPayloadAccess(payload, accessController.signal);
+    } catch (error) {
+      await deliveryStore.release(claim).catch(() => false);
+      options.client.reportError(error, payload);
+      return jsonError(
+        error instanceof AgentSdkError && error.status === 404
+          ? "Run is unavailable to this agent token"
+          : "Could not verify run access",
+        error instanceof AgentSdkError && error.status === 404 ? 403 : 503,
+      );
+    } finally {
+      clearTimeout(accessTimer);
+    }
 
     let begin = () => {};
     const ready = new Promise<void>((resolve) => {

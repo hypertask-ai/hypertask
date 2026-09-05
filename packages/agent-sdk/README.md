@@ -1,6 +1,6 @@
 # `@hypertask/agent-sdk`
 
-Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies. This workspace remains private and unpublished while the owner-approved `htpr-6115-agent-sdk` flag is restricted.
+Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies. This workspace remains private and unpublished while the `htpr-6115-agent-sdk` and `htpr-6123-add-typescript-agent-sdk` flags are restricted.
 
 ## Hello world in under 30 minutes
 
@@ -37,7 +37,7 @@ app.post(
 app.listen(3000);
 ```
 
-`createAgent` only constructs local objects and performs no network work. Every delivery is preflighted through the run API before callbacks can execute; that API enforces the owner-approved `htpr-6115-agent-sdk` epic flag server-side, and activity writes enforce it again alongside the activity flag. Until those flags are enabled for the token owner, run APIs intentionally answer as not found. HTPR-6123 deliberately shares the epic flag rather than introducing a second rollout switch.
+`createAgent` only constructs local objects and performs no network work. Every delivery is preflighted through the run API before callbacks can execute; that API enforces both `htpr-6115-agent-sdk` and the owner-only `htpr-6123-add-typescript-agent-sdk` server-side, and activity writes enforce them again alongside the activity flag. Until those flags are enabled for the token owner, run APIs intentionally answer as not found.
 
 ## API
 

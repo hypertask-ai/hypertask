@@ -15,7 +15,7 @@ export * from "./types.js";
 export * from "./webhook.js";
 
 export function createAgent(options: AgentOptions) {
-  // Construction is local-only; protected run APIs enforce htpr-6115-agent-sdk server-side.
+  // Construction is local-only; protected run APIs enforce the epic and HTPR-6123 flags server-side.
   const client = createClient(options);
   const handler = createWebhookHandler({
     client,
