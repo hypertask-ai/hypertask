@@ -278,8 +278,8 @@ export async function POST(request: NextRequest) {
             currentUser,
             currentUser.id,
             task.id,
-            ctx.agentId,
-            ctx.agentId,
+            ctx.agentId ?? undefined,
+            ctx.agentId ?? undefined,
             { intent: assignIntent }
           )
       );
