@@ -16,6 +16,10 @@ on:
         description: Hypertask ticket number (unique index on board 15) that receives the log
         required: true
         default: "6163"
+      filter:
+        description: Optional extended regex; only matching lines (with 3 lines of context) are kept before the tail
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -35,6 +39,7 @@ jobs:
           MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           DEPLOYMENT: ${{ inputs.deployment }}
           TICKET: ${{ inputs.ticket }}
+          FILTER: ${{ inputs.filter }}
         run: |
           set -euo pipefail
           api() { curl -sS --fail-with-body -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
@@ -56,6 +61,7 @@ jobs:
           EVENTS=$(api "/v3/deployments/$DEPLOYMENT/events?teamId=$TEAM_ID&builds=1&limit=-1" \
             | jq -r '.[]? | select(.type=="stdout" or .type=="stderr" or .type=="error" or .type=="command" or .type=="fatal")
                      | "\((.created // .date // 0) | tostring) \(.payload.text // .text // "")"' \
+            | { if [ -n "$FILTER" ]; then grep -E -A3 -B3 -- "$FILTER" || true; else cat; fi; } \
             | tail -80 \
             | sed -E -e 's#[a-z]+://[^[:space:]]*@[^[:space:]]+#<url-with-credentials>#g' \
                      -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig')
