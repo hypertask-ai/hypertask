@@ -454,7 +454,7 @@ function loadService({
     }),
   });
   stub("src/lib/agentWebhooks/outbox.ts", {
-    persistAgentRunStoppedWebhook: async () => null,
+    persistAgentRunStoppedWebhook: async (_tx, event) => (webhookEvents.push(event), null),
     persistAgentWebhookEvent: async (_tx, event) => {
       webhookEvents.push(event);
       return "delivery-1";
@@ -551,6 +551,7 @@ test("chat Stop and timeout persist one outcome against late replies", async () 
   assert.equal(await swept.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 1);
   assert.equal(swept.db.messages.at(-1).content, model.AGENT_CHAT_TIMEOUT_MESSAGE);
   assert.equal(swept.run.stoppedById, null);
+  assert.equal(swept.webhookEvents[0].actor.userId, null);
 });
 
 test("activity behavior requires the parent and ticket feature flags", async () => {

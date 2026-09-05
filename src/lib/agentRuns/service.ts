@@ -305,7 +305,7 @@ async function reconcileAgentChatTurn(
         ticketNumber: null,
         taskTitle: null,
         actor: {
-          userId: principal.userId,
+          userId: stop ? principal.userId : null,
           agentId: null,
           displayName: stop ? principal.displayName : "Agent Chat timeout",
         },

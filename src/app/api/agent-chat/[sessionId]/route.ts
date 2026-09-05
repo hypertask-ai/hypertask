@@ -47,11 +47,6 @@ export async function GET(
       "htpr-6094-agent-activity-rows",
       userId,
     );
-    const turn = await readAgentChatTurn(
-      { userId, agentId: null, displayName: "Hypertask user", source: "browser" },
-      session.id,
-    );
-
     // Last 200, oldest first: page desc from the tail, then flip.
     const [messageRows, activity] = await Promise.all([
       prisma.chatMessage.findMany({
@@ -66,6 +61,7 @@ export async function GET(
             userId,
           })
         : Promise.resolve([]),
+      readAgentChatTurn({ userId, agentId: null, displayName: "Hypertask user", source: "browser" }, session.id),
     ]);
     const messages = messageRows.reverse();
 
@@ -87,8 +83,7 @@ export async function GET(
         createdAt: message.createdAt,
       })),
       activity,
-      awaiting:
-        turn?.awaiting ?? messages[messages.length - 1]?.role === "human",
+      awaiting: messages[messages.length - 1]?.role === "human",
       chatEnabled,
     });
   } catch (error: any) {
