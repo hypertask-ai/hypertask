@@ -105,7 +105,7 @@ http.createServer(agent.adapters.node({ distributed: false })).listen(3000);
 app.post("/webhook", agent.adapters.hono());
 ```
 
-A Node-hosted Hono app can pass `{ distributed: false, waitUntil: task => void task }`. Distributed Hono deployments require both the platform `waitUntil` and a durable delivery store.
+A Node-hosted Hono app can pass `{ distributed: false, waitUntil: task => void task }`. Distributed Hono deployments require both the platform `waitUntil` and a durable delivery store; the adapter returns 503 before dispatch when the scheduler is unavailable.
 
 ### Next route handler
 

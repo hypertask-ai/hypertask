@@ -215,12 +215,22 @@ export function honoAdapter(
   handler: WebhookHandler,
   options: AdapterOptions = {},
 ) {
-  return (context: HonoContext): Promise<Response> => {
+  return async (context: HonoContext): Promise<Response> => {
     const waitUntil = options.waitUntil ?? context.executionCtx?.waitUntil.bind(context.executionCtx);
+    const distributed = options.distributed ?? true;
+    if (distributed && !waitUntil) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "A background scheduler is required for distributed Hono adapters",
+        }),
+        { status: 503, headers: { "content-type": "application/json" } },
+      );
+    }
     return invokeHandler(
       handler,
       context.req.raw,
-      processContext({ ...options, waitUntil }),
+      processContext({ ...options, waitUntil, distributed }),
     );
   };
 }

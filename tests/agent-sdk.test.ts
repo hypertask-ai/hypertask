@@ -665,12 +665,34 @@ test("Hono adapter preserves single-process mode without an execution context", 
   );
   const failure = await honoAdapter(failingHandler)({
     req: { raw: new Request("https://agent.example.test/webhook") },
+    executionCtx: { waitUntil() {} },
   });
   assert.equal(failure.status, 500);
   assert.deepEqual(await failure.json(), {
     success: false,
     error: "Webhook request failed",
   });
+});
+
+test("distributed Hono adapters require a background scheduler", async () => {
+  let handlerCalls = 0;
+  const handler: WebhookHandler = Object.assign(
+    async () => {
+      handlerCalls += 1;
+      return new Response(null, { status: 202 });
+    },
+    { deliveryStore: new MemoryDeliveryStore() },
+  );
+
+  const response = await honoAdapter(handler)({
+    req: { raw: new Request("https://agent.example.test/webhook") },
+  });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: "A background scheduler is required for distributed Hono adapters",
+  });
+  assert.equal(handlerCalls, 0);
 });
 
 test("Node adapters omit bodies from GET requests", async () => {
