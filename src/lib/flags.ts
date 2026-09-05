@@ -42,6 +42,10 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Registers the feature flag controls themselves; the owner-only admin page stays available in every mode.",
   },
   {
+    key: "htpr-6094-agent-activity-rows",
+    description: "Shows passive ticket progress between normal messages in Agent Chat.",
+  },
+  {
     key: "htpr-6112-copy-current-url",
     description: "Adds a Copy current URL action to the command menu.",
   },
@@ -87,6 +91,7 @@ const FEATURE_FLAG_DEFINITIONS = [
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
 const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6072-shallow-board-switch",
+  "htpr-6094-agent-activity-rows",
   "htpr-6122-agent-run-activities",
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",

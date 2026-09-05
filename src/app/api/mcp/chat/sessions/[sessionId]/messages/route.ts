@@ -2,8 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from '@/lib/realtime/server'
+import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
+import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
+import { isFeatureEnabled } from '@/lib/flags'
 
 const MAX_MESSAGE_LENGTH = 8000
+const TRANSCRIPT_LIMIT = 50
+const ACTIVITY_CONTEXT_LIMIT = 10
 
 function requireAgentToken(ctxAgentId: string | null): NextResponse | null {
   if (ctxAgentId) return null
@@ -42,6 +47,7 @@ export async function GET(
       select: {
         id: true,
         agentId: true,
+        userId: true,
         user: { select: { displayName: true } },
       },
     })
@@ -63,9 +69,38 @@ export async function GET(
       await prisma.chatMessage.findMany({
         where: { sessionId: session.id },
         orderBy: { createdAt: 'desc' },
-        take: 50,
+        take: TRANSCRIPT_LIMIT,
       })
     ).reverse()
+
+    const normalMessages = messages.map(({ id, role, content, createdAt }) => ({
+      id,
+      role,
+      content,
+      createdAt,
+    }))
+    const latestMessage = messages[messages.length - 1]
+    let transcript: Array<Record<string, unknown>> = normalMessages
+    if (
+      latestMessage?.role === 'human' &&
+      asksForAgentActivity(latestMessage.content) &&
+      (await isFeatureEnabled('htpr-6094-agent-activity-rows', session.userId))
+    ) {
+      const activity = await listAgentChatActivity({
+        agentId: session.agentId,
+        sessionId: session.id,
+        userId: session.userId,
+      })
+      const activityContext = activityContextMessages(
+        activity,
+        Math.min(ACTIVITY_CONTEXT_LIMIT, TRANSCRIPT_LIMIT - 1)
+      )
+      transcript = [
+        ...normalMessages.slice(-(TRANSCRIPT_LIMIT - activityContext.length), -1),
+        ...activityContext,
+        normalMessages[normalMessages.length - 1],
+      ]
+    }
 
     return NextResponse.json({
       success: true,
@@ -73,12 +108,7 @@ export async function GET(
         id: session.id,
         userName: session.user.displayName,
       },
-      messages: messages.map(({ id, role, content, createdAt }) => ({
-        id,
-        role,
-        content,
-        createdAt,
-      })),
+      messages: transcript,
     })
   } catch (error: any) {
     console.error('[mcp chat] GET messages failed:', error)
