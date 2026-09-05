@@ -19,7 +19,7 @@ export const AI_Chat_Sidebar = ({
   /** When true, parent mobile sheet (e.g. AppSheet) fills height; skip fixed layout. */
   inOffcanvas?: boolean;
 }) => {
-  const { currentSession, minimized } = useAiChatContext();
+  const { showWelcomeScreen, minimized } = useAiChatContext();
   const isMbl = useContext(MobileViewContext);
   const [sidebarWidthPx] = useRecoilState(aiChatSidebarWidthPxAtom);
 
@@ -73,11 +73,7 @@ export const AI_Chat_Sidebar = ({
         {!minimized && (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-              {currentSession && currentSession.messages.length === 0 ? (
-                <WelcomeScreen />
-              ) : (
-                <MessageList />
-              )}
+              {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
             </div>
 
             <AI_Tiptap_Container />

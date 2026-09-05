@@ -344,6 +344,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const {
     activeSession,
     currentSession,
+    showWelcomeScreen,
     deleteSession,
     selectSession,
     sessions,
@@ -427,7 +428,6 @@ export default function Chat({ initialSessionId }: ChatProps) {
       : []),
     ...sessionGroups,
   ];
-  const hasMessages = currentSession !== undefined && currentSession.messages.length > 0;
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
@@ -626,7 +626,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-hidden">
             <div className="mx-auto flex h-full w-full max-w-[800px] flex-col">
-              {hasMessages ? <MessageList /> : <WelcomeScreen />}
+              {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
             </div>
           </div>
           <div className="mx-auto w-full max-w-[800px] shrink-0">
