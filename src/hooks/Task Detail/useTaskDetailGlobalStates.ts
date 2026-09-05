@@ -87,12 +87,13 @@ const useTaskDetailGlobalStates = (
   // const{setStickyElementHeight} =useSetStickyHeight()
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
+  const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
   const [comments, setComments] = useState<IComment[]>(
-    JSON.parse(_comments).comments ?? []
+    initialCommentsPayload.comments ?? []
   );
   const [agentRunActivities, setAgentRunActivities] = useState<
     SerializedAgentRunActivity[]
-  >(JSON.parse(_comments).agentRunActivities ?? []);
+  >(initialCommentsPayload.agentRunActivities ?? []);
 
   const [currentId, setCurrentId] = useState<string>("");
   const [editState, setEditState] = useState<null | number>(null);

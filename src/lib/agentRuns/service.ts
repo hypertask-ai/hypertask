@@ -1,5 +1,10 @@
 import crypto from "crypto";
-import type { AgentRun, AgentRunActivity } from "@prisma/client";
+import {
+  AgentRunActivityType,
+  Status,
+  type AgentRun,
+  type AgentRunActivity,
+} from "@prisma/client";
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
@@ -393,14 +398,14 @@ export async function listTaskAgentRunActivities(
 
   const activities = await prisma.agentRunActivity.findMany({
     where: {
-      type: { not: "RESPONSE" },
+      type: { not: AgentRunActivityType.RESPONSE },
       run: {
         taskId,
         agent: { userId },
         task: {
-          status: { not: "Deleted" },
+          status: { not: Status.Deleted },
           project: {
-            status: { not: "Deleted" },
+            status: { not: Status.Deleted },
             ...projectContentAccessWhere(userId),
           },
         },

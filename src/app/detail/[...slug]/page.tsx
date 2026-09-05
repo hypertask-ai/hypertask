@@ -100,7 +100,10 @@ export default async function Page(
 
   [lastReadAt, agentRunActivities] = await Promise.all([
     getTaskReadStateLastReadAt(task.id, userObj.id),
-    listTaskAgentRunActivities(userObj.id, task.id),
+    listTaskAgentRunActivities(userObj.id, task.id).catch((error) => {
+      console.error("[agent-run] task activity load failed", error);
+      return [];
+    }),
   ]);
   allowPerks = task.project?.team.activeSubscriptionPlanId ? true : false;
   if (!Array.isArray(task) && task) {

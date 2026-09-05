@@ -45,24 +45,26 @@ import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { LIKESHORTCUTEVENT, thumbsUpEmoji } from "@/lib/constants/constants";
 const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
 let onCommentKeys = new Set(["Tab", "ArrowDown", "ArrowUp"]);
+const EMPTY_COMMENTS: IComment[] = [];
+const EMPTY_AGENT_RUN_ACTIVITIES: SerializedAgentRunActivity[] = [];
 
 const normalizeCommentsQueryPayload = (payload: any) => {
   if (Array.isArray(payload)) {
     return {
       comments: payload as IComment[],
       lastReadAt: null,
-      agentRunActivities: [] as SerializedAgentRunActivity[],
+      agentRunActivities: EMPTY_AGENT_RUN_ACTIVITIES,
     };
   }
 
   return {
     comments: Array.isArray(payload?.comments)
       ? (payload.comments as IComment[])
-      : [],
+      : EMPTY_COMMENTS,
     lastReadAt: payload?.lastReadAt ?? null,
     agentRunActivities: Array.isArray(payload?.agentRunActivities)
       ? (payload.agentRunActivities as SerializedAgentRunActivity[])
-      : [],
+      : EMPTY_AGENT_RUN_ACTIVITIES,
   };
 };
 

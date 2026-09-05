@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const ts = require("typescript");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
@@ -14,6 +15,50 @@ const load = (relativePath) =>
 const { mergeTaskThreadFeed, safeAgentRunActivityLink } = load(
   "src/lib/agentRuns/taskActivityFeed.ts",
 );
+
+const loadCommentsRoute = ({ getSessionUser, commentsGetByTask }) => {
+  const filename = path.join(root, "src/pages/api/comments/getByTask.ts");
+  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+    fileName: filename,
+  }).outputText;
+  const loadedModule = { exports: {} };
+  new Function("module", "exports", "require", javascript)(
+    loadedModule,
+    loadedModule.exports,
+    (request) => {
+      if (request === "@/lib/auth/getSessionUser") return { getSessionUser };
+      if (request === "@/utils/controllers/comments/getByTask") {
+        return { __esModule: true, default: commentsGetByTask };
+      }
+      throw new Error(`Unexpected route import: ${request}`);
+    },
+  );
+  return loadedModule.exports.default;
+};
+
+const responseRecorder = () => {
+  const result = { status: null, body: null, headers: {} };
+  const response = {
+    setHeader(name, value) {
+      result.headers[name] = value;
+      return response;
+    },
+    status(status) {
+      result.status = status;
+      return response;
+    },
+    json(body) {
+      result.body = body;
+      return response;
+    },
+  };
+  return { response, result };
+};
 
 const comment = (id, createdAt, activity = null) => ({
   id: String(id),
@@ -75,6 +120,8 @@ test("task activity links allow only http and https", () => {
     "https://example.com/result",
   );
   assert.equal(safeAgentRunActivityLink("javascript:alert(1)"), null);
+  assert.equal(safeAgentRunActivityLink("ftp://example.com/result"), null);
+  assert.equal(safeAgentRunActivityLink("data:text/html,unsafe"), null);
   assert.equal(safeAgentRunActivityLink("not a url"), null);
 });
 
@@ -95,16 +142,58 @@ test("passive activity row keeps selection accessible and reconciles through com
   assert.match(source, /response\.status === 409/);
 });
 
-test("comments route uses signed session identity and private no-store responses", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/pages/api/comments/getByTask.ts"),
-    "utf8",
+test("comments route rejects unsigned identity and sets private cache headers", async () => {
+  let controllerCalls = 0;
+  const handler = loadCommentsRoute({
+    getSessionUser: async () => null,
+    commentsGetByTask: async () => {
+      controllerCalls += 1;
+      return { status: 200, json: {} };
+    },
+  });
+  const { response, result } = responseRecorder();
+
+  await handler(
+    {
+      method: "GET",
+      query: { taskId: "6122" },
+      headers: { cookie: "nookies_user=6" },
+    },
+    response,
   );
 
-  assert.match(source, /getSessionUser/);
-  assert.doesNotMatch(source, /nookies_user/);
-  assert.match(source, /private, no-store/);
-  assert.match(source, /res\.setHeader\("Vary", "Cookie"\)/);
+  assert.equal(result.status, 401);
+  assert.equal(controllerCalls, 0);
+  assert.equal(result.headers["Cache-Control"], "private, no-store");
+  assert.equal(result.headers.Vary, "Cookie");
+});
+
+test("comments route passes the signed session user to the controller", async () => {
+  let controllerArgs = null;
+  const handler = loadCommentsRoute({
+    getSessionUser: async (headers) => {
+      assert.equal(headers.get("cookie"), "ht_session=signed");
+      return { userId: 42 };
+    },
+    commentsGetByTask: async (...args) => {
+      controllerArgs = args;
+      return { status: 200, json: { comments: [] } };
+    },
+  });
+  const { response, result } = responseRecorder();
+
+  await handler(
+    {
+      method: "GET",
+      query: { taskId: "6122" },
+      headers: { cookie: "ht_session=signed" },
+    },
+    response,
+  );
+
+  assert.deepEqual(controllerArgs, [42, "6122"]);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, { comments: [] });
 });
 
 test("comments payload carries activities separately from comments", () => {

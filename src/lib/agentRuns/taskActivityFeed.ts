@@ -44,6 +44,7 @@ export function mergeTaskThreadFeed(
     });
   });
 
+  // Run progress is conversation content, not task audit history, so it remains visible.
   activities.forEach((activity, activityIndex) => {
     if (activity.type === "response") return;
     feed.push({

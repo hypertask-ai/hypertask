@@ -12,7 +12,10 @@ const commentsGetByTask = async (
     const [comments, lastReadAt, agentRunActivities] = await Promise.all([
       fetchCommentsForTask(parsedTaskId, userId),
       getTaskReadStateLastReadAt(parsedTaskId, userId),
-      listTaskAgentRunActivities(userId, parsedTaskId),
+      listTaskAgentRunActivities(userId, parsedTaskId).catch((error) => {
+        console.error("[agent-run] task activity load failed", error);
+        return [];
+      }),
     ]);
     const filteredComments = await filterCommentReadReceipts(comments, userId);
     return {
