@@ -645,7 +645,7 @@ export function useAiChat() {
     if (!message && !currentSession) return;
     const targetMsg =
       message ||
-      [...currentSession.messages].reverse().find((msg) => msg.role === "human");
+      [...currentSession!.messages].reverse().find((msg) => msg.role === "human");
 
     if (targetMsg && targetMsg.content) {
       handleSendMessage(targetMsg.content);

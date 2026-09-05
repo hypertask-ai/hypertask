@@ -539,9 +539,13 @@ export const useSessionAndChatHistory = (
   // usually right, but a session can become active (the per-task init effect
   // above) without being reordered yet - resolve by id so every consumer
   // agrees (HTPR-6100). `sessions` is a fresh array each render, so this is
-  // not worth memoizing.
-  const currentSession =
-    sessions.find((session) => session.id === activeSession) ?? sessions[0];
+  // not worth memoizing. Only fall back to `sessions[0]` when nothing is
+  // active at all: if `activeSession` is set but a stale/mid-refetch
+  // `sessions` list doesn't have it yet, showing nothing beats showing
+  // whatever session another ticket last wrote to.
+  const currentSession = activeSession
+    ? sessions.find((session) => session.id === activeSession)
+    : sessions[0];
 
   return {
     isLoading: isDemo ? false : isLoadingSessions,
