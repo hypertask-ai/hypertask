@@ -10,7 +10,7 @@ import { Sparkles, X } from "lucide-react";
 
 export const ChatWindow = () => {
   const isMbl = useContext(MobileViewContext);
-  const { sessions, minimized, restoreChat, togglePopover } = useAiChatContext();
+  const { currentSession, minimized, restoreChat, togglePopover } = useAiChatContext();
 
   // Minimized: collapse to a small tab pinned bottom-right (the parent wrapper
   // is fixed bottom-right). Click the tab to reopen, the X to close for good.
@@ -23,7 +23,7 @@ export const ChatWindow = () => {
       >
         <Sparkles size={14} className="text-hypertasks-ai-purple" strokeWidth={1.75} />
         <span className="max-w-[160px] truncate text-meta font-medium">
-          {sessions[0]?.title ?? "AI Chat"}
+          {currentSession?.title ?? "AI Chat"}
         </span>
         <span
           role="button"
@@ -58,7 +58,7 @@ export const ChatWindow = () => {
           stays visible. Without min-h-0/flex-1 the welcome screen forced full
           height and pushed the input out of the overflow-hidden window. */}
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-        {(sessions[0]?.messages ?? []).length === 0 ? (
+        {(currentSession?.messages ?? []).length === 0 ? (
           <WelcomeScreen />
         ) : (
           <MessageList />

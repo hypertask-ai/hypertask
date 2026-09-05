@@ -265,6 +265,7 @@ export function useAiChat() {
   const {
     startNewSession: createSession,
     activeSession,
+    currentSession,
     sessions,
     selectSession: selectSessionInHistory,
     isSuccess: chatHistoryReady,
@@ -413,6 +414,27 @@ export function useAiChat() {
   const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000) => {
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
+
+    // A task-scoped surface (the ticket detail page) already owns session
+    // selection via useSessionAndChatHistory's per-task init effect, which
+    // finds-or-creates that exact ticket's session. Falling through to the
+    // project-wide board session map below would let a session another
+    // ticket in the same project last sent from win here too (HTPR-6100).
+    if (taskId !== undefined) {
+      const deadline = Date.now() + timeoutMs;
+      while (
+        !sessionsRef.current.some(
+          (session) => session.taskId === taskId && session.userId === userId
+        ) &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return sessionsRef.current.find(
+        (session) => session.taskId === taskId && session.userId === userId
+      );
+    }
+
     const needsBoardSession =
       typeof projectId === "number" &&
       !isFullScreenChat &&
@@ -541,6 +563,7 @@ export function useAiChat() {
     sessionContextKey,
     selectSessionInHistory,
     setAiChatBoardSessionMap,
+    taskId,
   ]);
 
   useEffect(() => {
@@ -618,8 +641,6 @@ export function useAiChat() {
 
   // If message is provided, use it; otherwise, find latest human message
   function retryStream(message?: IChatMessage) {
-    const currentSession =
-      sessions.find((session) => session.id === activeSession) ?? sessions[0];
     const targetMsg =
       message ||
       [...currentSession.messages].reverse().find((msg) => msg.role === "human");
@@ -1620,7 +1641,7 @@ export function useAiChat() {
   const toggleRenameChatModal = () => setShowRenameChatModal((prev) => !prev);
 
   const renameChat = (newTitle: string) => {
-    updateSessionTitle(activeSession ?? sessions[0].id, newTitle);
+    updateSessionTitle(currentSession.id, newTitle);
     setShowRenameChatModal(false);
   };
 
@@ -1635,6 +1656,7 @@ export function useAiChat() {
     isByokBlocked,
     sessions,
     activeSession,
+    currentSession,
     chatHistoryReady,
     isSidebarMode,
     setIsSidebarMode,

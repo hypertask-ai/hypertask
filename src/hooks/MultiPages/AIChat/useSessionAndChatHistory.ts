@@ -5,7 +5,7 @@ import {
   type TAllChatSessionsResponse,
 } from "@/utils/api/ai_chat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
@@ -533,6 +533,17 @@ export const useSessionAndChatHistory = (
     startNewSession,
   ]);
 
+  const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
+  // The single source of truth for "the session the user is looking at".
+  // Sessions are reordered to the front on select/write, so `sessions[0]` is
+  // usually right, but a session can become active (the per-task init effect
+  // above) without being reordered yet - resolve by id so every consumer
+  // agrees (HTPR-6100).
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.id === activeSession) ?? sessions[0],
+    [sessions, activeSession]
+  );
+
   return {
     isLoading: isDemo ? false : isLoadingSessions,
     isError: isDemo ? false : isErrorSessions,
@@ -541,9 +552,10 @@ export const useSessionAndChatHistory = (
     // guard does not race it by creating a second demo conversation.
     isSuccess: isDemo ? demoSessions.length > 0 : isSuccessSessions,
     activeSession,
+    currentSession,
     mounted: hasRequiredData ? mounted : false,
     hasRequiredData,
-    sessions: isDemo ? demoSessions : sessionsData?.data.sessions || [],
+    sessions,
     setActiveSession,
     startNewSession,
     selectSession,

@@ -80,7 +80,7 @@ const AI_Chat_Layout: React.FC<AI_Chat_LayoutProps> = ({
     isDetailPage,
     showRenameChatModal,
     renameChat,
-    sessions,
+    currentSession,
     togglePopover,
   } = useAiChatContext();
   const { toggleAIChatInterface } = useGlobalUIState();
@@ -212,7 +212,7 @@ const AI_Chat_Layout: React.FC<AI_Chat_LayoutProps> = ({
       )}
         {showRenameChatModal && (
           <RenameChatModal
-            currentTitle={sessions[0]?.title ?? ""}
+            currentTitle={currentSession?.title ?? ""}
             closeCallback={renameChat}
           />
         )}

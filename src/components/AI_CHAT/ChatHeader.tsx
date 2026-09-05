@@ -94,7 +94,7 @@ export const ChatHeader = () => {
     toggleSidebarMode,
     isSidebarMode,
     sessions,
-    activeSession,
+    currentSession,
     startNewSession,
     selectSession,
     toggleRenameChatModal,
@@ -121,11 +121,7 @@ export const ChatHeader = () => {
     [sessions]
   );
 
-  const activeSessionId = activeSession ?? sessions[0]?.id ?? null;
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.id === activeSessionId),
-    [sessions, activeSessionId]
-  );
+  const activeSessionId = currentSession?.id ?? null;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -286,12 +282,12 @@ export const ChatHeader = () => {
       <div className="relative min-w-0 flex-1" ref={dropdownRef}>
         <button
           type="button"
-          title={sessions[0]?.title ?? undefined}
+          title={currentSession?.title ?? undefined}
           onClick={() => setIsDropdownOpen((prev) => !prev)}
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
         >
           <span className="min-w-0 truncate font-medium">
-            {sessions[0]?.title ?? "Loading..."}
+            {currentSession?.title ?? "Loading..."}
           </span>
           <span
             style={{

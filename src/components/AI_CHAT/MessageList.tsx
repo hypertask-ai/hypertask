@@ -17,16 +17,9 @@ export const MessageList: React.FC<MessageListProps> = () => {
     createTaskFromResponse,
     retryStream,
     editMessage,
-    sessions,
-    activeSession,
+    currentSession,
     isTyping,
   } = useAiChatContext();
-  // Sessions are reordered to the front on select/write, so `sessions[0]` is
-  // usually the current one, but a session can become active (e.g. the
-  // per-task session-init effect) without being moved to the front yet.
-  // Resolve by id so the message list never shows a different task's chat.
-  const currentSession =
-    sessions.find((session) => session.id === activeSession) ?? sessions[0];
   const messages = currentSession?.messages ?? [];
   const lastMessage = messages[messages.length - 1];
 

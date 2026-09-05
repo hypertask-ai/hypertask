@@ -60,6 +60,7 @@ interface ChatContextType {
     onEditor: (editor: Editor | null) => void;
   };
   sessions: IChatSession[];
+  currentSession: IChatSession | undefined;
   contextList: MentionItem[];
   agentStatus: string | undefined;
   showScrollUpIndicator: boolean;
@@ -154,7 +155,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   // Consume a query handed over from Search's "Ask AI": send it into this single
   // general chat, then clear it. Done here (the one ChatProvider instance) rather
   // than in the composer so it can't double-send across mounts. Wait until the
-  // chat is ready — a session exists (handleSendMessage reads sessions[0]), BYOK
+  // chat is ready — a session exists (handleSendMessage resolves its own), BYOK
   // isn't blocking, and nothing is streaming — so the query is never dropped or
   // overlapped; the effect re-runs and fires once readiness flips.
   const [pendingAiChatPrompt, setPendingAiChatPrompt] = useRecoilState(

@@ -343,6 +343,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const {
     activeSession,
+    currentSession,
     deleteSession,
     selectSession,
     sessions,
@@ -352,9 +353,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
     setAiChatAutoOpenSuppressed,
     editor,
   } = useAiChatContext();
-  const activeSessionId = activeSession ?? sessions[0]?.id ?? null;
-  const currentSession =
-    sessions.find((session) => session.id === activeSessionId) ?? sessions[0];
+  const activeSessionId = currentSession?.id ?? null;
 
   useEffect(() => {
     if (
@@ -428,7 +427,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
       : []),
     ...sessionGroups,
   ];
-  const hasMessages = (sessions[0]?.messages?.length ?? 0) > 0;
+  const hasMessages = (currentSession?.messages?.length ?? 0) > 0;
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
