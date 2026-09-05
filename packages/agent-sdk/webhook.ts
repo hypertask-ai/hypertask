@@ -363,7 +363,10 @@ export function createWebhookHandler(options: {
       options.client.reportError(error, payload);
       throw error;
     }
-    if (claimed !== "claimed") return;
+    if (claimed === "completed") return;
+    if (claimed === "processing") {
+      throw new AgentSdkError("Webhook delivery is already processing");
+    }
 
     const accessController = new AbortController();
     const accessTimer = setTimeout(() => accessController.abort(), ACCESS_CHECK_TIMEOUT_MS);

@@ -1357,6 +1357,10 @@ test("delivery claims dedupe concurrent work and retain completion", async () =>
   const readsDuringWork = api.calls.filter((call) =>
     call.path.endsWith("/mcp/agents/runs/run-1"),
   ).length;
+  await assert.rejects(
+    agent.processDelivery(payload()),
+    /Webhook delivery is already processing/,
+  );
   assert.equal((await agent.handler(webhookRequest(payload()), firstWork.context)).status, 204);
   assert.equal(
     api.calls.filter((call) => call.path.endsWith("/mcp/agents/runs/run-1")).length,
@@ -1365,6 +1369,7 @@ test("delivery claims dedupe concurrent work and retain completion", async () =>
   );
   finish();
   await firstWork.drain();
+  await agent.processDelivery(payload());
   const readsAfterCompletion = api.calls.filter((call) =>
     call.path.endsWith("/mcp/agents/runs/run-1"),
   ).length;
