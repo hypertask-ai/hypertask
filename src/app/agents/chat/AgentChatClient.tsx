@@ -826,11 +826,14 @@ const AgentChatClient = (props: IProp) => {
   );
 
   // Honor ?agent=<slug> once the roster is in (deep link, reload, palette).
+  // The raw id resolves too: links written server side (a confirmed proposal's
+  // ticket, for one) have no slug to hand.
   const agentParam = searchParams?.get("agent") ?? null;
   useEffect(() => {
     if (!agents || !agentParam || selectedIdRef.current) return;
     const match = agents.find(
-      (a) => !a.revokedAt && (a.slug ?? a.id) === agentParam,
+      (a) =>
+        !a.revokedAt && ((a.slug ?? a.id) === agentParam || a.id === agentParam),
     );
     if (match) selectAgent(match);
   }, [agents, agentParam, selectAgent]);

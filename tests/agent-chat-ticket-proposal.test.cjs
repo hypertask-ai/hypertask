@@ -91,7 +91,19 @@ const prisma = {
   },
   chatTicketProposal: {
     findFirst: async () => proposalRow,
-    findUnique: async () => proposalRow,
+    // The relation Prisma would join once taskId is attached.
+    findUnique: async () =>
+      proposalRow && proposalRow.taskId
+        ? {
+            ...proposalRow,
+            task: {
+              ticketNumber: "HTPR-9001",
+              projectId: 15,
+              uniqueIndex: 9001,
+              status: "Normal",
+            },
+          }
+        : proposalRow,
     create: async ({ data }) => {
       createdProposals.push(data);
       return baseProposal(data);
@@ -279,6 +291,18 @@ test("confirming after board access is revoked fails recoverably", async () => {
   const retry = await confirmPost();
   assert.equal(retry.status, 200);
   assert.equal(createTaskCalls.length, 1);
+});
+
+test("the confirmed ticket links back to the conversation", async () => {
+  const res = await confirmPost();
+  assert.equal(res.status, 200);
+  const created = createTaskCalls[0];
+  assert.equal(created.title, "Rename the login button");
+  assert.match(created.description, /Rename the login button/);
+  // The other half of the two-way link; the card carries the ticket number.
+  assert.match(created.description, /\/agents\/chat\?agent=agent-1/);
+  const body = await res.json();
+  assert.equal(body.proposal.task.ticketNumber, "HTPR-9001");
 });
 
 test("a proposal in another user's conversation is not found", async () => {
