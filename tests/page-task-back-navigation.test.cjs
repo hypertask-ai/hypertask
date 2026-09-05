@@ -16,6 +16,7 @@ const {
   PAGE_RETURN_CONTEXT_PARAM,
   PAGE_RETURN_CONTEXT_TTL_MS,
   returnFromPage,
+  shouldReturnFromPageOnEscape,
 } = jiti(path.join(root, "src/lib/navigation/pageReturn.ts"));
 
 const origin = "https://app.hypertask.ai";
@@ -76,6 +77,29 @@ const makeHistory = (initialState = { __NA: true }) => {
 const navigation = (urls, index = urls.length - 1) => ({
   entries: () => urls.map((url) => ({ url })),
   currentEntry: { index },
+});
+
+test("Page Escape returns only when the editor owns the unconsumed key", () => {
+  const escape = {
+    key: "Escape",
+    defaultPrevented: false,
+    isComposing: false,
+  };
+
+  assert.equal(shouldReturnFromPageOnEscape(escape, false), true);
+  assert.equal(
+    shouldReturnFromPageOnEscape({ ...escape, defaultPrevented: true }, false),
+    false,
+  );
+  assert.equal(
+    shouldReturnFromPageOnEscape({ ...escape, isComposing: true }, false),
+    false,
+  );
+  assert.equal(shouldReturnFromPageOnEscape(escape, true), false);
+  assert.equal(
+    shouldReturnFromPageOnEscape({ ...escape, key: "Enter" }, false),
+    false,
+  );
 });
 
 const recordInternalNavigation = (storage, overrides = {}) =>

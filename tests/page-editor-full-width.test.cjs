@@ -30,6 +30,19 @@ test("the slim utility row survives", () => {
   assert.match(source, /Version \{version\}/);
 });
 
+test("Page keyboard return uses shared routing and preserves queued saves", () => {
+  assert.match(
+    source,
+    /shouldReturnFromPageOnEscape\(event\.nativeEvent, showCommands\.show\)/,
+  );
+  assert.match(source, /flushTitleSave\(\);[\s\S]*flushContentSave\(\);/);
+  assert.match(
+    source,
+    /Promise\.all\(\[titleSaveChainRef\.current, contentSaveChainRef\.current\]\)/,
+  );
+  assert.match(source, /showCommands\.show && <HypertasksCommands \/>/);
+});
+
 test("the mobile page canvas uses the full viewport at every zoom level", () => {
   assert.match(source, /useContentZoom\(contentRef, \{ min: 0\.5 \}\)/);
   assert.match(source, /style=\{\{ zoom, width: `\$\{100 \/ zoom\}%` \}\}/);
