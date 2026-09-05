@@ -1,6 +1,7 @@
 import type {
   AgentRun,
   AgentRunActivity,
+  ChatMessage,
   AgentRunActivityType,
   AgentRunStatus,
   AgentRunTrigger,
@@ -13,7 +14,20 @@ import type {
 export const AGENT_RUN_FEATURE_FLAG = "htpr-6115-agent-sdk";
 export const AGENT_SDK_FEATURE_FLAG = "htpr-6123-add-typescript-agent-sdk";
 export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
+export const AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG =
+  "htpr-6154-chat-stop-and-timeout";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
+export const AGENT_CHAT_TIMEOUT_MESSAGE = "Agent did not answer, try again";
+export const AGENT_CHAT_STOPPED_MESSAGE = "Run stopped";
+
+export function agentChatSystemMessageKind(
+  message: Pick<ChatMessage, "role" | "content" | "isDelivered">,
+): "timeout" | "stopped" | null {
+  if (message.role !== "assistant" || message.isDelivered) return null;
+  if (message.content === AGENT_CHAT_TIMEOUT_MESSAGE) return "timeout";
+  if (message.content === AGENT_CHAT_STOPPED_MESSAGE) return "stopped";
+  return null;
+}
 export const NONTERMINAL_AGENT_RUN_STATUSES: AgentRunStatus[] = [
   "ACTIVE",
   "STALE",

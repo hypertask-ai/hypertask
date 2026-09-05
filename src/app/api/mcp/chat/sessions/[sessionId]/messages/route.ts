@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
+import { agentChatSystemMessageKind } from '@/lib/agentRuns/model'
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from '@/lib/realtime/server'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
@@ -71,7 +72,7 @@ export async function GET(
         orderBy: { createdAt: 'desc' },
         take: TRANSCRIPT_LIMIT,
       })
-    ).reverse()
+    ).filter((message) => !agentChatSystemMessageKind(message)).reverse()
 
     const normalMessages = messages.map(({ id, role, content, createdAt }) => ({
       id,
@@ -210,6 +211,12 @@ export async function POST(
           { status: 409 }
         )
       }
+      if (agentChatSystemMessageKind(existing)) {
+        return NextResponse.json(
+          { success: false, error: 'This chat turn is no longer active' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json({
         success: true,
         message: serialize(existing),
@@ -242,6 +249,12 @@ export async function POST(
         where: { replyToMessageId },
       })
       if (!existing || existing.sessionId !== session.id) throw error
+      if (agentChatSystemMessageKind(existing)) {
+        return NextResponse.json(
+          { success: false, error: 'This chat turn is no longer active' },
+          { status: 409 }
+        )
+      }
       return NextResponse.json({
         success: true,
         message: serialize(existing),

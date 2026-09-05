@@ -16,6 +16,8 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import {
+  AGENT_CHAT_STOPPED_MESSAGE,
+  AGENT_CHAT_TIMEOUT_MESSAGE,
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
   AGENT_SDK_FEATURE_FLAG,
@@ -192,7 +194,8 @@ export async function stopAgentRun(
       return { run: serializeAgentRun(run), deliveryIds: [] as string[] };
     }
 
-    const stoppedById = principal.source === "browser" ? principal.userId : null;
+    const stoppedById =
+      principal.source === "browser" ? principal.userId : null;
     const stopped = await tx.agentRun.updateMany({
       where: {
         id: run.id,
@@ -241,6 +244,118 @@ export async function stopAgentRun(
 
   if (result) await publishAgentWebhookDeliveries(result.deliveryIds);
   return result?.run ?? null;
+}
+
+const chatRunSummary = (run: Pick<AgentRun, "id">) => ({ id: run.id });
+
+async function reconcileAgentChatTurn(
+  principal: AgentRunPrincipal,
+  sessionId: string,
+  stop: boolean,
+  now: Date,
+) {
+  if (principal.source !== "browser") return null;
+  const result = await prisma.$transaction(async (tx) => {
+    const session = await tx.chatSession.findFirst({
+      where: { id: sessionId, userId: principal.userId, agentId: { not: null } },
+      select: {
+        id: true,
+        messages: {
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { id: true, role: true, createdAt: true },
+        },
+        agentRuns: {
+          where: { status: { in: NONTERMINAL_AGENT_RUN_STATUSES } },
+          orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
+          take: 1,
+        },
+      },
+    });
+    if (!session) return null;
+    const message = session.messages[0];
+    if (message?.role !== "human") {
+      return stop ? null : { awaiting: false, run: null, changed: false, deliveryId: null };
+    }
+    const run = session.agentRuns[0]?.lastActivityAt >= message.createdAt
+      ? session.agentRuns[0]
+      : null;
+    const expired = now.getTime() - message.createdAt.getTime() >= AGENT_RUN_STALE_AFTER_MS;
+    if (!stop && !expired) {
+      return {
+        awaiting: true,
+        run: run ? chatRunSummary(run) : null,
+        changed: false,
+        deliveryId: null,
+      };
+    }
+    if (stop && !run) return null;
+
+    const marker = await tx.chatMessage.createMany({
+      data: [{
+        sessionId,
+        content: stop ? AGENT_CHAT_STOPPED_MESSAGE : AGENT_CHAT_TIMEOUT_MESSAGE,
+        role: "assistant",
+        isDelivered: false,
+        replyToMessageId: message.id,
+        createdAt: now,
+      }],
+      skipDuplicates: true,
+    });
+    if (marker.count === 0) {
+      return stop ? null : { awaiting: false, run: null, changed: false, deliveryId: null };
+    }
+
+    let deliveryId: string | null = null;
+    if (run) {
+      const stopped = await tx.agentRun.updateMany({
+        where: { id: run.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES } },
+        data: { status: "STOPPED", stoppedById: principal.userId, lastActivityAt: now },
+      });
+      if (stopped.count === 0) throw new Error("Agent chat run changed while stopping");
+      const stoppedRun = {
+        ...run,
+        status: "STOPPED" as const,
+        stoppedById: principal.userId,
+        lastActivityAt: now,
+      };
+      deliveryId = await persistAgentRunStoppedWebhook(tx, {
+        agentId: run.agentId,
+        projectId: null,
+        taskId: null,
+        ticketNumber: null,
+        taskTitle: null,
+        actor: { userId: principal.userId, agentId: null, displayName: principal.displayName },
+        runId: run.id,
+        run: serializeAgentRun(stoppedRun),
+      });
+    }
+    await tx.chatSession.update({ where: { id: sessionId }, data: { updatedAt: now } });
+    return {
+      awaiting: false,
+      run: run ? chatRunSummary(run) : null,
+      changed: true,
+      deliveryId,
+    };
+  });
+
+  if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
+  if (result?.changed) {
+    void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(console.warn);
+  }
+  return result;
+}
+
+/** Read the current turn and durably time it out after five minutes. */
+export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
+  const result = await reconcileAgentChatTurn(principal, sessionId, false, now);
+  return result ? { awaiting: result.awaiting, run: result.awaiting ? result.run : null } : null;
+}
+
+/** Stop only the current unanswered turn in a browser-owned chat session. */
+export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
+  const result = await reconcileAgentChatTurn(principal, sessionId, true, now);
+  return result?.run ? { run: result.run } : null;
 }
 
 type ActivityRunWithContext = AgentRun & {
@@ -295,9 +410,9 @@ async function findActivityRun(
 function isUniqueConstraintError(error: unknown): boolean {
   return Boolean(
     error &&
-      typeof error === "object" &&
-      "code" in error &&
-      error.code === "P2002",
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === "P2002",
   );
 }
 
@@ -449,9 +564,8 @@ export async function createAgentRunActivity(
   let activity: AgentRunActivity | null = null;
   try {
     if (input.type === "RESPONSE" && run.task) {
-      const { createCommentService } = await import(
-        "@/utils/controllers/comments/createCommentService",
-      );
+      const { createCommentService } =
+        await import("@/utils/controllers/comments/createCommentService");
       await createCommentService({
         text: toStoredHtml(input.text),
         creatorId: run.agent.user.id,
@@ -580,9 +694,8 @@ export async function selectAgentRunActivity(
     selectedAt: now,
   };
   if (run.task) {
-    const { createCommentService } = await import(
-      "@/utils/controllers/comments/createCommentService",
-    );
+    const { createCommentService } =
+      await import("@/utils/controllers/comments/createCommentService");
     await createCommentService({
       text: toStoredHtml(option.label),
       creatorId: principal.userId,
