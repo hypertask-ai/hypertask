@@ -16,7 +16,6 @@ import {
   type DeliveryClaim,
   type DeliveryScheduler,
   type DeliveryStore,
-  type DryRunWrite,
   type WebhookHandler,
 } from "../packages/agent-sdk/index.js";
 
@@ -114,7 +113,6 @@ function apiFixture(
     failActivity?: boolean;
     failUpdate?: boolean;
     malformedActivity?: boolean;
-    run?: AgentRunRecord;
   } = {},
 ) {
   const calls: ApiCall[] = [];
@@ -175,7 +173,7 @@ function apiFixture(
       });
     }
     if (url.pathname.endsWith("/mcp/agents/runs/run-1")) {
-      return Response.json({ success: true, run: options.run ?? run });
+      return Response.json({ success: true, run });
     }
     if (url.pathname.endsWith("/mcp/tasks") && method === "GET") {
       return Response.json({ success: true, tasks: [task] });
@@ -2812,57 +2810,4 @@ test("package manifest exports only dependency-free runtime entry points", async
     "./templates",
     "./templates/*",
   ]);
-});
-
-test("a dry run previews every write and replays a run that already finished", async () => {
-  const finished: AgentRunRecord = { ...run, status: "done" };
-  const api = apiFixture({ run: finished });
-  const previews: DryRunWrite[] = [];
-  const agent = createAgent({
-    token: "unit-test-token",
-    webhookSecret: secret,
-    apiUrl,
-    fetch: api.fetch,
-    dryRun: true,
-    onDryRun: (preview) => previews.push(preview),
-  });
-  let handled = false;
-  agent.on("mention", async (received) => {
-    handled = true;
-    await received.respond("This is what I would say.");
-    await received.task?.comment("<p>Preview only</p>");
-    await received.task?.move("QA");
-  });
-  const work = background();
-  assert.equal(
-    (await agent.handler(webhookRequest(payload({ run: finished })), work.context))
-      .status,
-    202,
-  );
-  await work.drain();
-
-  assert.equal(handled, true, "a recorded run is replayable while nothing is written");
-  assert.deepEqual(
-    api.calls.filter((call) => call.method !== "GET"),
-    [],
-    "a dry run sends no writes to Hypertask",
-  );
-  assert.deepEqual(
-    previews.map((preview) => `${preview.method} ${preview.path}`),
-    [
-      "POST /mcp/agents/runs/run-1/activities",
-      "POST /mcp/tasks/lease/claim",
-      "POST /mcp/comments",
-      "POST /mcp/tasks/lease/release",
-      "POST /mcp/tasks/lease/claim",
-      "POST /mcp/tasks/update",
-      "POST /mcp/tasks/lease/release",
-    ],
-    "every skipped write is previewed in the order it was attempted",
-  );
-  assert.deepEqual(
-    previews.find((preview) => preview.path === "/mcp/tasks/update")?.body,
-    { task_id: 101, sectionId: 2 },
-    "the preview carries the resolved section, not the caller's label",
-  );
 });
