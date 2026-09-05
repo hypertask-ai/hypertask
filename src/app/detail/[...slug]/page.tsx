@@ -20,6 +20,7 @@ import { fetchUserPreferenceController } from "@/utils/controllers/users/fetch_p
 import { ScrollSetting } from "@prisma/client";
 import { getTaskReadStateLastReadAt } from "@/utils/controllers/tasks/markRead";
 import { filterCommentReadReceipts } from "@/utils/controllers/comments/readReceipts";
+import { listTaskAgentRunActivities } from "@/lib/agentRuns/service";
 
 
 export async function generateMetadata(props: any): Promise<Metadata> {
@@ -77,6 +78,7 @@ export default async function Page(
   let task: any;
   const currentDate = new Date()
   let lastReadAt: Date | null = null;
+  let agentRunActivities: Awaited<ReturnType<typeof listTaskAgentRunActivities>> = [];
 
   // Extract and parse hash
   let stack = false;
@@ -96,7 +98,10 @@ export default async function Page(
     redirect("/unauthorized");
   }
 
-  lastReadAt = await getTaskReadStateLastReadAt(task.id, userObj.id);
+  [lastReadAt, agentRunActivities] = await Promise.all([
+    getTaskReadStateLastReadAt(task.id, userObj.id),
+    listTaskAgentRunActivities(userObj.id, task.id),
+  ]);
   allowPerks = task.project?.team.activeSubscriptionPlanId ? true : false;
   if (!Array.isArray(task) && task) {
     const {
@@ -133,7 +138,7 @@ export default async function Page(
         key={`task-detail-page-tasks-provider-${task.id}`}
         stack={{ stack }}
         _initialStacked={initialMap}
-        _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt })}
+        _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities })}
         allowPerks={true}
         parsedTask={JSON.stringify(task)}
         scrollSetting={scrollSetting}
@@ -157,7 +162,7 @@ export default async function Page(
               isMobile={false}
               _currentUser={userObj}
               _currentTask={JSON.stringify(task)}
-              _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt })}
+              _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities })}
               _slugs={[params.slug[0], params.slug[1]]}
             />
           </FollowersProvider>

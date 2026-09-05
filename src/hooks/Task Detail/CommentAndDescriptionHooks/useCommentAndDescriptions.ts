@@ -41,13 +41,18 @@ import {
   type TaskSeenRequestState,
 } from "@/utils/api/Task Detail/markTaskSeen";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { LIKESHORTCUTEVENT, thumbsUpEmoji } from "@/lib/constants/constants";
 const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
 let onCommentKeys = new Set(["Tab", "ArrowDown", "ArrowUp"]);
 
 const normalizeCommentsQueryPayload = (payload: any) => {
   if (Array.isArray(payload)) {
-    return { comments: payload as IComment[], lastReadAt: null };
+    return {
+      comments: payload as IComment[],
+      lastReadAt: null,
+      agentRunActivities: [] as SerializedAgentRunActivity[],
+    };
   }
 
   return {
@@ -55,6 +60,9 @@ const normalizeCommentsQueryPayload = (payload: any) => {
       ? (payload.comments as IComment[])
       : [],
     lastReadAt: payload?.lastReadAt ?? null,
+    agentRunActivities: Array.isArray(payload?.agentRunActivities)
+      ? (payload.agentRunActivities as SerializedAgentRunActivity[])
+      : [],
   };
 };
 
@@ -108,6 +116,7 @@ const useDescriptionAndCommentsStates = () => {
     CTRL_J_ENTER_Handler,
     comments,
     setComments,
+    setAgentRunActivities,
     stackData,
     showCommentDeleteModal,
     setShowCommentDeleteModal,
@@ -195,6 +204,7 @@ const useDescriptionAndCommentsStates = () => {
   );
   const commentsListFromQuery = commentsQueryPayload.comments;
   const lastReadAtFromQuery = commentsQueryPayload.lastReadAt;
+  const agentRunActivitiesFromQuery = commentsQueryPayload.agentRunActivities;
   const unreadSnapshotRef = useRef<{
     taskId: number;
     knownCommentIds: Set<number>;
@@ -431,12 +441,19 @@ const useDescriptionAndCommentsStates = () => {
     if (isShareView) return;
     if (commentsListFromQuery) {
       setComments(commentsListFromQuery);
+      setAgentRunActivities(agentRunActivitiesFromQuery);
       setStacked((prev) =>
         ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
       );
     }
     void updateSeen();
-  }, [commentsListFromQuery, isShareView, updateSeen]);
+  }, [
+    agentRunActivitiesFromQuery,
+    commentsListFromQuery,
+    isShareView,
+    setAgentRunActivities,
+    updateSeen,
+  ]);
 
   //trigger stack hashmap update after sidebar stack option is toggled
   useLayoutEffect(() => {

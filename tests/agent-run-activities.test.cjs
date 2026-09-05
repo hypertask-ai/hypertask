@@ -143,6 +143,28 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
       },
     },
     agentRunActivity: {
+      findMany: async ({ where, orderBy, take }) => {
+        const runWhere = where.run;
+        const matchingRunIds = new Set(
+          runs
+            .filter(
+              (run) =>
+                run.taskId === runWhere.taskId &&
+                run.ownerId === runWhere.agent.userId &&
+                run.taskAccessible !== false,
+            )
+            .map(({ id }) => id),
+        );
+        const direction = orderBy[0].createdAt === "desc" ? -1 : 1;
+        return activities
+          .filter(({ runId }) => matchingRunIds.has(runId))
+          .sort(
+            (a, b) =>
+              direction *
+              (a.createdAt - b.createdAt || a.id.localeCompare(b.id)),
+          )
+          .slice(0, take);
+      },
       create: async ({ data }) => {
         if (
           data.idempotencyKey &&
@@ -549,6 +571,36 @@ test("task activity refreshes Agent Chat without creating a chat message", async
     ["user-6", "agent-chat:changed", { agentId: "agent-1" }],
   ]);
   assert.equal(harness.db.messages.length, 0);
+});
+
+test("task activity feed only returns flag-enabled runs owned by an authorized viewer", async () => {
+  const ownedRun = runRow();
+  const otherRun = runRow({ id: "run-2", ownerId: 7 });
+  const inaccessibleRun = runRow({ id: "run-3", taskAccessible: false });
+  const activities = [
+    activityRow(),
+    activityRow({ id: "activity-2", runId: otherRun.id }),
+    activityRow({ id: "activity-3", runId: inaccessibleRun.id }),
+  ];
+  const harness = loadService({
+    runs: [ownedRun, otherRun, inaccessibleRun],
+    activities,
+  });
+
+  assert.deepEqual(
+    await harness.service.listTaskAgentRunActivities(6, 42),
+    [model.serializeAgentRunActivity(activities[0])],
+  );
+
+  const disabled = loadService({
+    runs: [ownedRun],
+    activities: [activities[0]],
+    featureEnabled: (key) => key !== model.AGENT_RUN_ACTIVITY_FEATURE_FLAG,
+  });
+  assert.deepEqual(
+    await disabled.service.listTaskAgentRunActivities(6, 42),
+    [],
+  );
 });
 
 test("only the matching agent creates an idempotent task response and visible comment", async () => {

@@ -378,6 +378,42 @@ export async function listAgentRunActivities(
   return run?.activities.reverse().map(serializeAgentRunActivity) ?? null;
 }
 
+export async function listTaskAgentRunActivities(
+  userId: number,
+  taskId: number,
+) {
+  const principal: AgentRunPrincipal = {
+    userId,
+    agentId: null,
+    displayName: "",
+    source: "browser",
+  };
+  if (!(await agentRunActivitiesEnabledFor(principal))) return [];
+
+  const activities = await prisma.agentRunActivity.findMany({
+    where: {
+      run: {
+        taskId,
+        agent: { userId },
+        task: {
+          status: { not: "Deleted" },
+          project: {
+            status: { not: "Deleted" },
+            OR: [
+              { ownerId: userId },
+              { members: { some: { userId } } },
+            ],
+          },
+        },
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: AGENT_RUN_ACTIVITY_LIST_LIMIT,
+  });
+
+  return activities.reverse().map(serializeAgentRunActivity);
+}
+
 export async function createAgentRunActivity(
   principal: AgentRunPrincipal,
   id: string,
