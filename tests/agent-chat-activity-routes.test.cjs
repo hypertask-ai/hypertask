@@ -217,20 +217,22 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
   assert.deepEqual(activityCalls, []);
 });
 
-test("activity-enabled chats poll uncached without overlapping requests", () => {
+test("activity rows keep refreshing without a pending reply, and uncached", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("const replyPollDeadline"),
+    chatClientSource.indexOf("// Activity rows arrive without a chat reply"),
     chatClientSource.indexOf("// Realtime nudge"),
   );
 
+  // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
   assert.match(chatClientSource, /const ACTIVITY_POLL_MS = 5000/);
+  // Without this the browser can serve a cached history and the feed freezes.
   assert.match(
     chatClientSource,
     /fetch\(`\/api\/agent-chat\/\$\{loadSessionId\}`,[\s\S]*?cache: "no-store"/,
   );
-  assert.match(polling, /await loadMessages\(session\.id\)/);
-  assert.match(polling, /timer = setTimeout\(poll, delay\)/);
-  assert.doesNotMatch(polling, /setInterval/);
-  assert.match(polling, /if \(!replyPollActive && !activityRowsEnabled\) return;/);
-  assert.match(polling, /Date\.now\(\) < replyPollDeadline/);
+  // The reply poll stops once the agent answers, so it cannot carry the feed.
+  assert.match(polling, /if \(!session \|\| !activityRowsEnabled\) return;/);
+  assert.doesNotMatch(polling, /awaiting/);
+  assert.match(polling, /setInterval\([\s\S]*?ACTIVITY_POLL_MS,/);
+  assert.match(polling, /return \(\) => clearInterval\(id\);/);
 });

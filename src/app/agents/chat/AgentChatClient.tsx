@@ -89,9 +89,11 @@ import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketPropos
 // While we are waiting for an external agent to answer, the only way to see
 // the reply arrive is to keep asking.
 const AWAITING_POLL_MS = 4000;
+// The passive activity feed has no realtime channel of its own, so it needs a
+// poll of its own to meet the 10-second freshness the ticket asks for.
 const ACTIVITY_POLL_MS = 5000;
-// Realtime still refetches when the reply lands; the reply-only fallback stops
-// after this long, while an enabled passive activity feed keeps refreshing.
+// Realtime still refetches when the reply lands; the interval is only a
+// fallback, so stop it after this long waiting on the same session.
 const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 const MAX_MESSAGE_LENGTH = 8000;
 const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
@@ -948,43 +950,36 @@ const AgentChatClient = (props: IProp) => {
   }, [awaiting, session]);
 
   useEffect(() => {
-    if (!session) return;
+    if (!awaiting || !session) return;
+    // The runtime has not enabled chat, so the message will never be
+    // delivered and polling cannot help.
+    if (deliveryNotice) return;
     const sinceAt =
       awaitingSince?.sessionId === session.id ? awaitingSince.at : Date.now();
-    const replyPollDeadline = sinceAt + AWAITING_POLL_MAX_MS;
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const schedule = () => {
-      const replyPollActive =
-        awaiting && !deliveryNotice && Date.now() < replyPollDeadline;
-      const delay = replyPollActive
-        ? AWAITING_POLL_MS
-        : activityRowsEnabled
-          ? ACTIVITY_POLL_MS
-          : null;
-      if (!cancelled && delay) timer = setTimeout(poll, delay);
-    };
-    const poll = async () => {
-      const replyPollActive =
-        awaiting && !deliveryNotice && Date.now() < replyPollDeadline;
-      if (!replyPollActive && !activityRowsEnabled) return;
-      await loadMessages(session.id);
-      schedule();
-    };
-    schedule();
+    const remaining = sinceAt + AWAITING_POLL_MAX_MS - Date.now();
+    if (remaining <= 0) return;
+    const id = setInterval(
+      () => void loadMessages(session.id),
+      AWAITING_POLL_MS,
+    );
+    const stop = setTimeout(() => clearInterval(id), remaining);
     return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
+      clearInterval(id);
+      clearTimeout(stop);
     };
-  }, [
-    awaiting,
-    session,
-    deliveryNotice,
-    awaitingSince,
-    loadMessages,
-    activityRowsEnabled,
-  ]);
+  }, [awaiting, session, deliveryNotice, awaitingSince, loadMessages]);
+
+  // Activity rows arrive without a chat reply, so they are not covered by the
+  // reply poll above. loadMessages drops stale responses by generation, so an
+  // overlap with that poll is harmless.
+  useEffect(() => {
+    if (!session || !activityRowsEnabled) return;
+    const id = setInterval(
+      () => void loadMessages(session.id),
+      ACTIVITY_POLL_MS,
+    );
+    return () => clearInterval(id);
+  }, [session, activityRowsEnabled, loadMessages]);
 
   // Realtime nudge: the send route broadcasts agent-chat:changed on this
   // user's private channel; refetch instead of waiting for the next poll.

@@ -302,10 +302,10 @@ export async function listAgentChatActivity(
         MAX_AGENT_CHAT_ACTIVITY,
       )
     : MAX_AGENT_CHAT_ACTIVITY;
-  const projectWhere = getProjectWhere(input.userId);
   const visibleTask = {
-    is: { project: projectWhere },
+    is: { project: getProjectWhere(input.userId) },
   } satisfies Prisma.TaskNullableScalarRelationFilter;
+  const projectWhere = getProjectWhere(input.userId);
   const visibleRunWhere = {
     agentId: input.agentId,
     OR: [
