@@ -87,6 +87,10 @@ import {
   reserveCreateTaskUploads,
 } from "@/lib/createTaskAttachmentUploads";
 const attachmentButtonId = "create-task-modal-attachmentUpload";
+// Kill switch: this behaviour already shipped unconditionally (HTPR-5922/5860/5973).
+// Set NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION=0 to turn it off.
+const NEW_TASK_AUTO_DESCRIPTION_ENABLED =
+  process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION !== "0";
 
 const TiptapCreateTaskModal = () => {
   const isMbl = useContext(MobileViewContext);
@@ -367,7 +371,9 @@ const TiptapCreateTaskModal = () => {
 
   const autoDescriptionTitle = formValues.title.trim();
   const autoDescriptionEligible = shouldSuggestCreateDescription({
-    enabled: userPreferences.autoDescriptionSuggestions ?? true,
+    enabled:
+      NEW_TASK_AUTO_DESCRIPTION_ENABLED &&
+      (userPreferences.autoDescriptionSuggestions ?? true),
     isDesktop: !isMbl,
     title: autoDescriptionTitle,
     description: taskWriterDescription,
@@ -394,7 +400,8 @@ const TiptapCreateTaskModal = () => {
           expectedTitle,
           formValues.title,
           currentDescription,
-          userPreferences.autoDescriptionSuggestions ?? true,
+          NEW_TASK_AUTO_DESCRIPTION_ENABLED &&
+            (userPreferences.autoDescriptionSuggestions ?? true),
           autoDescriptionDismissed,
         )
       ) {
@@ -425,7 +432,8 @@ const TiptapCreateTaskModal = () => {
         autoDescriptionTitleRef.current,
         formValues.title,
         currentDescription,
-        userPreferences.autoDescriptionSuggestions ?? true,
+        NEW_TASK_AUTO_DESCRIPTION_ENABLED &&
+          (userPreferences.autoDescriptionSuggestions ?? true),
         autoDescriptionDismissed,
       )
     ) {
