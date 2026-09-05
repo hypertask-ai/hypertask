@@ -5,7 +5,7 @@ import {
   type TAllChatSessionsResponse,
 } from "@/utils/api/ai_chat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
@@ -538,11 +538,10 @@ export const useSessionAndChatHistory = (
   // Sessions are reordered to the front on select/write, so `sessions[0]` is
   // usually right, but a session can become active (the per-task init effect
   // above) without being reordered yet - resolve by id so every consumer
-  // agrees (HTPR-6100).
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.id === activeSession) ?? sessions[0],
-    [sessions, activeSession]
-  );
+  // agrees (HTPR-6100). `sessions` is a fresh array each render, so this is
+  // not worth memoizing.
+  const currentSession =
+    sessions.find((session) => session.id === activeSession) ?? sessions[0];
 
   return {
     isLoading: isDemo ? false : isLoadingSessions,
