@@ -422,6 +422,9 @@ export function useAiChat() {
     // project-wide board session map below would let a session another
     // ticket in the same project last sent from win here too (HTPR-6100).
     if (taskId !== undefined) {
+      // No signed-in user yet means no session can ever match; don't spin
+      // for the full timeout waiting on a predicate that can't succeed.
+      if (userId === undefined) return undefined;
       const matchesTask = (session: IChatSession) =>
         session.taskId === taskId && session.userId === userId;
       const deadline = Date.now() + timeoutMs;
@@ -640,6 +643,7 @@ export function useAiChat() {
 
   // If message is provided, use it; otherwise, find latest human message
   function retryStream(message?: IChatMessage) {
+    if (!message && !currentSession) return;
     const targetMsg =
       message ||
       [...currentSession.messages].reverse().find((msg) => msg.role === "human");
