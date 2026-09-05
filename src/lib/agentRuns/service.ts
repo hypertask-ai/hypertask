@@ -264,7 +264,7 @@ async function reconcileAgentChatTurn(
         agentRuns: {
           where: { status: { in: NONTERMINAL_AGENT_RUN_STATUSES } },
           orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }], take: 1,
-          include: { activities: { where: { type: "ELICITATION", selectedAt: null }, take: 1 } },
+          include: { activities: { where: { type: "ELICITATION", selectedAt: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 } },
         },
       },
     });
@@ -340,21 +340,20 @@ export async function sweepExpiredAgentChatTurns(now = new Date()) {
     WHERE s."agentId" IS NOT NULL AND latest.role = 'human' AND latest."createdAt" <= ${new Date(now.getTime() - AGENT_RUN_STALE_AFTER_MS)}
       AND NOT EXISTS (SELECT 1 FROM "AgentRun" r JOIN "AgentRunActivity" a ON a."runId" = r.id
         WHERE r."chatSessionId" = s.id AND r.status IN ('ACTIVE', 'STALE') AND a.type = 'ELICITATION' AND a."selectedAt" IS NULL AND a."createdAt" >= latest."createdAt")
-    ORDER BY CASE s."userId" WHEN ${FEATURE_FLAG_OWNER_USER_ID} THEN 0 WHEN ${FEATURE_FLAG_QA_USER_ID} THEN 1 ELSE 2 END, latest."createdAt", latest.id LIMIT 100
+    ORDER BY CASE s."userId" WHEN ${FEATURE_FLAG_OWNER_USER_ID} THEN 0 WHEN ${FEATURE_FLAG_QA_USER_ID} THEN 1 ELSE 2 END, latest."createdAt", latest.id LIMIT 25
   `;
-  let timedOut = 0;
-  for (const session of sessions) {
+  const results = await Promise.all(sessions.map(async (session) => {
     try {
-      const result = await reconcileAgentChatTurn(
+      return (await reconcileAgentChatTurn(
         { userId: session.userId, agentId: null, displayName: "Agent Chat timeout", source: "browser" },
         session.id, false, now,
-      );
-      if (result?.changed) timedOut += 1;
+      ))?.changed ?? false;
     } catch (error) {
       console.warn("[agent-chat] timeout sweep failed", session.id, error);
+      return false;
     }
-  }
-  return timedOut;
+  }));
+  return results.filter(Boolean).length;
 }
 
 type ActivityRunWithContext = AgentRun & {
@@ -435,8 +434,8 @@ async function replayCreatedActivity(
       "Idempotency-Key was already used with different activity data",
     );
   }
-  if (input.type === "RESPONSE" && run.chatSession) {
-    const reply = await prisma.chatMessage.findUnique({ where: { replyToMessageId: input.replyToMessageId! } });
+  if (input.type === "RESPONSE" && run.chatSession && input.replyToMessageId) {
+    const reply = await prisma.chatMessage.findUnique({ where: { replyToMessageId: input.replyToMessageId } });
     if (reply?.sessionId !== run.chatSession.id || reply.content !== input.text || !reply.isDelivered) throw new AgentRunActivityConflictError("Idempotency-Key was already used for another chat turn");
   }
   // Older activities have no comment link, so they retain duplicate-only replay.
@@ -546,9 +545,9 @@ export async function createAgentRunActivity(
   if (!principal.agentId) return null;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
-  if (input.type === "RESPONSE" && run.chatSession && !input.replyToMessageId) {
-    throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
-  }
+  const exactChatReply = input.type === "RESPONSE" && run.chatSession &&
+    await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, run.chatSession.userId);
+  if (exactChatReply && !input.replyToMessageId) throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
 
   if (idempotencyKey !== null) {
     const existing = await findIdempotentActivity(run.id, idempotencyKey);
@@ -590,7 +589,7 @@ export async function createAgentRunActivity(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           select: { id: true, role: true },
         });
-        if (target?.role !== "human" || target.id !== input.replyToMessageId) {
+        if (target?.role !== "human" || (exactChatReply && target.id !== input.replyToMessageId)) {
           throw new AgentRunNotActiveError("Chat response does not target the current turn");
         }
         await tx.chatMessage.create({

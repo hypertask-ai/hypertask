@@ -226,7 +226,7 @@ export function parseAgentRunActivityInput(value: unknown): AgentRunActivityInpu
 
   const type = apiType.toUpperCase() as AgentRunActivityType;
   const replyToMessageId = typeof body.replyToMessageId === "string" ? body.replyToMessageId.trim() : null;
-  if (body.replyToMessageId != null && (!replyToMessageId || replyToMessageId.length > 100)) {
+  if (body.replyToMessageId !== null && body.replyToMessageId !== undefined && (!replyToMessageId || replyToMessageId.length > 100)) {
     throw new AgentRunActivityInputError("replyToMessageId must be 1 to 100 characters");
   }
   if (replyToMessageId && type !== "RESPONSE") throw new AgentRunActivityInputError("replyToMessageId is only valid for response activities");

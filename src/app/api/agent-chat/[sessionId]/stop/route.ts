@@ -10,9 +10,9 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
-  const rateLimited = await checkMcpRateLimit(request);
-  if (rateLimited) return rateLimited;
   try {
+    const rateLimited = await checkMcpRateLimit(request);
+    if (rateLimited) return rateLimited;
     const principal = await authenticateAgentRunRequest(request);
     if (!principal || principal.source !== "browser") return respond({ success: false, error: "Unauthorized" }, 401);
     if (!browserMutationIsSameOrigin(request)) return respond({ success: false, error: "Cross-origin request rejected" }, 403);
