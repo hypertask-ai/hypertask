@@ -643,14 +643,11 @@ export function useAiChat() {
 
   // If message is provided, use it; otherwise, find latest human message
   function retryStream(message?: IChatMessage) {
-    if (!message && !currentSession) return;
     const targetMsg =
-      message ||
-      [...currentSession!.messages].reverse().find((msg) => msg.role === "human");
-
-    if (targetMsg && targetMsg.content) {
-      handleSendMessage(targetMsg.content);
-    }
+      message ??
+      [...(currentSession?.messages ?? [])].reverse().find((msg) => msg.role === "human");
+    if (!targetMsg?.content) return;
+    handleSendMessage(targetMsg.content);
   }
 
   // Load a sent message back into the composer so the user can rephrase and
