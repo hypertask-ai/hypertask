@@ -951,7 +951,13 @@ const AgentChatClient = (props: IProp) => {
     prevFeedRevisionRef.current = visibleFeedRevision;
     // Only follow an update when the user was already at (or near) the bottom;
     // background activity must not yank them away from older content.
-    if (changed && !showScrollToBottom) scrollMessagesToBottom("smooth");
+    // "auto" (instant), not "smooth": handleMessageListScroll below reads
+    // scrollTop synchronously right after, and a smooth scroll hasn't moved
+    // yet at that point, so it would misjudge distance-from-bottom and leave
+    // showScrollToBottom stuck true after the very next update (e.g. the
+    // initial load after a page reload, where messages then activity land
+    // back-to-back).
+    if (changed && !showScrollToBottom) scrollMessagesToBottom("auto");
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleFeedRevision, activeFeedFilter]);
