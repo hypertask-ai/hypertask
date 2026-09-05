@@ -1,0 +1,67 @@
+name: Vercel deploy log
+
+# HTPR-6163: nobody on the server holds a Vercel token, so a stuck or failed
+# production build cannot be diagnosed from the VPS. This job fetches the
+# deployment's build events with the CI token and posts the tail as a comment
+# on a Hypertask ticket. The repo is public: the log never goes to the Actions
+# output, only a line count does.
+on:
+  workflow_dispatch:
+    inputs:
+      deployment:
+        description: Deployment id (dpl_...). Empty = latest production deployment.
+        required: false
+        default: ""
+      ticket:
+        description: Hypertask ticket number (unique index on board 15) that receives the log
+        required: true
+        default: "6163"
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_ID: prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf
+  TEAM_ID: team_yureFlJZ6ibwebaOOkKc5whs
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch build events and post them to the ticket
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          DEPLOYMENT: ${{ inputs.deployment }}
+          TICKET: ${{ inputs.ticket }}
+        run: |
+          set -uo pipefail
+          api() { curl -s -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+
+          if [ -z "$DEPLOYMENT" ]; then
+            DEPLOYMENT=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=1" \
+              | jq -r '.deployments[0].uid // empty')
+          fi
+          [ -n "$DEPLOYMENT" ] || { echo "no deployment found"; exit 1; }
+
+          META=$(api "/v13/deployments/$DEPLOYMENT?teamId=$TEAM_ID" \
+            | jq -c '{state: (.readyState // .state), errorCode, errorMessage, createdAt, sha: .meta.githubCommitSha}')
+          echo "deployment $DEPLOYMENT state: $(echo "$META" | jq -r '.state')"
+
+          # Build events; keep only log-like entries, tail them, redact DB URLs.
+          EVENTS=$(api "/v3/deployments/$DEPLOYMENT/events?teamId=$TEAM_ID&builds=1&limit=-1" \
+            | jq -r '.[]? | select(.type=="stdout" or .type=="stderr" or .type=="error" or .type=="command" or .type=="fatal")
+                     | "\((.created // .date // 0) | tostring) \(.payload.text // .text // "")"' \
+            | tail -80 \
+            | sed -E 's#postgres(ql)?://[^[:space:]]+#<db-url>#g')
+          echo "fetched $(printf '%s\n' "$EVENTS" | wc -l) event lines"
+
+          BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" \
+            '{unique_index: ($t|tonumber), project_id: 15, content_type: "html",
+              text: ("<p><strong>Vercel build log for " + $d + "</strong> (last 80 lines, vercel-deploy-log workflow).</p><p>"
+                     + ($meta|@html) + "</p><pre>" + ($ev|@html) + "</pre>")}')
+          code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/comments" \
+            -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" -d "$BODY")
+          echo "comment post: HTTP $code"
+          [ "$code" = 200 ] || [ "$code" = 201 ] || { head -c 300 /tmp/post.out; echo; exit 1; }
