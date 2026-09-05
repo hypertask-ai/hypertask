@@ -55,6 +55,14 @@ export function useBoardRealtime(
           surface: "board",
           trigger,
           reconcile,
+          // HTPR-6166: the endpoints this reconcile actually calls, so
+          // network_ms only counts this reconciliation's own fetches.
+          networkUrlPatterns: [
+            "/api/projects/boardTasks",
+            "/api/projects/getAll",
+            "/api/projects/planning",
+          ],
+          projectId,
         });
       }
     };

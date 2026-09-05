@@ -43,6 +43,8 @@ export function useInboxRealtime(userId: number | null | undefined): void {
               type: "active",
             }),
           ]).then(() => undefined),
+        // HTPR-6166: the endpoints this reconcile actually calls.
+        networkUrlPatterns: ["/api/notifications/getAll", "/api/agents/"],
       });
     };
 
