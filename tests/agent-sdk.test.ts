@@ -14,6 +14,7 @@ import {
   type AgentWebhookPayload,
   type BackgroundContext,
   type DeliveryClaim,
+  type DeliveryScheduler,
   type DeliveryStore,
   type WebhookHandler,
 } from "../packages/agent-sdk/index.js";
@@ -236,12 +237,16 @@ function apiFixture(
 
 function background(distributed = false) {
   const tasks: Promise<void>[] = [];
-  const context: BackgroundContext = {
-    distributed,
-    waitUntil(work) {
-      tasks.push(work);
+  const deliveries = new Set<string>();
+  const scheduler: DeliveryScheduler = {
+    async enqueue({ deliveryId, run: processDelivery }) {
+      if (deliveries.has(deliveryId)) return "duplicate";
+      deliveries.add(deliveryId);
+      tasks.push(Promise.resolve().then(processDelivery));
+      return "enqueued";
     },
   };
+  const context: BackgroundContext = { distributed, scheduler };
   return {
     context,
     async drain() {
@@ -363,7 +368,10 @@ test("Node adapters do not wait for stalled request cleanup", async (context) =>
       handlerCalled = true;
       return new Response(null, { status: 202 });
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const adapter = nodeHttpAdapter(handler);
   const request = {
@@ -406,7 +414,10 @@ test("Node and Express adapters reject decoded webhook strings", async () => {
       handlerCalls += 1;
       return new Response(null, { status: 202 });
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const response = () => ({
     statusCode: 0,
@@ -447,7 +458,10 @@ test("Node adapters do not expose unexpected handler errors", async () => {
     async (_request: Request, _context?: BackgroundContext) => {
       throw new Error("database-password-was-here");
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const adapter = nodeHttpAdapter(handler);
   const request = {
@@ -481,7 +495,10 @@ test("Node adapters do not classify handler messages as request errors", async (
     async () => {
       throw new Error("Webhook body is too large");
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   let responseBody = "";
   const response = {
@@ -519,7 +536,10 @@ test("Node adapters do not copy response headers before reading the body", async
       };
       return response;
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const adapter = nodeHttpAdapter(handler);
   const request = {
@@ -552,7 +572,10 @@ test("Node adapters preserve response body bytes", async () => {
         status: 200,
         headers: { "content-length": String(bytes.length) },
       }),
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const adapter = nodeHttpAdapter(handler);
   const request = {
@@ -585,7 +608,10 @@ test("Node adapters preserve multiple Set-Cookie response headers", async () => 
   responseHeaders.append("set-cookie", "preference=two; Path=/");
   const handler: WebhookHandler = Object.assign(
     async () => new Response(null, { status: 204, headers: responseHeaders }),
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const request = {
     method: "POST",
@@ -622,7 +648,10 @@ test("Node adapters reject cookie headers they cannot preserve", async () => {
   });
   const handler: WebhookHandler = Object.assign(
     async () => handlerResponse,
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const request = {
     method: "POST",
@@ -656,7 +685,10 @@ test("Node adapters require explicit single-process mode", async () => {
       distributedValues.push(context?.distributed);
       return new Response(null, { status: 204 });
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const request = () => ({
     method: "POST",
@@ -682,24 +714,31 @@ test("Hono adapter preserves single-process mode without an execution context", 
       receivedContext = context;
       return new Response(null, { status: 204 });
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
 
   await honoAdapter(handler, { distributed: false })({
     req: { raw: new Request("https://agent.example.test/webhook") },
   });
   assert.equal(receivedContext?.distributed, false);
-  assert.equal(typeof receivedContext?.waitUntil, "function");
+  assert.equal(receivedContext?.scheduler, undefined);
 
   const failingHandler: WebhookHandler = Object.assign(
     async () => {
       throw new Error("private adapter failure");
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
-  const failure = await honoAdapter(failingHandler)({
+  const failure = await honoAdapter(failingHandler, {
+    scheduler: background(true).context.scheduler,
+  })({
     req: { raw: new Request("https://agent.example.test/webhook") },
-    executionCtx: { waitUntil() {} },
   });
   assert.equal(failure.status, 500);
   assert.deepEqual(await failure.json(), {
@@ -708,14 +747,17 @@ test("Hono adapter preserves single-process mode without an execution context", 
   });
 });
 
-test("distributed Hono adapters require a background scheduler", async () => {
+test("distributed Hono adapters require a durable delivery scheduler", async () => {
   let handlerCalls = 0;
   const handler: WebhookHandler = Object.assign(
     async () => {
       handlerCalls += 1;
       return new Response(null, { status: 202 });
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
 
   const response = await honoAdapter(handler)({
@@ -724,7 +766,7 @@ test("distributed Hono adapters require a background scheduler", async () => {
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), {
     success: false,
-    error: "A background scheduler is required for distributed Hono adapters",
+    error: "A durable delivery scheduler is required for distributed Hono adapters",
   });
   assert.equal(handlerCalls, 0);
 });
@@ -736,7 +778,10 @@ test("Node adapters omit bodies from GET requests", async () => {
       receivedMethod = request.method;
       return new Response(null, { status: 405 });
     },
-    { deliveryStore: new MemoryDeliveryStore() },
+    {
+      deliveryStore: new MemoryDeliveryStore(),
+      processDelivery: async () => {},
+    },
   );
   const adapter = nodeHttpAdapter(handler);
   const request = {
@@ -871,6 +916,90 @@ test("handler rejects mismatched headers and unsafe runtime capabilities", async
     "distributed runtimes require a durable store",
   );
   assert.equal(api.calls.length, 0, "capability failures happen before API access");
+});
+
+test("handler acknowledges only after the scheduler durably accepts a delivery", async () => {
+  const api = apiFixture();
+  let persist!: () => void;
+  const persisted = new Promise<void>((resolve) => {
+    persist = resolve;
+  });
+  const scheduler: DeliveryScheduler = {
+    async enqueue() {
+      await persisted;
+      return "enqueued";
+    },
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+
+  let settled = false;
+  const responsePromise = agent.handler(webhookRequest(payload()), { scheduler });
+  void responsePromise.then(() => {
+    settled = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(settled, false);
+  assert.equal(api.calls.length, 0);
+  persist();
+  assert.equal((await responsePromise).status, 202);
+});
+
+test("handler returns 503 when durable enqueue fails", async () => {
+  const api = apiFixture();
+  const errors: unknown[] = [];
+  const scheduler: DeliveryScheduler = {
+    async enqueue() {
+      throw new Error("queue unavailable");
+    },
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    onError: (error) => errors.push(error),
+  });
+
+  const response = await agent.handler(webhookRequest(payload()), { scheduler });
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    success: false,
+    error: "Background work was not accepted",
+  });
+  assert.equal(api.calls.length, 0);
+  assert.equal(errors.length, 1);
+});
+
+test("permanently unavailable runs complete scheduled work without dispatch", async () => {
+  let scheduledRun: (() => Promise<void>) | undefined;
+  const scheduler: DeliveryScheduler = {
+    async enqueue({ run: processDelivery }) {
+      scheduledRun = processDelivery;
+      return "enqueued";
+    },
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: async () => Response.json({ success: false }, { status: 404 }),
+    onError: () => {},
+  });
+  agent.on("mention", () => {
+    assert.fail("an unavailable run must not dispatch");
+  });
+
+  assert.equal(
+    (await agent.handler(webhookRequest(payload()), { scheduler })).status,
+    202,
+  );
+  assert.ok(scheduledRun);
+  await scheduledRun();
 });
 
 test("legacy trigger deliveries are verified but do not dispatch a run twice", async () => {
@@ -1228,7 +1357,7 @@ test("delivery claims dedupe concurrent work and retain completion", async () =>
   const readsDuringWork = api.calls.filter((call) =>
     call.path.endsWith("/mcp/agents/runs/run-1"),
   ).length;
-  assert.equal((await agent.handler(webhookRequest(payload()), background().context)).status, 204);
+  assert.equal((await agent.handler(webhookRequest(payload()), firstWork.context)).status, 204);
   assert.equal(
     api.calls.filter((call) => call.path.endsWith("/mcp/agents/runs/run-1")).length,
     readsDuringWork,
@@ -1239,7 +1368,7 @@ test("delivery claims dedupe concurrent work and retain completion", async () =>
   const readsAfterCompletion = api.calls.filter((call) =>
     call.path.endsWith("/mcp/agents/runs/run-1"),
   ).length;
-  assert.equal((await agent.handler(webhookRequest(payload()), background().context)).status, 204);
+  assert.equal((await agent.handler(webhookRequest(payload()), firstWork.context)).status, 204);
   assert.equal(handled, 1);
   assert.equal(
     api.calls.filter((call) => call.path.endsWith("/mcp/agents/runs/run-1")).length,
@@ -1248,9 +1377,16 @@ test("delivery claims dedupe concurrent work and retain completion", async () =>
   );
 });
 
-test("failed background work releases its owner-fenced delivery claim", async () => {
+test("failed scheduled work releases its claim and remains retryable", async () => {
   const api = apiFixture();
   const errors: unknown[] = [];
+  let scheduledRun: (() => Promise<void>) | undefined;
+  const scheduler: DeliveryScheduler = {
+    async enqueue({ run: processDelivery }) {
+      scheduledRun = processDelivery;
+      return "enqueued";
+    },
+  };
   const agent = createAgent({
     token: "unit-test-token",
     webhookSecret: secret,
@@ -1258,17 +1394,22 @@ test("failed background work releases its owner-fenced delivery claim", async ()
     fetch: api.fetch,
     onError: (error) => errors.push(error),
   });
+  let attempts = 0;
   agent.on("mention", async (received) => {
+    attempts += 1;
     await received.thought("Attempting.");
-    throw new Error("Handler failed");
+    if (attempts === 1) throw new Error("Handler failed");
   });
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const work = background();
-    assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
-    await assert.rejects(work.drain(), /Handler failed/);
-  }
-  assert.equal(errors.length, 2);
+  assert.equal(
+    (await agent.handler(webhookRequest(payload()), { scheduler })).status,
+    202,
+  );
+  assert.ok(scheduledRun);
+  await assert.rejects(scheduledRun(), /Handler failed/);
+  await agent.processDelivery(payload());
+  assert.equal(attempts, 2);
+  assert.equal(errors.length, 1);
 });
 
 test("task helpers claim, mutate, heartbeat-compatible, and release in order", async () => {

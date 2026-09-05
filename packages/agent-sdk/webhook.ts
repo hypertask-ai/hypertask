@@ -3,6 +3,7 @@ import type {
   AgentRunRecord,
   AgentWebhookPayload,
   DeliveryClaim,
+  DeliveryScheduler,
   DeliveryStore,
   WebhookHandler,
 } from "./types.js";
@@ -342,11 +343,95 @@ export function createWebhookHandler(options: {
   client: AgentClient;
   webhookSecret: string;
   deliveryStore?: DeliveryStore;
+  scheduler?: DeliveryScheduler;
 }): WebhookHandler {
   if (!options.webhookSecret.trim()) {
     throw new AgentSdkError("webhookSecret is required");
   }
   const deliveryStore = options.deliveryStore ?? new MemoryDeliveryStore();
+
+  const processDelivery = async (payload: AgentWebhookPayload): Promise<void> => {
+    const claim: DeliveryClaim = {
+      deliveryId: payload.deliveryId,
+      owner: claimOwner(),
+      leaseUntil: Date.now() + PROCESSING_LEASE_MS,
+    };
+    let claimed;
+    try {
+      claimed = await deliveryStore.claim(claim);
+    } catch (error) {
+      options.client.reportError(error, payload);
+      throw error;
+    }
+    if (claimed !== "claimed") return;
+
+    const accessController = new AbortController();
+    const accessTimer = setTimeout(() => accessController.abort(), ACCESS_CHECK_TIMEOUT_MS);
+    let run: AgentRunRecord;
+    try {
+      run = await options.client.assertPayloadAccess(payload, accessController.signal);
+    } catch (error) {
+      await deliveryStore.release(claim).catch(() => false);
+      options.client.reportError(error, payload);
+      if (error instanceof AgentSdkError && error.status === 404) return;
+      throw error;
+    } finally {
+      clearTimeout(accessTimer);
+    }
+
+    const claimController = new AbortController();
+    let renewalError: unknown;
+    let renewalPromise: Promise<void> | null = null;
+    const renewal = setInterval(() => {
+      if (renewalPromise || claimController.signal.aborted) return;
+      const renewalClaim = {
+        ...claim,
+        leaseUntil: Date.now() + PROCESSING_LEASE_MS,
+      };
+      let renewalTimer: ReturnType<typeof setTimeout> | undefined;
+      const renewalTimeout = new Promise<never>((_, reject) => {
+        renewalTimer = setTimeout(
+          () => reject(new AgentSdkError("Webhook delivery claim renewal timed out")),
+          PROCESSING_HEARTBEAT_MS,
+        );
+        (renewalTimer as unknown as { unref?: () => void }).unref?.();
+      });
+      renewalPromise = Promise.race([
+        Promise.resolve().then(() => deliveryStore.renew(renewalClaim)),
+        renewalTimeout,
+      ])
+        .then((renewed) => {
+          if (!renewed) throw new AgentSdkError("Webhook delivery claim was lost");
+          claim.leaseUntil = renewalClaim.leaseUntil;
+        })
+        .catch((error) => {
+          renewalError = error;
+          claimController.abort(error);
+        })
+        .finally(() => {
+          clearTimeout(renewalTimer);
+          renewalPromise = null;
+        });
+    }, PROCESSING_HEARTBEAT_MS);
+    (renewal as unknown as { unref?: () => void }).unref?.();
+    try {
+      await options.client.dispatch(payload, run, claimController.signal);
+      clearInterval(renewal);
+      await renewalPromise;
+      if (renewalError) throw renewalError;
+      const completed = await deliveryStore.complete(
+        claim,
+        Date.now() + COMPLETED_RETENTION_MS,
+      );
+      if (!completed) throw new AgentSdkError("Webhook delivery claim was lost");
+    } catch (error) {
+      await deliveryStore.release(claim).catch(() => false);
+      options.client.reportError(error, payload);
+      throw error;
+    } finally {
+      clearInterval(renewal);
+    }
+  };
 
   const handler = async (
     request: Request,
@@ -365,116 +450,28 @@ export function createWebhookHandler(options: {
         : jsonError("Webhook verification failed", 500);
     }
     if (!RUN_EVENTS.has(payload.event)) return new Response(null, { status: 204 });
-    if (!context?.waitUntil) {
-      return jsonError("A background scheduler is required", 503);
-    }
-    if (context.distributed && !deliveryStore.durable) {
+    const scheduler = options.scheduler ?? context?.scheduler;
+    if (!scheduler) return jsonError("A durable delivery scheduler is required", 503);
+    if (context?.distributed && !deliveryStore.durable) {
       return jsonError("A durable DeliveryStore is required for distributed runtimes", 503);
     }
 
-    const claim: DeliveryClaim = {
-      deliveryId: payload.deliveryId,
-      owner: claimOwner(),
-      leaseUntil: Date.now() + PROCESSING_LEASE_MS,
-    };
-    let claimed;
     try {
-      claimed = await deliveryStore.claim(claim);
-    } catch (error) {
-      options.client.reportError(error, payload);
-      return jsonError("Could not claim webhook delivery", 503);
-    }
-    if (claimed !== "claimed") return new Response(null, { status: 204 });
-
-    const accessController = new AbortController();
-    const accessTimer = setTimeout(() => accessController.abort(), ACCESS_CHECK_TIMEOUT_MS);
-    let run: AgentRunRecord;
-    try {
-      run = await options.client.assertPayloadAccess(payload, accessController.signal);
-    } catch (error) {
-      await deliveryStore.release(claim).catch(() => false);
-      options.client.reportError(error, payload);
-      return jsonError(
-        error instanceof AgentSdkError && error.status === 404
-          ? "Run is unavailable to this agent token"
-          : "Could not verify run access",
-        error instanceof AgentSdkError && error.status === 404 ? 403 : 503,
-      );
-    } finally {
-      clearTimeout(accessTimer);
-    }
-
-    let begin = () => {};
-    const ready = new Promise<void>((resolve) => {
-      begin = resolve;
-    });
-    const claimController = new AbortController();
-    let renewalError: unknown;
-    let renewalPromise: Promise<void> | null = null;
-    const work = ready
-      .then(async () => {
-        const renewal = setInterval(() => {
-          if (renewalPromise || claimController.signal.aborted) return;
-          const renewalClaim = {
-            ...claim,
-            leaseUntil: Date.now() + PROCESSING_LEASE_MS,
-          };
-          let renewalTimer: ReturnType<typeof setTimeout> | undefined;
-          const renewalTimeout = new Promise<never>((_, reject) => {
-            renewalTimer = setTimeout(
-              () => reject(new AgentSdkError("Webhook delivery claim renewal timed out")),
-              PROCESSING_HEARTBEAT_MS,
-            );
-            (renewalTimer as unknown as { unref?: () => void }).unref?.();
-          });
-          renewalPromise = Promise.race([
-            Promise.resolve().then(() => deliveryStore.renew(renewalClaim)),
-            renewalTimeout,
-          ])
-            .then((renewed) => {
-              if (!renewed) throw new AgentSdkError("Webhook delivery claim was lost");
-              claim.leaseUntil = renewalClaim.leaseUntil;
-            })
-            .catch((error) => {
-              renewalError = error;
-              claimController.abort(error);
-            })
-            .finally(() => {
-              clearTimeout(renewalTimer);
-              renewalPromise = null;
-            });
-        }, PROCESSING_HEARTBEAT_MS);
-        (renewal as unknown as { unref?: () => void }).unref?.();
-        try {
-          await options.client.dispatch(payload, run, claimController.signal);
-          clearInterval(renewal);
-          await renewalPromise;
-          if (renewalError) throw renewalError;
-          const completed = await deliveryStore.complete(
-            claim,
-            Date.now() + COMPLETED_RETENTION_MS,
-          );
-          if (!completed) throw new AgentSdkError("Webhook delivery claim was lost");
-        } finally {
-          clearInterval(renewal);
-        }
-      })
-      .catch(async (error) => {
-        await deliveryStore.release(claim).catch(() => false);
-        options.client.reportError(error, payload);
-        throw error;
+      const accepted = await scheduler.enqueue({
+        deliveryId: payload.deliveryId,
+        payload,
+        run: () => processDelivery(payload),
       });
-
-    try {
-      context.waitUntil(work);
-      begin();
-      return new Response(null, { status: 202 });
+      return new Response(null, { status: accepted === "duplicate" ? 204 : 202 });
     } catch (error) {
-      await deliveryStore.release(claim).catch(() => false);
       options.client.reportError(error, payload);
       return jsonError("Background work was not accepted", 503);
     }
   };
-  Object.defineProperty(handler, "deliveryStore", { value: deliveryStore });
+  Object.defineProperties(handler, {
+    deliveryStore: { value: deliveryStore },
+    scheduler: { value: options.scheduler },
+    processDelivery: { value: processDelivery },
+  });
   return handler as WebhookHandler;
 }

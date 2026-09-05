@@ -22,6 +22,7 @@ const app = express();
 const agent = createAgent({
   token: process.env.AGENT_TOKEN!,
   webhookSecret: process.env.WEBHOOK_SECRET!,
+  scheduler,
 });
 
 agent.on("mention", async (run) => {
@@ -44,7 +45,8 @@ app.listen(3000);
 `createAgent({ token, webhookSecret })` returns:
 
 - `client`: authenticated Fetch-based API client and event registry.
-- `handler(request, { waitUntil })`: framework-neutral Fetch handler.
+- `handler(request, { scheduler })`: framework-neutral Fetch handler.
+- `processDelivery(payload)`: worker entrypoint for a delivery recovered after restart.
 - `on(event, callback)`: shorthand for `client.on`.
 - `adapters`: handlers for Node HTTP, Express, Hono, Next route handlers, and Cloudflare Workers.
 
@@ -90,7 +92,7 @@ Every write claims a task lease, heartbeats it during long work, and releases it
 
 ## Adapters
 
-Node and Express adapters default to distributed mode and require a durable `DeliveryStore`. Pass `{ distributed: false }` only when exactly one process receives webhooks. They also accept a custom `waitUntil` scheduler.
+Node and Express adapters default to distributed mode and require a durable `DeliveryStore`. Pass `{ distributed: false }` only when exactly one process receives webhooks. Every adapter also requires a `DeliveryScheduler` that durably records each delivery before `enqueue` resolves and retries `run` until it succeeds.
 
 ### Plain Node HTTP
 
@@ -105,7 +107,7 @@ http.createServer(agent.adapters.node({ distributed: false })).listen(3000);
 app.post("/webhook", agent.adapters.hono());
 ```
 
-A Node-hosted Hono app can pass `{ distributed: false, waitUntil: task => void task }`. Distributed Hono deployments require both the platform `waitUntil` and a durable delivery store; the adapter returns 503 before dispatch when the scheduler is unavailable.
+A Node-hosted Hono app can pass `{ distributed: false, scheduler }`. Distributed Hono deployments require both a durable delivery scheduler and a durable delivery store; the adapter returns 503 before dispatch when either is unavailable.
 
 ### Next route handler
 
@@ -118,22 +120,22 @@ const agent = createAgent({
   deliveryStore,
 });
 
-export const POST = agent.adapters.next(waitUntil);
+export const POST = agent.adapters.next(scheduler);
 ```
 
 ### Cloudflare Worker
 
 ```ts
-export default { fetch: agent.adapters.cloudflare };
+export default { fetch: agent.adapters.cloudflare(scheduler) };
 ```
 
 ## Delivery safety
 
-The SDK verifies HMAC-SHA256 over `timestamp.rawBody`, rejects timestamps outside five minutes, compares signatures in constant time, limits request bodies, and requires event and delivery headers to match their signed body fields. Before acknowledging a run event, it reads that run with the configured token and verifies the agent/task binding.
+The SDK verifies HMAC-SHA256 over `timestamp.rawBody`, rejects timestamps outside five minutes, compares signatures in constant time, limits request bodies, and requires event and delivery headers to match their signed body fields. It acknowledges a run event only after durable enqueue; the worker then reads that run with the configured token and verifies the agent/task binding before dispatch.
 
 The built-in `MemoryDeliveryStore` is deliberately single-process only. It has expiring owner-fenced claims and bounded retention, which is suitable for plain Node and local development. Next, Cloudflare, and other distributed adapters fail with 503 unless `deliveryStore.durable === true`. A durable implementation must make `claim`, `renew`, `complete`, and `release` atomic, reject expired or stale owners, and honor the supplied expiry values. Task writes use a unique lease token so delayed heartbeats or releases cannot affect a replacement lease.
 
-`waitUntil` keeps accepted work alive but is not a durable job queue. Background failures reject the scheduled promise and release the delivery claim so a durable scheduler can observe and retry them. If the hosting platform needs crash-proof execution, its adapter should enqueue the verified delivery before returning 2xx and invoke the SDK worker from that queue.
+`DeliveryScheduler.enqueue` must atomically persist the payload and deduplicate its `deliveryId` before resolving with `enqueued`; return `duplicate` when that ID is already queued or complete. The scheduler must retry a rejected `run` callback rather than complete the job. After a process restart, its worker must pass the stored payload to `agent.processDelivery(payload)` and retry rejected promises there too. Only replay payloads originally persisted by the verified webhook handler. A permanent 404 access check resolves the job without dispatch because the run no longer belongs to the token.
 
 ## Templates
 

@@ -7,7 +7,7 @@ import {
 } from "./adapters.js";
 import { createClient } from "./client.js";
 import { createWebhookHandler } from "./webhook.js";
-import type { AgentOptions } from "./types.js";
+import type { AgentOptions, DeliveryScheduler } from "./types.js";
 
 export * from "./adapters.js";
 export * from "./client.js";
@@ -21,11 +21,13 @@ export function createAgent(options: AgentOptions) {
     client,
     webhookSecret: options.webhookSecret,
     deliveryStore: options.deliveryStore,
+    scheduler: options.scheduler,
   });
 
   return {
     client,
     handler,
+    processDelivery: handler.processDelivery,
     on: client.on.bind(client),
     adapters: {
       node: (adapterOptions?: Parameters<typeof nodeHttpAdapter>[1]) =>
@@ -34,9 +36,9 @@ export function createAgent(options: AgentOptions) {
         expressAdapter(handler, adapterOptions),
       hono: (adapterOptions?: Parameters<typeof honoAdapter>[1]) =>
         honoAdapter(handler, adapterOptions),
-      next: (waitUntil: (task: Promise<void>) => void) =>
-        nextRouteAdapter(handler, waitUntil),
-      cloudflare: cloudflareWorkerAdapter(handler),
+      next: (scheduler: DeliveryScheduler) => nextRouteAdapter(handler, scheduler),
+      cloudflare: (scheduler: DeliveryScheduler) =>
+        cloudflareWorkerAdapter(handler, scheduler),
     },
   };
 }

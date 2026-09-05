@@ -1,4 +1,8 @@
-import type { BackgroundContext, WebhookHandler } from "./types.js";
+import type {
+  BackgroundContext,
+  DeliveryScheduler,
+  WebhookHandler,
+} from "./types.js";
 
 const MAX_WEBHOOK_BYTES = 1024 * 1024;
 const BODY_READ_TIMEOUT_MS = 2_000;
@@ -33,11 +37,10 @@ type ExpressResponse = NodeResponse & {
 };
 type HonoContext = {
   req: { raw: Request };
-  executionCtx?: { waitUntil(task: Promise<void>): void };
 };
 
 type AdapterOptions = {
-  waitUntil?: (task: Promise<void>) => void;
+  scheduler?: DeliveryScheduler;
   distributed?: boolean;
 };
 
@@ -157,13 +160,7 @@ async function sendResponse(response: Response, target: NodeResponse): Promise<v
 
 function processContext(options: AdapterOptions): BackgroundContext {
   return {
-    waitUntil:
-      options.waitUntil ??
-      ((task) => {
-        void task.catch((error) =>
-          console.error("[hypertask-agent-sdk] background task failed", error),
-        );
-      }),
+    scheduler: options.scheduler,
     distributed: options.distributed ?? true,
   };
 }
@@ -223,41 +220,36 @@ export function honoAdapter(
   options: AdapterOptions = {},
 ) {
   return async (context: HonoContext): Promise<Response> => {
-    const waitUntil = options.waitUntil ?? context.executionCtx?.waitUntil.bind(context.executionCtx);
     const distributed = options.distributed ?? true;
-    if (distributed && !waitUntil) {
+    if (distributed && !options.scheduler && !handler.scheduler) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: "A background scheduler is required for distributed Hono adapters",
+          error: "A durable delivery scheduler is required for distributed Hono adapters",
         }),
         { status: 503, headers: { "content-type": "application/json" } },
       );
     }
-    return invokeHandler(
-      handler,
-      context.req.raw,
-      processContext({ ...options, waitUntil, distributed }),
-    );
+    return invokeHandler(handler, context.req.raw, processContext({ ...options, distributed }));
   };
 }
 
 export function nextRouteAdapter(
   handler: WebhookHandler,
-  waitUntil: (task: Promise<void>) => void,
+  scheduler: DeliveryScheduler,
 ) {
   return (request: Request): Promise<Response> =>
-    invokeHandler(handler, request, { waitUntil, distributed: true });
+    invokeHandler(handler, request, { scheduler, distributed: true });
 }
 
-export function cloudflareWorkerAdapter(handler: WebhookHandler) {
+export function cloudflareWorkerAdapter(
+  handler: WebhookHandler,
+  scheduler: DeliveryScheduler,
+) {
   return (
     request: Request,
     _environment: unknown,
-    context: { waitUntil(task: Promise<void>): void },
+    _context: unknown,
   ): Promise<Response> =>
-    invokeHandler(handler, request, {
-      waitUntil: context.waitUntil.bind(context),
-      distributed: true,
-    });
+    invokeHandler(handler, request, { scheduler, distributed: true });
 }

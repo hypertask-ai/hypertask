@@ -167,8 +167,17 @@ export type AgentWebhookPayload = {
   [key: string]: unknown;
 };
 
+export type DeliveryScheduler = {
+  /** Persist and dedupe the delivery before resolving; retry `run` until it succeeds. */
+  enqueue(input: {
+    deliveryId: string;
+    payload: AgentWebhookPayload;
+    run: () => Promise<void>;
+  }): Promise<"enqueued" | "duplicate">;
+};
+
 export type BackgroundContext = {
-  waitUntil(task: Promise<void>): void;
+  scheduler?: DeliveryScheduler;
   /** Set for horizontally scaled or restartable request runtimes. */
   distributed?: boolean;
 };
@@ -176,6 +185,9 @@ export type BackgroundContext = {
 export interface WebhookHandler {
   (request: Request, context?: BackgroundContext): Promise<Response>;
   readonly deliveryStore: DeliveryStore;
+  readonly scheduler?: DeliveryScheduler;
+  /** Process a payload recovered by the configured durable scheduler. */
+  processDelivery(payload: AgentWebhookPayload): Promise<void>;
 }
 
 export type AgentOptions = {
@@ -184,7 +196,11 @@ export type AgentOptions = {
   apiUrl?: string;
   fetch?: typeof globalThis.fetch;
   deliveryStore?: DeliveryStore;
+  scheduler?: DeliveryScheduler;
   onError?: (error: unknown, payload?: AgentWebhookPayload) => void;
 };
 
-export type AgentClientOptions = Omit<AgentOptions, "webhookSecret" | "deliveryStore">;
+export type AgentClientOptions = Omit<
+  AgentOptions,
+  "webhookSecret" | "deliveryStore" | "scheduler"
+>;
