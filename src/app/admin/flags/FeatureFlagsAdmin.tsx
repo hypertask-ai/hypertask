@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADMIN_FEATURE_FLAGS_QUERY_KEY,
@@ -7,6 +8,7 @@ import {
   useFlag,
 } from "@/hooks/useFlag";
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
+import { clusterFeatureFlagsByReleaseDate } from "@/lib/flags/cluster";
 
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
 const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
@@ -14,6 +16,10 @@ const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "OWNER_AND_QA", label: "Owner + QA" },
   { mode: "EVERYONE", label: "Everyone" },
   { mode: "OFF", label: "Off" },
+];
+const AUDIENCE_FILTERS: { mode: FeatureFlagMode | "ALL"; label: string }[] = [
+  { mode: "ALL", label: "All" },
+  ...OPTIONS,
 ];
 
 type AdminFeatureFlags = {
@@ -46,6 +52,9 @@ async function updateFlag(input: { key: string; mode: FeatureFlagMode }) {
 export default function FeatureFlagsAdmin() {
   const queryClient = useQueryClient();
   const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
+  const sortFilterEnabled = useFlag("htpr-6179-flag-sort-filter");
+  const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
+  const [audienceFilter, setAudienceFilter] = useState<FeatureFlagMode | "ALL">("ALL");
   const flags = useQuery({
     queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY,
     queryFn: loadFlags,
@@ -85,6 +94,15 @@ export default function FeatureFlagsAdmin() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY }),
   });
 
+  // Off: one unlabelled group, so the rows below render exactly as they did before.
+  const clusters = useMemo(
+    () =>
+      sortFilterEnabled
+        ? clusterFeatureFlagsByReleaseDate(flags.data?.flags ?? [], sortDirection, audienceFilter)
+        : [["", flags.data?.flags ?? []] as [string, FeatureFlagRow[]]],
+    [sortFilterEnabled, flags.data?.flags, sortDirection, audienceFilter],
+  );
+
   return (
     <main className="min-h-screen bg-pageBackground px-4 py-8 text-white-black sm:px-8">
       <div className="mx-auto max-w-4xl">
@@ -93,16 +111,63 @@ export default function FeatureFlagsAdmin() {
           New features start with Owner + QA. Release or hide them without a deploy.
         </p>
 
-        <div className="mt-6 overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
-          {flags.isLoading && <p className="p-4 text-content text-text-light-gray">Loading flags...</p>}
-          {flags.isError && <p className="p-4 text-content text-destructive">Could not load feature flags.</p>}
-          {flags.data?.flags.map((flag) => (
+        {sortFilterEnabled && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+            <div
+              className="flex flex-wrap gap-1 rounded-sm bg-comment-description p-1"
+              role="group"
+              aria-label="Filter by audience"
+            >
+              {AUDIENCE_FILTERS.map((filter) => (
+                <button
+                  key={filter.mode}
+                  type="button"
+                  aria-pressed={audienceFilter === filter.mode}
+                  onClick={() => setAudienceFilter(filter.mode)}
+                  className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
+                    audienceFilter === filter.mode
+                      ? "bg-shadcn-primary text-primary-foreground"
+                      : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setSortDirection((current) => (current === "desc" ? "asc" : "desc"))}
+              className="rounded-sm border border-border-light-gray-thin px-3 py-1.5 text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
+            >
+              {sortDirection === "desc" ? "Newest first" : "Oldest first"}
+            </button>
+          </div>
+        )}
+
+        {(flags.isLoading || flags.isError || clusters.every(([, rows]) => rows.length === 0)) && (
+          <div className="mt-6 overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
+            {flags.isLoading && <p className="p-4 text-content text-text-light-gray">Loading flags...</p>}
+            {flags.isError && <p className="p-4 text-content text-destructive">Could not load feature flags.</p>}
+            {!flags.isLoading && !flags.isError && (
+              <p className="p-4 text-content text-text-light-gray">No flags match this filter.</p>
+            )}
+          </div>
+        )}
+
+        {clusters.map(([dateLabel, rows]) =>
+          rows.length === 0 ? null : (
+          <div key={dateLabel || "all"} className="mt-6">
+            {sortFilterEnabled && (
+              <h2 className="mb-2 text-dense font-semibold text-text-light-gray">{dateLabel}</h2>
+            )}
+            <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
+          {rows.map((flag) => (
             <div
               key={flag.key}
               className="flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0 sm:max-w-lg">
-                {flags.data.detailsEnabled && ticketTitleEnabled && flag.ticketTitle ? (
+                {flags.data?.detailsEnabled && ticketTitleEnabled && flag.ticketTitle ? (
                   <>
                     {flag.ticketUrl ? (
                       <a
@@ -116,7 +181,7 @@ export default function FeatureFlagsAdmin() {
                     )}
                     <code className="mt-1 block break-all text-dense text-text-light-gray">{flag.key}</code>
                   </>
-                ) : flags.data.detailsEnabled && flag.ticketUrl ? (
+                ) : flags.data?.detailsEnabled && flag.ticketUrl ? (
                   <a
                     href={flag.ticketUrl}
                     className="text-white-black underline-offset-2 hover:underline focus-visible:underline"
@@ -126,7 +191,7 @@ export default function FeatureFlagsAdmin() {
                 ) : (
                   <code className="break-all text-dense text-white-black">{flag.key}</code>
                 )}
-                {flags.data.detailsEnabled && (
+                {flags.data?.detailsEnabled && (
                   <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
                 )}
               </div>
@@ -158,7 +223,10 @@ export default function FeatureFlagsAdmin() {
               </div>
             </div>
           ))}
-        </div>
+            </div>
+          </div>
+          ),
+        )}
         {update.isError && (
           <p role="alert" className="mt-3 text-content text-destructive">
             {update.error.message}

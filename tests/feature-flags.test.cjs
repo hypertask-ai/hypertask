@@ -282,6 +282,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_ONLY",
         updatedAt: null,
       },
+      { key: "htpr-6179-flag-sort-filter", mode: "OWNER_ONLY", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl }) => {
