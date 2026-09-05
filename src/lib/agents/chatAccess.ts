@@ -110,6 +110,12 @@ export async function loadUserAgentChatSession<
  * the only identity that counts here, and a thread belonging to another agent
  * is refused as a mismatch rather than hidden, so a misconfigured runtime gets
  * a diagnosable answer instead of a phantom empty session.
+ *
+ * There is no agent predicate on this query on purpose: a revoked agent never
+ * reaches it, because `validateMcpAuth` fails its token with `agent_revoked`
+ * first. Board visibility is not checked either, and must not be: the agent is
+ * one side of the conversation, not a person looking in from a shared board.
+ * Anything about the agent's own standing belongs in token validation.
  */
 export async function loadAgentTokenChatSession<
   TSelect extends Prisma.ChatSessionSelect,

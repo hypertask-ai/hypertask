@@ -65,6 +65,9 @@ export async function GET(
       }
     }
 
+    // Activity is the whole feed, not a page of it. Re-reading it for every
+    // older page would repeat unbounded work for rows the client already has,
+    // so a paged read returns messages only.
     const activityRowsEnabled = await isFeatureEnabled(
       "htpr-6094-agent-activity-rows",
       userId,
@@ -86,7 +89,7 @@ export async function GET(
           ? { ticketProposal: { select: chatTicketProposalSelect } }
           : undefined,
       }),
-      activityRowsEnabled
+      activityRowsEnabled && !before
         ? listAgentChatActivity({
             agentId: access.agentId,
             sessionId: session.id,

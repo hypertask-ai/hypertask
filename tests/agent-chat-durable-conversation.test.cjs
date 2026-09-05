@@ -311,7 +311,14 @@ const MESSAGE_WRITERS = [
     "src/app/api/ai/chat/stream/persistAssistantMessage.ts",
     "authorAgentId: session.agentId",
   ],
-  ["src/app/api/ai-chat/add-message/route.ts", "authorUserId: messageData.role"],
+  [
+    "src/app/api/ai-chat/add-message/route.ts",
+    'authorUserId: messageData.role === "human" ? user.id : null',
+  ],
+  [
+    "src/app/api/ai-chat/add-message/route.ts",
+    'messageData.role === "assistant" ? session.agentId : null',
+  ],
 ];
 
 for (const [file, expected] of MESSAGE_WRITERS) {
@@ -329,10 +336,13 @@ test("the scheduled heartbeat prompt stays unattributed on purpose", () => {
     path.join(root, "src/app/api/cron/native-agent-heartbeat/route.ts"),
     "utf8",
   );
-  assert.match(
-    source,
-    /Deliberately unattributed[\s\S]{0,200}\}\);/,
-    "a machine-written prompt must not be signed with a person's name",
+  const start = source.indexOf("transaction.chatMessage.create(");
+  assert.notEqual(start, -1, "the heartbeat must still store its prompt");
+  const createCall = source.slice(start, source.indexOf("});", start));
+  assert.doesNotMatch(
+    createCall,
+    /author(UserId|AgentId)\s*:/,
+    "a machine-written prompt must not be signed with a person's or agent's name",
   );
 });
 
@@ -340,17 +350,25 @@ test("the scheduled heartbeat prompt stays unattributed on purpose", () => {
 // Schema and migration
 // ---------------------------------------------------------------------------
 const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
-const authorMigration = fs.readFileSync(
-  path.join(root, "src/prisma/migrations/20260905140000_chat_message_author/migration.sql"),
-  "utf8",
-);
-const statusMigration = fs.readFileSync(
-  path.join(
-    root,
-    "src/prisma/migrations/20260905140100_agent_run_status_vocabulary/migration.sql",
-  ),
-  "utf8",
-);
+function migration(name) {
+  return fs.readFileSync(
+    path.join(root, `src/prisma/migrations/${name}/migration.sql`),
+    "utf8",
+  );
+}
+
+/** Statement keywords only: comments and clauses like ON UPDATE do not count. */
+function statements(sql) {
+  return sql
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
+}
+
+const authorMigration = migration("20260905140000_chat_message_author");
+const backfillMigration = migration("20260905140010_chat_message_author_backfill");
+const indexMigration = migration("20260905140020_chat_message_history_index");
+const statusMigration = migration("20260905140100_agent_run_status_vocabulary");
 
 test("the migration adds attribution without touching stored history", () => {
   assert.match(authorMigration, /ADD COLUMN "authorUserId" INTEGER;/);
@@ -367,14 +385,29 @@ test("the migration adds attribution without touching stored history", () => {
   );
 });
 
+test("the column, the backfill and the indexes hold separate locks", () => {
+  // ADD COLUMN holds ACCESS EXCLUSIVE to the end of its transaction, so a
+  // bundled backfill and index build would block every chat read for the
+  // whole deploy.
+  assert.doesNotMatch(
+    statements(authorMigration),
+    /^\s*(UPDATE|CREATE INDEX)\b/im,
+  );
+  assert.doesNotMatch(
+    statements(backfillMigration),
+    /^\s*(ALTER TABLE|CREATE INDEX)\b/im,
+  );
+  assert.doesNotMatch(statements(indexMigration), /^\s*(ALTER TABLE|UPDATE)\b/im);
+});
+
 test("existing messages keep their history and gain their author", () => {
   assert.match(
-    authorMigration,
+    backfillMigration,
     /UPDATE "ChatMessage"[\s\S]*"authorUserId" = session\."userId"[\s\S]*role" = 'human'[\s\S]*isDelivered" = true/,
     "a delivered human message belongs to the person who owns the thread",
   );
   assert.match(
-    authorMigration,
+    backfillMigration,
     /UPDATE "ChatMessage"[\s\S]*"authorAgentId" = session\."agentId"[\s\S]*role" = 'assistant'[\s\S]*agentId" IS NOT NULL/,
     "a delivered reply in an agent thread belongs to that agent",
   );
@@ -417,8 +450,16 @@ test("turn states cover queued, failed and expired", () => {
   );
 });
 
+function modelBlock(name) {
+  const start = schema.indexOf(`model ${name} {`);
+  assert.notEqual(start, -1, `schema no longer declares model ${name}`);
+  const end = schema.indexOf("\n}", start);
+  assert.notEqual(end, -1, `model ${name} is not closed`);
+  return schema.slice(start, end);
+}
+
 test("the turn event log stays append-only, ordered and duplicate-proof", () => {
-  const activityBlock = schema.slice(schema.indexOf("model AgentRunActivity {"));
+  const activityBlock = modelBlock("AgentRunActivity");
   assert.match(
     activityBlock,
     /@@unique\(\[runId, idempotencyKey\]\)/,
@@ -433,5 +474,11 @@ test("the turn event log stays append-only, ordered and duplicate-proof", () => 
 
 test("history has an index that matches how it is read", () => {
   assert.match(schema, /@@index\(\[sessionId, createdAt, id\]\)/);
-  assert.match(authorMigration, /CREATE INDEX "ChatMessage_sessionId_createdAt_id_idx"/);
+  assert.match(indexMigration, /CREATE INDEX "ChatMessage_sessionId_createdAt_id_idx"/);
+  assert.doesNotMatch(
+    modelBlock("ChatMessage"),
+    /@@index\(\[sessionId\]\)/,
+    "a prefix of the composite index is a second B-tree written for no read",
+  );
+  assert.match(indexMigration, /DROP INDEX IF EXISTS "ChatMessage_sessionId_idx"/);
 });

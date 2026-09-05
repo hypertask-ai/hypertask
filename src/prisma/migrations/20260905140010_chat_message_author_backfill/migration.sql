@@ -1,0 +1,21 @@
+-- Every stored message already implies its author: a delivered human message
+-- is the session owner's, a delivered assistant message in an agent session is
+-- that agent's. Undelivered rows are machine-generated markers and stay
+-- unattributed, which is what the runtime does for new rows too.
+--
+-- Its own migration so the row lock here is a plain ROW EXCLUSIVE that readers
+-- pass through, instead of sharing the ACCESS EXCLUSIVE lock of the ADD COLUMN.
+UPDATE "ChatMessage" AS message
+SET "authorUserId" = session."userId"
+FROM "ChatSession" AS session
+WHERE message."sessionId" = session."id"
+  AND message."role" = 'human'
+  AND message."isDelivered" = true;
+
+UPDATE "ChatMessage" AS message
+SET "authorAgentId" = session."agentId"
+FROM "ChatSession" AS session
+WHERE message."sessionId" = session."id"
+  AND message."role" = 'assistant'
+  AND message."isDelivered" = true
+  AND session."agentId" IS NOT NULL;

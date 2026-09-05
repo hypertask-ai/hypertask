@@ -235,9 +235,10 @@ enum AgentRunTrigger {
 /// ACTIVE = running; STALE = started then went silent; STOPPED = a human
 /// stopped it; DONE = completed; FAILED = ended in an error; EXPIRED = never
 /// started before its deadline.
-/// ponytail: QUEUED, FAILED and EXPIRED are vocabulary only for now. The
-/// transitions belong to the chat runtime work in HTPR-6154, which is open on
-/// these same files; declaring them here twice would be the real defect.
+// ponytail: QUEUED, FAILED and EXPIRED are vocabulary only for now. The
+// transitions belong to the chat runtime work in HTPR-6154. Double-slash on
+// purpose: this note is about work in flight and must not ship into the
+// generated client's documentation.
 enum AgentRunStatus {
   QUEUED
   ACTIVE
@@ -2165,7 +2166,9 @@ model ChatMessage {
   // Who actually wrote this message. `role` says which side of the
   // conversation a message sits on; these say which person or which agent
   // produced it, which is the part a shared thread needs and role cannot
-  // carry. At most one is set, enforced by a CHECK constraint. Both stay null
+  // carry. At most one is set, enforced by the ChatMessage_author_check CHECK
+  // constraint in 20260905140000_chat_message_author; Prisma cannot declare a
+  // CHECK, so that migration is the only place it lives. Both stay null
   // for machine-generated turns (the heartbeat prompt) and for the built-in AI
   // assistant, which is not an Agent row. Deleting a user or agent keeps the
   // transcript and drops the attribution, like every other history record here.
@@ -2174,10 +2177,10 @@ model ChatMessage {
   authorAgentId String?
   authorAgent Agent? @relation("ChatMessageAuthorAgent", fields: [authorAgentId], references: [id], onDelete: SetNull)
 
-  @@index([sessionId])
   // Backs ordered, cursor-paginated history: createdAt alone ties for messages
   // stored in the same millisecond, so id breaks the tie and makes a page
-  // boundary reproducible.
+  // boundary reproducible. A plain [sessionId] index would be a prefix of this
+  // one, so it was dropped rather than maintained twice on every insert.
   @@index([sessionId, createdAt, id])
   @@index([authorUserId])
   @@index([authorAgentId])
