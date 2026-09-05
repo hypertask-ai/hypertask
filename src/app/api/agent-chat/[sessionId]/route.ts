@@ -2,6 +2,8 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
+import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
+import { isFeatureEnabled } from "@/lib/flags";
 
 export const runtime = "nodejs";
 
@@ -39,14 +41,26 @@ export async function GET(
       );
     }
 
+    const activityRowsEnabled = await isFeatureEnabled(
+      "htpr-6094-agent-activity-rows",
+      userId,
+    );
     // Last 200, oldest first: page desc from the tail, then flip.
-    const messages = (
-      await prisma.chatMessage.findMany({
+    const [messageRows, activity] = await Promise.all([
+      prisma.chatMessage.findMany({
         where: { sessionId: session.id },
         orderBy: { createdAt: "desc" },
         take: 200,
-      })
-    ).reverse();
+      }),
+      activityRowsEnabled
+        ? listAgentChatActivity({
+            agentId: session.agentId!,
+            sessionId: session.id,
+            userId,
+          })
+        : Promise.resolve([]),
+    ]);
+    const messages = messageRows.reverse();
 
     const subscription = await prisma.agentWebhookSubscription.findUnique({
       where: { agentId: session.agentId! },
@@ -65,6 +79,7 @@ export async function GET(
         content,
         createdAt,
       })),
+      activity,
       awaiting: messages[messages.length - 1]?.role === "human",
       chatEnabled,
     });

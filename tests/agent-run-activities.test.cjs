@@ -512,6 +512,24 @@ test("activity lists keep the newest 500 rows in chronological order", async () 
   assert.equal(listed[499].id, "activity-501");
 });
 
+test("task activity refreshes Agent Chat without creating a chat message", async () => {
+  const run = runRow();
+  const harness = loadService({ runs: [run] });
+
+  await harness.service.createAgentRunActivity(
+    agentPrincipal,
+    run.id,
+    activityInput({ type: "ACTION", text: "Opened PR" }),
+    "action-1",
+  );
+
+  assert.deepEqual(harness.broadcasts, [
+    [42, { originUserId: 6 }],
+    ["user-6", "agent-chat:changed", { agentId: "agent-1" }],
+  ]);
+  assert.equal(harness.db.messages.length, 0);
+});
+
 test("only the matching agent creates an idempotent task response and visible comment", async () => {
   const run = runRow({ status: "STALE" });
   const harness = loadService({ runs: [run] });

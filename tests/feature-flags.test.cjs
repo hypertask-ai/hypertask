@@ -129,6 +129,12 @@ test("shallow board switching starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6072-shallow-board-switch", 7), false);
 });
 
+test("Agent Chat activity rows start owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6094-agent-activity-rows", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6094-agent-activity-rows", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6094-agent-activity-rows", 7), false);
+});
+
 test("agent run activities start owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 6), true);
   assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 985), false);
@@ -224,6 +230,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6072-shallow-board-switch", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6094-agent-activity-rows", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },

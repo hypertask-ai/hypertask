@@ -25,7 +25,20 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import toast from "react-hot-toast";
-import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, Info, Plus, X } from "lucide-react";
+import {
+  Activity as ActivityIcon,
+  ArrowLeft,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  CircleHelp,
+  ExternalLink,
+  Info,
+  Lightbulb,
+  Plus,
+  X,
+} from "lucide-react";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
 import {
@@ -62,6 +75,13 @@ import {
   ModalHeaderComp,
   ModalInput,
 } from "@/components/Common/CommonModalComponents";
+import {
+  displayAgentChatFeed,
+  mergeAgentChatFeed,
+  type AgentChatActivity,
+  type AgentChatActivityGroup,
+  type AgentChatFilter,
+} from "@/lib/agents/chatActivityFeed";
 
 
 // While we are waiting for an external agent to answer, the only way to see
@@ -168,6 +188,129 @@ function MessageBubble({
   );
 }
 
+const ACTIVITY_ICONS: Record<
+  AgentChatActivity["type"],
+  typeof ActivityIcon
+> = {
+  thought: Lightbulb,
+  action: ActivityIcon,
+  error: CircleAlert,
+  elicitation: CircleHelp,
+};
+
+function emptyFeedText(filter: AgentChatFilter, agentName: string): string {
+  if (filter === "activity") return "No activity yet.";
+  if (filter === "chat") return "No chat messages yet.";
+  return `Send ${agentName} a message to start the conversation.`;
+}
+
+function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
+  const label = group.task
+    ? `${group.task.ticketNumber}: ${group.task.title}`
+    : "Agent activity";
+  return (
+    <div
+      className="rounded-[4px] bg-cardBackground px-3 py-2 text-meta text-text-light-gray"
+      role="group"
+      aria-label={label}
+    >
+      <div className="mb-1 flex min-w-0 items-center gap-1.5 font-medium">
+        <ActivityIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+        {group.task ? (
+          <a
+            href={group.task.url}
+            className="min-w-0 truncate text-white-black hover:text-hypertasks-purple"
+            title={label}
+          >
+            {group.task.ticketNumber} · {group.task.title}
+          </a>
+        ) : (
+          <span className="text-white-black">Agent activity</span>
+        )}
+      </div>
+      <div className="space-y-1">
+        {group.events.map((event) => {
+          const Icon = ACTIVITY_ICONS[event.type];
+          const eventContent = event.link ? (
+            <a
+              href={event.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-w-0 items-center gap-1 text-white-black hover:text-hypertasks-purple"
+            >
+              <span className="truncate">{event.text}</span>
+              <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+            </a>
+          ) : (
+            <span className="min-w-0 truncate">{event.text}</span>
+          );
+          return (
+            <div key={event.id} className="flex min-w-0 items-center gap-1.5">
+              <Icon
+                className={cn(
+                  "h-3 w-3 shrink-0",
+                  event.type === "error" && "text-red-500",
+                )}
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              {eventContent}
+              <time
+                dateTime={event.createdAt}
+                className="ml-auto shrink-0 text-[10px]"
+                title={new Date(event.createdAt).toLocaleString()}
+              >
+                {formatDateDifference(new Date(event.createdAt))}
+              </time>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FeedFilter({
+  value,
+  onChange,
+}: {
+  value: AgentChatFilter;
+  onChange: (value: AgentChatFilter) => void;
+}) {
+  const options: { value: AgentChatFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "chat", label: "Chat only" },
+    { value: "activity", label: "Activity only" },
+  ];
+  return (
+    <div
+      className="flex w-fit rounded-[4px] bg-hoverCardBackground p-0.5"
+      role="group"
+      aria-label="Filter Agent Chat feed"
+    >
+      {options.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "rounded-[3px] px-2 py-1 text-meta transition-colors",
+              active
+                ? "bg-cardBackground text-white-black shadow-sm"
+                : "text-text-light-gray hover:text-white-black",
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -233,6 +376,7 @@ const AgentChatClient = (props: IProp) => {
   const mobileAgentChatViewportEnabled = useFlag(
     "htpr-6129-mobile-agent-chat-viewport",
   );
+  const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
   const mobileAgentChatViewport = useMobileVisualViewport(
     isMbl && mobileAgentChatViewportEnabled,
   );
@@ -246,6 +390,8 @@ const AgentChatClient = (props: IProp) => {
   const [session, setSession] = useState<TAgentChatSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [messages, setMessages] = useState<TChatMessage[] | null>(null);
+  const [activity, setActivity] = useState<AgentChatActivity[]>([]);
+  const [feedFilter, setFeedFilter] = useState<AgentChatFilter>("all");
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   // Mic dictation (AudioButton), same component and editor={null} pattern as
@@ -425,6 +571,7 @@ const AgentChatClient = (props: IProp) => {
       const data = (await res.json()) as {
         success?: boolean;
         messages?: TChatMessage[];
+        activity?: AgentChatActivity[];
         error?: string;
         chatEnabled?: boolean;
       };
@@ -441,6 +588,7 @@ const AgentChatClient = (props: IProp) => {
       )
         return;
       setMessages(data.messages);
+      setActivity(Array.isArray(data.activity) ? data.activity : []);
       setMessagesError(null);
       // Same signal a failed send sets: no live webhook subscribed to
       // chat.message, so the human side of the notice must survive a reload.
@@ -504,6 +652,7 @@ const AgentChatClient = (props: IProp) => {
     setSession(null);
     setSessionLoading(false);
     setMessages(null);
+    setActivity([]);
     setMessagesError(null);
     setDeliveryNotice(false);
     setDraft("");
@@ -527,6 +676,7 @@ const AgentChatClient = (props: IProp) => {
         setSession(null);
         setSessionLoading(false);
         setMessages(null);
+        setActivity([]);
         setMessagesError(null);
         setDeliveryNotice(false);
         setDraft("");
@@ -563,6 +713,30 @@ const AgentChatClient = (props: IProp) => {
     void loadMessages(sessionName);
   }, [sessionName, loadMessages]);
 
+  const feed = useMemo(
+    () =>
+      mergeAgentChatFeed(
+        messages ?? [],
+        activityRowsEnabled ? activity : [],
+      ),
+    [messages, activity, activityRowsEnabled],
+  );
+  const visibleFeed = useMemo(
+    () => displayAgentChatFeed(feed, feedFilter),
+    [feed, feedFilter],
+  );
+  const visibleFeedRevision = useMemo(
+    () =>
+      JSON.stringify(
+        visibleFeed.map((item) =>
+          item.kind === "message"
+            ? [item.kind, item.id]
+            : [item.kind, ...item.events.map((event) => event.id)],
+        ),
+      ),
+    [visibleFeed],
+  );
+
   const scrollMessagesToBottom = useCallback(
     (behavior: ScrollBehavior = "smooth") => {
       const target = messageListRef.current;
@@ -582,25 +756,23 @@ const AgentChatClient = (props: IProp) => {
     setShowScrollToBottom(scrollTop + clientHeight < scrollHeight - 4);
   }, []);
 
-  // Jump to the bottom on a new message (own send, poll, or realtime nudge),
-  // but not on every poll: a poll can hand back the same-length or reordered
-  // array with nothing new in it, and if the user has scrolled up to read
-  // older content that must not yank them back down.
-  const prevMessagesLengthRef = useRef(0);
+  // Jump to the bottom when the feed gains or replaces an item (own send,
+  // poll, or realtime nudge), including when the capped feed stays the same
+  // length. Filter changes still need a fresh overflow measurement.
+  const prevFeedRevisionRef = useRef("");
   useLayoutEffect(() => {
-    const length = messages?.length ?? 0;
-    const grew = length > prevMessagesLengthRef.current;
-    prevMessagesLengthRef.current = length;
-    // showScrollToBottom is false when the user was already at (or near) the
-    // bottom as of the last scroll read, so it's safe to follow new content.
-    if (grew || !showScrollToBottom) scrollMessagesToBottom("smooth");
+    const changed = visibleFeedRevision !== prevFeedRevisionRef.current;
+    prevFeedRevisionRef.current = visibleFeedRevision;
+    // Only follow an update when the user was already at (or near) the bottom;
+    // background activity must not yank them away from older content.
+    if (changed && !showScrollToBottom) scrollMessagesToBottom("smooth");
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
+  }, [visibleFeedRevision, feedFilter]);
   useLayoutEffect(() => {
-    // A different chat's message count has nothing to do with this one's;
-    // don't let it suppress the next genuine-growth scroll.
-    prevMessagesLengthRef.current = 0;
+    // A different chat's feed identity has nothing to do with this one's;
+    // don't let it suppress the next genuine feed update.
+    prevFeedRevisionRef.current = "";
     scrollMessagesToBottom("auto");
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -672,11 +844,18 @@ const AgentChatClient = (props: IProp) => {
 
       const channelName = userChannel(currentUser.id);
       const channel = client.subscribe(channelName);
-      const onChatEvent = (payload: { sessionId?: string } | undefined) => {
-        const eventSessionId =
-          (payload as { sessionId?: string } | undefined)?.sessionId ?? null;
-        if (eventSessionId && eventSessionId === sessionIdRef.current) {
-          void loadMessages(eventSessionId);
+      const onChatEvent = (
+        payload: { sessionId?: string; agentId?: string } | undefined,
+      ) => {
+        const currentSessionId = sessionIdRef.current;
+        if (!currentSessionId) return;
+        if (
+          payload?.sessionId === currentSessionId ||
+          (activityRowsEnabled &&
+            payload?.agentId &&
+            payload.agentId === selectedIdRef.current)
+        ) {
+          void loadMessages(currentSessionId);
         }
       };
       channel.bind(AGENT_CHAT_EVENT, onChatEvent);
@@ -692,7 +871,7 @@ const AgentChatClient = (props: IProp) => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [currentUser.id, loadMessages]);
+  }, [currentUser.id, loadMessages, activityRowsEnabled]);
 
   const selectedAgent = useMemo(
     () => (agents ?? []).find((a) => a.id === selectedId) ?? null,
@@ -1377,6 +1556,11 @@ const AgentChatClient = (props: IProp) => {
         </div>
       ) : (
         <>
+          {activityRowsEnabled && (
+            <div className="shrink-0 border-b border-comment-description-border px-4 py-2">
+              <FeedFilter value={feedFilter} onChange={setFeedFilter} />
+            </div>
+          )}
           <div className="relative flex flex-1 flex-col overflow-hidden">
             {showScrollToBottom && (
               <ScrollToBottomButton
@@ -1394,20 +1578,23 @@ const AgentChatClient = (props: IProp) => {
             {(sessionLoading || (!messages && !messagesError)) && (
               <p className="text-meta text-text-light-gray">Loading chat…</p>
             )}
-            {messages && messages.length === 0 && (
+            {messages && visibleFeed.length === 0 && (
               <p className="text-meta text-text-light-gray">
-                Send {selectedAgent.displayName} a message to start the
-                conversation.
+                {emptyFeedText(feedFilter, selectedAgent.displayName)}
               </p>
             )}
-            {messages?.map((message) => (
-              <MessageBubble
-                key={message.id}
-                message={message}
-                projectIdForPrefix={projectIdForPrefix}
-              />
-            ))}
-            {awaiting && !deliveryNotice && (
+            {visibleFeed.map((item) =>
+              item.kind === "message" ? (
+                <MessageBubble
+                  key={item.id}
+                  message={item}
+                  projectIdForPrefix={projectIdForPrefix}
+                />
+              ) : (
+                <ActivityGroup key={item.id} group={item} />
+              ),
+            )}
+            {awaiting && feedFilter !== "activity" && !deliveryNotice && (
               <div
                 className="flex items-center gap-2 text-meta text-text-light-gray"
                 role="status"

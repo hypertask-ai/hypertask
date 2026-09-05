@@ -336,6 +336,11 @@ function broadcastActivityChange(
     void broadcastTaskComment(run.taskId, { originUserId }).catch((error) =>
       console.warn("[agent-run] task activity broadcast failed", error),
     );
+    void broadcast(userChannel(originUserId), AGENT_CHAT_EVENT, {
+      agentId: run.agentId,
+    }).catch((error) =>
+      console.warn("[agent-run] Agent Chat activity broadcast failed", error),
+    );
   } else if (run.chatSession) {
     void broadcast(userChannel(run.chatSession.userId), AGENT_CHAT_EVENT, {
       sessionId: run.chatSession.id,
