@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
+import { isAgentChatSystemMessage } from "@/lib/agentRuns/model";
+import { readAgentChatTurn } from "@/lib/agentRuns/service";
 
 export const runtime = "nodejs";
 
@@ -45,6 +47,7 @@ export async function GET(
       "htpr-6094-agent-activity-rows",
       userId,
     );
+    await readAgentChatTurn({ userId, agentId: null, displayName: "Hypertask user", source: "browser" }, session.id);
     // Last 200, oldest first: page desc from the tail, then flip.
     const [messageRows, activity] = await Promise.all([
       prisma.chatMessage.findMany({
@@ -73,11 +76,11 @@ export async function GET(
     return NextResponse.json({
       success: true,
       session: { id: session.id, agentId: session.agentId },
-      messages: messages.map(({ id, role, content, createdAt }) => ({
-        id,
-        role,
-        content,
-        createdAt,
+      messages: messages.map((message) => ({
+        id: message.id,
+        role: isAgentChatSystemMessage(message) ? "system" : message.role,
+        content: message.content,
+        createdAt: message.createdAt,
       })),
       activity,
       awaiting: messages[messages.length - 1]?.role === "human",

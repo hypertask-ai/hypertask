@@ -20,6 +20,7 @@ import { getRedis } from "@/lib/redis";
 import { sweepAgentWebhookDeliveries } from "@/lib/agentWebhooks/delivery";
 import { sweepPendingAgentTaskCreatedWebhooks } from "@/lib/agentWebhooks/taskCreatedRecovery";
 import { sweepBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outboxDelivery";
+import { sweepExpiredAgentChatTurns } from "@/lib/agentRuns/service";
 
 // Overlap guard: a Redis NX lease with a TTL just under the 1-min cron interval,
 // so an overlapping tick no-ops instead of double-processing the findMany-then-act
@@ -298,6 +299,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       summary.agentWebhooks = await sweepAgentWebhookDeliveries();
     } catch (error) {
       console.log("🚀 ~ sweep ~ agentWebhooks error:", error);
+    }
+
+    try {
+      await sweepExpiredAgentChatTurns();
+    } catch (error) {
+      console.log("🚀 ~ sweep ~ agentChatTurns error:", error);
     }
 
     try {
