@@ -6,9 +6,11 @@
 -- ADD COLUMN takes an ACCESS EXCLUSIVE lock on ChatMessage that Postgres holds
 -- to the end of the transaction, so bundling the row rewrite and the index
 -- builds in here would block every chat read and write for the whole deploy.
--- The constraints below are NOT VALID for the same reason: adding a validated
--- foreign key scans ChatMessage and takes SHARE ROW EXCLUSIVE on User and
--- Agent, blocking writes to both. Validation happens in its own migration.
+-- The constraints below are NOT VALID because a validated foreign key scans
+-- all of ChatMessage under the ADD COLUMN lock. NOT VALID skips that scan; it
+-- does not skip the brief SHARE ROW EXCLUSIVE these statements take on User
+-- and Agent, which is unavoidable when adding a reference to them. Validation
+-- happens in its own migration.
 ALTER TABLE "ChatMessage" ADD COLUMN "authorUserId" INTEGER;
 ALTER TABLE "ChatMessage" ADD COLUMN "authorAgentId" TEXT;
 

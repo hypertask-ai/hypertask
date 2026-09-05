@@ -403,7 +403,12 @@ test("the column, the backfill and the indexes hold separate locks", () => {
     statements(backfillMigration),
     /^\s*(ALTER TABLE|CREATE INDEX)\b/im,
   );
-  assert.doesNotMatch(statements(indexMigration), /^\s*(ALTER TABLE|UPDATE|DROP)\b/im);
+  assert.doesNotMatch(statements(indexMigration), /^\s*(ALTER TABLE|UPDATE)\b/im);
+  assert.doesNotMatch(
+    statements(indexMigration),
+    /^\s*DROP INDEX(?! CONCURRENTLY)/im,
+    "a blocking drop does not belong in the concurrent build migration",
+  );
 });
 
 test("constraints are added unvalidated and validated on their own", () => {
@@ -496,14 +501,32 @@ test("history has an index that matches how it is read", () => {
   assert.match(schema, /@@index\(\[sessionId, createdAt, id\]\)/);
   assert.match(
     indexMigration,
-    /CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_sessionId_createdAt_id_idx"/,
+    /CREATE INDEX CONCURRENTLY "ChatMessage_sessionId_createdAt_id_idx"/,
     "a plain build holds a SHARE lock and blocks chat inserts for its duration",
   );
+  for (const column of ["authorUserId", "authorAgentId"]) {
+    assert.match(
+      indexMigration,
+      new RegExp(`CREATE INDEX CONCURRENTLY "ChatMessage_${column}_idx"`),
+      "an unindexed referencing column makes every parent delete scan ChatMessage",
+    );
+  }
   assert.doesNotMatch(
     indexMigration,
-    /"ChatMessage_author(UserId|AgentId)_idx"/,
-    "no query reads by author yet, so an author index is a write cost for nothing",
+    /CREATE INDEX CONCURRENTLY IF NOT EXISTS/,
+    "IF NOT EXISTS would skip rebuilding an index left INVALID by an interrupted build",
   );
+  for (const index of [
+    "ChatMessage_sessionId_createdAt_id_idx",
+    "ChatMessage_authorUserId_idx",
+    "ChatMessage_authorAgentId_idx",
+  ]) {
+    assert.match(
+      indexMigration,
+      new RegExp(`DROP INDEX CONCURRENTLY IF EXISTS "${index}";\\nCREATE INDEX`),
+      `${index} must be dropped before it is rebuilt, so a retry is clean`,
+    );
+  }
   assert.doesNotMatch(
     modelBlock("ChatMessage"),
     /@@index\(\[sessionId\]\)/,

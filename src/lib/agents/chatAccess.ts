@@ -50,8 +50,10 @@ export function userAgentChatSessionWhere(
     userId,
     agentId: { not: null },
     agent: {
-      revokedAt: null,
+      // Spread first: a revoked agent must stay unreachable even if
+      // accessibleAgentWhere ever grows a revokedAt key of its own.
       ...accessibleAgentWhere(userId),
+      revokedAt: null,
     },
   };
 }

@@ -28,8 +28,8 @@ function userSessionRule() {
 test("message sends require the linked agent to remain active", () => {
   assert.match(
     userSessionRule(),
-    /agent:\s*\{(?=[^}]*\brevokedAt:\s*null\b)(?=[^}]*\.\.\.accessibleAgentWhere\(userId\))/,
-    "an existing session must not remain writable after its agent is revoked",
+    /agent:\s*\{[\s\S]*\.\.\.accessibleAgentWhere\(userId\),[\s\S]*revokedAt:\s*null,/,
+    "revoked must come after the spread, or a key collision could silently unrevoke",
   );
 });
 
