@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
+const { createJiti } = require("jiti");
 
 process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
 
@@ -13,6 +13,91 @@ const jiti = require("jiti")(path.join(root, "tests/agent-chat-brief-entry.cjs")
 const { buildAgentChatBrief } = jiti(
   path.join(root, "src/lib/agents/chatBrief.ts"),
 );
+
+let routeEntry = 0;
+function stubModule(relativePath, exports) {
+  const filename = path.join(root, relativePath);
+  require.cache[filename] = {
+    id: filename,
+    filename,
+    loaded: true,
+    exports,
+  };
+}
+
+function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
+  const deliveries = [];
+  let briefCalls = 0;
+  const prisma = {
+    chatSession: {
+      findFirst: async () => ({
+        id: "session-1",
+        agentId: "agent-dev-2",
+        user: { displayName: "Valentin" },
+        agent: { runtimeType: "EXTERNAL" },
+      }),
+    },
+    $transaction: async (operation) =>
+      operation({
+        chatMessage: {
+          create: async ({ data }) => ({
+            id: "message-1",
+            ...data,
+            createdAt: at("2026-09-05T12:00:00Z"),
+          }),
+        },
+        chatSession: { update: async () => ({}) },
+      }),
+  };
+
+  stubModule("src/lib/prisma.ts", { default: prisma });
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => ({ userId: 6 }),
+  });
+  stubModule("src/lib/agentWebhooks/outbox.ts", {
+    persistAgentRunTriggerWebhooks: async (_tx, input) => {
+      deliveries.push(input);
+      return [];
+    },
+    publishAgentWebhookDeliveries: async () => {},
+  });
+  stubModule("src/lib/realtime/server.ts", {
+    AGENT_CHAT_EVENT: "agent-chat",
+    broadcast: async () => {},
+    userChannel: (userId) => `user-${userId}`,
+  });
+  stubModule("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
+  stubModule("src/lib/flags.ts", {
+    AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
+    isFeatureEnabled: async () => flagEnabled,
+  });
+  stubModule("src/lib/agents/chatBrief.ts", {
+    buildAgentChatBrief: async (input) => {
+      briefCalls += 1;
+      if (briefError) throw briefError;
+      assert.deepEqual(input, { userId: 6, agentId: "agent-dev-2" });
+      return brief;
+    },
+  });
+
+  const routePath = path.join(
+    root,
+    "src/app/api/agent-chat/[sessionId]/messages/route.ts",
+  );
+  delete require.cache[routePath];
+  const routeJiti = createJiti(
+    path.join(root, `tests/agent-chat-brief-route-${++routeEntry}.cjs`),
+    {
+      alias: { "@": path.join(root, "src") },
+      interopDefault: true,
+    },
+  );
+  return {
+    ...routeJiti(routePath),
+    deliveries,
+    briefCalls: () => briefCalls,
+  };
+}
 
 const at = (value) => new Date(value);
 const sections = [
@@ -210,8 +295,8 @@ test("brief names current and recent work, open PRs, comments, links, assignees,
   assertAccessScoped(calls.prs.where.task);
 });
 
-test("brief keeps the required history inside the total payload cap", async () => {
-  const long = "x".repeat(1000);
+test("brief keeps the required history inside the UTF-8 payload cap", async () => {
+  const long = "🧠".repeat(1000);
   const current = task({
     id: 6155,
     ticketNumber: "HTPR-6155",
@@ -268,15 +353,57 @@ test("brief keeps the required history inside the total payload cap", async () =
   assert.equal(brief.recentTickets.length, 10);
   assert.equal(brief.recentComments.length, 5);
   assert.ok(brief.openPullRequests.length < 10);
-  assert.ok(JSON.stringify(brief).length <= 12000);
+  assert.ok(Buffer.byteLength(JSON.stringify(brief), "utf8") <= 12000);
 });
 
-test("message send gates the brief and falls back to the legacy payload on enrichment errors", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/agent-chat/[sessionId]/messages/route.ts"),
-    "utf8",
+async function sendMessage(route) {
+  return route.POST(
+    {
+      headers: new Headers(),
+      json: async () => ({ text: "What are you working on?" }),
+    },
+    { params: Promise.resolve({ sessionId: "session-1" }) },
   );
-  assert.match(route, /isFeatureEnabled\(AGENT_CHAT_BRIEF_FLAG, userId\)/);
-  assert.match(route, /try\s*\{[\s\S]*buildAgentChatBrief\([\s\S]*\}\s*catch/);
-  assert.match(route, /\.\.\.\(agentBrief \? \{ agentBrief \} : \{\}\)/);
+}
+
+test("message send includes the brief only when its server flag is enabled", async () => {
+  const brief = {
+    currentTicket: { ticketNumber: "HTPR-6155" },
+    recentTickets: [],
+    openPullRequests: [],
+    recentComments: [],
+  };
+  const enabled = loadMessageRoute({ flagEnabled: true, brief });
+  assert.equal((await sendMessage(enabled)).status, 200);
+  assert.equal(enabled.briefCalls(), 1);
+  assert.deepEqual(enabled.deliveries[0].agentBrief, brief);
+
+  const disabled = loadMessageRoute({ flagEnabled: false, brief });
+  assert.equal((await sendMessage(disabled)).status, 200);
+  assert.equal(disabled.briefCalls(), 0);
+  assert.equal("agentBrief" in disabled.deliveries[0], false);
+});
+
+test("message send keeps the exact legacy payload when enrichment fails", async () => {
+  const route = loadMessageRoute({
+    flagEnabled: true,
+    brief: null,
+    briefError: new Error("brief unavailable"),
+  });
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    assert.equal((await sendMessage(route)).status, 200);
+  } finally {
+    console.error = originalError;
+  }
+
+  assert.equal(route.briefCalls(), 1);
+  assert.equal("agentBrief" in route.deliveries[0], false);
+  assert.deepEqual(route.deliveries[0].chat, {
+    sessionId: "session-1",
+    messageId: "message-1",
+    text: "What are you working on?",
+    userName: "Valentin",
+  });
 });

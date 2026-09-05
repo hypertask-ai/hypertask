@@ -12,7 +12,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 const RECENT_TICKET_LIMIT = 10;
 const OPEN_PULL_REQUEST_LIMIT = 10;
 const RECENT_COMMENT_LIMIT = 5;
-const MAX_BRIEF_LENGTH = 12000;
+const MAX_BRIEF_BYTES = 12000;
 
 const TASK_TITLE_LIMIT = 120;
 const SECTION_LIMIT = 50;
@@ -54,8 +54,14 @@ type BriefDatabase = Pick<
   "assignees" | "comment" | "taskPullRequest"
 >;
 
-const clipped = (value: string | null | undefined, limit: number): string =>
-  (value ?? "").trim().slice(0, limit);
+const clipped = (value: string | null | undefined, limit: number): string => {
+  let result = "";
+  for (const character of (value ?? "").trim()) {
+    if (Buffer.byteLength(result + character, "utf8") > limit) break;
+    result += character;
+  }
+  return result;
+};
 
 const plainComment = (commentText: string, html: string): string => {
   const text = commentText.trim() || html.replace(/<[^>]*>/g, " ");
@@ -113,6 +119,7 @@ export async function buildAgentChatBrief({
   agentId: string;
   db?: BriefDatabase;
 }): Promise<AgentWebhookChatBrief> {
+  // The agent board protocol defines current work as the exact In Progress lane.
   const currentAssignment = await db.assignees.findFirst({
     where: {
       agentId,
@@ -205,11 +212,70 @@ export async function buildAgentChatBrief({
     })),
   };
 
+  const briefBytes = () => Buffer.byteLength(JSON.stringify(brief), "utf8");
   while (
     brief.openPullRequests.length > 0 &&
-    JSON.stringify(brief).length > MAX_BRIEF_LENGTH
+    briefBytes() > MAX_BRIEF_BYTES
   ) {
     brief.openPullRequests.pop();
+  }
+
+  const mutableText: Array<{ value: string; set: (value: string) => void }> = [];
+  for (const comment of brief.recentComments) {
+    mutableText.push({
+      value: comment.text,
+      set: (value) => {
+        comment.text = value;
+      },
+    });
+    mutableText.push({
+      value: comment.ticket.title,
+      set: (value) => {
+        comment.ticket.title = value;
+      },
+    });
+  }
+  for (const ticket of [
+    ...(brief.currentTicket ? [brief.currentTicket] : []),
+    ...brief.recentTickets,
+  ]) {
+    mutableText.push(
+      {
+        value: ticket.title,
+        set: (value) => {
+          ticket.title = value;
+        },
+      },
+      {
+        value: ticket.section,
+        set: (value) => {
+          ticket.section = value;
+        },
+      },
+      ...ticket.assignees.map((name, index) => ({
+        value: name,
+        set: (value: string) => {
+          ticket.assignees[index] = value;
+        },
+      })),
+    );
+  }
+  while (briefBytes() > MAX_BRIEF_BYTES) {
+    const candidate = mutableText
+      .filter(({ value }) => value.length > 0)
+      .sort(
+        (left, right) =>
+          Buffer.byteLength(right.value, "utf8") -
+          Buffer.byteLength(left.value, "utf8"),
+      )[0];
+    if (!candidate) {
+      throw new Error("Agent Chat brief exceeds its byte limit");
+    }
+    candidate.value = clipped(
+      candidate.value,
+      Math.floor(Buffer.byteLength(candidate.value, "utf8") / 2),
+    );
+    candidate.set(candidate.value);
   }
 
   return brief;
