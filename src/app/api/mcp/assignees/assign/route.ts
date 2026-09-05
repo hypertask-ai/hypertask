@@ -14,6 +14,7 @@ import { IUser } from "@/models/model";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { ACTIVE_TASK_MUTATION_STATUS } from "@/lib/mcp/tasks/activeTaskMutation";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import { withAgentMutationLeaseAdoption } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
 export interface McpAssigneeResponseItem {
   userId: number;
@@ -268,13 +269,19 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      const response = await assigneesAssign(
-        currentUser,
-        currentUser.id,
-        task.id,
-        ctx.agentId,
-        ctx.agentId,
-        { intent: assignIntent }
+      // Same request-boundary adoption as tasks/update and tasks/move: a caller
+      // that never claimed a lease gets one for this request's first fenced write.
+      const response = await withAgentMutationLeaseAdoption(
+        { agentId: ctx.agentId, userId: currentUser.id },
+        () =>
+          assigneesAssign(
+            currentUser,
+            currentUser.id,
+            task.id,
+            ctx.agentId,
+            ctx.agentId,
+            { intent: assignIntent }
+          )
       );
       if (response.status !== 200) {
         return NextResponse.json(
@@ -300,13 +307,17 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
-      const response = await assigneesAssign(
-        currentUser,
-        currentUser.id,
-        task.id,
-        targetAgentId,
-        ctx.agentId ?? undefined,
-        { intent: assignIntent }
+      const response = await withAgentMutationLeaseAdoption(
+        { agentId: ctx.agentId, userId: currentUser.id },
+        () =>
+          assigneesAssign(
+            currentUser,
+            currentUser.id,
+            task.id,
+            targetAgentId,
+            ctx.agentId ?? undefined,
+            { intent: assignIntent }
+          )
       );
       if (response.status !== 200) {
         return NextResponse.json(
@@ -365,9 +376,13 @@ export async function POST(request: NextRequest) {
 
       for (const uid of userIdsToProcess) {
         //Right now we are only assigning users from agents
-        const response = await assigneesAssign(currentUser, uid, task.id, undefined, ctx.agentId ?? undefined, {
-          intent: assignIntent,
-        });
+        const response = await withAgentMutationLeaseAdoption(
+          { agentId: ctx.agentId, userId: currentUser.id },
+          () =>
+            assigneesAssign(currentUser, uid, task.id, undefined, ctx.agentId ?? undefined, {
+              intent: assignIntent,
+            })
+        );
         if (response.status !== 200) {
           return NextResponse.json(
             {
