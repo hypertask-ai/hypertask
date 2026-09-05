@@ -245,8 +245,6 @@ export async function stopAgentRun(
   return result?.run ?? null;
 }
 
-const chatRunSummary = (run: Pick<AgentRun, "id">) => ({ id: run.id });
-
 async function reconcileAgentChatTurn(
   principal: AgentRunPrincipal,
   sessionId: string,
@@ -281,12 +279,7 @@ async function reconcileAgentChatTurn(
       : null;
     const expired = now.getTime() - message.createdAt.getTime() >= AGENT_RUN_STALE_AFTER_MS;
     if (!stop && !expired) {
-      return {
-        awaiting: true,
-        run: run ? chatRunSummary(run) : null,
-        changed: false,
-        deliveryId: null,
-      };
+      return { awaiting: true, run: run ? { id: run.id } : null, changed: false, deliveryId: null };
     }
     if (stop && !run) return null;
 
@@ -330,18 +323,11 @@ async function reconcileAgentChatTurn(
       });
     }
     await tx.chatSession.update({ where: { id: sessionId }, data: { updatedAt: now } });
-    return {
-      awaiting: false,
-      run: run ? chatRunSummary(run) : null,
-      changed: true,
-      deliveryId,
-    };
+    return { awaiting: false, run: run ? { id: run.id } : null, changed: true, deliveryId };
   });
 
   if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
-  if (result?.changed) {
-    void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(console.warn);
-  }
+  if (result?.changed) void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(console.warn);
   return result;
 }
 

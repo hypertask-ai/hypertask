@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
-import { agentChatSystemMessageKind } from '@/lib/agentRuns/model'
+import { AGENT_CHAT_STOPPED_MESSAGE, AGENT_CHAT_TIMEOUT_MESSAGE, agentChatSystemMessageKind } from '@/lib/agentRuns/model'
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from '@/lib/realtime/server'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
@@ -68,11 +68,14 @@ export async function GET(
     // Last 50, oldest first: page desc from the tail, then flip.
     const messages = (
       await prisma.chatMessage.findMany({
-        where: { sessionId: session.id },
+        where: {
+          sessionId: session.id,
+          NOT: { role: 'assistant', isDelivered: false, content: { in: [AGENT_CHAT_TIMEOUT_MESSAGE, AGENT_CHAT_STOPPED_MESSAGE] } },
+        },
         orderBy: { createdAt: 'desc' },
         take: TRANSCRIPT_LIMIT,
       })
-    ).filter((message) => !agentChatSystemMessageKind(message)).reverse()
+    ).reverse()
 
     const normalMessages = messages.map(({ id, role, content, createdAt }) => ({
       id,

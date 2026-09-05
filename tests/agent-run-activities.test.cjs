@@ -260,7 +260,15 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
     },
     chatMessage: {
       findFirst: async () => messages.at(-1) ?? { id: "human-1", role: "human" },
+      createMany: async ({ data }) => {
+        const created = data.filter((row) => !messages.some((item) => item.replyToMessageId === row.replyToMessageId));
+        messages.push(...created.map((row) => ({ id: `message-${messages.length + 1}`, ...row })));
+        return { count: created.length };
+      },
       create: async ({ data }) => {
+        if (data.replyToMessageId && messages.some((item) => item.replyToMessageId === data.replyToMessageId)) {
+          throw Object.assign(new Error("Unique constraint"), { code: "P2002" });
+        }
         const message = {
           id: `message-${messages.length + 1}`,
           createdAt: new Date(),
@@ -271,6 +279,11 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
       },
     },
     chatSession: {
+      findFirst: async ({ where }) => where.userId !== 6 ? null : ({
+        id: where.id,
+        messages: messages.filter((message) => message.sessionId === where.id).slice(-1).reverse(),
+        agentRuns: runs.filter((run) => run.chatSessionId === where.id && ["ACTIVE", "STALE"].includes(run.status)).slice(-1),
+      }),
       update: async (input) => {
         sessionUpdates.push(input);
         return input;
@@ -496,6 +509,33 @@ function loadService({
     flagChecks,
   };
 }
+
+function loadChatTurn() {
+  const createdAt = new Date("2026-09-04T10:00:00.000Z");
+  const run = runRow({
+    taskId: null, task: null, trigger: "CHAT", chatSessionId: "chat-1",
+    chatSession: { id: "chat-1", agentId: "agent-1", userId: 6 }, lastActivityAt: createdAt,
+  });
+  const harness = loadService({ runs: [run] });
+  harness.db.messages.push({ id: "human-1", sessionId: "chat-1", role: "human", content: "hello", isDelivered: true, createdAt });
+  return { ...harness, run };
+}
+
+test("chat Stop and timeout persist one outcome against late replies", async () => {
+  const stopped = loadChatTurn();
+  assert.equal(await stopped.service.stopAgentChatTurn({ ...browserPrincipal, userId: 7 }, "chat-1"), null);
+  assert.ok(await stopped.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  assert.equal(stopped.run.status, "STOPPED");
+  assert.equal(stopped.db.messages.at(-1).content, model.AGENT_CHAT_STOPPED_MESSAGE);
+
+  const racing = loadChatTurn();
+  const [, response] = await Promise.allSettled([
+    racing.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z")), racing.service.createAgentRunActivity(agentPrincipal, racing.run.id, activityInput({ type: "RESPONSE", text: "late" }), null),
+  ]);
+  assert.equal(response.status, "rejected");
+  assert.equal(racing.db.messages.filter((message) => message.replyToMessageId === "human-1").length, 1);
+  assert.equal(racing.db.messages.at(-1).content, model.AGENT_CHAT_TIMEOUT_MESSAGE);
+});
 
 test("activity behavior requires the parent and ticket feature flags", async () => {
   const activityFlagDisabled = loadService({

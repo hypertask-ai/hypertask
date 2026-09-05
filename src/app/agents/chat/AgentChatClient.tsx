@@ -65,6 +65,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useFlag } from "@/hooks/useFlag";
+import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
@@ -410,9 +411,7 @@ const AgentChatClient = (props: IProp) => {
     "htpr-6129-mobile-agent-chat-viewport",
   );
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
-  const chatStopAndTimeoutEnabled = useFlag(
-    "htpr-6154-chat-stop-and-timeout",
-  );
+  const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const mobileAgentChatViewport = useMobileVisualViewport(
     isMbl && mobileAgentChatViewportEnabled,
   );
@@ -1103,20 +1102,22 @@ const AgentChatClient = (props: IProp) => {
 
   const handleStop = async () => {
     if (!session || !stoppable || stopping) return;
+    const targetSessionId = session.id;
     setStopping(true);
     try {
-      const res = await fetch(`/api/agent-chat/${session.id}/stop`, { method: "POST" });
+      const res = await fetch(`/api/agent-chat/${targetSessionId}/stop`, { method: "POST" });
       const data = (await res.json()) as { success?: boolean; error?: string };
-      if (!res.ok || !data.success) {
-        throw new Error(data.error ?? "Failed to stop agent");
-      }
+      if (!res.ok || !data.success) throw new Error(data.error ?? "Failed to stop agent");
+      if (sessionIdRef.current !== targetSessionId) return;
       setAwaiting(false);
       setStoppable(false);
-      void loadMessages(session.id);
+      void loadMessages(targetSessionId);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to stop agent");
+      if (sessionIdRef.current === targetSessionId) {
+        toast.error(error instanceof Error ? error.message : "Failed to stop agent");
+      }
     } finally {
-      setStopping(false);
+      if (sessionIdRef.current === targetSessionId) setStopping(false);
     }
   };
 

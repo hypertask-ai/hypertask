@@ -218,18 +218,9 @@ test("the Agent Chat work brief starts owner-only", async () => {
 });
 
 test("Agent Chat Stop and timeout start owner-only", async () => {
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6154-chat-stop-and-timeout", 6),
-    true,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6154-chat-stop-and-timeout", 985),
-    false,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6154-chat-stop-and-timeout", 7),
-    false,
-  );
+  for (const [userId, expected] of [[6, true], [985, false], [7, false]]) {
+    assert.equal(await flags.isFeatureEnabled("htpr-6154-chat-stop-and-timeout", userId), expected);
+  }
 });
 
 test("per-user flag responses distinguish QA from normal members", async () => {
