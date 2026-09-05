@@ -951,23 +951,28 @@ const AgentChatClient = (props: IProp) => {
     if (!session) return;
     const sinceAt =
       awaitingSince?.sessionId === session.id ? awaitingSince.at : Date.now();
-    const replyPollRemaining =
-      awaiting && !deliveryNotice
-        ? sinceAt + AWAITING_POLL_MAX_MS - Date.now()
-        : 0;
-    if (!activityRowsEnabled && replyPollRemaining <= 0) return;
+    const replyPollDeadline = sinceAt + AWAITING_POLL_MAX_MS;
 
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const delay = replyPollRemaining > 0 ? AWAITING_POLL_MS : ACTIVITY_POLL_MS;
-    const poll = async () => {
-      await loadMessages(session.id);
-      const replyOnlyExpired =
-        !activityRowsEnabled &&
-        Date.now() >= sinceAt + AWAITING_POLL_MAX_MS;
-      if (!cancelled && !replyOnlyExpired) timer = setTimeout(poll, delay);
+    const schedule = () => {
+      const replyPollActive =
+        awaiting && !deliveryNotice && Date.now() < replyPollDeadline;
+      const delay = replyPollActive
+        ? AWAITING_POLL_MS
+        : activityRowsEnabled
+          ? ACTIVITY_POLL_MS
+          : null;
+      if (!cancelled && delay) timer = setTimeout(poll, delay);
     };
-    timer = setTimeout(poll, delay);
+    const poll = async () => {
+      const replyPollActive =
+        awaiting && !deliveryNotice && Date.now() < replyPollDeadline;
+      if (!replyPollActive && !activityRowsEnabled) return;
+      await loadMessages(session.id);
+      schedule();
+    };
+    schedule();
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);

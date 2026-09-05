@@ -81,6 +81,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function prefixedCommentWhere(prefixes: string[]): Prisma.CommentWhereInput[] {
+  return prefixes.flatMap((prefix) =>
+    (["text", "commentText"] as const).flatMap((field) => [
+      { [field]: { startsWith: prefix } },
+      { [field]: { startsWith: `<p>${prefix}` } },
+      { [field]: { startsWith: `<p><strong>${prefix}` } },
+    ]),
+  );
+}
+
 function normalizedTimelineText(text: string, commentText: string): string {
   const source = commentText.trim() || text;
   return source
@@ -310,6 +320,14 @@ export async function listAgentChatActivity(
       { task: visibleTask },
     ],
   } satisfies Prisma.AgentRunWhereInput;
+  const selectedCommentWhere = prefixedCommentWhere([
+    "Model:",
+    "Switched:",
+    "Live:",
+    "AI review concerns",
+    "🚨 Agent escalation — needs a human.",
+  ]);
+  const qaCommentWhere = prefixedCommentWhere(["PASS:", "FAIL:"]);
   const timelineTaskSelect = {
     ...taskSelect,
     agentRuns: {
@@ -376,7 +394,8 @@ export async function listAgentChatActivity(
         OR: [
           { activity: { path: ["type"], equals: "TaskPullRequest" } },
           { activity: { path: ["type"], equals: "TaskMove" } },
-          { agentId: { not: null } },
+          { agentId: input.agentId, OR: selectedCommentWhere },
+          { agentId: { not: null }, OR: qaCommentWhere },
         ],
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],

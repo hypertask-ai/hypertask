@@ -219,7 +219,7 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
 
 test("activity-enabled chats poll uncached without overlapping requests", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("const replyPollRemaining"),
+    chatClientSource.indexOf("const replyPollDeadline"),
     chatClientSource.indexOf("// Realtime nudge"),
   );
 
@@ -231,5 +231,6 @@ test("activity-enabled chats poll uncached without overlapping requests", () => 
   assert.match(polling, /await loadMessages\(session\.id\)/);
   assert.match(polling, /timer = setTimeout\(poll, delay\)/);
   assert.doesNotMatch(polling, /setInterval/);
-  assert.match(polling, /!activityRowsEnabled && replyPollRemaining <= 0/);
+  assert.match(polling, /if \(!replyPollActive && !activityRowsEnabled\) return;/);
+  assert.match(polling, /Date\.now\(\) < replyPollDeadline/);
 });
