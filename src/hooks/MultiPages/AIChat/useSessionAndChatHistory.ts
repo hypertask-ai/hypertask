@@ -60,6 +60,7 @@ export const useSessionAndChatHistory = (
   const {
     data: sessionsData,
     isLoading: isLoadingSessions,
+    isFetching: isFetchingSessions,
     isError: isErrorSessions,
     isSuccess: isSuccessSessions,
   } = useQuery({
@@ -551,10 +552,13 @@ export const useSessionAndChatHistory = (
   // decide "show the welcome screen" from this, so tell those two apart
   // here once: a pending selection should keep showing the message area
   // (empty, briefly) rather than flash the welcome screen over it.
-  // A failed fetch is not "briefly" pending - it will never catch up on its
-  // own, so treat it like the empty case instead of blanking the pane forever.
+  // "Pending" must be bounded to an in-flight fetch, or a session that's
+  // genuinely gone (deleted server-side, fetch failed) would blank the
+  // message pane forever instead of falling through to the welcome screen.
   const isSessionPending =
-    !isErrorSessions && activeSession !== undefined && currentSession === undefined;
+    (isLoadingSessions || isFetchingSessions) &&
+    activeSession !== undefined &&
+    currentSession === undefined;
   const showWelcomeScreen = !isSessionPending && (currentSession?.messages.length ?? 0) === 0;
 
   return {
