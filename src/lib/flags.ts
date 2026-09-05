@@ -20,6 +20,7 @@ export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
+export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -111,6 +112,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: FLAG_TICKET_TITLE_FLAG,
     description: "Shows the linked ticket's title as the primary label on the flags admin page.",
   },
+  {
+    key: FLAG_SORT_FILTER_FLAG,
+    description:
+      "Sorts and clusters the feature flags page by release date, with an audience filter.",
+  },
 ] as const satisfies readonly { key: string; description: string }[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
@@ -128,6 +134,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   AGENT_CHAT_BRIEF_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
   FLAG_TICKET_TITLE_FLAG,
+  FLAG_SORT_FILTER_FLAG,
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
