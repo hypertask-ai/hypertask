@@ -422,18 +422,16 @@ export function useAiChat() {
     // project-wide board session map below would let a session another
     // ticket in the same project last sent from win here too (HTPR-6100).
     if (taskId !== undefined) {
+      const matchesTask = (session: IChatSession) =>
+        session.taskId === taskId && session.userId === userId;
       const deadline = Date.now() + timeoutMs;
       while (
-        !sessionsRef.current.some(
-          (session) => session.taskId === taskId && session.userId === userId
-        ) &&
+        !sessionsRef.current.some(matchesTask) &&
         Date.now() < deadline
       ) {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
-      return sessionsRef.current.find(
-        (session) => session.taskId === taskId && session.userId === userId
-      );
+      return sessionsRef.current.find(matchesTask);
     }
 
     const needsBoardSession =
@@ -1654,7 +1652,9 @@ export function useAiChat() {
   const toggleRenameChatModal = () => setShowRenameChatModal((prev) => !prev);
 
   const renameChat = (newTitle: string) => {
-    updateSessionTitle(currentSession.id, newTitle);
+    const sessionId = currentSession?.id ?? activeSession;
+    if (!sessionId) return;
+    updateSessionTitle(sessionId, newTitle);
     setShowRenameChatModal(false);
   };
 
