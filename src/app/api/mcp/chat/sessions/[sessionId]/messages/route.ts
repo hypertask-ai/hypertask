@@ -214,12 +214,7 @@ export async function POST(
           { status: 409 }
         )
       }
-      if (isAgentChatSystemMessage(existing)) {
-        return NextResponse.json(
-          { success: false, error: 'This chat turn is no longer active' },
-          { status: 409 }
-        )
-      }
+      if (isAgentChatSystemMessage(existing)) return NextResponse.json({ success: false, error: 'This chat turn is no longer active' }, { status: 409 })
       return NextResponse.json({
         success: true,
         message: serialize(existing),
@@ -230,6 +225,9 @@ export async function POST(
     let message
     try {
       message = await prisma.$transaction(async (tx) => {
+        await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
+        const latest = await tx.chatMessage.findFirst({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { id: true, role: true } })
+        if (latest?.id !== replyToMessageId || latest.role !== 'human') throw new Error('This chat turn is no longer active')
         const created = await tx.chatMessage.create({
           data: {
             sessionId: session.id,
@@ -239,25 +237,17 @@ export async function POST(
             replyToMessageId,
           },
         })
-        await tx.chatSession.update({
-          where: { id: session.id },
-          data: { updatedAt: new Date() },
-        })
         return created
       })
     } catch (error: any) {
+      if (error?.message === 'This chat turn is no longer active') return NextResponse.json({ success: false, error: error.message }, { status: 409 })
       // Lost a race against a concurrent reply with the same idempotency key.
       if (error?.code !== 'P2002' || !replyToMessageId) throw error
       const existing = await prisma.chatMessage.findUnique({
         where: { replyToMessageId },
       })
       if (!existing || existing.sessionId !== session.id) throw error
-      if (isAgentChatSystemMessage(existing)) {
-        return NextResponse.json(
-          { success: false, error: 'This chat turn is no longer active' },
-          { status: 409 }
-        )
-      }
+      if (isAgentChatSystemMessage(existing)) return NextResponse.json({ success: false, error: 'This chat turn is no longer active' }, { status: 409 })
       return NextResponse.json({
         success: true,
         message: serialize(existing),

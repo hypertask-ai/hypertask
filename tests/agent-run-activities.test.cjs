@@ -292,7 +292,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
     },
   };
   db.$transaction = async (callback) => callback(db);
-  db.$queryRaw = async (_query, staleBefore) => [...new Set(messages.filter((message) => message.role === "human" && message.createdAt <= staleBefore).map((message) => message.sessionId))].map((id) => ({ id, userId: 6 }));
+  db.$queryRaw = async (query, staleBefore) => query.join("").includes("FOR UPDATE") ? [{ id: staleBefore }] : [...new Set(messages.filter((message) => message.role === "human" && message.createdAt <= staleBefore).map((message) => message.sessionId))].map((id) => ({ id, userId: 6 }));
   return db;
 }
 

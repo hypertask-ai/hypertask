@@ -12,7 +12,7 @@ import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
-import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import {
@@ -254,6 +254,8 @@ async function reconcileAgentChatTurn(
 ) {
   if (principal.source !== "browser" || !(await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, principal.userId))) return null;
   const result = await prisma.$transaction(async (tx) => {
+    const [lockedSession] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "ChatSession" WHERE id = ${sessionId} AND "userId" = ${principal.userId} AND "agentId" IS NOT NULL FOR UPDATE`;
+    if (!lockedSession) return null;
     const session = await tx.chatSession.findFirst({
       where: { id: sessionId, userId: principal.userId, agentId: { not: null } },
       select: {
@@ -270,12 +272,12 @@ async function reconcileAgentChatTurn(
     });
     if (!session) return null;
     const message = session.messages[0];
-    if (message?.role !== "human") return stop ? null : { awaiting: false, messageId: message?.id ?? null };
+    if (message?.role !== "human") return stop ? null : { awaiting: false };
     const [candidateRun] = session.agentRuns;
     const run = candidateRun && candidateRun.lastActivityAt >= message.createdAt ? candidateRun : null;
     const expired = now.getTime() - message.createdAt.getTime() >= AGENT_RUN_STALE_AFTER_MS;
     if (!stop && (!expired || run?.activities.some((activity) => activity.createdAt >= message.createdAt))) {
-      return { awaiting: true, messageId: message.id, run: run ? { id: run.id } : null };
+      return { awaiting: true, run: run ? { id: run.id } : null };
     }
     const marker = await tx.chatMessage.createMany({
       data: [{
@@ -288,7 +290,7 @@ async function reconcileAgentChatTurn(
       }],
       skipDuplicates: true,
     });
-    if (marker.count === 0) return stop ? null : { awaiting: false, messageId: message.id };
+    if (marker.count === 0) return stop ? null : { awaiting: false };
 
     let deliveryId: string | null = null;
     if (run) {
@@ -316,7 +318,7 @@ async function reconcileAgentChatTurn(
       });
     }
     await tx.chatSession.update({ where: { id: sessionId }, data: { updatedAt: now } });
-    return { awaiting: false, messageId: message.id, changed: true, deliveryId };
+    return { awaiting: false, changed: true, deliveryId };
   });
 
   if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
@@ -326,21 +328,20 @@ async function reconcileAgentChatTurn(
 
 export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   const result = await reconcileAgentChatTurn(principal, sessionId, false, now);
-  return result ? { awaiting: result.awaiting, messageId: result.messageId, run: result.awaiting ? result.run : null } : null;
+  return result ? { awaiting: result.awaiting, run: result.awaiting ? result.run : null } : null;
 }
 export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   return (await reconcileAgentChatTurn(principal, sessionId, true, now))?.changed || null;
 }
 
 export async function sweepExpiredAgentChatTurns(now = new Date()) {
-  // Prioritize restricted-mode users so disabled sessions cannot fill the bounded batch.
   const sessions = await prisma.$queryRaw<Array<{ id: string; userId: number }>>`
     SELECT s.id, s."userId" FROM "ChatSession" s
     JOIN LATERAL (SELECT m.id, m.role, m."createdAt" FROM "ChatMessage" m WHERE m."sessionId" = s.id ORDER BY m."createdAt" DESC, m.id DESC LIMIT 1) latest ON true
     WHERE s."agentId" IS NOT NULL AND latest.role = 'human' AND latest."createdAt" <= ${new Date(now.getTime() - AGENT_RUN_STALE_AFTER_MS)}
       AND NOT EXISTS (SELECT 1 FROM "AgentRun" r JOIN "AgentRunActivity" a ON a."runId" = r.id
         WHERE r."chatSessionId" = s.id AND r.status IN ('ACTIVE', 'STALE') AND a.type = 'ELICITATION' AND a."selectedAt" IS NULL AND a."createdAt" >= latest."createdAt")
-    ORDER BY CASE s."userId" WHEN ${FEATURE_FLAG_OWNER_USER_ID} THEN 0 WHEN ${FEATURE_FLAG_QA_USER_ID} THEN 1 ELSE 2 END, latest."createdAt", latest.id LIMIT 25
+    ORDER BY CASE s."userId" WHEN ${FEATURE_FLAG_OWNER_USER_ID} THEN 0 WHEN ${985} THEN 1 ELSE 2 END, latest."createdAt", latest.id LIMIT 25
   `;
   const results = await Promise.all(sessions.map(async (session) => {
     try {
@@ -584,6 +585,7 @@ export async function createAgentRunActivity(
       });
     } else if (input.type === "RESPONSE" && run.chatSession) {
       activity = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${run.chatSession!.id} FOR UPDATE`;
         const target = await tx.chatMessage.findFirst({
           where: { sessionId: run.chatSession!.id },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -729,6 +731,7 @@ export async function selectAgentRunActivity(
     });
   } else if (run.chatSession) {
     const deliveryIds = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${run.chatSession!.id} FOR UPDATE`;
       const selectedRun = await persistAgentRunSelection(tx, selectionInput);
       const message = await tx.chatMessage.create({
         data: {
