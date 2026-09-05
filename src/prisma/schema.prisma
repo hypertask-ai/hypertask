@@ -334,6 +334,7 @@ model User {
   decisionRequestsCreated  DecisionRequest[]             @relation("DecisionRequestCreatedBy")
   decisionRequestsAnswered DecisionRequest[]             @relation("DecisionRequestAnsweredBy")
   webhookSubscriptions     WebhookSubscription[]
+  authoredChatMessages     ChatMessage[]                 @relation("ChatMessageAuthorUser")
   stoppedAgentRuns         AgentRun[]                    @relation("AgentRunStoppedBy")
   selectedAgentRunActivities AgentRunActivity[]           @relation("AgentRunActivitySelectedBy")
   aiSkills                  AI_Skill[]                  @relation("AI_SkillOwner")
@@ -2151,8 +2152,31 @@ model ChatMessage {
   // so a retried agent POST cannot duplicate a reply.
   replyToMessageId String? @unique
   ticketProposal ChatTicketProposal?
+  // Who actually wrote this message. `role` says which side of the
+  // conversation a message sits on; these say which person or which agent
+  // produced it, which is the part a shared thread needs and role cannot
+  // carry. At most one is set, enforced by the ChatMessage_author_check CHECK
+  // constraint in 20260905140000_chat_message_author; Prisma cannot declare a
+  // CHECK, so that migration is the only place it lives. Both stay null
+  // for machine-generated turns (the heartbeat prompt) and for the built-in AI
+  // assistant, which is not an Agent row. Deleting a user or agent keeps the
+  // transcript and drops the attribution, like every other history record here.
+  authorUserId Int?
+  authorUser User? @relation("ChatMessageAuthorUser", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorAgentId String?
+  authorAgent Agent? @relation("ChatMessageAuthorAgent", fields: [authorAgentId], references: [id], onDelete: SetNull)
 
+  // Backs ordered, cursor-paginated history: createdAt alone ties for messages
+  // stored in the same millisecond, so id breaks the tie and makes a page
+  // boundary reproducible. The plain [sessionId] index above is now a prefix
+  // of this one and could be dropped, but it predates this change and removing
+  // it belongs to whoever measures that it is worth a migration.
   @@index([sessionId])
+  @@index([sessionId, createdAt, id])
+  // Not for a query: Postgres does not index a referencing column, so without
+  // these every User or Agent delete seq-scans ChatMessage to null its rows.
+  @@index([authorUserId])
+  @@index([authorAgentId])
 }
 
 model ChatTicketProposal {
@@ -2239,6 +2263,7 @@ model Agent {
   webhookSubscriptions      WebhookSubscription[]
   agentWebhookSubscription  AgentWebhookSubscription?
   chatSessions              ChatSession[]
+  authoredChatMessages      ChatMessage[] @relation("ChatMessageAuthorAgent")
   runs                      AgentRun[]
   byokApiKeys               AgentByokApiKey[]
 

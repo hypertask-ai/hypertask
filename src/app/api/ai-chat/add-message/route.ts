@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
       },
       select: {
         id: true,
+        agentId: true,
       },
     });
 
@@ -154,6 +155,12 @@ export async function POST(request: NextRequest) {
           content,
           role: messageData.role,
           isDelivered: true,
+          // The person owns their own turns; a reply in a native agent's
+          // session is that agent's. A plain AI reply has no Agent row and
+          // stays unattributed.
+          authorUserId: messageData.role === "human" ? user.id : null,
+          authorAgentId:
+            messageData.role === "assistant" ? session.agentId : null,
           attachments: uploadedAttachments.length
             ? {
                 create: uploadedAttachments.map((attachment) => ({

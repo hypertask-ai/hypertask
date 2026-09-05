@@ -542,6 +542,9 @@ export async function GET(request: NextRequest) {
                 content: heartbeatMessage,
                 role: "human",
                 isDelivered: false,
+                // Deliberately unattributed: the scheduler wrote this prompt,
+                // not the agent's owner. Naming a person here would put words
+                // in their mouth in the transcript.
               },
             });
             const claim = await transaction.agent.updateMany({

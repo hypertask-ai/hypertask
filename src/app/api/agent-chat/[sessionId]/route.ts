@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
-import { accessibleAgentWhere } from "@/lib/agents/visibility";
+import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";
@@ -11,6 +11,10 @@ import {
 } from "@/lib/agents/chatTicketProposal";
 
 export const runtime = "nodejs";
+
+// History page size, and the cap on ?limit=. Unchanged default so a client
+// that does not page keeps getting exactly what it got before.
+const MAX_HISTORY_PAGE = 200;
 
 // GET /api/agent-chat/[sessionId]
 // History for one agent chat session, oldest first. `awaiting` tells the
@@ -26,26 +30,44 @@ export async function GET(
     }
 
     const { sessionId } = await params;
-    const session = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        userId,
-        agentId: { not: null },
-        agent: {
-          revokedAt: null,
-          ...accessibleAgentWhere(userId),
-        },
-      },
-      select: { id: true, agentId: true },
+    const access = await loadUserAgentChatSession({
+      sessionId,
+      userId,
+      select: {},
     });
-
-    if (!session) {
+    if (!access.ok) {
       return NextResponse.json(
-        { success: false, error: "Session not found" },
-        { status: 404 }
+        { success: false, error: access.error },
+        { status: access.status }
       );
     }
+    const session = access.session;
 
+    // Paging walks backwards from the newest message. `before` is the oldest
+    // id the client already holds, so the next page ends just above it.
+    const url = new URL(request.url);
+    const requestedLimit = Number(url.searchParams.get("limit"));
+    const limit =
+      Number.isInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, MAX_HISTORY_PAGE)
+        : MAX_HISTORY_PAGE;
+    const before = url.searchParams.get("before");
+    if (before) {
+      const cursor = await prisma.chatMessage.findFirst({
+        where: { id: before, sessionId: session.id },
+        select: { id: true },
+      });
+      if (!cursor) {
+        return NextResponse.json(
+          { success: false, error: "before is not a message in this session" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Activity is the whole feed, not a page of it. Re-reading it for every
+    // older page would repeat unbounded work for rows the client already has,
+    // so a paged read returns messages only.
     const activityRowsEnabled = await isFeatureEnabled(
       "htpr-6094-agent-activity-rows",
       userId,
@@ -54,28 +76,34 @@ export async function GET(
       AGENT_CHAT_TICKET_CONFIRM_FLAG,
       userId,
     );
-    // Last 200, oldest first: page desc from the tail, then flip.
-    const [messageRows, activity] = await Promise.all([
+    // One page, oldest first: read desc from the tail, then flip. createdAt
+    // alone ties for messages stored in the same millisecond, so id breaks the
+    // tie and a page boundary lands in the same place on every request.
+    const [pageRows, activity] = await Promise.all([
       prisma.chatMessage.findMany({
         where: { sessionId: session.id },
-        orderBy: { createdAt: "desc" },
-        take: 200,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: limit + 1,
+        ...(before ? { cursor: { id: before }, skip: 1 } : {}),
         include: ticketConfirmEnabled
           ? { ticketProposal: { select: chatTicketProposalSelect } }
           : undefined,
       }),
-      activityRowsEnabled
+      activityRowsEnabled && !before
         ? listAgentChatActivity({
-            agentId: session.agentId!,
+            agentId: access.agentId,
             sessionId: session.id,
             userId,
           })
         : Promise.resolve([]),
     ]);
+    // One row over the page size is the has-more probe; it is not returned.
+    const hasMore = pageRows.length > limit;
+    const messageRows = hasMore ? pageRows.slice(0, limit) : pageRows;
     const messages = messageRows.reverse();
 
     const subscription = await prisma.agentWebhookSubscription.findUnique({
-      where: { agentId: session.agentId! },
+      where: { agentId: access.agentId },
       select: { active: true, events: true },
     });
     const chatEnabled = Boolean(
@@ -97,8 +125,16 @@ export async function GET(
           (messages[index] as { ticketProposal?: any }).ticketProposal,
         ),
       })),
-      activity,
-      awaiting: messages[messages.length - 1]?.role === "human",
+      // Null, not an empty list, on a paged read: an older page simply does
+      // not carry the feed, and [] would read as "this thread has none".
+      activity: before ? null : activity,
+      hasMore,
+      // The id to send back as `before` for the page above this one.
+      nextBefore: hasMore ? (messages[0]?.id ?? null) : null,
+      // Null on a paged read: an older page's last row says nothing about
+      // whose turn it is, and guessing "not waiting" would clear a live
+      // thinking state in the client.
+      awaiting: before ? null : messages[messages.length - 1]?.role === "human",
       chatEnabled,
     });
   } catch (error: any) {

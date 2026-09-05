@@ -30,7 +30,7 @@ export async function persistAssistantMessage({
 
   const session = await db.chatSession.findFirst({
     where: { id: sessionId, userId },
-    select: { id: true },
+    select: { id: true, agentId: true },
   });
   if (!session) return false;
 
@@ -52,6 +52,9 @@ export async function persistAssistantMessage({
         content: storedContent,
         role: "assistant",
         isDelivered: true,
+        // A native agent's reply is that agent's. In a plain AI chat there is
+        // no Agent row to point at, so the reply stays unattributed.
+        authorAgentId: session.agentId,
       },
     ],
     skipDuplicates: true,

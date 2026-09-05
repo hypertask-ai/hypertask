@@ -471,6 +471,7 @@ export async function createAgentRunActivity(
             content: input.text,
             role: "assistant",
             isDelivered: true,
+            authorAgentId: run.agentId,
           },
         });
         await tx.chatSession.update({
@@ -604,6 +605,7 @@ export async function selectAgentRunActivity(
           content: option.label,
           role: "human",
           isDelivered: true,
+          authorUserId: principal.userId,
         },
       });
       await tx.chatSession.update({
