@@ -14,7 +14,12 @@ SET "authorUserId" = session."userId"
 FROM "ChatSession" AS session
 WHERE message."sessionId" = session."id"
   AND message."role" = 'human'
-  AND message."isDelivered" = true;
+  AND message."isDelivered" = true
+  -- A heartbeat prompt flips to delivered the moment its turn starts
+  -- (src/app/api/ai/chat/stream/route.ts), so delivered alone would sign the
+  -- scheduler's words with the owner's name. The envelope marker is stable
+  -- (src/lib/nativeAgent/heartbeatTurnEnvelope.ts).
+  AND message."content" NOT LIKE '%<!--ht-heartbeat:v1:%';
 
 UPDATE "ChatMessage" AS message
 SET "authorAgentId" = session."agentId"

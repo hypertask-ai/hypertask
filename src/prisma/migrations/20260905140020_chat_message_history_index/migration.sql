@@ -1,10 +1,9 @@
--- Ordered, cursor-paginated history reads (sessionId, then createdAt with id
--- as the tiebreak). Index builds take a SHARE lock that blocks writes, so they
--- run in their own migration rather than extending the ADD COLUMN lock.
-CREATE INDEX "ChatMessage_sessionId_createdAt_id_idx" ON "ChatMessage"("sessionId", "createdAt", "id");
-CREATE INDEX "ChatMessage_authorUserId_idx" ON "ChatMessage"("authorUserId");
-CREATE INDEX "ChatMessage_authorAgentId_idx" ON "ChatMessage"("authorAgentId");
-
--- Strict prefix of the composite index above, so it serves no read the new one
--- does not, and costs a second B-tree write on every insert.
-DROP INDEX IF EXISTS "ChatMessage_sessionId_idx";
+-- Backs ordered, cursor-paginated agent chat history: sessionId, then createdAt
+-- with id as the tiebreak so a page boundary is reproducible.
+--
+-- CONCURRENTLY, matching the newest index migrations in this folder
+-- (20260901120000_comment_task_created_at_index,
+-- 20260903120000_index_taskid_delete_sweep_targets): a plain build holds a
+-- SHARE lock for its whole duration and blocks every chat message insert.
+-- IF NOT EXISTS keeps a hand-applied pre-creation a no-op for migrate deploy.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_sessionId_createdAt_id_idx" ON "ChatMessage"("sessionId", "createdAt", "id");

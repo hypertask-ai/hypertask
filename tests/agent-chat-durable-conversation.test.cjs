@@ -375,8 +375,7 @@ const authorMigration = migration("20260905140000_chat_message_author");
 const backfillMigration = migration("20260905140010_chat_message_author_backfill");
 const validateMigration = migration("20260905140015_chat_message_author_validate");
 const indexMigration = migration("20260905140020_chat_message_history_index");
-const statusMigration = migration("20260905140100_agent_run_status_vocabulary");
-
+const dropIndexMigration = migration("20260905140030_drop_chat_message_session_index");
 test("the migration adds attribution without touching stored history", () => {
   assert.match(authorMigration, /ADD COLUMN "authorUserId" INTEGER;/);
   assert.match(authorMigration, /ADD COLUMN "authorAgentId" TEXT;/);
@@ -404,7 +403,7 @@ test("the column, the backfill and the indexes hold separate locks", () => {
     statements(backfillMigration),
     /^\s*(ALTER TABLE|CREATE INDEX)\b/im,
   );
-  assert.doesNotMatch(statements(indexMigration), /^\s*(ALTER TABLE|UPDATE)\b/im);
+  assert.doesNotMatch(statements(indexMigration), /^\s*(ALTER TABLE|UPDATE|DROP)\b/im);
 });
 
 test("constraints are added unvalidated and validated on their own", () => {
@@ -441,6 +440,14 @@ test("existing messages keep their history and gain their author", () => {
   );
 });
 
+test("the backfill leaves scheduled heartbeat prompts unattributed", () => {
+  assert.match(
+    backfillMigration,
+    /NOT LIKE '%<!--ht-heartbeat:v1:%'/,
+    "a heartbeat prompt turns delivered when its turn starts, so delivered alone would sign the scheduler's words with the owner's name",
+  );
+});
+
 test("a message can never claim two authors", () => {
   assert.match(
     authorMigration,
@@ -460,21 +467,6 @@ test("deleting a person or an agent keeps the transcript", () => {
     schema,
     /session ChatSession @relation\(fields: \[sessionId\], references: \[id\], onDelete: Cascade\)/,
     "clearing a conversation still removes its messages",
-  );
-});
-
-test("turn states cover queued, failed and expired", () => {
-  const enumBlock = schema.slice(
-    schema.indexOf("enum AgentRunStatus {"),
-    schema.indexOf("}", schema.indexOf("enum AgentRunStatus {")),
-  );
-  for (const status of ["QUEUED", "ACTIVE", "STALE", "STOPPED", "DONE", "FAILED", "EXPIRED"]) {
-    assert.match(enumBlock, new RegExp(`\\b${status}\\b`), `missing ${status}`);
-  }
-  assert.match(
-    statusMigration,
-    /ALTER TYPE "AgentRunStatus" ADD VALUE IF NOT EXISTS/,
-    "new enum values need their own migration; Postgres cannot use them in the adding transaction",
   );
 });
 
@@ -502,11 +494,24 @@ test("the turn event log stays append-only, ordered and duplicate-proof", () => 
 
 test("history has an index that matches how it is read", () => {
   assert.match(schema, /@@index\(\[sessionId, createdAt, id\]\)/);
-  assert.match(indexMigration, /CREATE INDEX "ChatMessage_sessionId_createdAt_id_idx"/);
+  assert.match(
+    indexMigration,
+    /CREATE INDEX CONCURRENTLY IF NOT EXISTS "ChatMessage_sessionId_createdAt_id_idx"/,
+    "a plain build holds a SHARE lock and blocks chat inserts for its duration",
+  );
+  assert.doesNotMatch(
+    indexMigration,
+    /"ChatMessage_author(UserId|AgentId)_idx"/,
+    "no query reads by author yet, so an author index is a write cost for nothing",
+  );
   assert.doesNotMatch(
     modelBlock("ChatMessage"),
     /@@index\(\[sessionId\]\)/,
     "a prefix of the composite index is a second B-tree written for no read",
   );
-  assert.match(indexMigration, /DROP INDEX IF EXISTS "ChatMessage_sessionId_idx"/);
+  assert.match(
+    dropIndexMigration,
+    /DROP INDEX CONCURRENTLY IF EXISTS "ChatMessage_sessionId_idx"/,
+    "the prefix index is dropped only after its replacement exists",
+  );
 });

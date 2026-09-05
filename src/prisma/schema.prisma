@@ -231,22 +231,11 @@ enum AgentRunTrigger {
   CHAT
 }
 
-/// Turn lifecycle for one agent run. QUEUED = accepted, not started;
-/// ACTIVE = running; STALE = started then went silent; STOPPED = a human
-/// stopped it; DONE = completed; FAILED = ended in an error; EXPIRED = never
-/// started before its deadline.
-// ponytail: QUEUED, FAILED and EXPIRED are vocabulary only for now. The
-// transitions belong to the chat runtime work in HTPR-6154. Double-slash on
-// purpose: this note is about work in flight and must not ship into the
-// generated client's documentation.
 enum AgentRunStatus {
-  QUEUED
   ACTIVE
   STALE
   STOPPED
   DONE
-  FAILED
-  EXPIRED
 }
 
 enum AgentRunActivityType {
@@ -2182,8 +2171,6 @@ model ChatMessage {
   // boundary reproducible. A plain [sessionId] index would be a prefix of this
   // one, so it was dropped rather than maintained twice on every insert.
   @@index([sessionId, createdAt, id])
-  @@index([authorUserId])
-  @@index([authorAgentId])
 }
 
 model ChatTicketProposal {
