@@ -566,7 +566,7 @@ export const useSessionAndChatHistory = (
   const isSessionPending =
     !isDemo &&
     currentSession === undefined &&
-    (isLoadingSessions || (isFetchingSessions && activeSession !== null));
+    (isLoadingSessions || (isFetchingSessions && Boolean(activeSession)));
   const showWelcomeScreen = !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
 
   return {
