@@ -36,7 +36,7 @@ const message = (id, content) => ({
 
 // One reload: the panel mounts with no session yet, then the session list
 // arrives with the ticket's own chat and its messages paint in one go.
-async function renderReloadAndMeasure() {
+async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
   const dom = new JSDOM('<div id="root"></div>', {
     url: "https://app.hypertask.ai/detail/project-15/6099",
   });
@@ -76,7 +76,8 @@ async function renderReloadAndMeasure() {
   // to the bottom has to move scrollTop; landing at 0 means it never did.
   const listBox = { clientHeight: 300, messageHeight: 100 };
   let listElement = null;
-  const state = { scrollTop: 0, measuredDistanceFromBottom: null };
+  const state = { scrollTop: 0, measuredDistanceFromBottom: null, scrollAttempts: 0 };
+  let registeredBeforeFirstScroll = false;
   const scrollHeight = (messageCount) =>
     Math.max(listBox.clientHeight, messageCount * listBox.messageHeight);
   let messageCount = 0;
@@ -91,9 +92,16 @@ async function renderReloadAndMeasure() {
 
     const context = {
       chatMounted: false,
-      // Models the browser: "auto" lands synchronously, "smooth" animates
-      // and so has not moved by the time the next statement runs.
+      // Models the real helper in useAiChat.ts: it scrolls the node the
+      // component handed over via registerMessageListRef, and returns early
+      // while that is still null. Modelling that early return is what makes
+      // this test able to fail -- registering the ref after the auto-scroll
+      // effects made every mount-time scroll a silent no-op in production.
+      // "auto" then lands synchronously, "smooth" animates and so has not
+      // moved by the time the next statement runs.
       scrollMessagesToBottom: (behavior = "smooth") => {
+        state.scrollAttempts += 1;
+        if (!listElement) return;
         if (behavior === "auto") {
           state.scrollTop = scrollHeight(messageCount) - listBox.clientHeight;
         }
@@ -106,6 +114,7 @@ async function renderReloadAndMeasure() {
       },
       registerMessageListRef: (element) => {
         listElement = element;
+        if (element) registeredBeforeFirstScroll ||= state.scrollAttempts === 0;
       },
       copyResponse: () => {},
       createTaskFromResponse: () => {},
@@ -147,30 +156,39 @@ async function renderReloadAndMeasure() {
     const container = dom.window.document.getElementById("root");
     reactRoot = createRoot(container);
 
-    // Reload, step 1: the panel is restored open before its session data
-    // has arrived, so there is nothing to scroll to yet.
-    context.chatMounted = true;
-    await React.act(async () => {
-      reactRoot.render(React.createElement(MessageList));
-    });
-
-    // Reload, step 2: the ticket's session and its history land together.
     const messages = [
       message("m1", "qa retest message 1"),
       message("m2", "qa retest message 2"),
       message("m3", "qa retest message 3"),
       message("m4", "qa retest message 4"),
     ];
-    messageCount = messages.length;
-    context.sessions = [{ id: "session-6099", messages }];
-    context.activeSession = "session-6099";
+    const showHistory = () => {
+      messageCount = messages.length;
+      context.sessions = [{ id: "session-6099", messages }];
+      context.activeSession = "session-6099";
+    };
+
+    context.chatMounted = true;
+    // Opening an existing thread (and the reload QA reproduced) paints the
+    // list and its whole history in ONE commit, so the mount is the only
+    // chance to scroll. The two-step variant models the slower reload where
+    // the panel is restored open first and the history arrives after.
+    if (historyOnFirstPaint) showHistory();
     await React.act(async () => {
       reactRoot.render(React.createElement(MessageList));
     });
 
+    if (!historyOnFirstPaint) {
+      showHistory();
+      await React.act(async () => {
+        reactRoot.render(React.createElement(MessageList));
+      });
+    }
+
     return {
       ...state,
       listElement,
+      registeredBeforeFirstScroll,
       bottomScrollTop: scrollHeight(messageCount) - listBox.clientHeight,
     };
   } finally {
@@ -217,4 +235,27 @@ test("the docked chat registers its scrollable list", async () => {
   const result = await renderReloadAndMeasure();
 
   assert.ok(result.listElement, "the message list ref must reach the chat hook");
+});
+
+test("the docked chat registers its list before it tries to scroll", async () => {
+  const result = await renderReloadAndMeasure();
+
+  assert.ok(
+    result.registeredBeforeFirstScroll,
+    "scrollMessagesToBottom scrolls the node registered through the chat " +
+      "hook, so registering after the auto-scroll effects makes every " +
+      "mount-time scroll a silent no-op",
+  );
+});
+
+test("a chat whose history paints on the first commit still lands at the bottom", async () => {
+  const result = await renderReloadAndMeasure({ historyOnFirstPaint: true });
+
+  assert.equal(
+    result.scrollTop,
+    result.bottomScrollTop,
+    "opening an existing thread paints the list and its messages in one " +
+      "commit, so the mount-time auto-scroll is the only one that runs; it " +
+      "must not be a no-op",
+  );
 });
