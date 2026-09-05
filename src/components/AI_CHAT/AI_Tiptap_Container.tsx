@@ -28,6 +28,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { usePathname } from "next/navigation";
 import {
   type ChangeEvent,
+  type ClipboardEvent,
   type ComponentProps,
   useContext,
   useEffect,
@@ -45,6 +46,7 @@ import {
 } from "@/store";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
+import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
 import toast from "react-hot-toast";
@@ -80,6 +82,7 @@ export function AI_Tiptap_Container() {
     toggleRecording,
     handleAttachmentClick,
     handleFileUpload,
+    handleDroppedFiles,
     fileInputRef,
     fileItems,
     removeFile,
@@ -104,6 +107,13 @@ export function AI_Tiptap_Container() {
     } finally {
       input.value = "";
     }
+  };
+
+  const handleEditorPaste = (event: ClipboardEvent) => {
+    const imageFiles = extractPastedImageFiles(event.clipboardData?.items);
+    if (imageFiles.length === 0) return;
+    event.preventDefault();
+    void handleDroppedFiles(imageFiles);
   };
 
   // Focus the composer as soon as it is on screen. The focus call in
@@ -263,6 +273,7 @@ export function AI_Tiptap_Container() {
                 ${styles.editorContainer}
                 `}
           id="ai-chat-tiptap-editor"
+          onPaste={handleEditorPaste}
         >
           {editor ? (
             <EditorContent editor={editor} />
