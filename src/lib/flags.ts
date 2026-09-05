@@ -173,22 +173,40 @@ export type FeatureFlagRow = {
   updatedAt: Date | null;
   description: string;
   ticketUrl: string | null;
+  ticketTitle: string | null;
 };
 
+const FEATURE_FLAG_TICKET_PROJECT_ID = 15;
 const FEATURE_FLAG_TICKET_BASE = "https://app.hypertask.ai/detail/project-15";
 const LEGACY_FEATURE_FLAG_DESCRIPTION =
   "This older feature flag has no description in this version of the app.";
+const FEATURE_FLAG_KEY_TICKET_NUMBER = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function withFeatureFlagMetadata(
   row: Pick<FeatureFlagRow, "key" | "mode" | "updatedAt">,
+  ticketTitleByNumber: Map<number, string>,
 ): FeatureFlagRow {
   const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === row.key);
-  const ticketNumber = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(row.key)?.[1];
+  const ticketNumber = FEATURE_FLAG_KEY_TICKET_NUMBER.exec(row.key)?.[1];
   return {
     ...row,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     ticketUrl: ticketNumber ? `${FEATURE_FLAG_TICKET_BASE}/${ticketNumber}` : null,
+    ticketTitle: ticketNumber ? (ticketTitleByNumber.get(Number(ticketNumber)) ?? null) : null,
   };
+}
+
+async function loadFeatureFlagTicketTitles(keys: readonly string[]): Promise<Map<number, string>> {
+  const ticketNumbers = keys
+    .map((key) => FEATURE_FLAG_KEY_TICKET_NUMBER.exec(key)?.[1])
+    .filter((value): value is string => value !== undefined)
+    .map(Number);
+  if (ticketNumbers.length === 0) return new Map();
+  const tickets = await prisma.task.findMany({
+    where: { projectId: FEATURE_FLAG_TICKET_PROJECT_ID, uniqueIndex: { in: ticketNumbers } },
+    select: { uniqueIndex: true, title: true },
+  });
+  return new Map(tickets.map((ticket) => [ticket.uniqueIndex, ticket.title]));
 }
 
 export function featureFlagModeEnabled(
@@ -226,17 +244,20 @@ export async function isFeatureEnabled(
 }
 
 export async function listFeatureFlagModes(): Promise<FeatureFlagRow[]> {
-  const stored = await prisma.featureFlag.findMany({
-    select: { key: true, mode: true, updatedAt: true },
-    orderBy: { key: "asc" },
-  });
+  const [stored, ticketTitleByNumber] = await Promise.all([
+    prisma.featureFlag.findMany({
+      select: { key: true, mode: true, updatedAt: true },
+      orderBy: { key: "asc" },
+    }),
+    loadFeatureFlagTicketTitles(FEATURE_FLAG_KEYS),
+  ]);
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      withFeatureFlagMetadata({ key, mode: defaultFeatureFlagMode(key), updatedAt: null }),
+      withFeatureFlagMetadata({ key, mode: defaultFeatureFlagMode(key), updatedAt: null }, ticketTitleByNumber),
     ]),
   );
-  stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row)));
+  stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row, ticketTitleByNumber)));
   return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
@@ -277,11 +298,14 @@ export async function setFeatureFlagMode(
     : Boolean(await prisma.featureFlag.findUnique({ where: { key }, select: { key: true } }));
   if (!existing) throw new FeatureFlagInputError("Unknown feature flag");
 
-  const row = await prisma.featureFlag.upsert({
-    where: { key },
-    create: { key, mode },
-    update: { mode },
-    select: { key: true, mode: true, updatedAt: true },
-  });
-  return withFeatureFlagMetadata(row);
+  const [row, ticketTitleByNumber] = await Promise.all([
+    prisma.featureFlag.upsert({
+      where: { key },
+      create: { key, mode },
+      update: { mode },
+      select: { key: true, mode: true, updatedAt: true },
+    }),
+    loadFeatureFlagTicketTitles([key]),
+  ]);
+  return withFeatureFlagMetadata(row, ticketTitleByNumber);
 }

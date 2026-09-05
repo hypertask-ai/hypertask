@@ -11,6 +11,7 @@ let sessionUserId = 6;
 let usersById = new Map();
 const prisma = {
   user: { findUnique: async ({ where }) => usersById.get(where.id) ?? null },
+  task: { findMany: async () => [] },
   featureFlag: {
     findUnique: async () => {
       if (readError) throw readError;
