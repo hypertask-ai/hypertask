@@ -19,7 +19,13 @@ export const AI_Chat_Sidebar = ({
   /** When true, parent mobile sheet (e.g. AppSheet) fills height; skip fixed layout. */
   inOffcanvas?: boolean;
 }) => {
-  const { currentSession, minimized } = useAiChatContext();
+  const { activeSession, currentSession, minimized } = useAiChatContext();
+  // While activeSession is set but `currentSession` hasn't resolved yet (a
+  // stale/mid-refetch sessions list, HTPR-6100), keep showing the message
+  // list instead of flashing the welcome screen over an open conversation.
+  const showWelcomeScreen = activeSession
+    ? currentSession !== undefined && currentSession.messages.length === 0
+    : (currentSession?.messages?.length ?? 0) === 0;
   const isMbl = useContext(MobileViewContext);
   const [sidebarWidthPx] = useRecoilState(aiChatSidebarWidthPxAtom);
 
@@ -73,7 +79,7 @@ export const AI_Chat_Sidebar = ({
         {!minimized && (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-              {(currentSession?.messages ?? []).length === 0 ? (
+              {showWelcomeScreen ? (
                 <WelcomeScreen />
               ) : (
                 <MessageList />
