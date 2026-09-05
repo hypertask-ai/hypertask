@@ -1042,6 +1042,51 @@ test("malformed hydrated collections fail with AgentSdkError", async () => {
   });
 });
 
+test("hydrated activities retain the activity discriminator", async () => {
+  const api = apiFixture();
+  const fetch: typeof globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+    );
+    if (url.pathname.endsWith("/mcp/agents/runs/run-1/activities")) {
+      return Response.json({
+        success: true,
+        activities: [
+          {
+            id: "activity-1",
+            runId: "run-1",
+            type: "thought",
+            text: "Working",
+            link: null,
+            options: null,
+            selectedOption: null,
+            selectedAt: null,
+            selectedBy: null,
+            createdAt: "2026-09-04T00:00:00.000Z",
+            kind: "comment",
+          },
+        ],
+      });
+    }
+    return api.fetch(input, init);
+  };
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch,
+  });
+  let activityKind: string | undefined;
+  agent.on("mention", (received) => {
+    activityKind = received.thread.find((item) => item.id === "activity-1")?.kind;
+  });
+
+  const work = background();
+  assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
+  await work.drain();
+  assert.equal(activityKind, "activity");
+});
+
 test("malformed task status checks fail with AgentSdkError", async () => {
   const api = apiFixture();
   let runRequests = 0;

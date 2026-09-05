@@ -437,8 +437,8 @@ export class AgentClient {
         objectValue(response, "Agent activities").activities,
         "Agent activities",
       ).map((activity) => ({
-        kind: "activity" as const,
         ...activity,
+        kind: "activity" as const,
       })),
     );
 
