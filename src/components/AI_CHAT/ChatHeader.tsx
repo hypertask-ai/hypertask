@@ -441,7 +441,10 @@ export const ChatHeader = () => {
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
                 onClick={async () => {
                   setIsOverflowOpen(false);
-                  if (!resolvedSessionId) return;
+                  if (!resolvedSessionId) {
+                    toast.error("No chat selected yet. Please try again in a moment.");
+                    return;
+                  }
                   try {
                     await deleteSession(resolvedSessionId);
                   } catch {

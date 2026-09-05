@@ -1671,9 +1671,10 @@ export function useAiChat() {
     const sessionId = currentSession?.id;
     // No resolved session means there's nothing to rename (a transient
     // refetch gap, or the chat was deleted from under the open modal) -
-    // close without erroring rather than renaming a session id that may no
-    // longer exist.
+    // surface it the same way delete does rather than renaming a session id
+    // that may no longer exist.
     if (!sessionId) {
+      toast.error("No chat selected yet. Please try again in a moment.");
       setShowRenameChatModal(false);
       return;
     }
