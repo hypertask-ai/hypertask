@@ -23,6 +23,13 @@ function resolveBuildId() {
 }
 
 const nextConfig = {
+  // HTPR-6163 (2026-09-05): five of the last seven Vercel production builds
+  // hung forever in "Running TypeScript ..." and died at the 45-minute limit,
+  // leaving production undeployable. Types are already gated on every PR and
+  // every production push by CI (`next typegen && tsc --noEmit` in
+  // ci-tests.yml), so the in-build check only duplicates that gate. Remove this
+  // once the Vercel hang is understood.
+  typescript: { ignoreBuildErrors: true },
   env: {
     NEXT_PUBLIC_BUILD_ID: resolveBuildId(),
   },
