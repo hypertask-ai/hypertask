@@ -16,6 +16,7 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
+export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -76,6 +77,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: "htpr-6141-ai-first-task-writer",
     description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
   },
+  {
+    key: AGENT_CHAT_BRIEF_FLAG,
+    description:
+      "Gives Agent Chat a bounded snapshot of each agent's current and recent work.",
+  },
 ] as const satisfies readonly { key: string; description: string }[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
@@ -86,6 +92,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6130-mobile-reminder-safe-area",
   FEATURE_FLAG_DETAILS_FLAG,
   "htpr-6141-ai-first-task-writer",
+  AGENT_CHAT_BRIEF_FLAG,
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [

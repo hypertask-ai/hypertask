@@ -184,6 +184,12 @@ test("the AI-first task writer starts owner-only", async () => {
   assert.equal(await flags.isFeatureEnabled("htpr-6141-ai-first-task-writer", 7), false);
 });
 
+test("the Agent Chat work brief starts owner-only", async () => {
+  assert.equal(await flags.isFeatureEnabled("htpr-6155-chat-agent-brief", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-6155-chat-agent-brief", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-6155-chat-agent-brief", 7), false);
+});
+
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
@@ -231,6 +237,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6133-feature-flag-details", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6155-chat-agent-brief", mode: "OWNER_ONLY", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl }) => {

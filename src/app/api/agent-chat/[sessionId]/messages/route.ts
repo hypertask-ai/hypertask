@@ -7,6 +7,9 @@ import {
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { NextRequest, NextResponse } from "next/server";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
+import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
+import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
+import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 export const runtime = "nodejs";
 
@@ -72,6 +75,15 @@ export async function POST(
       );
     }
 
+    let agentBrief: AgentWebhookChatBrief | null = null;
+    try {
+      if (await isFeatureEnabled(AGENT_CHAT_BRIEF_FLAG, userId)) {
+        agentBrief = await buildAgentChatBrief({ userId, agentId });
+      }
+    } catch (error) {
+      console.error("Failed to enrich Agent Chat with work context", error);
+    }
+
     const { message, deliveryIds } = await prisma.$transaction(async (tx) => {
       const message = await tx.chatMessage.create({
         data: {
@@ -102,6 +114,7 @@ export async function POST(
           text,
           userName: session.user.displayName,
         },
+        ...(agentBrief ? { agentBrief } : {}),
       });
 
       await tx.chatSession.update({
