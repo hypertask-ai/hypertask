@@ -354,7 +354,6 @@ export default function Chat({ initialSessionId }: ChatProps) {
     setAiChatAutoOpenSuppressed,
     editor,
   } = useAiChatContext();
-  const activeSessionId = activeSession ?? null;
 
   useEffect(() => {
     if (
@@ -531,7 +530,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
                 </h2>
                 <ul className="space-y-0.5">
                   {group.sessions.map((session) => {
-                    const isActive = session.id === activeSessionId;
+                    const isActive = session.id === activeSession;
                     const isPinned = aiChatPinnedSessionIds.includes(
                       session.id
                     );
