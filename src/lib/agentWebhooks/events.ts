@@ -65,6 +65,8 @@ export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {
     description: "A user sent this agent a message in Agent Chat.",
     payload: {
       chat: "Chat object with sessionId, messageId, text, and userName.",
+      agentBrief:
+        "Optional bounded snapshot of the agent's current ticket, recent tickets, open pull requests, and recent comments.",
     },
   },
   "run.created": {
@@ -176,6 +178,36 @@ export type AgentWebhookTaskChanges = {
   labelsRedacted?: boolean;
 };
 
+export type AgentWebhookChatBriefTicketRef = {
+  ticketNumber: string | null;
+  title: string;
+  url: string;
+};
+
+export type AgentWebhookChatBriefTicket = AgentWebhookChatBriefTicketRef & {
+  section: string;
+  outcome: "open" | "completed" | "archived";
+  assignees: string[];
+};
+
+export type AgentWebhookChatBrief = {
+  currentTicket: AgentWebhookChatBriefTicket | null;
+  recentTickets: AgentWebhookChatBriefTicket[];
+  openPullRequests: Array<{
+    number: number;
+    title: string;
+    url: string;
+    repository: string;
+    checkState: string;
+    ticket: AgentWebhookChatBriefTicketRef;
+  }>;
+  recentComments: Array<{
+    text: string;
+    createdAt: string;
+    ticket: AgentWebhookChatBriefTicketRef;
+  }>;
+};
+
 /** Board-free chat context, present only on chat.message deliveries. */
 export type AgentWebhookChat = {
   sessionId: string;
@@ -215,6 +247,7 @@ export type AgentWebhookEventInput = {
     label: string;
   };
   chat?: AgentWebhookChat;
+  agentBrief?: AgentWebhookChatBrief;
   commentId?: number;
   commentHtml?: string;
   changes?: AgentWebhookTaskChanges;
