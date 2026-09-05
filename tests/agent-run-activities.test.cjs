@@ -259,6 +259,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
           : null,
     },
     chatMessage: {
+      findFirst: async () => messages.at(-1) ?? { id: "human-1", role: "human" },
       create: async ({ data }) => {
         const message = {
           id: `message-${messages.length + 1}`,

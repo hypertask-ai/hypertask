@@ -194,8 +194,7 @@ export async function stopAgentRun(
       return { run: serializeAgentRun(run), deliveryIds: [] as string[] };
     }
 
-    const stoppedById =
-      principal.source === "browser" ? principal.userId : null;
+    const stoppedById = principal.source === "browser" ? principal.userId : null;
     const stopped = await tx.agentRun.updateMany({
       where: {
         id: run.id,
@@ -410,9 +409,9 @@ async function findActivityRun(
 function isUniqueConstraintError(error: unknown): boolean {
   return Boolean(
     error &&
-    typeof error === "object" &&
-    "code" in error &&
-    error.code === "P2002",
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2002",
   );
 }
 
@@ -564,8 +563,9 @@ export async function createAgentRunActivity(
   let activity: AgentRunActivity | null = null;
   try {
     if (input.type === "RESPONSE" && run.task) {
-      const { createCommentService } =
-        await import("@/utils/controllers/comments/createCommentService");
+      const { createCommentService } = await import(
+        "@/utils/controllers/comments/createCommentService",
+      );
       await createCommentService({
         text: toStoredHtml(input.text),
         creatorId: run.agent.user.id,
@@ -578,15 +578,22 @@ export async function createAgentRunActivity(
       });
     } else if (input.type === "RESPONSE" && run.chatSession) {
       activity = await prisma.$transaction(async (tx) => {
-        const stored = await persistAgentRunActivity(tx, persistenceInput);
+        const target = await tx.chatMessage.findFirst({
+          where: { sessionId: run.chatSession!.id },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: { id: true, role: true },
+        });
+        if (target?.role !== "human") throw new AgentRunNotActiveError("Run is no longer active");
         await tx.chatMessage.create({
           data: {
             sessionId: run.chatSession!.id,
             content: input.text,
             role: "assistant",
             isDelivered: true,
+            replyToMessageId: target.id,
           },
         });
+        const stored = await persistAgentRunActivity(tx, persistenceInput);
         await tx.chatSession.update({
           where: { id: run.chatSession!.id },
           data: { updatedAt: now },
@@ -602,6 +609,9 @@ export async function createAgentRunActivity(
     if (idempotencyKey !== null && isUniqueConstraintError(error)) {
       const existing = await findIdempotentActivity(run.id, idempotencyKey);
       if (existing) return replayCreatedActivity(run, principal, existing, input);
+    }
+    if (run.chatSession && isUniqueConstraintError(error)) {
+      throw new AgentRunNotActiveError("Run is no longer active");
     }
     throw error;
   }
@@ -694,8 +704,9 @@ export async function selectAgentRunActivity(
     selectedAt: now,
   };
   if (run.task) {
-    const { createCommentService } =
-      await import("@/utils/controllers/comments/createCommentService");
+    const { createCommentService } = await import(
+      "@/utils/controllers/comments/createCommentService",
+    );
     await createCommentService({
       text: toStoredHtml(option.label),
       creatorId: principal.userId,
