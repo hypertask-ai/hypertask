@@ -2,7 +2,9 @@
   "name": "@hypertask/agent-sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for building Hypertask agents",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

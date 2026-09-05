@@ -1,6 +1,6 @@
 # `@hypertask/agent-sdk`
 
-Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies. This workspace remains private and unpublished while the `htpr-6115-agent-sdk` and `htpr-6123-add-typescript-agent-sdk` flags are restricted.
+Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package is publicly available on npm and has no runtime or framework dependencies. SDK requests remain protected by the `htpr-6115-agent-sdk` and `htpr-6123-add-typescript-agent-sdk` flags.
 
 ## Hello world in under 30 minutes
 
