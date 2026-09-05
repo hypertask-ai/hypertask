@@ -551,7 +551,10 @@ export const useSessionAndChatHistory = (
   // decide "show the welcome screen" from this, so tell those two apart
   // here once: a pending selection should keep showing the message area
   // (empty, briefly) rather than flash the welcome screen over it.
-  const isSessionPending = activeSession !== undefined && currentSession === undefined;
+  // A failed fetch is not "briefly" pending - it will never catch up on its
+  // own, so treat it like the empty case instead of blanking the pane forever.
+  const isSessionPending =
+    !isErrorSessions && activeSession !== undefined && currentSession === undefined;
   const showWelcomeScreen = !isSessionPending && (currentSession?.messages.length ?? 0) === 0;
 
   return {
