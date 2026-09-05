@@ -449,7 +449,6 @@ export function useAiChat() {
         await new Promise((resolve) => setTimeout(resolve, 50));
         if (sessionIntentGenerationRef.current !== generation) return undefined;
       }
-      if (sessionIntentGenerationRef.current !== generation) return undefined;
       return sessionsRef.current.find(matchesTask);
     }
 
