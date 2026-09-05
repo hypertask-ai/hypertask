@@ -94,6 +94,7 @@ export const ChatHeader = () => {
     toggleSidebarMode,
     isSidebarMode,
     sessions,
+    activeSession,
     currentSession,
     startNewSession,
     selectSession,
@@ -121,7 +122,7 @@ export const ChatHeader = () => {
     [sessions]
   );
 
-  const activeSessionId = currentSession?.id ?? null;
+  const activeSessionId = activeSession ?? null;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

@@ -58,7 +58,7 @@ export const ChatWindow = () => {
           stays visible. Without min-h-0/flex-1 the welcome screen forced full
           height and pushed the input out of the overflow-hidden window. */}
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-        {(currentSession?.messages ?? []).length === 0 ? (
+        {currentSession && currentSession.messages.length === 0 ? (
           <WelcomeScreen />
         ) : (
           <MessageList />

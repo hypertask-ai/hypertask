@@ -353,7 +353,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
     setAiChatAutoOpenSuppressed,
     editor,
   } = useAiChatContext();
-  const activeSessionId = currentSession?.id ?? null;
+  const activeSessionId = activeSession ?? null;
 
   useEffect(() => {
     if (
@@ -427,7 +427,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
       : []),
     ...sessionGroups,
   ];
-  const hasMessages = (currentSession?.messages?.length ?? 0) > 0;
+  const hasMessages = currentSession !== undefined && currentSession.messages.length > 0;
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
