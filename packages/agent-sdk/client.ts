@@ -192,6 +192,13 @@ export class AgentClient {
     this.onErrorCallback = options.onError;
     this.onDryRunCallback = options.onDryRun;
     this.dryRun = options.dryRun ?? envDryRun();
+    if (this.dryRun && options.dryRun === undefined) {
+      // A stray HYPERTASK_DRY_RUN in a deployed process would silently drop
+      // every write, so say so once at startup.
+      console.warn(
+        "[hypertask-agent-sdk] HYPERTASK_DRY_RUN is set: every write is previewed and skipped.",
+      );
+    }
   }
 
   private previewWrite(write: DryRunWrite): void {

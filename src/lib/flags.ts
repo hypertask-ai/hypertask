@@ -75,6 +75,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Allows the TypeScript Agent SDK to read and update agent runs.",
   },
   {
+    key: "htpr-6124-agent-dev-loop",
+    description:
+      "Lets an agent author replay a recorded run into a handler running on their own machine.",
+  },
+  {
     key: "htpr-6129-mobile-agent-chat-viewport",
     description: "Keeps the full Agent Chat visible on mobile when the keyboard is open.",
   },
@@ -104,6 +109,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6094-agent-activity-rows",
   "htpr-6122-agent-run-activities",
   "htpr-6123-add-typescript-agent-sdk",
+  "htpr-6124-agent-dev-loop",
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
   FEATURE_FLAG_DETAILS_FLAG,

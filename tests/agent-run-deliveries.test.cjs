@@ -35,6 +35,7 @@ const state = {
   run: runRecord,
   deliveries: [],
   queries: [],
+  flagEnabled: true,
 };
 
 stub("src/lib/prisma.ts", {
@@ -53,6 +54,7 @@ stub("src/lib/agentRuns/service.ts", {
   readAgentRun: async () => state.run,
 });
 stub("src/lib/mcp/auth.ts", { checkMcpRateLimit: async () => null });
+stub("src/lib/flags.ts", { isFeatureEnabled: async () => state.flagEnabled });
 
 const route = load("src/app/api/mcp/agents/runs/[id]/deliveries/route.ts");
 
@@ -62,6 +64,7 @@ function scenario(overrides = {}) {
     run: runRecord,
     deliveries: [],
     queries: [],
+    flagEnabled: true,
     ...overrides,
   });
   return state;
@@ -124,5 +127,12 @@ test("an unauthenticated caller exposes no delivery payloads", async () => {
   const { queries } = scenario({ principal: null });
   const response = await route.GET(request(), { params: Promise.resolve({ id: "run-1" }) });
   assert.equal(response.status, 401);
+  assert.equal(queries.length, 0);
+});
+
+test("the ticket feature flag gates the recorded payloads", async () => {
+  const { queries } = scenario({ flagEnabled: false });
+  const response = await route.GET(request(), { params: Promise.resolve({ id: "run-1" }) });
+  assert.equal(response.status, 404);
   assert.equal(queries.length, 0);
 });

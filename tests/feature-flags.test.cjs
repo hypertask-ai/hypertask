@@ -263,6 +263,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_ONLY",
         updatedAt: null,
       },
+      { key: "htpr-6124-agent-dev-loop", mode: "OWNER_ONLY", updatedAt: null },
       {
         key: "htpr-6129-mobile-agent-chat-viewport",
         mode: "OWNER_ONLY",

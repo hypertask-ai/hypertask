@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
 import {
   agentRunsEnabledFor,
   authenticateAgentRunRequest,
@@ -10,6 +11,7 @@ import { checkMcpRateLimit } from "@/lib/mcp/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const REPLAY_FEATURE_FLAG = "htpr-6124-agent-dev-loop";
 /** Lifecycle events an agent handler can be replayed with locally. */
 const REPLAYABLE_EVENTS = ["run.created", "run.prompted"];
 const MAX_DELIVERIES = 50;
@@ -40,7 +42,10 @@ export async function GET(
         401,
       );
     }
-    if (!(await agentRunsEnabledFor(principal))) {
+    if (
+      !(await agentRunsEnabledFor(principal)) ||
+      !(await isFeatureEnabled(REPLAY_FEATURE_FLAG, principal.userId))
+    ) {
       return noStore({ success: false, error: "Run not found" }, 404);
     }
 
