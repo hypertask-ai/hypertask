@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -30,6 +30,19 @@ export const MessageList: React.FC<MessageListProps> = () => {
   const messages = currentSession?.messages ?? [];
   const lastMessage = messages[messages.length - 1];
 
+  // Hand the scrollable node to the chat hook during the layout phase, and
+  // before the auto-scroll effects below: scrollMessagesToBottom reads this
+  // same node back out of the hook and returns early while it is still null.
+  // Registering in a plain useEffect ran after those effects, so on the mount
+  // that first paints a chat's history every auto-scroll silently did nothing
+  // and the panel sat on the very first message with the "jump to bottom"
+  // button showing. Hook order is declaration order, so this must stay above
+  // them.
+  useLayoutEffect(() => {
+    registerMessageListRef(messageListRef.current);
+    return () => registerMessageListRef(null);
+  }, []);
+
   // Auto-scroll to bottom when messages change. "auto" (instant), not
   // "smooth": handleMessageListScroll below reads scrollTop synchronously
   // right after, and a smooth (animated) scroll hasn't moved yet at that
@@ -51,10 +64,6 @@ export const MessageList: React.FC<MessageListProps> = () => {
     handleMessageListScroll(messageListRef.current);
   }, [chatMounted]);
 
-  useEffect(() => {
-    registerMessageListRef(messageListRef.current);
-    return () => registerMessageListRef(null);
-  }, []);
 
   return (
     <div
