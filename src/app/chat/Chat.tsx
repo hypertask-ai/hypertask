@@ -530,7 +530,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
                 </h2>
                 <ul className="space-y-0.5">
                   {group.sessions.map((session) => {
-                    const isActive = session.id === activeSession;
+                    const isActive = session.id === currentSession?.id;
                     const isPinned = aiChatPinnedSessionIds.includes(
                       session.id
                     );

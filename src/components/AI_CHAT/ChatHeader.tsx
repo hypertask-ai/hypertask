@@ -94,7 +94,6 @@ export const ChatHeader = () => {
     toggleSidebarMode,
     isSidebarMode,
     sessions,
-    activeSession,
     currentSession,
     isSessionPending,
     startNewSession,
@@ -123,12 +122,10 @@ export const ChatHeader = () => {
     [sessions]
   );
 
-  // Delete must target whichever session is highlighted below (activeSession),
-  // never a currentSession that's only a display-only fallback during a
-  // refetch - deleting is destructive, so it can't silently diverge from
-  // what the user sees selected. Only fall back to currentSession when
-  // nothing is explicitly selected yet (HTPR-6100).
-  const resolvedSessionId = activeSession ?? currentSession?.id;
+  // currentSession is the one canonical resolved session (title, messages,
+  // and now delete/highlight all read it) so none of them can disagree about
+  // which chat is on screen (HTPR-6100).
+  const resolvedSessionId = currentSession?.id;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -181,7 +178,7 @@ export const ChatHeader = () => {
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
-                  isActive={chat.id === activeSession}
+                  isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     selectSession(chat.id);
@@ -204,7 +201,7 @@ export const ChatHeader = () => {
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
-                  isActive={chat.id === activeSession}
+                  isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
                     selectSession(chat.id);

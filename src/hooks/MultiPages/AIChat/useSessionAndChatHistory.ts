@@ -555,7 +555,10 @@ export const useSessionAndChatHistory = (
   // "Pending" must be bounded to an in-flight fetch, or a session that's
   // genuinely gone (deleted server-side, fetch failed) would blank the
   // message pane forever instead of falling through to the welcome screen.
-  const isSessionPending = isFetchingSessions && currentSession === undefined;
+  // Demo mode never queries the real sessions endpoint (demoSessions is local
+  // state), so a background fetch of the signed-in user's own sessions being
+  // in flight is meaningless here and must not suppress the welcome screen.
+  const isSessionPending = !isDemo && isFetchingSessions && currentSession === undefined;
   const showWelcomeScreen = !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
 
   return {
