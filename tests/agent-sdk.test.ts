@@ -2801,7 +2801,8 @@ test("package manifest exports only dependency-free runtime entry points", async
     await readFile(new URL("../packages/agent-sdk/package.json", import.meta.url), "utf8"),
   );
   assert.equal(manifest.name, "@hypertask/agent-sdk");
-  assert.equal(manifest.private, true);
+  assert.equal(manifest.private, undefined);
+  assert.deepEqual(manifest.publishConfig, { access: "public" });
   assert.equal(manifest.dependencies, undefined);
   assert.deepEqual(Object.keys(manifest.exports), [
     ".",
