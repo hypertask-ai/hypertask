@@ -17,6 +17,7 @@ const FEATURE_FLAG_QA_USER = {
 
 export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
 export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
+export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -31,6 +32,10 @@ const FEATURE_FLAG_DEFINITIONS = [
   {
     key: "htpr-5993-optimistic-task-uploads",
     description: "Saves new tasks immediately while their attachments continue uploading.",
+  },
+  {
+    key: AGENT_CHAT_TICKET_CONFIRM_FLAG,
+    description: "Requires a confirmed board ticket before Agent Chat can start side-effecting work.",
   },
   {
     key: "htpr-6072-shallow-board-switch",
@@ -94,6 +99,7 @@ const FEATURE_FLAG_DEFINITIONS = [
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
 const OWNER_ONLY_BY_DEFAULT = new Set<string>([
+  AGENT_CHAT_TICKET_CONFIRM_FLAG,
   "htpr-6072-shallow-board-switch",
   "htpr-6094-agent-activity-rows",
   "htpr-6122-agent-run-activities",
