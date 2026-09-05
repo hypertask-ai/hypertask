@@ -4,14 +4,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
-import {
-  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
-  agentChatSystemMessageKind,
-} from "@/lib/agentRuns/model";
+import { isAgentChatSystemMessage } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 // GET /api/agent-chat/[sessionId]
 // History for one agent chat session, oldest first. `awaiting` tells the
@@ -51,16 +47,10 @@ export async function GET(
       "htpr-6094-agent-activity-rows",
       userId,
     );
-    const controlsEnabled = await isFeatureEnabled(
-      AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
-      userId,
+    const turn = await readAgentChatTurn(
+      { userId, agentId: null, displayName: "Hypertask user", source: "browser" },
+      session.id,
     );
-    const turn = controlsEnabled
-      ? await readAgentChatTurn(
-          { userId, agentId: null, displayName: "Hypertask user", source: "browser" },
-          session.id,
-        )
-      : null;
 
     // Last 200, oldest first: page desc from the tail, then flip.
     const [messageRows, activity] = await Promise.all([
@@ -92,14 +82,13 @@ export async function GET(
       session: { id: session.id, agentId: session.agentId },
       messages: messages.map((message) => ({
         id: message.id,
-        role: agentChatSystemMessageKind(message) ? "system" : message.role,
+        role: isAgentChatSystemMessage(message) ? "system" : message.role,
         content: message.content,
         createdAt: message.createdAt,
       })),
       activity,
       awaiting:
         turn?.awaiting ?? messages[messages.length - 1]?.role === "human",
-      stoppable: Boolean(turn?.awaiting),
       chatEnabled,
     });
   } catch (error: any) {

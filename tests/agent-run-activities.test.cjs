@@ -260,6 +260,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
     },
     chatMessage: {
       findFirst: async ({ where }) => [...messages].reverse().find((message) => (!where.sessionId || message.sessionId === where.sessionId) && (!where.id || message.id === where.id) && (!where.role || message.role === where.role)) ?? null,
+      findUnique: async ({ where }) => messages.find((message) => (!where.id || message.id === where.id) && (!where.replyToMessageId || message.replyToMessageId === where.replyToMessageId)) ?? null,
       createMany: async ({ data }) => {
         const created = data.filter((row) => !messages.some((item) => item.replyToMessageId === row.replyToMessageId));
         messages.push(...created.map((row, index) => ({ id: `message-${messages.length + index + 1}`, ...row })));
@@ -282,7 +283,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
       findFirst: async ({ where }) => where.userId !== 6 ? null : ({
         id: where.id,
         messages: messages.filter((message) => message.sessionId === where.id).slice(-1).reverse(),
-        agentRuns: runs.filter((run) => run.chatSessionId === where.id && ["ACTIVE", "STALE"].includes(run.status)).slice(-1),
+        agentRuns: runs.filter((run) => run.chatSessionId === where.id && ["ACTIVE", "STALE"].includes(run.status)).slice(-1).map((run) => ({ ...run, activities: activities.filter((activity) => activity.runId === run.id && activity.type === "ELICITATION" && activity.selectedAt === null) })),
       }),
       update: async (input) => {
         sessionUpdates.push(input);
@@ -291,6 +292,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
     },
   };
   db.$transaction = async (callback) => callback(db);
+  db.$queryRaw = async (_query, staleBefore) => [...new Set(messages.filter((message) => message.role === "human" && message.createdAt <= staleBefore).map((message) => message.sessionId))].map((id) => ({ id, userId: 6 }));
   return db;
 }
 
@@ -313,6 +315,7 @@ function activityInput(overrides = {}) {
     text: "Checking the task",
     link: null,
     options: null,
+    replyToMessageId: null,
     ...overrides,
   };
 }
@@ -335,6 +338,7 @@ test("activity input accepts typed rows and rejects invalid type-specific fields
         { value: "product", label: "Product" },
         { value: "docs", label: "Docs" },
       ],
+      replyToMessageId: null,
     },
   );
   assert.deepEqual(
@@ -349,8 +353,10 @@ test("activity input accepts typed rows and rejects invalid type-specific fields
       text: "Nullable fields",
       link: null,
       options: null,
+      replyToMessageId: null,
     },
   );
+  assert.equal(model.parseAgentRunActivityInput({ type: "response", text: "Done", replyToMessageId: "human-1" }).replyToMessageId, "human-1");
   assert.throws(
     () =>
       model.parseAgentRunActivityInput({
@@ -529,14 +535,22 @@ test("chat Stop and timeout persist one outcome against late replies", async () 
   assert.equal(stopped.db.messages.at(-1).content, model.AGENT_CHAT_STOPPED_MESSAGE);
   const queued = loadChatTurn(false);
   assert.ok(await queued.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
-  assert.equal(queued.db.messages.at(-1).content, model.AGENT_CHAT_STOPPED_MESSAGE);
   const racing = loadChatTurn();
   const [, response] = await Promise.allSettled([
-    racing.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z")), racing.service.createAgentRunActivity(agentPrincipal, racing.run.id, activityInput({ type: "RESPONSE", text: "late" }), null),
+    racing.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z")), racing.service.createAgentRunActivity(agentPrincipal, racing.run.id, activityInput({ type: "RESPONSE", text: "late", replyToMessageId: "human-1" }), null),
   ]);
   assert.equal(response.status, "rejected");
   assert.equal(racing.db.messages.filter((message) => message.replyToMessageId === "human-1").length, 1);
   assert.equal(racing.db.messages.at(-1).content, model.AGENT_CHAT_TIMEOUT_MESSAGE);
+  const eliciting = loadChatTurn();
+  eliciting.db.activities.push(activityRow({ runId: eliciting.run.id, type: "ELICITATION", createdAt: new Date("2026-09-04T10:01:00.000Z") }));
+  assert.equal((await eliciting.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z"))).awaiting, true);
+  assert.equal(await eliciting.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 0);
+  assert.ok(await eliciting.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  const swept = loadChatTurn();
+  assert.equal(await swept.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 1);
+  assert.equal(swept.db.messages.at(-1).content, model.AGENT_CHAT_TIMEOUT_MESSAGE);
+  assert.equal(swept.run.stoppedById, null);
 });
 
 test("activity behavior requires the parent and ticket feature flags", async () => {
@@ -837,15 +851,17 @@ test("chat responses store the activity and assistant message together", async (
     trigger: "CHAT",
   });
   const harness = loadService({ runs: [run] });
-  harness.db.messages.push({ id: "human-1", sessionId: "session-1", role: "human", createdAt: new Date() });
-
-  await harness.service.createAgentRunActivity(
-    agentPrincipal,
-    run.id,
-    activityInput({ type: "RESPONSE", text: "Chat answer" }),
-    "chat-response-1",
+  harness.db.messages.push(
+    { id: "human-old", sessionId: "session-1", role: "human", createdAt: new Date(0) },
+    { id: "human-1", sessionId: "session-1", role: "human", createdAt: new Date() },
   );
+  const response = activityInput({ type: "RESPONSE", text: "Chat answer", replyToMessageId: "human-1" });
+  await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, { ...response, replyToMessageId: null }, null), /replyToMessageId is required/);
+  await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, { ...response, replyToMessageId: "human-old" }, null), model.AgentRunNotActiveError);
+  await harness.service.createAgentRunActivity(agentPrincipal, run.id, response, "chat-response-1");
+  const replay = await harness.service.createAgentRunActivity(agentPrincipal, run.id, response, "chat-response-1");
 
+  assert.equal(replay.duplicate, true);
   assert.equal(harness.db.activities.length, 1);
   assert.deepEqual(
     harness.db.messages.filter(({ role }) => role === "assistant").map(({ role, content, sessionId }) => ({

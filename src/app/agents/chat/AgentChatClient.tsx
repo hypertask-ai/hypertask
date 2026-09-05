@@ -103,6 +103,7 @@ type TChatMessage = {
 
 type TAgentChatSession = { id: string; agentId: string };
 
+
 /** Header status line: a live lease names its ticket, anything else is idle. */
 function chatStatusText(agent: TAgent): string {
   if (isWorking(agent) && agent.working) {
@@ -318,33 +319,6 @@ function FeedFilter({
   );
 }
 
-function QueuedMessageBubble({
-  item,
-  onCancel,
-}: {
-  item: { id: string; content: string };
-  onCancel: (id: string) => void;
-}) {
-  return (
-    <div className="flex flex-col items-end">
-      <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground whitespace-pre-wrap break-words opacity-70">
-        {item.content}
-      </div>
-      <div className="mt-0.5 flex items-center gap-2 text-[10px] text-text-light-gray">
-        <span className="font-semibold uppercase tracking-wide">Queued</span>
-        <button
-          type="button"
-          onClick={() => onCancel(item.id)}
-          className="hover:text-white-black"
-          aria-label="Cancel queued message"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -435,7 +409,6 @@ const AgentChatClient = (props: IProp) => {
   const [isDictationProcessing, setIsDictationProcessing] = useState(false);
   const [sending, setSending] = useState(false);
   const [awaiting, setAwaiting] = useState(false);
-  const [stoppable, setStoppable] = useState(false);
   const [stopping, setStopping] = useState(false);
   // FIFO follow-ups typed while the agent is working (HTPR-6038), same
   // pattern as useAiChat.ts's messageQueueRef/drainQueuedMessage: the
@@ -613,7 +586,6 @@ const AgentChatClient = (props: IProp) => {
         error?: string;
         chatEnabled?: boolean;
         awaiting?: boolean;
-        stoppable?: boolean;
       };
       if (!res.ok || !data.success || !Array.isArray(data.messages)) {
         throw new Error(data.error ?? "Failed to load messages");
@@ -630,7 +602,6 @@ const AgentChatClient = (props: IProp) => {
       setMessages(data.messages);
       setActivity(Array.isArray(data.activity) ? data.activity : []);
       setAwaiting(Boolean(data.awaiting));
-      setStoppable(Boolean(data.stoppable));
       setMessagesError(null);
       // Same signal a failed send sets: no live webhook subscribed to
       // chat.message, so the human side of the notice must survive a reload.
@@ -697,7 +668,6 @@ const AgentChatClient = (props: IProp) => {
     setActivity([]);
     setMessagesError(null);
     setAwaiting(false);
-    setStoppable(false);
     setStopping(false);
     setDeliveryNotice(false);
     setDraft("");
@@ -724,7 +694,6 @@ const AgentChatClient = (props: IProp) => {
         setActivity([]);
         setMessagesError(null);
         setAwaiting(false);
-        setStoppable(false);
         setStopping(false);
         setDeliveryNotice(false);
         setDraft("");
@@ -1012,13 +981,11 @@ const AgentChatClient = (props: IProp) => {
     };
     setDeliveryNotice(false);
     setAwaiting(true);
-    setStoppable(false);
     // A new message restarts the 15 minute awaiting-poll bound.
     setAwaitingSince(null);
     setMessages((prev) => [...(prev ?? []), optimistic]);
     sendingRef.current = true;
     setSending(true);
-    let sent = false;
     try {
       const res = await fetch(`/api/agent-chat/${targetSessionId}/messages`, {
         method: "POST",
@@ -1035,7 +1002,6 @@ const AgentChatClient = (props: IProp) => {
         throw new Error(data.error ?? "Failed to send message");
       }
       const sentMessage = data.message;
-      sent = true;
       if (sessionIdRef.current !== targetSessionId) return;
       setMessages((prev) =>
         (prev ?? []).map((m) => (m.id === optimistic.id ? sentMessage : m)),
@@ -1048,7 +1014,6 @@ const AgentChatClient = (props: IProp) => {
       // Roll the optimistic bubble back and reopen the composer.
       setMessages((prev) => (prev ?? []).filter((m) => m.id !== optimistic.id));
       setAwaiting(false);
-      setStoppable(false);
       if (queuedId) {
         // A drained queue item failing must not free up the next item to
         // fire out of order: put it back at the front and block draining
@@ -1063,11 +1028,8 @@ const AgentChatClient = (props: IProp) => {
     } finally {
       sendingRef.current = false;
       setSending(false);
-      if (sent && sessionIdRef.current === targetSessionId) {
-        void loadMessages(targetSessionId);
-      }
     }
-  }, [loadMessages]);
+  }, []);
 
   const removeQueuedMessage = useCallback((id: string) => {
     messageQueueRef.current = messageQueueRef.current.filter(
@@ -1101,7 +1063,7 @@ const AgentChatClient = (props: IProp) => {
   drainQueuedMessageRef.current = drainQueuedMessage;
 
   const handleStop = async () => {
-    if (!session || !stoppable || stopping) return;
+    if (!session || !awaiting || stopping) return;
     const targetSessionId = session.id;
     setStopping(true);
     try {
@@ -1665,11 +1627,17 @@ const AgentChatClient = (props: IProp) => {
             )}
             {chatStopAndTimeoutEnabled &&
               queuedMessages.map((item) => (
-                <QueuedMessageBubble
-                  key={item.id}
-                  item={item}
-                  onCancel={removeQueuedMessage}
-                />
+                <div key={item.id} className="flex flex-col items-end">
+                  <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground whitespace-pre-wrap break-words opacity-70">
+                    {item.content}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-2 text-micro text-text-light-gray">
+                    <span className="font-semibold uppercase tracking-wide">Queued</span>
+                    <button type="button" onClick={() => removeQueuedMessage(item.id)} className="hover:text-white-black" aria-label="Cancel queued message">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               ))}
             {awaiting && activeFeedFilter !== "activity" && !deliveryNotice && (
               <div
@@ -1678,7 +1646,7 @@ const AgentChatClient = (props: IProp) => {
               >
                 <TypingIndicator />
                 <span>{selectedAgent.displayName} is working</span>
-                {chatStopAndTimeoutEnabled && stoppable && (
+                {chatStopAndTimeoutEnabled && (
                   <button
                     type="button"
                     onClick={() => void handleStop()}

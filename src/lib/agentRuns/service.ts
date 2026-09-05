@@ -12,11 +12,12 @@ import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
-import { isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import {
   AGENT_CHAT_STOPPED_MESSAGE,
+  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
   AGENT_CHAT_TIMEOUT_MESSAGE,
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
@@ -251,34 +252,30 @@ async function reconcileAgentChatTurn(
   stop: boolean,
   now: Date,
 ) {
-  if (principal.source !== "browser") return null;
+  if (principal.source !== "browser" || !(await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, principal.userId))) return null;
   const result = await prisma.$transaction(async (tx) => {
     const session = await tx.chatSession.findFirst({
       where: { id: sessionId, userId: principal.userId, agentId: { not: null } },
       select: {
-        id: true,
         messages: {
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: 1,
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1,
           select: { id: true, role: true, createdAt: true },
         },
         agentRuns: {
           where: { status: { in: NONTERMINAL_AGENT_RUN_STATUSES } },
-          orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }],
-          take: 1,
+          orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }], take: 1,
+          include: { activities: { where: { type: "ELICITATION", selectedAt: null }, take: 1 } },
         },
       },
     });
     if (!session) return null;
     const message = session.messages[0];
-    if (message?.role !== "human") {
-      return stop ? null : { awaiting: false, run: null, changed: false, deliveryId: null };
-    }
+    if (message?.role !== "human") return stop ? null : { awaiting: false };
     const [candidateRun] = session.agentRuns;
     const run = candidateRun && candidateRun.lastActivityAt >= message.createdAt ? candidateRun : null;
     const expired = now.getTime() - message.createdAt.getTime() >= AGENT_RUN_STALE_AFTER_MS;
-    if (!stop && !expired) {
-      return { awaiting: true, run: run ? { id: run.id } : null, changed: false, deliveryId: null };
+    if (!stop && (!expired || run?.activities.some((activity) => activity.createdAt >= message.createdAt))) {
+      return { awaiting: true, run: run ? { id: run.id } : null };
     }
     const marker = await tx.chatMessage.createMany({
       data: [{
@@ -291,36 +288,35 @@ async function reconcileAgentChatTurn(
       }],
       skipDuplicates: true,
     });
-    if (marker.count === 0) {
-      return stop ? null : { awaiting: false, run: null, changed: false, deliveryId: null };
-    }
+    if (marker.count === 0) return stop ? null : { awaiting: false };
 
     let deliveryId: string | null = null;
     if (run) {
+      const stoppedById = stop ? principal.userId : null;
       const stopped = await tx.agentRun.updateMany({
         where: { id: run.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES } },
-        data: { status: "STOPPED", stoppedById: principal.userId, lastActivityAt: now },
+        data: { status: "STOPPED", stoppedById, lastActivityAt: now },
       });
       if (stopped.count === 0) throw new Error("Agent chat run changed while stopping");
-      const stoppedRun = {
-        ...run,
-        status: "STOPPED" as const,
-        stoppedById: principal.userId,
-        lastActivityAt: now,
-      };
       deliveryId = await persistAgentRunStoppedWebhook(tx, {
         agentId: run.agentId,
         projectId: null,
         taskId: null,
         ticketNumber: null,
         taskTitle: null,
-        actor: { userId: principal.userId, agentId: null, displayName: principal.displayName },
+        actor: {
+          userId: principal.userId,
+          agentId: null,
+          displayName: stop ? principal.displayName : "Agent Chat timeout",
+        },
         runId: run.id,
-        run: serializeAgentRun(stoppedRun),
+        run: serializeAgentRun({
+          ...run, status: "STOPPED", stoppedById, lastActivityAt: now,
+        }),
       });
     }
     await tx.chatSession.update({ where: { id: sessionId }, data: { updatedAt: now } });
-    return { awaiting: false, run: run ? { id: run.id } : null, changed: true, deliveryId };
+    return { awaiting: false, changed: true, deliveryId };
   });
 
   if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
@@ -333,8 +329,32 @@ export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId:
   return result ? { awaiting: result.awaiting, run: result.awaiting ? result.run : null } : null;
 }
 export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
-  const result = await reconcileAgentChatTurn(principal, sessionId, true, now);
-  return result?.changed ? { run: result.run } : null;
+  return (await reconcileAgentChatTurn(principal, sessionId, true, now))?.changed || null;
+}
+
+export async function sweepExpiredAgentChatTurns(now = new Date()) {
+  // Prioritize restricted-mode users so disabled sessions cannot fill the bounded batch.
+  const sessions = await prisma.$queryRaw<Array<{ id: string; userId: number }>>`
+    SELECT s.id, s."userId" FROM "ChatSession" s
+    JOIN LATERAL (SELECT m.id, m.role, m."createdAt" FROM "ChatMessage" m WHERE m."sessionId" = s.id ORDER BY m."createdAt" DESC, m.id DESC LIMIT 1) latest ON true
+    WHERE s."agentId" IS NOT NULL AND latest.role = 'human' AND latest."createdAt" <= ${new Date(now.getTime() - AGENT_RUN_STALE_AFTER_MS)}
+      AND NOT EXISTS (SELECT 1 FROM "AgentRun" r JOIN "AgentRunActivity" a ON a."runId" = r.id
+        WHERE r."chatSessionId" = s.id AND r.status IN ('ACTIVE', 'STALE') AND a.type = 'ELICITATION' AND a."selectedAt" IS NULL AND a."createdAt" >= latest."createdAt")
+    ORDER BY CASE s."userId" WHEN ${FEATURE_FLAG_OWNER_USER_ID} THEN 0 WHEN ${FEATURE_FLAG_QA_USER_ID} THEN 1 ELSE 2 END, latest."createdAt", latest.id LIMIT 100
+  `;
+  let timedOut = 0;
+  for (const session of sessions) {
+    try {
+      const result = await reconcileAgentChatTurn(
+        { userId: session.userId, agentId: null, displayName: "Agent Chat timeout", source: "browser" },
+        session.id, false, now,
+      );
+      if (result?.changed) timedOut += 1;
+    } catch (error) {
+      console.warn("[agent-chat] timeout sweep failed", session.id, error);
+    }
+  }
+  return timedOut;
 }
 
 type ActivityRunWithContext = AgentRun & {
@@ -414,6 +434,10 @@ async function replayCreatedActivity(
     throw new AgentRunActivityConflictError(
       "Idempotency-Key was already used with different activity data",
     );
+  }
+  if (input.type === "RESPONSE" && run.chatSession) {
+    const reply = await prisma.chatMessage.findUnique({ where: { replyToMessageId: input.replyToMessageId! } });
+    if (reply?.sessionId !== run.chatSession.id || reply.content !== input.text || !reply.isDelivered) throw new AgentRunActivityConflictError("Idempotency-Key was already used for another chat turn");
   }
   // Older activities have no comment link, so they retain duplicate-only replay.
   if (input.type === "RESPONSE" && run.task && activity.responseCommentId) {
@@ -522,6 +546,9 @@ export async function createAgentRunActivity(
   if (!principal.agentId) return null;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
+  if (input.type === "RESPONSE" && run.chatSession && !input.replyToMessageId) {
+    throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
+  }
 
   if (idempotencyKey !== null) {
     const existing = await findIdempotentActivity(run.id, idempotencyKey);
@@ -563,7 +590,9 @@ export async function createAgentRunActivity(
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           select: { id: true, role: true },
         });
-        if (target?.role !== "human") throw new AgentRunNotActiveError("Run is no longer active");
+        if (target?.role !== "human" || target.id !== input.replyToMessageId) {
+          throw new AgentRunNotActiveError("Chat response does not target the current turn");
+        }
         await tx.chatMessage.create({
           data: {
             sessionId: run.chatSession!.id,

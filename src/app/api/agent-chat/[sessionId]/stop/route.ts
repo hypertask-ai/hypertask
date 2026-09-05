@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
-import {
-  authenticateAgentRunRequest,
-  browserMutationIsSameOrigin,
-  stopAgentChatTurn,
-} from "@/lib/agentRuns/service";
-import { isFeatureEnabled } from "@/lib/flags";
+import { authenticateAgentRunRequest, browserMutationIsSameOrigin, stopAgentChatTurn } from "@/lib/agentRuns/service";
 import { checkMcpRateLimit } from "@/lib/mcp/auth";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 const respond = (body: Record<string, unknown>, status = 200) =>
   NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 
@@ -21,19 +14,10 @@ export async function POST(
   if (rateLimited) return rateLimited;
   try {
     const principal = await authenticateAgentRunRequest(request);
-    if (!principal || principal.source !== "browser") {
-      return respond({ success: false, error: "Unauthorized" }, 401);
-    }
-    if (!browserMutationIsSameOrigin(request)) {
-      return respond({ success: false, error: "Cross-origin request rejected" }, 403);
-    }
-    if (!(await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, principal.userId))) {
-      return respond({ success: false, error: "Run not found" }, 404);
-    }
+    if (!principal || principal.source !== "browser") return respond({ success: false, error: "Unauthorized" }, 401);
+    if (!browserMutationIsSameOrigin(request)) return respond({ success: false, error: "Cross-origin request rejected" }, 403);
     const sessionId = (await params).sessionId.trim();
-    if (!sessionId || !(await stopAgentChatTurn(principal, sessionId))) {
-      return respond({ success: false, error: "Active run not found" }, 404);
-    }
+    if (!sessionId || !(await stopAgentChatTurn(principal, sessionId))) return respond({ success: false, error: "Active run not found" }, 404);
     return respond({ success: true });
   } catch (error) {
     console.error("[agent-chat] stop failed", error);

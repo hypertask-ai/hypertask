@@ -7,12 +7,13 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
+export const FEATURE_FLAG_QA_USER_ID = 985;
 const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
 } as const;
 const FEATURE_FLAG_QA_USER = {
-  userId: 985,
+  userId: FEATURE_FLAG_QA_USER_ID,
   email: "valentin@hypertask.ai",
 } as const;
 

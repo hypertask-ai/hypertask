@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
-import { AGENT_CHAT_STOPPED_MESSAGE, AGENT_CHAT_TIMEOUT_MESSAGE, agentChatSystemMessageKind } from '@/lib/agentRuns/model'
+import { AGENT_CHAT_STOPPED_MESSAGE, AGENT_CHAT_TIMEOUT_MESSAGE, isAgentChatSystemMessage } from '@/lib/agentRuns/model'
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from '@/lib/realtime/server'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
@@ -214,7 +214,7 @@ export async function POST(
           { status: 409 }
         )
       }
-      if (agentChatSystemMessageKind(existing)) {
+      if (isAgentChatSystemMessage(existing)) {
         return NextResponse.json(
           { success: false, error: 'This chat turn is no longer active' },
           { status: 409 }
@@ -252,7 +252,7 @@ export async function POST(
         where: { replyToMessageId },
       })
       if (!existing || existing.sessionId !== session.id) throw error
-      if (agentChatSystemMessageKind(existing)) {
+      if (isAgentChatSystemMessage(existing)) {
         return NextResponse.json(
           { success: false, error: 'This chat turn is no longer active' },
           { status: 409 }
