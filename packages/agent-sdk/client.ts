@@ -364,7 +364,12 @@ export class AgentClient {
       }
 
       try {
-        for (const handler of handlers) await handler(run);
+        for (const handler of handlers) {
+          if (claimError) throw claimError;
+          if (statusCheckError) throw statusCheckError;
+          if (event !== "stop") dispatchController.signal.throwIfAborted();
+          await handler(run);
+        }
         cancelAutoThought();
         await autoThoughtDone;
         if (autoThoughtFailed) throw autoThoughtError;

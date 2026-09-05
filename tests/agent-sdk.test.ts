@@ -1951,6 +1951,30 @@ test("losing one delivery claim does not cancel a sibling delivery", async () =>
   assert.equal(siblingWasAborted, false);
 });
 
+test("claim loss prevents later handlers from running", async () => {
+  const api = apiFixture();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+  });
+  const claim = new AbortController();
+  let laterHandlerCalled = false;
+  agent.on("mention", () => {
+    claim.abort(new Error("claim lost between handlers"));
+  });
+  agent.on("mention", () => {
+    laterHandlerCalled = true;
+  });
+
+  await assert.rejects(
+    agent.client.dispatch(payload(), run, claim.signal),
+    /claim lost between handlers/,
+  );
+  assert.equal(laterHandlerCalled, false);
+});
+
 test("a stop delivery aborts active work and still reaches stop handlers", async () => {
   const api = apiFixture();
   const errors: unknown[] = [];
