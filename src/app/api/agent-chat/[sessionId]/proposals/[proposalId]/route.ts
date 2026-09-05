@@ -104,8 +104,11 @@ export async function POST(
         select: chatTicketProposalSelect,
       });
     const fail = async (message: string, status: number) => {
-      await prisma.chatTicketProposal.update({
-        where: { id: proposal.id },
+      // Only the claim this request holds may be released. An unguarded write
+      // would reopen a proposal a second tab dismissed, or wipe the ticket off
+      // one that finished while these live rechecks were still running.
+      await prisma.chatTicketProposal.updateMany({
+        where: { id: proposal.id, status: "CONFIRMED", taskId: null },
         data: {
           status: "FAILED",
           failureMessage: message.slice(0, 255),
@@ -228,14 +231,21 @@ export async function POST(
 
     // taskId is unique and only attaches while it is null, so a lease takeover
     // that raced the original confirm cannot leave two tickets on the board.
+    // ponytail: the create and this attach are two statements, so a process
+    // that dies between them leaves one ticket no proposal points at, and the
+    // lease takeover then creates a second. Recording the ticket id before the
+    // create (or creating it in the same transaction) closes that window.
     const attached = await prisma.chatTicketProposal.updateMany({
       where: { id: proposal.id, taskId: null },
       data: { taskId: task.id },
     });
     if (attached.count === 0) {
+      // ponytail: a plain status write rather than the archive controller, so
+      // this skips the activity row and notifications. Fine for a ticket the
+      // board never should have seen; use updateTaskSingle if that changes.
       await prisma.task.update({
         where: { id: task.id },
-        data: { status: "Archive" },
+        data: { status: "Archive", archivedAt: new Date() },
       });
     }
 

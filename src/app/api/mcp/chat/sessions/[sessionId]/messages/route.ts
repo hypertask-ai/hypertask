@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from '@/lib/realtime/server'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
@@ -197,13 +198,43 @@ export async function POST(
       role: 'human' | 'assistant'
       content: string
       createdAt: Date
-      ticketProposal?: unknown
+      ticketProposal?: Parameters<typeof serializeChatTicketProposal>[0]
     }) => ({ id, role, content, createdAt,
-      proposal: serializeChatTicketProposal(ticketProposal as any) })
+      proposal: serializeChatTicketProposal(ticketProposal) })
+
+    const target = await prisma.chatMessage.findFirst({
+      where: { id: replyToMessageId, sessionId: session.id, role: 'human' },
+      select: { id: true },
+    })
+    if (!target) {
+      return NextResponse.json(
+        { success: false, error: 'replyToMessageId is not a user message in this session' },
+        { status: 400 }
+      )
+    }
+    const existing = await prisma.chatMessage.findUnique({
+      where: { replyToMessageId },
+      include: { ticketProposal: { select: chatTicketProposalSelect } },
+    })
+    if (existing) {
+      if (existing.sessionId !== session.id) {
+        return NextResponse.json(
+          { success: false, error: 'replyToMessageId already used by another session' },
+          { status: 409 }
+        )
+      }
+      return NextResponse.json({
+        success: true,
+        message: serialize(existing),
+        duplicate: true,
+      })
+    }
 
     // A proposal is the whole point of the confirm-before-side-effects boundary:
     // the agent asks for a ticket instead of doing the work. Everything is
     // checked before anything is stored, so a rejected proposal creates nothing.
+    // This runs after the replay check above: a retry of an already stored
+    // reply must not be refused because the agent's rights narrowed since.
     const parsedProposal = parseChatTicketProposal(body?.proposal)
     if (parsedProposal.error) {
       return NextResponse.json(
@@ -263,36 +294,10 @@ export async function POST(
       }
     }
 
-    const target = await prisma.chatMessage.findFirst({
-      where: { id: replyToMessageId, sessionId: session.id, role: 'human' },
-      select: { id: true },
-    })
-    if (!target) {
-      return NextResponse.json(
-        { success: false, error: 'replyToMessageId is not a user message in this session' },
-        { status: 400 }
-      )
-    }
-    const existing = await prisma.chatMessage.findUnique({
-      where: { replyToMessageId },
-      include: { ticketProposal: { select: chatTicketProposalSelect } },
-    })
-    if (existing) {
-      if (existing.sessionId !== session.id) {
-        return NextResponse.json(
-          { success: false, error: 'replyToMessageId already used by another session' },
-          { status: 409 }
-        )
-      }
-      return NextResponse.json({
-        success: true,
-        message: serialize(existing),
-        duplicate: true,
-      })
-    }
-
     let message
-    let createdProposal: any = null
+    let createdProposal: Prisma.ChatTicketProposalGetPayload<{
+      select: typeof chatTicketProposalSelect
+    }> | null = null
     try {
       message = await prisma.$transaction(async (tx) => {
         const created = await tx.chatMessage.create({
@@ -334,7 +339,8 @@ export async function POST(
     }
 
     if (createdProposal) {
-      ;(message as { ticketProposal?: unknown }).ticketProposal = createdProposal
+      ;(message as { ticketProposal?: typeof createdProposal }).ticketProposal =
+        createdProposal
     }
 
     // The user's open Agent Chat tab refetches the thread; fire and forget.

@@ -155,6 +155,7 @@ function ProposalCard({
     }
   };
   const open = proposal.status === "PENDING" || proposal.status === "FAILED";
+  const confirmLabel = busy === "confirm" ? "Creating…" : "Create ticket";
   return (
     <div className="mt-1 max-w-[80%] rounded-[5px] bg-cardBackground px-3 py-2 text-meta">
       <div className="mb-1 flex items-center gap-1.5 font-medium text-white-black">
@@ -169,8 +170,12 @@ function ProposalCard({
       {proposal.status === "FAILED" && proposal.failureMessage && (
         <p className="mt-1 text-red-500">{proposal.failureMessage}</p>
       )}
+      {proposal.status === "CONFIRMED" && !proposal.task && (
+        <p className="mt-1 text-text-light-gray">Creating the ticket…</p>
+      )}
       {proposal.status === "CONFIRMED" &&
-        (proposal.task ? (
+        proposal.task &&
+        (proposal.task.url ? (
           <a
             href={proposal.task.url}
             className="mt-1 inline-flex items-center gap-1 text-hypertasks-purple hover:underline"
@@ -179,7 +184,9 @@ function ProposalCard({
             <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
           </a>
         ) : (
-          <p className="mt-1 text-text-light-gray">Creating the ticket…</p>
+          <p className="mt-1 text-text-light-gray">
+            {proposal.task.ticketNumber} was deleted.
+          </p>
         ))}
       {proposal.status === "DISMISSED" && (
         <p className="mt-1 text-text-light-gray">Dismissed, still discussing.</p>
@@ -189,22 +196,20 @@ function ProposalCard({
           <button
             type="button"
             disabled={busy !== null}
-            onClick={() => void run("confirm")}
-            className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {busy === "confirm"
-              ? "Creating…"
-              : proposal.status === "FAILED"
-                ? "Try again"
-                : "Create ticket"}
-          </button>
-          <button
-            type="button"
-            disabled={busy !== null}
             onClick={() => void run("dismiss")}
             className="text-dense text-text-light-gray hover:text-white-black disabled:opacity-50"
           >
             Keep discussing
+          </button>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void run("confirm")}
+            className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {proposal.status === "FAILED" && busy === null
+              ? "Try again"
+              : confirmLabel}
           </button>
         </div>
       )}

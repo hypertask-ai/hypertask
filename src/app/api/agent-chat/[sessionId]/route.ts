@@ -90,6 +90,7 @@ export async function GET(
         role,
         content,
         createdAt,
+      // Second pass over the same array, so index i is the same row in both.
       })).map((message, index) => ({
         ...message,
         proposal: serializeChatTicketProposal(

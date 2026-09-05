@@ -83,8 +83,11 @@ const prisma = {
     findFirst: async () => ({ id: "human-1" }),
     findUnique: async () => null,
     create: async ({ data }) => {
-      const row = { id: `msg-${createdMessages.length + 1}`, ...data,
-        role: data.role, content: data.content, createdAt: new Date() };
+      const row = {
+        id: `msg-${createdMessages.length + 1}`,
+        ...data,
+        createdAt: new Date(),
+      };
       createdMessages.push(row);
       return row;
     },

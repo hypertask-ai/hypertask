@@ -101,21 +101,24 @@ export type SerializedChatTicketProposal = {
   targetProjectTitle: string;
   targetSectionTitle: string;
   failureMessage: string | null;
-  task: { ticketNumber: string; url: string } | null;
+  task: { ticketNumber: string; url: string | null } | null;
 };
 
 export function serializeChatTicketProposal(
   row: ProposalRow | null | undefined,
 ): SerializedChatTicketProposal | null {
   if (!row) return null;
-  // A deleted ticket leaves the link off rather than pointing at a tombstone.
-  const task =
-    row.task && row.task.status !== "Deleted" && row.task.ticketNumber
-      ? {
-          ticketNumber: row.task.ticketNumber,
-          url: `/detail/project-${row.task.projectId}/${row.task.uniqueIndex}`,
-        }
-      : null;
+  // A deleted ticket keeps its number and loses its link: the card must say
+  // the ticket is gone rather than sit on "creating" forever.
+  const task = row.task?.ticketNumber
+    ? {
+        ticketNumber: row.task.ticketNumber,
+        url:
+          row.task.status === "Deleted"
+            ? null
+            : `/detail/project-${row.task.projectId}/${row.task.uniqueIndex}`,
+      }
+    : null;
   return {
     id: row.id,
     status: row.status,
