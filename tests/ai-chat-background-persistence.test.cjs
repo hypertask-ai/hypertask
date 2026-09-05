@@ -28,6 +28,7 @@ const { acquireAiChatStreamLease, releaseAiChatStreamLease } = jiti(
 
 function persistenceDb({
   owned = true,
+  agentId = null,
   createdCount = 1,
   existingRole = "assistant",
   existingContent = "Finished reply",
@@ -40,7 +41,7 @@ function persistenceDb({
       chatSession: {
         findFirst: async (args) => {
           calls.push(["session.findFirst", args]);
-          return owned ? { id: args.where.id } : null;
+          return owned ? { id: args.where.id, agentId } : null;
         },
         update: async (args) => {
           calls.push(["session.update", args]);
@@ -82,7 +83,7 @@ test("completed assistant replies persist idempotently in an owned session", asy
     "session.findFirst",
     {
       where: { id: "session-id", userId: 6 },
-      select: { id: true },
+      select: { id: true, agentId: true },
     },
   ]);
   assert.equal(calls[1][0], "message.createMany");
@@ -94,6 +95,7 @@ test("completed assistant replies persist idempotently in an owned session", asy
       content: "<p>Finished reply</p>",
       role: "assistant",
       isDelivered: true,
+      authorAgentId: null,
     },
   ]);
   assert.equal(calls.at(-1)[0], "session.update");
@@ -247,6 +249,7 @@ test("one native stream creates its owned session and human message idempotently
       content: "Hello from Android",
       role: "human",
       isDelivered: true,
+      authorUserId: 6,
     },
   ]);
 });
@@ -480,4 +483,24 @@ test("the stream and client use rollout-safe background persistence", () => {
     /const appendMessageToSessionCache[\s\S]*addMessageToSessionQuery\(sessionId, message, true, false\)/,
   );
   assert.doesNotMatch(client, /addEventListener\("beforeunload", handleBeforeUnload\)/);
+});
+
+test("a native agent's reply is stored as that agent's message", async () => {
+  const { db, calls } = persistenceDb({ agentId: "agent-1" });
+  const saved = await persistAssistantMessage({
+    db,
+    messageId: "message-id",
+    sessionId: "session-id",
+    userId: 6,
+    content: "Finished reply",
+    linkify: async (content) => content,
+  });
+
+  assert.equal(saved, true);
+  const created = calls.find(([name]) => name === "message.createMany")[1];
+  assert.equal(
+    created.data[0].authorAgentId,
+    "agent-1",
+    "a reader must be able to tell which agent wrote a reply, not just that a machine did",
+  );
 });

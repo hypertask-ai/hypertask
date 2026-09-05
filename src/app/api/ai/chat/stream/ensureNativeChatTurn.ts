@@ -86,6 +86,7 @@ export async function ensureNativeChatTurn({
         content,
         role: "human",
         isDelivered: true,
+        authorUserId: userId,
       },
     ],
     skipDuplicates: true,

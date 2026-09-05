@@ -1,6 +1,13 @@
 export type AgentEventName = "mention" | "assigned" | "chat" | "prompted" | "stop";
 export type AgentEventSubscription = AgentEventName | "*";
-export type AgentRunStatus = "active" | "stale" | "stopped" | "done";
+export type AgentRunStatus =
+  | "queued"
+  | "active"
+  | "stale"
+  | "stopped"
+  | "done"
+  | "failed"
+  | "expired";
 export type AgentRunTrigger = "mention" | "assigned" | "chat";
 export type AgentActivityType =
   | "thought"

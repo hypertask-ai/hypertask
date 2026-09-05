@@ -222,7 +222,14 @@ export type AgentWebhookRun = {
   taskId: number | null;
   chatSessionId: string | null;
   trigger: "mention" | "assigned" | "chat";
-  status: "active" | "stale" | "stopped" | "done";
+  status:
+    | "queued"
+    | "active"
+    | "stale"
+    | "stopped"
+    | "done"
+    | "failed"
+    | "expired";
   createdAt: string;
   lastActivityAt: string;
   stoppedBy: number | null;

@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
-import { accessibleAgentWhere } from "@/lib/agents/visibility";
+import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { getAgentRole } from "@/lib/mcp/agents/scopes";
@@ -56,31 +56,25 @@ export async function POST(
       );
     }
 
-    // Same ownership rule as the sibling agent-chat routes: the session is this
-    // user's, its agent is live, and the user may still see that agent.
-    const session = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        userId,
-        agentId: { not: null },
-        agent: {
-          revokedAt: null,
-          ...accessibleAgentWhere(userId),
-        },
-      },
-      select: {
-        id: true,
-        agentId: true,
-        agent: { select: { id: true, displayName: true } },
-      },
+    const access = await loadUserAgentChatSession({
+      sessionId,
+      userId,
+      select: { agent: { select: { id: true, displayName: true } } },
     });
-    if (!session?.agentId || !session.agent) {
+    if (!access.ok) {
+      return NextResponse.json(
+        { success: false, error: access.error },
+        { status: access.status }
+      );
+    }
+    const session = access.session;
+    if (!session.agent) {
       return NextResponse.json(
         { success: false, error: "Session not found" },
         { status: 404 }
       );
     }
-    const agentId = session.agentId;
+    const agentId = access.agentId;
 
     const proposal = await prisma.chatTicketProposal.findFirst({
       where: { id: proposalId, message: { sessionId: session.id } },

@@ -6,7 +6,7 @@ import {
 } from "@/lib/agentWebhooks/outbox";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { NextRequest, NextResponse } from "next/server";
-import { accessibleAgentWhere } from "@/lib/agents/visibility";
+import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
 import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -42,31 +42,22 @@ export async function POST(
       );
     }
 
-    const session = await prisma.chatSession.findFirst({
-      where: {
-        id: sessionId,
-        userId,
-        agentId: { not: null },
-        agent: {
-          revokedAt: null,
-          ...accessibleAgentWhere(userId),
-        },
-      },
+    const access = await loadUserAgentChatSession({
+      sessionId,
+      userId,
       select: {
-        id: true,
-        agentId: true,
         user: { select: { displayName: true } },
         agent: { select: { runtimeType: true } },
       },
     });
-
-    if (!session || !session.agentId) {
+    if (!access.ok) {
       return NextResponse.json(
-        { success: false, error: "Session not found" },
-        { status: 404 }
+        { success: false, error: access.error },
+        { status: access.status }
       );
     }
-    const agentId = session.agentId;
+    const session = access.session;
+    const agentId = access.agentId;
 
     if (session.agent?.runtimeType === "NATIVE") {
       return NextResponse.json(
@@ -91,6 +82,7 @@ export async function POST(
           content: text,
           role: "human",
           isDelivered: true,
+          authorUserId: userId,
         },
       });
 

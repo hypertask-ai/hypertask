@@ -231,11 +231,21 @@ enum AgentRunTrigger {
   CHAT
 }
 
+/// Turn lifecycle for one agent run. QUEUED = accepted, not started;
+/// ACTIVE = running; STALE = started then went silent; STOPPED = a human
+/// stopped it; DONE = completed; FAILED = ended in an error; EXPIRED = never
+/// started before its deadline.
+/// ponytail: QUEUED, FAILED and EXPIRED are vocabulary only for now. The
+/// transitions belong to the chat runtime work in HTPR-6154, which is open on
+/// these same files; declaring them here twice would be the real defect.
 enum AgentRunStatus {
+  QUEUED
   ACTIVE
   STALE
   STOPPED
   DONE
+  FAILED
+  EXPIRED
 }
 
 enum AgentRunActivityType {
@@ -334,6 +344,7 @@ model User {
   decisionRequestsCreated  DecisionRequest[]             @relation("DecisionRequestCreatedBy")
   decisionRequestsAnswered DecisionRequest[]             @relation("DecisionRequestAnsweredBy")
   webhookSubscriptions     WebhookSubscription[]
+  authoredChatMessages     ChatMessage[]                 @relation("ChatMessageAuthorUser")
   stoppedAgentRuns         AgentRun[]                    @relation("AgentRunStoppedBy")
   selectedAgentRunActivities AgentRunActivity[]           @relation("AgentRunActivitySelectedBy")
   aiSkills                  AI_Skill[]                  @relation("AI_SkillOwner")
@@ -2151,8 +2162,25 @@ model ChatMessage {
   // so a retried agent POST cannot duplicate a reply.
   replyToMessageId String? @unique
   ticketProposal ChatTicketProposal?
+  // Who actually wrote this message. `role` says which side of the
+  // conversation a message sits on; these say which person or which agent
+  // produced it, which is the part a shared thread needs and role cannot
+  // carry. At most one is set, enforced by a CHECK constraint. Both stay null
+  // for machine-generated turns (the heartbeat prompt) and for the built-in AI
+  // assistant, which is not an Agent row. Deleting a user or agent keeps the
+  // transcript and drops the attribution, like every other history record here.
+  authorUserId Int?
+  authorUser User? @relation("ChatMessageAuthorUser", fields: [authorUserId], references: [id], onDelete: SetNull)
+  authorAgentId String?
+  authorAgent Agent? @relation("ChatMessageAuthorAgent", fields: [authorAgentId], references: [id], onDelete: SetNull)
 
   @@index([sessionId])
+  // Backs ordered, cursor-paginated history: createdAt alone ties for messages
+  // stored in the same millisecond, so id breaks the tie and makes a page
+  // boundary reproducible.
+  @@index([sessionId, createdAt, id])
+  @@index([authorUserId])
+  @@index([authorAgentId])
 }
 
 model ChatTicketProposal {
@@ -2239,6 +2267,7 @@ model Agent {
   webhookSubscriptions      WebhookSubscription[]
   agentWebhookSubscription  AgentWebhookSubscription?
   chatSessions              ChatSession[]
+  authoredChatMessages      ChatMessage[] @relation("ChatMessageAuthorAgent")
   runs                      AgentRun[]
   byokApiKeys               AgentByokApiKey[]
 
