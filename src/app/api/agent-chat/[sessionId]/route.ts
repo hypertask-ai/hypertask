@@ -125,7 +125,9 @@ export async function GET(
           (messages[index] as { ticketProposal?: any }).ticketProposal,
         ),
       })),
-      activity,
+      // Null, not an empty list, on a paged read: an older page simply does
+      // not carry the feed, and [] would read as "this thread has none".
+      activity: before ? null : activity,
       hasMore,
       // The id to send back as `before` for the page above this one.
       nextBefore: hasMore ? (messages[0]?.id ?? null) : null,

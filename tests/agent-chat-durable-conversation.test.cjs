@@ -274,6 +274,27 @@ test("the page above continues from the cursor without repeating a row", async (
   assert.equal(third.nextBefore, null);
 });
 
+test("a paged read says the feed is absent, not empty", async () => {
+  messages = Array.from({ length: 3 }, (_, index) => message(index + 1));
+
+  const first = await (
+    await historyRoute.GET(historyRequest("?limit=1"), routeContext())
+  ).json();
+  assert.deepEqual(first.activity, [], "the newest page carries the feed");
+
+  const older = await (
+    await historyRoute.GET(
+      historyRequest(`?limit=1&before=${first.nextBefore}`),
+      routeContext(),
+    )
+  ).json();
+  assert.equal(
+    older.activity,
+    null,
+    "an empty list would read as 'this thread has no activity'",
+  );
+});
+
 test("a cursor from another thread is rejected instead of paging it", async () => {
   messages = [message(1), message(2, "session-other-user")];
   const response = await historyRoute.GET(
@@ -435,13 +456,23 @@ test("constraints are added unvalidated and validated on their own", () => {
 test("existing messages keep their history and gain their author", () => {
   assert.match(
     backfillMigration,
-    /UPDATE "ChatMessage"[\s\S]*"authorUserId" = session\."userId"[\s\S]*role" = 'human'[\s\S]*isDelivered" = true/,
-    "a delivered human message belongs to the person who owns the thread",
+    /"authorUserId" = CASE WHEN message\."role" = 'human' THEN session\."userId" END/,
+    "a human message belongs to the person who owns the thread",
   );
   assert.match(
     backfillMigration,
-    /UPDATE "ChatMessage"[\s\S]*"authorAgentId" = session\."agentId"[\s\S]*role" = 'assistant'[\s\S]*agentId" IS NOT NULL/,
-    "a delivered reply in an agent thread belongs to that agent",
+    /"authorAgentId" = CASE WHEN message\."role" = 'assistant' THEN session\."agentId" END/,
+    "a reply in an agent thread belongs to that agent",
+  );
+  assert.match(
+    backfillMigration,
+    /role" = 'assistant'[\s\S]{0,120}isDelivered" = true[\s\S]{0,120}agentId" IS NOT NULL/,
+    "an undelivered assistant row is a system notice about the turn, not the agent's answer",
+  );
+  assert.equal(
+    (statements(backfillMigration).match(/^\s*UPDATE\b/gim) || []).length,
+    1,
+    "the human and assistant row sets are disjoint, so a second pass would rewrite the table for nothing",
   );
 });
 
