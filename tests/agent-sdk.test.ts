@@ -980,6 +980,13 @@ test("run events bind the token, hydrate context, and use stable activity keys",
   await work.drain();
   assert.equal(seen, true);
   assert.equal(
+    api.calls
+      .filter((call) => call.path.includes("/mcp/agents/runs/"))
+      .every((call) => call.headers.get("x-hypertask-agent-sdk") === "typescript"),
+    true,
+    "run requests identify the SDK for server-side rollout gating",
+  );
+  assert.equal(
     api.calls.some(
       (call) =>
         call.path === "/api/mcp/comments?task_id=101&limit=100&sort_order=desc",
@@ -2350,16 +2357,12 @@ test("automatic acknowledgement failures stay observed until the handler settles
   }
 });
 
-test("dispatch waits for an automatic thought already in flight", async (context) => {
+test("handler failure aborts an automatic thought already in flight", async (context) => {
   context.mock.timers.enable({ apis: ["setTimeout"], now });
   const api = apiFixture();
   let activityStarted!: () => void;
   const startedActivity = new Promise<void>((resolve) => {
     activityStarted = resolve;
-  });
-  let finishActivity!: () => void;
-  const activityGate = new Promise<void>((resolve) => {
-    finishActivity = resolve;
   });
   const fetch: typeof globalThis.fetch = async (input, init = {}) => {
     const url = new URL(
@@ -2370,7 +2373,11 @@ test("dispatch waits for an automatic thought already in flight", async (context
       url.pathname.endsWith("/mcp/agents/runs/run-1/activities")
     ) {
       activityStarted();
-      await activityGate;
+      await new Promise<void>((_resolve, reject) => {
+        const rejectForAbort = () => reject(init.signal?.reason);
+        init.signal?.addEventListener("abort", rejectForAbort, { once: true });
+        if (init.signal?.aborted) rejectForAbort();
+      });
     }
     return api.fetch(input, init);
   };
@@ -2402,27 +2409,13 @@ test("dispatch waits for an automatic thought already in flight", async (context
     context.mock.timers.tick(8_000);
     await startedActivity;
 
-    let drainSettled = false;
-    const drainResult = work
-      .drain()
-      .then(
-        () => ({ status: "fulfilled" as const, error: null }),
-        (error: unknown) => ({ status: "rejected" as const, error }),
-      )
-      .finally(() => {
-        drainSettled = true;
-      });
     finishHandler();
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    assert.equal(drainSettled, false);
-
-    finishActivity();
-    const result = await drainResult;
-    assert.equal(result.status, "rejected");
-    assert.match(String(result.error), /handler failed while thought was pending/);
+    await assert.rejects(
+      work.drain(),
+      /handler failed while thought was pending/,
+    );
   } finally {
     finishHandler();
-    finishActivity();
     context.mock.timers.reset();
   }
 });

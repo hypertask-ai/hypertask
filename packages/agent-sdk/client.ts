@@ -157,6 +157,7 @@ export class AgentClient {
     const headers = new Headers({
       Accept: "application/json",
       Authorization: `Bearer ${this.token}`,
+      "X-Hypertask-Agent-SDK": "typescript",
     });
     let body: string | undefined;
     if (options.body !== undefined) {
@@ -379,6 +380,7 @@ export class AgentClient {
         await autoThoughtDone;
         if (autoThoughtFailed) throw autoThoughtError;
       } catch (error) {
+        dispatchController.abort(error);
         cancelAutoThought();
         await autoThoughtDone;
         throw error;

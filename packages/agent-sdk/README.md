@@ -37,7 +37,7 @@ app.post(
 app.listen(3000);
 ```
 
-`createAgent` only constructs local objects and performs no network work. Every delivery is preflighted through the run API before callbacks can execute; that API enforces both `htpr-6115-agent-sdk` and the owner-only `htpr-6123-add-typescript-agent-sdk` server-side, and activity writes enforce them again alongside the activity flag. Until those flags are enabled for the token owner, run APIs intentionally answer as not found.
+`createAgent` only constructs local objects and performs no network work. SDK requests identify themselves with `X-Hypertask-Agent-SDK: typescript`. Every delivery is preflighted through the run API before callbacks can execute; that API enforces both `htpr-6115-agent-sdk` and the owner-only `htpr-6123-add-typescript-agent-sdk` for SDK requests, and activity writes enforce them again alongside the activity flag. Until those flags are enabled for the token owner, SDK run requests intentionally answer as not found.
 
 ## API
 
