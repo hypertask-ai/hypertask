@@ -4,7 +4,14 @@ import { EditorContent } from "@tiptap/react";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { ChangeEvent, useContext, useEffect, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import toast from "react-hot-toast";
 
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
@@ -201,7 +208,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     );
   }, SAVE_DELAY);
 
-  const returnToTask = async () => {
+  const returnToTask = useCallback(async () => {
     if (returningRef.current) return;
     returningRef.current = true;
     flushTitleSave();
@@ -221,7 +228,18 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     } catch {
       router.replace(taskHref);
     }
-  };
+  }, [flushContentSave, flushTitleSave, router, taskHref]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (shouldReturnFromPageOnEscape(event, showCommands.show)) {
+        void returnToTask();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [returnToTask, showCommands.show]);
 
   useEffect(() => {
     if (!editor) return;
@@ -290,11 +308,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     <main
       aria-label={`Page editor for ${currentUser.displayName || "current user"}`}
       className="min-h-SVH-full bg-taskDetailPage text-white-black"
-      onKeyDown={(event) => {
-        if (shouldReturnFromPageOnEscape(event.nativeEvent, showCommands.show)) {
-          void returnToTask();
-        }
-      }}
     >
       {showCommands.show && <HypertasksCommands />}
       {showRail && <AppShellRail variant="global" currentUser={currentUser} />}
