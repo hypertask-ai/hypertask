@@ -27,6 +27,7 @@ import { formatTaskWriterRetrievedContext } from "@/app/api/ai/_lib/taskWriterPr
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
+import { AUTO_TASK_DESCRIPTIONS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
@@ -136,6 +137,12 @@ export async function prepareTaskWriterRun(
   if (!project) throw new ProjectAccessError();
 
   if (body.requestKind === "auto-description") {
+    // HTPR-6177: automatic drafting shipped before it was ready, so it stays
+    // behind an owner-only flag. Only this branch is gated: the manual task
+    // writer predates it and must keep working for everyone.
+    if (!(await isFeatureEnabled(AUTO_TASK_DESCRIPTIONS_FLAG, userId))) {
+      throw new AutoDescriptionSuggestionsDisabledError();
+    }
     const preference = await prisma.userSetting.findUnique({
       where: { userId },
       select: { autoDescriptionSuggestions: true },

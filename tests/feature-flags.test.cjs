@@ -273,6 +273,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6133-feature-flag-details", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
       { key: "htpr-6155-chat-agent-brief", mode: "OWNER_ONLY", updatedAt: null },
+      {
+        key: "htpr-6177-auto-task-descriptions",
+        mode: "OWNER_ONLY",
+        updatedAt: null,
+      },
     ],
   );
   listed.forEach(({ key, description, ticketUrl }) => {

@@ -5,6 +5,8 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const preferenceReads = [];
+const featureFlagChecks = [];
+let autoTaskDescriptionsEnabled = true;
 let autoDescriptionSuggestions = true;
 let preferenceFetchMode = "existing";
 const afterGate = new Error("continued after auto-description preference gate");
@@ -29,6 +31,13 @@ stubModule("src/app/api/ai/_lib/providerGate.ts", {
   },
 });
 stubModule("src/lib/systemModelLadder.ts", {});
+stubModule("src/lib/flags.ts", {
+  AUTO_TASK_DESCRIPTIONS_FLAG: "htpr-6177-auto-task-descriptions",
+  isFeatureEnabled: async (key, userId) => {
+    featureFlagChecks.push({ key, userId });
+    return autoTaskDescriptionsEnabled;
+  },
+});
 stubModule("src/lib/prisma.ts", {
   default: {
     project: {
@@ -85,6 +94,8 @@ function request(requestKind) {
 
 test.beforeEach(() => {
   preferenceReads.length = 0;
+  featureFlagChecks.length = 0;
+  autoTaskDescriptionsEnabled = true;
   autoDescriptionSuggestions = true;
   preferenceFetchMode = "existing";
 });
@@ -138,4 +149,30 @@ test("failed preference reads retain the auto-description fallback", async () =>
 
   assert.equal(result.status, 500);
   assert.equal(result.res.autoDescriptionSuggestions, true);
+});
+
+// HTPR-6177: automatic drafting shipped before it was ready, so it is owner-only
+// until the flag opens up. The manual writer predates it and must stay untouched.
+test("automatic task-writer requests stop when the feature flag is off", async () => {
+  autoTaskDescriptionsEnabled = false;
+
+  await assert.rejects(
+    prepareTaskWriterRun(request("auto-description"), 42),
+    AutoDescriptionSuggestionsDisabledError,
+  );
+  assert.deepEqual(featureFlagChecks, [
+    { key: "htpr-6177-auto-task-descriptions", userId: 42 },
+  ]);
+  // The flag is checked before the preference, so a blocked user is never read.
+  assert.deepEqual(preferenceReads, []);
+});
+
+test("manual task-writer requests ignore the auto-description feature flag", async () => {
+  autoTaskDescriptionsEnabled = false;
+
+  await assert.rejects(
+    prepareTaskWriterRun(request("manual"), 42),
+    (error) => error === afterGate,
+  );
+  assert.deepEqual(featureFlagChecks, []);
 });

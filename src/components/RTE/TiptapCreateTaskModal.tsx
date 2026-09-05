@@ -94,6 +94,8 @@ const TiptapCreateTaskModal = () => {
   const backgroundTaskUploadsEnabled = useFlag(
     "htpr-5993-optimistic-task-uploads",
   );
+  // HTPR-6177: automatic description drafting is owner-only until it is ready.
+  const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const createSubmissionRef = useRef(false);
   const {
     editMode,
@@ -366,8 +368,13 @@ const TiptapCreateTaskModal = () => {
   }, [editor, scheduleTitleGeneration]);
 
   const autoDescriptionTitle = formValues.title.trim();
+  // HTPR-6177: fold the flag in once so every eligibility check shares the same
+  // switch, rather than relying on the effect below returning early to stay off.
+  const autoDescriptionPreferenceEnabled =
+    autoTaskDescriptionsEnabled &&
+    (userPreferences.autoDescriptionSuggestions ?? true);
   const autoDescriptionEligible = shouldSuggestCreateDescription({
-    enabled: userPreferences.autoDescriptionSuggestions ?? true,
+    enabled: autoDescriptionPreferenceEnabled,
     isDesktop: !isMbl,
     title: autoDescriptionTitle,
     description: taskWriterDescription,
@@ -394,7 +401,7 @@ const TiptapCreateTaskModal = () => {
           expectedTitle,
           formValues.title,
           currentDescription,
-          userPreferences.autoDescriptionSuggestions ?? true,
+          autoDescriptionPreferenceEnabled,
           autoDescriptionDismissed,
         )
       ) {
@@ -414,7 +421,7 @@ const TiptapCreateTaskModal = () => {
     formValues.currentProject?.id,
     formValues.description,
     shouldShowAiTaskWriter,
-    userPreferences.autoDescriptionSuggestions,
+    autoDescriptionPreferenceEnabled,
   ]);
 
   const handleAutoDescriptionTakeover = (content: string) => {
@@ -425,7 +432,7 @@ const TiptapCreateTaskModal = () => {
         autoDescriptionTitleRef.current,
         formValues.title,
         currentDescription,
-        userPreferences.autoDescriptionSuggestions ?? true,
+        autoDescriptionPreferenceEnabled,
         autoDescriptionDismissed,
       )
     ) {

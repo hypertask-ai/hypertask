@@ -34,6 +34,7 @@ test("rapid description preference toggles preserve the latest value and persist
   let cancellations = 0;
   let invalidations = 0;
   let preferenceToggle;
+  let autoTaskDescriptionsEnabled = true;
   let cachedPreferences = {
     displayAvatar: "Hidden",
     commentsStacked: false,
@@ -104,6 +105,11 @@ test("rapid description preference toggles preserve the latest value and persist
     ),
     { ToggleSwitch: () => null },
   );
+  // HTPR-6177 gates the toggle. Keep it on for the queue assertions below, then
+  // flip it off at the end to prove the control disappears.
+  stubModule(path.join(root, "src/hooks/useFlag.tsx"), {
+    useFlag: () => autoTaskDescriptionsEnabled,
+  });
 
   const previousReact = global.React;
   global.React = React;
@@ -162,6 +168,15 @@ test("rapid description preference toggles preserve the latest value and persist
       { autoDescriptionSuggestions: true },
     ]);
     assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
+
+    // HTPR-6177: with the flag off the control is not rendered at all.
+    autoTaskDescriptionsEnabled = false;
+    preferenceToggle = undefined;
+    const gated = renderToStaticMarkup(
+      React.createElement(UserPreferenceSidebar, { ToggleComponent }),
+    );
+    assert.equal(preferenceToggle, undefined);
+    assert.ok(!gated.includes("auto-description-suggestions-toggle"));
   } finally {
     for (const [filename, previous] of stubs) {
       if (previous === undefined) delete require.cache[filename];
