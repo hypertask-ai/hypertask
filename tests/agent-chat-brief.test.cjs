@@ -212,6 +212,7 @@ function fakeDb() {
 }
 
 function assertAccessScoped(taskWhere) {
+  assert.equal(taskWhere.deletedAt, null);
   assert.equal(taskWhere.project.teamId.not, null);
   assert.ok(Array.isArray(taskWhere.project.OR));
 }

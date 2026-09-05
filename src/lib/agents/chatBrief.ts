@@ -9,6 +9,8 @@ import type {
 } from "@/lib/agentWebhooks/events";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
+export const AGENT_CURRENT_WORK_SECTION = "In Progress";
+
 const RECENT_TICKET_LIMIT = 10;
 const OPEN_PULL_REQUEST_LIMIT = 10;
 const RECENT_COMMENT_LIMIT = 5;
@@ -19,7 +21,6 @@ const SECTION_LIMIT = 50;
 const ASSIGNEE_LIMIT = 3;
 const ASSIGNEE_NAME_LIMIT = 40;
 const COMMENT_LIMIT = 160;
-const URL_LIMIT = 160;
 const REPOSITORY_LIMIT = 120;
 
 const taskSelect = {
@@ -89,7 +90,7 @@ const taskOutcome = (
 const taskRef = (task: BriefTask): AgentWebhookChatBriefTicketRef => ({
   ticketNumber: clipped(task.ticketNumber, 40) || null,
   title: clipped(task.title, TASK_TITLE_LIMIT),
-  url: clipped(buildMcpTaskUrl(task.projectId, task.uniqueIndex), URL_LIMIT),
+  url: buildMcpTaskUrl(task.projectId, task.uniqueIndex),
 });
 
 const taskBrief = (task: BriefTask): AgentWebhookChatBriefTicket => ({
@@ -119,14 +120,14 @@ export async function buildAgentChatBrief({
   agentId: string;
   db?: BriefDatabase;
 }): Promise<AgentWebhookChatBrief> {
-  // The agent board protocol defines current work as the exact In Progress lane.
+  // The agent board protocol defines current work as this exact named lane.
   const currentAssignment = await db.assignees.findFirst({
     where: {
       agentId,
       task: {
         status: "Normal",
         deletedAt: null,
-        section: "In Progress",
+        section: AGENT_CURRENT_WORK_SECTION,
         project: getProjectWhere(userId),
       },
     },
@@ -136,6 +137,7 @@ export async function buildAgentChatBrief({
   const currentTaskId = currentAssignment?.task.id;
   const visibleTask = {
     status: { not: "Deleted" as const },
+    deletedAt: null,
     project: getProjectWhere(userId),
   };
 
@@ -197,7 +199,7 @@ export async function buildAgentChatBrief({
     openPullRequests: pullRequests.map((pullRequest) => ({
       number: pullRequest.number,
       title: clipped(pullRequest.title, TASK_TITLE_LIMIT),
-      url: clipped(pullRequest.url, URL_LIMIT),
+      url: pullRequest.url,
       repository: clipped(
         `${pullRequest.repositoryOwner}/${pullRequest.repositoryName}`,
         REPOSITORY_LIMIT,
