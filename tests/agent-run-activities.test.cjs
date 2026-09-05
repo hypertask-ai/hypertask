@@ -536,9 +536,11 @@ test("chat Stop and timeout persist one outcome against late replies", async () 
   const queued = loadChatTurn(false);
   assert.ok(await queued.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
   const racing = loadChatTurn();
-  await Promise.allSettled([
+  const [timeout, response] = await Promise.allSettled([
     racing.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z")), racing.service.createAgentRunActivity(agentPrincipal, racing.run.id, activityInput({ type: "RESPONSE", text: "late", replyToMessageId: "human-1" }), null),
   ]);
+  assert.equal(timeout.status, "fulfilled");
+  assert.ok(response.status === "fulfilled" || response.reason instanceof model.AgentRunNotActiveError);
   assert.equal(racing.db.messages.filter((message) => message.replyToMessageId === "human-1").length, 1);
   assert.ok([model.AGENT_CHAT_TIMEOUT_MESSAGE, "late"].includes(racing.db.messages.at(-1).content));
   const eliciting = loadChatTurn();

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgentRunRequest, browserMutationIsSameOrigin, stopAgentChatTurn } from "@/lib/agentRuns/service";
 import { checkMcpRateLimit } from "@/lib/mcp/auth";
-
 export const runtime = "nodejs";
-const respond = (body: Record<string, unknown>, status = 200) =>
-  NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
+const respond = (body: Record<string, unknown>, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "private, no-store" } });
 
 export async function POST(
   request: NextRequest,
