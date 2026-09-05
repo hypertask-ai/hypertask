@@ -35,7 +35,11 @@ test("message sends require the linked agent to remain active", () => {
 
 test("the user rule keeps a thread private to its owner", () => {
   const rule = userSessionRule();
-  assert.match(rule, /\buserId,/, "the session must belong to the requester");
+  assert.match(
+    rule,
+    /^\s*userId,$/m,
+    "the session must belong to the requester",
+  );
   assert.match(
     rule,
     /agentId:\s*\{\s*not:\s*null\s*\}/,

@@ -5,6 +5,10 @@
 --
 -- Its own migration so the row lock here is a plain ROW EXCLUSIVE that readers
 -- pass through, instead of sharing the ACCESS EXCLUSIVE lock of the ADD COLUMN.
+--
+-- ponytail: one unbatched pass, like every other backfill in this folder. The
+-- ceiling is table size: if ChatMessage ever grows past what one transaction
+-- should rewrite, move this to a post-deploy script that commits by id range.
 UPDATE "ChatMessage" AS message
 SET "authorUserId" = session."userId"
 FROM "ChatSession" AS session

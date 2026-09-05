@@ -42,7 +42,9 @@ const SESSIONS = [
   { id: "session-revoked", userId: 6, agentId: "agent-revoked" },
   { id: "session-other-user", userId: 9, agentId: "agent-live" },
   { id: "session-plain", userId: 6, agentId: null },
-  { id: "session-foreign-agent", userId: 6, agentId: "agent-private" },
+  // Owned by 7, but agent-private is shared only with 6: the sharing clause is
+  // the only thing that can deny this one.
+  { id: "session-unshared", userId: 7, agentId: "agent-private" },
 ];
 
 let messages = [];
@@ -52,10 +54,14 @@ function agentMatches(agent, where) {
   if (where.revokedAt === null && agent.revokedAt !== null) return false;
   // Stands in for accessibleAgentWhere: the requester must still share a board
   // with the agent, which is how this codebase draws the team boundary.
-  if (where.__visibleTo !== undefined) {
-    return agent.sharedWith.includes(where.__visibleTo);
-  }
-  return true;
+  // Fail closed, so dropping that clause from the real rule fails here rather
+  // than quietly widening access.
+  assert.notEqual(
+    where.__visibleTo,
+    undefined,
+    "the rule must still narrow the agent to one the requester can see",
+  );
+  return agent.sharedWith.includes(where.__visibleTo);
 }
 
 function sessionMatches(session, where) {
@@ -164,7 +170,7 @@ test("a person reaches their own live agent thread", async () => {
 const DENIED = [
   ["another person's thread", "session-other-user", 6],
   ["a thread whose agent was revoked", "session-revoked", 6],
-  ["a thread whose agent is no longer shared with them", "session-1", 8],
+  ["a thread whose agent is no longer shared with them", "session-unshared", 7],
   ["a thread that is not an agent thread", "session-plain", 6],
   ["a thread that does not exist", "session-missing", 6],
 ];
@@ -367,6 +373,7 @@ function statements(sql) {
 
 const authorMigration = migration("20260905140000_chat_message_author");
 const backfillMigration = migration("20260905140010_chat_message_author_backfill");
+const validateMigration = migration("20260905140015_chat_message_author_validate");
 const indexMigration = migration("20260905140020_chat_message_history_index");
 const statusMigration = migration("20260905140100_agent_run_status_vocabulary");
 
@@ -398,6 +405,27 @@ test("the column, the backfill and the indexes hold separate locks", () => {
     /^\s*(ALTER TABLE|CREATE INDEX)\b/im,
   );
   assert.doesNotMatch(statements(indexMigration), /^\s*(ALTER TABLE|UPDATE)\b/im);
+});
+
+test("constraints are added unvalidated and validated on their own", () => {
+  // A validated foreign key scans ChatMessage and locks User and Agent against
+  // writes; NOT VALID plus a later VALIDATE keeps both tables usable.
+  for (const constraint of [
+    "ChatMessage_author_check",
+    "ChatMessage_authorUserId_fkey",
+    "ChatMessage_authorAgentId_fkey",
+  ]) {
+    assert.match(
+      authorMigration,
+      new RegExp(`"${constraint}"[\\s\\S]{0,240}NOT VALID;`),
+      `${constraint} must be added unvalidated`,
+    );
+    assert.match(
+      validateMigration,
+      new RegExp(`VALIDATE CONSTRAINT "${constraint}"`),
+      `${constraint} must still be validated`,
+    );
+  }
 });
 
 test("existing messages keep their history and gain their author", () => {
