@@ -30,10 +30,18 @@ test("the slim utility row survives", () => {
   assert.match(source, /Version \{version\}/);
 });
 
-test("Page keyboard return uses shared routing and preserves queued saves", () => {
+test("Page keyboard return stays global when focus is outside the editor", () => {
   assert.match(
     source,
-    /shouldReturnFromPageOnEscape\(event\.nativeEvent, showCommands\.show\)/,
+    /document\.addEventListener\("keydown", handleKeyDown\)/,
+  );
+  assert.match(
+    source,
+    /shouldReturnFromPageOnEscape\(event, showCommands\.show\)/,
+  );
+  assert.match(
+    source,
+    /document\.removeEventListener\("keydown", handleKeyDown\)/,
   );
   assert.match(source, /flushTitleSave\(\);[\s\S]*flushContentSave\(\);/);
   assert.match(
