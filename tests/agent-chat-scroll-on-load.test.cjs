@@ -6,6 +6,7 @@
 // it stuck "scrolled away" forever, since nothing else can ever clear it
 // without a manual scroll from the user.
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -58,17 +59,22 @@ test("an unchanged feed never triggers a scroll", () => {
   );
 });
 
-const fs = require("node:fs");
 const source = fs.readFileSync(
   path.join(__dirname, "..", "src/app/agents/chat/AgentChatClient.tsx"),
   "utf8",
 );
 
 test("the auto-follow effect scrolls instantly, not smoothly", () => {
-  assert.match(
-    source,
-    /scrollMessagesToBottom\("auto"\);\s*\n\s*\}\s*\n\s*if \(visibleFeed\.length > 0\)/,
-    "the shouldAutoScrollToBottom branch must scroll with behavior \"auto\"",
+  const start = source.indexOf("shouldAutoScrollToBottom({");
+  const end = source.indexOf("handleMessageListScroll();", start);
+  assert.ok(start !== -1 && end !== -1, "expected to find the auto-follow effect");
+  const effectBody = source.slice(start, end);
+  assert.match(effectBody, /scrollMessagesToBottom\("auto"\)/);
+  assert.doesNotMatch(
+    effectBody,
+    /scrollMessagesToBottom\("smooth"\)/,
+    "the auto-follow branch must not use the animated scroll: it would leave " +
+      "the next scrollTop read stale (see shouldAutoScrollToBottom's doc comment)",
   );
 });
 
