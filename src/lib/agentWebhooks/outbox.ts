@@ -370,6 +370,7 @@ async function createOrReactivateAgentRun(
     status: "ACTIVE" as const,
     createdAt: now,
     lastActivityAt: now,
+    chatPromptMessageId: input.event === "chat.message" ? input.chat!.messageId : null,
   };
   let inserted = await tx.agentRun.createMany({ data: [data], skipDuplicates: true });
   let created = inserted.count === 1;
@@ -377,7 +378,7 @@ async function createOrReactivateAgentRun(
   if (!created) {
     const reactivated = await tx.agentRun.updateMany({
       where: nonterminalRunWhere(input.agentId, context),
-      data: { status: "ACTIVE", lastActivityAt: now },
+      data: { status: "ACTIVE", lastActivityAt: now, chatPromptMessageId: data.chatPromptMessageId },
     });
     if (reactivated.count === 0) {
       // A stop can win between the skipped insert and guarded update. In that
@@ -387,7 +388,7 @@ async function createOrReactivateAgentRun(
       if (!created) {
         const retry = await tx.agentRun.updateMany({
           where: nonterminalRunWhere(input.agentId, context),
-          data: { status: "ACTIVE", lastActivityAt: now },
+          data: { status: "ACTIVE", lastActivityAt: now, chatPromptMessageId: data.chatPromptMessageId },
         });
         if (retry.count === 0) {
           throw new Error("Agent run changed while recording its interaction");

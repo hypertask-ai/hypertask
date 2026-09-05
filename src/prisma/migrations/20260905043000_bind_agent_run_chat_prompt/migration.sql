@@ -1,0 +1,1 @@
+ALTER TABLE "AgentRun" ADD COLUMN "chatPromptMessageId" TEXT; UPDATE "AgentRun" AS run SET "chatPromptMessageId" = (SELECT message.id FROM "ChatMessage" AS message WHERE message."sessionId" = run."chatSessionId" AND message.role = 'human' ORDER BY message."createdAt" DESC, message.id DESC LIMIT 1) WHERE run."chatSessionId" IS NOT NULL AND run.status IN ('ACTIVE', 'STALE');

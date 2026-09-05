@@ -2254,6 +2254,7 @@ model AgentRun {
   task           Task?           @relation(fields: [taskId], references: [id], onDelete: Cascade)
   chatSessionId  String?
   chatSession    ChatSession?    @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  chatPromptMessageId String?
   trigger        AgentRunTrigger
   status         AgentRunStatus  @default(ACTIVE)
   createdAt      DateTime        @default(now())

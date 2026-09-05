@@ -1,6 +1,7 @@
 import type {
   AgentRun,
   AgentRunActivity,
+  ChatMessage,
   AgentRunActivityType,
   AgentRunStatus,
   AgentRunTrigger,
@@ -14,7 +15,18 @@ export const AGENT_RUN_FEATURE_FLAG = "htpr-6115-agent-sdk";
 export const AGENT_SDK_FEATURE_FLAG = "htpr-6123-add-typescript-agent-sdk";
 export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
 export const AGENT_DEV_LOOP_FEATURE_FLAG = "htpr-6124-agent-dev-loop";
+export const AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG =
+  "htpr-6154-chat-stop-and-timeout";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
+export const AGENT_CHAT_TIMEOUT_MESSAGE = "Agent did not answer, try again";
+export const AGENT_CHAT_STOPPED_MESSAGE = "Run stopped";
+
+export function isAgentChatSystemMessage(
+  message: Pick<ChatMessage, "role" | "content" | "isDelivered">,
+): boolean {
+  return message.role === "assistant" && !message.isDelivered &&
+    (message.content === AGENT_CHAT_TIMEOUT_MESSAGE || message.content === AGENT_CHAT_STOPPED_MESSAGE);
+}
 export const NONTERMINAL_AGENT_RUN_STATUSES: AgentRunStatus[] = [
   "ACTIVE",
   "STALE",
@@ -41,6 +53,7 @@ export type AgentRunActivityInput = {
   text: string;
   link: string | null;
   options: AgentRunActivityOption[] | null;
+  replyToMessageId: string | null;
 };
 
 export type SerializedAgentRunActivity = {
@@ -174,7 +187,7 @@ function parseActivityOptions(value: unknown): AgentRunActivityOption[] {
 export function parseAgentRunActivityInput(value: unknown): AgentRunActivityInput {
   const body = objectRecord(value);
   if (!body) throw new AgentRunActivityInputError("request body must be an object");
-  const allowedFields = new Set(["type", "text", "link", "options"]);
+  const allowedFields = new Set(["type", "text", "link", "options", "replyToMessageId"]);
   const unknownField = Object.keys(body).find((key) => !allowedFields.has(key));
   if (unknownField) {
     throw new AgentRunActivityInputError(`unknown field: ${unknownField}`);
@@ -213,6 +226,11 @@ export function parseAgentRunActivityInput(value: unknown): AgentRunActivityInpu
   }
 
   const type = apiType.toUpperCase() as AgentRunActivityType;
+  const replyToMessageId = typeof body.replyToMessageId === "string" ? body.replyToMessageId.trim() : null;
+  if (body.replyToMessageId !== null && body.replyToMessageId !== undefined && (!replyToMessageId || replyToMessageId.length > 100)) {
+    throw new AgentRunActivityInputError("replyToMessageId must be 1 to 100 characters");
+  }
+  if (replyToMessageId && type !== "RESPONSE") throw new AgentRunActivityInputError("replyToMessageId is only valid for response activities");
   if (link && type !== "ACTION") {
     throw new AgentRunActivityInputError("link is only valid for action activities");
   }
@@ -231,7 +249,7 @@ export function parseAgentRunActivityInput(value: unknown): AgentRunActivityInpu
     );
   }
 
-  return { type, text, link, options };
+  return { type, text, link, options, replyToMessageId };
 }
 
 export function parseAgentRunSelection(value: unknown): string {

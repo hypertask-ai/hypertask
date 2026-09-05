@@ -142,7 +142,7 @@ export const AGENT_WEBHOOK_DELIVERY_CONTRACT = {
 export type AgentWebhookEventType = (typeof AGENT_WEBHOOK_EVENTS)[number];
 
 export type AgentWebhookActor = {
-  userId: number;
+  userId: number | null;
   agentId?: string | null;
   displayName: string;
 };

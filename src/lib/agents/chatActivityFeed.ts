@@ -1,6 +1,6 @@
 export type AgentChatMessage = {
   id: string;
-  role: "human" | "assistant";
+  role: "human" | "assistant" | "system";
   content: string;
   createdAt: string;
 };

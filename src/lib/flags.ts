@@ -4,14 +4,16 @@ import type {
 } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
 const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
 } as const;
+export const FEATURE_FLAG_QA_USER_ID = 985;
 const FEATURE_FLAG_QA_USER = {
-  userId: 985,
+  userId: FEATURE_FLAG_QA_USER_ID,
   email: "valentin@hypertask.ai",
 } as const;
 
@@ -106,6 +108,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     description:
       "Drafts a task description from the title while you type, below an empty description.",
   },
+  {
+    key: AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+    description:
+      "Lets people stop stuck Agent Chat turns and ends unanswered turns after five minutes.",
+  },
 ] as const satisfies readonly { key: string; description: string }[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
@@ -122,6 +129,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6141-ai-first-task-writer",
   AGENT_CHAT_BRIEF_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
+  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
@@ -202,7 +210,7 @@ export function featureFlagModeEnabled(
   return false;
 }
 
-const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+export const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
   OWNER_ONLY_BY_DEFAULT.has(key) ? "OWNER_ONLY" : "OWNER_AND_QA";
 
 export async function isFeatureEnabled(
