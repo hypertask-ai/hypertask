@@ -157,3 +157,18 @@ test("the draft mirror ref is set synchronously, so two fast switches cannot cro
   );
   assert.match(composerChange, /draftRef\.current = value/);
 });
+
+test("a restored draft does not disable the agent-cycle shortcut", () => {
+  // The guard exists to protect text the user is typing. Drafts now survive a
+  // switch, so text that was merely restored on selection must not latch the
+  // shortcut off for as long as it sits in the composer.
+  const selectAgent = chat.slice(
+    chat.indexOf("const selectAgent = useCallback("),
+    chat.indexOf("// Honor ?agent=<slug>"),
+  );
+  assert.match(selectAgent, /restoredDraftRef\.current = restored/);
+  assert.match(
+    chat,
+    /draftRef\.current\.trim\(\) !== ""\s*&&\s*draftRef\.current !== restoredDraftRef\.current/,
+  );
+});

@@ -580,6 +580,9 @@ const AgentChatClient = (props: IProp) => {
   // doesn't need `draft` in its dependency array (which would tear down and
   // re-add the window listener on every keystroke).
   const draftRef = useRef("");
+  // What selectAgent last restored into the composer. Text equal to this was
+  // not typed in this visit, so the agent-cycle guard below can ignore it.
+  const restoredDraftRef = useRef("");
   // Monotonic request generation for loadMessages, so a late response can be
   // recognized as superseded by a newer one for the same session.
   const loadGenRef = useRef(0);
@@ -835,6 +838,7 @@ const AgentChatClient = (props: IProp) => {
       // here means the next switch always writes the draft it actually left.
       const restored = readDraft(currentUser.id, agent.id);
       draftRef.current = restored;
+      restoredDraftRef.current = restored;
       // A queued follow-up belongs to the chat it was typed in, not whatever
       // agent gets selected next.
       messageQueueRef.current = [];
@@ -1530,15 +1534,18 @@ const AgentChatClient = (props: IProp) => {
         ) {
           return;
         }
-        // Switching agents clears the composer draft (selectAgent below), so
-        // don't fire while the composer has an unsent message: an Alt+Arrow
-        // meant to move the cursor, or a stray Ctrl+Tab, would otherwise
-        // silently drop what the user was typing. Reads draftRef (not
-        // `draft` directly) so this effect doesn't need to re-run, and
-        // re-add the window listener, on every keystroke.
+        // Don't fire while the user is mid-edit in the composer: an Alt+Arrow
+        // meant to move the cursor, or a stray Ctrl+Tab, would yank them to
+        // another agent instead. Text merely restored on selection doesn't
+        // count -- drafts now survive the switch, so cycling past a saved one
+        // costs nothing and blocking on it would disable the shortcut for as
+        // long as the draft sits there (HTPR-6005 review). Reads refs (not
+        // `draft` directly) so this effect doesn't need to re-run, and re-add
+        // the window listener, on every keystroke.
         if (
           document.activeElement === composerRef.current &&
-          draftRef.current.trim() !== ""
+          draftRef.current.trim() !== "" &&
+          draftRef.current !== restoredDraftRef.current
         ) {
           return;
         }
