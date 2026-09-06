@@ -5,6 +5,11 @@ const { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } = require('nod
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
+// Shared with tests that need to build a `comments` fixture referencing the
+// PR head before calling runWorkflow, so it can never drift from the value
+// baked into the gh stub.
+const HEAD = 'a'.repeat(40)
+
 async function workflowScript() {
   const workflow = await readFile('.github/workflows/automerge.yml', 'utf8')
   const marker = '        run: |\n'
@@ -17,15 +22,16 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, unknownMergeability = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts' } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, unknownMergeability = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
   await mkdir(bin)
   await mkdir(runnerTemp)
 
-  const head = 'a'.repeat(40)
+  const head = HEAD
   const prTitle = title ?? (speed ? '[SPEED] Optimize the app' : 'Safe change')
+  const commentsJson = JSON.stringify(comments ?? [{ body: `APPROVE\nreviewed-commit: ${head}` }])
   const gh = `#!/usr/bin/env bash
 set -u
 if [ "$1 $2" = "pr list" ]; then
@@ -46,7 +52,7 @@ if [ "$1 $2" = "pr view" ]; then
     exit 0
   fi
   cat <<'JSON'
-{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"claude-review","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":[{"body":"APPROVE\\nreviewed-commit: ${head}"}]}
+{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"claude-review","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
 JSON
   exit 0
 fi
@@ -95,7 +101,7 @@ exit 2
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
       },
     })
-    return { result, scratchEntries: await readdir(runnerTemp) }
+    return { result, scratchEntries: await readdir(runnerTemp), head }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -232,5 +238,65 @@ test('auto-merge refuses to merge when GitHub never resolves UNKNOWN', async () 
   assert.equal(result.status, 1)
   assert.match(result.stdout, /Mergeability for PR #42 stayed UNKNOWN after 5 polls/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+// HTPR-6149: PR 267 merged after an EARLIER commit's review flagged a MAJOR
+// finding and a LATER commit's review came back APPROVE with only a MINOR --
+// the major concern was never actually fixed, it just stopped being the
+// current-commit review. A major/blocker finding on any review for the PR
+// must park it for a human, even once a newer commit reviews clean.
+test('a MAJOR finding on an older commit still parks the PR after a clean re-review', async () => {
+  const comments = [
+    { body: 'CONCERNS (1) - reviewed by gpt-5.6-sol\n\n- **MAJOR - Strict gate remounts SectionComp on every switch**\n\n<!-- reviewed-commit: 2acfbc8bd27898e80b45b284d034673b87f64e65 -->' },
+    { body: `APPROVE (minors only: 1) - reviewed by gpt-5.6-sol\n\n- **MINOR - Missing speed evidence**\n\n<!-- reviewed-commit: ${HEAD} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /PARK: a review flagged a blocker or major-severity finding/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('a summary mentioning "no major issues" does not falsely park the PR', async () => {
+  const comments = [
+    { body: `APPROVE (no major issues) - reviewed by gpt-5.6-sol\n\n<!-- reviewed-commit: ${HEAD} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.doesNotMatch(result.stdout, /PARK: a review flagged/)
+  assert.match(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('a bare-word BLOCKER without markdown bold still parks the PR', async () => {
+  const comments = [
+    { body: `APPROVE\nBLOCKER: schema migration is destructive\n\n<!-- reviewed-commit: ${HEAD} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /PARK: a review flagged a blocker or major-severity finding/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+// A null comment body (GitHub sends this for some system-generated comments)
+// must never crash the jq pipeline: this whole step runs under bash -e, so an
+// uncaught jq error here would kill the sweep for every PR in the batch, not
+// just this one. The null-body comment is simply ignored; the real review
+// next to it still gets read and the PR merges normally.
+test('a malformed (null-body) review comment does not crash the sweep', async () => {
+  const comments = [
+    { body: null },
+    { body: `APPROVE\n\n<!-- reviewed-commit: ${HEAD} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.doesNotMatch(result.stdout, /PARK: could not parse review comments/)
+  assert.match(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
