@@ -283,10 +283,18 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       { key: "htpr-6179-flag-sort-filter", mode: "OWNER_ONLY", updatedAt: null },
+      {
+        key: "htpr-6191-flag-ship-date-clusters",
+        mode: "OWNER_ONLY",
+        updatedAt: null,
+      },
     ],
   );
-  listed.forEach(({ key, description, ticketUrl }) => {
+  listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
     assert.ok(description.length > 20, `${key} needs a useful description`);
+    // The flags admin page clusters on this day, so a typo would silently create a
+    // one-flag heading instead of failing.
+    assert.match(shippedOn, /^\d{4}-\d{2}-\d{2}$/, `${key} needs a shippedOn day`);
     assert.equal(
       ticketUrl,
       `https://app.hypertask.ai/detail/project-15/${key.match(/^htpr-(\d+)-/)[1]}`,
