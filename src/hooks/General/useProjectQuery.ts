@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import nookies from "nookies";
 import { useFlag } from "@/hooks/useFlag";
+import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { getNextRouterAwareHistoryState } from "@/lib/navigation/nextHistoryState";
 import {
   useRecoilValue,
@@ -63,6 +64,12 @@ export const useProjectQuery = () => {
       (item: IProject) => item.id === projectId
     );
     const activeView = getViewFromProject(project);
+
+    // Every client-side board switch funnels through here (sidebar, palette,
+    // keyboard), and the board page's own last-board-team effect does not
+    // re-fire on shallow/in-place switches -- so Agent Chat's default team
+    // filter went stale until a full reload (HTPR-6036 QA).
+    if (project?.teamId) setLastBoardTeam(project.teamId);
 
     if (updateBoardCookie) {
       nookies.destroy(null, "previousBoard");
