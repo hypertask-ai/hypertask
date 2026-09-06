@@ -14,6 +14,7 @@ import {
   parseChatTicketProposal,
   serializeChatTicketProposal,
 } from '@/lib/agents/chatTicketProposal'
+import { loadAgentTokenChatSession } from '@/lib/agents/chatAccess'
 
 const MAX_MESSAGE_LENGTH = 8000
 const TRANSCRIPT_LIMIT = 50
@@ -49,29 +50,23 @@ export async function GET(
     }
     const agentGate = requireAgentToken(ctx.agentId)
     if (agentGate) return agentGate
+    // Proven non-null by the gate above; the helper returns a response, not a
+    // type predicate, so the narrowing has to be restated here.
+    const tokenAgentId = ctx.agentId as string
 
     const { sessionId } = await params
-    const session = await prisma.chatSession.findFirst({
-      where: { id: sessionId },
-      select: {
-        id: true,
-        agentId: true,
-        userId: true,
-        user: { select: { displayName: true } },
-      },
+    const access = await loadAgentTokenChatSession({
+      sessionId,
+      agentId: tokenAgentId,
+      select: { userId: true, user: { select: { displayName: true } } },
     })
-    if (!session || !session.agentId) {
+    if (!access.ok) {
       return NextResponse.json(
-        { success: false, error: 'Session not found' },
-        { status: 404 }
+        { success: false, error: access.error },
+        { status: access.status }
       )
     }
-    if (session.agentId !== ctx.agentId) {
-      return NextResponse.json(
-        { success: false, error: 'This session belongs to a different agent' },
-        { status: 403 }
-      )
-    }
+    const session = access.session
 
     // Last 50, oldest first: page desc from the tail, then flip.
     const messages = (
@@ -96,7 +91,7 @@ export async function GET(
       (await isFeatureEnabled('htpr-6094-agent-activity-rows', session.userId))
     ) {
       const activity = await listAgentChatActivity({
-        agentId: session.agentId,
+        agentId: tokenAgentId,
         sessionId: session.id,
         userId: session.userId,
       })
@@ -157,6 +152,9 @@ export async function POST(
     }
     const agentGate = requireAgentToken(ctx.agentId)
     if (agentGate) return agentGate
+    // Proven non-null by the gate above; the helper returns a response, not a
+    // type predicate, so the narrowing has to be restated here.
+    const tokenAgentId = ctx.agentId as string
 
     const { sessionId } = await params
     const body = (await request.json().catch(() => null)) as PostChatMessageBody | null
@@ -176,22 +174,18 @@ export async function POST(
       )
     }
 
-    const session = await prisma.chatSession.findFirst({
-      where: { id: sessionId },
-      select: { id: true, agentId: true, userId: true },
+    const access = await loadAgentTokenChatSession({
+      sessionId,
+      agentId: tokenAgentId,
+      select: { userId: true },
     })
-    if (!session || !session.agentId) {
+    if (!access.ok) {
       return NextResponse.json(
-        { success: false, error: 'Session not found' },
-        { status: 404 }
+        { success: false, error: access.error },
+        { status: access.status }
       )
     }
-    if (session.agentId !== ctx.agentId) {
-      return NextResponse.json(
-        { success: false, error: 'This session belongs to a different agent' },
-        { status: 403 }
-      )
-    }
+    const session = access.session
 
     const serialize = ({ id, role, content, createdAt, ticketProposal }: {
       id: string
@@ -307,6 +301,7 @@ export async function POST(
             role: 'assistant',
             isDelivered: true,
             replyToMessageId,
+            authorAgentId: tokenAgentId,
           },
         })
         // Same transaction, and messageId is unique: one reply carries at most

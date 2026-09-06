@@ -298,6 +298,7 @@ async function main() {
     createSessionRoute,
     existingSessionRoute,
     existingSessionMessagesRoute,
+    chatAccessModule,
     assignRoute,
   ] = await Promise.all([
     readFile("src/app/agents/[agentId]/AgentDetail.tsx", "utf8"),
@@ -311,6 +312,7 @@ async function main() {
     readFile("src/app/api/ai-chat/create-session/route.ts", "utf8"),
     readFile("src/app/api/agent-chat/[sessionId]/route.ts", "utf8"),
     readFile("src/app/api/agent-chat/[sessionId]/messages/route.ts", "utf8"),
+    readFile("src/lib/agents/chatAccess.ts", "utf8"),
     readFile("src/app/api/mcp/assignees/assign/route.ts", "utf8"),
   ]);
   assert.match(detail, /<InfoRow label="Visibility">/);
@@ -366,15 +368,21 @@ async function main() {
     /SELECT t\.id, t\."projectId" FROM "Task" t[\s\S]*?task_row AS \(SELECT id AS "taskId", "projectId" FROM authorized_task\)/,
   );
   assert.match(createSessionRoute, /\.\.\.accessibleAgentWhere\(userId\)/);
+  // HTPR-6002 moved this rule out of each route into one shared module, so the
+  // routes are checked for delegation and the rule itself is checked once,
+  // where it now lives. revokedAt must come after the spread: the other order
+  // lets a future key in accessibleAgentWhere overwrite the revocation guard.
   for (const existingSessionSurface of [
     existingSessionRoute,
     existingSessionMessagesRoute,
   ]) {
-    assert.match(
-      existingSessionSurface,
-      /agent: \{[\s\S]*?revokedAt: null,[\s\S]*?\.\.\.accessibleAgentWhere\(userId\)/,
-    );
+    assert.match(existingSessionSurface, /loadUserAgentChatSession\(/);
+    assert.doesNotMatch(existingSessionSurface, /prisma\.chatSession\.findFirst\(/);
   }
+  assert.match(
+    chatAccessModule,
+    /agent: \{[\s\S]*?\.\.\.accessibleAgentWhere\(userId\),[\s\S]*?revokedAt: null,/,
+  );
   assert.match(
     assignRoute,
     /agentAssigner: \{[\s\S]*?select: mcpVisibleAgentSelect\(ctx\.user\.id, task\.projectId\)/,
