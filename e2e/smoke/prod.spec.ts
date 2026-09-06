@@ -41,6 +41,23 @@ for (const view of VIEWS) {
     expect(response, `no response for ${view.path}`).toBeTruthy()
     expect(response!.status(), `${view.path} returned ${response!.status()}`).toBeLessThan(400)
 
+    // A 2xx response alone doesn't prove the view rendered — a blank or
+    // loading-only shell must fail too (PR #366 review). Wait until the body
+    // carries real content and the "Loading..." Suspense fallback is gone.
+    // ponytail: generic content check; the ceiling is a broken-but-nonempty
+    // shell passing. Upgrade path: one view-specific selector per VIEWS entry.
+    await expect
+      .poll(
+        async () => (await page.locator('body').innerText()).trim().length,
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(30)
+    await expect(page.locator('text=/^loading/i')).toHaveCount(0, { timeout: 15_000 })
+
+    // An auth redirect on one view means the session broke mid-run or the
+    // route is misbehaving; either way this is not a passing check.
+    expect(page.url(), `${view.path} redirected to ${page.url()}`).not.toContain('/login')
+
     const bodyText = await page.locator('body').innerText()
     for (const marker of ERROR_MARKERS) {
       expect(bodyText, `${view.path} rendered an error page`).not.toMatch(marker)
