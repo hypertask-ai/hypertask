@@ -2831,6 +2831,36 @@ test("the memory scheduler dispatches once per delivery and retries a failure", 
   assert.deepEqual(attempts, ["delivery-1", "delivery-1", "delivery-1"]);
 });
 
+test("a throwing error reporter cannot take the memory scheduler down", async () => {
+  const scheduler = new MemoryDeliveryScheduler({
+    retryDelaysMs: [],
+    onError: () => {
+      throw new Error("the reporter itself is broken");
+    },
+  });
+
+  await scheduler.enqueue({
+    deliveryId: "delivery-3",
+    payload: payload(),
+    run: async () => {
+      throw new Error("permanent");
+    },
+  });
+  // An unhandled rejection here would kill the host process on Node 15+.
+  await scheduler.idle();
+
+  let ran = false;
+  await scheduler.enqueue({
+    deliveryId: "delivery-4",
+    payload: payload(),
+    run: async () => {
+      ran = true;
+    },
+  });
+  await scheduler.idle();
+  assert.equal(ran, true);
+});
+
 test("the memory scheduler stays open once its dedupe map is full", async () => {
   const scheduler = new MemoryDeliveryScheduler({ maxEntries: 2 });
   const accept = async (deliveryId: string) =>

@@ -183,7 +183,13 @@ export class MemoryDeliveryScheduler implements DeliveryScheduler {
             this.options.onError ??
             ((cause: unknown, id: string) =>
               console.error(`Hypertask delivery ${id} failed after retries`, cause));
-          report(error, deliveryId);
+          // A reporter that throws must not become an unhandled rejection and
+          // take the webhook server down with it.
+          try {
+            report(error, deliveryId);
+          } catch {
+            /* the delivery is already lost; nothing left to report it with */
+          }
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
