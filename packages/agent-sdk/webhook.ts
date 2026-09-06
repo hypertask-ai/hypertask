@@ -138,10 +138,8 @@ export class MemoryDeliveryScheduler implements DeliveryScheduler {
     run: () => Promise<void>;
   }): Promise<"enqueued" | "duplicate"> {
     const now = this.options.now?.() ?? Date.now();
-    for (const [deliveryId, until] of this.seen) {
-      if (until <= now) this.seen.delete(deliveryId);
-    }
-    if (this.seen.has(input.deliveryId)) return "duplicate";
+    const until = this.seen.get(input.deliveryId);
+    if (until !== undefined && until > now) return "duplicate";
     // Bounded, but by evicting the oldest entry rather than refusing new work:
     // a redelivery follows its original within minutes, so dropping the least
     // recent IDs costs nothing while a full map would reject every webhook

@@ -2831,6 +2831,19 @@ test("the memory scheduler dispatches once per delivery and retries a failure", 
   assert.deepEqual(attempts, ["delivery-1", "delivery-1", "delivery-1"]);
 });
 
+test("the memory scheduler accepts a delivery ID again once it has aged out", async () => {
+  let clock = now;
+  const scheduler = new MemoryDeliveryScheduler({ now: () => clock });
+  const accept = async () =>
+    scheduler.enqueue({ deliveryId: "delivery-5", payload: payload(), run: async () => {} });
+
+  assert.equal(await accept(), "enqueued");
+  assert.equal(await accept(), "duplicate");
+  clock += 25 * 60 * 60 * 1000;
+  assert.equal(await accept(), "enqueued");
+  await scheduler.idle();
+});
+
 test("a throwing error reporter cannot take the memory scheduler down", async () => {
   const scheduler = new MemoryDeliveryScheduler({
     retryDelaysMs: [],
