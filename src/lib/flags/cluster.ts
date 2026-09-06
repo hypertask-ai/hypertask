@@ -29,10 +29,15 @@ function dayLabel(date: Date | null): string {
 }
 
 /**
- * Sorts flags by date and clusters them by calendar day. With `byShipDate` the date is the day
- * the flag key first reached production, which every declared flag has, so the trailing
- * "Not yet released" cluster cannot appear. Without it the date is the last mode change and
- * never-touched flags fall into that trailing cluster, in either sort direction.
+ * Sorts flags by date and clusters them by calendar day.
+ *
+ * With `byShipDate` the date is the day the flag key first reached production. Every declared
+ * flag carries one, and a stored key with no definition left behind by a removed flag falls
+ * back to its `updatedAt`, which the database always sets, so the trailing "Not yet released"
+ * cluster does not appear.
+ *
+ * Without `byShipDate` the date is the last mode change, and never-touched flags fall into that
+ * trailing cluster in either sort direction.
  */
 export function clusterFeatureFlagsByReleaseDate(
   flags: FeatureFlagRow[],
