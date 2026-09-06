@@ -38,7 +38,7 @@ test("splits title, priority and size out of the description", () => {
   assert.doesNotMatch(result.description, /Size:/);
 });
 
-test("description-only takeover removes hidden task property markers", () => {
+test("description-only takeover removes the proposed-properties line and hidden markers", () => {
   const previousDOMParser = global.DOMParser;
   global.DOMParser = new JSDOM("").window.DOMParser;
   try {
@@ -53,7 +53,11 @@ test("description-only takeover removes hidden task property markers", () => {
     const result = extractTitleAndDescription(html);
 
     assert.equal(result.title, "Verify automatic planning draft");
-    assert.match(result.description, /Priority <strong>Urgent<\/strong>, Size <strong>S<\/strong>/);
+    // The takeover writes straight into the user's description, so the
+    // proposed-properties preview line must not survive it: nothing applies
+    // those values, and it would read as body text the user never wrote.
+    assert.match(result.description, /Verify the automatic planning draft/);
+    assert.doesNotMatch(result.description, /Proposed properties|Priority|Size/);
     assert.doesNotMatch(result.description, /ai-generated-task|>1<|>3</);
   } finally {
     global.DOMParser = previousDOMParser;
