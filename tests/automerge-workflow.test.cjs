@@ -144,13 +144,25 @@ test('auto-merge evaluates and merges a ready PR with isolated scratch state', a
 
 
 
-test('a Prisma migration is parked and cannot auto-merge', async () => {
+// HTPR-6194: schema and migration changes are the manager's call and rollback is the
+// safety net, so they no longer park. Auth, billing, CI, lockfile and env paths still do.
+test('a Prisma migration auto-merges like any other change', async () => {
   const changedFile = 'src/prisma/migrations/20260901110000_example/migration.sql'
   const { result, scratchEntries } = await runWorkflow({ changedFile })
 
   assert.equal(result.status, 0, result.stderr)
+  assert.doesNotMatch(result.stdout, /PARK: risky paths/)
+  assert.match(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('an auth change is still parked and cannot auto-merge', async () => {
+  const changedFile = 'src/lib/auth/getSessionUser.ts'
+  const { result, scratchEntries } = await runWorkflow({ changedFile })
+
+  assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /PARK: risky paths/)
-  assert.match(result.stdout, /src\/prisma\/migrations/)
+  assert.match(result.stdout, /src\/lib\/auth\//)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })

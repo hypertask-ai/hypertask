@@ -53,6 +53,7 @@ export default function FeatureFlagsAdmin() {
   const queryClient = useQueryClient();
   const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
   const sortFilterEnabled = useFlag("htpr-6179-flag-sort-filter");
+  const shipDateClustersEnabled = useFlag("htpr-6191-flag-ship-date-clusters");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [audienceFilter, setAudienceFilter] = useState<FeatureFlagMode | "ALL">("ALL");
   const flags = useQuery({
@@ -98,9 +99,14 @@ export default function FeatureFlagsAdmin() {
   const clusters = useMemo(
     () =>
       sortFilterEnabled
-        ? clusterFeatureFlagsByReleaseDate(flags.data?.flags ?? [], sortDirection, audienceFilter)
+        ? clusterFeatureFlagsByReleaseDate(
+            flags.data?.flags ?? [],
+            sortDirection,
+            audienceFilter,
+            shipDateClustersEnabled,
+          )
         : [["", flags.data?.flags ?? []] as [string, FeatureFlagRow[]]],
-    [sortFilterEnabled, flags.data?.flags, sortDirection, audienceFilter],
+    [sortFilterEnabled, flags.data?.flags, sortDirection, audienceFilter, shipDateClustersEnabled],
   );
 
   return (
