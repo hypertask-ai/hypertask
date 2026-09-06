@@ -15,6 +15,7 @@ const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
 const PROCESSING_HEARTBEAT_MS = 2 * 60 * 1000;
 const COMPLETED_RETENTION_MS = 24 * 60 * 60 * 1000;
+const MEMORY_SCHEDULER_RETRY_DELAYS_MS = [1_000, 5_000, 15_000];
 const RUN_EVENTS = new Set(["run.created", "run.prompted", "run.stopped"]);
 const KNOWN_EVENTS = new Set([
   "comment.mention",
@@ -103,6 +104,77 @@ export class MemoryDeliveryStore implements DeliveryStore {
   private removeExpired(now: number): void {
     for (const [deliveryId, entry] of this.entries) {
       if (entry.until <= now) this.entries.delete(deliveryId);
+    }
+  }
+}
+
+/**
+ * Single-process delivery scheduler for plain Node, Express, and local
+ * development, the scheduling half of `MemoryDeliveryStore`. It dedupes by
+ * delivery ID, dispatches in the background so the webhook still answers
+ * within five seconds, and retries a rejected delivery.
+ *
+ * ponytail: a fixed retry budget in process memory, not a queue. A restart
+ * loses whatever has not finished, so distributed and restartable hosts must
+ * supply a durable scheduler backed by a real queue instead.
+ */
+export class MemoryDeliveryScheduler implements DeliveryScheduler {
+  private readonly seen = new Map<string, number>();
+  private readonly inFlight = new Set<Promise<void>>();
+
+  constructor(
+    private readonly options: {
+      maxEntries?: number;
+      retryDelaysMs?: readonly number[];
+      now?: () => number;
+      onError?: (error: unknown, deliveryId: string) => void;
+    } = {},
+  ) {}
+
+  async enqueue(input: {
+    deliveryId: string;
+    payload: AgentWebhookPayload;
+    run: () => Promise<void>;
+  }): Promise<"enqueued" | "duplicate"> {
+    const now = this.options.now?.() ?? Date.now();
+    for (const [deliveryId, until] of this.seen) {
+      if (until <= now) this.seen.delete(deliveryId);
+    }
+    if (this.seen.has(input.deliveryId)) return "duplicate";
+    if (this.seen.size >= (this.options.maxEntries ?? 10_000)) {
+      throw new AgentSdkError("In-memory delivery scheduler is full");
+    }
+    // Recorded before this resolves, so a redelivery racing the first one is a
+    // duplicate rather than a second dispatch.
+    this.seen.set(input.deliveryId, now + COMPLETED_RETENTION_MS);
+    const task = this.dispatch(input.deliveryId, input.run).finally(() => {
+      this.inFlight.delete(task);
+    });
+    this.inFlight.add(task);
+    return "enqueued";
+  }
+
+  /** Resolves once every accepted delivery has finished or run out of retries. */
+  async idle(): Promise<void> {
+    while (this.inFlight.size > 0) await Promise.all([...this.inFlight]);
+  }
+
+  private async dispatch(deliveryId: string, run: () => Promise<void>): Promise<void> {
+    const delays = this.options.retryDelaysMs ?? MEMORY_SCHEDULER_RETRY_DELAYS_MS;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await run();
+        return;
+      } catch (error) {
+        if (attempt >= delays.length) {
+          // Forget the delivery ID so a later Hypertask redelivery is accepted
+          // instead of being answered as an already-handled duplicate.
+          this.seen.delete(deliveryId);
+          this.options.onError?.(error, deliveryId);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      }
     }
   }
 }

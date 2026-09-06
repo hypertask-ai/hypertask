@@ -1,6 +1,6 @@
 # `@hypertask/agent-sdk`
 
-Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package is publicly available on npm and has no runtime or framework dependencies. SDK requests remain protected by the `htpr-6115-agent-sdk` and `htpr-6123-add-typescript-agent-sdk` flags.
+Build a TypeScript Hypertask agent around the existing run, activity, webhook, and task APIs. The package has no runtime or framework dependencies. SDK requests remain protected by the `htpr-6115-agent-sdk` and `htpr-6123-add-typescript-agent-sdk` flags.
 
 ## Hello world in under 30 minutes
 
@@ -16,13 +16,13 @@ npm install @hypertask/agent-sdk express
 
 ```ts
 import express from "express";
-import { createAgent } from "@hypertask/agent-sdk";
+import { createAgent, MemoryDeliveryScheduler } from "@hypertask/agent-sdk";
 
 const app = express();
 const agent = createAgent({
   token: process.env.AGENT_TOKEN!,
   webhookSecret: process.env.WEBHOOK_SECRET!,
-  scheduler,
+  scheduler: new MemoryDeliveryScheduler(),
 });
 
 agent.on("mention", async (run) => {
@@ -92,7 +92,7 @@ Every write claims a task lease, heartbeats it during long work, and releases it
 
 ## Adapters
 
-Node and Express adapters default to distributed mode and require a durable `DeliveryStore`. Pass `{ distributed: false }` only when exactly one process receives webhooks. Every adapter also requires a `DeliveryScheduler` that durably records each delivery before `enqueue` resolves and retries `run` until it succeeds.
+Node and Express adapters default to distributed mode and require a durable `DeliveryStore`. Pass `{ distributed: false }` only when exactly one process receives webhooks. Every adapter also requires a `DeliveryScheduler` that durably records each delivery before `enqueue` resolves and retries `run` until it succeeds. `MemoryDeliveryScheduler` is the single-process implementation used above; it keeps deliveries in memory, so distributed and restartable hosts must pass a scheduler backed by a real queue.
 
 ### Plain Node HTTP
 
