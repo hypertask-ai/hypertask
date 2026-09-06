@@ -113,7 +113,7 @@ Before changing a feature, trace the entry point through middleware, route handl
 
 - Every new feature, screen, control, shortcut, API route, or user-visible behavior change requires one ticket-specific feature flag.
 - Name the key after the ticket, for example `htpr-6091-feature-flags`; never reuse a flag for another feature.
-- New flags always default to **Only me**. Developers never release them; Valentin changes the mode at `/admin/flags`.
+- New flags always default to **Owner + QA**, so Valentin and the QA account can judge the change in the real app (HTPR-6192 deleted the old Only-me default; `DEFAULT_FEATURE_FLAG_MODE` in `src/lib/flags.ts` is the source of truth). Developers never release a flag to Everyone; Valentin changes the mode at `/admin/flags`.
 - Gate protected behavior on the server. `useFlag` only hides client UI and never replaces API authorization.
 - The label on the ticket does not decide this; the effect does. If a user will see, click, type, or read anything differently after the change ships, it needs a flag, even when the ticket is called a bug. Layout, wording, flow, timing, defaults, shortcuts, embeds, and autocomplete behaviour all count.
 - Exempt only when nothing visible changes: a fix that makes a broken thing do exactly what it did before (crash, 500, wrong or lost data), performance work with identical output, security fixes, dependency or CI changes, spelling corrections, and tickets carrying the **AI CHAT 💬** label.
