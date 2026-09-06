@@ -80,7 +80,7 @@ function matches(row, where) {
 const prisma = {
   chatSession: { findFirst: async () => sessionRow },
   chatMessage: {
-    findFirst: async () => ({ id: "human-1" }),
+    findFirst: async () => ({ id: "human-1", role: "human" }),
     findUnique: async () => null,
     create: async ({ data }) => {
       const row = {
@@ -132,6 +132,9 @@ const prisma = {
       chatMessage: prisma.chatMessage,
       chatTicketProposal: prisma.chatTicketProposal,
       chatSession: { update: async () => null },
+      // HTPR-6154: a reply is only accepted while a live run is bound to the
+      // exact human message it answers.
+      agentRun: { findFirst: async () => ({ id: "run-1" }) },
     }),
 };
 

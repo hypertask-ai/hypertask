@@ -12,10 +12,13 @@ import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
-import { isFeatureEnabled } from "@/lib/flags";
+import { featureFlagCandidateUserIds, isFeatureEnabled } from "@/lib/flags";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import {
+  AGENT_CHAT_STOPPED_MESSAGE,
+  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+  AGENT_CHAT_TIMEOUT_MESSAGE,
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
   AGENT_SDK_FEATURE_FLAG,
@@ -243,6 +246,144 @@ export async function stopAgentRun(
   return result?.run ?? null;
 }
 
+async function reconcileAgentChatTurn(
+  principal: AgentRunPrincipal,
+  sessionId: string,
+  stop: boolean,
+  now: Date,
+) {
+  if (principal.source !== "browser" || !(await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, principal.userId))) return null;
+  const result = await prisma.$transaction(async (tx) => {
+    const [lockedSession] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "ChatSession" WHERE id = ${sessionId} AND "userId" = ${principal.userId} AND "agentId" IS NOT NULL FOR UPDATE`;
+    if (!lockedSession) return null;
+    const session = await tx.chatSession.findFirst({
+      where: { id: sessionId, userId: principal.userId, agentId: { not: null } },
+      select: {
+        messages: {
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1,
+          select: { id: true, role: true, createdAt: true, isDelivered: true },
+        },
+        agentRuns: {
+          where: { status: { in: NONTERMINAL_AGENT_RUN_STATUSES } },
+          orderBy: [{ lastActivityAt: "desc" }, { id: "desc" }], take: 1,
+          include: { activities: { where: { type: "ELICITATION", selectedAt: null }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 } },
+        },
+      },
+    });
+    if (!session) return null;
+    const message = session.messages[0];
+    // Heartbeat prompts are undelivered human messages in the agent's own
+    // session; they are not a user turn and must never time out as one.
+    if (message?.role !== "human" || !message.isDelivered) return stop ? null : { awaiting: false };
+    const [candidateRun] = session.agentRuns;
+    // A timeout may only end the run that owns this exact turn. Two exceptions:
+    // an explicit Stop ends whatever is still running in the session, and a run
+    // from before this deploy carries no binding at all, so there is no newer
+    // turn to protect and leaving it nonterminal forever is the stuck state.
+    const unbound = !candidateRun?.chatPromptMessageId;
+    const run =
+      candidateRun && (stop || unbound || candidateRun.chatPromptMessageId === message.id)
+        ? candidateRun
+        : null;
+    const expired = now.getTime() - message.createdAt.getTime() >= AGENT_RUN_STALE_AFTER_MS;
+    if (!stop && (!expired || run?.activities.some((activity) => activity.createdAt >= message.createdAt))) {
+      return { awaiting: true, run: run ? { id: run.id } : null };
+    }
+    const marker = await tx.chatMessage.createMany({
+      data: [{
+        sessionId,
+        content: stop ? AGENT_CHAT_STOPPED_MESSAGE : AGENT_CHAT_TIMEOUT_MESSAGE,
+        role: "assistant",
+        isDelivered: false,
+        replyToMessageId: message.id,
+        createdAt: now,
+      }],
+      skipDuplicates: true,
+    });
+    // Only the marker insert is idempotent. A run left nonterminal by an earlier
+    // timeout still has to be stopped, so Stop falls through when it has one.
+    if (marker.count === 0 && !(stop && run)) return stop ? null : { awaiting: false };
+    let deliveryId: string | null = null;
+    if (run) {
+      const stoppedById = stop ? principal.userId : null;
+      const stopped = await tx.agentRun.updateMany({
+        where: { id: run.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES } },
+        data: { status: "STOPPED", stoppedById, lastActivityAt: now },
+      });
+      if (stopped.count === 0) throw new Error("Agent chat run changed while stopping");
+      deliveryId = await persistAgentRunStoppedWebhook(tx, {
+        agentId: run.agentId,
+        projectId: null,
+        taskId: null,
+        ticketNumber: null,
+        taskTitle: null,
+        actor: {
+          userId: stop ? principal.userId : null,
+          agentId: null,
+          displayName: stop ? principal.displayName : "Agent Chat timeout",
+        },
+        runId: run.id,
+        run: serializeAgentRun({
+          ...run, status: "STOPPED", stoppedById, lastActivityAt: now,
+        }),
+      });
+    }
+    await tx.chatSession.update({ where: { id: sessionId }, data: { updatedAt: now } });
+    return { awaiting: false, changed: true, deliveryId };
+  });
+
+  if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
+  if (result?.changed) void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(console.warn);
+  return result;
+}
+
+export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
+  if (principal.source !== "browser" || !(await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, principal.userId))) return null;
+  // The client polls this every few seconds per open tab. Only an expired turn
+  // can change anything, so decide that with a plain read rather than taking
+  // the session row lock every tick.
+  const latest = await prisma.chatMessage.findFirst({
+    where: { sessionId, session: { userId: principal.userId, agentId: { not: null } } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { role: true, isDelivered: true, createdAt: true },
+  });
+  if (!latest) return null;
+  if (latest.role !== "human" || !latest.isDelivered) return { awaiting: false, run: null };
+  if (now.getTime() - latest.createdAt.getTime() < AGENT_RUN_STALE_AFTER_MS) return { awaiting: true, run: null };
+  const result = await reconcileAgentChatTurn(principal, sessionId, false, now);
+  return result ? { awaiting: result.awaiting, run: result.awaiting ? result.run : null } : null;
+}
+export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
+  return (await reconcileAgentChatTurn(principal, sessionId, true, now))?.changed || null;
+}
+
+export async function sweepExpiredAgentChatTurns(now = new Date()) {
+  const candidates = await featureFlagCandidateUserIds(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
+  if (candidates?.length === 0) return 0;
+  const sessions = await prisma.$queryRaw<Array<{ id: string; userId: number }>>`
+    SELECT s.id, s."userId" FROM "ChatSession" s
+    JOIN LATERAL (SELECT m.id, m.role, m."createdAt", m."isDelivered" FROM "ChatMessage" m WHERE m."sessionId" = s.id ORDER BY m."createdAt" DESC, m.id DESC LIMIT 1) latest ON true
+    WHERE s."agentId" IS NOT NULL AND latest.role = 'human' AND latest."isDelivered"
+      AND latest."createdAt" <= ${new Date(now.getTime() - AGENT_RUN_STALE_AFTER_MS)}
+      AND (${candidates === null} OR s."userId" = ANY(${candidates ?? []}))
+      AND NOT EXISTS (SELECT 1 FROM "AgentRun" r JOIN "AgentRunActivity" a ON a."runId" = r.id
+        WHERE r."chatSessionId" = s.id AND r.status::text = ANY(${[...NONTERMINAL_AGENT_RUN_STATUSES]}) AND a.type = 'ELICITATION' AND a."selectedAt" IS NULL AND a."createdAt" >= latest."createdAt")
+    ORDER BY latest."createdAt", latest.id LIMIT 25
+  `;
+  let changed = 0;
+  for (const session of sessions) {
+    try {
+      if ((await reconcileAgentChatTurn(
+        { userId: session.userId, agentId: null, displayName: "Agent Chat timeout", source: "browser" },
+        session.id, false, now,
+      ))?.changed) changed += 1;
+    } catch (error) {
+      console.warn("[agent-chat] timeout sweep failed", session.id, error);
+    }
+  }
+  return changed;
+}
+
 type ActivityRunWithContext = AgentRun & {
   agent: {
     user: {
@@ -320,6 +461,10 @@ async function replayCreatedActivity(
     throw new AgentRunActivityConflictError(
       "Idempotency-Key was already used with different activity data",
     );
+  }
+  if (input.type === "RESPONSE" && run.chatSession && input.replyToMessageId) {
+    const reply = await prisma.chatMessage.findUnique({ where: { replyToMessageId: input.replyToMessageId } });
+    if (reply?.sessionId !== run.chatSession.id || reply.content !== input.text || !reply.isDelivered || reply.createdAt.getTime() !== activity.createdAt.getTime()) throw new AgentRunActivityConflictError("Idempotency-Key was already used for another chat turn");
   }
   // Older activities have no comment link, so they retain duplicate-only replay.
   if (input.type === "RESPONSE" && run.task && activity.responseCommentId) {
@@ -428,6 +573,9 @@ export async function createAgentRunActivity(
   if (!principal.agentId) return null;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
+  const exactChatReply = input.type === "RESPONSE" && run.chatSession &&
+    await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, run.chatSession.userId);
+  if (exactChatReply && !input.replyToMessageId) throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
 
   if (idempotencyKey !== null) {
     const existing = await findIdempotentActivity(run.id, idempotencyKey);
@@ -464,7 +612,26 @@ export async function createAgentRunActivity(
       });
     } else if (input.type === "RESPONSE" && run.chatSession) {
       activity = await prisma.$transaction(async (tx) => {
-        const stored = await persistAgentRunActivity(tx, persistenceInput);
+        await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${run.chatSession!.id} FOR UPDATE`;
+        // Everything in this block is new refusal logic, so all of it stays
+        // behind the flag: without it a chat RESPONSE stores exactly as before.
+        let replyToMessageId: string | null = null;
+        if (exactChatReply) {
+          // NOTE: a run created by the previous deploy has a null
+          // chatPromptMessageId, so its reply is refused until the five-minute
+          // sweep stops the turn. The flag is owner-only, so that window is one
+          // person for one turn.
+          const boundRun = await tx.agentRun.findFirst({ where: { id: run.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES }, chatPromptMessageId: input.replyToMessageId }, select: { id: true } });
+          const target = await tx.chatMessage.findFirst({
+            where: { sessionId: run.chatSession!.id },
+            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+            select: { id: true, role: true },
+          });
+          if (!boundRun || target?.role !== "human" || (input.replyToMessageId && target.id !== input.replyToMessageId)) {
+            throw new AgentRunNotActiveError("Chat response does not target the current turn");
+          }
+          replyToMessageId = target.id;
+        }
         await tx.chatMessage.create({
           data: {
             sessionId: run.chatSession!.id,
@@ -472,8 +639,11 @@ export async function createAgentRunActivity(
             role: "assistant",
             isDelivered: true,
             authorAgentId: run.agentId,
+            ...(replyToMessageId ? { replyToMessageId } : {}),
+            createdAt: now,
           },
         });
+        const stored = await persistAgentRunActivity(tx, persistenceInput);
         await tx.chatSession.update({
           where: { id: run.chatSession!.id },
           data: { updatedAt: now },
@@ -489,6 +659,11 @@ export async function createAgentRunActivity(
     if (idempotencyKey !== null && isUniqueConstraintError(error)) {
       const existing = await findIdempotentActivity(run.id, idempotencyKey);
       if (existing) return replayCreatedActivity(run, principal, existing, input);
+    }
+    // Only the flagged path can hit the replyToMessageId unique index; without
+    // the flag a duplicate must surface as it did before this ticket.
+    if (exactChatReply && run.chatSession && isUniqueConstraintError(error)) {
+      throw new AgentRunNotActiveError("Run is no longer active");
     }
     throw error;
   }
@@ -598,6 +773,7 @@ export async function selectAgentRunActivity(
     });
   } else if (run.chatSession) {
     const deliveryIds = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${run.chatSession!.id} FOR UPDATE`;
       const selectedRun = await persistAgentRunSelection(tx, selectionInput);
       const message = await tx.chatMessage.create({
         data: {
@@ -608,6 +784,10 @@ export async function selectAgentRunActivity(
           authorUserId: principal.userId,
         },
       });
+      // Without the rebind the agent's reply to this choice is refused and the
+      // user waits out the full timeout, so a lost race has to fail loudly.
+      const rebound = await tx.agentRun.updateMany({ where: { id: run.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES } }, data: { chatPromptMessageId: message.id } });
+      if (rebound.count === 0) throw new AgentRunNotActiveError("Run is no longer active");
       await tx.chatSession.update({
         where: { id: run.chatSession!.id },
         data: { updatedAt: now },

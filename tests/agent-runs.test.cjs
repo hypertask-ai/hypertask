@@ -206,6 +206,7 @@ test("chat follow-up emits run.prompted without creating a second run", async ()
 
   assert.equal(tx.runs.length, 1);
   assert.equal(tx.runs[0].id, runId);
+  assert.equal(tx.runs[0].chatPromptMessageId, "message-2");
   assert.deepEqual(
     tx.deliveries.map(({ event }) => event),
     ["chat.message", "run.created", "chat.message", "run.prompted"],
