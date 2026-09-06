@@ -33,6 +33,7 @@ function runRow(overrides = {}) {
     agentId: "agent-1",
     taskId: 42,
     chatSessionId: null,
+    chatPromptMessageId: null,
     trigger: "MENTION",
     status: "ACTIVE",
     createdAt: new Date("2026-09-04T10:00:00.000Z"),
@@ -105,6 +106,7 @@ function matchesRun(run, where) {
     (where.taskId === undefined || run.taskId === where.taskId) &&
     (where.chatSessionId === undefined ||
       run.chatSessionId === where.chatSessionId) &&
+    (where.chatPromptMessageId === undefined || run.chatPromptMessageId === where.chatPromptMessageId) &&
     (!where.agent || run.ownerId === where.agent.userId) &&
     statusMatches &&
     clockMatches
@@ -140,6 +142,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
     activities,
     messages,
     sessionUpdates,
+    featureFlag: { findUnique: async () => ({ mode: "OWNER_ONLY" }) },
     agentRun: {
       findFirst: async ({ where, select }) => {
         const run = runs.find((candidate) => matchesRun(candidate, where));
@@ -259,7 +262,18 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
           : null,
     },
     chatMessage: {
+      findFirst: async ({ where }) => [...messages].reverse().find((message) => (!where.sessionId || message.sessionId === where.sessionId) && (!where.id || message.id === where.id) && (!where.role || message.role === where.role)) ?? null,
+      findUnique: async ({ where }) => messages.find((message) => (!where.id || message.id === where.id) && (!where.replyToMessageId || message.replyToMessageId === where.replyToMessageId)) ?? null,
+      createMany: async ({ data }) => {
+        // Postgres treats every NULL as distinct, so only a real id collides.
+        const created = data.filter((row) => !(row.replyToMessageId && messages.some((item) => item.replyToMessageId === row.replyToMessageId)));
+        messages.push(...created.map((row, index) => ({ id: `message-${messages.length + index + 1}`, ...row })));
+        return { count: created.length };
+      },
       create: async ({ data }) => {
+        if (data.replyToMessageId && messages.some((item) => item.replyToMessageId === data.replyToMessageId)) {
+          throw Object.assign(new Error("Unique constraint"), { code: "P2002" });
+        }
         const message = {
           id: `message-${messages.length + 1}`,
           createdAt: new Date(),
@@ -270,6 +284,11 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
       },
     },
     chatSession: {
+      findFirst: async ({ where }) => where.userId !== 6 ? null : ({
+        id: where.id,
+        messages: messages.filter((message) => message.sessionId === where.id).slice(-1),
+        agentRuns: runs.filter((run) => run.chatSessionId === where.id && ["ACTIVE", "STALE"].includes(run.status)).slice(-1).map((run) => ({ ...run, activities: activities.filter((activity) => activity.runId === run.id && activity.type === "ELICITATION" && activity.selectedAt === null) })),
+      }),
       update: async (input) => {
         sessionUpdates.push(input);
         return input;
@@ -277,6 +296,7 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
     },
   };
   db.$transaction = async (callback) => callback(db);
+  db.$queryRaw = async (query, staleBefore) => query.join("").includes("FOR UPDATE") ? [{ id: staleBefore }] : [...new Set(messages.filter((message) => message.role === "human" && message.isDelivered && message.createdAt <= staleBefore).map((message) => message.sessionId))].map((id) => ({ id, userId: 6 }));
   return db;
 }
 
@@ -299,6 +319,7 @@ function activityInput(overrides = {}) {
     text: "Checking the task",
     link: null,
     options: null,
+    replyToMessageId: null,
     ...overrides,
   };
 }
@@ -321,6 +342,7 @@ test("activity input accepts typed rows and rejects invalid type-specific fields
         { value: "product", label: "Product" },
         { value: "docs", label: "Docs" },
       ],
+      replyToMessageId: null,
     },
   );
   assert.deepEqual(
@@ -335,8 +357,10 @@ test("activity input accepts typed rows and rejects invalid type-specific fields
       text: "Nullable fields",
       link: null,
       options: null,
+      replyToMessageId: null,
     },
   );
+  assert.equal(model.parseAgentRunActivityInput({ type: "response", text: "Done", replyToMessageId: "human-1" }).replyToMessageId, "human-1");
   assert.throws(
     () =>
       model.parseAgentRunActivityInput({
@@ -425,6 +449,8 @@ function loadService({
       flagChecks.push(key);
       return featureEnabled(key);
     },
+    // Owner-only in the real default, so the sweep prefilter sees one id.
+    featureFlagCandidateUserIds: async (key) => (featureEnabled(key) ? [6] : []),
   });
   stub("src/lib/mcp/auth.ts", { validateMcpAuth: async () => null });
   stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
@@ -434,7 +460,7 @@ function loadService({
     }),
   });
   stub("src/lib/agentWebhooks/outbox.ts", {
-    persistAgentRunStoppedWebhook: async () => null,
+    persistAgentRunStoppedWebhook: async (_tx, event) => (webhookEvents.push(event), null),
     persistAgentWebhookEvent: async (_tx, event) => {
       webhookEvents.push(event);
       return "delivery-1";
@@ -495,6 +521,76 @@ function loadService({
     flagChecks,
   };
 }
+
+function loadChatTurn(withRun = true) {
+  const createdAt = new Date("2026-09-04T10:00:00.000Z");
+  const run = runRow({
+    taskId: null, task: null, trigger: "CHAT", chatSessionId: "chat-1", chatPromptMessageId: "human-1",
+    chatSession: { id: "chat-1", agentId: "agent-1", userId: 6 }, lastActivityAt: createdAt,
+  });
+  const harness = loadService({ runs: withRun ? [run] : [] });
+  harness.db.messages.push({ id: "human-1", sessionId: "chat-1", role: "human", content: "hello", isDelivered: true, createdAt });
+  return { ...harness, run };
+}
+
+test("chat Stop and timeout persist one outcome against late replies", async () => {
+  const stopped = loadChatTurn();
+  assert.equal(await stopped.service.stopAgentChatTurn({ ...browserPrincipal, userId: 7 }, "chat-1"), null);
+  assert.ok(await stopped.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  assert.equal(stopped.run.status, "STOPPED");
+  assert.equal(stopped.db.messages.at(-1).content, model.AGENT_CHAT_STOPPED_MESSAGE);
+  const queued = loadChatTurn(false);
+  assert.ok(await queued.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  const racing = loadChatTurn();
+  const [timeout, response] = await Promise.allSettled([
+    racing.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z")), racing.service.createAgentRunActivity(agentPrincipal, racing.run.id, activityInput({ type: "RESPONSE", text: "late", replyToMessageId: "human-1" }), null),
+  ]);
+  assert.equal(timeout.status, "fulfilled");
+  assert.ok(response.status === "fulfilled" || response.reason instanceof model.AgentRunNotActiveError);
+  assert.equal(racing.db.messages.filter((message) => message.replyToMessageId === "human-1").length, 1);
+  assert.ok([model.AGENT_CHAT_TIMEOUT_MESSAGE, "late"].includes(racing.db.messages.at(-1).content));
+  const eliciting = loadChatTurn();
+  eliciting.db.activities.push(activityRow({ runId: eliciting.run.id, type: "ELICITATION", createdAt: new Date("2026-09-04T10:01:00.000Z") }));
+  assert.equal((await eliciting.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z"))).awaiting, true);
+  assert.equal(await eliciting.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 0);
+  assert.ok(await eliciting.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  const swept = loadChatTurn();
+  assert.equal(await swept.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 1);
+  assert.equal(swept.db.messages.at(-1).content, model.AGENT_CHAT_TIMEOUT_MESSAGE);
+  assert.equal(swept.run.stoppedById, null);
+  assert.equal(swept.webhookEvents[0].actor.userId, null);
+  // A heartbeat prompt is an undelivered human message in the agent's own
+  // session, not a user turn: timing it out would corrupt the agent's own
+  // transcript and stop a run nobody is waiting on.
+  const heartbeat = loadService({ runs: [] });
+  heartbeat.db.messages.push({ id: "heartbeat-1", sessionId: "chat-1", role: "human", content: "heartbeat", isDelivered: false, createdAt: new Date("2026-09-04T10:00:00.000Z") });
+  assert.equal(await heartbeat.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 0);
+  assert.equal((await heartbeat.service.readAgentChatTurn(browserPrincipal, "chat-1", new Date("2026-09-04T10:05:00.000Z"))).awaiting, false);
+  assert.equal(heartbeat.db.messages.length, 1);
+});
+
+test("a run with no prompt binding is still ended", async () => {
+  // The stuck state this ticket is about: a run started before the prompt
+  // binding existed. Neither the sweep nor Stop may leave it nonterminal.
+  const swept = loadChatTurn();
+  swept.run.chatPromptMessageId = null;
+  assert.equal(await swept.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 1);
+  assert.equal(swept.run.status, "STOPPED");
+  assert.equal(swept.run.stoppedById, null);
+  // Stop is a promise to the user, so it ends the session's run even when the
+  // binding points somewhere else. Every writer of a delivered human message
+  // rebinds, so this is a backstop rather than a reachable state today.
+  const stale = loadChatTurn();
+  stale.run.chatPromptMessageId = "some-older-message";
+  assert.ok(await stale.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  assert.equal(stale.run.status, "STOPPED");
+  const pressed = loadChatTurn();
+  pressed.run.chatPromptMessageId = null;
+  assert.ok(await pressed.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
+  assert.equal(pressed.run.status, "STOPPED");
+  assert.equal(pressed.run.stoppedById, 6);
+  assert.equal(pressed.db.messages.filter((message) => message.replyToMessageId === "human-1").length, 1);
+});
 
 test("activity behavior requires the parent and ticket feature flags", async () => {
   const activityFlagDisabled = loadService({
@@ -790,21 +886,26 @@ test("chat responses store the activity and assistant message together", async (
     taskId: null,
     task: null,
     chatSessionId: "session-1",
+    chatPromptMessageId: "human-old",
     chatSession: { id: "session-1", userId: 6, agentId: "agent-1" },
     trigger: "CHAT",
   });
   const harness = loadService({ runs: [run] });
-
-  await harness.service.createAgentRunActivity(
-    agentPrincipal,
-    run.id,
-    activityInput({ type: "RESPONSE", text: "Chat answer" }),
-    "chat-response-1",
+  harness.db.messages.push(
+    { id: "human-old", sessionId: "session-1", role: "human", createdAt: new Date(0) },
+    { id: "human-1", sessionId: "session-1", role: "human", createdAt: new Date() },
   );
+  const response = activityInput({ type: "RESPONSE", text: "Chat answer", replyToMessageId: "human-1" });
+  await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, { ...response, replyToMessageId: null }, null), /replyToMessageId is required/);
+  await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, response, null), model.AgentRunNotActiveError);
+  run.chatPromptMessageId = "human-1";
+  await harness.service.createAgentRunActivity(agentPrincipal, run.id, response, "chat-response-1");
+  const replay = await harness.service.createAgentRunActivity(agentPrincipal, run.id, response, "chat-response-1");
 
+  assert.equal(replay.duplicate, true);
   assert.equal(harness.db.activities.length, 1);
   assert.deepEqual(
-    harness.db.messages.map(({ role, content, sessionId }) => ({
+    harness.db.messages.filter(({ role }) => role === "assistant").map(({ role, content, sessionId }) => ({
       role,
       content,
       sessionId,
@@ -813,6 +914,20 @@ test("chat responses store the activity and assistant message together", async (
   );
   assert.equal(harness.db.sessionUpdates.length, 1);
   assert.equal(harness.broadcasts.length, 1);
+  harness.db.messages.push({ id: "human-2", sessionId: "session-1", role: "human", createdAt: new Date() });
+  Object.assign(harness.db.messages.find(({ role }) => role === "assistant"), { replyToMessageId: "human-2", createdAt: new Date("2030-01-01") });
+  // Bind the run to human-2 so the prompt check passes and the reused
+  // idempotency key is the only thing left that can reject this call.
+  run.chatPromptMessageId = "human-2";
+  await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, { ...response, replyToMessageId: "human-2" }, "chat-response-1"), model.AgentRunActivityConflictError);
+  const legacyRun = runRow({ id: "legacy-run", taskId: null, task: null, chatSessionId: "legacy-chat", chatSession: { id: "legacy-chat", userId: 6 }, trigger: "CHAT" });
+  const legacy = loadService({ runs: [legacyRun], featureEnabled: () => false }); legacy.db.messages.push({ id: "legacy-human", sessionId: "legacy-chat", role: "human", createdAt: new Date() });
+  // With the flag off nothing here is new: a reply stores whether or not it
+  // names the newest turn, exactly as it did before this ticket.
+  await assert.doesNotReject(legacy.service.createAgentRunActivity(agentPrincipal, legacyRun.id, activityInput({ type: "RESPONSE", text: "Stale answer", replyToMessageId: "other-human" }), null));
+  await assert.doesNotReject(legacy.service.createAgentRunActivity(agentPrincipal, legacyRun.id, activityInput({ type: "RESPONSE", text: "Legacy answer" }), null));
+  assert.equal(legacy.db.messages.filter(({ role }) => role === "assistant").length, 2);
+  assert.ok(legacy.db.messages.filter(({ role }) => role === "assistant").every(({ replyToMessageId }) => !replyToMessageId));
 });
 
 test("one browser selection wins and its retry does not post twice", async () => {

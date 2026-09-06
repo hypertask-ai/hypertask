@@ -76,6 +76,7 @@ export async function POST(
     }
 
     const { message, deliveryIds } = await prisma.$transaction(async (tx) => {
+      await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
       const message = await tx.chatMessage.create({
         data: {
           sessionId: session.id,
@@ -107,11 +108,6 @@ export async function POST(
           userName: session.user.displayName,
         },
         ...(agentBrief ? { agentBrief } : {}),
-      });
-
-      await tx.chatSession.update({
-        where: { id: session.id },
-        data: { updatedAt: new Date() },
       });
 
       return { message, deliveryIds };

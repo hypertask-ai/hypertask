@@ -4,14 +4,16 @@ import type {
 } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
 const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
 } as const;
+export const FEATURE_FLAG_QA_USER_ID = 985;
 const FEATURE_FLAG_QA_USER = {
-  userId: 985,
+  userId: FEATURE_FLAG_QA_USER_ID,
   email: "valentin@hypertask.ai",
 } as const;
 
@@ -145,6 +147,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-06",
     description: "Groups the feature flags page by the day each flag first reached production.",
   },
+  {
+    key: AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+    shippedOn: "2026-09-06",
+    description:
+      "Lets people stop stuck Agent Chat turns and ends unanswered turns after five minutes.",
+  },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
   // `git log -S"<key>" --format=%cd --date=short production | tail -1`. An author adding a flag
@@ -170,6 +178,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   FLAG_TICKET_TITLE_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_SHIP_DATE_CLUSTER_FLAG,
+  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
@@ -270,8 +279,25 @@ export function featureFlagModeEnabled(
   return false;
 }
 
-const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
+export const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
   OWNER_ONLY_BY_DEFAULT.has(key) ? "OWNER_ONLY" : "OWNER_AND_QA";
+
+/**
+ * The user ids a flag can possibly be on for, or null when it is on for
+ * everyone. A coarse prefilter only: isFeatureEnabled still decides per user.
+ */
+export async function featureFlagCandidateUserIds(
+  key: string,
+  db: FeatureFlagDatabase = prisma,
+): Promise<number[] | null> {
+  const row = await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
+  const mode = row?.mode ?? defaultFeatureFlagMode(key);
+  if (mode === "EVERYONE") return null;
+  if (mode === "OFF") return [];
+  return mode === "OWNER_AND_QA"
+    ? [FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID]
+    : [FEATURE_FLAG_OWNER_USER_ID];
+}
 
 export async function isFeatureEnabled(
   key: string,

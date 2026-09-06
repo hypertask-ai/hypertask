@@ -54,6 +54,7 @@ stub("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => ({ userId: 6 }),
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
+stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaiting: true }) });
 stub("src/lib/flags.ts", {
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
   isFeatureEnabled: async (key, userId) => {

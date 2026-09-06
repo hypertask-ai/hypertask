@@ -134,7 +134,8 @@ export const AGENT_WEBHOOK_DELIVERY_CONTRACT = {
     taskId: "Task-only numeric task ID.",
     ticketNumber: "Task-only human-readable ticket number when available.",
     taskTitle: "Task-only task title.",
-    actor: "Object with userId, optional agentId, and displayName.",
+    actor:
+      "Object with userId, optional agentId, and displayName. userId is null when the platform acted on its own, such as a chat turn that timed out.",
     runId: "Run UUID on agent-run-enabled interaction and lifecycle events.",
   },
 } as const;
@@ -142,7 +143,7 @@ export const AGENT_WEBHOOK_DELIVERY_CONTRACT = {
 export type AgentWebhookEventType = (typeof AGENT_WEBHOOK_EVENTS)[number];
 
 export type AgentWebhookActor = {
-  userId: number;
+  userId: number | null;
   agentId?: string | null;
   displayName: string;
 };

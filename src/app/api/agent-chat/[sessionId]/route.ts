@@ -9,6 +9,8 @@ import {
   chatTicketProposalSelect,
   serializeChatTicketProposal,
 } from "@/lib/agents/chatTicketProposal";
+import { isAgentChatSystemMessage } from "@/lib/agentRuns/model";
+import { readAgentChatTurn } from "@/lib/agentRuns/service";
 
 export const runtime = "nodejs";
 
@@ -76,6 +78,12 @@ export async function GET(
       AGENT_CHAT_TICKET_CONFIRM_FLAG,
       userId,
     );
+    // Reconciling the turn is a side effect of reading it; if it fails the
+    // transcript still has to load.
+    await readAgentChatTurn(
+      { userId, agentId: null, displayName: "Hypertask user", source: "browser" },
+      session.id,
+    ).catch((error) => console.warn("[agent-chat] turn reconcile failed", session.id, error));
     // One page, oldest first: read desc from the tail, then flip. createdAt
     // alone ties for messages stored in the same millisecond, so id breaks the
     // tie and a page boundary lands in the same place on every request.
@@ -113,11 +121,11 @@ export async function GET(
     return NextResponse.json({
       success: true,
       session: { id: session.id, agentId: session.agentId },
-      messages: messages.map(({ id, role, content, createdAt }) => ({
-        id,
-        role,
-        content,
-        createdAt,
+      messages: messages.map((message) => ({
+        id: message.id,
+        role: isAgentChatSystemMessage(message) ? "system" : message.role,
+        content: message.content,
+        createdAt: message.createdAt,
       // Second pass over the same array, so index i is the same row in both.
       })).map((message, index) => ({
         ...message,
