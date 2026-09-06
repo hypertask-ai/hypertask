@@ -276,7 +276,16 @@ export async function POST(request: NextRequest) {
     const user = await currentSessionUser()
 
     if (!user) {
-      return invalid('Not signed in', 'access_denied', 401)
+      // The session lapsed while the consent screen sat open. Send them through
+      // login with the request intact so the flow resumes instead of dead-ending.
+      const loginUrl = new URL('/login', request.url)
+      for (const [key, value] of form.entries()) {
+        if (typeof value === 'string' && key !== 'consent_token') {
+          loginUrl.searchParams.set(key, value)
+        }
+      }
+
+      return NextResponse.redirect(loginUrl.toString(), 303)
     }
 
     if (!user.uid) {

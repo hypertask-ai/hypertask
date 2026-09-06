@@ -14,11 +14,12 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-const PANEL = "min-h-[100svh] w-full flex items-center justify-center bg-[#0a0012] text-white p-8";
+const PANEL =
+  "min-h-[100svh] w-full flex items-center justify-center bg-pageBackground text-white-black p-8";
 const PRIMARY_BUTTON =
-  "w-full py-3 px-6 mb-3 bg-[#6C47FF] hover:bg-[#5a3ed6] text-white font-medium rounded-lg transition-colors";
+  "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded-[5px] transition-colors";
 const SECONDARY_BUTTON =
-  "block w-full py-3 px-6 bg-transparent border border-gray-600 hover:border-gray-500 text-gray-400 hover:text-white font-medium rounded-lg transition-colors";
+  "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded-[5px] transition-colors";
 
 /** Registered client names are attacker-supplied. Strip anything that could disguise
  * the name (control and bidi characters) and cap the length before showing it. */
@@ -52,8 +53,8 @@ function Fallback({ heading, message }: { heading: string; message: string }) {
           width={48}
           height={48}
         />
-        <h1 className="text-heading font-semibold text-white mb-2">{heading}</h1>
-        <p className="text-gray-400 text-content mb-6">{message}</p>
+        <h1 className="text-heading font-semibold text-white-black mb-2">{heading}</h1>
+        <p className="text-text-light-gray text-content mb-6">{message}</p>
         <Link href="/" className={cn(SECONDARY_BUTTON, "max-w-[288px]")}>
           Return to Hypertask
         </Link>
@@ -130,19 +131,19 @@ export default async function OAuthConsentPage(props: {
           height={48}
         />
 
-        <h1 className="text-heading font-semibold text-white mb-2">
+        <h1 className="text-heading font-semibold text-white-black mb-2">
           {clientName} wants to connect to your Hypertask account
         </h1>
 
-        <p className="text-gray-400 text-content mb-4">
+        <p className="text-text-light-gray text-content mb-4">
           If you approve, it can read and change everything you can: your boards, tasks, comments
           and files. You can disconnect it later in settings.
         </p>
 
-        <div className="w-full text-left rounded-lg border border-gray-700 p-4 mb-6">
-          <p className="text-gray-500 text-meta mb-1">Access is sent to</p>
-          <p className="text-white text-content break-all mb-3">{redirectOrigin(redirectUri)}</p>
-          <p className="text-gray-500 text-meta">
+        <div className="w-full text-left rounded-[5px] border border-border-light-gray-thin p-4 mb-6">
+          <p className="text-text-light-gray text-meta mb-1">Access is sent to</p>
+          <p className="text-white-black text-content break-all mb-3">{redirectOrigin(redirectUri)}</p>
+          <p className="text-text-light-gray text-meta">
             Hypertask has not verified this app. Only approve it if you just asked it to connect.
           </p>
         </div>

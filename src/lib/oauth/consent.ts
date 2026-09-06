@@ -6,8 +6,10 @@ import { createHmac, timingSafeEqual } from 'crypto'
  * into handing over full board access. The code is now minted only by a POST that
  * carries one of these tokens, which the consent screen embeds in its approve form.
  *
- * The token binds every security-relevant part of the authorization request, so an
- * approval for one connector can never be replayed against another.
+ * The token binds the parts of the request that decide who gets access: user,
+ * client, redirect URI, PKCE challenge and agent. An approval for one connector
+ * can never be replayed against another. response_type and code_challenge_method
+ * are not bound because the POST rejects anything but "code" and "S256" outright.
  *
  * ponytail: stateless HMAC, so one approval can mint more than one code inside its
  * short lifetime. Harmless (each code is still one-time-use, PKCE-bound, and for the

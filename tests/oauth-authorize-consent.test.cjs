@@ -319,7 +319,7 @@ test("an approved agent_id is stored on the code", async () => {
   assert.equal(createdCode.agent_id, "agent-1");
 });
 
-test("a signed-out POST mints nothing", async () => {
+test("a signed-out POST mints nothing and resumes through login", async () => {
   reset();
   requestCookies = {};
 
@@ -327,6 +327,11 @@ test("a signed-out POST mints nothing", async () => {
     authorizePost({ ...baseParams(), consent_token: consentTokenFor() }),
   );
 
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 303);
+  const location = new URL(response.headers.get("location"));
+  assert.equal(location.pathname, "/login");
+  assert.equal(location.searchParams.get("client_id"), "test-client");
+  // The stale approval must not survive the round trip through login.
+  assert.equal(location.searchParams.get("consent_token"), null);
   assert.equal(createdCode, undefined);
 });
