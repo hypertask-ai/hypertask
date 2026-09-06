@@ -46,6 +46,12 @@ stubModule(path.join(root, "src/lib/prisma.ts"), {
     agent: {
       findFirst: async () => null,
     },
+    // HTPR-6200: this user has already approved the client on the consent screen,
+    // so the GET still mints and the identity assertions below stay meaningful.
+    oAuthClientGrant: {
+      findUnique: async () => ({ id: "grant-1" }),
+      upsert: async (args) => args.create,
+    },
     oAuthAuthorizationCode: {
       create: async (args) => {
         createdCode = args.data;
