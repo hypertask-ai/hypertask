@@ -48,7 +48,9 @@ import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
 import {
   INBOX_CLUSTER_COMMAND_GROUP,
+  INBOX_CLUSTER_COMMAND_KEY_PREFIX,
   inboxClusterCommandName,
+  isInboxClusterCommandKey,
   type InboxCluster,
 } from "@/lib/inboxClusters";
 import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags";
@@ -127,7 +129,7 @@ const Commands = (props: Props) => {
     // commandLists get frecency-sorted below, and brand-new keys score 0.
     const inboxClusterCommands: ICommandList[] = inboxClusterEnabled
       ? (contextOptions?.inboxClusters ?? []).map((cluster: InboxCluster) => ({
-          key: `archiveInboxCluster-${cluster.notificationId}`,
+          key: `${INBOX_CLUSTER_COMMAND_KEY_PREFIX}${cluster.notificationId}`,
           name: inboxClusterCommandName(cluster),
           payload: cluster.notificationId,
           commandMode: CommandMode.ArchiveInboxCluster,
@@ -228,6 +230,10 @@ const Commands = (props: Props) => {
     const canonicalCommands = new Map(
       commandGroups
         .flatMap((group) => group.commandLists)
+        // Frequently used is built from this map and leads the untyped palette,
+        // so an archive command remembered from an earlier use must not be able
+        // to become the blank-Ctrl+K Enter target.
+        .filter((command) => !isInboxClusterCommandKey(command.key))
         .map((command) => [command.key, command])
     );
     const topCommands = Object.entries(frequentlyUsed)

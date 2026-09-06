@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  INBOX_CLUSTER_COMMAND_KEY_PREFIX,
   inboxArchiveTooltip,
   inboxClusterCommandName,
+  isInboxClusterCommandKey,
   topInboxClusters,
 } from "./inboxClusters";
 
@@ -56,4 +58,12 @@ test("the row tooltip names what the key already does, and only when it is a pil
   assert.equal(inboxArchiveTooltip(22), "Archive all 22");
   assert.equal(inboxArchiveTooltip(1), "Remove notification");
   assert.equal(inboxArchiveTooltip(undefined), "Remove notification");
+});
+
+test("cluster keys are recognisable, so they can be kept out of Frequently used", () => {
+  // Frequently used leads the untyped palette: a remembered archive there would
+  // make a bare Ctrl+K then Enter destructive.
+  assert.equal(isInboxClusterCommandKey(`${INBOX_CLUSTER_COMMAND_KEY_PREFIX}1234`), true);
+  assert.equal(isInboxClusterCommandKey("createTask"), false);
+  assert.equal(isInboxClusterCommandKey("gotoBoard-15"), false);
 });

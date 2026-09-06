@@ -28,6 +28,17 @@ export const MAX_INBOX_CLUSTER_COMMANDS = 5;
  */
 export const INBOX_CLUSTER_COMMAND_GROUP = "Archive inbox cluster";
 
+export const INBOX_CLUSTER_COMMAND_KEY_PREFIX = "archiveInboxCluster-";
+
+/**
+ * Cluster keys must never reach the Frequently used group. That group leads the
+ * untyped palette, so a remembered archive would make a bare Ctrl+K then Enter
+ * destructive. Frecency is meaningless for these anyway: the key dies with the
+ * notification it names.
+ */
+export const isInboxClusterCommandKey = (key: string): boolean =>
+  key.startsWith(INBOX_CLUSTER_COMMAND_KEY_PREFIX);
+
 /**
  * The biggest ticket piles in one inbox tab, largest first.
  *
