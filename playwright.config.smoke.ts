@@ -2,9 +2,9 @@ import { defineConfig, devices } from '@playwright/test'
 
 // HTPR-6199 — post-release smoke QA against production. Runs from
 // .github/workflows/prod-health.yml after every deploy, using a dedicated
-// smoke-only account's session (see tests/smoke/README.md).
+// smoke-only account's session (see e2e/smoke/README.md).
 export default defineConfig({
-  testDir: './tests/smoke',
+  testDir: './e2e/smoke',
   fullyParallel: true,
   // A view that fails once is retried before it counts as a real failure —
   // the ticket asks to roll back only if the SAME view fails twice, and
@@ -15,12 +15,12 @@ export default defineConfig({
   timeout: 20_000,
   use: {
     baseURL: process.env.SMOKE_BASE_URL || 'https://app.hypertask.ai',
-    storageState: 'tests/smoke/.state/smoke-state.json',
+    storageState: 'e2e/smoke/.state/smoke-state.json',
     trace: 'off',
     screenshot: 'off',
     video: 'off',
   },
-  globalSetup: './tests/smoke/global-setup.ts',
+  globalSetup: './e2e/smoke/global-setup.ts',
   projects: [
     { name: 'Desktop', use: { ...devices['Desktop Chrome'] } },
     // browserName pinned: the iPhone 13 device descriptor defaults to WebKit,
