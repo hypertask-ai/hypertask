@@ -507,15 +507,17 @@ const Inbox = ({
   }, [_notifications, globalFocus]);
 
   // HTPR-6160: the biggest piles in the tab you are looking at, offered in Ctrl+K.
-  // Memoised as one object because HTC rebuilds its whole command registry
-  // whenever the contextOptions identity changes.
+  // HTC rebuilds its whole command registry whenever this object's identity
+  // changes, and visibleNotifications is keyed on the whole globalFocus object,
+  // so this memo does re-run as focus moves. That is bounded rather than fixed:
+  // HypertasksCommands only mounts while showCommands.show is true, and the
+  // palette owns the keyboard while it is open, so inbox focus is not moving
+  // then. The guard below keeps the scan itself off the closed-palette path.
   const currentSplitNotifications: INotification[] =
     visibleNotifications?.[globalFocus.currSplit] ?? NO_NOTIFICATIONS;
   const commandContextOptions: IAllCommands = useMemo(
     () => ({
       context: "Others",
-      // visibleNotifications is keyed on globalFocus, so its identity changes on
-      // every arrow key. Only scan when the palette is actually open.
       inboxClusters: showCommands.show
         ? topInboxClusters(currentSplitNotifications)
         : [],
