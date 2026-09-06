@@ -115,9 +115,10 @@ export class MemoryDeliveryStore implements DeliveryStore {
  * within five seconds, and retries a rejected delivery.
  *
  * ponytail: a fixed retry budget and a bounded ID map in process memory, not
- * a queue. A restart loses whatever has not finished, and dedupe only covers
- * the most recent `maxEntries` deliveries, so distributed and restartable
- * hosts must supply a durable scheduler backed by a real queue instead.
+ * a queue. A restart loses whatever has not finished, dedupe only covers the
+ * most recent `maxEntries` deliveries, and nothing caps concurrency, so a
+ * burst of N deliveries runs N handlers at once. Distributed, restartable, or
+ * high-volume hosts must supply a durable scheduler backed by a real queue.
  */
 export class MemoryDeliveryScheduler implements DeliveryScheduler {
   private readonly seen = new Map<string, number>();
