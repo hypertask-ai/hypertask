@@ -356,10 +356,10 @@ jobs:
   # as health confirms this SHA is live, before its own probes run, so it
   # alone would still be true after a rollback further down that same job —
   # the extra `needs.health.result != 'failure'` check excludes that case (a
-  # health job that rolls back always exits non-zero). health also exits 0
-  # when there's nothing to check (see the job's own comments) and exits 1 on
-  # an inconclusive write probe even though the SHA is genuinely live, which
-  # is why the gate isn't `needs.health.result == 'success'` alone.
+  # health job that rolls back always exits non-zero). For a push, this makes
+  # the gate equivalent to `needs.health.result == 'success'`; an inconclusive
+  # write-probe run also exits non-zero, so it's skipped here too rather than
+  # smoke-tested.
   # workflow_dispatch runs the checks without any of this (nothing to gate
   # on, `health` doesn't run) so this job is dispatchable for manual
   # verification; rollback is skipped there too, since a manual run is
@@ -395,7 +395,15 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
+      # signup + email verification). Until it exists, skip the checks
+      # instead of alerting on every production push over a known gap.
+      - name: Check the smoke session secret is provisioned
+        id: provisioned
+        run: echo "ok=${{ secrets.SMOKE_SESSION_STATE != '' }}" >> "$GITHUB_OUTPUT"
+
       - name: Write the smoke session (never logged, never uploaded as an artifact)
+        if: steps.provisioned.outputs.ok == 'true'
         env:
           SMOKE_SESSION_STATE: ${{ secrets.SMOKE_SESSION_STATE }}
         run: |
@@ -404,14 +412,19 @@ jobs:
 
       - name: Run the smoke checks
         id: smoke
+        if: steps.provisioned.outputs.ok == 'true'
         continue-on-error: true
         env:
           SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
           SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
         run: npx playwright test -c playwright.config.smoke.ts
 
+      - name: Not provisioned yet — see tests/smoke/README.md
+        if: steps.provisioned.outputs.ok != 'true'
+        run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See tests/smoke/README.md to provision it."
+
       - name: Decide unrunnable vs. real failure, rollback if confirmed
-        if: steps.smoke.outcome == 'failure'
+        if: steps.provisioned.outputs.ok == 'true' && steps.smoke.outcome == 'failure'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
