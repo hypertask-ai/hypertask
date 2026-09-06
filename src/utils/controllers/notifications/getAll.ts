@@ -372,6 +372,7 @@ const notificationGetAll = async (userId: string | string[]) => {
     );
 
     const unreadCountByTaskId = new Map<number, number>();
+    const clusterCountByTaskId = new Map<number, number>();
     if (taskIds.length) {
       const readStates = await prisma.taskReadState.findMany({
         where: {
@@ -391,7 +392,8 @@ const notificationGetAll = async (userId: string | string[]) => {
         (taskId) => !taskIdsWithReadState.has(taskId)
       );
 
-      const [unreadCommentCounts, unreadNotificationCounts] = await Promise.all([
+      const [unreadCommentCounts, unreadNotificationCounts, clusterCounts] =
+        await Promise.all([
         readStates.length
           ? prisma.comment.groupBy({
               by: ["taskId"],
@@ -433,6 +435,14 @@ const notificationGetAll = async (userId: string | string[]) => {
               _count: { _all: true },
             })
           : Promise.resolve([]),
+        // HTPR-6160: a ticket collapses to one inbox row, and archiving that row
+        // archives its whole pile. unreadCount cannot stand in for the pile size:
+        // it counts unread only, and the biggest piles (agent chatter) are read.
+        prisma.notification.groupBy({
+          by: ["taskId"],
+          where: { ...inboxWhere, taskId: { in: taskIds } },
+          _count: { _all: true },
+        }),
       ]);
 
       unreadCommentCounts.forEach((row) => {
@@ -442,6 +452,12 @@ const notificationGetAll = async (userId: string | string[]) => {
       unreadNotificationCounts.forEach((row) => {
         if (row.taskId != null) {
           unreadCountByTaskId.set(row.taskId, row._count._all);
+        }
+      });
+
+      clusterCounts.forEach((row) => {
+        if (row.taskId != null) {
+          clusterCountByTaskId.set(row.taskId, row._count._all);
         }
       });
     }
@@ -462,7 +478,10 @@ const notificationGetAll = async (userId: string | string[]) => {
         // addressed marker while any active direct-reply row remains in the inbox.
         ...directReplyState,
         ...(hasTaskId
-          ? { unreadCount: unreadCountByTaskId.get(notification.taskId!) ?? 0 }
+          ? {
+              unreadCount: unreadCountByTaskId.get(notification.taskId!) ?? 0,
+              clusterCount: clusterCountByTaskId.get(notification.taskId!) ?? 1,
+            }
           : {}),
       };
     });

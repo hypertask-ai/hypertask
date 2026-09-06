@@ -23,6 +23,7 @@ export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
+export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
@@ -160,6 +161,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-06",
     description:
       "Offers the board's canvas pages in the @ menu, so a comment or description can link a page like it links a task.",
+  },
+  {
+    key: INBOX_ARCHIVE_CLUSTER_FLAG,
+    shippedOn: "2026-09-06",
+    description:
+      "Adds Ctrl+K entries for the five biggest ticket piles in the inbox, and names the row archive action after what it already does.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

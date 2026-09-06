@@ -87,6 +87,11 @@ import { canWarmPreviousBoardFromInbox } from "@/lib/inboxSync/warmPreviousBoard
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
 import { shouldPreserveNativeInboxTab } from "@/lib/inboxKeyboardNavigation";
 import { getInitialInboxSplitIndex } from "@/lib/inboxSplitSettings";
+import { topInboxClusters } from "@/lib/inboxClusters";
+import type { IAllCommands } from "@/models/model";
+
+// Stable identity: a fresh [] would rebuild the whole Ctrl+K registry each render.
+const NO_NOTIFICATIONS: INotification[] = [];
 
 const Inbox = ({
   currentUser,
@@ -501,9 +506,48 @@ const Inbox = ({
     });
   }, [_notifications, globalFocus]);
 
+  // HTPR-6160: the biggest piles in the tab you are looking at, offered in Ctrl+K.
+  // Memoised as one object because HTC rebuilds its whole command registry
+  // whenever the contextOptions identity changes.
+  const currentSplitNotifications: INotification[] =
+    visibleNotifications?.[globalFocus.currSplit] ?? NO_NOTIFICATIONS;
+  const commandContextOptions: IAllCommands = useMemo(
+    () => ({
+      context: "Others",
+      // visibleNotifications is keyed on globalFocus, so its identity changes on
+      // every arrow key. Only scan when the palette is actually open.
+      inboxClusters: showCommands.show
+        ? topInboxClusters(currentSplitNotifications)
+        : [],
+    }),
+    [currentSplitNotifications, showCommands.show],
+  );
+
+  const archiveInboxCluster = (notificationId: string) => {
+    // Every split, not just the one the command was built from: the palette holds
+    // a snapshot, and switching tabs while it is open must not turn Enter into a
+    // silent no-op. markAsDone archives by notification identity and never
+    // forwards its index argument, so the per-split walk exists only to keep that
+    // argument truthful in its own split rather than a flattened position.
+    for (const split of visibleNotifications ?? []) {
+      const index = split.findIndex(
+        (notification: INotification) => String(notification.id) === notificationId,
+      );
+      // Archiving one row already archives that ticket's whole pile server-side
+      // (markAsDone), and this reuses the row's undo wiring unchanged.
+      if (index >= 0) return void markAsDone(split[index], index, "Notification");
+    }
+    // Only reachable once the pile is already gone, so say so rather than
+    // leaving Enter looking broken.
+    toast("That ticket's notifications are already archived");
+  };
+
   const htcCallbackHandler = (payload: any, mode: string) => {
     if (mode === "CreateSubTask") {
       createSubTask();
+    }
+    if (mode === "ArchiveInboxCluster" && typeof payload === "string") {
+      archiveInboxCluster(payload);
     }
   };
 
@@ -892,7 +936,10 @@ const Inbox = ({
           )}
         </div>
         {showCommands.show && (
-          <HypertasksCommands callbackHandler={htcCallbackHandler} />
+          <HypertasksCommands
+            callbackHandler={htcCallbackHandler}
+            contextOptions={commandContextOptions}
+          />
         )}
       </BulkSelectionProvider>
       {showManageSplits && (
