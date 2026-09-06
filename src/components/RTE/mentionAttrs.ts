@@ -53,5 +53,5 @@ export function mentionAttrsForItem(
     return { id: String(item?.id ?? ""), label: "page", text: item?.name };
   }
 
-  return { id: item?.name as string, label: `${item?.type}-${item?.id}` };
+  return { id: String(item?.name ?? ""), label: `${item?.type}-${item?.id}` };
 }

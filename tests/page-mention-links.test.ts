@@ -59,6 +59,11 @@ test("a picked page becomes a /page/<publicId> link showing its title", () => {
     rendered.includes(pageRow.name),
     `link text should stay the page title, got: ${rendered}`,
   );
+  // The chip's readable label lives in `text`, and LinkableMention falls back to
+  // the raw publicId without it. normalizeRichTextStructure rebuilds the node as
+  // an anchor from an attribute allow-list, so dropping `text` from that list
+  // would silently turn every posted page mention into a cuid.
+  assert.match(rendered, /text="Wireframe: @ mention dropdown with Pages group"/);
 });
 
 test("a page title carrying quotes or angle brackets cannot break out of the link", () => {

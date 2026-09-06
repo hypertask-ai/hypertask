@@ -40,7 +40,10 @@ const taskSearchByParam = async (
           id: hyperAiId,
         },
       }),
-      isFeatureEnabled(PAGE_MENTIONS_FLAG, userid),
+      // Fail open on the gate, never on the menu: this route had no dependency
+      // on the flag table before, and a read failure there must not blank the
+      // whole @ list (people, agents, tasks, boards) for everyone.
+      isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
     ]);
 
     let hyperAIObject = { ...hyperAI, displayName: "HyperAI" };
@@ -161,11 +164,7 @@ const taskSearchByParam = async (
           ...updatedAgents,
           { name: "Tasks", type: "taskHeading", count: updatedtask.length },
           ...updatedtask,
-          // Omitted entirely when the flag is off, so a user without it sees the
-          // exact response they saw before this feature existed.
-          ...(pages.length
-            ? [{ name: "Pages", type: "pageHeading", count: pages.length }, ...pages]
-            : []),
+          ...pageGroup(pages),
           {
             name: "Boards",
             type: "projectHeading",
@@ -265,11 +264,7 @@ const taskSearchByParam = async (
           ...updatedAgents,
           { name: "Tasks", type: "taskHeading", count: updatedtask.length },
           ...updatedtask,
-          // Omitted entirely when the flag is off, so a user without it sees the
-          // exact response they saw before this feature existed.
-          ...(pages.length
-            ? [{ name: "Pages", type: "pageHeading", count: pages.length }, ...pages]
-            : []),
+          ...pageGroup(pages),
           {
             name: "Boards",
             type: "projectHeading",
@@ -291,16 +286,35 @@ const taskSearchByParam = async (
 export default taskSearchByParam;
 
 /**
+ * The Pages group, or nothing at all when there are no pages to offer. Omitting
+ * the heading keeps the response byte-identical to the pre-feature one for a
+ * user the flag is off for.
+ */
+const pageGroup = (pages: MentionPage[]) =>
+  pages.length
+    ? [{ name: "Pages", type: "pageHeading", count: pages.length }, ...pages]
+    : [];
+
+interface MentionPage {
+  id: string;
+  name: string;
+  type: string;
+  ticketNumber: string;
+}
+
+/**
  * Canvas pages of the current board, offered as a "Pages" group in the @ menu
  * (HTPR-5898). `id` carries the page publicId because that is what
  * buildRichTextMentionHref turns into /page/<id>; `name` is the chip's text.
  * An empty `titleQuery` means the caller typed nothing yet, so return the newest.
+ * Page.task is a required relation, so every page has a parent task; only
+ * Task.ticketNumber itself is nullable, hence the fallback on the label.
  */
 const fetchMentionPages = async (
   enabled: boolean,
   projectId: number,
   titleQuery: string,
-) => {
+): Promise<MentionPage[]> => {
   if (!enabled) return [];
   try {
     const pages = await prisma.page.findMany({
@@ -324,10 +338,13 @@ const fetchMentionPages = async (
       id: page.publicId,
       name: page.title,
       type: "page",
-      ticketNumber: page.task?.ticketNumber ?? "",
+      ticketNumber: page.task.ticketNumber ?? "",
     }));
   } catch (error) {
-    console.log("🤔 ~ fetchMentionPages ~ error:", error);
+    // Degrade to "no Pages group" rather than losing the whole @ menu, but make
+    // the reason loud: a silent empty group is indistinguishable from a board
+    // that genuinely has no pages.
+    console.error("🤔 ~ fetchMentionPages ~ error:", error);
     return [];
   }
 };
