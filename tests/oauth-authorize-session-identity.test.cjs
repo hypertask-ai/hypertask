@@ -134,7 +134,7 @@ test("OAuth code identity comes exclusively from the signed session", async () =
   assert.equal(new URL(location.searchParams.get("redirect_uri")).origin, "https://client.example.test");
   assert.deepEqual(userLookup, {
     where: { id: ATTACKER_ID },
-    select: { uid: true, email: true },
+    select: { uid: true },
   });
   assert.equal(createdCode.user_id, ATTACKER_ID);
   assert.equal(createdCode.firebase_uid, `firebase-${ATTACKER_ID}`);
