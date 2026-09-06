@@ -30,15 +30,18 @@ function safeClientName(name: string | null | undefined): string {
   return cleaned.length === 0 ? "An unnamed app" : cleaned.slice(0, 80);
 }
 
+/** Custom schemes like cursor:// have no origin (URL.origin is the string "null"),
+ * and those are exactly the desktop clients this screen is most often shown for. */
 function redirectOrigin(redirectUri: string): string {
   try {
-    return new URL(redirectUri).origin;
+    const url = new URL(redirectUri);
+    return url.origin === "null" ? redirectUri : url.origin;
   } catch {
     return redirectUri;
   }
 }
 
-function Fallback({ message }: { message: string }) {
+function Fallback({ heading, message }: { heading: string; message: string }) {
   return (
     <div className={cn(PANEL)}>
       <div className="w-full max-w-md flex flex-col items-center text-center">
@@ -49,7 +52,7 @@ function Fallback({ message }: { message: string }) {
           width={48}
           height={48}
         />
-        <h1 className="text-heading font-semibold text-white mb-2">Connection request expired</h1>
+        <h1 className="text-heading font-semibold text-white mb-2">{heading}</h1>
         <p className="text-gray-400 text-content mb-6">{message}</p>
         <Link href="/" className={cn(SECONDARY_BUTTON, "max-w-[288px]")}>
           Return to Hypertask
@@ -92,7 +95,12 @@ export default async function OAuthConsentPage(props: {
       agentId: agentId || null,
     })
   ) {
-    return <Fallback message="Start the connection again from the app you were using." />;
+    return (
+      <Fallback
+        heading="Connection request expired"
+        message="Start the connection again from the app you were using."
+      />
+    );
   }
 
   const client = await prisma.oAuthClient.findUnique({
@@ -101,7 +109,12 @@ export default async function OAuthConsentPage(props: {
   });
 
   if (!client) {
-    return <Fallback message="This app is no longer registered with Hypertask." />;
+    return (
+      <Fallback
+        heading="Connection request could not be completed"
+        message="This app is no longer registered with Hypertask."
+      />
+    );
   }
 
   const clientName = safeClientName(client.client_name);

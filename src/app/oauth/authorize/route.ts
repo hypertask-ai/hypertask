@@ -70,7 +70,7 @@ function invalid(description: string, error = 'invalid_request', status = 400) {
  * Shared by GET and POST so the two paths can never drift on what they accept.
  * Returns either a validated request or the error response to send back.
  */
-export async function validateAuthorizationRequest(
+async function validateAuthorizationRequest(
   params: AuthorizationRequest
 ): Promise<{ ok: true; request: ValidatedRequest } | { ok: false; response: NextResponse }> {
   if (params.responseType !== 'code') {

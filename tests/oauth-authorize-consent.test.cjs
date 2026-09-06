@@ -184,6 +184,20 @@ test("approving with a valid consent token mints the code and remembers the gran
   assert.deepEqual(upsertedGrant, { user_id: USER_ID, client_id: "test-client" });
 });
 
+test("the token the consent redirect carries is the one approval accepts", async () => {
+  reset();
+
+  const consentResponse = await GET(authorizeGet());
+  const consentUrl = new URL(consentResponse.headers.get("location"));
+  const params = Object.fromEntries(consentUrl.searchParams.entries());
+
+  // Exactly what the consent form posts back, straight from the redirect.
+  const response = await POST(authorizePost(params));
+
+  assert.equal(response.status, 303);
+  assert.equal(createdCode.user_id, USER_ID);
+});
+
 test("a POST without a consent token mints nothing", async () => {
   reset();
 

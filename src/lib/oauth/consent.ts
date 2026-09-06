@@ -73,8 +73,10 @@ export function verifyConsentToken(
     return false
   }
 
-  const presented = Buffer.from(token.slice(separatorIndex + 1), 'base64url')
-  const expected = Buffer.from(sign(canonical(request, expiresAt)), 'base64url')
+  // Compare the encoded strings: base64url decoding silently drops invalid
+  // characters, so distinct tokens could decode to the same bytes.
+  const presented = Buffer.from(token.slice(separatorIndex + 1), 'utf8')
+  const expected = Buffer.from(sign(canonical(request, expiresAt)), 'utf8')
 
   return presented.length === expected.length && timingSafeEqual(presented, expected)
 }
