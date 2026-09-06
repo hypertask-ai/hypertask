@@ -5,6 +5,11 @@ const { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } = require('nod
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
+// Shared with tests that need to build a `comments` fixture referencing the
+// PR head before calling runWorkflow, so it can never drift from the value
+// baked into the gh stub.
+const HEAD = 'a'.repeat(40)
+
 async function workflowScript() {
   const workflow = await readFile('.github/workflows/automerge.yml', 'utf8')
   const marker = '        run: |\n'
@@ -24,7 +29,7 @@ async function runWorkflow({ failTemp = false, failList = false, failView = fals
   await mkdir(bin)
   await mkdir(runnerTemp)
 
-  const head = 'a'.repeat(40)
+  const head = HEAD
   const prTitle = title ?? (speed ? '[SPEED] Optimize the app' : 'Safe change')
   const commentsJson = JSON.stringify(comments ?? [{ body: `APPROVE\nreviewed-commit: ${head}` }])
   const gh = `#!/usr/bin/env bash
@@ -96,7 +101,7 @@ exit 2
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
       },
     })
-    return { result, scratchEntries: await readdir(runnerTemp) }
+    return { result, scratchEntries: await readdir(runnerTemp), head }
   } finally {
     await rm(directory, { recursive: true, force: true })
   }
@@ -242,10 +247,9 @@ test('auto-merge refuses to merge when GitHub never resolves UNKNOWN', async () 
 // current-commit review. A major/blocker finding on any review for the PR
 // must park it for a human, even once a newer commit reviews clean.
 test('a MAJOR finding on an older commit still parks the PR after a clean re-review', async () => {
-  const head = 'a'.repeat(40)
   const comments = [
     { body: 'CONCERNS (1) - reviewed by gpt-5.6-sol\n\n- **MAJOR - Strict gate remounts SectionComp on every switch**\n\n<!-- reviewed-commit: 2acfbc8bd27898e80b45b284d034673b87f64e65 -->' },
-    { body: `APPROVE (minors only: 1) - reviewed by gpt-5.6-sol\n\n- **MINOR - Missing speed evidence**\n\n<!-- reviewed-commit: ${head} -->` },
+    { body: `APPROVE (minors only: 1) - reviewed by gpt-5.6-sol\n\n- **MINOR - Missing speed evidence**\n\n<!-- reviewed-commit: ${HEAD} -->` },
   ]
   const { result, scratchEntries } = await runWorkflow({ comments })
 
@@ -256,14 +260,43 @@ test('a MAJOR finding on an older commit still parks the PR after a clean re-rev
 })
 
 test('a summary mentioning "no major issues" does not falsely park the PR', async () => {
-  const head = 'a'.repeat(40)
   const comments = [
-    { body: `APPROVE (no major issues) - reviewed by gpt-5.6-sol\n\n<!-- reviewed-commit: ${head} -->` },
+    { body: `APPROVE (no major issues) - reviewed by gpt-5.6-sol\n\n<!-- reviewed-commit: ${HEAD} -->` },
   ]
   const { result, scratchEntries } = await runWorkflow({ comments })
 
   assert.equal(result.status, 0, result.stderr)
   assert.doesNotMatch(result.stdout, /PARK: a review flagged/)
+  assert.match(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('a bare-word BLOCKER without markdown bold still parks the PR', async () => {
+  const comments = [
+    { body: `APPROVE\nBLOCKER: schema migration is destructive\n\n<!-- reviewed-commit: ${HEAD} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /PARK: a review flagged a blocker or major-severity finding/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+// A null comment body (GitHub sends this for some system-generated comments)
+// must never crash the jq pipeline: this whole step runs under bash -e, so an
+// uncaught jq error here would kill the sweep for every PR in the batch, not
+// just this one. The null-body comment is simply ignored; the real review
+// next to it still gets read and the PR merges normally.
+test('a malformed (null-body) review comment does not crash the sweep', async () => {
+  const comments = [
+    { body: null },
+    { body: `APPROVE\n\n<!-- reviewed-commit: ${HEAD} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.doesNotMatch(result.stdout, /PARK: could not parse review comments/)
   assert.match(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })

@@ -278,8 +278,16 @@ jobs:
             # comment for the exact head SHA. This catches a misconfigured or
             # accidentally green check without trusting a stale review comment.
             marker="reviewed-commit: ${headOid}"
-            current_review=$(jq -r --arg marker "$marker" \
-              '[.comments[].body | select(contains($marker)) | select(test("^(APPROVE|CONCERNS)"))] | last // ""' <<<"$J")
+            # `.comments[]?.body // ""`: a null/absent body must never make jq
+            # fail (this whole step runs under bash -e, so an uncaught jq error
+            # here would kill the sweep for every PR in the batch, not just this
+            # one) (HTPR-6149).
+            if ! current_review=$(jq -r --arg marker "$marker" \
+              '[.comments[]?.body // "" | select(contains($marker)) | select(test("^(APPROVE|CONCERNS)"))] | last // ""' <<<"$J"); then
+              echo "PARK: could not parse review comments"
+              park "$PR" "review comments could not be parsed"
+              echo "::endgroup::"; continue
+            fi
             if ! grep -q '^APPROVE' <<<"$current_review"; then
               echo "PARK: no current-commit APPROVE review comment"
               park "$PR" "the required review check is green but its current-commit APPROVE comment is missing"
@@ -294,10 +302,20 @@ jobs:
             # remount bug was never actually fixed -- the earlier concern just
             # silently stopped counting. Checking every review comment closes that
             # gap: a human has to look and remove the park label themselves.
-            # Anchored on the rendered "**MAJOR"/"**BLOCKER" bullet prefix, not the
-            # bare word, so a summary sentence like "no major issues" can't trip it.
-            all_reviews=$(jq -r '[.comments[].body | select(test("^(APPROVE|CONCERNS)"))] | join("\n")' <<<"$J")
-            if grep -qiE '\*\*(BLOCKER|MAJOR)\b' <<<"$all_reviews"; then
+            # MAJOR is anchored on the rendered "**MAJOR" bullet prefix (not the
+            # bare word) so a summary sentence like "no major issues" can't trip
+            # it; BLOCKER keeps the original bare-word match since "no blockers"
+            # is not a phrase these reviews use. `.comments[]?.body // ""` and the
+            # explicit exit-status check matter: a null body or missing .comments
+            # would otherwise make jq fail, all_reviews come back empty, and the
+            # PR merge with NO review ever inspected -- a silent fail-open that
+            # is worse than no gate at all.
+            if ! all_reviews=$(jq -r '[.comments[]?.body // "" | select(test("^[\\s*#>]*(APPROVE|CONCERNS)"; "i"))] | join("\n")' <<<"$J"); then
+              echo "PARK: could not parse review comments"
+              park "$PR" "review comments could not be parsed"
+              echo "::endgroup::"; continue
+            fi
+            if grep -qiE '\bblocker\b|\*\*MAJOR\b' <<<"$all_reviews"; then
               echo "PARK: a review flagged a blocker or major-severity finding"
               park "$PR" "an automated review flagged a blocker or major-severity finding; confirm it's resolved, then remove the label and merge manually"
               echo "::endgroup::"; continue
