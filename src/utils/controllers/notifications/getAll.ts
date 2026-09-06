@@ -456,7 +456,7 @@ const notificationGetAll = async (userId: string | string[]) => {
       });
 
       clusterCounts.forEach((row) => {
-        if (row.taskId != null) {
+        if (row.taskId !== null && row.taskId !== undefined) {
           clusterCountByTaskId.set(row.taskId, row._count._all);
         }
       });
