@@ -46,6 +46,14 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
+import {
+  INBOX_CLUSTER_COMMAND_GROUP,
+  INBOX_CLUSTER_COMMAND_KEY_PREFIX,
+  inboxClusterCommandName,
+  isInboxClusterCommandKey,
+  type InboxCluster,
+} from "@/lib/inboxClusters";
+import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags";
 
 type Props = {
   handleAction?: (mode?: CommandMode, action?: string) => void;
@@ -85,6 +93,7 @@ const Commands = (props: Props) => {
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
+  const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -115,6 +124,18 @@ const Commands = (props: Props) => {
         commandMode: CommandMode.GoToBoard,
         keywords: `${project.title} board project go open switch`,
       }));
+    // HTPR-6160: the inbox sorts by recency, so the noisiest tickets are invisible
+    // until you scroll. These rank by pile size instead. Own group: every group's
+    // commandLists get frecency-sorted below, and brand-new keys score 0.
+    const inboxClusterCommands: ICommandList[] = inboxClusterEnabled
+      ? (contextOptions?.inboxClusters ?? []).map((cluster: InboxCluster) => ({
+          key: `${INBOX_CLUSTER_COMMAND_KEY_PREFIX}${cluster.notificationId}`,
+          name: inboxClusterCommandName(cluster),
+          payload: cluster.notificationId,
+          commandMode: CommandMode.ArchiveInboxCluster,
+          keywords: `inbox archive cluster clear notifications ${cluster.ticketNumber}`,
+        }))
+      : [];
     const registryGroups = getAllCommands({
       context: "Others",
       ...contextOptions,
@@ -191,6 +212,17 @@ const Commands = (props: Props) => {
         (left, right) => scoreCommand(right) - scoreCommand(left)
       ),
     }));
+    // Appended, and added after the per-group frecency sort so the piles keep
+    // size order. Position is only visible on an empty query, and the group is
+    // dropped from that list below: a typed query goes through filterData, which
+    // flattens every group and re-ranks by match score, so this never jumps a
+    // destructive command ahead of a better match.
+    if (inboxClusterCommands.length > 0) {
+      commandGroups.push({
+        group: INBOX_CLUSTER_COMMAND_GROUP,
+        commandLists: inboxClusterCommands,
+      });
+    }
     if (contextOptions?.context === "Task") {
       return getMobileCommandGroups(commandGroups, isMobile);
     }
@@ -198,6 +230,10 @@ const Commands = (props: Props) => {
     const canonicalCommands = new Map(
       commandGroups
         .flatMap((group) => group.commandLists)
+        // Frequently used is built from this map and leads the untyped palette,
+        // so an archive command remembered from an earlier use must not be able
+        // to become the blank-Ctrl+K Enter target.
+        .filter((command) => !isInboxClusterCommandKey(command.key))
         .map((command) => [command.key, command])
     );
     const topCommands = Object.entries(frequentlyUsed)
@@ -238,6 +274,7 @@ const Commands = (props: Props) => {
     contextOptions,
     copyCurrentUrlEnabled,
     currentProject,
+    inboxClusterEnabled,
     frequentlyUsed,
     isMobile,
     onAgentChat,
@@ -247,8 +284,13 @@ const Commands = (props: Props) => {
   ])
 
   const emptyQueryCommands = useMemo(() => {
-    if (scope !== "board") return allCommands_;
-    return getBoardMenuCommands(allCommands_, boardLayout);
+    // Archiving is destructive and the first group is default-highlighted, so an
+    // untyped Ctrl+K plus Enter must not wipe a ticket's pile. Type toward it.
+    const withoutClusters = allCommands_.filter(
+      (group) => group.group !== INBOX_CLUSTER_COMMAND_GROUP,
+    );
+    if (scope !== "board") return withoutClusters;
+    return getBoardMenuCommands(withoutClusters, boardLayout);
   }, [allCommands_, scope, boardLayout]);
 
   const {
