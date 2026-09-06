@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/react";
+import type { InboxCluster } from "@/lib/inboxClusters";
 import type {
   DraftType,
   EmptySections,
@@ -698,6 +699,8 @@ export interface INotification {
   task: ITask;
   taskId: number;
   unreadCount?: number;
+  /** Notifications hiding behind this ticket's single inbox row (HTPR-6160). */
+  clusterCount?: number;
   projectId: number;
   reaction?: IReaction;
   fromUserId: number;
@@ -1114,6 +1117,7 @@ export type HTCContext = "Task" | "Kanban" | "Inbox" | "Others";
 
 export interface IAllCommands {
   context: HTCContext;
+  inboxClusters?: InboxCluster[];
   bulkSelectionCount?: number;
   task?: {
     taskId: number;

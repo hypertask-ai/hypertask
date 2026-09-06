@@ -988,6 +988,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       case CommandMode.GotoSnippets:
         GoToHandler("/snippets");
         break;
+      case CommandMode.ArchiveInboxCluster:
+        // The inbox owns the archive + undo wiring; this only names the row.
+        callbackHandler?.(action, "ArchiveInboxCluster");
+        boardCloseHandler();
+        break;
       case CommandMode.GoToBoard: {
         const projectId = Number(action);
         if (Number.isInteger(projectId) && projectId > 0) {
