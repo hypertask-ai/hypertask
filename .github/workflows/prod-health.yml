@@ -377,7 +377,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies
+        id: setup-npm
+        continue-on-error: true
+        run: npm ci
 
       - name: Restore Playwright browser cache
         id: pw-cache
@@ -386,7 +389,20 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
-      - run: npx playwright install --with-deps chromium
+      - name: Install the Chromium browser
+        id: setup-pw
+        continue-on-error: true
+        run: npx playwright install --with-deps chromium
+
+      # A failed npm ci / playwright install is an UNRUNNABLE check, not a
+      # broken app: record it as a failed preflight so the decision step below
+      # alerts on Telegram and never rolls back (PR #366 review).
+      - name: Record a setup failure as unrunnable
+        if: always() && (steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
+        run: |
+          mkdir -p e2e/smoke/.state
+          echo '{"ok":false,"reason":"setup failed (npm ci or playwright install)"}' > e2e/smoke/.state/preflight.json
+          echo "::error::Smoke setup failed — classified as unrunnable, not a broken app"
 
       - name: Save Playwright browser cache
         if: steps.pw-cache.outputs.cache-hit != 'true'
@@ -412,7 +428,7 @@ jobs:
 
       - name: Run the smoke checks
         id: smoke
-        if: steps.provisioned.outputs.ok == 'true'
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-npm.outcome != 'failure' && steps.setup-pw.outcome != 'failure'
         continue-on-error: true
         env:
           SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
@@ -424,7 +440,7 @@ jobs:
         run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See e2e/smoke/README.md to provision it."
 
       - name: Decide unrunnable vs. real failure, rollback if confirmed
-        if: steps.provisioned.outputs.ok == 'true' && steps.smoke.outcome == 'failure'
+        if: always() && steps.provisioned.outputs.ok == 'true' && (steps.smoke.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
