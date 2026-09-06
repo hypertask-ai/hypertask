@@ -25,6 +25,7 @@ export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
+export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -159,6 +160,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     description:
       "Lets people stop stuck Agent Chat turns and ends unanswered turns after five minutes.",
   },
+  {
+    key: PAGE_MENTIONS_FLAG,
+    shippedOn: "2026-09-06",
+    description:
+      "Offers the board's canvas pages in the @ menu, so a comment or description can link a page like it links a task.",
+  },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
   // `git log -S"<key>" --format=%cd --date=short production | tail -1`. An author adding a flag
@@ -186,6 +193,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   FLAG_SORT_FILTER_FLAG,
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+  PAGE_MENTIONS_FLAG,
 ]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [

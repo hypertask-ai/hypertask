@@ -6,6 +6,7 @@ export const NON_SELECTABLE_MENTION_TYPES = [
   "peopleHeading",
   "modelHeading",
   "taskHeading",
+  "pageHeading",
   "projectHeading",
   "agentHeading",
   "loading",

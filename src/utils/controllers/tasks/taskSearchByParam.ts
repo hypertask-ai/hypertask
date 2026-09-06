@@ -5,6 +5,7 @@ import {
 } from "@/lib/aiModelOptions";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
+import { isFeatureEnabled, PAGE_MENTIONS_FLAG } from "@/lib/flags";
 
 const taskSearchByParam = async (
   rawParam: string,
@@ -17,7 +18,7 @@ const taskSearchByParam = async (
     // (needs only userid), owner_members (only projectId) and hyperAI (a
     // constant id) are mutually independent, so fetch them concurrently
     // instead of in three sequential round trips.
-    const [projectIds, owner_members, hyperAI] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, pageMentionsEnabled] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -39,9 +40,13 @@ const taskSearchByParam = async (
           id: hyperAiId,
         },
       }),
+      isFeatureEnabled(PAGE_MENTIONS_FLAG, userid),
     ]);
 
     let hyperAIObject = { ...hyperAI, displayName: "HyperAI" };
+
+    // Pages are only offered for a board the caller is actually a member of.
+    const canMentionPages = pageMentionsEnabled && projectIds.includes(projectId);
 
     const param = cleanQuery(rawParam);
     const wordsInQuery = getQueryWords(param);
@@ -95,7 +100,7 @@ const taskSearchByParam = async (
 
       // HTPR-4478: projects, recent tasks and board agents are independent
       // reads; run them concurrently instead of three sequential round trips.
-      const [projects, task, boardAgentRows] = await Promise.all([
+      const [projects, task, boardAgentRows, pages] = await Promise.all([
         prisma.project.findMany({
           take: 5,
           where: {
@@ -118,6 +123,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
+        fetchMentionPages(canMentionPages, projectId, ""),
       ]);
 
       const updatedtask = task?.map((item: any) => ({
@@ -155,6 +161,11 @@ const taskSearchByParam = async (
           ...updatedAgents,
           { name: "Tasks", type: "taskHeading", count: updatedtask.length },
           ...updatedtask,
+          // Omitted entirely when the flag is off, so a user without it sees the
+          // exact response they saw before this feature existed.
+          ...(pages.length
+            ? [{ name: "Pages", type: "pageHeading", count: pages.length }, ...pages]
+            : []),
           {
             name: "Boards",
             type: "projectHeading",
@@ -180,7 +191,7 @@ const taskSearchByParam = async (
       // board-agent lookup are independent; run them concurrently instead of
       // three sequential round trips (Turbopuffer is the slow one, so this
       // matters most on this branch).
-      const [updatedtask, projects, boardAgentRows] = await Promise.all([
+      const [updatedtask, projects, boardAgentRows, pages] = await Promise.all([
         turbopufferFetchMentionTasks(rawParam, projectIds, projectId),
         prisma.project.findMany({
           take: 5,
@@ -219,6 +230,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
+        fetchMentionPages(canMentionPages, projectId, param),
       ]);
 
       const updatedProjects = projects?.map((item: any) => ({
@@ -253,6 +265,11 @@ const taskSearchByParam = async (
           ...updatedAgents,
           { name: "Tasks", type: "taskHeading", count: updatedtask.length },
           ...updatedtask,
+          // Omitted entirely when the flag is off, so a user without it sees the
+          // exact response they saw before this feature existed.
+          ...(pages.length
+            ? [{ name: "Pages", type: "pageHeading", count: pages.length }, ...pages]
+            : []),
           {
             name: "Boards",
             type: "projectHeading",
@@ -272,6 +289,48 @@ const taskSearchByParam = async (
 };
 
 export default taskSearchByParam;
+
+/**
+ * Canvas pages of the current board, offered as a "Pages" group in the @ menu
+ * (HTPR-5898). `id` carries the page publicId because that is what
+ * buildRichTextMentionHref turns into /page/<id>; `name` is the chip's text.
+ * An empty `titleQuery` means the caller typed nothing yet, so return the newest.
+ */
+const fetchMentionPages = async (
+  enabled: boolean,
+  projectId: number,
+  titleQuery: string,
+) => {
+  if (!enabled) return [];
+  try {
+    const pages = await prisma.page.findMany({
+      take: 5,
+      where: {
+        projectId,
+        archived: false,
+        task: { deletedAt: null },
+        ...(titleQuery
+          ? { title: { contains: titleQuery, mode: "insensitive" as const } }
+          : {}),
+      },
+      orderBy: { id: "desc" },
+      select: {
+        publicId: true,
+        title: true,
+        task: { select: { ticketNumber: true } },
+      },
+    });
+    return pages.map((page) => ({
+      id: page.publicId,
+      name: page.title,
+      type: "page",
+      ticketNumber: page.task?.ticketNumber ?? "",
+    }));
+  } catch (error) {
+    console.log("🤔 ~ fetchMentionPages ~ error:", error);
+    return [];
+  }
+};
 
 const fetchidlist = async (id: number) => {
   try {

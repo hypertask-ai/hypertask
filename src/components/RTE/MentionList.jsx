@@ -1,4 +1,5 @@
 import { showMentionListAtom } from "@/store";
+import { FileText } from "lucide-react";
 import React, {
   forwardRef,
   useEffect,
@@ -7,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { useRecoilState } from "@/lib/state";
+import { mentionAttrsForItem } from "./mentionAttrs";
 import {
   firstSelectableMentionIndex,
   nextSelectableMentionIndex,
@@ -27,30 +29,7 @@ const MentionList = forwardRef((props, ref) => {
   const selectItem = (index) => {
     const item = props.items[index];
     if (item && !ignoreItems.includes(item.type)) {
-      props.command(
-        item?.type === "task"
-          ? {
-              projectId: item?.project_id,
-              uniqueIndex: item?.index,
-              id: `${item?.ticketNumber} ${item?.name}`,
-              label: item?.type,
-            }
-          : item?.type === "project"
-          ? {
-              id: `${item?.identifier} ${item?.name}`,
-              projectId: item?.id,
-              label: `${item?.type}-${item?.id}`,
-            }
-          : item?.type === "agent"
-          ? {
-              id: `${item?.name}`,
-              label: `${item?.type}-${item?.id}`,
-            }
-          : {
-                id: item?.name,
-                label: `${item?.type}-${item?.id}`,
-           }
-      );
+      props.command(mentionAttrsForItem(item));
     }
   };
 
@@ -247,6 +226,20 @@ const MentionList = forwardRef((props, ref) => {
                         <span className="text-white-black">(archived)</span>
                       )}
                     </div>
+                  )}
+                  {item?.type === "page" && (
+                    <>
+                      <FileText
+                        className="h-4 w-4 shrink-0 text-icon-dark-gray"
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{item?.name}</span>
+                      {item?.ticketNumber && (
+                        <span className="ml-auto pl-2 text-icon-dark-gray whitespace-nowrap">
+                          {item?.ticketNumber}
+                        </span>
+                      )}
+                    </>
                   )}
                   {item?.type === "project" && (
                     <div className="block space-x-1 gap-1">
