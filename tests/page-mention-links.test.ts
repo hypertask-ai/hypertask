@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { LinkableMention } from "../src/components/RTE/Extensions/LinkableMention";
 import { mentionAttrsForItem } from "../src/components/RTE/mentionAttrs";
 import { buildRichTextMentionHref } from "../src/utils/helperFunctions/richTextMention";
 import { normalizeRichTextStructure } from "../src/utils/helperFunctions/normalizeRichTextStructure";
@@ -64,6 +65,20 @@ test("a picked page becomes a /page/<publicId> link showing its title", () => {
   // an anchor from an attribute allow-list, so dropping `text` from that list
   // would silently turn every posted page mention into a cuid.
   assert.match(rendered, /text="Wireframe: @ mention dropdown with Pages group"/);
+});
+
+test("the mention node still declares the text attribute the chip reads from", () => {
+  // Without it the editor discards mentionAttrsForItem's `text` on insert and
+  // every page chip renders its raw cuid. The allow-list assertion above cannot
+  // see that: it starts from a span that already has the attribute.
+  const declared = LinkableMention.config.addAttributes?.call({
+    parent: () => ({}),
+    name: "mention",
+  } as never);
+  assert.ok(
+    declared && "text" in declared,
+    `LinkableMention must declare a text attribute, got: ${Object.keys(declared ?? {})}`,
+  );
 });
 
 test("a page title carrying quotes or angle brackets cannot break out of the link", () => {
