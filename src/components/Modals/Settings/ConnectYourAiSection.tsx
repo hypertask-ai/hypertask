@@ -6,6 +6,7 @@ import { MCP_SERVER_URL } from "@/components/Modals/McpToken/utils";
 import SettingsCard from "./SettingsCard";
 import SettingsCodeRow from "./SettingsCodeRow";
 import {
+  CONNECT_PROVIDER_SETUP_URLS,
   CONNECT_PROVIDER_STEPS,
   type ConnectProvider,
   getOtherChatsCopy,
@@ -28,6 +29,15 @@ const ConnectYourAiSection = () => {
     setActiveProvider(provider);
     setCopiedProvider(null);
     setCopyError(false);
+
+    // Open the provider first. A browser only honours window.open while the
+    // click gesture is still on the stack, and awaiting the clipboard ends it,
+    // which is why the panel used to promise a tab it never opened.
+    window.open(
+      CONNECT_PROVIDER_SETUP_URLS[provider],
+      "_blank",
+      "noopener,noreferrer",
+    );
 
     try {
       await navigator.clipboard.writeText(MCP_SERVER_URL);
@@ -86,7 +96,7 @@ const ConnectYourAiSection = () => {
             {copiedProvider === activeProvider && (
               <p className="flex items-center gap-1 text-meta font-semibold text-hypertasks-green">
                 <Check aria-hidden size={14} strokeWidth={1.5} />
-                Link copied. Return to {activeProvider === "claude" ? "Claude" : "ChatGPT"} to finish setup.
+                Link copied. Finish setup in the new {activeProvider === "claude" ? "Claude" : "ChatGPT"} tab.
               </p>
             )}
             {copyError && (
