@@ -76,11 +76,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Enables the shared Agent SDK run model and lifecycle endpoints.",
   },
   {
-    key: "htpr-6116-figma-node-preview",
-    shippedOn: "2026-09-04",
-    description: "Shows a preview of Figma file contents instead of the file cover image.",
-  },
-  {
     key: "htpr-6118-comment-reactions-api",
     shippedOn: "2026-09-04",
     description: "Lets agents add and remove emoji reactions on comments through the API and CLI.",
