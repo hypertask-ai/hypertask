@@ -12,6 +12,7 @@ const stubModule = (relativePath, exports) => {
 let userId = 7;
 let reads = 0;
 let writes = 0;
+let keepWrites = 0;
 let broadcasts = 0;
 let broadcastFails = false;
 let authFails = false;
@@ -45,6 +46,17 @@ stubModule("src/lib/flags.ts", {
     return {
       key,
       mode,
+      updatedAt: new Date(),
+      description: "Registers the feature flag controls themselves.",
+      ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
+    };
+  },
+  setFeatureFlagKeep: async (key, keep) => {
+    keepWrites += 1;
+    return {
+      key,
+      mode: "EVERYONE",
+      keep,
       updatedAt: new Date(),
       description: "Registers the feature flag controls themselves.",
       ticketUrl: "https://app.hypertask.ai/detail/project-15/6091",
@@ -93,6 +105,7 @@ test.beforeEach(() => {
   userId = 7;
   reads = 0;
   writes = 0;
+  keepWrites = 0;
   broadcasts = 0;
   broadcastFails = false;
   authFails = false;
@@ -188,6 +201,45 @@ test("owner writes reject cross-origin and invalid modes", async () => {
     400,
   );
   assert.equal(writes, 0);
+});
+
+test("the owner can pause removal with Keep without touching the mode", async () => {
+  userId = 6;
+  const result = await json(
+    await admin.PATCH(request("PATCH", { key: "htpr-6091-feature-flags", keep: true })),
+  );
+  assert.equal(result.status, 200);
+  assert.equal(result.body.flag.keep, true);
+  assert.equal(keepWrites, 1);
+  assert.equal(writes, 0);
+  assert.equal(broadcasts, 1);
+});
+
+test("Keep writes are refused while the countdown flag is off for the owner", async () => {
+  userId = 6;
+  detailsEnabled = false;
+  const result = await json(
+    await admin.PATCH(request("PATCH", { key: "htpr-6091-feature-flags", keep: true })),
+  );
+  assert.deepEqual(result, { status: 404, body: { error: "Not found" } });
+  assert.equal(keepWrites, 0);
+});
+
+test("a Keep write must say exactly one thing", async () => {
+  userId = 6;
+  const bodies = [
+    // Both fields: which change was meant is ambiguous, so neither is applied.
+    { key: "htpr-6091-feature-flags", mode: "EVERYONE", keep: true },
+    // Neither field: nothing to change.
+    { key: "htpr-6091-feature-flags" },
+    // Keep must be a boolean, not a truthy string.
+    { key: "htpr-6091-feature-flags", keep: "yes" },
+  ];
+  for (const body of bodies) {
+    assert.equal((await admin.PATCH(request("PATCH", body))).status, 400);
+  }
+  assert.equal(writes, 0);
+  assert.equal(keepWrites, 0);
 });
 
 test("user flag responses are private, per-user booleans", async () => {

@@ -26,6 +26,7 @@ export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
+export const FLAG_REMOVAL_COUNTDOWN_FLAG = "htpr-6193-flag-removal-countdown";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -161,6 +162,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     description:
       "Offers the board's canvas pages in the @ menu, so a comment or description can link a page like it links a task.",
   },
+  {
+    key: FLAG_REMOVAL_COUNTDOWN_FLAG,
+    shippedOn: "2026-09-06",
+    description:
+      "Counts down the 14 days before an Everyone flag is removed from the code, with a Keep switch that stops it. Set this flag itself to Everyone to let the daily sweep file the removal tickets.",
+  },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
   // `git log -S"<key>" --format=%cd --date=short production | tail -1`. An author adding a flag
@@ -218,20 +225,32 @@ export type FeatureFlagRow = {
   key: string;
   mode: FeatureFlagMode;
   updatedAt: Date | null;
+  releasedAt: Date | null;
+  keep: boolean;
+  removalTaskId: number | null;
   shippedOn: string | null;
   description: string;
   ticketUrl: string | null;
   ticketTitle: string | null;
 };
 
-const FEATURE_FLAG_TICKET_PROJECT_ID = 15;
+const FEATURE_FLAG_ROW_SELECT = {
+  key: true,
+  mode: true,
+  updatedAt: true,
+  releasedAt: true,
+  keep: true,
+  removalTaskId: true,
+} as const;
+
+export const FEATURE_FLAG_TICKET_PROJECT_ID = 15;
 const FEATURE_FLAG_TICKET_BASE = "https://app.hypertask.ai/detail/project-15";
 const LEGACY_FEATURE_FLAG_DESCRIPTION =
   "This older feature flag has no description in this version of the app.";
 const FEATURE_FLAG_KEY_TICKET_NUMBER = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function withFeatureFlagMetadata(
-  row: Pick<FeatureFlagRow, "key" | "mode" | "updatedAt">,
+  row: Pick<FeatureFlagRow, "key" | "mode" | "updatedAt" | "releasedAt" | "keep" | "removalTaskId">,
   ticketTitleByNumber: Map<number, string>,
 ): FeatureFlagRow {
   const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === row.key);
@@ -315,7 +334,7 @@ export async function listFeatureFlagModes(
   options: { includeTicketTitles?: boolean } = {},
 ): Promise<FeatureFlagRow[]> {
   const stored = await prisma.featureFlag.findMany({
-    select: { key: true, mode: true, updatedAt: true },
+    select: FEATURE_FLAG_ROW_SELECT,
     orderBy: { key: "asc" },
   });
   const ticketTitleByNumber = options.includeTicketTitles
@@ -326,7 +345,10 @@ export async function listFeatureFlagModes(
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      withFeatureFlagMetadata({ key, mode: DEFAULT_FEATURE_FLAG_MODE, updatedAt: null }, ticketTitleByNumber),
+      withFeatureFlagMetadata(
+        { key, mode: DEFAULT_FEATURE_FLAG_MODE, updatedAt: null, releasedAt: null, keep: false, removalTaskId: null },
+        ticketTitleByNumber,
+      ),
     ]),
   );
   stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row, ticketTitleByNumber)));
@@ -365,17 +387,47 @@ export async function setFeatureFlagMode(
     throw new FeatureFlagInputError("Invalid feature flag");
   }
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
-  const existing = declared
-    ? true
-    : Boolean(await prisma.featureFlag.findUnique({ where: { key }, select: { key: true } }));
-  if (!existing) throw new FeatureFlagInputError("Unknown feature flag");
+  const stored = await prisma.featureFlag.findUnique({
+    where: { key },
+    select: { key: true, mode: true, releasedAt: true },
+  });
+  if (!declared && !stored) throw new FeatureFlagInputError("Unknown feature flag");
+
+  // HTPR-6193: entering EVERYONE restarts the 14-day removal countdown and unlinks the ticket
+  // filed for the previous release. Re-filing is still suppressed while the old ticket is open or
+  // Keep is on, both by the sweep. Staying on EVERYONE keeps the original date, so re-pressing
+  // Everyone cannot extend the clock.
+  const entersEveryone = mode === "EVERYONE" && (stored?.mode !== "EVERYONE" || !stored.releasedAt);
+  const release = entersEveryone ? { releasedAt: new Date(), removalTaskId: null } : {};
 
   const [row, ticketTitleByNumber] = await Promise.all([
     prisma.featureFlag.upsert({
       where: { key },
-      create: { key, mode },
-      update: { mode },
-      select: { key: true, mode: true, updatedAt: true },
+      create: { key, mode, ...release },
+      update: { mode, ...release },
+      select: FEATURE_FLAG_ROW_SELECT,
+    }),
+    loadFeatureFlagTicketTitles([key]),
+  ]);
+  return withFeatureFlagMetadata(row, ticketTitleByNumber);
+}
+
+/**
+ * Pauses or resumes removal for one flag. Keep never moves `releasedAt`, so turning it off
+ * resumes the countdown from the original release date, as HTPR-6193 asks.
+ */
+export async function setFeatureFlagKeep(key: string, keep: boolean): Promise<FeatureFlagRow> {
+  if (!validFeatureFlagKey(key)) throw new FeatureFlagInputError("Invalid feature flag");
+  const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
+  const stored = await prisma.featureFlag.findUnique({ where: { key }, select: { key: true } });
+  if (!declared && !stored) throw new FeatureFlagInputError("Unknown feature flag");
+
+  const [row, ticketTitleByNumber] = await Promise.all([
+    prisma.featureFlag.upsert({
+      where: { key },
+      create: { key, mode: DEFAULT_FEATURE_FLAG_MODE, keep },
+      update: { keep },
+      select: FEATURE_FLAG_ROW_SELECT,
     }),
     loadFeatureFlagTicketTitles([key]),
   ]);
