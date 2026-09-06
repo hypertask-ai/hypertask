@@ -169,8 +169,9 @@ async function issueCodeAndRedirect(
 
   const finalRedirectUrl = buildRedirectUrl(validated.redirectUri, redirectParams)
 
-  // Custom URI schemes (like cursor://) cannot be followed reliably from a server
-  // redirect, so they go through an intermediate page that hands off to the client.
+  // Every absolute URI matches, http(s) included, so in practice all clients hand off
+  // through /oauth/success. That is what makes cursor:// style schemes work at all:
+  // a server redirect to a non-web scheme is not followed reliably.
   const customSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//
   if (customSchemePattern.test(validated.redirectUri.toLowerCase())) {
     const successUrl = new URL('/oauth/success', request.url)
@@ -191,7 +192,7 @@ async function currentSessionUser() {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { uid: true, email: true },
+    select: { uid: true },
   })
 
   if (!dbUser || !dbUser.uid) return { id: session.id, uid: null }
@@ -308,7 +309,17 @@ export async function POST(request: NextRequest) {
     )
 
     if (!approved) {
-      return invalid('Missing or expired approval. Start the connection again.', 'access_denied', 400)
+      // A person is looking at this, not a machine, so send them to the consent
+      // screen's own expiry page rather than raw JSON in the address bar. Dropping
+      // the stale token is what makes that page render the expired state.
+      const consentUrl = new URL('/oauth/consent', request.url)
+      for (const [key, value] of form.entries()) {
+        if (typeof value === 'string' && key !== 'consent_token') {
+          consentUrl.searchParams.set(key, value)
+        }
+      }
+
+      return NextResponse.redirect(consentUrl.toString(), 303)
     }
 
     // Remember the approval so reconnecting this connector is one click.

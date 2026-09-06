@@ -123,6 +123,17 @@ function consentTokenFor(overrides = {}) {
   });
 }
 
+function assertSentBackToConsent(response) {
+  // No approval means no code. The person is on a form, so they land back on the
+  // consent screen's expiry state, and the rejected token does not travel with them.
+  assert.equal(response.status, 303);
+  const location = new URL(response.headers.get("location"));
+  assert.equal(location.pathname, "/oauth/consent");
+  assert.equal(location.searchParams.get("consent_token"), null);
+  assert.equal(createdCode, undefined);
+  assert.equal(upsertedGrant, undefined);
+}
+
 function reset() {
   requestCookies = { ht_session: signSession({ id: USER_ID }) };
   createdCode = undefined;
@@ -203,9 +214,7 @@ test("a POST without a consent token mints nothing", async () => {
 
   const response = await POST(authorizePost(baseParams()));
 
-  assert.equal(response.status, 400);
-  assert.equal(createdCode, undefined);
-  assert.equal(upsertedGrant, undefined);
+  assertSentBackToConsent(response);
 });
 
 test("a tampered consent token mints nothing", async () => {
@@ -216,8 +225,7 @@ test("a tampered consent token mints nothing", async () => {
     authorizePost({ ...baseParams(), consent_token: `${token}x` }),
   );
 
-  assert.equal(response.status, 400);
-  assert.equal(createdCode, undefined);
+  assertSentBackToConsent(response);
 });
 
 test("an expired consent token mints nothing", async () => {
@@ -237,8 +245,7 @@ test("an expired consent token mints nothing", async () => {
     authorizePost({ ...baseParams(), consent_token: token }),
   );
 
-  assert.equal(response.status, 400);
-  assert.equal(createdCode, undefined);
+  assertSentBackToConsent(response);
 });
 
 test("a consent token for another user mints nothing", async () => {
@@ -251,8 +258,7 @@ test("a consent token for another user mints nothing", async () => {
     }),
   );
 
-  assert.equal(response.status, 400);
-  assert.equal(createdCode, undefined);
+  assertSentBackToConsent(response);
 });
 
 test("a consent token approved for another redirect_uri mints nothing", async () => {
@@ -267,8 +273,7 @@ test("a consent token approved for another redirect_uri mints nothing", async ()
     }),
   );
 
-  assert.equal(response.status, 400);
-  assert.equal(createdCode, undefined);
+  assertSentBackToConsent(response);
 });
 
 test("a consent token approved without an agent cannot smuggle one in", async () => {
@@ -283,8 +288,7 @@ test("a consent token approved without an agent cannot smuggle one in", async ()
     }),
   );
 
-  assert.equal(response.status, 400);
-  assert.equal(createdCode, undefined);
+  assertSentBackToConsent(response);
 });
 
 test("an agent_id that is not the user's is rejected on approval", async () => {
