@@ -2066,6 +2066,9 @@ model OAuthClient {
 
 // HTPR-6200: one row per user who has approved a connector on the /oauth/authorize
 // consent screen. Its presence is what lets a reconnect skip the screen.
+// No scopes column because the flow has none: a connector gets everything the user
+// can reach, which is what the screen says. Adding scopes means re-prompting here
+// whenever a reconnect asks for more than the row records.
 model OAuthClientGrant {
   id        String   @id @default(uuid()) @db.Uuid
   user_id   Int

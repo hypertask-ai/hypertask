@@ -183,6 +183,16 @@ async function issueCodeAndRedirect(
   return NextResponse.redirect(finalRedirectUrl, redirectStatus)
 }
 
+/** Carries the original request forward on a redirect. The rejected consent token
+ * never travels with it: a stale approval must not survive a round trip. */
+function copyFormParams(form: FormData, url: URL) {
+  for (const [key, value] of form.entries()) {
+    if (typeof value === 'string' && key !== 'consent_token') {
+      url.searchParams.set(key, value)
+    }
+  }
+}
+
 /** Resolves identity only from the signed, HttpOnly session. nookies_user is a
  * client-writable presentation cache and must never select the OAuth subject. */
 async function currentSessionUser() {
@@ -280,11 +290,7 @@ export async function POST(request: NextRequest) {
       // The session lapsed while the consent screen sat open. Send them through
       // login with the request intact so the flow resumes instead of dead-ending.
       const loginUrl = new URL('/login', request.url)
-      for (const [key, value] of form.entries()) {
-        if (typeof value === 'string' && key !== 'consent_token') {
-          loginUrl.searchParams.set(key, value)
-        }
-      }
+      copyFormParams(form, loginUrl)
 
       return NextResponse.redirect(loginUrl.toString(), 303)
     }
@@ -313,11 +319,7 @@ export async function POST(request: NextRequest) {
       // screen's own expiry page rather than raw JSON in the address bar. Dropping
       // the stale token is what makes that page render the expired state.
       const consentUrl = new URL('/oauth/consent', request.url)
-      for (const [key, value] of form.entries()) {
-        if (typeof value === 'string' && key !== 'consent_token') {
-          consentUrl.searchParams.set(key, value)
-        }
-      }
+      copyFormParams(form, consentUrl)
 
       return NextResponse.redirect(consentUrl.toString(), 303)
     }
