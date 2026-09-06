@@ -5,6 +5,7 @@ import { test } from "node:test";
 import {
   createAgent,
   AgentSdkError,
+  MemoryDeliveryScheduler,
   MemoryDeliveryStore,
   expressAdapter,
   honoAdapter,
@@ -2796,6 +2797,160 @@ test("distributed handlers accept an explicitly durable store", async () => {
   const work = background(true);
   assert.equal((await agent.handler(webhookRequest(payload()), work.context)).status, 202);
   await work.drain();
+});
+
+test("the memory scheduler dispatches once per delivery and retries a failure", async () => {
+  const attempts: string[] = [];
+  const scheduler = new MemoryDeliveryScheduler({ retryDelaysMs: [0, 0] });
+  let failuresLeft = 2;
+
+  assert.equal(
+    await scheduler.enqueue({
+      deliveryId: "delivery-1",
+      payload: payload(),
+      run: async () => {
+        attempts.push("delivery-1");
+        if (failuresLeft-- > 0) throw new Error("transient");
+      },
+    }),
+    "enqueued",
+  );
+  // A redelivery of the same webhook must not start a second dispatch.
+  assert.equal(
+    await scheduler.enqueue({
+      deliveryId: "delivery-1",
+      payload: payload(),
+      run: async () => {
+        attempts.push("must-not-run");
+      },
+    }),
+    "duplicate",
+  );
+
+  await scheduler.idle();
+  assert.deepEqual(attempts, ["delivery-1", "delivery-1", "delivery-1"]);
+});
+
+test("the memory scheduler accepts a delivery ID again once it has aged out", async () => {
+  let clock = now;
+  const scheduler = new MemoryDeliveryScheduler({ now: () => clock });
+  const accept = async () =>
+    scheduler.enqueue({ deliveryId: "delivery-5", payload: payload(), run: async () => {} });
+
+  assert.equal(await accept(), "enqueued");
+  assert.equal(await accept(), "duplicate");
+  clock += 25 * 60 * 60 * 1000;
+  assert.equal(await accept(), "enqueued");
+  await scheduler.idle();
+});
+
+test("a throwing error reporter cannot take the memory scheduler down", async () => {
+  const scheduler = new MemoryDeliveryScheduler({
+    retryDelaysMs: [],
+    onError: () => {
+      throw new Error("the reporter itself is broken");
+    },
+  });
+
+  await scheduler.enqueue({
+    deliveryId: "delivery-3",
+    payload: payload(),
+    run: async () => {
+      throw new Error("permanent");
+    },
+  });
+  // An unhandled rejection here would kill the host process on Node 15+.
+  await scheduler.idle();
+
+  let ran = false;
+  await scheduler.enqueue({
+    deliveryId: "delivery-4",
+    payload: payload(),
+    run: async () => {
+      ran = true;
+    },
+  });
+  await scheduler.idle();
+  assert.equal(ran, true);
+});
+
+test("the memory scheduler stays open once its dedupe map is full", async () => {
+  const scheduler = new MemoryDeliveryScheduler({ maxEntries: 2 });
+  const accept = async (deliveryId: string) =>
+    scheduler.enqueue({ deliveryId, payload: payload(), run: async () => {} });
+
+  assert.equal(await accept("old"), "enqueued");
+  assert.equal(await accept("newer"), "enqueued");
+  // A full map must evict rather than refuse; refusing would fail every
+  // webhook until the retention window aged out.
+  assert.equal(await accept("newest"), "enqueued");
+  assert.equal(await accept("newest"), "duplicate");
+  assert.equal(await accept("old"), "enqueued");
+  await scheduler.idle();
+});
+
+test("the memory scheduler frees a delivery that exhausted its retries", async () => {
+  const errors: string[] = [];
+  const scheduler = new MemoryDeliveryScheduler({
+    retryDelaysMs: [0],
+    onError: (_error, deliveryId) => errors.push(deliveryId),
+  });
+  const failing = async () => {
+    throw new Error("permanent");
+  };
+
+  await scheduler.enqueue({ deliveryId: "delivery-2", payload: payload(), run: failing });
+  await scheduler.idle();
+  assert.deepEqual(errors, ["delivery-2"]);
+
+  // Given up on, so a later Hypertask redelivery gets a real attempt rather
+  // than a duplicate answer that silently drops the work.
+  let retried = false;
+  assert.equal(
+    await scheduler.enqueue({
+      deliveryId: "delivery-2",
+      payload: payload(),
+      run: async () => {
+        retried = true;
+      },
+    }),
+    "enqueued",
+  );
+  await scheduler.idle();
+  assert.equal(retried, true);
+});
+
+test("the README hello world runs the code it tells a new developer to copy", async () => {
+  const readme = await readFile(
+    new URL("../packages/agent-sdk/README.md", import.meta.url),
+    "utf8",
+  );
+  // Every identifier the quickstart snippet uses must be one it also imports.
+  assert.match(readme, /import \{ createAgent, MemoryDeliveryScheduler \}/);
+  assert.match(readme, /scheduler: new MemoryDeliveryScheduler\(\)/);
+  assert.doesNotMatch(readme, /publicly available on npm/);
+
+  const api = apiFixture();
+  const scheduler = new MemoryDeliveryScheduler();
+  const agent = createAgent({
+    token: "unit-test-token",
+    webhookSecret: secret,
+    apiUrl,
+    fetch: api.fetch,
+    scheduler,
+  });
+  let replied = false;
+  agent.on("mention", async (received) => {
+    await received.thought("Reading the ticket.");
+    await received.respond("Hello from the Hypertask Agent SDK.");
+    replied = true;
+  });
+
+  // No BackgroundContext: the scheduler passed to createAgent is the only one,
+  // exactly as in the README.
+  assert.equal((await agent.handler(webhookRequest(payload()))).status, 202);
+  await scheduler.idle();
+  assert.equal(replied, true);
 });
 
 test("package manifest exports only dependency-free runtime entry points", async () => {

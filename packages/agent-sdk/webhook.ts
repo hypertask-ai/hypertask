@@ -15,6 +15,7 @@ const SIGNATURE_TOLERANCE_SECONDS = 5 * 60;
 const PROCESSING_LEASE_MS = 10 * 60 * 1000;
 const PROCESSING_HEARTBEAT_MS = 2 * 60 * 1000;
 const COMPLETED_RETENTION_MS = 24 * 60 * 60 * 1000;
+const MEMORY_SCHEDULER_RETRY_DELAYS_MS = [1_000, 5_000, 15_000];
 const RUN_EVENTS = new Set(["run.created", "run.prompted", "run.stopped"]);
 const KNOWN_EVENTS = new Set([
   "comment.mention",
@@ -103,6 +104,95 @@ export class MemoryDeliveryStore implements DeliveryStore {
   private removeExpired(now: number): void {
     for (const [deliveryId, entry] of this.entries) {
       if (entry.until <= now) this.entries.delete(deliveryId);
+    }
+  }
+}
+
+/**
+ * Single-process delivery scheduler for plain Node, Express, and local
+ * development, the scheduling half of `MemoryDeliveryStore`. It dedupes by
+ * delivery ID, dispatches in the background so the webhook still answers
+ * within five seconds, and retries a rejected delivery.
+ *
+ * ponytail: a fixed retry budget and a bounded ID map in process memory, not
+ * a queue. A restart loses whatever has not finished, dedupe only covers the
+ * most recent `maxEntries` deliveries, and nothing caps concurrency, so a
+ * burst of N deliveries runs N handlers at once. Distributed, restartable, or
+ * high-volume hosts must supply a durable scheduler backed by a real queue.
+ */
+export class MemoryDeliveryScheduler implements DeliveryScheduler {
+  private readonly seen = new Map<string, number>();
+  private readonly inFlight = new Set<Promise<void>>();
+
+  constructor(
+    private readonly options: {
+      maxEntries?: number;
+      retryDelaysMs?: readonly number[];
+      now?: () => number;
+      onError?: (error: unknown, deliveryId: string) => void;
+    } = {},
+  ) {}
+
+  async enqueue(input: {
+    deliveryId: string;
+    payload: AgentWebhookPayload;
+    run: () => Promise<void>;
+  }): Promise<"enqueued" | "duplicate"> {
+    const now = this.options.now?.() ?? Date.now();
+    const until = this.seen.get(input.deliveryId);
+    if (until !== undefined && until > now) return "duplicate";
+    // Bounded, but by evicting the oldest entry rather than refusing new work:
+    // a redelivery follows its original within minutes, so dropping the least
+    // recent IDs costs nothing while a full map would reject every webhook
+    // until the retention window aged out.
+    const maxEntries = this.options.maxEntries ?? 10_000;
+    for (const oldest of this.seen.keys()) {
+      if (this.seen.size < maxEntries) break;
+      this.seen.delete(oldest);
+    }
+    // Recorded before this resolves, so a redelivery racing the first one is a
+    // duplicate rather than a second dispatch.
+    this.seen.set(input.deliveryId, now + COMPLETED_RETENTION_MS);
+    const task = this.dispatch(input.deliveryId, input.run).finally(() => {
+      this.inFlight.delete(task);
+    });
+    this.inFlight.add(task);
+    return "enqueued";
+  }
+
+  /** Resolves once every accepted delivery has finished or run out of retries. */
+  async idle(): Promise<void> {
+    while (this.inFlight.size > 0) await Promise.all([...this.inFlight]);
+  }
+
+  private async dispatch(deliveryId: string, run: () => Promise<void>): Promise<void> {
+    const delays = this.options.retryDelaysMs ?? MEMORY_SCHEDULER_RETRY_DELAYS_MS;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await run();
+        return;
+      } catch (error) {
+        if (attempt >= delays.length) {
+          // Forget the delivery ID so a later Hypertask redelivery is accepted
+          // instead of being answered as an already-handled duplicate.
+          this.seen.delete(deliveryId);
+          // The webhook already answered 2xx, so an unreported failure is a
+          // delivery nobody can see was lost.
+          const report =
+            this.options.onError ??
+            ((cause: unknown, id: string) =>
+              console.error(`Hypertask delivery ${id} failed after retries`, cause));
+          // A reporter that throws must not become an unhandled rejection and
+          // take the webhook server down with it.
+          try {
+            report(error, deliveryId);
+          } catch {
+            /* the delivery is already lost; nothing left to report it with */
+          }
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      }
     }
   }
 }
