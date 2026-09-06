@@ -2831,6 +2831,21 @@ test("the memory scheduler dispatches once per delivery and retries a failure", 
   assert.deepEqual(attempts, ["delivery-1", "delivery-1", "delivery-1"]);
 });
 
+test("the memory scheduler stays open once its dedupe map is full", async () => {
+  const scheduler = new MemoryDeliveryScheduler({ maxEntries: 2 });
+  const accept = async (deliveryId: string) =>
+    scheduler.enqueue({ deliveryId, payload: payload(), run: async () => {} });
+
+  assert.equal(await accept("old"), "enqueued");
+  assert.equal(await accept("newer"), "enqueued");
+  // A full map must evict rather than refuse; refusing would fail every
+  // webhook until the retention window aged out.
+  assert.equal(await accept("newest"), "enqueued");
+  assert.equal(await accept("newest"), "duplicate");
+  assert.equal(await accept("old"), "enqueued");
+  await scheduler.idle();
+});
+
 test("the memory scheduler frees a delivery that exhausted its retries", async () => {
   const errors: string[] = [];
   const scheduler = new MemoryDeliveryScheduler({

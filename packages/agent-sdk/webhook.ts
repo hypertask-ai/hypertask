@@ -114,9 +114,10 @@ export class MemoryDeliveryStore implements DeliveryStore {
  * delivery ID, dispatches in the background so the webhook still answers
  * within five seconds, and retries a rejected delivery.
  *
- * ponytail: a fixed retry budget in process memory, not a queue. A restart
- * loses whatever has not finished, so distributed and restartable hosts must
- * supply a durable scheduler backed by a real queue instead.
+ * ponytail: a fixed retry budget and a bounded ID map in process memory, not
+ * a queue. A restart loses whatever has not finished, and dedupe only covers
+ * the most recent `maxEntries` deliveries, so distributed and restartable
+ * hosts must supply a durable scheduler backed by a real queue instead.
  */
 export class MemoryDeliveryScheduler implements DeliveryScheduler {
   private readonly seen = new Map<string, number>();
@@ -141,8 +142,14 @@ export class MemoryDeliveryScheduler implements DeliveryScheduler {
       if (until <= now) this.seen.delete(deliveryId);
     }
     if (this.seen.has(input.deliveryId)) return "duplicate";
-    if (this.seen.size >= (this.options.maxEntries ?? 10_000)) {
-      throw new AgentSdkError("In-memory delivery scheduler is full");
+    // Bounded, but by evicting the oldest entry rather than refusing new work:
+    // a redelivery follows its original within minutes, so dropping the least
+    // recent IDs costs nothing while a full map would reject every webhook
+    // until the retention window aged out.
+    const maxEntries = this.options.maxEntries ?? 10_000;
+    for (const oldest of this.seen.keys()) {
+      if (this.seen.size < maxEntries) break;
+      this.seen.delete(oldest);
     }
     // Recorded before this resolves, so a redelivery racing the first one is a
     // duplicate rather than a second dispatch.
@@ -170,7 +177,13 @@ export class MemoryDeliveryScheduler implements DeliveryScheduler {
           // Forget the delivery ID so a later Hypertask redelivery is accepted
           // instead of being answered as an already-handled duplicate.
           this.seen.delete(deliveryId);
-          this.options.onError?.(error, deliveryId);
+          // The webhook already answered 2xx, so an unreported failure is a
+          // delivery nobody can see was lost.
+          const report =
+            this.options.onError ??
+            ((cause: unknown, id: string) =>
+              console.error(`Hypertask delivery ${id} failed after retries`, cause));
+          report(error, deliveryId);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
