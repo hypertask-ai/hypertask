@@ -9,7 +9,7 @@ production push. Read-only: it opens views, it never submits a form.
   for a dedicated, low-privilege production account. Session cookies last 7
   days (`src/lib/configs/auth.config.ts`), so this needs re-capturing weekly;
   when it expires the job alerts on Telegram instead of rolling back
-  (see `tests/smoke/global-setup.ts`) — that's expected, not a bug.
+  (see `e2e/smoke/global-setup.ts`) — that's expected, not a bug.
 - `SMOKE_BOARD_PATH` (var) — canonical URL path of the seeded board with a
   couple of cards on the smoke account, e.g. `/detail/project-<id>`.
 - `SMOKE_TASK_PATH` (var) — canonical URL path of one seeded task on that

@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test'
 // view here submits a form or creates data, per the ticket's explicit ask.
 //
 // Board/task paths point at the dedicated smoke account's seeded fixtures
-// (see tests/smoke/README.md) so "board with cards" and "task detail" have
+// (see e2e/smoke/README.md) so "board with cards" and "task detail" have
 // something real to open, instead of an empty state.
 const VIEWS: Array<{ name: string; path: string | undefined; requiresFixture?: boolean }> = [
   { name: 'board list', path: '/all-tasks' },

@@ -407,8 +407,8 @@ jobs:
         env:
           SMOKE_SESSION_STATE: ${{ secrets.SMOKE_SESSION_STATE }}
         run: |
-          mkdir -p tests/smoke/.state
-          printf '%s' "$SMOKE_SESSION_STATE" > tests/smoke/.state/smoke-state.json
+          mkdir -p e2e/smoke/.state
+          printf '%s' "$SMOKE_SESSION_STATE" > e2e/smoke/.state/smoke-state.json
 
       - name: Run the smoke checks
         id: smoke
@@ -419,9 +419,9 @@ jobs:
           SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
         run: npx playwright test -c playwright.config.smoke.ts
 
-      - name: Not provisioned yet — see tests/smoke/README.md
+      - name: Not provisioned yet — see e2e/smoke/README.md
         if: steps.provisioned.outputs.ok != 'true'
-        run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See tests/smoke/README.md to provision it."
+        run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See e2e/smoke/README.md to provision it."
 
       - name: Decide unrunnable vs. real failure, rollback if confirmed
         if: steps.provisioned.outputs.ok == 'true' && steps.smoke.outcome == 'failure'
@@ -437,7 +437,7 @@ jobs:
               -d chat_id="$TG_CHAT" --data-urlencode text="$1" || true
           }
 
-          PREFLIGHT=tests/smoke/.state/preflight.json
+          PREFLIGHT=e2e/smoke/.state/preflight.json
           if [ ! -f "$PREFLIGHT" ] || [ "$(jq -r '.ok' "$PREFLIGHT" 2>/dev/null)" != "true" ]; then
             REASON=$(jq -r '.reason // "no preflight result written"' "$PREFLIGHT" 2>/dev/null || echo "playwright/install failure before the login check ran")
             notify "⚠️ hypertasks: smoke QA for $SHA could not run ($REASON). NOT rolling back — this is an unrunnable check, not a proven break. https://app.hypertask.ai"

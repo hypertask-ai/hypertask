@@ -57,5 +57,5 @@ src/service_key.json
 /visual/playwright-report/
 
 # Prod smoke QA (HTPR-6199) — holds the session cookie secret at runtime.
-/tests/smoke/.state/
+/e2e/smoke/.state/
 /test-results/
