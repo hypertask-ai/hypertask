@@ -175,26 +175,6 @@ const FEATURE_FLAG_DEFINITIONS = [
 ] as const satisfies readonly { key: string; description: string; shippedOn: string }[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
-const OWNER_ONLY_BY_DEFAULT = new Set<string>([
-  AGENT_CHAT_TICKET_CONFIRM_FLAG,
-  "htpr-6072-shallow-board-switch",
-  "htpr-6094-agent-activity-rows",
-  "htpr-6122-agent-run-activities",
-  "htpr-6123-add-typescript-agent-sdk",
-  "htpr-6124-agent-dev-loop",
-  "htpr-6129-mobile-agent-chat-viewport",
-  "htpr-6130-mobile-reminder-safe-area",
-  FEATURE_FLAG_DETAILS_FLAG,
-  FIGMA_CONNECT_FLAG,
-  "htpr-6141-ai-first-task-writer",
-  AGENT_CHAT_BRIEF_FLAG,
-  AUTO_TASK_DESCRIPTIONS_FLAG,
-  FLAG_TICKET_TITLE_FLAG,
-  FLAG_SORT_FILTER_FLAG,
-  FLAG_SHIP_DATE_CLUSTER_FLAG,
-  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
-  PAGE_MENTIONS_FLAG,
-]);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
   "OWNER_ONLY",
@@ -294,8 +274,10 @@ export function featureFlagModeEnabled(
   return false;
 }
 
-export const defaultFeatureFlagMode = (key: string): FeatureFlagMode =>
-  OWNER_ONLY_BY_DEFAULT.has(key) ? "OWNER_ONLY" : "OWNER_AND_QA";
+// HTPR-6192: a flag with no stored row is on for the owner and the QA account, never owner-only,
+// so the QA agent can verify a feature before Valentin looks at it. Choosing Only me stays possible,
+// but it has to be set on the admin page on purpose.
+const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";
 
 /**
  * The user ids a flag can possibly be on for, or null when it is on for
@@ -306,7 +288,7 @@ export async function featureFlagCandidateUserIds(
   db: FeatureFlagDatabase = prisma,
 ): Promise<number[] | null> {
   const row = await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
-  const mode = row?.mode ?? defaultFeatureFlagMode(key);
+  const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE;
   if (mode === "EVERYONE") return null;
   if (mode === "OFF") return [];
   return mode === "OWNER_AND_QA"
@@ -325,7 +307,7 @@ export async function isFeatureEnabled(
   });
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
-  const mode = row?.mode ?? defaultFeatureFlagMode(key);
+  const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE;
   const includesOwner = mode === "OWNER_ONLY" || mode === "OWNER_AND_QA";
   return featureFlagModeEnabled(
     mode,
@@ -349,7 +331,7 @@ export async function listFeatureFlagModes(
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
-      withFeatureFlagMetadata({ key, mode: defaultFeatureFlagMode(key), updatedAt: null }, ticketTitleByNumber),
+      withFeatureFlagMetadata({ key, mode: DEFAULT_FEATURE_FLAG_MODE, updatedAt: null }, ticketTitleByNumber),
     ]),
   );
   stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row, ticketTitleByNumber)));

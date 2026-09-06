@@ -93,137 +93,18 @@ test("feature flag modes enforce owner, QA, everyone, and off access", () => {
   assert.equal(flags.featureFlagModeEnabled("OFF", true, true), false);
 });
 
-test("the mobile All Tasks redesign starts with owner and QA access", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 985), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-5992-mobile-all-tasks", 7), false);
-});
-
-test("background task uploads start with owner and QA access", async () => {
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-5993-optimistic-task-uploads", 6),
-    true,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-5993-optimistic-task-uploads", 985),
-    true,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-5993-optimistic-task-uploads", 7),
-    false,
-  );
-});
-
-test("copy current URL starts with owner and QA access", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 985), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6112-copy-current-url", 7), false);
-});
-
-test("comment reaction API starts with owner and QA access", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 985), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6118-comment-reactions-api", 7), false);
-});
-
-test("Agent Chat ticket confirmation starts owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6006-chat-confirm-ticket", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6006-chat-confirm-ticket", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6006-chat-confirm-ticket", 7), false);
-});
-
-test("shallow board switching starts owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6072-shallow-board-switch", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6072-shallow-board-switch", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6072-shallow-board-switch", 7), false);
-});
-
-test("Agent Chat activity rows start owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6094-agent-activity-rows", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6094-agent-activity-rows", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6094-agent-activity-rows", 7), false);
-});
-
-test("agent run activities start owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6122-agent-run-activities", 7), false);
-});
-
-test("TypeScript Agent SDK starts owner-only", async () => {
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6123-add-typescript-agent-sdk", 6),
-    true,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6123-add-typescript-agent-sdk", 985),
-    false,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6123-add-typescript-agent-sdk", 7),
-    false,
-  );
-});
-
-test("mobile Agent Chat viewport fix starts owner-only", async () => {
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6129-mobile-agent-chat-viewport", 6),
-    true,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6129-mobile-agent-chat-viewport", 985),
-    false,
-  );
-  assert.equal(
-    await flags.isFeatureEnabled("htpr-6129-mobile-agent-chat-viewport", 7),
-    false,
-  );
-});
-
-test("feature flag details start owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6133-feature-flag-details", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6133-feature-flag-details", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6133-feature-flag-details", 7), false);
-});
-
-test("Figma connection starts owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), false);
-});
-
-test("declared flags without rows default to owner and QA", async () => {
-  for (const key of [
-    "htpr-5913-consistent-comment-shortcuts",
-    "htpr-6091-feature-flags",
-    "htpr-6115-agent-sdk",
-    "htpr-6116-figma-node-preview",
-  ]) {
-    assert.equal(await flags.isFeatureEnabled(key, 6), true);
-    assert.equal(await flags.isFeatureEnabled(key, 985), true);
-    assert.equal(await flags.isFeatureEnabled(key, 7), false);
+test("every declared flag without a stored row is on for the owner and QA, nobody else", async () => {
+  // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
+  // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
+  assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
+  for (const key of flags.FEATURE_FLAG_KEYS) {
+    assert.deepEqual(
+      await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
+      [true, true, false],
+      `${key} should default to owner and QA`,
+    );
   }
 });
-
-test("the mobile reminder safe-area fix starts owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6130-mobile-reminder-safe-area", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6130-mobile-reminder-safe-area", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6130-mobile-reminder-safe-area", 7), false);
-});
-
-test("the AI-first task writer starts owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6141-ai-first-task-writer", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6141-ai-first-task-writer", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6141-ai-first-task-writer", 7), false);
-});
-
-test("the Agent Chat work brief starts owner-only", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6155-chat-agent-brief", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6155-chat-agent-brief", 985), false);
-  assert.equal(await flags.isFeatureEnabled("htpr-6155-chat-agent-brief", 7), false);
-});
-
-test("Agent Chat Stop and timeout start owner-only", async () => assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled("htpr-6154-chat-stop-and-timeout", userId))), [true, false, false]));
 
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
@@ -250,7 +131,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   assert.deepEqual(
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
     [
-      { key: "htpr-5898-page-mentions", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-5913-consistent-comment-shortcuts",
         mode: "OWNER_AND_QA",
@@ -258,42 +139,42 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_ONLY", updatedAt: null },
-      { key: "htpr-6072-shallow-board-switch", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6072-shallow-board-switch", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6094-agent-activity-rows", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6094-agent-activity-rows", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6122-agent-run-activities", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6122-agent-run-activities", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6123-add-typescript-agent-sdk",
-        mode: "OWNER_ONLY",
+        mode: "OWNER_AND_QA",
         updatedAt: null,
       },
-      { key: "htpr-6124-agent-dev-loop", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6124-agent-dev-loop", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6129-mobile-agent-chat-viewport",
-        mode: "OWNER_ONLY",
+        mode: "OWNER_AND_QA",
         updatedAt: null,
       },
-      { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_ONLY", updatedAt: null },
-      { key: "htpr-6133-feature-flag-details", mode: "OWNER_ONLY", updatedAt: null },
-      { key: "htpr-6136-figma-connect", mode: "OWNER_ONLY", updatedAt: null },
-      { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_ONLY", updatedAt: null },
-      { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_ONLY", updatedAt: null },
-      { key: "htpr-6155-chat-agent-brief", mode: "OWNER_ONLY", updatedAt: null },
-      { key: "htpr-6176-flag-ticket-title", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6133-feature-flag-details", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6136-figma-connect", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6155-chat-agent-brief", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6176-flag-ticket-title", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6177-auto-task-descriptions",
-        mode: "OWNER_ONLY",
+        mode: "OWNER_AND_QA",
         updatedAt: null,
       },
-      { key: "htpr-6179-flag-sort-filter", mode: "OWNER_ONLY", updatedAt: null },
+      { key: "htpr-6179-flag-sort-filter", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6191-flag-ship-date-clusters",
-        mode: "OWNER_ONLY",
+        mode: "OWNER_AND_QA",
         updatedAt: null,
       },
     ],
