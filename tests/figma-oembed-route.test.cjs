@@ -5,20 +5,32 @@ const { NextRequest } = require("next/server");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
+const originalFetch = global.fetch;
 let authenticated;
 let enabled;
+let principalError;
+let accessToken;
+let tokenUserIds;
 let calls;
 let handler;
 function stub(file, exports) {
   const filename = path.join(root, file);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
-stub("src/utils/edgeHelpers.ts", {
-  isValidUser: () => ({ isValid: authenticated, user: authenticated ? { id: 6 } : null }),
+stub("src/app/api/figma/_lib.ts", {
+  getFigmaRequestUser: async () => {
+    if (!authenticated) return { status: "unauthorized" };
+    if (principalError) return { status: "error" };
+    return enabled
+      ? { status: "allowed", userId: 6 }
+      : { status: "disabled" };
+  },
 });
-stub("src/lib/flags.ts", { isFeatureEnabled: async () => enabled });
-stub("node_modules/next/headers.js", {
-  cookies: async () => ({ get: () => ({ value: "session" }) }),
+stub("src/lib/figma/connection.ts", {
+  getFigmaAccessToken: async (userId) => {
+    tokenUserIds.push(userId);
+    return accessToken;
+  },
 });
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const { GET } = jiti(path.join(root, "src/app/api/figma/oembed/route.ts"));
@@ -36,9 +48,10 @@ const request = (url = FIGMA) =>
   new NextRequest(`https://app.test/api/figma/oembed?url=${encodeURIComponent(url)}`);
 function reset() {
   authenticated = enabled = true;
+  principalError = false;
+  accessToken = "viewer-token";
+  tokenUserIds = [];
   calls = [];
-  process.env.FIGMA_ACCESS_TOKEN = "test-token";
-  process.env.FIGMA_PREVIEW_FILE_KEYS = KEY;
   handler = (url) => {
     if (url.hostname === "www.figma.com") return json(COVER);
     throw new Error(`Unexpected fetch ${url}`);
@@ -51,11 +64,10 @@ function reset() {
 }
 test.beforeEach(reset);
 test.after(() => {
-  delete process.env.FIGMA_ACCESS_TOKEN;
-  delete process.env.FIGMA_PREVIEW_FILE_KEYS;
+  global.fetch = originalFetch;
 });
 
-test("authenticates and feature-gates token-backed previews", async () => {
+test("requires a signed session and server feature eligibility", async () => {
   authenticated = false;
   assert.equal((await GET(request())).status, 401);
   assert.equal(calls.length, 0);
@@ -63,22 +75,37 @@ test("authenticates and feature-gates token-backed previews", async () => {
   reset();
   enabled = false;
   const response = await GET(request());
-  const body = await response.json();
   assert.equal(calls.length, 1);
-  assert.equal(body.thumbnailUrl, COVER.thumbnail_url);
-  assert.match(response.headers.get("cache-control"), /s-maxage=3600/);
+  assert.equal((await response.json()).thumbnailUrl, COVER.thumbnail_url);
+  assert.equal(response.headers.get("cache-control"), "private, max-age=3600");
+  assert.deepEqual(tokenUserIds, []);
+
+  reset();
+  principalError = true;
+  const degradedResponse = await GET(request());
+  assert.equal(
+    degradedResponse.headers.get("cache-control"),
+    "private, no-store",
+  );
+  assert.deepEqual(tokenUserIds, []);
 });
 
-test("normalizes and renders only one requested node", async () => {
+test("uses the signed viewer's OAuth bearer token for one requested node", async () => {
   handler = (url, init) => {
     if (url.hostname === "www.figma.com") return json(COVER);
     assert.equal(url.hostname, "api.figma.com");
     assert.equal(url.searchParams.get("ids"), "12:34");
-    assert.equal(init.headers["X-Figma-Token"], "test-token");
+    assert.equal(init.headers.Authorization, "Bearer viewer-token");
+    assert.equal(init.headers["X-Figma-Token"], undefined);
     return json({ images: { "12:34": "https://s3-alpha.figma.com/frame.png" } });
   };
   const response = await GET(request(`${FIGMA}?node-id=12-34`));
+  // Never stored: the connection-version cookie only exists on the browser that
+  // connected, so a second signed-in browser's cache key would not change on
+  // disconnect and it would keep serving private frames for the cache lifetime.
   assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.equal(response.headers.get("vary"), "Cookie");
+  assert.deepEqual(tokenUserIds, [6]);
   assert.deepEqual((await response.json()).previewImages, [
     { url: "https://s3-alpha.figma.com/frame.png", name: "Figma frame" },
   ]);
@@ -86,6 +113,50 @@ test("normalizes and renders only one requested node", async () => {
   reset();
   await GET(request(`${FIGMA}?node-id=12-34,56-78`));
   assert.equal(calls.length, 1);
+});
+
+test("starts the cover and connected frame lookups together", async () => {
+  let releaseCover;
+  let releaseFrame;
+  let signalCoverStarted;
+  let signalFrameStarted;
+  const coverStarted = new Promise((resolve) => {
+    signalCoverStarted = resolve;
+  });
+  const frameStarted = new Promise((resolve) => {
+    signalFrameStarted = resolve;
+  });
+  const coverResponse = new Promise((resolve) => {
+    releaseCover = () => resolve(json(COVER));
+  });
+  const frameResponse = new Promise((resolve) => {
+    releaseFrame = () =>
+      resolve(json({ images: { "12:34": "https://s3-alpha.figma.com/frame.png" } }));
+  });
+  handler = (url) => {
+    if (url.hostname === "www.figma.com") {
+      signalCoverStarted();
+      return coverResponse;
+    }
+    signalFrameStarted();
+    return frameResponse;
+  };
+
+  const responsePromise = GET(request(`${FIGMA}?node-id=12-34`));
+  let timeout;
+  const bothStartedInTime = await Promise.race([
+    Promise.all([coverStarted, frameStarted]).then(() => true),
+    new Promise((resolve) => {
+      timeout = setTimeout(() => resolve(false), 1000);
+    }),
+  ]);
+  clearTimeout(timeout);
+  releaseCover();
+  releaseFrame();
+  assert.equal((await responsePromise).status, 200);
+  assert.equal(bothStartedInTime, true);
+  assert.deepEqual(tokenUserIds, [6]);
+  assert.equal(calls.length, 2);
 });
 
 test("renders at most six first-page frames and falls back on denial", async () => {
@@ -101,12 +172,47 @@ test("renders at most six first-page frames and falls back on denial", async () 
     }
     const ids = url.searchParams.get("ids").split(",");
     assert.deepEqual(ids, frames.slice(0, 6).map(({ id }) => id));
-    return json({ images: Object.fromEntries(ids.map((id) => [id, `https://s3-alpha.figma.com/${id}`])) });
+    return json({
+      images: Object.fromEntries(
+        ids.map((id) => [id, `https://s3-alpha.figma.com/${id}`]),
+      ),
+    });
   };
   const body = await (await GET(request())).json();
-  assert.deepEqual(body.previewImages.map(({ name }) => name), frames.slice(0, 6).map(({ name }) => name));
+  assert.deepEqual(
+    body.previewImages.map(({ name }) => name),
+    frames.slice(0, 6).map(({ name }) => name),
+  );
 
   reset();
-  handler = (url) => (url.hostname === "www.figma.com" ? json(COVER) : json({}, 403));
-  assert.equal((await (await GET(request(`${FIGMA}?node-id=1-2`))).json()).thumbnailUrl, COVER.thumbnail_url);
+  handler = (url) =>
+    url.hostname === "www.figma.com" ? json(COVER) : json({}, 403);
+  const deniedResponse = await GET(request(`${FIGMA}?node-id=1-2`));
+  assert.equal((await deniedResponse.json()).thumbnailUrl, COVER.thumbnail_url);
+  assert.equal(
+    deniedResponse.headers.get("cache-control"),
+    "private, no-store",
+  );
+
+  reset();
+  handler = () => json({}, 502);
+  const unavailableResponse = await GET(request(`${FIGMA}?node-id=1-2`));
+  const unavailable = await unavailableResponse.json();
+  assert.equal(unavailable.previewUnavailable, true);
+  assert.equal(unavailable.thumbnailUrl, "");
+  assert.equal(
+    unavailableResponse.headers.get("cache-control"),
+    "private, no-store",
+  );
+});
+
+test("offers connection only when the eligible viewer has no stored account", async () => {
+  accessToken = null;
+  const body = await (await GET(request())).json();
+  assert.equal(body.canConnectFigma, true);
+  assert.equal(body.thumbnailUrl, COVER.thumbnail_url);
+
+  enabled = false;
+  const disabledBody = await (await GET(request())).json();
+  assert.equal(disabledBody.canConnectFigma, undefined);
 });
