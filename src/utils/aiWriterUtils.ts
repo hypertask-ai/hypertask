@@ -81,6 +81,12 @@ export function mergeMobileCreateTaskWriterResult(
 /**
  * Extracts task title and description from AI-generated HTML.
  * The AI outputs title in h1#ai-generated-task-title.
+ *
+ * The "Proposed properties: ..." paragraph is preview chrome, not description
+ * text: it belongs in the sidebar fields or nowhere. Accept all already drops
+ * it, so a description-only takeover has to drop it too, otherwise the same
+ * draft lands with a stray "Proposed properties: Priority Medium, Size M"
+ * line depending on which accept the user pressed.
  */
 export function extractTitleAndDescription(htmlString: string) {
   const parser = new DOMParser();
@@ -90,7 +96,7 @@ export function extractTitleAndDescription(htmlString: string) {
   doc.querySelectorAll('[id^="ai-generated-task-"]').forEach((element) => {
     element.remove();
   });
-  const description = doc.body.innerHTML;
+  const description = stripPropertyMetadataFromDescription(doc.body.innerHTML);
   return { title, description };
 }
 
