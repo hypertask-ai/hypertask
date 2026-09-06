@@ -37,7 +37,7 @@ export function mentionAttrsForItem(
   if (item?.type === "project") {
     return {
       id: `${item?.identifier} ${item?.name}`,
-      projectId: item?.id as number,
+      projectId: Number(item?.id),
       label: `project-${item?.id}`,
     };
   }
