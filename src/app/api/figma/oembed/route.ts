@@ -4,7 +4,6 @@ import { getFigmaAccessToken } from "@/lib/figma/connection";
 import { FIGMA_API_BASE_URL } from "@/lib/figma/paths";
 
 const CACHE_CONTROL = "private, max-age=3600";
-const FRAME_CACHE_CONTROL = "private, max-age=86400";
 const NO_STORE_CACHE_CONTROL = "private, no-store";
 const UPSTREAM_TIMEOUT_MS = 5000;
 const MAX_OEMBED_BYTES = 64 * 1024;
@@ -218,7 +217,11 @@ const getRenderedImages = async (
 
 function previewResponse(body: unknown, cacheControl = CACHE_CONTROL) {
   // Connect rotates and disconnect clears the client-readable, non-secret
-  // connection version, so cached previews cannot cross authorization states.
+  // connection version, so a browser that performed either cannot serve a
+  // cached preview from the other authorization state. That only holds where
+  // the cookie is set, which is why token-backed frames are never stored: a
+  // second signed-in browser sends no version, so its cache key never changes
+  // on disconnect and it would keep serving private frames.
   return NextResponse.json(body, {
     headers: {
       "Cache-Control": cacheControl,
@@ -281,7 +284,7 @@ export async function GET(request: NextRequest) {
         title: rendered.title ?? basePreview.title,
         previewImages: rendered.previewImages,
       },
-      FRAME_CACHE_CONTROL,
+      NO_STORE_CACHE_CONTROL,
     );
   }
 

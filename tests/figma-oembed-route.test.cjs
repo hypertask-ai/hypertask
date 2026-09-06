@@ -100,7 +100,10 @@ test("uses the signed viewer's OAuth bearer token for one requested node", async
     return json({ images: { "12:34": "https://s3-alpha.figma.com/frame.png" } });
   };
   const response = await GET(request(`${FIGMA}?node-id=12-34`));
-  assert.equal(response.headers.get("cache-control"), "private, max-age=86400");
+  // Never stored: the connection-version cookie only exists on the browser that
+  // connected, so a second signed-in browser's cache key would not change on
+  // disconnect and it would keep serving private frames for the cache lifetime.
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.equal(response.headers.get("vary"), "Cookie");
   assert.deepEqual(tokenUserIds, [6]);
   assert.deepEqual((await response.json()).previewImages, [
