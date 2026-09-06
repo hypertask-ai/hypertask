@@ -286,10 +286,20 @@ jobs:
               echo "::endgroup::"; continue
             fi
 
-            # Only the current review matters; blockers from older commits are stale.
-            if grep -qiE '\bblocker\b' <<<"$current_review"; then
-              echo "PARK: AI review flagged a blocker"
-              park "$PR" "the automated review flagged a blocker"
+            # A blocker or MAJOR finding from ANY review on this PR (not just the
+            # current commit) must be dismissed by a human before auto-merge can
+            # proceed (HTPR-6149). PR 267 merged through this gate because an
+            # earlier commit's review said CONCERNS with a MAJOR remount finding,
+            # a later commit's review came back APPROVE with only a MINOR, and the
+            # remount bug was never actually fixed -- the earlier concern just
+            # silently stopped counting. Checking every review comment closes that
+            # gap: a human has to look and remove the park label themselves.
+            # Anchored on the rendered "**MAJOR"/"**BLOCKER" bullet prefix, not the
+            # bare word, so a summary sentence like "no major issues" can't trip it.
+            all_reviews=$(jq -r '[.comments[].body | select(test("^(APPROVE|CONCERNS)"))] | join("\n")' <<<"$J")
+            if grep -qiE '\*\*(BLOCKER|MAJOR)\b' <<<"$all_reviews"; then
+              echo "PARK: a review flagged a blocker or major-severity finding"
+              park "$PR" "an automated review flagged a blocker or major-severity finding; confirm it's resolved, then remove the label and merge manually"
               echo "::endgroup::"; continue
             fi
 

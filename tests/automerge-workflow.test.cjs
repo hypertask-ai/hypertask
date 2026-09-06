@@ -17,7 +17,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, unknownMergeability = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts' } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, unknownMergeability = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -26,6 +26,7 @@ async function runWorkflow({ failTemp = false, failList = false, failView = fals
 
   const head = 'a'.repeat(40)
   const prTitle = title ?? (speed ? '[SPEED] Optimize the app' : 'Safe change')
+  const commentsJson = JSON.stringify(comments ?? [{ body: `APPROVE\nreviewed-commit: ${head}` }])
   const gh = `#!/usr/bin/env bash
 set -u
 if [ "$1 $2" = "pr list" ]; then
@@ -46,7 +47,7 @@ if [ "$1 $2" = "pr view" ]; then
     exit 0
   fi
   cat <<'JSON'
-{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"claude-review","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":[{"body":"APPROVE\\nreviewed-commit: ${head}"}]}
+{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"claude-review","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
 JSON
   exit 0
 fi
@@ -232,5 +233,37 @@ test('auto-merge refuses to merge when GitHub never resolves UNKNOWN', async () 
   assert.equal(result.status, 1)
   assert.match(result.stdout, /Mergeability for PR #42 stayed UNKNOWN after 5 polls/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+// HTPR-6149: PR 267 merged after an EARLIER commit's review flagged a MAJOR
+// finding and a LATER commit's review came back APPROVE with only a MINOR --
+// the major concern was never actually fixed, it just stopped being the
+// current-commit review. A major/blocker finding on any review for the PR
+// must park it for a human, even once a newer commit reviews clean.
+test('a MAJOR finding on an older commit still parks the PR after a clean re-review', async () => {
+  const head = 'a'.repeat(40)
+  const comments = [
+    { body: 'CONCERNS (1) - reviewed by gpt-5.6-sol\n\n- **MAJOR - Strict gate remounts SectionComp on every switch**\n\n<!-- reviewed-commit: 2acfbc8bd27898e80b45b284d034673b87f64e65 -->' },
+    { body: `APPROVE (minors only: 1) - reviewed by gpt-5.6-sol\n\n- **MINOR - Missing speed evidence**\n\n<!-- reviewed-commit: ${head} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /PARK: a review flagged a blocker or major-severity finding/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('a summary mentioning "no major issues" does not falsely park the PR', async () => {
+  const head = 'a'.repeat(40)
+  const comments = [
+    { body: `APPROVE (no major issues) - reviewed by gpt-5.6-sol\n\n<!-- reviewed-commit: ${head} -->` },
+  ]
+  const { result, scratchEntries } = await runWorkflow({ comments })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.doesNotMatch(result.stdout, /PARK: a review flagged/)
+  assert.match(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
