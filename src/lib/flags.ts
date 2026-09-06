@@ -22,6 +22,7 @@ export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
+export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -113,6 +114,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Shows a plain-language description and ticket link for every feature flag.",
   },
   {
+    key: FIGMA_CONNECT_FLAG,
+    shippedOn: "2026-09-06",
+    description: "Lets each user connect a Figma account so linked frames render as previews.",
+  },
+  {
     key: "htpr-6141-ai-first-task-writer",
     shippedOn: "2026-09-04",
     description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
@@ -164,6 +170,7 @@ const OWNER_ONLY_BY_DEFAULT = new Set<string>([
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6130-mobile-reminder-safe-area",
   FEATURE_FLAG_DETAILS_FLAG,
+  FIGMA_CONNECT_FLAG,
   "htpr-6141-ai-first-task-writer",
   AGENT_CHAT_BRIEF_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,

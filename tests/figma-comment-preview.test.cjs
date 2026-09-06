@@ -2,8 +2,17 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { JSDOM } = require("jsdom");
 
 const root = path.resolve(__dirname, "..");
+let activeAccountId = null;
+const accountsFilename = path.join(root, "src/lib/auth/accounts.ts");
+require.cache[accountsFilename] = {
+  id: accountsFilename,
+  filename: accountsFilename,
+  loaded: true,
+  exports: { getActiveAccountId: () => activeAccountId },
+};
 const jiti = require("jiti")(path.join(root, "tests/figma-comment-preview.test.cjs"), {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
@@ -13,6 +22,12 @@ const { hasFigmaEmbed } = jiti(
 );
 const { isContentCarouselImage } = jiti(
   path.join(root, "src/utils/helperFunctions/isContentCarouselImage.ts"),
+);
+const { fetchFigmaOembed, renderFigmaPreview } = jiti(
+  path.join(root, "src/components/RTE/Extensions/FigmaTiptap/index.ts"),
+);
+const { FIGMA_CONNECTION_VERSION_COOKIE } = jiti(
+  path.join(root, "src/lib/figma/paths.ts"),
 );
 
 const source = (relativePath) =>
@@ -52,6 +67,174 @@ test("excludes Figma control thumbnails from the content-image carousel", () => 
     false,
   );
   assert.equal(isContentCarouselImage({ closest: () => null }), true);
+});
+
+test("renders at most six returned Figma frames side by side", () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const originalDocument = global.document;
+  global.document = dom.window.document;
+  try {
+    const createdImages = [];
+    const createElement = document.createElement.bind(document);
+    document.createElement = (tagName, options) => {
+      const element = createElement(tagName, options);
+      if (tagName === "img") createdImages.push(element);
+      return element;
+    };
+    const preview = document.createElement("button");
+    const affordance = document.createElement("span");
+    preview.append(affordance);
+    renderFigmaPreview(preview, affordance, {
+      previewImages: Array.from({ length: 7 }, (_, index) => ({
+        name: `Frame ${index + 1}`,
+        url: `https://s3-alpha.figma.com/frame-${index + 1}.png`,
+      })),
+    });
+
+    assert.equal(preview.querySelectorAll("img").length, 0);
+    createdImages[0].onload();
+    let images = preview.querySelectorAll("img");
+    assert.equal(images.length, 6);
+    assert.equal(images[0].alt, "Frame 1");
+    assert.equal(images[5].alt, "Frame 6");
+    assert.match(images[0].className, /object-contain/);
+    assert.equal(affordance.textContent, "Click to open the live file");
+    createdImages[1].onerror();
+    images = preview.querySelectorAll("img");
+    assert.equal(images.length, 5);
+  } finally {
+    global.document = originalDocument;
+  }
+});
+
+test("keeps a live-file fallback when every preview image fails", () => {
+  const dom = new JSDOM("<!doctype html><body></body>");
+  const originalDocument = global.document;
+  global.document = dom.window.document;
+  try {
+    const createdImages = [];
+    const createElement = document.createElement.bind(document);
+    document.createElement = (tagName, options) => {
+      const element = createElement(tagName, options);
+      if (tagName === "img") createdImages.push(element);
+      return element;
+    };
+
+    const galleryPreview = document.createElement("button");
+    const galleryAffordance = document.createElement("span");
+    renderFigmaPreview(galleryPreview, galleryAffordance, {
+      previewImages: [
+        { name: "One", url: "https://s3-alpha.figma.com/one.png" },
+        { name: "Two", url: "https://s3-alpha.figma.com/two.png" },
+      ],
+    });
+    createdImages[0].onerror();
+    createdImages[1].onerror();
+    assert.equal(
+      galleryAffordance.textContent,
+      "Preview unavailable — click to load live Figma",
+    );
+
+    const coverPreview = document.createElement("button");
+    const coverAffordance = document.createElement("span");
+    renderFigmaPreview(coverPreview, coverAffordance, {
+      thumbnailUrl: "https://s3-alpha.figma.com/cover.png",
+    });
+    createdImages[2].onerror();
+    assert.equal(
+      coverAffordance.textContent,
+      "Preview unavailable — click to load live Figma",
+    );
+
+    const emptyPreview = document.createElement("button");
+    const emptyAffordance = document.createElement("span");
+    renderFigmaPreview(emptyPreview, emptyAffordance, {
+      previewUnavailable: true,
+    });
+    assert.equal(
+      emptyAffordance.textContent,
+      "Preview unavailable — click to load live Figma",
+    );
+  } finally {
+    global.document = originalDocument;
+  }
+});
+
+test("deduplicates only in-flight previews within one connection version", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>", {
+    url: "https://app.hypertask.ai/detail/project-15/6136",
+  });
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  global.document = dom.window.document;
+  activeAccountId = 6;
+  document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-one; Path=/`;
+
+  const responses = [];
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    return new Promise((resolve) => responses.push(resolve));
+  };
+
+  try {
+    const first = fetchFigmaOembed("https://www.figma.com/design/abc");
+    const duplicate = fetchFigmaOembed("https://www.figma.com/design/abc");
+    assert.equal(first, duplicate);
+    assert.equal(fetchCalls, 1);
+
+    responses.shift()(Response.json({ title: "First" }));
+    assert.deepEqual(await first, { title: "First" });
+
+    const settled = fetchFigmaOembed("https://www.figma.com/design/abc");
+    assert.notEqual(settled, first);
+    assert.equal(fetchCalls, 2);
+    responses.shift()(Response.json({ title: "Second" }));
+    assert.deepEqual(await settled, { title: "Second" });
+  } finally {
+    activeAccountId = null;
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+  }
+});
+
+test("partitions and rejects previews after account or connection changes", async () => {
+  const dom = new JSDOM("<!doctype html><body></body>", {
+    url: "https://app.hypertask.ai/detail/project-15/6136",
+  });
+  const originalDocument = global.document;
+  const originalFetch = global.fetch;
+  global.document = dom.window.document;
+  activeAccountId = 6;
+  document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-one; Path=/`;
+
+  const responses = [];
+  let fetchCalls = 0;
+  global.fetch = async () => {
+    fetchCalls += 1;
+    return new Promise((resolve) => responses.push(resolve));
+  };
+
+  try {
+    const oldAccount = fetchFigmaOembed("https://www.figma.com/design/stale");
+    activeAccountId = 7;
+    const newAccount = fetchFigmaOembed("https://www.figma.com/design/stale");
+    assert.notEqual(oldAccount, newAccount);
+    assert.equal(fetchCalls, 2);
+    responses.shift()(Response.json({ title: "Old account" }));
+    responses.shift()(Response.json({ title: "New account" }));
+    await assert.rejects(oldAccount, /Figma authorization changed/);
+    assert.deepEqual(await newAccount, { title: "New account" });
+
+    const oldConnection = fetchFigmaOembed("https://www.figma.com/design/stale");
+    document.cookie = `${FIGMA_CONNECTION_VERSION_COOKIE}=connection-two; Path=/`;
+    responses.shift()(Response.json({ title: "Old connection" }));
+    await assert.rejects(oldConnection, /Figma authorization changed/);
+  } finally {
+    activeAccountId = null;
+    global.document = originalDocument;
+    global.fetch = originalFetch;
+  }
 });
 
 test("Figma comments keep one editor while non-Figma comments stay lightweight", () => {
@@ -116,6 +299,7 @@ test("the persistent read view is inert but keeps its existing interactions", ()
     "src/components/RTE/Extensions/FigmaTiptap/index.ts",
   );
   const taskDetail = source("src/app/detail/[...slug]/TaskDetailComp.tsx");
+  const figmaPaths = source("src/lib/figma/paths.ts");
 
   assert.match(
     taskEditor,
@@ -128,6 +312,9 @@ test("the persistent read view is inert but keeps its existing interactions", ()
   assert.match(editorContainer, /!isEditModeActive &&/);
   assert.match(editorContainer, /!isReadOnlyExistingContent && \(/);
   assert.match(figmaNode, /preview\.dataset\.figmaEmbedPreview = 'true'/);
+  assert.match(figmaNode, /Connect Figma to preview/);
+  assert.match(figmaNode, /FIGMA_OAUTH_START_PATH/);
+  assert.match(figmaPaths, /\/api\/figma\/oauth\/start/);
   assert.match(taskEditor, /\.filter\(isContentCarouselImage\)/);
   assert.match(
     taskEditor,
