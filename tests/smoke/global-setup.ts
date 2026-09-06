@@ -22,6 +22,11 @@ export default async function globalSetup(config: FullConfig) {
   const baseURL = config.projects[0].use.baseURL!
   const storageState = config.projects[0].use.storageState as string
 
+  // Written up front so a throw from launch/newContext itself (missing
+  // browser binary, unreadable storageState file) still leaves an unrunnable
+  // verdict on disk instead of nothing at all.
+  writePreflight({ ok: false, reason: 'setup did not complete' })
+
   const browser = await chromium.launch()
   try {
     const context = await browser.newContext({ storageState, baseURL })

@@ -352,17 +352,21 @@ jobs:
 
   # ── Playwright smoke QA (HTPR-6199): open every main view as a real user ──
   # The curl-based `health` job above proves the app responds; this proves the
-  # main screens actually render for a logged-in user. Gated on `health`'s
-  # `live` output, not its pass/fail result — health also exits 0 when there's
-  # nothing to check (see the job's own comments) and exits 1 on an
-  # inconclusive write probe even though the SHA is genuinely live, neither of
-  # which `live` reports. workflow_dispatch runs the checks without the
-  # `live` gate (nothing to gate on, `health` doesn't run) so this job is
-  # dispatchable for manual verification; rollback is skipped there too, since
-  # a manual run is exploratory, not a deploy signal.
+  # main screens actually render for a logged-in user. `live` is set as soon
+  # as health confirms this SHA is live, before its own probes run, so it
+  # alone would still be true after a rollback further down that same job —
+  # the extra `needs.health.result != 'failure'` check excludes that case (a
+  # health job that rolls back always exits non-zero). health also exits 0
+  # when there's nothing to check (see the job's own comments) and exits 1 on
+  # an inconclusive write probe even though the SHA is genuinely live, which
+  # is why the gate isn't `needs.health.result == 'success'` alone.
+  # workflow_dispatch runs the checks without any of this (nothing to gate
+  # on, `health` doesn't run) so this job is dispatchable for manual
+  # verification; rollback is skipped there too, since a manual run is
+  # exploratory, not a deploy signal.
   smoke:
     needs: health
-    if: always() && ((github.event_name == 'push' && needs.health.outputs.live == 'true') || github.event_name == 'workflow_dispatch')
+    if: always() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result != 'failure') || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
