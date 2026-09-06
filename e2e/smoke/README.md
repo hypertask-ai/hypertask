@@ -15,9 +15,9 @@ production push. Read-only: it opens views, it never submits a form.
 - `SMOKE_TASK_PATH` (var) — canonical URL path of one seeded task on that
   board, e.g. `/detail/project-<id>/<taskNumber>`.
 
-Missing `SMOKE_BOARD_PATH`/`SMOKE_TASK_PATH` fall back to `/all-tasks`, which
-still exercises login + rendering but skips the "board with cards" and
-"task detail" checks the ticket asks for — set them once the account exists.
+Without `SMOKE_BOARD_PATH`/`SMOKE_TASK_PATH` the kanban-board and task-detail
+checks are skipped (they have nothing real to open) — the other six views
+still run. Set them once the seeded account exists.
 
 ## Re-capturing the session
 
