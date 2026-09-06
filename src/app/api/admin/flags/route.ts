@@ -3,10 +3,12 @@ import {
   FEATURE_FLAG_DETAILS_FLAG,
   FEATURE_FLAG_MODES,
   FEATURE_FLAG_OWNER_USER_ID,
+  FLAG_REMOVAL_COUNTDOWN_FLAG,
   FeatureFlagInputError,
   isFeatureEnabled,
   isFeatureFlagOwner,
   listFeatureFlagModes,
+  setFeatureFlagKeep,
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
@@ -61,17 +63,28 @@ export async function PATCH(request: NextRequest) {
 
     const text = await request.text();
     if (text.length > 1024) return noStore({ error: "Request is too large" }, 413);
-    const body = JSON.parse(text) as { key?: unknown; mode?: unknown } | null;
-    if (
-      !body ||
-      Array.isArray(body) ||
-      typeof body.key !== "string" ||
-      typeof body.mode !== "string" ||
-      !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode)
-    ) {
+    const body = JSON.parse(text) as { key?: unknown; mode?: unknown; keep?: unknown } | null;
+    if (!body || Array.isArray(body) || typeof body.key !== "string") {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode);
+    // Exactly one of mode and keep: a body carrying both would hide which change was intended.
+    const setsMode = body.mode !== undefined;
+    const setsKeep = body.keep !== undefined;
+    if (setsMode === setsKeep) return noStore({ error: "Invalid feature flag" }, 400);
+    if (setsMode && (typeof body.mode !== "string" || !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode))) {
+      return noStore({ error: "Invalid feature flag" }, 400);
+    }
+    if (setsKeep && typeof body.keep !== "boolean") {
+      return noStore({ error: "Invalid feature flag" }, 400);
+    }
+    // useFlag only hides the Keep control, so the write itself is gated here too. The owner is
+    // the only caller that gets past isFeatureFlagOwner above, so this is their own audience.
+    if (setsKeep && !(await isFeatureEnabled(FLAG_REMOVAL_COUNTDOWN_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
+      return noStore({ error: "Not found" }, 404);
+    }
+    const flag = setsMode
+      ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode)
+      : await setFeatureFlagKeep(body.key, body.keep as boolean);
     await broadcastFeatureFlagsChange().catch((error) =>
       console.warn("[feature-flags] realtime broadcast failed", error),
     );

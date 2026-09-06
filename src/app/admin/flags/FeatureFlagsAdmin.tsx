@@ -9,6 +9,7 @@ import {
 } from "@/hooks/useFlag";
 import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 import { clusterFeatureFlagsByReleaseDate } from "@/lib/flags/cluster";
+import { featureFlagRemovalState } from "@/lib/flags/removal";
 
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
 const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
@@ -33,7 +34,9 @@ async function loadFlags(): Promise<AdminFeatureFlags> {
   return (await response.json()) as AdminFeatureFlags;
 }
 
-async function updateFlag(input: { key: string; mode: FeatureFlagMode }) {
+type FlagUpdate = { key: string; mode: FeatureFlagMode } | { key: string; keep: boolean };
+
+async function updateFlag(input: FlagUpdate) {
   const response = await fetch(ADMIN_FLAGS_ROUTE, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -54,6 +57,7 @@ export default function FeatureFlagsAdmin() {
   const ticketTitleEnabled = useFlag("htpr-6176-flag-ticket-title");
   const sortFilterEnabled = useFlag("htpr-6179-flag-sort-filter");
   const shipDateClustersEnabled = useFlag("htpr-6191-flag-ship-date-clusters");
+  const removalCountdownEnabled = useFlag("htpr-6193-flag-removal-countdown");
   const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [audienceFilter, setAudienceFilter] = useState<FeatureFlagMode | "ALL">("ALL");
   const flags = useQuery({
@@ -71,7 +75,7 @@ export default function FeatureFlagsAdmin() {
           ? {
               ...current,
               flags: current.flags.map((flag) =>
-                flag.key === next.key ? { ...flag, mode: next.mode } : flag,
+                flag.key === next.key ? { ...flag, ...next } : flag,
               ),
             }
           : current,
@@ -200,6 +204,35 @@ export default function FeatureFlagsAdmin() {
                 {flags.data?.detailsEnabled && (
                   <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
                 )}
+                {removalCountdownEnabled &&
+                  (() => {
+                    const removal = featureFlagRemovalState(flag);
+                    if (!removal) return null;
+                    return (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`text-dense ${
+                            removal.kind === "due" ? "text-destructive" : "text-text-light-gray"
+                          }`}
+                        >
+                          {removal.label}
+                        </span>
+                        <button
+                          type="button"
+                          aria-pressed={flag.keep}
+                          disabled={update.isPending}
+                          onClick={() => update.mutate({ key: flag.key, keep: !flag.keep })}
+                          className={`rounded-sm px-2 py-0.5 text-dense font-medium transition-colors disabled:opacity-50 ${
+                            flag.keep
+                              ? "bg-shadcn-primary text-primary-foreground"
+                              : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
+                          }`}
+                        >
+                          Keep
+                        </button>
+                      </div>
+                    );
+                  })()}
               </div>
               <div
                 className="flex w-full shrink-0 rounded-sm bg-comment-description p-1 sm:w-auto"
