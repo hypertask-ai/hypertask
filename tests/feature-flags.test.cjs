@@ -109,8 +109,8 @@ test("every declared flag without a stored row is on for the owner and QA, nobod
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
-  assert.equal(qaFlags["htpr-6116-figma-node-preview"], true);
-  assert.equal(normalFlags["htpr-6116-figma-node-preview"], false);
+  assert.equal(qaFlags["htpr-6118-comment-reactions-api"], true);
+  assert.equal(normalFlags["htpr-6118-comment-reactions-api"], false);
 });
 
 test("stored owner-only flags stay unavailable to QA until changed", async () => {
@@ -145,7 +145,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6094-agent-activity-rows", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6116-figma-node-preview", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6118-comment-reactions-api", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6122-agent-run-activities", mode: "OWNER_AND_QA", updatedAt: null },
       {
