@@ -21,8 +21,9 @@ const prisma = {
     findMany: async () =>
       listedRows ?? (row ? [{ key: "htpr-6091-feature-flags", ...row }] : []),
     upsert: async ({ where, create, update }) => {
-      row = { mode: row ? update.mode : create.mode, updatedAt: new Date() };
-      return { key: where.key, ...row };
+      const data = row ? update : create;
+      row = { ...(row ?? {}), ...data, key: where.key, updatedAt: new Date() };
+      return { ...row };
     },
   },
 };
@@ -176,6 +177,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      {
+        key: "htpr-6193-flag-removal-countdown",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
@@ -194,6 +200,40 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   assert.match(changed.description, /feature flag controls/);
   assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/6091");
   assert.equal(await flags.isFeatureEnabled("htpr-6091-feature-flags", 7), true);
+});
+
+test("switching to Everyone starts a fresh removal countdown", async () => {
+  const before = Date.now();
+  const released = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  // The countdown has to start from the switch, not from whenever the row was last written.
+  assert.ok(released.releasedAt.getTime() >= before);
+
+  // Re-pressing Everyone must not extend the deadline of a flag already released.
+  row.releasedAt = new Date("2026-01-01T00:00:00.000Z");
+  row.removalTaskId = 4242;
+  const again = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  assert.equal(again.releasedAt.toISOString(), "2026-01-01T00:00:00.000Z");
+  assert.equal(again.removalTaskId, 4242);
+
+  // Leaving Everyone and coming back is a new release, so it earns its own countdown and ticket.
+  await flags.setFeatureFlagMode("htpr-6091-feature-flags", "OWNER_ONLY");
+  const rereleased = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  assert.ok(rereleased.releasedAt.getTime() >= before);
+  assert.equal(rereleased.removalTaskId, null);
+});
+
+test("Keep pauses removal without moving the release date", async () => {
+  const released = await flags.setFeatureFlagMode("htpr-6091-feature-flags", "EVERYONE");
+  const kept = await flags.setFeatureFlagKeep("htpr-6091-feature-flags", true);
+  assert.equal(kept.keep, true);
+  assert.equal(kept.mode, "EVERYONE");
+  assert.equal(kept.releasedAt.toISOString(), released.releasedAt.toISOString());
+
+  const resumed = await flags.setFeatureFlagKeep("htpr-6091-feature-flags", false);
+  assert.equal(resumed.keep, false);
+  assert.equal(resumed.releasedAt.toISOString(), released.releasedAt.toISOString());
+
+  await assert.rejects(flags.setFeatureFlagKeep("not a valid key!", true), /Invalid feature flag/);
 });
 
 test("legacy database flags stay visible, safe, and updateable", async () => {
