@@ -183,3 +183,26 @@ test("refresh uses Figma's refresh endpoint and rejects failed credentials", asy
       error.cause === transportCause,
   );
 });
+
+test("an oversized refresh token is rejected, not encrypted and stored", async () => {
+  // Both tokens come from the same untrusted response body, so the refresh
+  // token needs the same length cap the access token has always had.
+  await assert.rejects(
+    oauth.exchangeFigmaCode(
+      {
+        code: "authorization-code",
+        codeVerifier: "v".repeat(43),
+        redirectUri: "https://app.hypertask.ai/api/figma/oauth/callback",
+      },
+      config,
+      0,
+      async () =>
+        Response.json({
+          access_token: "access-token",
+          expires_in: 3600,
+          refresh_token: "r".repeat(8193),
+        }),
+    ),
+    /invalid token/,
+  );
+});

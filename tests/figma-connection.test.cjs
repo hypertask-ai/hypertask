@@ -386,3 +386,43 @@ test("disconnect supersedes an in-flight connect without token resurrection", as
   assert.equal(currentRow(), null);
   assert.equal(lockCalls, 3);
 });
+
+test("a refresh queue that keeps reclaiming the slot still gives up at the caller's deadline", async () => {
+  await connection.connectFigmaUser(6, async () => ({
+    accessToken: "access",
+    refreshToken: "refresh",
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    userId: "figma-user",
+    figmaUserName: null,
+  }));
+
+  // The token is stale, so every entry into getFigmaAccessToken must refresh.
+  const nowMs = Date.now();
+  rows.set(6, { ...rows.get(6), expiresAt: new Date(nowMs) });
+
+  // Stand in for a queue of workers: the slot lapses (so waitForPendingRefresh
+  // recurses into getFigmaAccessToken) and is immediately reclaimed by the next
+  // worker (so that recursion waits again). Without one shared deadline each
+  // recursion started a fresh 60s budget and this never returned.
+  let lapse = true;
+  onPendingOperationRead = () => {
+    operationRows.set(6, {
+      operationId: "other-worker",
+      pendingUntil: new Date(lapse ? nowMs - 1 : nowMs + 60_000),
+    });
+    lapse = !lapse;
+  };
+  operationRows.set(6, {
+    operationId: "other-worker",
+    pendingUntil: new Date(nowMs + 60_000),
+  });
+
+  const timer = new Promise((resolve) => setTimeout(resolve, 5_000, "hung"));
+  const outcome = await Promise.race([
+    connection
+      .getFigmaAccessToken(6, nowMs, nowMs + 600)
+      .then(() => "resolved", (error) => error.message),
+    timer,
+  ]);
+  assert.equal(outcome, "Figma token refresh did not finish in time");
+});

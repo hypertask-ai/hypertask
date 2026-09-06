@@ -144,12 +144,16 @@ export function getFigmaConnection(userId: number) {
   });
 }
 
+// `deadlineMs` is an absolute point on the same synthetic clock as `nowMs`, set
+// once by the first caller. Recomputing it per hop let a queue of workers each
+// claiming the operation slot as the previous one lapsed stretch one request's
+// wait without bound, because every recursion started a fresh TTL.
 async function waitForPendingRefresh(
   userId: number,
   nowMs: number,
+  deadlineMs: number,
 ): Promise<string | null | undefined> {
   const startedAt = Date.now();
-  const waitUntilMs = nowMs + FIGMA_OPERATION_TTL_MS;
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, REFRESH_WAIT_INTERVAL_MS));
     const checkNowMs = nowMs + (Date.now() - startedAt);
@@ -171,15 +175,18 @@ async function waitForPendingRefresh(
       !operation?.pendingUntil ||
       operation.pendingUntil.getTime() <= checkNowMs
     ) {
-      return getFigmaAccessToken(userId, checkNowMs);
+      return checkNowMs >= deadlineMs
+        ? undefined
+        : getFigmaAccessToken(userId, checkNowMs, deadlineMs);
     }
-    if (checkNowMs >= waitUntilMs) return undefined;
+    if (checkNowMs >= deadlineMs) return undefined;
   }
 }
 
 export async function getFigmaAccessToken(
   userId: number,
   nowMs = Date.now(),
+  deadlineMs = nowMs + FIGMA_OPERATION_TTL_MS,
 ): Promise<string | null> {
   const current = await prisma.figmaConnection.findUnique({
     where: { userId },
@@ -237,7 +244,7 @@ export async function getFigmaAccessToken(
   if (refresh.status === "missing") return null;
   if (refresh.status === "fresh") return refresh.accessToken;
   if (refresh.status === "pending") {
-    const accessToken = await waitForPendingRefresh(userId, nowMs);
+    const accessToken = await waitForPendingRefresh(userId, nowMs, deadlineMs);
     if (accessToken !== undefined) return accessToken;
     throw new Error("Figma token refresh did not finish in time");
   }

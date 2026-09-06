@@ -276,6 +276,7 @@ async function requestToken(
   if (
     !accessToken ||
     accessToken.length > MAX_TOKEN_LENGTH ||
+    refreshToken.length > MAX_TOKEN_LENGTH ||
     !Number.isSafeInteger(expiresIn) ||
     expiresIn <= 0 ||
     expiresIn > MAX_EXPIRES_IN_SECONDS
