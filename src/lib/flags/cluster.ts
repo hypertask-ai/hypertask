@@ -33,8 +33,9 @@ function dayLabel(date: Date | null): string {
  *
  * With `byShipDate` the date is the day the flag key first reached production. Every declared
  * flag carries one, and a stored key with no definition left behind by a removed flag falls
- * back to its `updatedAt`, which the database always sets, so the trailing "Not yet released"
- * cluster does not appear.
+ * back to its `updatedAt`, which the database sets on write, so in practice the trailing
+ * "Not yet released" cluster stays empty. The null handling below is still the honest
+ * fallback for a row that somehow has neither date; do not remove it.
  *
  * Without `byShipDate` the date is the last mode change, and never-touched flags fall into that
  * trailing cluster in either sort direction.
