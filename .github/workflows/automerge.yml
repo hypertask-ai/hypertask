@@ -79,11 +79,11 @@ jobs:
           REQUIRED="ci-tests claude-review next-public-secrets revert-guard pr-title"
 
           # Any changed file matching this (case-insensitive) parks the PR for a
-          # human: auth/identity, billing, security
+          # human: auth/identity, billing, Prisma schema+migrations, security
           # middleware, CI itself, dependency manifests (supply chain), and
           # build/env config. Deliberately conservative and broad: over-parking
           # is a manual merge, a wrong auto-merge is production.
-          RISK_RE='(^|/)middleware\.[tj]sx?$|(^|/)proxy\.[tj]sx?$|(^|/)auth/|/auth\.[tj]sx?$|auth(service|provider|context|guard|middleware|helper|check|z|n)|better-auth|oauth|firebase|(^|/)login/|login\.[tj]sx?$|session(manager|store|service|provider|context|helper)|stripe|billing|invoice|checkout|subscription|paywall|(^|/)pricing/|pricing\.[tj]sx?$|credential|(^|/)\.github/|(^|/)scripts/check-speed-pr-evidence\.mjs$|(^|/)config/app-project-performance-baseline\.json$|(^|/)package(-lock)?\.json$|(^|/)npm-shrinkwrap\.json$|(^|/)pnpm-lock|(^|/)yarn\.lock$|(^|/)\.npmrc$|(^|/)next\.config\.|(^|/)vercel\.json$|(^|/)\.env'
+          RISK_RE='(^|/)prisma/|prisma\.config\.|(^|/)middleware\.[tj]sx?$|(^|/)proxy\.[tj]sx?$|(^|/)auth/|/auth\.[tj]sx?$|auth(service|provider|context|guard|middleware|helper|check|z|n)|better-auth|oauth|firebase|(^|/)login/|login\.[tj]sx?$|session(manager|store|service|provider|context|helper)|stripe|billing|invoice|checkout|subscription|paywall|(^|/)pricing/|pricing\.[tj]sx?$|credential|(^|/)\.github/|(^|/)scripts/check-speed-pr-evidence\.mjs$|(^|/)config/app-project-performance-baseline\.json$|(^|/)package(-lock)?\.json$|(^|/)npm-shrinkwrap\.json$|(^|/)pnpm-lock|(^|/)yarn\.lock$|(^|/)\.npmrc$|(^|/)next\.config\.|(^|/)vercel\.json$|(^|/)\.env'
 
           # Labels that stop an auto-merge outright.
           HOLD_LABELS="hold do-not-merge valentin-review wip probation"
