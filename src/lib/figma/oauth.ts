@@ -51,13 +51,6 @@ export class FigmaOAuthRequestError extends Error {
   }
 }
 
-export class FigmaOAuthTransportError extends Error {
-  constructor(cause: unknown) {
-    super("Figma OAuth request failed", { cause });
-    this.name = "FigmaOAuthTransportError";
-  }
-}
-
 export function getFigmaOAuthConfig(): FigmaOAuthConfig | null {
   const clientId = process.env.FIGMA_CLIENT_ID?.trim();
   const clientSecret = process.env.FIGMA_CLIENT_SECRET?.trim();
@@ -221,25 +214,20 @@ async function requestToken(
   nowMs: number,
   fetcher: typeof fetch,
 ): Promise<FigmaToken> {
-  let response: Response;
-  try {
-    response = await fetcher(`${FIGMA_API_BASE_URL}/oauth/${endpoint}`, {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Basic ${Buffer.from(
-          `${config.clientId}:${config.clientSecret}`,
-          "utf8",
-        ).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body,
-      redirect: "error",
-      signal: AbortSignal.timeout(FIGMA_REQUEST_TIMEOUT_MS),
-    });
-  } catch (cause) {
-    throw new FigmaOAuthTransportError(cause);
-  }
+  const response = await fetcher(`${FIGMA_API_BASE_URL}/oauth/${endpoint}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Basic ${Buffer.from(
+        `${config.clientId}:${config.clientSecret}`,
+        "utf8",
+      ).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
+    redirect: "error",
+    signal: AbortSignal.timeout(FIGMA_REQUEST_TIMEOUT_MS),
+  });
   if (!response.ok) {
     let oauthError: string | null = null;
     try {

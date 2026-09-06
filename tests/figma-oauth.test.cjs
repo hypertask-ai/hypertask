@@ -172,15 +172,15 @@ test("refresh uses Figma's refresh endpoint and rejects failed credentials", asy
     { message: "Figma OAuth returned an invalid response" },
   );
 
+  // A transport failure reaches the caller unwrapped: the callback route logs
+  // `error.message` under a "Figma OAuth callback failed" prefix, so the raw
+  // cause reads better there than a class that only restates the prefix.
   const transportCause = new TypeError("fetch failed");
   await assert.rejects(
     oauth.refreshFigmaToken("offline", config, 0, async () => {
       throw transportCause;
     }),
-    (error) =>
-      error instanceof oauth.FigmaOAuthTransportError &&
-      error.message === "Figma OAuth request failed" &&
-      error.cause === transportCause,
+    (error) => error === transportCause,
   );
 });
 
