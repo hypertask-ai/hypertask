@@ -65,19 +65,38 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ skipped: "sweep flag is not released", filed: 0 });
   }
 
-  return prisma.$transaction(
-    async (tx) => {
-      const [lock] = await tx.$queryRaw<{ acquired: boolean }[]>`
-        SELECT pg_try_advisory_xact_lock(
-          CAST(${REMOVAL_SWEEP_LOCK_NAMESPACE} AS integer),
-          CAST(${REMOVAL_SWEEP_LOCK_KEY} AS integer)
-        ) AS acquired
-      `;
-      if (!lock?.acquired) return NextResponse.json({ skipped: "sweep already running", filed: 0 });
-      return sweep();
-    },
-    { timeout: 120_000, maxWait: 10_000 },
-  );
+  // sweep() writes with the module-level client, so its tickets commit as they are created; this
+  // transaction exists only to hold the advisory lock for the length of the run. The answer is
+  // therefore captured here rather than returned through the transaction: if the commit fails or
+  // the window expires after tickets were filed, the caller must still be told what was filed
+  // instead of getting a 500 for work that already landed and cannot be rolled back.
+  //
+  // ponytail: the lock costs one pooled connection sitting idle for the run. A sweep files at most
+  // MAX_TICKETS_PER_RUN tickets, so that is seconds. If this ever sweeps whole boards, move to a
+  // session-level lock on a dedicated connection released in a finally.
+  let result: NextResponse | null = null;
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        const [lock] = await tx.$queryRaw<{ acquired: boolean }[]>`
+          SELECT pg_try_advisory_xact_lock(
+            CAST(${REMOVAL_SWEEP_LOCK_NAMESPACE} AS integer),
+            CAST(${REMOVAL_SWEEP_LOCK_KEY} AS integer)
+          ) AS acquired
+        `;
+        if (!lock?.acquired) {
+          result = NextResponse.json({ skipped: "sweep already running", filed: 0 });
+          return;
+        }
+        result = await sweep();
+      },
+      { timeout: 120_000, maxWait: 10_000 },
+    );
+  } catch (error) {
+    if (!result) throw error;
+    console.error("[feature-flags] sweep lock transaction failed after the sweep ran", error);
+  }
+  return result ?? NextResponse.json({ skipped: "sweep did not run", filed: 0 });
 }
 
 async function sweep() {
