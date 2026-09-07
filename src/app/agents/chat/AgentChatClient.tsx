@@ -79,6 +79,10 @@ import {
 } from "@/components/Common/CommonModalComponents";
 import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import {
+  markChatRead,
+  saveDraftToServer,
+} from "@/lib/agents/chatViewerState";
+import {
   displayAgentChatFeed,
   mergeAgentChatFeed,
   shouldAutoScrollToBottom,
@@ -482,6 +486,17 @@ function RosterRow({
           {isWorking(agent) && agent.working ? ` · ${agent.working.ticket}` : ""}
         </span>
       </span>
+      {/* The thread is shared, so a teammate's message is news to this person
+          too. Hidden while the chat is open, because reading it is catching
+          up and the count is about to be zero. */}
+      {!selected && (agent.unreadCount ?? 0) > 0 && (
+        <span
+          aria-label={`${agent.unreadCount} unread`}
+          className="shrink-0 rounded-full bg-shadcn-primary px-1.5 py-0.5 text-micro font-semibold leading-none text-primary-foreground"
+        >
+          {agent.unreadCount! > 99 ? "99+" : agent.unreadCount}
+        </span>
+      )}
     </button>
   );
 }
@@ -599,6 +614,10 @@ const AgentChatClient = (props: IProp) => {
   // Monotonic request generation for loadMessages, so a late response can be
   // recognized as superseded by a newer one for the same session.
   const loadGenRef = useRef(0);
+  // The session whose server-side draft has already been folded in. The draft
+  // is taken from the server once per thread and never again, or every refetch
+  // would overwrite what is being typed right now.
+  const draftHydratedRef = useRef<string | null>(null);
   // Mobile keyboards only open for a focus() that lands synchronously inside
   // the tap's event handler, so selectAgent needs the composer's DOM node
   // before that handler returns (see the flushSync call there).
@@ -716,6 +735,7 @@ const AgentChatClient = (props: IProp) => {
         error?: string;
         chatEnabled?: boolean;
         awaiting?: boolean;
+        viewer?: { draft: string | null; unreadCount: number } | null;
       };
       if (!res.ok || !data.success || !Array.isArray(data.messages)) {
         throw new Error(data.error ?? "Failed to load messages");
@@ -736,6 +756,25 @@ const AgentChatClient = (props: IProp) => {
       // Same signal a failed send sets: no live webhook subscribed to
       // chat.message, so the human side of the notice must survive a reload.
       if (data.chatEnabled === false) setDeliveryNotice(true);
+      // First load of this thread: reconcile the two draft copies. Whatever is
+      // on this device wins, because it is what was typed most recently here,
+      // and it gets pushed up so the next device sees it. An empty device slot
+      // takes the server's copy, which is what makes a draft cross devices.
+      if (draftHydratedRef.current !== loadSessionId) {
+        draftHydratedRef.current = loadSessionId;
+        const local = draftRef.current;
+        const stored = data.viewer?.draft ?? "";
+        if (local.trim() !== "") {
+          if (local !== stored) saveDraftToServer(loadSessionId, local);
+        } else if (stored !== "") {
+          draftRef.current = stored;
+          setDraft(stored);
+          if (selectedIdRef.current)
+            writeDraft(currentUser.id, selectedIdRef.current, stored);
+        }
+      }
+      // Reading the newest page is catching up, so the unread marker moves.
+      if (data.viewer && data.viewer.unreadCount > 0) markChatRead(loadSessionId);
       // Draining here would read awaitingRef before the render that follows
       // this setMessages has run, so it'd still see the stale (pre-reply)
       // value. The effect below (keyed on the derived `awaiting`) is the one
@@ -750,7 +789,7 @@ const AgentChatClient = (props: IProp) => {
         );
       }
     }
-  }, []);
+  }, [currentUser.id]);
 
   // Confirm or dismiss a proposed ticket. The server owns the decision; this
   // just refetches so every tab lands on the state the server committed.
@@ -829,6 +868,7 @@ const AgentChatClient = (props: IProp) => {
     }
     selectedIdRef.current = null;
     sessionIdRef.current = null;
+    draftHydratedRef.current = null;
     setSelectedId(null);
     setSession(null);
     setSessionLoading(false);
@@ -852,6 +892,7 @@ const AgentChatClient = (props: IProp) => {
       }
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
+      draftHydratedRef.current = null;
       // draftRef is normally refreshed by a passive effect, which can lag
       // behind two switches in the same task (holding Ctrl+Tab). Setting it
       // here means the next switch always writes the draft it actually left.
@@ -1098,15 +1139,26 @@ const AgentChatClient = (props: IProp) => {
         payload: { sessionId?: string; agentId?: string } | undefined,
       ) => {
         const currentSessionId = sessionIdRef.current;
-        if (!currentSessionId) return;
         if (
-          payload?.sessionId === currentSessionId ||
-          (activityRowsEnabled &&
-            payload?.agentId &&
-            payload.agentId === selectedIdRef.current)
+          currentSessionId &&
+          (payload?.sessionId === currentSessionId ||
+            (activityRowsEnabled &&
+              payload?.agentId &&
+              payload.agentId === selectedIdRef.current))
         ) {
           void loadMessages(currentSessionId);
+          return;
         }
+        // A message in a thread this person is not looking at: the roster
+        // carries the unread count, so it is the roster that has to refresh.
+        const myGen = ++rosterGenRef.current;
+        void loadAgents()
+          .then((loaded) => {
+            if (myGen === rosterGenRef.current) setAgents(loaded);
+          })
+          .catch(() => {
+            // A missed refresh only delays the badge to the next visit.
+          });
       };
       channel.bind(AGENT_CHAT_EVENT, onChatEvent);
 
@@ -1121,7 +1173,7 @@ const AgentChatClient = (props: IProp) => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [currentUser.id, loadMessages, activityRowsEnabled]);
+  }, [currentUser.id, loadMessages, loadAgents, activityRowsEnabled]);
 
   const selectedAgent = useMemo(
     () => (agents ?? []).find((a) => a.id === selectedId) ?? null,
@@ -1603,6 +1655,12 @@ const AgentChatClient = (props: IProp) => {
     // Sending empties the composer, which clears the stored draft through the
     // same write; a failed send puts the text back and re-saves it.
     if (selectedId) writeDraft(currentUser.id, selectedId, draft);
+    // Only once the server copy has been folded in: writing before that would
+    // push this thread's empty composer over a draft typed on another device.
+    const activeSessionId = sessionIdRef.current;
+    if (activeSessionId && draftHydratedRef.current === activeSessionId) {
+      saveDraftToServer(activeSessionId, draft);
+    }
   }, [draft, selectedId, currentUser.id]);
 
   useEffect(() => {

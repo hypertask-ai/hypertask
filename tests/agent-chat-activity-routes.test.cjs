@@ -43,6 +43,14 @@ const prisma = {
   },
   chatMessage: {
     findMany: async () => messageRows,
+    count: async () => 0,
+  },
+  chatSessionParticipant: {
+    upsert: async () => ({ draft: null, lastReadAt: new Date(), joinedAt: new Date() }),
+    findMany: async () => [],
+  },
+  member_Team: {
+    findMany: async () => [],
   },
   agentWebhookSubscription: {
     findUnique: async () => ({ active: true, events: ["chat.message"] }),

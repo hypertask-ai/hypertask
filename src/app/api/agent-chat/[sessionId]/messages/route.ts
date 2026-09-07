@@ -4,9 +4,12 @@ import {
   persistAgentRunTriggerWebhooks,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
-import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { NextRequest, NextResponse } from "next/server";
-import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
+import {
+  ensureChatParticipant,
+  loadUserAgentChatSession,
+} from "@/lib/agents/chatAccess";
+import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
 import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -46,7 +49,6 @@ export async function POST(
       sessionId,
       userId,
       select: {
-        user: { select: { displayName: true } },
         agent: { select: { runtimeType: true } },
       },
     });
@@ -58,13 +60,27 @@ export async function POST(
     }
     const session = access.session;
     const agentId = access.agentId;
-
     if (session.agent?.runtimeType === "NATIVE") {
       return NextResponse.json(
         { success: false, error: "Native agents use the AI chat" },
         { status: 400 }
       );
     }
+
+    // Sending is taking part, even for someone who reached the thread without
+    // going through the open path. After the refusal above, so a rejected send
+    // does not sign anyone up to a conversation they never posted to.
+    await ensureChatParticipant(session.id, userId);
+
+    // The thread is shared, so its owner is not necessarily who is typing. The
+    // agent has to be told who actually sent this, or every teammate's message
+    // arrives signed by the agent's owner. Read after the refusal above, so a
+    // send to a native agent does not pay for a name it throws away.
+    const sender = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { displayName: true },
+    });
+    const senderName = sender?.displayName || "Hypertask user";
 
     let agentBrief: AgentWebhookChatBrief | null = null;
     try {
@@ -86,6 +102,14 @@ export async function POST(
           authorUserId: userId,
         },
       });
+      // The draft became this message, so it stops being a draft in the same
+      // commit. Anything else lets sent text reappear in the composer. The
+      // read marker moves after the row exists, so the sender's own message is
+      // never newer than the marker that is meant to cover it.
+      await tx.chatSessionParticipant.updateMany({
+        where: { sessionId: session.id, userId },
+        data: { draft: null, lastReadAt: message.createdAt },
+      });
 
       // The outbox row joins this transaction, so the webhook can never fire
       // for a message that failed to commit. An empty list means the agent has
@@ -99,13 +123,13 @@ export async function POST(
         taskTitle: null,
         actor: {
           userId: userId,
-          displayName: session.user.displayName || "Hypertask user",
+          displayName: senderName,
         },
         chat: {
           sessionId: session.id,
           messageId: message.id,
           text,
-          userName: session.user.displayName,
+          userName: sender?.displayName ?? null,
         },
         ...(agentBrief ? { agentBrief } : {}),
       });
@@ -116,10 +140,9 @@ export async function POST(
     // Queue only after commit; a failure stays sweepable.
     await publishAgentWebhookDeliveries(deliveryIds);
 
-    // Other tabs of this user refetch the thread; fire and forget.
-    void broadcast(userChannel(userId), AGENT_CHAT_EVENT, {
-      sessionId: session.id,
-    });
+    // Everyone in the shared thread refetches it, not just the sender's own
+    // tabs: a teammate watching the same conversation has to see this arrive.
+    await broadcastChatSession(session.id, [userId]);
 
     return NextResponse.json({
       success: true,

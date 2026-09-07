@@ -1,7 +1,10 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
-import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
+import {
+  ensureChatParticipant,
+  loadUserAgentChatSession,
+} from "@/lib/agents/chatAccess";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";
@@ -17,6 +20,26 @@ export const runtime = "nodejs";
 // History page size, and the cap on ?limit=. Unchanged default so a client
 // that does not page keeps getting exactly what it got before.
 const MAX_HISTORY_PAGE = 200;
+
+/**
+ * How many messages have arrived in this thread since one person last caught
+ * up. Their own messages never count, and neither does anything from before
+ * they joined, because `ensureChatParticipant` seeds the marker as they arrive.
+ *
+ * The "not mine" half is spelled out rather than left to a `NOT`: an agent's
+ * reply has no author user at all, and those are exactly the rows that should
+ * count. `/api/agents/owned` counts the same thing in raw SQL, and the two must
+ * not drift into different definitions of unread.
+ */
+function unreadSince(sessionId: string, userId: number, since: Date) {
+  return prisma.chatMessage.count({
+    where: {
+      sessionId,
+      createdAt: { gt: since },
+      OR: [{ authorUserId: null }, { authorUserId: { not: userId } }],
+    },
+  });
+}
 
 // GET /api/agent-chat/[sessionId]
 // History for one agent chat session, oldest first. `awaiting` tells the
@@ -110,10 +133,41 @@ export async function GET(
     const messageRows = hasMore ? pageRows.slice(0, limit) : pageRows;
     const messages = messageRows.reverse();
 
-    const subscription = await prisma.agentWebhookSubscription.findUnique({
-      where: { agentId: access.agentId },
-      select: { active: true, events: true },
-    });
+    // Opening the thread is taking part in it, which is what gives this person
+    // an unread marker and a draft slot. Skipped on a paged read: scrolling
+    // back through history is not arriving. This one writes, and it has to
+    // land before the list below, or a first-time reader gets a participant
+    // list without themselves in it.
+    const participant = before
+      ? null
+      : await ensureChatParticipant(session.id, userId);
+    const [unreadCount, participants, subscription] = await Promise.all([
+      participant
+        ? unreadSince(
+            session.id,
+            userId,
+            participant.lastReadAt ?? participant.joinedAt,
+          )
+        : null,
+      before
+        ? null
+        : prisma.chatSessionParticipant.findMany({
+            where: { sessionId: session.id },
+            orderBy: { joinedAt: "asc" },
+            select: {
+              userId: true,
+              joinedAt: true,
+              user: { select: { displayName: true, email: true } },
+            },
+          }),
+      prisma.agentWebhookSubscription.findUnique({
+        where: { agentId: access.agentId },
+        select: { active: true, events: true },
+      }),
+    ]);
+    const viewer = participant
+      ? { draft: participant.draft, unreadCount: unreadCount ?? 0 }
+      : null;
     const chatEnabled = Boolean(
       subscription?.active && subscription.events.includes("chat.message")
     );
@@ -143,6 +197,15 @@ export async function GET(
       // whose turn it is, and guessing "not waiting" would clear a live
       // thinking state in the client.
       awaiting: before ? null : messages[messages.length - 1]?.role === "human",
+      // Null on a paged read, like `activity`: an older page carries neither.
+      viewer,
+      participants:
+        participants?.map((participant) => ({
+          userId: participant.userId,
+          displayName:
+            participant.user.displayName || participant.user.email,
+          joinedAt: participant.joinedAt,
+        })) ?? null,
       chatEnabled,
     });
   } catch (error: any) {

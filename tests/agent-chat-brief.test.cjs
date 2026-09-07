@@ -37,6 +37,12 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
         agent: { runtimeType: "EXTERNAL" },
       }),
     },
+    user: { findUnique: async () => ({ displayName: "Valentin" }) },
+    member_Team: { findMany: async () => [] },
+    chatSessionParticipant: {
+      upsert: async () => ({ draft: null, lastReadAt: null, joinedAt: new Date() }),
+      findMany: async () => [{ userId: 6 }],
+    },
     $transaction: async (operation) =>
       operation({
         chatMessage: {
@@ -47,6 +53,7 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
           }),
         },
         chatSession: { update: async () => ({}) },
+        chatSessionParticipant: { updateMany: async () => ({ count: 1 }) },
       }),
   };
 

@@ -34,21 +34,37 @@ const notFound: ChatAccessDenied = {
 };
 
 /**
- * The authorization rule for a person opening an agent thread: the thread is
- * theirs, it is an agent thread, the agent is still enabled, and the agent is
- * still one this person can see. `accessibleAgentWhere` is the cross-team
- * boundary in this codebase: it resolves to the agent's owner or to a board
- * this person is a member of, so a foreign team and a removed board member
- * both fall out of the query rather than needing a second check.
+ * The authorization rule for a person opening an agent thread: it is an agent
+ * thread, the agent is still enabled, the agent is still one this person can
+ * see, and the conversation's own team is one they belong to.
+ *
+ * `accessibleAgentWhere` is the cross-team boundary in this codebase: it
+ * resolves to the agent's owner or to a board this person is a member of, so a
+ * foreign team and a removed board member both fall out of the query. The
+ * thread is no longer scoped to one person: everyone the agent is shared with
+ * reads the same conversation, which is what makes it shared.
+ *
+ * `teamIds` is the caller's own team membership, and it is what stops a thread
+ * following an agent that later moved teams. A conversation with no team of its
+ * own never got past its creator, so it stays theirs.
  */
 export function userAgentChatSessionWhere(
   sessionId: string,
   userId: number,
+  teamIds: readonly string[],
 ): Prisma.ChatSessionWhereInput {
   return {
     id: sessionId,
-    userId,
     agentId: { not: null },
+    OR: [
+      // The row's own person, whatever the thread's team is. Sessions are keyed
+      // on the agent's owner, so this is the owner reading their own agent's
+      // thread, and an owner who was never added to the board's team would
+      // otherwise be locked out of a conversation that used to be theirs alone.
+      // It grants nothing new: before this change it was the ONLY branch.
+      { userId },
+      { teamId: { in: [...teamIds] } },
+    ],
     agent: {
       // Spread first: a revoked agent must stay unreachable even if
       // accessibleAgentWhere ever grows a revokedAt key of its own.
@@ -56,6 +72,45 @@ export function userAgentChatSessionWhere(
       revokedAt: null,
     },
   };
+}
+
+/**
+ * Teams this person belongs to. No status filter, matching every other team
+ * membership check in this codebase (see moveToDifferentBoard): a stricter one
+ * here would lock a board member out of a thread they can already see.
+ */
+export async function userTeamIds(userId: number): Promise<string[]> {
+  const rows = await prisma.member_Team.findMany({
+    where: { userId },
+    select: { teamId: true },
+  });
+  return rows.map((row) => row.teamId);
+}
+
+/**
+ * Record that this person has taken part, and hand back their private state.
+ * Reading a thread is taking part: it is what gives them an unread marker and a
+ * draft slot. `joinedAt` doubles as the unread baseline, so joining a long
+ * conversation does not arrive with hundreds of unread messages.
+ */
+export async function ensureChatParticipant(sessionId: string, userId: number) {
+  return prisma.chatSessionParticipant.upsert({
+    where: { sessionId_userId: { sessionId, userId } },
+    update: {},
+    create: { sessionId, userId, lastReadAt: new Date() },
+    select: { draft: true, lastReadAt: true, joinedAt: true },
+  });
+}
+
+/** Every person with a participant row, for fanning a live update out. */
+export async function chatParticipantUserIds(
+  sessionId: string,
+): Promise<number[]> {
+  const rows = await prisma.chatSessionParticipant.findMany({
+    where: { sessionId },
+    select: { userId: true },
+  });
+  return rows.map((row) => row.userId);
 }
 
 /**
@@ -96,7 +151,7 @@ export async function loadUserAgentChatSession<
   select: TSelect;
 }): Promise<ChatAccessResult<ChatSessionOf<TSelect>>> {
   const session = await findChatSession(
-    userAgentChatSessionWhere(sessionId, userId),
+    userAgentChatSessionWhere(sessionId, userId, await userTeamIds(userId)),
     select,
   );
   if (!session?.agentId) return notFound;

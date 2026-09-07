@@ -40,3 +40,4 @@ export function writeDraft(userId: number, agentId: string, text: string): void 
     // Quota or a blocked store: the draft simply isn't restored later.
   }
 }
+

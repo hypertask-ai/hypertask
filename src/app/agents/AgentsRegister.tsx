@@ -62,6 +62,9 @@ type TAgent = {
   heartbeatAt: string | null;
   lastPostedAt?: string | null;
   boards?: TAgentBoard[];
+  // Messages in this agent's shared chat thread that arrived after this person
+  // last caught up. Private to them: it is read off their own participant row.
+  unreadCount?: number;
   // A key is shown once, when it is minted: the database keeps only its hash,
   // so no route can send it again. The two fields answer different questions:
   // `mcpToken` is a value this session just saw, `hasMcpToken` is what the

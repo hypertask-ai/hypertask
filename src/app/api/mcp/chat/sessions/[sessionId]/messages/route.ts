@@ -3,7 +3,7 @@ import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { AGENT_CHAT_STOPPED_MESSAGE, AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, AGENT_CHAT_TIMEOUT_MESSAGE, NONTERMINAL_AGENT_RUN_STATUSES, isAgentChatSystemMessage } from '@/lib/agentRuns/model'
-import { AGENT_CHAT_EVENT, broadcast, userChannel } from '@/lib/realtime/server'
+import { broadcastChatSession } from '@/lib/agents/chatBroadcast'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
 import { isFeatureEnabled } from '@/lib/flags'
@@ -353,10 +353,10 @@ export async function POST(
         createdProposal
     }
 
-    // The user's open Agent Chat tab refetches the thread; fire and forget.
-    void broadcast(userChannel(session.userId), AGENT_CHAT_EVENT, {
-      sessionId: session.id,
-    })
+    // Every open Agent Chat tab on this thread refetches it. The agent's reply
+    // is the message a teammate is actually waiting on, so it cannot go only to
+    // the person whose name is on the session row.
+    await broadcastChatSession(session.id, [session.userId])
 
     return NextResponse.json({
       success: true,
