@@ -39,7 +39,9 @@ const SplitTitle = ({
     >
       <div
         className={`flex items-baseline gap-1 ${
-          isSelected ? "text-text-light-gray" : classes.textPrimary
+          isSelected
+            ? "font-normal text-text-light-gray"
+            : `font-semibold ${classes.textPrimary}`
         }`}
       >
         <span className="footer_tags">{tab.project}</span>
