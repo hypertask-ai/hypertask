@@ -54,7 +54,17 @@ export class FigmaOAuthRequestError extends Error {
 export function getFigmaOAuthConfig(): FigmaOAuthConfig | null {
   const clientId = process.env.FIGMA_CLIENT_ID?.trim();
   const clientSecret = process.env.FIGMA_CLIENT_SECRET?.trim();
-  return clientId && clientSecret ? { clientId, clientSecret } : null;
+  if (clientId && clientSecret) return { clientId, clientSecret };
+  // Connect, callback, and token refresh all read the config here, so one log
+  // covers every entry point and names the variable that is actually absent.
+  // Without it a misconfigured deployment only bounces the user back to
+  // settings and leaves nothing behind explaining why.
+  const missing = [
+    clientId ? null : "FIGMA_CLIENT_ID",
+    clientSecret ? null : "FIGMA_CLIENT_SECRET",
+  ].filter(Boolean);
+  console.error("Figma OAuth is not configured", `missing ${missing.join(" and ")}`);
+  return null;
 }
 
 export function safeFigmaReturnTo(value: string | null | undefined): string {
