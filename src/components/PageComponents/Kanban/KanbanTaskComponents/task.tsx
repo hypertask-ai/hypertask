@@ -60,7 +60,7 @@ interface IProps {
   index: number;
   sectionIndex: number;
   sectionId: number;
-  project: IProject;
+  project: IProject | null;
   currentSetting: TBoardSubtaskSetting;
   archiveNotification: (sectionId: number, itemId: number) => void;
   updateAssignees: (sectionId: number, itemId: number, assignees?: any) => void;
