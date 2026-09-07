@@ -69,4 +69,10 @@ ON CONFLICT ("sessionId", "userId") DO NOTHING;
 -- point at a team that no longer exists. SET NULL, not CASCADE: deleting a team
 -- must not delete a transcript, and a thread with no team falls back to the
 -- person who opened it.
+-- Postgres indexes the referenced side of a foreign key, never the referencing
+-- one, so without this every team deletion scans ChatSession in full to find
+-- the rows it has to null out. The two foreign keys above are already covered
+-- by the indexes created with the table; this is the one left.
+CREATE INDEX "ChatSession_teamId_idx" ON "ChatSession"("teamId");
+
 ALTER TABLE "ChatSession" ADD CONSTRAINT "ChatSession_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE SET NULL ON UPDATE CASCADE;

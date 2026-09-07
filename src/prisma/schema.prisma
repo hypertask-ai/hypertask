@@ -2169,6 +2169,9 @@ model ChatSession {
   @@index([userId])
   @@index([taskId])
   @@index([projectId])
+  // Covers the team foreign key, which Postgres does not index for us: a team
+  // deletion has to find the sessions pointing at it to null them out.
+  @@index([teamId])
   // One thread per agent: enforced in the DB (not just app-level dedup) so
   // two concurrent "open this agent's chat" requests can't create two
   // sessions. Postgres treats NULL as distinct, so plain (taskId-only or

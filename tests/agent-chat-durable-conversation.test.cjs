@@ -182,7 +182,9 @@ const prisma = {
         (message) =>
           message.sessionId === where.sessionId &&
           message.createdAt > where.createdAt.gt &&
-          (message.authorUserId == null || message.authorUserId !== mine),
+          (message.authorUserId === null ||
+            message.authorUserId === undefined ||
+            message.authorUserId !== mine),
       ).length;
     },
   },
@@ -635,6 +637,36 @@ test("its owner still gets the thread when the agent has no team", async () => {
     );
   } finally {
     agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);
+  }
+});
+
+test("seeing an agent across a board is not enough to open its team's thread", async () => {
+  // 8 can see the agent (it is shared with them) but belongs to no team, which
+  // is the shape a board member who was never added to the team leaves behind.
+  agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);
+  AGENTS[OPENABLE_AGENT].sharedWith.push(8);
+  createdSessions = [];
+  participants = [];
+  sessionUserId = 8;
+  try {
+    const response = await createSessionRoute.POST(
+      new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
+        method: "POST",
+        body: JSON.stringify({ agentId: OPENABLE_AGENT }),
+      }),
+    );
+    assert.equal(response.status, 404);
+    assert.deepEqual(
+      createdSessions,
+      [],
+      "the refusal has to come before the write, not after it",
+    );
+    assert.deepEqual(participants, [], "a refused open leaves no row behind");
+  } finally {
+    sessionUserId = 6;
+    AGENTS[OPENABLE_AGENT].sharedWith = AGENTS[OPENABLE_AGENT].sharedWith.filter(
+      (id) => id !== 8,
+    );
   }
 });
 

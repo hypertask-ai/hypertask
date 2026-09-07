@@ -30,9 +30,16 @@ export async function broadcastChatSession(
   } catch (error) {
     console.warn("[agent-chat] participant fan-out lookup failed", sessionId, error);
   }
-  for (const userId of new Set([...alsoUserIds, ...participantIds])) {
-    void broadcast(userChannel(userId), AGENT_CHAT_EVENT, { sessionId }).catch(
-      (error) => console.warn("[agent-chat] fan-out failed", sessionId, error),
-    );
-  }
+  // Awaited, not fired and forgotten: the freeze this function exists to
+  // survive would drop a send that had been started but not finished. One
+  // failed channel must not take the others down with it, so each carries its
+  // own catch and this never rejects -- the message is already committed, and
+  // a 500 would tell the caller a saved message failed.
+  await Promise.all(
+    [...new Set([...alsoUserIds, ...participantIds])].map((userId) =>
+      broadcast(userChannel(userId), AGENT_CHAT_EVENT, { sessionId }).catch(
+        (error) => console.warn("[agent-chat] fan-out failed", sessionId, error),
+      ),
+    ),
+  );
 }
