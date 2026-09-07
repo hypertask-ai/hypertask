@@ -24,14 +24,30 @@ function stub(relativePath, exports) {
 const OWNER = 6;
 const TEAMMATE = 7;
 const OUTSIDER = 99;
+// On the board, but not in the board's team.
+const BOARD_ONLY = 8;
+const TEAM = "team-1";
 
-// One board, owned by the agent owner, with the teammate as a member.
+// One board, owned by the agent owner, with the teammate as a member. The board
+// belongs to a team because the route asks which team an agent's board is in
+// (getAgentTeamIds) and refuses to open a thread otherwise.
 const SHARED_BOARD = {
   id: 15,
   status: "Normal",
   ownerId: OWNER,
-  memberships: [{ userId: TEAMMATE, agentId: null }],
+  teamId: TEAM,
+  memberships: [
+    { userId: TEAMMATE, agentId: null },
+    { userId: BOARD_ONLY, agentId: null },
+  ],
 };
+
+// Being on a board and being in its team are two different things, and the
+// route needs both. The outsider is in neither.
+const TEAM_MEMBERSHIPS = [
+  { userId: OWNER, teamId: TEAM },
+  { userId: TEAMMATE, teamId: TEAM },
+];
 
 const PRIVATE_ID = "11111111-1111-4111-8111-111111111111";
 const TEAM_ID = "22222222-2222-4222-8222-222222222222";
@@ -63,6 +79,14 @@ const AGENTS = [
     projects: [SHARED_BOARD],
   },
 ];
+
+// The `Member` rows that put each agent on the shared board, which is how the
+// route works out an agent's team.
+const AGENT_BOARD_MEMBERS = AGENTS.map((agent, index) => ({
+  id: index + 1,
+  agentId: agent.id,
+  project: { teamId: SHARED_BOARD.teamId },
+}));
 
 // Every filter this fake understands is spelled out, and anything else throws:
 // an unknown key name, an unknown key inside a relation filter, and an operator
@@ -152,20 +176,105 @@ function matchAgent(agent, where) {
   });
 }
 
+// The route re-reads the thread it just opened through the shared rule in
+// chatAccess, so the fake has to store sessions rather than pretend one exists.
+// Same discipline as the agent filters above: only the keys the rule really uses
+// are understood, and anything else throws instead of silently matching.
+function inFilter(value, kind) {
+  const keys = Object.keys(value);
+  if (keys.length !== 1 || keys[0] !== "in" || !Array.isArray(value.in)) {
+    throw new Error(`unhandled ${kind} filter: ${keys.join(", ")}`);
+  }
+  return value.in;
+}
+
+function matchSession(session, where) {
+  return Object.entries(where).every(([key, value]) => {
+    switch (key) {
+      case "id":
+        return scalar(session.id, value, key);
+      case "userId":
+        return scalar(session.userId, value, key);
+      case "teamId":
+        return value !== null && typeof value === "object"
+          ? inFilter(value, "session team").includes(session.teamId)
+          : scalar(session.teamId, value, key);
+      case "agentId": {
+        if (value === null || typeof value !== "object") {
+          return scalar(session.agentId, value, key);
+        }
+        const keys = Object.keys(value);
+        if (keys.length !== 1 || keys[0] !== "not" || value.not !== null) {
+          throw new Error(`unhandled session agentId filter: ${keys.join(", ")}`);
+        }
+        return session.agentId !== null;
+      }
+      case "OR":
+        return value.some((branch) => matchSession(session, branch));
+      case "agent": {
+        // The same agent rule, applied to the thread's agent: a thread whose
+        // agent this caller may no longer see must not come back.
+        const agent = AGENTS.find((row) => row.id === session.agentId);
+        return agent != null && matchAgent(agent, value);
+      }
+      default:
+        throw new Error(`unhandled chat session filter: ${key}`);
+    }
+  });
+}
+
 let upserts = [];
+let sessions = [];
+let participants = [];
 
 const prisma = {
   agent: {
     findFirst: async ({ where }) =>
       AGENTS.find((agent) => matchAgent(agent, where)) ?? null,
   },
-  chatSession: {
-    upsert: async ({ where }) => {
-      upserts.push(where.userId_agentId);
-      return { id: "session-created" };
+  member: {
+    findMany: async ({ where }) => {
+      const keys = Object.keys(where);
+      if (keys.length !== 1 || keys[0] !== "agentId") {
+        throw new Error(`unhandled member filter: ${keys.join(", ")}`);
+      }
+      const ids = inFilter(where.agentId, "member agent");
+      return AGENT_BOARD_MEMBERS.filter((row) => ids.includes(row.agentId));
     },
+  },
+  member_Team: {
+    findMany: async ({ where }) => {
+      const keys = Object.keys(where);
+      if (keys.length !== 1 || keys[0] !== "userId") {
+        throw new Error(`unhandled team member filter: ${keys.join(", ")}`);
+      }
+      return TEAM_MEMBERSHIPS.filter((row) =>
+        scalar(row.userId, where.userId, "userId"),
+      );
+    },
+  },
+  chatSession: {
+    upsert: async ({ where, create }) => {
+      upserts.push(where.userId_agentId);
+      const { userId, agentId } = where.userId_agentId;
+      const existing = sessions.find(
+        (row) => row.userId === userId && row.agentId === agentId,
+      );
+      if (existing) return existing;
+      const session = { id: `session-${sessions.length + 1}`, ...create };
+      sessions.push(session);
+      return session;
+    },
+    findFirst: async ({ where }) =>
+      sessions.find((session) => matchSession(session, where)) ?? null,
     create: async () => {
       throw new Error("an agent request must not fall through to a plain session");
+    },
+  },
+  chatSessionParticipant: {
+    upsert: async ({ where }) => {
+      participants.push(where.sessionId_userId);
+      return { draft: null, lastReadAt: new Date(), joinedAt: new Date() };
     },
   },
 };
@@ -185,6 +294,8 @@ const route = createJiti(path.join(root, "tests/agent-chat-create-session-visibi
 async function openChat(userId, agentId) {
   sessionUserId = userId;
   upserts = [];
+  sessions = [];
+  participants = [];
   const response = await route.POST(
     new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
       method: "POST",
@@ -212,7 +323,21 @@ test("a teammate on the same board can open a team agent's chat", async () => {
   // Without this the denial above could pass for the wrong reason.
   const result = await openChat(TEAMMATE, TEAM_ID);
   assert.equal(result.status, 200);
-  assert.deepEqual(upserts, [{ userId: TEAMMATE, agentId: TEAM_ID }]);
+  // Keyed on the agent's owner, not on whoever opened it: everyone the agent is
+  // shared with lands in one thread rather than a private copy each.
+  assert.deepEqual(upserts, [{ userId: OWNER, agentId: TEAM_ID }]);
+  assert.deepEqual(participants, [
+    { sessionId: "session-1", userId: TEAMMATE },
+  ]);
+});
+
+test("a board member outside the agent's team cannot open its chat", async () => {
+  // Seeing the agent on a shared board is not the same as being in its team.
+  // Refused before anything is written: without this the route would open a
+  // thread and then refuse the caller who asked for it.
+  const result = await openChat(BOARD_ONLY, TEAM_ID);
+  assert.equal(result.status, 404);
+  assert.deepEqual(upserts, [], "a denied request must not create a thread");
 });
 
 test("someone outside the board cannot open a team agent's chat", async () => {
