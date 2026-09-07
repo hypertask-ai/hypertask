@@ -96,6 +96,35 @@ test("concurrent readers share a slice and later refetches cannot replay it", as
   }
 });
 
+test("waitForEarlyAppShellBootstrap only reports the bridge as done when bridge-session ran", async () => {
+  // HTPR-6065: the early script picks its endpoint from the server-only
+  // BETTER_AUTH_ENABLED, while useAuth gates on the client-side
+  // NEXT_PUBLIC_BETTER_AUTH_ENABLED. If those two ever disagree, a script
+  // that hit /api/app-shell/bootstrap must not be read as "the bridge
+  // session already ran" -- otherwise useAuth skips its own POST forever.
+  const bridged = runBootstrap({
+    betterAuthEnabled: true,
+    body: { ok: true, bootstrap: successfulPayload },
+  });
+  global.window = bridged.runtimeWindow;
+  try {
+    assert.equal(await waitForEarlyAppShellBootstrap(6), true);
+  } finally {
+    delete global.window;
+  }
+
+  const unbridged = runBootstrap({
+    betterAuthEnabled: false,
+    body: successfulPayload,
+  });
+  global.window = unbridged.runtimeWindow;
+  try {
+    assert.equal(await waitForEarlyAppShellBootstrap(6), false);
+  } finally {
+    delete global.window;
+  }
+});
+
 test("a failed slice falls back without discarding successful slices", async () => {
   const { runtimeWindow } = runBootstrap({
     betterAuthEnabled: false,

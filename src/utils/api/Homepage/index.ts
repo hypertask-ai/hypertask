@@ -45,8 +45,10 @@ export const getAllTeamsForLSidebar = async(body:any| null) => {
 }
 
 // =================== GET ALL TEAMS FOR SIDEBAR
-export const getCurrentUserById = async(id:any)=>{
-    const response = axios.get(`/api/users/getById?userId=${id}`, )
+// HTPR-6065: /api/users/getById always returns the session user; it no
+// longer reads a userId query param, so the `id` argument here is unused.
+export const getCurrentUserById = async(_id:number)=>{
+    const response = axios.get(`/api/users/getById`, )
     return response;
 }
 

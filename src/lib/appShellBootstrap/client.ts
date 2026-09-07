@@ -13,6 +13,7 @@ type AppShellBootstrapState = {
   accountId: number;
   expiresAt: number;
   request: Promise<BootstrapRequestResult>;
+  bridgedBetterAuthSession: boolean;
   consumed: Partial<Record<AppShellBootstrapSliceKey, boolean>>;
   slicePromises: Partial<
     Record<AppShellBootstrapSliceKey, Promise<unknown | undefined>>
@@ -59,6 +60,7 @@ export const buildEarlyAppShellBootstrapScript = ({
       accountId:accountId,
       expiresAt:Date.now()+${APP_SHELL_BOOTSTRAP_TTL_MS},
       request:request,
+      bridgedBetterAuthSession:${JSON.stringify(betterAuthEnabled)},
       consumed:{},
       slicePromises:{}
     };
@@ -87,7 +89,7 @@ export const waitForEarlyAppShellBootstrap = async (
   expectedAccountId: number,
 ): Promise<boolean> => {
   const state = getBootstrapState(expectedAccountId);
-  if (!state) return false;
+  if (!state || !state.bridgedBetterAuthSession) return false;
   const result = await state.request;
   return result.ok && result.payload.accountId === expectedAccountId;
 };
