@@ -9,6 +9,9 @@ export const FIGMA_OAUTH_START_PATH = "/api/figma/oauth/start";
 export const FIGMA_OEMBED_PATH = "/api/figma/oembed";
 export const FIGMA_SETTINGS_PATH = "/settings/accounts";
 
+export const FIGMA_CONNECT_GENERIC_ERROR =
+  "Figma could not be connected. Try again.";
+
 // The OAuth routes can only hand the browser a short code on the redirect back
 // to settings. Each code gets its own sentence because "try again" is wrong
 // advice for half of them: a server with no Figma keys will never succeed.
@@ -36,11 +39,8 @@ const FIGMA_CONNECT_ERROR_MESSAGES = new Map<string, string>([
     "user_mismatch",
     "You signed in as a different Hypertask user part way through. Start again from Connect Figma.",
   ],
-  ["connection_failed", "Figma could not be connected. Try again."],
+  ["connection_failed", FIGMA_CONNECT_GENERIC_ERROR],
 ]);
-
-export const FIGMA_CONNECT_GENERIC_ERROR =
-  "Figma could not be connected. Try again.";
 
 export const figmaConnectErrorMessage = (code: string | null | undefined) =>
   (code ? FIGMA_CONNECT_ERROR_MESSAGES.get(code) : undefined) ??
