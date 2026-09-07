@@ -13,6 +13,11 @@
  *
  * `ranking` is optional because view entries saved before that field existed
  * carry none; the canonical order lives on Section.ranking either way.
+ *
+ * ponytail: that optionality also lets a future caller write a stored entry
+ * with no ranking, which updateSectionInAllViews would then sort as equal to
+ * every other entry. Every caller today passes a real ranking. If one stops,
+ * give the read path its own looser type and make this one required again.
  */
 export type NewSectionForView = {
   id: number

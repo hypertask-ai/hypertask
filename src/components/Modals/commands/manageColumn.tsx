@@ -374,7 +374,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     // The list behind this editor reads its own cache, so its checkbox would
     // otherwise keep the pre-action state.
     updateCache(
-      updateSection(sections, { ...editSection, visibility: visible }, "Others"),
+      updateSection(
+        sections,
+        { ...editSection, id: sectionId, visibility: visible },
+        "Others"
+      ),
       false
     );
     setEditSection((current) =>

@@ -92,7 +92,11 @@ test("a legacy entry keyed as sectionId is flipped, never duplicated", () => {
 
 test("hiding a column a view never had changes nothing", () => {
   const columns = [{ id: 1, section_title: "Todo", visibility: true }];
-  assert.deepEqual(applyColumnVisibility(columns, qa, false), columns);
+  const before = structuredClone(columns);
+  assert.deepEqual(applyColumnVisibility(columns, qa, false), before);
+  // Compared against the snapshot, not against itself: an implementation that
+  // mutated in place and returned the same reference would pass that.
+  assert.deepEqual(columns, before);
 });
 
 test("a column with no entry counts as hidden, matching how the board reads it", () => {
@@ -275,7 +279,10 @@ test("every board_columns_view write is locked and read inside its transaction",
   // each read a stale copy of the same JSON document and overwrite each other.
   const writer = slice("async function updateBoardViewColumns");
   assert.match(writer, /prisma\.\$transaction\(async \(tx\)/);
-  assert.match(writer, /FOR UPDATE OF v/);
+  // On the transaction client: the same query on the base client would take
+  // the lock on another connection and release it immediately, which is the
+  // lost update this test is named after.
+  assert.match(writer, /tx\.\$queryRaw[\s\S]*FOR UPDATE OF v/);
   assert.match(writer, /await tx\.view\.findMany/);
   assert.match(writer, /await tx\.view\.update/);
 
@@ -295,5 +302,9 @@ test("every board_columns_view write is locked and read inside its transaction",
   const visibility = slice("export async function setSectionVisibilityInAllViews");
   assert.match(visibility, /unsaved_User_Project_View: \{ none: \{\} \}/);
   assert.match(visibility, /unsaved_User_Project_View: \{ some: \{ userId: actingUserId \} \}/);
-  assert.doesNotMatch(visibility, /sortByStringParam/);
+  assert.doesNotMatch(
+    visibility,
+    /sortByStringParam/,
+    "showing or hiding a column must not reorder the stored columns",
+  );
 });

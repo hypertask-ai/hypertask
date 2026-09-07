@@ -28,6 +28,10 @@ async function updateBoardViewColumns(
   mapColumns: (columns: ISection[]) => unknown[],
   where: Prisma.ViewWhereInput = {}
 ) {
+  // ponytail: one sequential update per view under a board-wide lock. Boards
+  // carry tens of views, so the generous window is enough; if a board ever
+  // holds hundreds, batch the writes into a single SQL statement rather than
+  // raising this further.
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`
       SELECT v."id"
@@ -49,7 +53,7 @@ async function updateBoardViewColumns(
         data: { board_columns_view: columns as unknown as Prisma.InputJsonValue }
       })
     }
-  })
+  }, { timeout: 20000, maxWait: 10000 })
 }
 
 /**
@@ -90,7 +94,7 @@ export async function updateSectionInAllViews(
     )
     // If ranking was updated, re-sort the array by ranking to reflect the new
     // order. This ensures the UI displays sections in the correct order.
-    return updates.ranking != null
+    return updates.ranking !== undefined && updates.ranking !== null
       ? sortByStringParam([...updated], 'ranking')
       : updated
   })
