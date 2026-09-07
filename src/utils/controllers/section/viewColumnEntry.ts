@@ -8,8 +8,9 @@
 export type NewSectionForView = {
   id: number
   section_title: string
-  ranking: string
-  [key: string]: unknown
+  // Optional because view entries saved before this field existed carry no
+  // ranking; the canonical order lives on Section.ranking either way.
+  ranking?: string
 }
 
 export const buildViewColumnEntry = (section: NewSectionForView) => ({

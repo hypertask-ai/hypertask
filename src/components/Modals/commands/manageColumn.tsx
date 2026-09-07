@@ -38,6 +38,13 @@ import {
   hasNoSectionAutoAssign,
 } from "@/lib/sectionAutoAssign";
 import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
+import { useFlag } from "@/hooks/useFlag";
+import { COLUMN_ALL_VIEWS_FLAG } from "@/lib/flags";
+import {
+  applyColumnVisibilityToProject,
+  countViewsShowingColumn,
+  describeViewsShowingColumn,
+} from "@/utils/helperFunctions/Views/ColumnAllViewsHelper";
 import { getManageColumnRows } from "./manageColumnTaskCounts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
@@ -313,6 +320,63 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     } finally {
       setUpdating(false);
     }
+  };
+
+  // ============ show/hide this column in every saved view (HTPR-5937)
+  const columnAllViewsEnabled = useFlag(COLUMN_ALL_VIEWS_FLAG);
+  const viewCounts = useMemo(
+    () =>
+      editSection
+        ? countViewsShowingColumn(currentProject, editSection.id ?? editSection.sectionId ?? 0)
+        : { visible: 0, total: 0 },
+    [currentProject, editSection]
+  );
+
+  const setVisibilityInAllViews = async (visible: boolean) => {
+    if (!editSection || !currentProject) return;
+    const sectionId = editSection.id ?? editSection.sectionId;
+    if (!sectionId) return;
+    try {
+      await axios.post("/api/sections/view-visibility", { sectionId, visible });
+    } catch {
+      toast.error(
+        visible
+          ? "Column could not be shown in all views"
+          : "Column could not be hidden in all views"
+      );
+      return;
+    }
+    // Refetching the board query remounts this tree and closes the editor, so
+    // every cached copy is patched in place instead.
+    const patch = (project: IProject) =>
+      project.id === currentProject.id
+        ? applyColumnVisibilityToProject(
+            project,
+            { ...editSection, id: sectionId },
+            visible
+          )
+        : project;
+    setCurrentProject((project) => (project ? patch(project) : project));
+    queryClient.setQueryData<IProjectsAll>(["projectsAll"], (cached) =>
+      cached
+        ? { ...cached, updatedProjects: cached.updatedProjects.map(patch) }
+        : cached
+    );
+    queryClient.setQueriesData<IProject[]>(
+      { queryKey: ["projectsAllMinimal"] },
+      (cached) => cached?.map(patch)
+    );
+    // The list behind this editor reads its own cache, so its checkbox would
+    // otherwise keep the pre-action state.
+    updateCache(
+      updateSection(sections, { ...editSection, visibility: visible }, "Others"),
+      false
+    );
+    setEditSection((current) =>
+      current && (current.id ?? current.sectionId) === sectionId
+        ? { ...current, visibility: visible }
+        : current
+    );
   };
 
   const onSubmit = () => {
@@ -724,6 +788,35 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                 onChange={() => saveIsDone(!ticketsFinished)}
               />
             </div>
+
+            {columnAllViewsEnabled && (
+              <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
+                <div className="min-w-0">
+                  <span className="text-dense font-semibold text-white-black">
+                    Views
+                  </span>
+                  <p className="text-dense font-medium text-text-light-gray">
+                    {describeViewsShowingColumn(viewCounts)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <button
+                    type="button"
+                    className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:text-subheading"
+                    onClick={() => void queueSave(() => setVisibilityInAllViews(true))}
+                  >
+                    Show in all views
+                  </button>
+                  <button
+                    type="button"
+                    className="border-0 bg-transparent p-0 text-dense text-text-light-gray transition hover:text-subheading"
+                    onClick={() => void queueSave(() => setVisibilityInAllViews(false))}
+                  >
+                    Hide in all views
+                  </button>
+                </div>
+              </div>
+            )}
 
             <button
               type="button"

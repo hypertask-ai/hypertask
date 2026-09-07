@@ -27,6 +27,7 @@ export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
 export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
+export const COLUMN_ALL_VIEWS_FLAG = "htpr-5937-show-column-in-all-views";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
@@ -167,6 +168,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-06",
     description:
       "Adds Ctrl+K entries for the five biggest ticket piles in the inbox, and names the row archive action after what it already does.",
+  },
+  {
+    key: COLUMN_ALL_VIEWS_FLAG,
+    shippedOn: "2026-09-07",
+    description:
+      "Adds Show in all views and Hide in all views to the column editor, so one column's visibility changes across every saved view at once.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
