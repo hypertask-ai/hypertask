@@ -1000,15 +1000,15 @@ const Task = ({
           {(provided, snapshot) => renderTaskCard(provided, snapshot)}
         </Draggable>
       )}
-      {showAssignModal && (
+      {showAssignModal && project?.name && (
         <AssignModal
           onClose={toggleAssigneesModal}
           project={project}
           task={{
             id: task.id,
             title: task.title,
-            link: `${taskBaseUri}${project?.name}/${task.uniqueIndex}`,
-          }} 
+            link: `${taskBaseUri}${project.name}/${task.uniqueIndex}`,
+          }}
           assignees={[...humanAssignees, ...agentAssignees]}
         />
       )}
