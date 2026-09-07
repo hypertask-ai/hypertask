@@ -276,6 +276,7 @@ const prisma = {
       participants.push(where.sessionId_userId);
       return { draft: null, lastReadAt: new Date(), joinedAt: new Date() };
     },
+    findMany: async () => [],
   },
 };
 
@@ -310,6 +311,9 @@ test("the owner can open their own private agent's chat", async () => {
   const result = await openChat(OWNER, PRIVATE_ID);
   assert.equal(result.status, 200);
   assert.deepEqual(upserts, [{ userId: OWNER, agentId: PRIVATE_ID }]);
+  assert.deepEqual(participants, [
+    { sessionId: "session-1", userId: OWNER },
+  ]);
 });
 
 test("a teammate who guesses a private agent's id cannot open its chat", async () => {
