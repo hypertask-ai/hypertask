@@ -33,4 +33,4 @@ function loadReal(relativePath) {
   return loaded.exports;
 }
 
-module.exports = loadReal("src/lib/mcp/agents.ts");
+module.exports = { ...loadReal("src/lib/mcp/agents.ts"), transpile };

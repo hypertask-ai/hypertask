@@ -1,9 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
-const ts = require("typescript");
 
 // HTPR-6080: /api/mcp/comments must only name an agent when it belongs to the
 // task's own project, not merely to any project the requester can see. This
@@ -11,21 +9,15 @@ const ts = require("typescript");
 // stubbed), so two fixture users/projects stand in for a live second account.
 const root = path.resolve(__dirname, "..");
 const routePath = path.join(root, "src/app/api/mcp/comments/route.ts");
-const routeSource = fs.readFileSync(routePath, "utf8");
 
 const {
   mcpVisibleAgentSelect,
   mapVisibleMcpAgent,
+  transpile,
 } = require(path.join(root, "tests/helpers/load-mcp-agents.cjs"));
 
 function loadRoute(comments) {
-  const javascript = ts.transpileModule(routeSource, {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
+  const javascript = transpile(routePath);
 
   let commentFindManyQuery;
   const prisma = {
@@ -133,8 +125,10 @@ test("comments GET keeps a same-team agent visible but hides a different team's 
     photoURL: null,
     userId: 42, // owned by a different user entirely
     visibility: "TEAM",
-    // Real member of project 77 ("their" team) only, never project 15.
-    members: [{ projectId: 77 }],
+    // Real DB rows scope `members` to the query's `where` (project 15, see
+    // assertion below), so an agent whose only membership is project 77
+    // comes back with an empty array here, exactly like production.
+    members: [],
   };
   const insiderAgent = {
     id: "insider-agent",
