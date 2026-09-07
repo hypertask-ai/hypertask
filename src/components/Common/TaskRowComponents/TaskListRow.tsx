@@ -279,8 +279,10 @@ export const SplitTitle = ({
       onClick={onClick}
     >
       <div
-        className={`flex items-baseline gap-1 font-normal ${
-          isSelected ? "text-white-black" : "text-text-light-gray"
+        className={`flex items-baseline gap-1 ${
+          isSelected
+            ? "font-semibold text-white-black"
+            : "font-normal text-text-light-gray"
         }`}
       >
         <span className="footer_tags">{tab.project}</span>

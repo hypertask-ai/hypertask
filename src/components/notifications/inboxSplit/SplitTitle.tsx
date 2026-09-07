@@ -38,8 +38,14 @@ const SplitTitle = ({
       onClick={onClick}
     >
       <div
+        // `isSelected` here means "not the active split" (callers pass
+        // currSplit !== index), unlike TaskListRow's SplitTitle where
+        // isSelected means "is the active split" — the active tab is the
+        // else branch below, not the isSelected branch.
         className={`flex items-baseline gap-1 ${
-          isSelected ? "text-text-light-gray" : classes.textPrimary
+          isSelected
+            ? "font-normal text-text-light-gray"
+            : `font-semibold ${classes.textPrimary}`
         }`}
       >
         <span className="footer_tags">{tab.project}</span>
