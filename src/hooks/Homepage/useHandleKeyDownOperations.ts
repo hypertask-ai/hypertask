@@ -56,7 +56,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     // =========== RECOIL STATES
     const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
     const setShowSidebar = useSetRecoilState(showSidebarAtom);
-    const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom)
+    const _currentProject = useRecoilValue(currentProjectAtom)
     const currentUser = useRecoilValue(currentUserAtom)
     const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom)
     const setActiveSection = useSetRecoilState(activeSectionAtom);
@@ -332,8 +332,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
         }
         // console.log("🚀 ~ useEffect ~ _currentProject:", _currentProject)
         setFirstTask(_currentProject?.firstTask)
-        // console.log(_sections)
-        setCurrentProject(_currentProject)
       }, [filteredSections, initialSections, _currentProject]);
   
 
