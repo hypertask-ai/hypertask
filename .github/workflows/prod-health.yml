@@ -376,6 +376,7 @@ jobs:
       # just goes red with no Telegram alert. With it, setup-npm still runs,
       # predictably fails (no repo/no node), and gets classified correctly.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        id: setup-checkout
         continue-on-error: true
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -400,7 +401,7 @@ jobs:
 
       - name: Install the Chromium browser
         id: setup-pw
-        if: steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success'
+        if: steps.setup-checkout.outcome == 'success' && steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success'
         continue-on-error: true
         run: ./node_modules/.bin/playwright install --with-deps chromium
 
@@ -408,10 +409,10 @@ jobs:
       # broken app: record it as a failed preflight so the decision step below
       # alerts on Telegram and never rolls back (PR #366 review).
       - name: Record a setup failure as unrunnable
-        if: always() && (steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
+        if: always() && (steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
         run: |
           mkdir -p e2e/smoke/.state
-          echo '{"ok":false,"reason":"setup failed (Node, npm ci, or playwright install)"}' > e2e/smoke/.state/preflight.json
+          echo '{"ok":false,"reason":"setup failed (checkout, Node, npm ci, or playwright install)"}' > e2e/smoke/.state/preflight.json
           echo "::error::Smoke setup failed — classified as unrunnable, not a broken app"
 
       - name: Save Playwright browser cache
@@ -439,7 +440,7 @@ jobs:
 
       - name: Run the smoke checks
         id: smoke
-        if: steps.provisioned.outputs.ok == 'true' && steps.setup-node.outcome != 'failure' && steps.setup-npm.outcome != 'failure' && steps.setup-pw.outcome != 'failure'
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-checkout.outcome == 'success' && steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success' && steps.setup-pw.outcome == 'success'
         continue-on-error: true
         env:
           SMOKE_BASE_URL: https://app.hypertask.ai
@@ -463,7 +464,7 @@ jobs:
         run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See e2e/smoke/README.md to provision it."
 
       - name: Decide unrunnable vs. real failure, rollback if confirmed
-        if: always() && steps.provisioned.outputs.ok == 'true' && (steps.smoke.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
+        if: always() && steps.provisioned.outputs.ok == 'true' && (steps.smoke.outcome == 'failure' || steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
