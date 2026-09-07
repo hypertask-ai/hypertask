@@ -268,6 +268,7 @@ export const FEATURE_FLAG_TICKET_PROJECT_ID = 15;
 // the old mode, and an OFF write landing after an EVERYONE write leaves EVERYONE on a stale date.
 const FEATURE_FLAG_MODE_LOCK_NAMESPACE = 6193;
 const FEATURE_FLAG_TICKET_BASE = "https://app.hypertask.ai/detail/project-15";
+export const FEATURE_FLAG_ADMIN_URL = "https://app.hypertask.ai/admin/flags";
 const LEGACY_FEATURE_FLAG_DESCRIPTION =
   "This older feature flag has no description in this version of the app.";
 const FEATURE_FLAG_KEY_TICKET_NUMBER = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/;

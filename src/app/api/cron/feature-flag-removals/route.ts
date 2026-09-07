@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import {
+  FEATURE_FLAG_ADMIN_URL,
   FEATURE_FLAG_OWNER_USER_ID,
   FEATURE_FLAG_TICKET_PROJECT_ID,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
@@ -37,7 +38,7 @@ function removalDescription(key: string, releasedAt: Date) {
     `<li><p>Remove the key from <code>FEATURE_FLAG_DEFINITIONS</code>, delete every <code>useFlag</code> ` +
     `and server check for it, keep the enabled branch, and add a migration deleting the stored row.</p></li>` +
     `<li><p>Filed automatically by the feature flag removal sweep. Press <strong>Keep</strong> on ` +
-    `<a href="https://app.hypertask.ai/admin/flags">the flags page</a> to stop this for a flag.</p></li></ul>`
+    `<a href="${FEATURE_FLAG_ADMIN_URL}">the flags page</a> to stop this for a flag.</p></li></ul>`
   );
 }
 
