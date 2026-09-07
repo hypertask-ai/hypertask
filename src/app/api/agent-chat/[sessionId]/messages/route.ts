@@ -60,15 +60,6 @@ export async function POST(
     }
     const session = access.session;
     const agentId = access.agentId;
-    // The thread is shared, so its owner is not necessarily who is typing. The
-    // agent has to be told who actually sent this, or every teammate's message
-    // arrives signed by the agent's owner.
-    const sender = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { displayName: true },
-    });
-    const senderName = sender?.displayName || "Hypertask user";
-
     if (session.agent?.runtimeType === "NATIVE") {
       return NextResponse.json(
         { success: false, error: "Native agents use the AI chat" },
@@ -80,6 +71,16 @@ export async function POST(
     // going through the open path. After the refusal above, so a rejected send
     // does not sign anyone up to a conversation they never posted to.
     await ensureChatParticipant(session.id, userId);
+
+    // The thread is shared, so its owner is not necessarily who is typing. The
+    // agent has to be told who actually sent this, or every teammate's message
+    // arrives signed by the agent's owner. Read after the refusal above, so a
+    // send to a native agent does not pay for a name it throws away.
+    const sender = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { displayName: true },
+    });
+    const senderName = sender?.displayName || "Hypertask user";
 
     let agentBrief: AgentWebhookChatBrief | null = null;
     try {

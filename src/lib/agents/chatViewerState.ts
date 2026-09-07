@@ -20,6 +20,12 @@ async function patchParticipant(sessionId: string, body: unknown): Promise<void>
   }
 }
 
+// One thread's draft saves run one at a time, in the order they were made.
+// Cancelling the timer is not enough on its own: two requests already in flight
+// can finish in either order, and the loser would put back text the writer had
+// already replaced or sent.
+const inFlight = new Map<string, Promise<void>>();
+
 export function saveDraftToServer(sessionId: string, text: string): void {
   const queued = pending.get(sessionId);
   if (queued) clearTimeout(queued);
@@ -27,7 +33,13 @@ export function saveDraftToServer(sessionId: string, text: string): void {
     sessionId,
     setTimeout(() => {
       pending.delete(sessionId);
-      void patchParticipant(sessionId, { draft: text });
+      const next = (inFlight.get(sessionId) ?? Promise.resolve()).then(() =>
+        patchParticipant(sessionId, { draft: text }),
+      );
+      inFlight.set(sessionId, next);
+      void next.finally(() => {
+        if (inFlight.get(sessionId) === next) inFlight.delete(sessionId);
+      });
     }, SERVER_SAVE_DELAY_MS),
   );
 }

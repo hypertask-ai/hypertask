@@ -213,6 +213,36 @@ const prisma = {
       Object.assign(row, data);
       return row;
     },
+    findUnique: async ({ where }) => {
+      const key = where.sessionId_userId;
+      return (
+        participants.find(
+          (row) =>
+            row.sessionId === key.sessionId && row.userId === key.userId,
+        ) ?? null
+      );
+    },
+    // The read marker is written through updateMany because it carries a
+    // "only if this is newer" guard that a keyed update cannot express. The
+    // stub honours that guard, so a test can prove the marker never goes back.
+    updateMany: async ({ where, data }) => {
+      assert.ok(
+        Array.isArray(where.OR),
+        "the read marker must be written with a forward-only guard",
+      );
+      const matches = participants.filter((row) => {
+        if (row.sessionId !== where.sessionId || row.userId !== where.userId) {
+          return false;
+        }
+        return where.OR.some((clause) =>
+          clause.lastReadAt === null
+            ? row.lastReadAt === null
+            : row.lastReadAt !== null && row.lastReadAt < clause.lastReadAt.lt,
+        );
+      });
+      for (const row of matches) Object.assign(row, data);
+      return { count: matches.length };
+    },
   },
   member_Team: {
     findMany: async ({ where }) =>
@@ -558,6 +588,30 @@ test("a draft is private to the person who typed it", async () => {
     await historyRoute.GET(historyRequest(), routeContext())
   ).json();
   assert.equal(mine.viewer.draft, "mine");
+});
+
+test("a slow catch-up cannot drag the read marker back", async () => {
+  // Two tabs catch up at once. The one that started first can commit last, and
+  // an unconditional write would then resurrect messages already read.
+  const ahead = new Date(Date.now() + 60_000);
+  participants = [
+    { sessionId: "session-1", userId: 6, joinedAt: new Date(0), lastReadAt: ahead, draft: null },
+  ];
+  messages = [message(1)];
+  const response = await participantRoute.PATCH(
+    new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
+      method: "PATCH",
+      body: JSON.stringify({ read: true }),
+    }),
+    routeContext(),
+  );
+  assert.equal(response.status, 200);
+  const row = participants.find((candidate) => candidate.userId === 6);
+  assert.equal(
+    row.lastReadAt.getTime(),
+    ahead.getTime(),
+    "a marker already further ahead must stay where it is",
+  );
 });
 
 test("the read marker is stamped by the server, so it cannot move backwards", async () => {

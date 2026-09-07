@@ -41,8 +41,8 @@ test("the user rule keeps a thread inside the team it belongs to", () => {
   // moved teams handing its old team's transcript to the new one.
   assert.match(
     rule,
-    /\{\s*teamId:\s*null,\s*userId\s*\}/,
-    "a conversation with no team of its own stays with the person who opened it",
+    /OR:\s*\[[\s\S]*\{\s*userId\s*\}/,
+    "the row's own person keeps the thread they had before it was shared",
   );
   assert.match(
     rule,

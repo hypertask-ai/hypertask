@@ -53,7 +53,7 @@ WHERE s."agentId" = agent_team."agentId" AND s."teamId" IS NULL;
 -- opened it, plus everyone who has written in it. lastReadAt is set to now so
 -- nobody wakes up to a badge counting messages they have already read.
 INSERT INTO "ChatSessionParticipant" ("id", "sessionId", "userId", "joinedAt", "lastReadAt", "updatedAt")
-SELECT md5(random()::text || clock_timestamp()::text), s."id", participant."userId", NOW(), NOW(), NOW()
+SELECT gen_random_uuid()::text, s."id", participant."userId", NOW(), NOW(), NOW()
 FROM "ChatSession" s
 JOIN LATERAL (
     SELECT s."userId" AS "userId"

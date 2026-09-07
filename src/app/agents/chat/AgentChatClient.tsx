@@ -492,7 +492,7 @@ function RosterRow({
       {!selected && (agent.unreadCount ?? 0) > 0 && (
         <span
           aria-label={`${agent.unreadCount} unread`}
-          className="shrink-0 rounded-full bg-shadcn-primary px-1.5 py-0.5 text-[10px] font-semibold leading-none text-primary-foreground"
+          className="shrink-0 rounded-full bg-shadcn-primary px-1.5 py-0.5 text-micro font-semibold leading-none text-primary-foreground"
         >
           {agent.unreadCount! > 99 ? "99+" : agent.unreadCount}
         </span>

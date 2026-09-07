@@ -68,7 +68,8 @@ export async function POST(request: NextRequest) {
       // asked for it.
       const teamIds = await userTeamIds(userId);
       const mayOpen =
-        teamId === null ? agent.userId === userId : teamIds.includes(teamId);
+        agent.userId === userId ||
+        (teamId !== null && teamIds.includes(teamId));
       if (!mayOpen) {
         return NextResponse.json({ error: "Agent not found" }, { status: 404 });
       }

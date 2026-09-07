@@ -57,7 +57,12 @@ export function userAgentChatSessionWhere(
     id: sessionId,
     agentId: { not: null },
     OR: [
-      { teamId: null, userId },
+      // The row's own person, whatever the thread's team is. Sessions are keyed
+      // on the agent's owner, so this is the owner reading their own agent's
+      // thread, and an owner who was never added to the board's team would
+      // otherwise be locked out of a conversation that used to be theirs alone.
+      // It grants nothing new: before this change it was the ONLY branch.
+      { userId },
       { teamId: { in: [...teamIds] } },
     ],
     agent: {

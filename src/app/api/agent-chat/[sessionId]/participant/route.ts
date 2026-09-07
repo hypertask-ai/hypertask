@@ -70,16 +70,31 @@ export async function PATCH(
     }
 
     await ensureChatParticipant(access.session.id, userId);
-    const participant = await prisma.chatSessionParticipant.update({
-      where: {
-        sessionId_userId: { sessionId: access.session.id, userId },
-      },
-      data: {
-        ...(hasDraft ? { draft: nextDraft } : {}),
-        // The server stamps the read marker instead of trusting a client
-        // cursor, so it can only ever move forward.
-        ...(markRead ? { lastReadAt: new Date() } : {}),
-      },
+    const where = { sessionId_userId: { sessionId: access.session.id, userId } };
+    if (hasDraft) {
+      await prisma.chatSessionParticipant.update({
+        where,
+        data: { draft: nextDraft },
+        select: { id: true },
+      });
+    }
+    if (markRead) {
+      // The server stamps the read marker instead of trusting a client cursor,
+      // and only ever forward: two tabs catching up at once can commit out of
+      // the order they were stamped in, and the older one would otherwise drag
+      // the marker back and resurrect messages this person has read.
+      const now = new Date();
+      await prisma.chatSessionParticipant.updateMany({
+        where: {
+          sessionId: access.session.id,
+          userId,
+          OR: [{ lastReadAt: null }, { lastReadAt: { lt: now } }],
+        },
+        data: { lastReadAt: now },
+      });
+    }
+    const participant = await prisma.chatSessionParticipant.findUnique({
+      where,
       select: { draft: true, lastReadAt: true },
     });
 
