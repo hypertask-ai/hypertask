@@ -21,6 +21,30 @@ export default defineConfig([
   // YPER4-5 enables the exported rule set after it adds suppressions for existing violations.
   styleGuideRuleRegistrationConfig,
   {
+    // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser
+    // component importing it breaks the production build with `Can't resolve 'tls'`.
+    files: ["src/components/**/*.{ts,tsx}", "src/hooks/**/*.{ts,tsx}", "src/app/**/*.tsx"],
+    // The one server-rendered page that reads a flag directly. Exempt this file,
+    // not every page.tsx: a page carrying "use client" is a browser bundle too.
+    ignores: ["src/app/admin/flags/page.tsx"],
+    rules: {
+      // Types are erased, so a type-only import never reaches the bundle.
+      "@typescript-eslint/no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/flags",
+              message:
+                'Import flag keys from "@/lib/flags/keys". "@/lib/flags" is server-only.',
+              allowTypeImports: true,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     plugins: { "react-hooks": nextCoreWebVitals[0].plugins["react-hooks"] },
     rules: {
       // eslint-config-next 16 pulls in eslint-plugin-react-hooks' new React

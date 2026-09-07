@@ -53,7 +53,7 @@ import {
   isInboxClusterCommandKey,
   type InboxCluster,
 } from "@/lib/inboxClusters";
-import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags";
+import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags/keys";
 
 type Props = {
   handleAction?: (mode?: CommandMode, action?: string) => void;

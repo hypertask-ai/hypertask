@@ -15,7 +15,7 @@ import { format } from "date-fns";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { inboxArchiveTooltip } from "@/lib/inboxClusters";
-import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags";
+import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { decodeAgentMessage } from "@/lib/nativeAgent/agentMessageEnvelope";
 
