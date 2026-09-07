@@ -109,6 +109,65 @@ test("OAuth start requires the signed user and owner-only server flag", async ()
   assert.deepEqual(eligibilityUserIds, [6]);
 });
 
+test("OAuth start with no Figma keys names the reason on screen and in the log", async () => {
+  const originalConsoleError = console.error;
+  const logged = [];
+  console.error = (...args) => logged.push(args.join(" "));
+  const fixtureClientId = process.env.FIGMA_CLIENT_ID;
+  delete process.env.FIGMA_CLIENT_ID;
+
+  try {
+    const response = await startRoute.GET(
+      appRequest("/api/figma/oauth/start"),
+    );
+    const location = new URL(response.headers.get("location"));
+    assert.equal(location.pathname, figmaPaths.FIGMA_SETTINGS_PATH);
+    assert.equal(location.searchParams.get("figma_error"), "not_configured");
+    // The bounce back to settings is invisible on its own, so the code has to
+    // resolve to a message that says retrying cannot work.
+    assert.match(
+      figmaPaths.figmaConnectErrorMessage(
+        location.searchParams.get("figma_error"),
+      ),
+      /not set up on this server yet/,
+    );
+    // The log has to name the variable that is missing, not just the failure,
+    // so whoever reads it knows which one to set.
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /FIGMA_CLIENT_ID/);
+    assert.doesNotMatch(logged[0], /FIGMA_CLIENT_SECRET/);
+  } finally {
+    console.error = originalConsoleError;
+    if (fixtureClientId === undefined) delete process.env.FIGMA_CLIENT_ID;
+    else process.env.FIGMA_CLIENT_ID = fixtureClientId;
+  }
+});
+
+test("unknown Figma error codes keep the generic retry message", () => {
+  assert.equal(
+    figmaPaths.figmaConnectErrorMessage("kaboom"),
+    figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
+  );
+  assert.equal(
+    figmaPaths.figmaConnectErrorMessage(null),
+    figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
+  );
+  // The code arrives from the query string, so a prototype key has to come
+  // back as the plain message and not as something React cannot render.
+  assert.equal(
+    figmaPaths.figmaConnectErrorMessage("__proto__"),
+    figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
+  );
+  assert.equal(
+    figmaPaths.figmaConnectErrorMessage("constructor"),
+    figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
+  );
+  assert.notEqual(
+    figmaPaths.figmaConnectErrorMessage("not_configured"),
+    figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
+  );
+});
+
 test("session lookup failures return a controlled service error", async () => {
   sessionError = new Error("session unavailable");
   assert.equal((await startRoute.GET(appRequest("/api/figma/oauth/start"))).status, 503);

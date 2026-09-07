@@ -8,3 +8,40 @@ export const FIGMA_OAUTH_SCOPE = "file_content:read current_user:read";
 export const FIGMA_OAUTH_START_PATH = "/api/figma/oauth/start";
 export const FIGMA_OEMBED_PATH = "/api/figma/oembed";
 export const FIGMA_SETTINGS_PATH = "/settings/accounts";
+
+export const FIGMA_CONNECT_GENERIC_ERROR =
+  "Figma could not be connected. Try again.";
+
+// The OAuth routes can only hand the browser a short code on the redirect back
+// to settings. Each code gets its own sentence because "try again" is wrong
+// advice for half of them: a server with no Figma keys will never succeed.
+// A Map, not an object literal: the code comes from the query string, and an
+// object lookup would answer `?figma_error=__proto__` with Object.prototype,
+// which React refuses to render.
+const FIGMA_CONNECT_ERROR_MESSAGES = new Map<string, string>([
+  [
+    "not_configured",
+    "Figma is not set up on this server yet, so there is nothing to connect to. Trying again will not help.",
+  ],
+  [
+    "access_denied",
+    "You cancelled the Figma approval, so nothing was connected.",
+  ],
+  [
+    "invalid_state",
+    "That Figma sign-in attempt expired. Start again from Connect Figma.",
+  ],
+  [
+    "missing_code",
+    "Figma did not send back a sign-in code. Start again from Connect Figma.",
+  ],
+  [
+    "user_mismatch",
+    "You signed in as a different Hypertask user part way through. Start again from Connect Figma.",
+  ],
+  ["connection_failed", FIGMA_CONNECT_GENERIC_ERROR],
+]);
+
+export const figmaConnectErrorMessage = (code: string | null | undefined) =>
+  (code ? FIGMA_CONNECT_ERROR_MESSAGES.get(code) : undefined) ??
+  FIGMA_CONNECT_GENERIC_ERROR;

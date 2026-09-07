@@ -9,6 +9,7 @@ import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
 import { useFlag } from "@/hooks/useFlag";
 import { authClient } from "@/lib/auth/betterAuthClient";
 import {
+  figmaConnectErrorMessage,
   FIGMA_CONNECTION_PATH,
   FIGMA_DISCONNECT_PATH,
   FIGMA_OAUTH_START_PATH,
@@ -240,6 +241,15 @@ const AccountsSection = () => {
     }
   };
 
+  // A failed connect returns here as ?figma_error=<code>. The message sits
+  // inside the Connected apps card, under the row that was clicked, because the
+  // page is otherwise identical after the bounce and a note below the card
+  // reads as unrelated.
+  const figmaMessage =
+    figmaError ?? (searchParams?.get("figma_error")
+      ? figmaConnectErrorMessage(searchParams.get("figma_error"))
+      : null);
+
   let figmaAction = (
     <a className={settingsActionButtonClass} href={FIGMA_CONNECT_URL}>
       Connect Figma
@@ -355,13 +365,15 @@ const AccountsSection = () => {
       {figmaEnabled && (
         <SettingsCard title="Connected apps">
           <BillingActionRow label="Figma account" action={figmaAction} />
+          {figmaMessage && (
+            <p
+              className="px-2 text-dense font-medium text-red-400"
+              role="alert"
+            >
+              {figmaMessage}
+            </p>
+          )}
         </SettingsCard>
-      )}
-
-      {figmaEnabled && (figmaError || searchParams?.get("figma_error")) && (
-        <p className="text-dense font-medium text-red-400" role="alert">
-          {figmaError || "Figma could not be connected. Try again."}
-        </p>
       )}
 
       <SettingsCard title="Passkeys">
