@@ -97,18 +97,18 @@ const useSections = ({
 
   // ======================== create new task at given position
   const createTaskAt = (position: "top"|"bottom", sectionPayload?:TSectionPayload, defaultEditFocus?:TDefaultEditFocus) => {
-    if (quickEntryEnabled) {
+    const editFocus =
+      defaultEditFocus ??
+      (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
+    // Quick entry only replaces the plain "add a card" path. Asking for a
+    // specific editor focus (the AI writer on Ctrl+J or mobile) still opens
+    // the full modal, which is the only place that focus means anything.
+    if (quickEntryEnabled && !editFocus) {
       setShowAddItem(true);
       setPosition(position);
       return;
     }
-    toggleCreateTaskGlobally(
-      sectionPayload,
-      defaultEditFocus ??
-        (isMbl && aiFirstTaskWriterEnabled
-          ? MOBILE_AI_TASK_WRITER_FOCUS
-          : undefined),
-    )
+    toggleCreateTaskGlobally(sectionPayload, editFocus)
   };
 
   // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
