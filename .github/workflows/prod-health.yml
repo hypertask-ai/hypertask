@@ -416,7 +416,7 @@ jobs:
           echo "::error::Smoke setup failed — classified as unrunnable, not a broken app"
 
       - name: Save Playwright browser cache
-        if: steps.pw-cache.outputs.cache-hit != 'true'
+        if: steps.pw-cache.outputs.cache-hit != 'true' && steps.setup-pw.outcome == 'success'
         continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
