@@ -184,14 +184,31 @@ async function sweep() {
             labelIds: label ? [label.id] : undefined,
           })
         ).task.id;
-      // Only the release cycle this run claimed gets the id. A switch away from Everyone and back
-      // clears removalTaskId, so that new cycle keeps its empty slot and earns its own ticket.
+      // Only the release cycle this run claimed gets the id, and only if that cycle is still what
+      // it was when claimed: an owner can press Keep or change mode while createTaskCore is in
+      // flight, and the claim's removalTaskId marker alone would not catch that.
       const recorded = await prisma.featureFlag.updateMany({
-        where: { key: flag.key, removalTaskId: PENDING_REMOVAL_TASK_ID },
+        where: {
+          key: flag.key,
+          removalTaskId: PENDING_REMOVAL_TASK_ID,
+          mode: "EVERYONE",
+          keep: false,
+          releasedAt: flag.releasedAt,
+        },
         data: { removalTaskId: taskId },
       });
       if (recorded.count === 0) {
         console.warn(`[feature-flags] ${flag.key} was re-released while its removal ticket was filed`);
+        // The ticket was already filed before the invalidation was visible; archive it so Keep
+        // (or a mode change) still means zero open removal tickets, matching the acceptance bar.
+        if (!existing) {
+          await prisma.task
+            .update({ where: { id: taskId }, data: { status: "Archive" } })
+            .catch((error) =>
+              console.error(`[feature-flags] failed to archive stale removal ticket for ${flag.key}`, error),
+            );
+        }
+        continue;
       }
       filed.push(flag.key);
     } catch (error) {

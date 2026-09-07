@@ -4,6 +4,7 @@ import {
   FEATURE_FLAG_MODES,
   FEATURE_FLAG_OWNER_USER_ID,
   FeatureFlagInputError,
+  FLAG_REMOVAL_COUNTDOWN_FLAG,
   isFeatureEnabled,
   isFeatureFlagOwner,
   listFeatureFlagModes,
@@ -76,10 +77,11 @@ export async function PATCH(request: NextRequest) {
     if (setsKeep && typeof body.keep !== "boolean") {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    // No flag gate on the Keep write. isFeatureFlagOwner above already limits this route to the
-    // owner, and the flag's default mode answers true for the owner id, so a gate here could never
-    // return 404 and would only read as if the endpoint were dark before launch. Gating on
-    // EVERYONE instead would lock the owner out of the control they are evaluating.
+    if (setsKeep && !(await isFeatureEnabled(FLAG_REMOVAL_COUNTDOWN_FLAG, FEATURE_FLAG_OWNER_USER_ID))) {
+      // Defaults to enabled for the owner, so this only trips when the owner explicitly turns the
+      // countdown flag OFF. That should also retire the Keep control, not just hide it client-side.
+      return noStore({ error: "Not found" }, 404);
+    }
     const flag = setsMode
       ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode)
       : await setFeatureFlagKeep(body.key, body.keep as boolean);
