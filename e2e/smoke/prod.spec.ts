@@ -1,8 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
+const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
 const LOGIN_PATH = '/login'
 
 const RUNNER_ERROR_MARKERS = [
@@ -10,22 +11,44 @@ const RUNNER_ERROR_MARKERS = [
   /\b(?:ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN)\b/i,
   /browser (?:has been closed|disconnected)/i,
   /target page, context or browser has been closed/i,
+  /Vercel bot-challenged/i,
+  /smoke session (?:got HTTP|redirected)/i,
 ]
 
 function markUnrunnable(reason: string) {
   writeFileSync(PREFLIGHT_FILE, JSON.stringify({ ok: false, reason }))
 }
 
-function isRunnerError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err)
-  return RUNNER_ERROR_MARKERS.some((marker) => marker.test(message))
+function preflightAllowsRollback(): boolean {
+  try {
+    return JSON.parse(readFileSync(PREFLIGHT_FILE, 'utf8')).ok === true
+  } catch {
+    return false
+  }
 }
 
-test.afterEach(async ({ page }, testInfo) => {
+function abortUnrunnable(reason: string): never {
+  markUnrunnable(reason)
+  const error = new Error(reason)
+  error.name = 'UnrunnableSmokeError'
+  throw error
+}
+
+function isUnrunnableError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'UnrunnableSmokeError')) ||
+    RUNNER_ERROR_MARKERS.some((marker) => marker.test(message))
+}
+
+test.afterEach(({ page }, testInfo) => {
   if (page.url().includes(LOGIN_PATH)) {
     markUnrunnable(`smoke session redirected to ${LOGIN_PATH} during the view checks`)
-  } else if (testInfo.error && isRunnerError(testInfo.error)) {
+  } else if (testInfo.status === 'timedOut' || (testInfo.error && isUnrunnableError(testInfo.error))) {
     markUnrunnable(`browser runner failed during ${testInfo.title}`)
+  } else if (testInfo.status === 'failed' && testInfo.retry === testInfo.project.retries && preflightAllowsRollback()) {
+    // Only a final failed retry writes this marker. A first-attempt flake that
+    // passes its retry cannot authorize rollback.
+    writeFileSync(APPLICATION_FAILURE_FILE, JSON.stringify({ view: testInfo.title }))
   }
 })
 
@@ -103,20 +126,21 @@ for (const view of VIEWS) {
     try {
       response = await page.goto(view.path!, { waitUntil: 'load' })
     } catch (err) {
-      if (isRunnerError(err)) {
+      if (isUnrunnableError(err)) {
         markUnrunnable(`navigation infrastructure failed on ${view.path}`)
       }
       throw err
     }
 
-    test.skip(isBotChallenge(response), `Vercel bot-challenged the runner IP on ${view.path}`)
+    if (isBotChallenge(response)) {
+      abortUnrunnable(`Vercel bot-challenged the runner IP on ${view.path}`)
+    }
 
     if (response && (response.status() === 401 || response.status() === 403)) {
-      markUnrunnable(`smoke session got HTTP ${response.status()} on ${view.path}`)
+      abortUnrunnable(`smoke session got HTTP ${response.status()} on ${view.path}`)
     }
     if (page.url().includes(LOGIN_PATH)) {
-      markUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${view.path}`)
-      throw new Error(`smoke session redirected to ${LOGIN_PATH} on ${view.path}`)
+      abortUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${view.path}`)
     }
 
     expect(response, `no response for ${view.path}`).toBeTruthy()

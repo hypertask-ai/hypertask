@@ -364,7 +364,7 @@ jobs:
   # exploratory, not a deploy signal.
   smoke:
     needs: health
-    if: always() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch')
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -478,10 +478,17 @@ jobs:
           }
 
           PREFLIGHT=e2e/smoke/.state/preflight.json
+          APPLICATION_FAILURE=e2e/smoke/.state/application-failure.json
           if [ ! -f "$PREFLIGHT" ] || [ "$(jq -r '.ok' "$PREFLIGHT" 2>/dev/null)" != "true" ]; then
             REASON=$(jq -r '.reason // "no preflight result written"' "$PREFLIGHT" 2>/dev/null || echo "playwright/install failure before the login check ran")
             notify "⚠️ hypertasks: smoke QA for $SHA could not run ($REASON). NOT rolling back — this is an unrunnable check, not a proven break. https://app.hypertask.ai"
             echo "::error::Smoke QA unrunnable: $REASON"
+            exit 1
+          fi
+
+          if [ ! -f "$APPLICATION_FAILURE" ]; then
+            notify "⚠️ hypertasks: smoke QA for $SHA failed without a confirmed application-failure verdict. NOT rolling back — check the runner logs. https://app.hypertask.ai"
+            echo "::error::Smoke QA failed without a confirmed application-failure verdict"
             exit 1
           fi
 

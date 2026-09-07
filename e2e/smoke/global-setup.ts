@@ -1,5 +1,5 @@
 import { chromium, type FullConfig } from '@playwright/test'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
 // Confirms the smoke session is actually logged in BEFORE any view test runs.
@@ -7,6 +7,7 @@ import path from 'node:path'
 // unrunnable check, and prod-health.yml reads this file to tell the two
 // apart so it alerts instead of rolling back a healthy deploy.
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
+const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
 const INBOX_PATH = '/inbox'
 const LOGIN_PATH = '/login'
 
@@ -25,6 +26,7 @@ export default async function globalSetup(config: FullConfig) {
   // browser binary, unreadable storageState file) still leaves an unrunnable
   // verdict on disk instead of nothing at all.
   writePreflight({ ok: false, reason: 'setup did not complete' })
+  rmSync(APPLICATION_FAILURE_FILE, { force: true })
 
   const project = config.projects[0]
   if (!project) fail('smoke config has no Playwright project')
@@ -62,8 +64,13 @@ export default async function globalSetup(config: FullConfig) {
       fail(`login check was redirected to ${LOGIN_PATH} — the smoke session cookie is expired or invalid`)
     }
 
-    writePreflight({ ok: true })
   } finally {
-    await browser.close()
+    try {
+      await browser.close()
+    } catch (err) {
+      fail(`login check browser could not close cleanly: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
+
+  writePreflight({ ok: true })
 }
