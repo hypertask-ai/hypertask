@@ -2221,6 +2221,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     let frame = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let observer: MutationObserver | undefined;
+    let poll: ReturnType<typeof setInterval> | undefined;
     // The 30s timer below still publishes the real readiness event (a task
     // that never reaches the DOM markers - share view, no description editor,
     // permission-limited, an error state - is a genuine measurement failure
@@ -2234,6 +2235,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     const cleanup = () => {
       if (frame) cancelAnimationFrame(frame);
       if (timer) clearTimeout(timer);
+      if (poll) clearInterval(poll);
       clearTimeout(nonEssentialFallback);
       observer?.disconnect();
     };
@@ -2292,6 +2294,12 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     observer = new MutationObserver(scheduleCheck);
     observer.observe(document.documentElement, { childList: true, subtree: true });
     timer = setTimeout(() => publish(true), TASK_DETAIL_READINESS_MAX_MS);
+    // HTPR-6047: the rAF+MutationObserver path alone can silently lose a
+    // scheduled check across a tab freeze/resume (backgrounding, sleep/wake,
+    // OS-level suspension) - reproduced via CDP Page.setWebLifecycleState.
+    // A plain interval keeps firing across that gap, so it catches
+    // usability even when the primary path drops its pending check.
+    poll = setInterval(checkReady, 250);
     scheduleCheck();
     return cleanup;
   }, [currentUser.id, embedded, _parsedTask.id, _parsedTask.projectId, setNonEssentialReady]);
