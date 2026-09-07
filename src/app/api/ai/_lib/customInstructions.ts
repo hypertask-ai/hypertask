@@ -1,4 +1,3 @@
-import "server-only";
 import { generateText, type UserContent } from "ai";
 import { parse } from "node-html-parser";
 
