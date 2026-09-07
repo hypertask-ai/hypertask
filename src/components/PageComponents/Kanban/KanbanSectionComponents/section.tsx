@@ -15,6 +15,7 @@ import { Draggable, Droppable, type DraggableProvided } from "@hello-pangea/dnd"
 
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import NewTaskButton from "@/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton";
+import NewTask from "@/components/Common/newTask";
 import useSections from "@/hooks/Homepage/useSections";
 import { useKanbanModalStatesContext } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext";
 // import ManageColumns from "@/components/Modals/commands/manageColumn";
@@ -162,7 +163,17 @@ const Section = ({
     if (active) setActiveSectionId(section.sectionId ?? null);
   }, [active, section.sectionId, setActiveSectionId]);
 
-  const { sectionRef, createTaskAt, tasksPlayList } = useSections({
+  const {
+    sectionRef,
+    createTaskAt,
+    tasksPlayList,
+    showAddItem,
+    position: newTaskPosition,
+    invokeCreateItem,
+    onCancelCreate,
+    topInputRef,
+    bottomInputRef,
+  } = useSections({
     active,
     items: section.items ?? [],
     index,
@@ -449,11 +460,13 @@ const Section = ({
                 title={section.section_title}
                 id={section.sectionId!}
               />
-              <NewTaskButton
-                buttonPosition="top"
-                createTaskAt={createTaskAt}
-                sectionPayload={topSectionPayload}
-              />
+              {!showAddItem && (
+                <NewTaskButton
+                  buttonPosition="top"
+                  createTaskAt={createTaskAt}
+                  sectionPayload={topSectionPayload}
+                />
+              )}
             </div>
             {/* tasks */}
             <div
@@ -462,6 +475,14 @@ const Section = ({
                 ${isMbl ? " scrollbar-thin  overflow-y-auto max-h-[98%]" : ""}
                 "w-full px-2 space-y-4 mt-0"`}
             >
+              {showAddItem && newTaskPosition === "top" && (
+                <NewTask
+                  inputRef={topInputRef}
+                  invokeCreateItem={invokeCreateItem}
+                  onCancelCreate={onCancelCreate}
+                  position="top"
+                />
+              )}
               {(section.items ?? []).map((task: ITask, i: number) => {
                 const shouldRenderTask =
                   !progressiveRendering ||
@@ -554,13 +575,23 @@ const Section = ({
                   />
                 );
               })}
-              <div className="h-[32px]">
-                <NewTaskButton
-                  createTaskAt={createTaskAt}
-                  buttonPosition="bottom"
-                  snapshot={snapshot}
-                  sectionPayload={bottomSectionPayload}
+              {showAddItem && newTaskPosition === "bottom" && (
+                <NewTask
+                  inputRef={bottomInputRef}
+                  invokeCreateItem={invokeCreateItem}
+                  onCancelCreate={onCancelCreate}
+                  position="bottom"
                 />
+              )}
+              <div className="h-[32px]">
+                {!showAddItem && (
+                  <NewTaskButton
+                    createTaskAt={createTaskAt}
+                    buttonPosition="bottom"
+                    snapshot={snapshot}
+                    sectionPayload={bottomSectionPayload}
+                  />
+                )}
               </div>
             </div>
 

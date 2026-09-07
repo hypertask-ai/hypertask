@@ -1,33 +1,38 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { RefObject, useEffect, useRef, useState } from "react";
+import React, { RefObject, useEffect, useRef, useState } from "react";
 
-import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import toast from "react-hot-toast";
 
 type Props = {
     onCancelCreate: () => void;
-    invokeCreateItem: (title: string, createAnother:boolean) => void;
+    invokeCreateItem: (title: string, createAnother:boolean) => Promise<boolean>;
     inputRef: RefObject<HTMLInputElement | null>;
     position:"top"|"bottom"
 }
 
+// Quick entry: Enter always saves and keeps the box open for the next card
+// (HTPR-6175). The title only clears once the create actually succeeds, so a
+// failed save never loses what was typed.
 const NewTask = ({
     inputRef,
     invokeCreateItem,
     onCancelCreate,
     position
 }: Props) => {
-  const isApple = useDeviceContext()
-
     const [title, setTitle] = useState('')
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const createItem = (createAnother:boolean) => {
-        const res =schemaCheck() 
-        if (res){
-          invokeCreateItem(res, createAnother);
-          setTitle('')
+    const createItem = async () => {
+        const trimmedTitle = title.trim();
+        if (!trimmedTitle) {
+          toast("Cannot create tasks with empty title")
+          return
         }
-        else toast("Cannot create tasks with empty title")
+        setIsSubmitting(true)
+        const created = await invokeCreateItem(trimmedTitle, true);
+        setIsSubmitting(false)
+        if (created) setTitle('')
+        else toast("Could not create the task, try again")
     }
 
     const cancelCreate = () => {
@@ -35,39 +40,28 @@ const NewTask = ({
         onCancelCreate()
     }
 
-    const schemaCheck = ()=>{
-      const trimmedTitle = title.trim();
-  
-      // Check if the trimmed title is not empty
-      
-      if (trimmedTitle.length > 0) {
-        return trimmedTitle;
-      } else {
-        return false;
-      }
-    }
+  const boxRef = useRef<HTMLDivElement>(null);
   useEffect(()=>{
-    document.getElementById("newTask")?.scrollIntoView({behavior:"smooth",block:"center"})
-    // position==="top"&&document.getElementById("newTask")?.scrollIntoView({behavior:"smooth" as ScrollBehavior,block:"start"})
+    boxRef.current?.scrollIntoView({behavior:"smooth",block:"center"})
   },[])
   return (
-        <div id="newTask" className="rounded-md bg-cardBackground px-3 py-[10px]"  style={{ cursor: 'pointer', width: '100%'}}>
+        <div ref={boxRef} className="rounded-md bg-cardBackground px-3 py-[10px]"  style={{ cursor: 'pointer', width: '100%'}}>
           <input
             ref={inputRef}
             value={title}
+            disabled={isSubmitting}
+            autoFocus
             onBlur={cancelCreate}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {
-              var cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;
-              if (e.key==="Enter" && cmdControl){
-                createItem(true)
+              if (e.nativeEvent.isComposing || isSubmitting) return;
+
+              // ======= pressing enter saves and keeps the box open
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createItem();
               }
 
-              // ======= pressing enter
-              else if (e.key === "Enter" && title.length > 0) {
-                createItem(false);
-              }
-              
               // esc to cancel add new item
               if (e.key === "Escape") {
                 e.preventDefault();

@@ -6,13 +6,14 @@ const test = require("node:test");
 const jitiModule = require("jiti");
 
 const root = path.resolve(__dirname, "..");
+const jitiOptions = {
+  interopDefault: true,
+  jsx: true,
+  alias: { "@": path.join(root, "src") },
+};
 const jiti = jitiModule.createJiti
-  ? jitiModule.createJiti(__filename, {
-      interopDefault: true,
-      moduleCache: false,
-      jsx: true,
-    })
-  : jitiModule(__filename, { interopDefault: true, cache: false, jsx: true });
+  ? jitiModule.createJiti(__filename, { ...jitiOptions, moduleCache: false })
+  : jitiModule(__filename, { ...jitiOptions, cache: false });
 const {
   createTaskFromTableSelection,
   getTableCreateTaskButtonLabelsForSelection,
@@ -213,6 +214,138 @@ test("the rendered table create control follows live selection and project scope
       reactRoot.render(renderControl(null, 0));
     });
     assert.equal(container.innerHTML, "");
+  } finally {
+    if (reactRoot && act) await act(async () => reactRoot.unmount());
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+    if (previousNavigator === undefined) delete global.navigator;
+    else global.navigator = previousNavigator;
+    dom.window.close();
+    if (previousActEnvironment === undefined) {
+      delete global.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  }
+});
+
+// HTPR-6175: with quick entry on, the New task button opens an inline box that
+// saves on Enter and stays open for the next card.
+test("table quick entry saves on Enter, keeps the box open, and keeps the target column", async () => {
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const previousNavigator = global.navigator;
+  const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
+  const dom = new JSDOM("<!doctype html><div id='root'></div>");
+  const rows = [{ sid: 20 }, { sid: 10 }];
+  const sections = [
+    { sectionId: 20, section_title: "Doing" },
+    { sectionId: 10, section_title: "Inbox" },
+  ];
+  const modalCalls = [];
+  const quickCalls = [];
+  let quickResult = true;
+  const quickCreateTask = async (title, sectionId, sectionTitle) => {
+    quickCalls.push({ title, sectionId, sectionTitle });
+    return quickResult;
+  };
+  const renderControl = (selectedIndex) =>
+    React.createElement(
+      TableCreateTaskControl,
+      getTableCreateTaskControlProps({
+        currentProject: { id: 15 },
+        rows,
+        selectedIndex,
+        sections,
+        toggleCreateTaskGlobally: (payload) => modalCalls.push(payload),
+        quickEntryEnabled: true,
+        quickCreateTask,
+      }),
+    );
+  const pressEnter = async (act, input) => {
+    await act(async () => {
+      input.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Enter",
+          bubbles: true,
+        }),
+      );
+    });
+  };
+  const type = async (act, input, value) => {
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(
+        dom.window.HTMLInputElement.prototype,
+        "value",
+      ).set;
+      setter.call(input, value);
+      input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    });
+  };
+  let act;
+  let reactRoot;
+
+  try {
+    global.window = dom.window;
+    global.document = dom.window.document;
+    global.navigator = dom.window.navigator;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    // jsdom has no layout, so the box's scroll-into-view call needs a stub.
+    dom.window.Element.prototype.scrollIntoView = () => {};
+    ({ act } = React);
+    const { createRoot } = require("react-dom/client");
+    const container = document.getElementById("root");
+    reactRoot = createRoot(container);
+
+    await act(async () => reactRoot.render(renderControl(0)));
+    await act(async () => container.querySelector("button").click());
+
+    // The inline box replaces the button, and no modal was opened.
+    const input = container.querySelector("input");
+    assert.ok(input);
+    assert.equal(container.querySelector("button"), null);
+    assert.deepEqual(modalCalls, []);
+
+    // Enter saves against the column that was selected when the box opened.
+    await type(act, input, "First card");
+    await pressEnter(act, input);
+    assert.deepEqual(quickCalls, [
+      { title: "First card", sectionId: 20, sectionTitle: "Doing" },
+    ]);
+    // Box stays open and clears, ready for the next card.
+    assert.ok(container.querySelector("input"));
+    assert.equal(container.querySelector("input").value, "");
+
+    // Moving the selection to another column must not redirect the open box.
+    await act(async () => reactRoot.render(renderControl(1)));
+    await type(act, container.querySelector("input"), "Second card");
+    await pressEnter(act, container.querySelector("input"));
+    assert.deepEqual(quickCalls[1], {
+      title: "Second card",
+      sectionId: 20,
+      sectionTitle: "Doing",
+    });
+
+    // A failed save keeps the typed title instead of losing it.
+    quickResult = false;
+    await type(act, container.querySelector("input"), "Kept on failure");
+    await pressEnter(act, container.querySelector("input"));
+    assert.equal(quickCalls.length, 3);
+    assert.equal(container.querySelector("input").value, "Kept on failure");
+
+    // Escape closes the box and brings the button back.
+    await act(async () => {
+      container.querySelector("input").dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+        }),
+      );
+    });
+    assert.equal(container.querySelector("input"), null);
+    assert.ok(container.querySelector("button"));
   } finally {
     if (reactRoot && act) await act(async () => reactRoot.unmount());
     if (previousWindow === undefined) delete global.window;

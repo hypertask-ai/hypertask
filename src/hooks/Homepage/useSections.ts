@@ -80,6 +80,7 @@ const useSections = ({
   const isApple = useDeviceContext()
   const isMbl = useContext(MobileViewContext);
   const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
+  const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -96,34 +97,29 @@ const useSections = ({
 
   // ======================== create new task at given position
   const createTaskAt = (position: "top"|"bottom", sectionPayload?:TSectionPayload, defaultEditFocus?:TDefaultEditFocus) => {
-    // if (position === "top") {
-      // setShowAddItem(true);
-      // setPosition("top");
-      // topInputRef.current?.focus();
-      toggleCreateTaskGlobally(
-        sectionPayload,
-        defaultEditFocus ??
-          (isMbl && aiFirstTaskWriterEnabled
-            ? MOBILE_AI_TASK_WRITER_FOCUS
-            : undefined),
-      )
-    // }
-    //  else {
-    //   setShowAddItem(true);
-    //   setPosition("bottom");
-    //   bottomInputRef.current?.focus();
-    // }
+    if (quickEntryEnabled) {
+      setShowAddItem(true);
+      setPosition(position);
+      return;
+    }
+    toggleCreateTaskGlobally(
+      sectionPayload,
+      defaultEditFocus ??
+        (isMbl && aiFirstTaskWriterEnabled
+          ? MOBILE_AI_TASK_WRITER_FOCUS
+          : undefined),
+    )
   };
 
-  // ======================== user presses [Enter] / [CTRL] to CREATE a task
-  const invokeCreateItem = async (taskTitle: any, createAnother: any) => {
+  // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
+  const invokeCreateItem = async (taskTitle: any, createAnother: any): Promise<boolean> => {
     const itemToCreate = {
       title: taskTitle,
       description: "",
       id: -1,
     };
-    if (!position) return;
-    createItem({
+    if (!position) return false;
+    const created = await createItem({
       sectionId: sectionId,
       item: itemToCreate,
       position,
@@ -132,12 +128,14 @@ const useSections = ({
       section: title,
     });
 
-    if (createAnother) createTaskAt(position);
-    else {
+    if (!created) return false;
+
+    if (!createAnother) {
       setPosition(null);
       setShowAddItem(false);
       sectionRef.current?.focus();
     }
+    return true;
   };
 
   const latestRef = useRef({

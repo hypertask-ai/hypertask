@@ -156,6 +156,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
   },
   {
+    key: "htpr-6175-quick-entry-cards",
+    shippedOn: "2026-09-07",
+    description: "Opens a small inline box for the column plus and the table's New task button so several cards can be entered one after another without the full editor.",
+  },
+  {
     key: AGENT_CHAT_BRIEF_FLAG,
     shippedOn: "2026-09-05",
     description:
