@@ -5,8 +5,9 @@ import MentionList from "./MentionList";
 import { stableClientRect } from "./suggestionAnchor";
 import axios from "axios";
 import { mentionCommand } from "./mentionCommand";
+import { resolveMentionProjectId } from "@/utils/helperFunctions/mentionSearch";
 
-export default {
+export const createMentionData = (mentionProjectId) => ({
   command: mentionCommand,
   items: async ({ query }) => {
     const getAllTasks = async (data) => {
@@ -14,7 +15,10 @@ export default {
         if(data.startsWith(" ")) {
           return [{ type: "hide", name: "hiding mention list" }];
         }
-        let projectId = localStorage.getItem("MENTION_PROJECT_ID");
+        const projectId = resolveMentionProjectId(
+          mentionProjectId,
+          localStorage.getItem("MENTION_PROJECT_ID"),
+        );
         let url = `/api/tasks/searchByParam?param=${data}&projectId=${projectId}`;
         const result = await axios.get(url);
         if (result && result.data) {
@@ -122,4 +126,6 @@ export default {
       },
     };
   },
-};
+});
+
+export default createMentionData();

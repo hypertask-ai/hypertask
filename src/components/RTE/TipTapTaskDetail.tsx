@@ -217,7 +217,12 @@ const Tiptap = ({
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
   
   // State
-  const { editor } = useTiptap({ mode, defaultContent, createNewComment });
+  const { editor } = useTiptap({
+    mode,
+    defaultContent,
+    createNewComment,
+    mentionProjectId: currentTask?.projectId,
+  });
   const [editorContent, setEditorContent] = useState<string>("");
   const [scrolledOnMobile, setScrolledOnMobile] = useState<boolean>(false);
   const [toggleHighlight, setToggleHighlight] = useState<boolean>(false);

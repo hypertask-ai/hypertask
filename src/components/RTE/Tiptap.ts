@@ -28,7 +28,7 @@ import Snippets from "./Extensions/Snippets/Snippets";
 import Link from "@tiptap/extension-link";
 import Emoji, { emojis } from "@tiptap/extension-emoji";
 import suggestion from "./suggestion";
-import MentionData from "./MentionData";
+import { createMentionData } from "./MentionData";
 import { Figma } from "./Extensions/FigmaTiptap";
 import { Loom } from "./Extensions/LoomTiptap";
 import { ResizableMedia } from "./Extensions/resizableMedia";
@@ -75,6 +75,7 @@ interface IProps {
   mode: any;
   createNewComment?: boolean;
   trackFocus?: boolean;
+  mentionProjectId?: number | null;
   // Overrides the mode-derived random tip, for callers (e.g. the feedback
   // form) that need a fixed, specific placeholder instead.
   placeholder?: string;
@@ -84,6 +85,7 @@ const useTiptap = ({
   defaultContent = "",
   createNewComment = false,
   trackFocus = true,
+  mentionProjectId,
   placeholder,
 }: IProps) => {
   const isApple = useDeviceContext();
@@ -222,7 +224,7 @@ const useTiptap = ({
           HTMLAttributes: {
             class: "mention",
           },
-          suggestion: MentionData,
+          suggestion: createMentionData(mentionProjectId),
         })
       ),
       ResizableMedia.configure({
@@ -255,8 +257,8 @@ const useTiptap = ({
     // Build the extensions exactly once for this editor instance. They must be
     // referentially stable: Tiptap v3's useEditor reconfigures the whole plugin
     // set (destroying open suggestion popups) whenever any extension instance
-    // changes between renders. mode/isApple/createNewComment are fixed per
-    // instance, so capturing them on first render is correct.
+    // changes between renders. mode/isApple/createNewComment/mentionProjectId are
+    // fixed per instance, so capturing them on first render is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
