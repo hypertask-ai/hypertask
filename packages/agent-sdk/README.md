@@ -10,9 +10,15 @@ Build a TypeScript Hypertask agent around the existing run, activity, webhook, a
 4. Mount the webhook before JSON parsing so the SDK receives the exact request bytes.
 5. Mention the agent on a test ticket and watch its thought and response appear.
 
+The package is not on npm yet, so build the tarball from this repository and install that:
+
 ```bash
-npm install @hypertask/agent-sdk express
+git clone https://github.com/hypertask-ai/hypertask.git
+cd hypertask/packages/agent-sdk && npm install && npm pack && cd -
+npm install ./hypertask/packages/agent-sdk/hypertask-agent-sdk-0.1.0.tgz express
 ```
+
+Once it is published, `npm install @hypertask/agent-sdk express` replaces the block above; nothing else in this README changes.
 
 ```ts
 import express from "express";
