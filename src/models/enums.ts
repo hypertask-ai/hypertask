@@ -212,6 +212,7 @@ export enum CommandMode {
   AgentChatAddAgent,
   AgentChatNextTeam,
   AgentChatPreviousTeam,
+  ArchiveInboxCluster,
 }
 
 export enum ELogType {

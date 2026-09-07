@@ -164,6 +164,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6155-chat-agent-brief", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6160-inbox-archive-cluster", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6176-flag-ticket-title", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-6177-auto-task-descriptions",
