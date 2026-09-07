@@ -113,6 +113,7 @@ test("OAuth start with no Figma keys names the reason on screen and in the log",
   const originalConsoleError = console.error;
   const logged = [];
   console.error = (...args) => logged.push(args.join(" "));
+  const fixtureClientId = process.env.FIGMA_CLIENT_ID;
   delete process.env.FIGMA_CLIENT_ID;
 
   try {
@@ -137,7 +138,7 @@ test("OAuth start with no Figma keys names the reason on screen and in the log",
     assert.doesNotMatch(logged[0], /FIGMA_CLIENT_SECRET/);
   } finally {
     console.error = originalConsoleError;
-    process.env.FIGMA_CLIENT_ID = "figma-client";
+    process.env.FIGMA_CLIENT_ID = fixtureClientId;
   }
 });
 
