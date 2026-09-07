@@ -14,6 +14,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { useGifPlayback } from "@/hooks/General/useGifPlayback";
 import { normalizeRichHtmlForRender } from "@/utils/helperFunctions/normalizeRichHtmlForRender";
 import { normalizeImageSourcesInHtml } from "@/utils/helperFunctions/normalizeImageSource";
+import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 import {
   isInternalTaskDetailHref,
   preserveInboxFlowOnTaskHref,
@@ -43,10 +44,11 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
         }
         else return desktopDescriptionPlaceHolder
     },[_mbl])
+    // HTPR-6205: turn bare URLs (e.g. CLI-posted descriptions) into clickable links.
     const normalizedDescription = useMemo(
-      () => normalizeImageSourcesInHtml(
+      () => linkifyHtml(normalizeImageSourcesInHtml(
         normalizeRichHtmlForRender(descriptionText ?? ""),
-      ),
+      )),
       [descriptionText],
     );
     const textToShow = (normalizedDescription.length===0 || emptyDescriptions.includes(normalizedDescription))?currentDescriptionPlaceHolder:normalizedDescription
