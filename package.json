@@ -131,6 +131,7 @@
     "react-modal-sheet": "^4.4.0",
     "reactstrap": "^9.2.0",
     "sass": "^1.76.0",
+    "server-only": "^0.0.1",
     "stripe": "^22.3.0",
     "stripe-cli": "^0.1.0",
     "sugar": "^2.0.6",
