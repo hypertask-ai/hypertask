@@ -14,8 +14,10 @@ const unsavedViewId = (project?: IProject | null) =>
   project?.project_view?.user_project_views?.[0]?.unsavedView?.id;
 
 /**
- * The views a person sees in the board's view strip: the board default view and
- * every named saved view, never the live "unsaved" working copy. Views the
+ * The views a person sees in the board's view strip, which is exactly
+ * `allViews` minus the live "unsaved" working copy: the board default view is
+ * a titled public View row, so it arrives inside `allViews` too (see
+ * useOrderedViews, which pins it first out of that same array). Views the
  * column has no entry in count as hidden, which is how the board reads them.
  */
 export const countViewsShowingColumn = (
@@ -67,6 +69,8 @@ export const applyColumnVisibilityToProject = (
     ...project,
     project_view: {
       ...projectView,
+      // The default view is also an element of allViews, but Prisma hands the
+      // two relations back as separate objects, so both copies need patching.
       default_view: patchView(projectView.default_view, section, visible),
       allViews: projectView.allViews?.map((view) =>
         patchView(view, section, visible)

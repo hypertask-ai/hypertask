@@ -45,8 +45,11 @@ test("showing a column a view never had appends it", () => {
       [991, true],
     ],
   );
-  // The caller must not be handed back its own array to mutate.
-  assert.equal(columns.length, 2);
+  // Neither the caller's array nor the objects inside it are touched.
+  assert.deepEqual(columns, [
+    { id: 1, section_title: "Todo", visibility: true },
+    { id: 2, section_title: "Done", visibility: true },
+  ]);
 });
 
 test("showing a column the view hid flips it back on and adds nothing", () => {
@@ -57,6 +60,8 @@ test("showing a column the view hid flips it back on and adds nothing", () => {
   const updated = applyColumnVisibility(columns, qa, true);
   assert.equal(updated.length, 2);
   assert.equal(updated[1].visibility, true);
+  // The stored entry the caller passed in is left as it was.
+  assert.equal(columns[1].visibility, false);
 });
 
 test("hiding a column keeps its entry so rename and reorder still find it", () => {
@@ -71,6 +76,18 @@ test("hiding a column keeps its entry so rename and reorder still find it", () =
   // Sibling columns are untouched: a view that deliberately hides something
   // else keeps hiding it.
   assert.equal(updated[0].visibility, true);
+});
+
+test("a legacy entry keyed as sectionId is flipped, never duplicated", () => {
+  // Older stored rows key the column as sectionId. Appending a second entry for
+  // the same column would write a duplicate into every view's JSON document.
+  const columns = [{ sectionId: 991, section_title: "QA", visibility: false }];
+  const shown = applyColumnVisibility(columns, qa, true);
+  assert.equal(shown.length, 1);
+  assert.equal(isColumnVisibleInView(shown, 991), true);
+  const hidden = applyColumnVisibility(shown, qa, false);
+  assert.equal(hidden.length, 1);
+  assert.equal(isColumnVisibleInView(hidden, 991), false);
 });
 
 test("hiding a column a view never had changes nothing", () => {
@@ -173,8 +190,8 @@ const handler = (overrides = {}) => {
       calls.lookups.push([userId, sectionId]);
       return { id: sectionId, projectId: 15, section_title: "QA", ranking: "A1650" };
     },
-    setVisibility: async (section, visible) => {
-      calls.writes.push([section.id, visible]);
+    setVisibility: async (section, visible, actingUserId) => {
+      calls.writes.push([section.id, visible, actingUserId]);
     },
     afterChange: (projectId, userId) => calls.broadcasts.push([projectId, userId]),
     ...overrides,
@@ -230,28 +247,53 @@ test("an allowed caller switches the column and the board is told", async () => 
     visible: false,
   });
   assert.deepEqual(calls.lookups, [[6, 991]]);
-  assert.deepEqual(calls.writes, [[991, false]]);
+  // The acting user is threaded through: the write leaves other people's
+  // unsaved working copies alone but must reach the caller's own.
+  assert.deepEqual(calls.writes, [[991, false, 6]]);
   assert.deepEqual(calls.broadcasts, [[15, 6]]);
 });
 
-test("every view of the board is switched in one transaction", () => {
+test("every board_columns_view write is locked and read inside its transaction", () => {
   const helpers = read("src/utils/controllers/section/viewHelpers.ts");
-  const start = helpers.indexOf("export async function setSectionVisibilityInAllViews");
-  assert.notEqual(start, -1, "the helper must still be exported under this name");
-  // Bounded to this helper: a match belonging to a neighbouring function would
-  // make these guards vacuous.
-  const ends = ["\nexport ", "\nfunction ", "\nconst ", "\nasync function "]
-    .map((needle) => helpers.indexOf(needle, start + 1))
-    .filter((at) => at !== -1);
-  const helper = helpers.slice(start, ends.length ? Math.min(...ends) : undefined);
-  assert.match(helper, /prisma\.\$transaction\(async \(tx\)/);
-  // Read and write inside the same locked transaction. board_columns_view is a
-  // whole JSON document, so a snapshot read before the transaction would
-  // discard any concurrent rename or reorder on every view of the board.
-  assert.match(helper, /FOR UPDATE OF v/);
-  assert.match(helper, /await tx\.view\.findMany/);
-  assert.doesNotMatch(helper, /await prisma\.view\./);
-  // The stored array is written through unsorted: sorting it would compare
-  // legacy entries that carry no ranking and scramble every saved view.
-  assert.doesNotMatch(helper, /sortByStringParam/);
+  const slice = (name) => {
+    const start = helpers.indexOf(name);
+    assert.notEqual(start, -1, `${name} must still exist under this name`);
+    const ends = ["\nexport ", "\nfunction ", "\nasync function ", "\nconst "]
+      .map((needle) => helpers.indexOf(needle, start + 1))
+      .filter((at) => at !== -1);
+    const text = helpers.slice(start, ends.length ? Math.min(...ends) : undefined);
+    // A truncated slice would make every doesNotMatch below pass on a stub, so
+    // the slice must reach the function's own closing brace.
+    assert.ok(
+      text.includes("\n}") && text.length > 100,
+      `${name} slice looks truncated: ${text.length} chars`,
+    );
+    return text;
+  };
+
+  // One writer, so a rename and a visibility switch on the same board cannot
+  // each read a stale copy of the same JSON document and overwrite each other.
+  const writer = slice("async function updateBoardViewColumns");
+  assert.match(writer, /prisma\.\$transaction\(async \(tx\)/);
+  assert.match(writer, /FOR UPDATE OF v/);
+  assert.match(writer, /await tx\.view\.findMany/);
+  assert.match(writer, /await tx\.view\.update/);
+
+  for (const name of [
+    "export async function appendSectionToAllViews",
+    "export async function updateSectionInAllViews",
+    "export async function removeSectionFromAllViews",
+    "export async function setSectionVisibilityInAllViews",
+  ]) {
+    const helper = slice(name);
+    assert.match(helper, /updateBoardViewColumns\(/, `${name} must use the locked writer`);
+    assert.doesNotMatch(helper, /prisma\.view\./, `${name} must not read or write views directly`);
+  }
+
+  // Other people's in-flight working copies are private; only the caller's own
+  // is swept along so the action is visible without switching views.
+  const visibility = slice("export async function setSectionVisibilityInAllViews");
+  assert.match(visibility, /unsaved_User_Project_View: \{ none: \{\} \}/);
+  assert.match(visibility, /unsaved_User_Project_View: \{ some: \{ userId: actingUserId \} \}/);
+  assert.doesNotMatch(visibility, /sortByStringParam/);
 });

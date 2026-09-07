@@ -24,7 +24,8 @@ export type ColumnViewVisibilityDependencies = {
   ) => Promise<ColumnViewVisibilitySection | null>;
   setVisibility: (
     section: ColumnViewVisibilitySection,
-    visible: boolean
+    visible: boolean,
+    actingUserId: number
   ) => Promise<void>;
   afterChange: (projectId: number, userId: number) => void;
 };
@@ -67,7 +68,7 @@ export const createColumnViewVisibilityHandler =
       );
     }
 
-    await dependencies.setVisibility(section, visible);
+    await dependencies.setVisibility(section, visible, session.userId);
     dependencies.afterChange(section.projectId, session.userId);
 
     return NextResponse.json({ success: true, sectionId: section.id, visible });
