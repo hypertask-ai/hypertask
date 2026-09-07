@@ -29,7 +29,7 @@ export const getUserAnnouncements = async (userId: number) => {
   return prisma.userAnnouncement.findMany({
     where: { userId },
     include: { announcement: true },
-    orderBy: { createdAt: "desc" },
+    orderBy: { announcement: { createdAt: "desc" } },
     take: 15,
   });
 };
