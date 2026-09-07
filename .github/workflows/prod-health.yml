@@ -400,8 +400,9 @@ jobs:
 
       - name: Install the Chromium browser
         id: setup-pw
+        if: steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success'
         continue-on-error: true
-        run: npx playwright install --with-deps chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
 
       # A failed npm ci / playwright install is an UNRUNNABLE check, not a
       # broken app: record it as a failed preflight so the decision step below
@@ -441,6 +442,7 @@ jobs:
         if: steps.provisioned.outputs.ok == 'true' && steps.setup-node.outcome != 'failure' && steps.setup-npm.outcome != 'failure' && steps.setup-pw.outcome != 'failure'
         continue-on-error: true
         env:
+          SMOKE_BASE_URL: https://app.hypertask.ai
           SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
           SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
         run: npx playwright test -c playwright.config.smoke.ts

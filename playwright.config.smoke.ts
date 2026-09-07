@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const baseURL = process.env.SMOKE_BASE_URL
+if (!baseURL) throw new Error('SMOKE_BASE_URL is required for production smoke QA')
+
 // HTPR-6199 — post-release smoke QA against production. Runs from
 // .github/workflows/prod-health.yml after every deploy, using a dedicated
 // smoke-only account's session (see e2e/smoke/README.md).
@@ -14,7 +17,7 @@ export default defineConfig({
   reporter: [['list']],
   timeout: 20_000,
   use: {
-    baseURL: process.env.SMOKE_BASE_URL || 'https://app.hypertask.ai',
+    baseURL,
     storageState: 'e2e/smoke/.state/smoke-state.json',
     // Traces include authenticated network traffic and must never be uploaded
     // as CI artifacts. The failure log and screenshot identify the broken
