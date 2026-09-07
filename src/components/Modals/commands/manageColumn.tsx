@@ -807,14 +807,14 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:text-subheading"
+                    className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:opacity-70"
                     onClick={() => void queueSave(() => setVisibilityInAllViews(true))}
                   >
                     Show in all views
                   </button>
                   <button
                     type="button"
-                    className="border-0 bg-transparent p-0 text-dense text-text-light-gray transition hover:text-subheading"
+                    className="border-0 bg-transparent p-0 text-dense text-text-light-gray transition hover:text-white-black"
                     onClick={() => void queueSave(() => setVisibilityInAllViews(false))}
                   >
                     Hide in all views
