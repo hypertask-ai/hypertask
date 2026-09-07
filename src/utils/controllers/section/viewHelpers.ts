@@ -95,38 +95,49 @@ export async function removeSectionFromAllViews(sectionId: number, projectId: nu
 /**
  * Show or hide one section in every view of the board (HTPR-5937).
  *
- * The loop covers the board default view, every named saved view, and the
+ * The write covers the board default view, every named saved view, and the
  * transient per-user "unsaved" working copies, exactly like the append, rename
  * and remove helpers above. The working copies are included on purpose: they
  * are what the acting user is looking at, so leaving them out would make the
- * action appear to do nothing until the user switched views. One transaction,
- * so a board never ends up half switched.
+ * action appear to do nothing until the user switched views.
+ *
+ * Read and write both happen inside one transaction, under a row lock on this
+ * board's views. board_columns_view is a whole JSON document, so reading it
+ * before the transaction and writing it inside would silently discard any
+ * rename, reorder or visibility change that landed in between, on every view
+ * of the board at once.
  */
 export async function setSectionVisibilityInAllViews(
   section: { id: number; projectId: number; section_title: string; ranking: string },
   visible: boolean
 ) {
-  const views = await prisma.view.findMany({
-    where: { project_view: { projectId: section.projectId } },
-    select: { id: true, board_columns_view: true }
-  })
-  await prisma.$transaction(
-    views.map((view) => {
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT v."id"
+      FROM "View" v
+      JOIN "Project_View" pv ON pv."id" = v."project_view_id"
+      WHERE pv."projectId" = ${section.projectId}
+      FOR UPDATE OF v
+    `
+    const views = await tx.view.findMany({
+      where: { project_view: { projectId: section.projectId } },
+      select: { id: true, board_columns_view: true }
+    })
+    for (const view of views) {
       // Not re-sorted here. Stored entries predating the ranking field would
       // sort against `undefined`, which this comparator treats as equal to
-      // everything and scrambles, and this write lands on every view of the
-      // board. A column appended by "Show in all views" therefore sits last in
-      // the stored array, exactly as a freshly created column does, and the
-      // readers place it by Section.ranking.
+      // everything and scrambles. A column appended by "Show in all views"
+      // therefore sits last in the stored array, exactly as a freshly created
+      // column does, and the readers place it by Section.ranking.
       const columns = applyColumnVisibility(
         view.board_columns_view as unknown as Record<string, unknown>[],
         section,
         visible
       )
-      return prisma.view.update({
+      await tx.view.update({
         where: { id: view.id },
         data: { board_columns_view: columns as unknown as Prisma.InputJsonValue }
       })
-    })
-  )
+    }
+  })
 }

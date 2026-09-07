@@ -85,7 +85,11 @@ export const applyColumnVisibilityToProject = (
   };
 };
 
-/** "Visible in 6 of 10 saved views", or "Visible in all 10 saved views". */
+/**
+ * "Visible in 6 of 10 views", or "Visible in all 10 views". Plain "views"
+ * rather than "saved views": the set counted here is the board's view strip,
+ * which starts with the board default view.
+ */
 export const describeViewsShowingColumn = ({
   visible,
   total,
@@ -93,11 +97,11 @@ export const describeViewsShowingColumn = ({
   visible: number;
   total: number;
 }): string => {
-  if (total === 0) return "No saved views yet";
+  if (total === 0) return "No views yet";
   if (total === 1) {
-    return visible === 1 ? "Visible in the only saved view" : "Hidden in the only saved view";
+    return visible === 1 ? "Visible in the only view" : "Hidden in the only view";
   }
-  if (visible === total) return `Visible in all ${total} saved views`;
-  if (visible === 0) return `Hidden in all ${total} saved views`;
-  return `Visible in ${visible} of ${total} saved views`;
+  if (visible === total) return `Visible in all ${total} views`;
+  if (visible === 0) return `Hidden in all ${total} views`;
+  return `Visible in ${visible} of ${total} views`;
 };

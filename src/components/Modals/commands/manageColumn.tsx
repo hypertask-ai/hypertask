@@ -324,13 +324,12 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
 
   // ============ show/hide this column in every saved view (HTPR-5937)
   const columnAllViewsEnabled = useFlag(COLUMN_ALL_VIEWS_FLAG);
-  const viewCounts = useMemo(
-    () =>
-      editSection
-        ? countViewsShowingColumn(currentProject, editSection.id ?? editSection.sectionId ?? 0)
-        : { visible: 0, total: 0 },
-    [currentProject, editSection]
-  );
+  const viewCounts = useMemo(() => {
+    const sectionId = editSection?.id ?? editSection?.sectionId;
+    return currentProject && sectionId
+      ? countViewsShowingColumn(currentProject, sectionId)
+      : { visible: 0, total: 0 };
+  }, [currentProject, editSection]);
 
   const setVisibilityInAllViews = async (visible: boolean) => {
     if (!editSection || !currentProject) return;
@@ -347,7 +346,13 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       return;
     }
     // Refetching the board query remounts this tree and closes the editor, so
-    // every cached copy is patched in place instead.
+    // every cached copy is patched in place instead. A board request that
+    // started before this save would otherwise resolve afterwards and restore
+    // the old visibility, so those requests are stopped first.
+    await Promise.all([
+      queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true }),
+      queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] }),
+    ]);
     const patch = (project: IProject) =>
       project.id === currentProject.id
         ? applyColumnVisibilityToProject(
@@ -799,7 +804,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
                     {describeViewsShowingColumn(viewCounts)}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
                     className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:text-subheading"

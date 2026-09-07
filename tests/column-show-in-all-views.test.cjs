@@ -87,6 +87,45 @@ test("a column with no entry counts as hidden, matching how the board reads it",
   assert.equal(isColumnVisibleInView([{ sectionId: 991, visibility: true }], 991), true);
 });
 
+test("the ticket's acceptance case: one action, every view of the board", () => {
+  // A board with three saved views. One of them deliberately hides Todo.
+  const board = [
+    { id: "default", columns: [{ id: 1, section_title: "Todo", visibility: true }] },
+    {
+      id: "bugs",
+      columns: [
+        { id: 1, section_title: "Todo", visibility: false },
+        { id: 991, section_title: "QA", visibility: false },
+      ],
+    },
+    { id: "triage", columns: [{ id: 991, section_title: "QA", visibility: true }] },
+  ];
+  const sweep = (views, visible) =>
+    views.map((view) => ({
+      ...view,
+      columns: applyColumnVisibility(view.columns, qa, visible),
+    }));
+
+  const shown = sweep(board, true);
+  assert.deepEqual(
+    shown.map((view) => isColumnVisibleInView(view.columns, 991)),
+    [true, true, true],
+    "Show in all views reaches a view that never had the column",
+  );
+  // The view that hides Todo keeps hiding Todo.
+  assert.equal(isColumnVisibleInView(shown[1].columns, 1), false);
+  assert.equal(isColumnVisibleInView(shown[0].columns, 1), true);
+
+  const hidden = sweep(shown, false);
+  assert.deepEqual(
+    hidden.map((view) => isColumnVisibleInView(view.columns, 991)),
+    [false, false, false],
+    "Hide in all views clears it everywhere",
+  );
+  assert.equal(isColumnVisibleInView(hidden[1].columns, 1), false);
+  assert.equal(isColumnVisibleInView(hidden[0].columns, 1), true);
+});
+
 test("the count covers saved views only, never the live unsaved working copy", () => {
   const project = {
     id: 15,
@@ -105,12 +144,12 @@ test("the count covers saved views only, never the live unsaved working copy", (
 });
 
 test("the count reads as a sentence, never \"all 10 of 10\"", () => {
-  assert.equal(describeViewsShowingColumn({ visible: 6, total: 10 }), "Visible in 6 of 10 saved views");
-  assert.equal(describeViewsShowingColumn({ visible: 10, total: 10 }), "Visible in all 10 saved views");
-  assert.equal(describeViewsShowingColumn({ visible: 0, total: 10 }), "Hidden in all 10 saved views");
-  assert.equal(describeViewsShowingColumn({ visible: 1, total: 1 }), "Visible in the only saved view");
-  assert.equal(describeViewsShowingColumn({ visible: 0, total: 1 }), "Hidden in the only saved view");
-  assert.equal(describeViewsShowingColumn({ visible: 0, total: 0 }), "No saved views yet");
+  assert.equal(describeViewsShowingColumn({ visible: 6, total: 10 }), "Visible in 6 of 10 views");
+  assert.equal(describeViewsShowingColumn({ visible: 10, total: 10 }), "Visible in all 10 views");
+  assert.equal(describeViewsShowingColumn({ visible: 0, total: 10 }), "Hidden in all 10 views");
+  assert.equal(describeViewsShowingColumn({ visible: 1, total: 1 }), "Visible in the only view");
+  assert.equal(describeViewsShowingColumn({ visible: 0, total: 1 }), "Hidden in the only view");
+  assert.equal(describeViewsShowingColumn({ visible: 0, total: 0 }), "No views yet");
 });
 
 const { NextRequest } = require("next/server");
@@ -199,9 +238,19 @@ test("every view of the board is switched in one transaction", () => {
   const helpers = read("src/utils/controllers/section/viewHelpers.ts");
   const start = helpers.indexOf("export async function setSectionVisibilityInAllViews");
   assert.notEqual(start, -1, "the helper must still be exported under this name");
-  const next = helpers.indexOf("\nexport ", start + 1);
-  const helper = helpers.slice(start, next === -1 ? undefined : next);
-  assert.match(helper, /prisma\.\$transaction\(/);
+  // Bounded to this helper: a match belonging to a neighbouring function would
+  // make these guards vacuous.
+  const ends = ["\nexport ", "\nfunction ", "\nconst ", "\nasync function "]
+    .map((needle) => helpers.indexOf(needle, start + 1))
+    .filter((at) => at !== -1);
+  const helper = helpers.slice(start, ends.length ? Math.min(...ends) : undefined);
+  assert.match(helper, /prisma\.\$transaction\(async \(tx\)/);
+  // Read and write inside the same locked transaction. board_columns_view is a
+  // whole JSON document, so a snapshot read before the transaction would
+  // discard any concurrent rename or reorder on every view of the board.
+  assert.match(helper, /FOR UPDATE OF v/);
+  assert.match(helper, /await tx\.view\.findMany/);
+  assert.doesNotMatch(helper, /await prisma\.view\./);
   // The stored array is written through unsorted: sorting it would compare
   // legacy entries that carry no ranking and scramble every saved view.
   assert.doesNotMatch(helper, /sortByStringParam/);
