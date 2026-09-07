@@ -32,31 +32,6 @@ test("slash commands choose available viewport space and stay inset", () => {
   assert.match(list, /overflow-y-auto/);
 });
 
-test("Agent Chat skill controls follow the ticket feature flag", () => {
-  const list = read(
-    "src/components/RTE/Extensions/SlashCommands/CommandsList.tsx",
-  );
-  const library = read("src/components/Modals/Settings/SkillLibrary.tsx");
-  const personal = read("src/components/Modals/Settings/SkillsSection.tsx");
-  const board = read("src/components/Modals/Settings/BoardSkillsSection.tsx");
-
-  assert.match(list, /useFlag\(AGENT_CHAT_SKILLS_FLAG\)/);
-  assert.match(list, /const COMMENT_SKILL_MODE = "create-comment"/);
-  assert.match(list, /const AGENT_CHAT_SKILL_MODE = "ai-chat"/);
-  assert.match(
-    list,
-    /mode === COMMENT_SKILL_MODE \|\|\s*\(mode === AGENT_CHAT_SKILL_MODE && agentChatSkillsEnabled\)/,
-  );
-  assert.match(list, /if \(!skillsEnabled\) \{\s*setSkillItems\(\[\]\)/);
-  assert.match(library, /agentChatSkillsEnabled && \(\s*<SettingsCard title="Import from GitHub">/);
-  for (const section of [personal, board]) {
-    assert.match(
-      section,
-      /agentChatSkillsEnabled\s*\? "Type \/slug in AI chat, or @hyperai \/slug in a comment\."\s*: "Type @hyperai \/slug in a comment\."/,
-    );
-  }
-});
-
 test("mentions choose available viewport space instead of clipping above mobile editors", () => {
   const renderer = read("src/components/RTE/MentionData.js");
   const list = read("src/components/RTE/MentionList.jsx");

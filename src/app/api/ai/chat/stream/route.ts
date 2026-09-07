@@ -255,8 +255,7 @@ import {
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
-import { resolveSkills } from "@/app/api/ai/_lib/skills";
-import { AGENT_CHAT_SKILLS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution";
 import { HOUSE_OUTPUT_STYLE } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
 import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
@@ -10168,18 +10167,15 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        const agentChatSkillsEnabled = await isFeatureEnabled(
-          AGENT_CHAT_SKILLS_FLAG,
-          dbUser.id,
-        ).catch(async (error) => {
-          await reportHandledChatError(error, "skills-feature-flag");
-          return false;
-        });
-        const skillResolution = await resolveSkills(requestMessage, {
-          userId: dbUser.id,
-          projectId: body.default_context?.project_id,
-          allowInstalledSkills: agentChatSkillsEnabled,
-        });
+        const skillResolution = await resolveSkillsForAiRequest(
+          requestMessage,
+          {
+            userId: dbUser.id,
+            projectId: body.default_context?.project_id,
+          },
+          body.aiFeature,
+          (error) => reportHandledChatError(error, "skills-feature-flag"),
+        );
         const resolvedBody = {
           ...body,
           // A message of only "/standup" strips to empty; fall back to the raw
