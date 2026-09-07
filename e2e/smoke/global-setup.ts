@@ -24,8 +24,12 @@ export default async function globalSetup(config: FullConfig) {
   // verdict on disk instead of nothing at all.
   writePreflight({ ok: false, reason: 'setup did not complete' })
 
-  const baseURL = config.projects[0].use.baseURL!
-  const storageState = config.projects[0].use.storageState as string
+  const project = config.projects[0]
+  if (!project) fail('smoke config has no Playwright project')
+
+  const { baseURL, storageState } = project.use
+  if (typeof baseURL !== 'string' || !baseURL) fail('smoke config has no baseURL')
+  if (typeof storageState !== 'string' || !storageState) fail('smoke config has no storageState file')
 
   const browser = await chromium.launch()
   try {

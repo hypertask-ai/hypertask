@@ -16,11 +16,10 @@ export default defineConfig({
   use: {
     baseURL: process.env.SMOKE_BASE_URL || 'https://app.hypertask.ai',
     storageState: 'e2e/smoke/.state/smoke-state.json',
-    // Only kept for a failing run (OCR review): a run that triggers
-    // rollback needs more evidence than the reporter's one-line message to
-    // diagnose which view broke and why, after prod is already back on the
-    // previous build.
-    trace: 'retain-on-failure',
+    // Traces include authenticated network traffic and must never be uploaded
+    // as CI artifacts. The failure log and screenshot identify the broken
+    // view without exposing the smoke account's session cookie.
+    trace: 'off',
     screenshot: 'only-on-failure',
     video: 'off',
   },

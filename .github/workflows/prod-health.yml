@@ -444,7 +444,10 @@ jobs:
           SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
         run: npx playwright test -c playwright.config.smoke.ts
 
-      - name: Upload trace/screenshots for the failing run
+      # Playwright traces are disabled because they include authenticated
+      # network traffic. Only screenshots from the isolated smoke account are
+      # retained; the Actions log carries the failed route and assertion.
+      - name: Upload screenshots for the failing run
         if: steps.smoke.outcome == 'failure'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
