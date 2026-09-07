@@ -45,7 +45,13 @@ export default async function globalSetup(config: FullConfig) {
     // A client-side auth guard can redirect to /login after hydration, which
     // hasn't necessarily happened yet right after `load`. Give it a moment
     // before trusting the URL, so an expired cookie can't look logged-in.
-    await page.waitForURL('**/login**', { timeout: 3_000 }).catch(() => {})
+    try {
+      await page.waitForURL('**/login**', { timeout: 3_000 })
+    } catch (err) {
+      if (!(err instanceof Error) || err.name !== 'TimeoutError') {
+        fail(`login check failed while waiting for an auth redirect: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
     if (page.url().includes('/login')) {
       fail('login check was redirected to /login — the smoke session cookie is expired or invalid')
     }

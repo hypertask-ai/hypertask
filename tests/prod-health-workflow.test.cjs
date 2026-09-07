@@ -148,6 +148,7 @@ async function runHealthCheck(hcSequence) {
         PROJECT_ID: "prj_stub",
         TEAM_ID: "team_stub",
         RUNNER_TEMP: runnerTemp,
+        GITHUB_OUTPUT: join(runnerTemp, "github-output"),
         HC_SEQUENCE: hcSequence,
       },
     });

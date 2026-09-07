@@ -354,19 +354,19 @@ jobs:
   # The curl-based `health` job above proves the app responds; this proves the
   # main screens actually render for a logged-in user. `live` is set as soon
   # as health confirms this SHA is live, before its own probes run, so it
-  # alone would still be true after a rollback further down that same job —
-  # the extra `needs.health.result != 'failure'` check excludes that case (a
-  # health job that rolls back always exits non-zero). For a push, this makes
-  # the gate equivalent to `needs.health.result == 'success'`; an inconclusive
-  # write-probe run also exits non-zero, so it's skipped here too rather than
-  # smoke-tested.
+  # alone would still be true after a rollback or cancellation further down
+  # that same job. Requiring a successful health result excludes both cases;
+  # an inconclusive write-probe run also exits non-zero, so it's skipped here
+  # too rather than smoke-tested.
   # workflow_dispatch runs the checks without any of this (nothing to gate
   # on, `health` doesn't run) so this job is dispatchable for manual
   # verification; rollback is skipped there too, since a manual run is
   # exploratory, not a deploy signal.
   smoke:
     needs: health
-    if: always() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result != 'failure') || github.event_name == 'workflow_dispatch')
+    if: always() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch')
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -391,6 +391,7 @@ jobs:
 
       - name: Restore Playwright browser cache
         id: pw-cache
+        continue-on-error: true
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
@@ -413,6 +414,7 @@ jobs:
 
       - name: Save Playwright browser cache
         if: steps.pw-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
