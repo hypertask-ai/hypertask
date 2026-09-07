@@ -150,6 +150,16 @@ test("unknown Figma error codes keep the generic retry message", () => {
     figmaPaths.figmaConnectErrorMessage(null),
     figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
   );
+  // The code arrives from the query string, so a prototype key has to come
+  // back as the plain message and not as something React cannot render.
+  assert.equal(
+    figmaPaths.figmaConnectErrorMessage("__proto__"),
+    figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
+  );
+  assert.equal(
+    figmaPaths.figmaConnectErrorMessage("constructor"),
+    figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
+  );
   assert.notEqual(
     figmaPaths.figmaConnectErrorMessage("not_configured"),
     figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
