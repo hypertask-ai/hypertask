@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  INBOX_ARCHIVE_SHORTCUT_LABEL,
   INBOX_CLUSTER_COMMAND_KEY_PREFIX,
   inboxArchiveTooltip,
   inboxClusterCommandName,
   isInboxClusterCommandKey,
   topInboxClusters,
-} from "./inboxClusters";
+} from "../src/lib/inboxClusters";
+import { InboxPageTipsConstants } from "../src/components/Global/ConstantsQuickTips";
+import { getKeyboardShortcuts } from "../src/lib/constants/shortcuts";
 
 const row = (id: string, ticketNumber: string | null, clusterCount?: number) => ({
   id,
@@ -102,4 +105,20 @@ test("cluster keys are recognisable, so they can be kept out of Frequently used"
   assert.equal(isInboxClusterCommandKey(`${INBOX_CLUSTER_COMMAND_KEY_PREFIX}1234`), true);
   assert.equal(isInboxClusterCommandKey("createTask"), false);
   assert.equal(isInboxClusterCommandKey("gotoBoard-15"), false);
+});
+
+test("every always-visible label for E says it archives the whole ticket", () => {
+  // QA fail on 7 Sep: the row tooltip read "Archive all 3" while the quick tips
+  // bar still read "Remove notification", on the same screen. Both surfaces are
+  // static, so they can only stay honest by sharing one string.
+  const tip = InboxPageTipsConstants.find(({ key }) => key?.join("") === "E");
+  assert.equal(tip?.hint, INBOX_ARCHIVE_SHORTCUT_LABEL);
+  const listed = getKeyboardShortcuts(false)
+    .flatMap(({ sub }) => sub)
+    .filter(({ pressKey }) => pressKey.join("") === "E");
+  assert.ok(listed.length >= 2, "both E entries in the shortcuts list must be checked");
+  assert.deepEqual(
+    [...new Set(listed.map(({ shortTitle }) => shortTitle))],
+    [INBOX_ARCHIVE_SHORTCUT_LABEL],
+  );
 });

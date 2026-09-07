@@ -1,4 +1,5 @@
 import { RAIL_TOGGLE_KEY } from "@/lib/constants/railToggleKey";
+import { INBOX_ARCHIVE_SHORTCUT_LABEL } from "@/lib/inboxClusters";
 
 interface IShortcut {
   title: string;
@@ -76,7 +77,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Set priority", pressKey: ["P"] },
         { shortTitle: "Set task size", pressKey: ["S"] },
         { shortTitle: "Add tags", pressKey: ["T"] },
-        { shortTitle: "Remove notification", pressKey: ["E"] },
+        { shortTitle: INBOX_ARCHIVE_SHORTCUT_LABEL, pressKey: ["E"] },
         { shortTitle: "Move focus down", pressKey: ["J"] },
         { shortTitle: "Move focus up", pressKey: ["K"] },
         { shortTitle: "Move focus", pressKey: ["←", "⭡", "⭣", "→"] },
@@ -259,7 +260,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Select message", pressKey: ["X"] },
         { shortTitle: "Bulk Archive", pressKey: ["SHIFT", "E"] },
         { shortTitle: "Bulk Reminder", pressKey: ["SHIFT", "H"] },
-        { shortTitle: "Archive notification", pressKey: ["E"] },
+        { shortTitle: INBOX_ARCHIVE_SHORTCUT_LABEL, pressKey: ["E"] },
         { shortTitle: "Open task", pressKey: ["ENTER"] },
         { shortTitle: "Move focus down", pressKey: ["J"] },
         { shortTitle: "Move focus up", pressKey: ["K"] },

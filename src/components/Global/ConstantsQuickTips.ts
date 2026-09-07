@@ -1,4 +1,5 @@
 import { ITips } from "@/models/model";
+import { INBOX_ARCHIVE_SHORTCUT_LABEL } from "@/lib/inboxClusters";
 
 export const HTCTipsConstants: ITips[] = [
   {
@@ -156,7 +157,7 @@ export const InboxPageTipsConstants: ITips[] = [
   },
   {
     key: ["E"],
-    hint: "Remove notification",
+    hint: INBOX_ARCHIVE_SHORTCUT_LABEL,
   },
   {
     key: ["CTRL", "E"],
