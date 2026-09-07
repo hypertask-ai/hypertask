@@ -12,6 +12,10 @@ import { mentionAttrsForItem } from "../src/components/RTE/mentionAttrs";
 import { buildRichTextMentionHref } from "../src/utils/helperFunctions/richTextMention";
 import { normalizeRichTextStructure } from "../src/utils/helperFunctions/normalizeRichTextStructure";
 import {
+  matchesMentionName,
+  resolveMentionProjectId,
+} from "../src/utils/helperFunctions/mentionSearch";
+import {
   firstSelectableMentionIndex,
   isSelectableMentionItem,
 } from "../src/components/RTE/mentionNavigation";
@@ -110,6 +114,15 @@ test("the Pages group header is skipped by keyboard navigation", () => {
     ]),
     2,
   );
+});
+
+test("mention search uses the ticket board and matches people and agents by name", () => {
+  assert.equal(resolveMentionProjectId(339, "15"), 339);
+  assert.equal(resolveMentionProjectId(undefined, "15"), "15");
+
+  assert.equal(matchesMentionName("Jacqueline Bolz", "Jac"), true);
+  assert.equal(matchesMentionName("inne Wiki", "Wiki"), true);
+  assert.equal(matchesMentionName("inne AB Test Manager", "wiki"), false);
 });
 
 test("the other mention kinds keep the attributes they had before the extraction", () => {

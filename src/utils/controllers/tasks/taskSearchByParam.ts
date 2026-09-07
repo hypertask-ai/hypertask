@@ -6,6 +6,7 @@ import {
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
 import { isFeatureEnabled, PAGE_MENTIONS_FLAG } from "@/lib/flags";
+import { matchesMentionName } from "@/utils/helperFunctions/mentionSearch";
 
 const taskSearchByParam = async (
   rawParam: string,
@@ -175,7 +176,7 @@ const taskSearchByParam = async (
       };
     } else {
       const filteredData = combinedArray.filter((item) =>
-        item.displayName.toLowerCase().includes(param.toLowerCase())
+        matchesMentionName(item.displayName, param)
       );
       const firstFiveResults = filteredData.slice(0, 5);
       newArray =
@@ -240,11 +241,7 @@ const taskSearchByParam = async (
       }));
 
       const updatedAgents = boardAgentRows
-        .filter((row) =>
-          row.agent.displayName
-            .toLowerCase()
-            .includes(param.toLowerCase())
-        )
+        .filter((row) => matchesMentionName(row.agent.displayName, param))
         .slice(0, 5)
         .map((row) => ({
           id: row.agent.id,
