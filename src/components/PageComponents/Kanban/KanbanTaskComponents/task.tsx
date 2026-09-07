@@ -782,7 +782,7 @@ const Task = ({
   const openDetail = () => {
     if (
       (!showCommands.show && showAssignModal) ||
-      !project.name ||
+      !project?.name ||
       task.uniqueIndex === undefined
     )
       return;
@@ -1000,7 +1000,7 @@ const Task = ({
           {(provided, snapshot) => renderTaskCard(provided, snapshot)}
         </Draggable>
       )}
-      {showAssignModal && (
+      {showAssignModal && project?.name && (
         <AssignModal
           onClose={toggleAssigneesModal}
           project={project}
@@ -1008,7 +1008,7 @@ const Task = ({
             id: task.id,
             title: task.title,
             link: `${taskBaseUri}${project.name}/${task.uniqueIndex}`,
-          }} 
+          }}
           assignees={[...humanAssignees, ...agentAssignees]}
         />
       )}
