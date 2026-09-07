@@ -7,7 +7,7 @@ import {
   FEATURE_FLAG_TICKET_PROJECT_ID,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
 } from "@/lib/flags";
-import { FEATURE_FLAG_REMOVAL_DAYS } from "@/lib/flags/removal";
+import { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } from "@/lib/flags/removal";
 import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 
 export const runtime = "nodejs";
@@ -21,11 +21,8 @@ const MAX_TICKETS_PER_RUN = 3;
 // Only one sweep may run at a time: two overlapping runs could both see a flag with no ticket and
 // both file one. Vercel does not overlap its own cron, but the route is reachable by anything
 // holding CRON_SECRET, so serialise it the way the rest of the app serialises write fences.
-const REMOVAL_SWEEP_LOCK_NAMESPACE = 6193;
+const REMOVAL_SWEEP_LOCK_NAMESPACE = 1_179_207_763;
 const REMOVAL_SWEEP_LOCK_KEY = 1;
-// Written into removalTaskId to claim a flag for the length of one ticket creation. The claim is
-// what decides a flag is due, so an owner pressing Keep a moment later cannot half-apply.
-export const PENDING_REMOVAL_TASK_ID = 0;
 
 function removalTitle(key: string) {
   return `Remove feature flag ${key}`;

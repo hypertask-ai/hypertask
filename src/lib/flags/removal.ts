@@ -5,6 +5,12 @@ import type { FeatureFlagRow } from "@/lib/flags";
  * to delete it and its dead branch (AGENTS.md, "Feature flags for new user-facing behavior").
  */
 export const FEATURE_FLAG_REMOVAL_DAYS = 14;
+
+/**
+ * Written into `removalTaskId` while the sweep creates a flag's removal ticket. A route file may
+ * not export anything but its handlers, so the marker lives here with the state it changes.
+ */
+export const PENDING_REMOVAL_TASK_ID = 0;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type FeatureFlagRemovalState =
