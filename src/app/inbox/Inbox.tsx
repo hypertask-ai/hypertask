@@ -532,6 +532,9 @@ const Inbox = ({
     // forwards its index argument, so the per-split walk exists only to keep that
     // argument truthful in its own split rather than a flattened position.
     for (const split of visibleNotifications ?? []) {
+      // Indexing visibleNotifications is treated as possibly nullish above, so
+      // this must not assume every split is an array.
+      if (!split) continue;
       const index = split.findIndex(
         (notification: INotification) => String(notification.id) === notificationId,
       );

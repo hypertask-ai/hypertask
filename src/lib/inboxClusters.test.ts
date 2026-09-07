@@ -47,6 +47,42 @@ test("ties keep inbox order so the palette list does not reshuffle between rende
   );
 });
 
+test("one ticket yields one command even when it holds several inbox rows", () => {
+  // getInboxNotifications is DISTINCT ON (taskId, notification_inviteId), so a
+  // ticket with a task row AND an invite row appears twice. Archiving either
+  // clears the whole pile, so a second command would duplicate the first.
+  const clusters = topInboxClusters([
+    row("10", "HTPR-6141", 22),
+    row("11", "HTPR-6141", 22),
+    row("12", "htpr-6141", 22),
+    row("13", "HTPR-6137", 20),
+  ]);
+
+  assert.deepEqual(
+    clusters.map((cluster) => [cluster.ticketNumber, cluster.notificationId]),
+    [
+      ["HTPR-6141", "10"],
+      ["HTPR-6137", "13"],
+    ],
+  );
+});
+
+test("deduplication does not let one ticket eat several of the five slots", () => {
+  const duplicated = Array.from({ length: 8 }, (_, index) =>
+    row(String(index), "HTPR-1", 30),
+  );
+  const clusters = topInboxClusters([
+    ...duplicated,
+    row("a", "HTPR-2", 9),
+    row("b", "HTPR-3", 8),
+  ]);
+
+  assert.deepEqual(
+    clusters.map((cluster) => cluster.ticketNumber),
+    ["HTPR-1", "HTPR-2", "HTPR-3"],
+  );
+});
+
 test("the command name carries the ticket and its pile size", () => {
   assert.equal(
     inboxClusterCommandName({ notificationId: "1", ticketNumber: "htpr-6141", count: 22 }),

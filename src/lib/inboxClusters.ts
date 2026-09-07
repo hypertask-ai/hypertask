@@ -48,19 +48,33 @@ export const isInboxClusterCommandKey = (key: string): boolean =>
 export const topInboxClusters = (
   notifications: readonly InboxClusterSource[],
   limit: number = MAX_INBOX_CLUSTER_COMMANDS,
-): InboxCluster[] =>
-  notifications
-    .flatMap((notification) => {
-      const count = notification.clusterCount ?? 0;
-      const ticketNumber = notification.task?.ticketNumber;
-      const notificationId = String(notification.id ?? "");
-      if (count < 2 || !ticketNumber || !notificationId) return [];
-      return [{ notificationId, ticketNumber, count }];
-    })
-    // Array.prototype.sort is stable, so equal piles keep the caller's order.
-    // The inbox passes its own newest-first list, which keeps renders stable.
-    .sort((left, right) => right.count - left.count)
-    .slice(0, Math.max(0, limit));
+): InboxCluster[] => {
+  // One command per ticket. The inbox selects
+  // DISTINCT ON (taskId, notification_inviteId), so a ticket carrying both a task
+  // notification and an invite yields two rows. Both rows report the same
+  // clusterCount and archiving either clears the whole pile, so a second command
+  // would duplicate the first and burn one of the five slots.
+  const byTicket = new Map<string, InboxCluster>();
+
+  for (const notification of notifications) {
+    const count = notification.clusterCount ?? 0;
+    const ticketNumber = notification.task?.ticketNumber;
+    const notificationId = String(notification.id ?? "");
+    if (count < 2 || !ticketNumber || !notificationId) continue;
+    const key = ticketNumber.toUpperCase();
+    // First row wins: the inbox passes newest-first, so this keeps the freshest
+    // representative of the ticket.
+    if (!byTicket.has(key)) byTicket.set(key, { notificationId, ticketNumber, count });
+  }
+
+  return (
+    Array.from(byTicket.values())
+      // Array.prototype.sort is stable, so equal piles keep the caller's order.
+      // The inbox passes its own newest-first list, which keeps renders stable.
+      .sort((left, right) => right.count - left.count)
+      .slice(0, Math.max(0, limit))
+  );
+};
 
 export const inboxClusterCommandName = (cluster: InboxCluster): string =>
   `Archive cluster: ${cluster.ticketNumber.toUpperCase()} (${cluster.count})`;
