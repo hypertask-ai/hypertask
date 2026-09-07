@@ -5,6 +5,7 @@
 // /* eslint-disable @next/next/no-img-element */
 "use client";
 import dynamic from "next/dynamic";
+import { instrumentedDynamicImport } from "@/lib/analytics/taskDetailPhaseTimings";
 import "@/styles/taskDetail.scss";
 import {
   IComment,
@@ -53,24 +54,27 @@ import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 
 // const HypertasksCommands = dynamic(() => import("@/components/commands"), { ssr: false });
 const KeyboardShortcuts = dynamic(
-  () => import("@/components/sidebars/keyboardShortcuts"),
+  instrumentedDynamicImport("KeyboardShortcuts", () => import("@/components/sidebars/keyboardShortcuts")),
   { ssr: false }
 );
 const DeleteCommentById = dynamic(
-  () => import("@/components/Modals/commands/DeleteCommentById"),
+  instrumentedDynamicImport("DeleteCommentById", () => import("@/components/Modals/commands/DeleteCommentById")),
   { ssr: false }
 );
 const NewCommentComponent = dynamic(
-  () =>
-    import(
-      "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent"
-    )
+  instrumentedDynamicImport(
+    "NewCommentComponent",
+    () =>
+      import(
+        "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent"
+      ),
+  )
 );
 const TaskMovement = dynamic(
-  () => import("@/components/PageComponents/TaskDetail/TaskMovement")
+  instrumentedDynamicImport("TaskMovement", () => import("@/components/PageComponents/TaskDetail/TaskMovement"))
 );
 
-const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), {
+const Tooltip = dynamic(instrumentedDynamicImport("Tooltip", () => import("@/components/Common/Tooltip")), {
   ssr: false,
 });
 import { focusManager, useQueryClient } from "@tanstack/react-query";
@@ -107,15 +111,15 @@ import SetPriorityModal from "@/components/Modals/TaskPriority";
 import MoveToColumn from "@/components/Modals/commands/moveToColumn";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 const AttachmentCarousel = dynamic(
-  () => import("@/components/Common/AttachmentsView/AttachmentsCarousel"),
+  instrumentedDynamicImport("AttachmentCarousel", () => import("@/components/Common/AttachmentsView/AttachmentsCarousel")),
   { ssr: false }
 );
 
 const ConfirmTaskDelete = dynamic(
-  () => import("@/components/Modals/confirmDeleteModals/confirmtTaskDelete")
+  instrumentedDynamicImport("ConfirmTaskDelete", () => import("@/components/Modals/confirmDeleteModals/confirmtTaskDelete"))
 );
 const MoveTaskGlobal = dynamic(
-  () => import("@/components/Modals/MoveTaskToBoard")
+  instrumentedDynamicImport("MoveTaskGlobal", () => import("@/components/Modals/MoveTaskToBoard"))
 );
 import SubtaskLinkingModal from "@/components/Modals/SubtaskLinkingModal/SubtaskLinking";
 import useUpdateSubtask from "@/hooks/Task Detail/useUpdateSubtask";
@@ -155,6 +159,13 @@ import {
   TASK_DETAIL_READINESS_MAX_MS,
   taskDetailUsableDomPresent,
 } from "@/lib/analytics/taskDetailReadiness";
+import {
+  markTaskDetailPhase,
+  readTaskDetailPhaseTimings,
+  TASK_DETAIL_COMP_MOUNT_MARK,
+  TASK_DETAIL_SUSPENSE_COMMIT_MARK,
+  TASK_DETAIL_USABLE_MARK,
+} from "@/lib/analytics/taskDetailPhaseTimings";
 interface TaskDetailProps {
   isMobile: boolean;
   _slugs: string[];
@@ -177,6 +188,21 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const _parsedTask = JSON.parse(_currentTask);
   const _parsedComments = JSON.parse(_comments);
   const currentUser = _currentUser;
+  // HTPR-6047: mark the first render of the component the shared Suspense
+  // boundary is gating - this is as close as a render-phase mark can get to
+  // "the boundary committed" without a fake second data point. Guarded by a
+  // ref (not state) so it fires exactly once and never triggers a re-render.
+  const suspenseCommitMarkedRef = useRef(false);
+  if (!suspenseCommitMarkedRef.current) {
+    suspenseCommitMarkedRef.current = true;
+    markTaskDetailPhase(TASK_DETAIL_SUSPENSE_COMMIT_MARK);
+  }
+  // Effects run after commit, so this timestamp is always at or after the
+  // suspense-commit mark above - the gap between them is React's own commit
+  // and effect-scheduling cost, not app code.
+  useEffect(() => {
+    markTaskDetailPhase(TASK_DETAIL_COMP_MOUNT_MARK);
+  }, []);
   const queryClient = useQueryClient();
   const { undoData, undoAction } = useUndoContext();
   const [currentProject, setCurrentProject] =
@@ -2222,7 +2248,12 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
           }
         : measured;
       readinessTaskRef.current = readinessTask;
-      if (!timedOut) performance.mark("ht-task-detail-usable");
+      if (!timedOut) markTaskDetailPhase(TASK_DETAIL_USABLE_MARK);
+      // HTPR-6047: phase attribution for the gap. Read after the usable mark
+      // above so phase_usable_ms can see it - a timed-out publish never sets
+      // that mark, so phase_usable_ms stays null on that path, matching
+      // exclusion_reason rather than reporting a fake completion time.
+      const phaseTimings = readTaskDetailPhaseTimings();
       emitProductPerformanceEvent(
         {
           event: "app_task_detail_readiness",
@@ -2242,6 +2273,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
             exclusion_reason: sample.exclusionReason,
             readiness_measurement_version: 1,
             readiness_measurement_scope: "task_detail_open_to_usable",
+            ...phaseTimings,
           },
         },
         currentUser.id!,
