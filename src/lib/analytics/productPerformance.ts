@@ -177,6 +177,14 @@ export type TaskDetailReadinessPerformanceEvent = {
       | "usable_state_timeout";
     readiness_measurement_version: 1;
     readiness_measurement_scope: "task_detail_open_to_usable";
+    // HTPR-6047: phase attribution, null whenever that phase couldn't be
+    // measured (mark never fired, or fired before this mount and was
+    // discarded as stale) - never a fabricated number.
+    phase_suspense_commit_ms: number | null;
+    phase_comp_mount_ms: number | null;
+    phase_comments_request_ms: number | null;
+    phase_usable_ms: number | null;
+    phase_dynamic_imports: string | null;
   };
 };
 

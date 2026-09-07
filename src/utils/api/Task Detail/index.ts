@@ -9,6 +9,10 @@ import { TaskShareType } from "@prisma/client";
 import { getTaskDetailMeta, hasSessionCookie } from "@/utils/api/global/apiHelpers/getTaskDetailMeta";
 import axios, { CancelTokenSource } from "axios";
 import { uploadFilesViaApi } from "@/lib/storage/uploadViaApi";
+import {
+  markTaskDetailPhase,
+  TASK_DETAIL_COMMENTS_REQUEST_MARK,
+} from "@/lib/analytics/taskDetailPhaseTimings";
 
 export const getDraftsHelper= async(taskId:number, userId:number )=>{
   try {
@@ -83,6 +87,7 @@ export const updateDraftHelper = async (projectId:number, taskId: number, userId
   // QueryClient/query key makes it the same fetch.
   // ---------------------- FETCH COMMENTS ---------------
   export const fetchCommentsHelper = async (taskId:number, userId:number, queryClient?: QueryClient) => {
+    markTaskDetailPhase(TASK_DETAIL_COMMENTS_REQUEST_MARK);
     const response = await fetch(`/api/comments/getByTask?taskId=${taskId}`);
     const prefResponse = queryClient
       ? await queryClient.ensureQueryData({
