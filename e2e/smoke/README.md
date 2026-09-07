@@ -19,6 +19,17 @@ Without `SMOKE_BOARD_PATH`/`SMOKE_TASK_PATH` the kanban-board and task-detail
 checks are skipped (they have nothing real to open) — the other six views
 still run. Set them once the seeded account exists.
 
+## Selectors
+
+Each view in `prod.spec.ts` asserts one route-specific DOM element (a
+`data-`/`id` attribute or class read straight from the component that
+renders it — see the comment above each `VIEWS` entry for the source file).
+This is what stops a blank or generic app shell from passing. They're
+verified against the current component source, not against a live session
+(the smoke account doesn't exist yet) — if a selector ever goes stale after
+a UI change, the fix is a one-line update to the `selector` field for that
+view, not a redesign of the check.
+
 ## Re-capturing the session
 
 Log in as the smoke account in a real browser, then export cookies as
