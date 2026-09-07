@@ -469,7 +469,12 @@ const InboxSplit = ({
     selectedIdsArray.length > 0 ? (
       <>
         <SelectionCheckbox
-          className="!border-white-black"
+          // mr-2: unlike a row's gutter (checkbox + gap-2 + Seen dot before the
+          // text), this gutter holds only the checkbox, so with no sibling to
+          // push it off the right edge it sits flush against the group label
+          // (HTPR-6206). Match the row's spacing explicitly instead of relying
+          // on an element that isn't here.
+          className="!border-white-black mr-2"
           alwaysVisible
           isChecked={isAllSelected}
           onClick={() => selectAllFromAllTabs()}
