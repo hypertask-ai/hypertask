@@ -155,6 +155,15 @@ const nextConfig = {
         ],
       },
       {
+        // HTPR-6200: the OAuth approve screen is only as strong as the click on
+        // it, so no site may frame it and steer that click.
+        source: "/oauth/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+      {
         // WordPress signup route - completely exclude from global CORS
         source: "/api/auth/wordpress-signup",
         headers: [{ key: "X-Custom-CORS", value: "handled-by-middleware" }],

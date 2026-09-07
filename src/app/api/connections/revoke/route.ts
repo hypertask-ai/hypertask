@@ -57,6 +57,12 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // HTPR-6200: forget the consent screen approval too, so reconnecting this
+    // client asks the user again instead of going through silently.
+    await prisma.oAuthClientGrant.deleteMany({
+      where: { user_id: user.id, client_id: client_id },
+    })
+
     // Set user-level token revocation timestamp to invalidate ALL tokens
     // This ensures old tokens without jti are also revoked
     await prisma.user.update({
