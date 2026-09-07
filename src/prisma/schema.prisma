@@ -499,6 +499,15 @@ model FeatureFlag {
   key       String          @id
   mode      FeatureFlagMode @default(OWNER_AND_QA)
   updatedAt DateTime        @updatedAt
+  // HTPR-6193: the day the flag was switched to EVERYONE, which starts the 14-day
+  // removal countdown. Reset on every fresh switch to EVERYONE, never cleared otherwise.
+  releasedAt DateTime?
+  // Owner pressed Keep: the flag is excluded from removal while this is true.
+  keep      Boolean         @default(false)
+  // The removal ticket already filed for the current release, so the sweep files one per flag.
+  // Deliberately a soft reference, not a relation: deleting the ticket must not delete the flag,
+  // and the sweep only ever filters on it being null.
+  removalTaskId Int?
 }
 
 model FigmaConnection {
