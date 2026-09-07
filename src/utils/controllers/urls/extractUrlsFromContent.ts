@@ -1,4 +1,3 @@
-import 'server-only';
 import { parse, HTMLElement } from 'node-html-parser';
 import { IUrl } from '@/models/model';
 import addIntoTask from '@/utils/controllers/urls/addIntoTask';
