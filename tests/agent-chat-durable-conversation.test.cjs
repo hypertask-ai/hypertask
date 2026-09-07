@@ -663,16 +663,39 @@ test("the agent is told who actually sent the message", () => {
   assert.match(source, /displayName: senderName/);
 });
 
-test("a live update reaches everyone in the thread, not just the sender", () => {
+// Every write to a shared thread has to wake every tab on it. The one that
+// matters most is the agent's reply, which arrives through the MCP route and
+// used to reach only the person whose name is on the session row.
+const CHAT_BROADCASTERS = [
+  "src/app/api/agent-chat/[sessionId]/messages/route.ts",
+  "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
+  "src/lib/agentRuns/service.ts",
+];
+
+for (const relativePath of CHAT_BROADCASTERS) {
+  test(`a live update from ${relativePath} reaches everyone in the thread`, () => {
+    const source = fs.readFileSync(path.join(root, relativePath), "utf8");
+    assert.match(
+      source,
+      /broadcastChatSession\(/,
+      "a teammate watching the same conversation has to see this arrive",
+    );
+    assert.doesNotMatch(
+      source,
+      /userChannel\((?:session|run\.chatSession)\.userId\)/,
+      "the session's owner is not the only person watching the thread",
+    );
+  });
+}
+
+test("the fan-out list is resolved before the response, not after it", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/app/api/agent-chat/[sessionId]/messages/route.ts"),
+    path.join(root, "src/lib/agents/chatBroadcast.ts"),
     "utf8",
   );
-  assert.match(
-    source,
-    /chatParticipantUserIds\(session\.id\)/,
-    "a teammate watching the same conversation has to see the message arrive",
-  );
+  // A serverless runtime can freeze once the response is flushed, so the
+  // participant lookup has to be awaited rather than started and abandoned.
+  assert.match(source, /await chatParticipantUserIds\(sessionId\)/);
 });
 
 // ---------------------------------------------------------------------------

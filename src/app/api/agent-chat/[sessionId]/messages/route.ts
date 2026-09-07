@@ -4,13 +4,12 @@ import {
   persistAgentRunTriggerWebhooks,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
-import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  chatParticipantUserIds,
   ensureChatParticipant,
   loadUserAgentChatSession,
 } from "@/lib/agents/chatAccess";
+import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
 import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -142,20 +141,7 @@ export async function POST(
 
     // Everyone in the shared thread refetches it, not just the sender's own
     // tabs: a teammate watching the same conversation has to see this arrive.
-    // The list is resolved before the response, not inside the fire-and-forget
-    // chain: a serverless runtime can freeze once the response is flushed, and
-    // work that had not started yet simply never happens.
-    const participantIds = await chatParticipantUserIds(session.id).catch(
-      (error) => {
-        console.warn("[agent-chat] participant fan-out lookup failed", session.id, error);
-        return [];
-      },
-    );
-    for (const participantId of new Set([userId, ...participantIds])) {
-      void broadcast(userChannel(participantId), AGENT_CHAT_EVENT, {
-        sessionId: session.id,
-      });
-    }
+    await broadcastChatSession(session.id, [userId]);
 
     return NextResponse.json({
       success: true,

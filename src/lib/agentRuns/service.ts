@@ -13,6 +13,7 @@ import {
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
 import { featureFlagCandidateUserIds, isFeatureEnabled } from "@/lib/flags";
+import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import {
@@ -491,7 +492,7 @@ async function replayCreatedActivity(
   return { activity: serializeAgentRunActivity(activity), duplicate: true };
 }
 
-function broadcastActivityChange(
+async function broadcastActivityChange(
   run: ActivityRunWithContext,
   originUserId: number,
 ) {
@@ -505,11 +506,9 @@ function broadcastActivityChange(
       console.warn("[agent-run] Agent Chat activity broadcast failed", error),
     );
   } else if (run.chatSession) {
-    void broadcast(userChannel(run.chatSession.userId), AGENT_CHAT_EVENT, {
-      sessionId: run.chatSession.id,
-    }).catch((error) =>
-      console.warn("[agent-run] chat activity broadcast failed", error),
-    );
+    // A shared thread has more than one watcher, and what the agent is doing
+    // is the part they are staring at while they wait.
+    await broadcastChatSession(run.chatSession.id, [run.chatSession.userId]);
   }
 }
 
@@ -673,7 +672,7 @@ export async function createAgentRunActivity(
   });
   if (!activity) throw new Error("Agent run activity was not persisted");
   if (!run.task || input.type !== "RESPONSE") {
-    broadcastActivityChange(run, principal.userId);
+    await broadcastActivityChange(run, principal.userId);
   }
   return { activity: serializeAgentRunActivity(activity), duplicate: false };
 }
@@ -828,6 +827,6 @@ export async function selectAgentRunActivity(
     where: { id: activity.id },
   });
   if (!selected) throw new Error("Agent run activity selection was not persisted");
-  if (!run.task) broadcastActivityChange(run, principal.userId);
+  if (!run.task) await broadcastActivityChange(run, principal.userId);
   return { activity: serializeAgentRunActivity(selected), duplicate: false };
 }

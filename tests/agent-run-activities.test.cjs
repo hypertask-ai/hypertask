@@ -476,6 +476,13 @@ function loadService({
     broadcast: async (...args) => broadcasts.push(args),
     broadcastTaskComment: async (...args) => broadcasts.push(args),
   });
+  // The shared thread's fan-out is its own module; it resolves the participant
+  // list from the database, which this harness does not model. Recording the
+  // call keeps "a chat response wakes the thread" assertable here.
+  stub("src/lib/agents/chatBroadcast.ts", {
+    broadcastChatSession: async (sessionId, alsoUserIds = []) =>
+      broadcasts.push(["chat-session", sessionId, [...alsoUserIds]]),
+  });
   stub("src/utils/controllers/comments/createCommentService.ts", {
     createCommentService: async (input) => {
       commentCalls.push(input);
