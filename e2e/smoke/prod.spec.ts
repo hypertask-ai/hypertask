@@ -24,6 +24,9 @@ const VIEWS: Array<{
   // source, see e2e/smoke/README.md#selectors — a shell that stalls before
   // reaching this element fails here even with a correct title/status.
   selector: string
+  // Assert presence (toBeAttached) instead of visibility for selectors that
+  // are display:none by design (the inbox's hidden marker span).
+  attachedOnly?: boolean
 }> = [
   // <ul id="users-list"> — src/app/all-tasks/AllTasks.tsx
   { name: 'board list', path: '/all-tasks', title: 'All tasks', selector: '#users-list' },
@@ -34,10 +37,11 @@ const VIEWS: Array<{
   // "undefined undefined - Hypertask".
   // <textarea id="title-input"> — src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx
   { name: 'task detail', path: process.env.SMOKE_TASK_PATH, requiresFixture: true, titlePattern: / - Hypertask$/, notTitle: /undefined/, selector: '#title-input' },
-  // Hidden span the inbox flips once its notifications query resolves —
-  // present regardless of empty/non-empty state or viewport.
+  // Hidden (display:none, aria-hidden) span the inbox flips to "true" once
+  // its notifications query resolves — present regardless of empty/non-empty
+  // state or viewport, so assert presence, not visibility.
   // src/app/inbox/Inbox.tsx
-  { name: 'inbox', path: '/inbox', titlePattern: /^Inbox/, selector: '[data-tutorial-inbox-loaded="true"]' },
+  { name: 'inbox', path: '/inbox', titlePattern: /^Inbox/, selector: '[data-tutorial-inbox-loaded="true"]', attachedOnly: true },
   // Desktop calendar toggle button, or the mobile calendar's root class —
   // src/components/PageComponents/Calendar/{calendar,MobileCalendar}.tsx
   { name: 'calendar', path: '/calendar', title: 'Calender', selector: '[aria-label="Toggle boards and filters panel"], .mobile-calendar' },
@@ -88,7 +92,12 @@ for (const view of VIEWS) {
     // of chrome (nav, header) without the actual view still needs to fail
     // here (round-4 review). Each selector is a real, verified element from
     // the view's own component, not a generic wrapper.
-    await expect(page.locator(view.selector).first(), `${view.path} missing "${view.selector}"`).toBeVisible({ timeout: 15_000 })
+    const target = page.locator(view.selector).first()
+    if (view.attachedOnly) {
+      await expect(target, `${view.path} missing "${view.selector}"`).toBeAttached({ timeout: 15_000 })
+    } else {
+      await expect(target, `${view.path} missing "${view.selector}"`).toBeVisible({ timeout: 15_000 })
+    }
 
     // An auth redirect on one view means the session broke mid-run or the
     // route is misbehaving; either way this is not a passing check.

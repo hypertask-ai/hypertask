@@ -30,6 +30,10 @@ verified against the current component source, not against a live session
 a UI change, the fix is a one-line update to the `selector` field for that
 view, not a redesign of the check.
 
+One nuance: the inbox marker is `display:none` by design, so it asserts
+presence (`toBeAttached`) instead of visibility; every other view's element
+must actually be visible.
+
 ## Re-capturing the session
 
 Log in as the smoke account in a real browser, then export cookies as
