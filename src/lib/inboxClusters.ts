@@ -79,6 +79,15 @@ export const topInboxClusters = (
 export const inboxClusterCommandName = (cluster: InboxCluster): string =>
   `Archive cluster: ${cluster.ticketNumber.toUpperCase()} (${cluster.count})`;
 
+/**
+ * The always-visible label for E, in the quick tips bar and the shortcuts list.
+ * E archives every notification for the focused ticket, so neither surface may
+ * say "Remove notification": QA saw the bar contradict the row tooltip, which is
+ * the misleading label this ticket exists to fix. Neither surface knows the
+ * focused row, so the wording holds for a pile of one as well as a pile of 22.
+ */
+export const INBOX_ARCHIVE_SHORTCUT_LABEL = "Archive all for this ticket";
+
 /** Row tooltip. Singular piles keep the original wording. */
 export const inboxArchiveTooltip = (clusterCount: number | undefined): string =>
   clusterCount && clusterCount > 1
