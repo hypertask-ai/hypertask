@@ -194,9 +194,13 @@ const useTiptap = ({
       // }),
       SlashCommands(mode),
       Snippets,
-      Link.configure({
+      // HTPR-6205: autolink was disabled in HTPR-3236 because the Link mark
+      // is inclusive whenever autolink is on, so a link mark active before an
+      // @mention bled across the mention node into text typed after it.
+      // Force the mark non-inclusive instead of disabling autolink outright.
+      Link.extend({ inclusive: false }).configure({
         openOnClick: true,
-        autolink: false,
+        autolink: true,
         linkOnPaste: true,
         HTMLAttributes: {
           // Change rel to different value
