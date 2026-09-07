@@ -782,7 +782,7 @@ const Task = ({
   const openDetail = () => {
     if (
       (!showCommands.show && showAssignModal) ||
-      !project.name ||
+      !project?.name ||
       task.uniqueIndex === undefined
     )
       return;
@@ -1007,7 +1007,7 @@ const Task = ({
           task={{
             id: task.id,
             title: task.title,
-            link: `${taskBaseUri}${project.name}/${task.uniqueIndex}`,
+            link: `${taskBaseUri}${project?.name}/${task.uniqueIndex}`,
           }} 
           assignees={[...humanAssignees, ...agentAssignees]}
         />
