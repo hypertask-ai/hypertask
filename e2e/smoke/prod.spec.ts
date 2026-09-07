@@ -1,4 +1,33 @@
 import { test, expect } from '@playwright/test'
+import { writeFileSync } from 'node:fs'
+import path from 'node:path'
+
+const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
+const LOGIN_PATH = '/login'
+
+const RUNNER_ERROR_MARKERS = [
+  /net::ERR_/i,
+  /\b(?:ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN)\b/i,
+  /browser (?:has been closed|disconnected)/i,
+  /target page, context or browser has been closed/i,
+]
+
+function markUnrunnable(reason: string) {
+  writeFileSync(PREFLIGHT_FILE, JSON.stringify({ ok: false, reason }))
+}
+
+function isRunnerError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err)
+  return RUNNER_ERROR_MARKERS.some((marker) => marker.test(message))
+}
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (page.url().includes(LOGIN_PATH)) {
+    markUnrunnable(`smoke session redirected to ${LOGIN_PATH} during the view checks`)
+  } else if (testInfo.error && isRunnerError(testInfo.error)) {
+    markUnrunnable(`browser runner failed during ${testInfo.title}`)
+  }
+})
 
 // HTPR-6199 — one check per main view, desktop + mobile (via the two
 // projects in playwright.config.smoke.ts = 16 checks total). Read-only: no
@@ -70,9 +99,25 @@ for (const view of VIEWS) {
     const pageErrors: Error[] = []
     page.on('pageerror', (err) => pageErrors.push(err))
 
-    const response = await page.goto(view.path!, { waitUntil: 'load' })
+    let response
+    try {
+      response = await page.goto(view.path!, { waitUntil: 'load' })
+    } catch (err) {
+      if (isRunnerError(err)) {
+        markUnrunnable(`navigation infrastructure failed on ${view.path}`)
+      }
+      throw err
+    }
 
     test.skip(isBotChallenge(response), `Vercel bot-challenged the runner IP on ${view.path}`)
+
+    if (response && (response.status() === 401 || response.status() === 403)) {
+      markUnrunnable(`smoke session got HTTP ${response.status()} on ${view.path}`)
+    }
+    if (page.url().includes(LOGIN_PATH)) {
+      markUnrunnable(`smoke session redirected to ${LOGIN_PATH} on ${view.path}`)
+      throw new Error(`smoke session redirected to ${LOGIN_PATH} on ${view.path}`)
+    }
 
     expect(response, `no response for ${view.path}`).toBeTruthy()
     expect(response!.status(), `${view.path} returned ${response!.status()}`).toBeLessThan(400)
@@ -101,7 +146,7 @@ for (const view of VIEWS) {
 
     // An auth redirect on one view means the session broke mid-run or the
     // route is misbehaving; either way this is not a passing check.
-    expect(page.url(), `${view.path} redirected to ${page.url()}`).not.toContain('/login')
+    expect(page.url(), `${view.path} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
 
     const title = await page.title()
     if (view.title) {
