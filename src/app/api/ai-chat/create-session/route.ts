@@ -3,6 +3,11 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
+import { getAgentTeamIds } from "@/utils/controllers/agents/boardMembers";
+import {
+  ensureChatParticipant,
+  loadUserAgentChatSession,
+} from "@/lib/agents/chatAccess";
 
 export const runtime = "nodejs";
 
@@ -35,7 +40,7 @@ export async function POST(request: NextRequest) {
           revokedAt: null,
           ...accessibleAgentWhere(userId),
         },
-        select: { id: true, displayName: true },
+        select: { id: true, displayName: true, userId: true },
       });
       if (!agent) {
         return NextResponse.json(
@@ -44,17 +49,53 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // One ongoing thread per agent, like a DM. A `(userId, agentId)` unique
-      // constraint backs this upsert, so two concurrent "open this agent's
-      // chat" requests converge on the same row instead of forking two
-      // sessions -- a plain findFirst-then-create has a race window here.
+      // One ongoing conversation per agent, shared by everyone that agent is
+      // shared with, rather than a private copy each. The row is keyed on the
+      // agent's OWNER, not on whoever is opening it, so every authorized caller
+      // resolves to the same thread -- and to the same one the native heartbeat
+      // already writes to (src/app/api/cron/native-agent-heartbeat/route.ts),
+      // which keyed on the owner while this route keyed on the caller. The
+      // existing `(userId, agentId)` unique still backs the upsert, so two
+      // concurrent "open this agent's chat" requests converge on one row
+      // instead of forking two.
+      const teamId = (await getAgentTeamIds([agent.id])).get(agent.id) ?? null;
       const session = await prisma.chatSession.upsert({
-        where: { userId_agentId: { userId: userId, agentId: agent.id } },
+        where: { userId_agentId: { userId: agent.userId, agentId: agent.id } },
         update: {},
-        create: { userId: userId, agentId: agent.id, title: agent.displayName },
-        select: { id: true },
+        create: {
+          userId: agent.userId,
+          agentId: agent.id,
+          teamId,
+          title: agent.displayName,
+        },
+        select: { id: true, teamId: true },
       });
-      return NextResponse.json({ success: true, session }, { status: 200 });
+      // Written once, the first time the agent has a team to record. Never
+      // rewritten: the stored team is the conversation's scope, and letting it
+      // follow the agent would hand an old team's transcript to a new one.
+      if (session.teamId === null && teamId !== null) {
+        await prisma.chatSession.updateMany({
+          where: { id: session.id, teamId: null },
+          data: { teamId },
+        });
+      }
+
+      // Re-read through the one shared rule rather than trusting the upsert:
+      // an agent that has since moved teams keeps a thread this caller must
+      // not open, and that judgement lives in exactly one place.
+      const access = await loadUserAgentChatSession({
+        sessionId: session.id,
+        userId,
+        select: {},
+      });
+      if (!access.ok) {
+        return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+      }
+      await ensureChatParticipant(session.id, userId);
+      return NextResponse.json(
+        { success: true, session: { id: session.id } },
+        { status: 200 }
+      );
     }
 
     const session = await prisma.chatSession.create({

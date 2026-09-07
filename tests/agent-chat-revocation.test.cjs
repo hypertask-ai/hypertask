@@ -19,7 +19,7 @@ const USER_ROUTES = [
 
 function userSessionRule() {
   const start = access.indexOf("export function userAgentChatSessionWhere");
-  const end = access.indexOf("type ChatSessionOf", start);
+  const end = access.indexOf("export async function userTeamIds", start);
   assert.notEqual(start, -1, "the shared layer must expose the user rule");
   assert.notEqual(end, -1, "the user rule must be a bounded block");
   return access.slice(start, end);
@@ -33,12 +33,21 @@ test("message sends require the linked agent to remain active", () => {
   );
 });
 
-test("the user rule keeps a thread private to its owner", () => {
+test("the user rule keeps a thread inside the team it belongs to", () => {
   const rule = userSessionRule();
+  // HTPR-6002: the thread is shared with everyone the agent is shared with, so
+  // the requester no longer has to own it. What still bounds it is the
+  // conversation's own recorded team, which is what stops an agent that later
+  // moved teams handing its old team's transcript to the new one.
   assert.match(
     rule,
-    /^\s*userId,$/m,
-    "the session must belong to the requester",
+    /\{\s*teamId:\s*null,\s*userId\s*\}/,
+    "a conversation with no team of its own stays with the person who opened it",
+  );
+  assert.match(
+    rule,
+    /teamId:\s*\{\s*in:\s*\[\.\.\.teamIds\]\s*\}/,
+    "a conversation with a team is readable only by that team's members",
   );
   assert.match(
     rule,

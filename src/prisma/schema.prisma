@@ -321,6 +321,7 @@ model User {
   revokedTokens             RevokedToken[]
   apiKeys                   ApiKey[]
   chatSessions              ChatSession[]
+  chatParticipations        ChatSessionParticipant[]
   agents                    Agent[]
   timeEntries               TimeEntry[]
   taskMutes                 TaskMute[]
@@ -2145,9 +2146,20 @@ model ChatSession {
   projectId Int? // Deliberately no FK: projects can be deleted while chat history remains.
   agentId String? // Set when this session's conversation target is a native agent.
   agent Agent? @relation(fields: [agentId], references: [id])
+  // The team this conversation belongs to, written once the first time the
+  // thread is opened while the agent is on a team's board, and never rewritten.
+  // It is the conversation's scope, not a live lookup: an agent that later
+  // moves to another team must not hand its old team's transcript over, so the
+  // stored value keeps deciding who may read (see lib/agents/chatAccess). Null
+  // means the agent had no board yet, which keeps the thread its creator's.
+  // ponytail: an agent moved between teams keeps this thread and the new team
+  // gets a 404 rather than a fresh one. Add the re-homing step when an agent
+  // actually changes teams.
+  teamId String?
   title String @default("New AI Chat")
   messages ChatMessage[]
   agentRuns AgentRun[]
+  participants ChatSessionParticipant[]
 
   @@index([userId])
   @@index([taskId])
@@ -2159,6 +2171,32 @@ model ChatSession {
   @@unique([userId, agentId])
   // Backs the sweep's stale-session scan (src/pages/api/queues/sweep.ts).
   @@index([updatedAt])
+}
+
+/// One human who has taken part in an agent chat thread, plus the two pieces of
+/// state that are theirs alone: how far they have read, and what they have
+/// typed but not sent. The thread itself is shared with everyone the agent is
+/// shared with, and who may read it is decided live by board membership, so
+/// this is the record of who turned up, not the access list.
+model ChatSessionParticipant {
+  id String @id @default(uuid())
+  sessionId String
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime @default(now())
+  // Stamped by the server when this person reaches the newest message, so it
+  // can only move forward and a stale tab cannot drag it back. Unread is then
+  // every later message this person did not write; joinedAt is the baseline,
+  // so arriving in an old thread does not arrive with hundreds unread.
+  lastReadAt DateTime?
+  // Unsent composer text, private until it is sent. Cleared in the same
+  // transaction as the message it becomes, so sent text cannot come back.
+  draft String? @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, userId])
+  @@index([userId])
 }
 
 model ChatMessage {

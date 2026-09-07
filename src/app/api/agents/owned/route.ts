@@ -14,6 +14,27 @@ const MAX_AGENTS = 200;
 export const runtime = "nodejs";
 
 /**
+ * Unread agent-chat messages per agent for one person. Every thread has its own
+ * cutoff -- the reader's own `lastReadAt` -- so this cannot be a plain groupBy
+ * over messages; the cutoff has to be joined in per row. Their own messages
+ * never count, and neither does anything from before they joined the thread.
+ */
+async function unreadChatCounts(userId: number): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<{ agentId: string; unread: bigint }[]>`
+    SELECT s."agentId" AS "agentId", COUNT(m.id) AS unread
+    FROM "ChatSessionParticipant" p
+    JOIN "ChatSession" s ON s.id = p."sessionId"
+    JOIN "ChatMessage" m ON m."sessionId" = s.id
+    WHERE p."userId" = ${userId}
+      AND s."agentId" IS NOT NULL
+      AND m."createdAt" > COALESCE(p."lastReadAt", p."joinedAt")
+      AND (m."authorUserId" IS NULL OR m."authorUserId" <> ${userId})
+    GROUP BY s."agentId"
+  `;
+  return new Map(rows.map((row) => [row.agentId, Number(row.unread)]));
+}
+
+/**
  * Every agent the signed-in user owns, across every team and board.
  *
  * The sibling routes answer different questions: `/api/agents` lists a single
@@ -102,6 +123,8 @@ export async function GET(request: NextRequest) {
     userId,
   );
 
+  const unreadByAgent = await unreadChatCounts(userId);
+
   return NextResponse.json({
     success: true,
     agents: agents.map(({ permissions, members, byokApiKeys, ...agent }) => ({
@@ -116,6 +139,9 @@ export async function GET(request: NextRequest) {
       // An unexpired task lease is the agent saying "I am on this right now",
       // which is what the card's spinner reports.
       working: workingByAgent.get(agent.id) ?? null,
+      // Messages in this agent's shared thread that arrived after this person
+      // last caught up. Private to them: it reads their own participant row.
+      unreadCount: unreadByAgent.get(agent.id) ?? 0,
       postsToImportant:
         (permissions as AgentScopes | null)?.postsToImportant !== false,
       // Teams come from the boards, since an agent belongs to its owner rather

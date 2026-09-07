@@ -79,6 +79,7 @@ function matches(row, where) {
 
 const prisma = {
   chatSession: { findFirst: async () => sessionRow },
+  member_Team: { findMany: async () => [] },
   chatMessage: {
     findFirst: async () => ({ id: "human-1", role: "human" }),
     findUnique: async () => null,

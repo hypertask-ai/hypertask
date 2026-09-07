@@ -1,7 +1,10 @@
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
-import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
+import {
+  ensureChatParticipant,
+  loadUserAgentChatSession,
+} from "@/lib/agents/chatAccess";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";
@@ -17,6 +20,25 @@ export const runtime = "nodejs";
 // History page size, and the cap on ?limit=. Unchanged default so a client
 // that does not page keeps getting exactly what it got before.
 const MAX_HISTORY_PAGE = 200;
+
+/**
+ * This person's own state in a shared thread: their unsent draft, and how many
+ * messages have arrived since they last caught up. Their own messages never
+ * count as unread, and neither does anything from before they joined, because
+ * `ensureChatParticipant` seeds the marker at the moment they arrive.
+ */
+async function loadViewerState(sessionId: string, userId: number) {
+  const participant = await ensureChatParticipant(sessionId, userId);
+  const since = participant.lastReadAt ?? participant.joinedAt;
+  const unreadCount = await prisma.chatMessage.count({
+    where: {
+      sessionId,
+      createdAt: { gt: since },
+      NOT: { authorUserId: userId },
+    },
+  });
+  return { draft: participant.draft, unreadCount };
+}
 
 // GET /api/agent-chat/[sessionId]
 // History for one agent chat session, oldest first. `awaiting` tells the
@@ -110,6 +132,22 @@ export async function GET(
     const messageRows = hasMore ? pageRows.slice(0, limit) : pageRows;
     const messages = messageRows.reverse();
 
+    // Opening the thread is taking part in it, which is what gives this person
+    // an unread marker and a draft slot. Skipped on a paged read: scrolling
+    // back through history is not arriving.
+    const viewer = before ? null : await loadViewerState(session.id, userId);
+    const participants = before
+      ? null
+      : await prisma.chatSessionParticipant.findMany({
+          where: { sessionId: session.id },
+          orderBy: { joinedAt: "asc" },
+          select: {
+            userId: true,
+            joinedAt: true,
+            user: { select: { displayName: true, email: true } },
+          },
+        });
+
     const subscription = await prisma.agentWebhookSubscription.findUnique({
       where: { agentId: access.agentId },
       select: { active: true, events: true },
@@ -143,6 +181,15 @@ export async function GET(
       // whose turn it is, and guessing "not waiting" would clear a live
       // thinking state in the client.
       awaiting: before ? null : messages[messages.length - 1]?.role === "human",
+      // Null on a paged read, like `activity`: an older page carries neither.
+      viewer,
+      participants:
+        participants?.map((participant) => ({
+          userId: participant.userId,
+          displayName:
+            participant.user.displayName || participant.user.email,
+          joinedAt: participant.joinedAt,
+        })) ?? null,
       chatEnabled,
     });
   } catch (error: any) {
