@@ -30,8 +30,9 @@ export function featureFlagRemovalDueAt(row: {
 }
 
 /**
- * What the flags admin card says about removal, or null when the flag is not on Everyone and
- * so has no countdown at all. Keep wins over the countdown; a filed ticket wins over both,
+ * What the flags admin card says about removal, or null when there is no countdown to show:
+ * the flag is not on Everyone, or it is but has no usable `releasedAt` (legacy rows written
+ * before the column existed). Keep wins over the countdown; a filed ticket wins over both,
  * because turning Keep on no longer un-files it.
  */
 export function featureFlagRemovalState(
