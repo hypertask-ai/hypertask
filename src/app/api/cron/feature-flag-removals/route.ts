@@ -199,15 +199,14 @@ async function sweep() {
       });
       if (recorded.count === 0) {
         console.warn(`[feature-flags] ${flag.key} was re-released while its removal ticket was filed`);
-        // The ticket was already filed before the invalidation was visible; archive it so Keep
-        // (or a mode change) still means zero open removal tickets, matching the acceptance bar.
-        if (!existing) {
-          await prisma.task
-            .update({ where: { id: taskId }, data: { status: "Archive" } })
-            .catch((error) =>
-              console.error(`[feature-flags] failed to archive stale removal ticket for ${flag.key}`, error),
-            );
-        }
+        // The ticket is already open (freshly created, or reused from a crashed run) before the
+        // invalidation was visible; archive it either way so Keep (or a mode change) still means
+        // zero open removal tickets, matching the acceptance bar.
+        await prisma.task
+          .update({ where: { id: taskId }, data: { status: "Archive" } })
+          .catch((error) =>
+            console.error(`[feature-flags] failed to archive stale removal ticket for ${flag.key}`, error),
+          );
         continue;
       }
       filed.push(flag.key);
