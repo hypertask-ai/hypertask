@@ -370,9 +370,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # continue-on-error here too (OCR review): without it, a checkout or
+      # setup-node failure skips every later step including setup-npm, so
+      # the "unrunnable" classification below never triggers and the job
+      # just goes red with no Telegram alert. With it, setup-npm still runs,
+      # predictably fails (no repo/no node), and gets classified correctly.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        continue-on-error: true
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        continue-on-error: true
         with:
           node-version: 20
           cache: npm
@@ -434,6 +441,14 @@ jobs:
           SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
           SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
         run: npx playwright test -c playwright.config.smoke.ts
+
+      - name: Upload trace/screenshots for the failing run
+        if: steps.smoke.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: smoke-failure-evidence
+          path: test-results/
+          retention-days: 7
 
       - name: Not provisioned yet — see e2e/smoke/README.md
         if: steps.provisioned.outputs.ok != 'true'

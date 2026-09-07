@@ -16,8 +16,12 @@ export default defineConfig({
   use: {
     baseURL: process.env.SMOKE_BASE_URL || 'https://app.hypertask.ai',
     storageState: 'e2e/smoke/.state/smoke-state.json',
-    trace: 'off',
-    screenshot: 'off',
+    // Only kept for a failing run (OCR review): a run that triggers
+    // rollback needs more evidence than the reporter's one-line message to
+    // diagnose which view broke and why, after prod is already back on the
+    // previous build.
+    trace: 'retain-on-failure',
+    screenshot: 'only-on-failure',
     video: 'off',
   },
   globalSetup: './e2e/smoke/global-setup.ts',
