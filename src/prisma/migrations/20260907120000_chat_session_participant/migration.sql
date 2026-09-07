@@ -29,10 +29,14 @@ ALTER TABLE "ChatSessionParticipant" ADD CONSTRAINT "ChatSessionParticipant_sess
 -- AddForeignKey
 ALTER TABLE "ChatSessionParticipant" ADD CONSTRAINT "ChatSessionParticipant_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Record the team an existing conversation already belongs to, and only when
--- the agent's boards agree on one. An agent whose boards span two teams, or
--- sits on none, keeps a null team, which leaves the thread with its creator
--- rather than guessing a scope and widening who can read it.
+-- Record the team an existing conversation already belongs to. This is the one
+-- deliberate widening in this change: a thread that was one person's becomes
+-- readable by that team, history included. That is the point of the ticket, a
+-- shared conversation per team and agent, and it is what a merge reviewer
+-- needs to see. It applies only where the agent's boards agree on one team;
+-- an agent whose boards span two keeps a null team and stays with its creator.
+-- Boards with no team of their own are ignored rather than counted as a second
+-- scope, matching how getAgentTeamIds resolves the same question at runtime.
 UPDATE "ChatSession" AS s
 SET "teamId" = agent_team."teamId"
 FROM (
@@ -60,3 +64,9 @@ JOIN LATERAL (
 ) AS participant ON TRUE
 WHERE s."agentId" IS NOT NULL
 ON CONFLICT ("sessionId", "userId") DO NOTHING;
+
+-- The stored team decides who may read the thread, so it should not be able to
+-- point at a team that no longer exists. SET NULL, not CASCADE: deleting a team
+-- must not delete a transcript, and a thread with no team falls back to the
+-- person who opened it.
+ALTER TABLE "ChatSession" ADD CONSTRAINT "ChatSession_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE SET NULL ON UPDATE CASCADE;

@@ -142,19 +142,20 @@ export async function POST(
 
     // Everyone in the shared thread refetches it, not just the sender's own
     // tabs: a teammate watching the same conversation has to see this arrive.
-    void chatParticipantUserIds(session.id)
-      .then((participantIds) =>
-        Promise.all(
-          [...new Set([userId, ...participantIds])].map((participantId) =>
-            broadcast(userChannel(participantId), AGENT_CHAT_EVENT, {
-              sessionId: session.id,
-            }),
-          ),
-        ),
-      )
-      .catch((error) =>
-        console.warn("[agent-chat] live update fan-out failed", session.id, error),
-      );
+    // The list is resolved before the response, not inside the fire-and-forget
+    // chain: a serverless runtime can freeze once the response is flushed, and
+    // work that had not started yet simply never happens.
+    const participantIds = await chatParticipantUserIds(session.id).catch(
+      (error) => {
+        console.warn("[agent-chat] participant fan-out lookup failed", session.id, error);
+        return [];
+      },
+    );
+    for (const participantId of new Set([userId, ...participantIds])) {
+      void broadcast(userChannel(participantId), AGENT_CHAT_EVENT, {
+        sessionId: session.id,
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -31,14 +31,24 @@ export async function PATCH(
     // one, which would surface as a 500 instead of the 400 it is.
     const hasDraft =
       typeof body === "object" && body !== null && "draft" in body;
-    const draft =
-      typeof body?.draft === "string" ? body.draft : null;
-    if (hasDraft && draft !== null && draft.length > MAX_DRAFT_LENGTH) {
+    const draft = hasDraft ? (body as { draft: unknown }).draft : null;
+    // A number or an object is a malformed request, not "clear the draft":
+    // treating it as a clear would destroy text typed on another device.
+    if (hasDraft && draft !== null && typeof draft !== "string") {
+      return NextResponse.json(
+        { success: false, error: "Draft must be text or null" },
+        { status: 400 }
+      );
+    }
+    if (typeof draft === "string" && draft.length > MAX_DRAFT_LENGTH) {
       return NextResponse.json(
         { success: false, error: `Draft must be at most ${MAX_DRAFT_LENGTH} characters` },
         { status: 400 }
       );
     }
+    // Whitespace-only is no draft, so it clears the slot.
+    const nextDraft =
+      typeof draft === "string" && draft.trim() !== "" ? draft : null;
     const markRead = body?.read === true;
     if (!hasDraft && !markRead) {
       return NextResponse.json(
@@ -65,10 +75,7 @@ export async function PATCH(
         sessionId_userId: { sessionId: access.session.id, userId },
       },
       data: {
-        // Whitespace-only is no draft, so it clears the slot.
-        ...(hasDraft
-          ? { draft: draft && draft.trim() !== "" ? draft : null }
-          : {}),
+        ...(hasDraft ? { draft: nextDraft } : {}),
         // The server stamps the read marker instead of trusting a client
         // cursor, so it can only ever move forward.
         ...(markRead ? { lastReadAt: new Date() } : {}),

@@ -22,22 +22,23 @@ export const runtime = "nodejs";
 const MAX_HISTORY_PAGE = 200;
 
 /**
- * This person's own state in a shared thread: their unsent draft, and how many
- * messages have arrived since they last caught up. Their own messages never
- * count as unread, and neither does anything from before they joined, because
- * `ensureChatParticipant` seeds the marker at the moment they arrive.
+ * How many messages have arrived in this thread since one person last caught
+ * up. Their own messages never count, and neither does anything from before
+ * they joined, because `ensureChatParticipant` seeds the marker as they arrive.
+ *
+ * The "not mine" half is spelled out rather than left to a `NOT`: an agent's
+ * reply has no author user at all, and those are exactly the rows that should
+ * count. `/api/agents/owned` counts the same thing in raw SQL, and the two must
+ * not drift into different definitions of unread.
  */
-async function loadViewerState(sessionId: string, userId: number) {
-  const participant = await ensureChatParticipant(sessionId, userId);
-  const since = participant.lastReadAt ?? participant.joinedAt;
-  const unreadCount = await prisma.chatMessage.count({
+function unreadSince(sessionId: string, userId: number, since: Date) {
+  return prisma.chatMessage.count({
     where: {
       sessionId,
       createdAt: { gt: since },
-      NOT: { authorUserId: userId },
+      OR: [{ authorUserId: null }, { authorUserId: { not: userId } }],
     },
   });
-  return { draft: participant.draft, unreadCount };
 }
 
 // GET /api/agent-chat/[sessionId]
@@ -134,10 +135,20 @@ export async function GET(
 
     // Opening the thread is taking part in it, which is what gives this person
     // an unread marker and a draft slot. Skipped on a paged read: scrolling
-    // back through history is not arriving. Three independent reads, so they
-    // go together rather than costing two extra round trips per load.
-    const [viewer, participants, subscription] = await Promise.all([
-      before ? null : loadViewerState(session.id, userId),
+    // back through history is not arriving. This one writes, and it has to
+    // land before the list below, or a first-time reader gets a participant
+    // list without themselves in it.
+    const participant = before
+      ? null
+      : await ensureChatParticipant(session.id, userId);
+    const [unreadCount, participants, subscription] = await Promise.all([
+      participant
+        ? unreadSince(
+            session.id,
+            userId,
+            participant.lastReadAt ?? participant.joinedAt,
+          )
+        : null,
       before
         ? null
         : prisma.chatSessionParticipant.findMany({
@@ -154,6 +165,9 @@ export async function GET(
         select: { active: true, events: true },
       }),
     ]);
+    const viewer = participant
+      ? { draft: participant.draft, unreadCount: unreadCount ?? 0 }
+      : null;
     const chatEnabled = Boolean(
       subscription?.active && subscription.events.includes("chat.message")
     );

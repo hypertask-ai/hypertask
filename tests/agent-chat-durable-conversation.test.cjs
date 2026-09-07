@@ -169,13 +169,22 @@ const prisma = {
       }
       return rows.slice(0, take);
     },
-    count: async ({ where }) =>
-      messages.filter(
+    count: async ({ where }) => {
+      // An agent's reply has no author user, and those are exactly the rows
+      // that should count as unread, so the clause has to name the null case.
+      const mine = where.OR?.find((branch) => branch.authorUserId?.not)
+        ?.authorUserId.not;
+      assert.ok(
+        where.OR?.some((branch) => branch.authorUserId === null),
+        "a bare NOT would drop the agent's own replies from the count",
+      );
+      return messages.filter(
         (message) =>
           message.sessionId === where.sessionId &&
           message.createdAt > where.createdAt.gt &&
-          message.authorUserId !== where.NOT.authorUserId,
-      ).length,
+          (message.authorUserId == null || message.authorUserId !== mine),
+      ).length;
+    },
   },
   chatSessionParticipant: {
     upsert: async ({ where, create }) => {
@@ -599,6 +608,7 @@ test("opening a teamless agent's thread is refused without leaving a row behind"
       [],
       "creating the conversation and then refusing the caller leaves an orphan row",
     );
+    assert.deepEqual(participants, [], "a refused open leaves no row behind");
   } finally {
     sessionUserId = 6;
     agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);

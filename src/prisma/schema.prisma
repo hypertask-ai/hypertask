@@ -605,6 +605,7 @@ model Team {
   slackInstall                 SlackInstall?
   aiProviderSettings           Json?
   webhookSubscriptions         WebhookSubscription[]
+  chatSessions                 ChatSession[]
   // HTPR-2572: signups on these email domains auto-join this team, billed a seat like an invite.
   allowedEmailDomains          String[]           @default([])
 }
@@ -2156,6 +2157,10 @@ model ChatSession {
   // gets a 404 rather than a fresh one. Add the re-homing step when an agent
   // actually changes teams.
   teamId String?
+  // SetNull, not Cascade: a deleted team must not take a transcript with it,
+  // and a thread with no team falls back to its creator, which is the same
+  // fallback the null case already documents above.
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
   title String @default("New AI Chat")
   messages ChatMessage[]
   agentRuns AgentRun[]
