@@ -69,10 +69,14 @@ export function userAgentChatSessionWhere(
   };
 }
 
-/** Teams this person is an accepted member of. */
+/**
+ * Teams this person belongs to. No status filter, matching every other team
+ * membership check in this codebase (see moveToDifferentBoard): a stricter one
+ * here would lock a board member out of a thread they can already see.
+ */
 export async function userTeamIds(userId: number): Promise<string[]> {
   const rows = await prisma.member_Team.findMany({
-    where: { userId, status: "Accepted" },
+    where: { userId },
     select: { teamId: true },
   });
   return rows.map((row) => row.teamId);

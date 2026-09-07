@@ -69,9 +69,6 @@ export async function POST(
       select: { displayName: true },
     });
     const senderName = sender?.displayName || "Hypertask user";
-    // Sending is taking part, even for someone who reached the thread without
-    // going through the open path.
-    await ensureChatParticipant(session.id, userId);
 
     if (session.agent?.runtimeType === "NATIVE") {
       return NextResponse.json(
@@ -79,6 +76,11 @@ export async function POST(
         { status: 400 }
       );
     }
+
+    // Sending is taking part, even for someone who reached the thread without
+    // going through the open path. After the refusal above, so a rejected send
+    // does not sign anyone up to a conversation they never posted to.
+    await ensureChatParticipant(session.id, userId);
 
     let agentBrief: AgentWebhookChatBrief | null = null;
     try {
@@ -91,12 +93,6 @@ export async function POST(
 
     const { message, deliveryIds } = await prisma.$transaction(async (tx) => {
       await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
-      // The draft became this message, so it stops being a draft in the same
-      // commit. Anything else lets sent text reappear in the composer.
-      await tx.chatSessionParticipant.updateMany({
-        where: { sessionId: session.id, userId },
-        data: { draft: null, lastReadAt: new Date() },
-      });
       const message = await tx.chatMessage.create({
         data: {
           sessionId: session.id,
@@ -105,6 +101,14 @@ export async function POST(
           isDelivered: true,
           authorUserId: userId,
         },
+      });
+      // The draft became this message, so it stops being a draft in the same
+      // commit. Anything else lets sent text reappear in the composer. The
+      // read marker moves after the row exists, so the sender's own message is
+      // never newer than the marker that is meant to cover it.
+      await tx.chatSessionParticipant.updateMany({
+        where: { sessionId: session.id, userId },
+        data: { draft: null, lastReadAt: message.createdAt },
       });
 
       // The outbox row joins this transaction, so the webhook can never fire

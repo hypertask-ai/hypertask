@@ -28,14 +28,35 @@ function load(relativePath) {
 // read.
 // ---------------------------------------------------------------------------
 const AGENTS = {
-  "agent-live": { id: "agent-live", revokedAt: null, sharedWith: [6, 7] },
+  "agent-live": {
+    id: "agent-live",
+    revokedAt: null,
+    ownerId: 6,
+    sharedWith: [6, 7],
+  },
   "agent-revoked": {
     id: "agent-revoked",
     revokedAt: new Date("2026-09-01"),
+    ownerId: 6,
     sharedWith: [6],
   },
-  "agent-private": { id: "agent-private", revokedAt: null, sharedWith: [6] },
+  "agent-private": {
+    id: "agent-private",
+    revokedAt: null,
+    ownerId: 6,
+    sharedWith: [6],
+  },
+  // The create-session route validates the id as a uuid, so the open path
+  // needs one that looks real.
+  "11111111-1111-4111-8111-111111111111": {
+    id: "11111111-1111-4111-8111-111111111111",
+    revokedAt: null,
+    ownerId: 6,
+    sharedWith: [6, 7],
+  },
 };
+
+const OPENABLE_AGENT = "11111111-1111-4111-8111-111111111111";
 
 const SESSIONS = [
   {
@@ -82,8 +103,15 @@ function sessionMatches(session, where) {
   if (where.id !== undefined && session.id !== where.id) return false;
   if (where.userId !== undefined && session.userId !== where.userId) return false;
   if (where.teamId !== undefined) {
-    if (where.teamId === null && session.teamId !== null) return false;
-    if (where.teamId?.in && !where.teamId.in.includes(session.teamId)) return false;
+    if (where.teamId === null) {
+      if (session.teamId !== null) return false;
+    } else if (where.teamId.in) {
+      if (!where.teamId.in.includes(session.teamId)) return false;
+    } else if (session.teamId !== where.teamId) {
+      // A shape this stub does not model must still narrow, or the DENIED
+      // table below would pass without the rule doing anything.
+      return false;
+    }
   }
   // The scope clause: the conversation's own team, or its creator when it has
   // none. A person's rule must carry it -- fail closed, so dropping it from the
@@ -114,6 +142,11 @@ function orderedDesc(rows) {
 const prisma = {
   chatSession: {
     findFirst: async ({ where }) => SESSIONS.find((s) => sessionMatches(s, where)) ?? null,
+    upsert: async ({ create }) => {
+      createdSessions.push(create);
+      return { id: "session-1", teamId: create.teamId ?? null };
+    },
+    updateMany: async () => ({ count: 1 }),
   },
   chatMessage: {
     findFirst: async ({ where }) =>
@@ -165,6 +198,7 @@ const prisma = {
         (candidate) =>
           candidate.sessionId === key.sessionId && candidate.userId === key.userId,
       );
+      assert.ok(row, "update of a participant row that was never created");
       Object.assign(row, data);
       return row;
     },
@@ -172,6 +206,13 @@ const prisma = {
   member_Team: {
     findMany: async ({ where }) =>
       (TEAMS[where.userId] ?? []).map((teamId) => ({ teamId })),
+  },
+  agent: {
+    findFirst: async ({ where }) => {
+      const agent = AGENTS[where.id];
+      if (!agent || !agent.sharedWith.includes(where.__visibleTo)) return null;
+      return { id: agent.id, displayName: agent.id, userId: agent.ownerId };
+    },
   },
   agentWebhookSubscription: {
     findUnique: async () => ({ active: true, events: ["chat.message"] }),
@@ -196,7 +237,14 @@ stub("src/lib/agents/agentChatActivity.ts", {
 });
 
 const chatAccess = load("src/lib/agents/chatAccess.ts");
+stub("src/utils/controllers/agents/boardMembers.ts", {
+  getAgentTeamIds: async () => agentTeams,
+});
+let agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);
+let createdSessions = [];
+
 const historyRoute = load("src/app/api/agent-chat/[sessionId]/route.ts");
+const createSessionRoute = load("src/app/api/ai-chat/create-session/route.ts");
 const participantRoute = load(
   "src/app/api/agent-chat/[sessionId]/participant/route.ts",
 );
@@ -432,31 +480,38 @@ test("opening a thread records who turned up", async () => {
 });
 
 test("unread counts what arrived after you caught up, and never your own", async () => {
-  participants = [];
   const caughtUpAt = new Date(Date.UTC(2026, 8, 4, 12, 0, 0));
-  participants.push({
-    sessionId: "session-1",
-    userId: 6,
-    joinedAt: caughtUpAt,
-    lastReadAt: caughtUpAt,
-    draft: null,
-  });
+  participants = [
+    {
+      sessionId: "session-1",
+      userId: 6,
+      joinedAt: caughtUpAt,
+      lastReadAt: caughtUpAt,
+      draft: null,
+    },
+  ];
   const later = (minutes, authorUserId) => ({
     ...message(minutes),
     createdAt: new Date(Date.UTC(2026, 8, 4, 12, minutes, 0)),
     authorUserId,
   });
-  // Two from a teammate, one from the agent, one of my own.
-  messages = [later(1, 7), later(2, 7), later(3, null), later(4, 6)];
+  // One before the marker, two from a teammate, one from the agent, one of mine.
+  messages = [
+    { ...message(9), authorUserId: 7 },
+    later(1, 7),
+    later(2, 7),
+    later(3, null),
+    later(4, 6),
+  ];
 
-  const unread = await prisma.chatMessage.count({
-    where: {
-      sessionId: "session-1",
-      createdAt: { gt: caughtUpAt },
-      NOT: { authorUserId: 6 },
-    },
-  });
-  assert.equal(unread, 3, "my own message is not news to me");
+  const body = await (
+    await historyRoute.GET(historyRequest(), routeContext())
+  ).json();
+  assert.equal(
+    body.viewer.unreadCount,
+    3,
+    "my own message is not news to me, and neither is one I had already read",
+  );
 });
 
 test("a draft is private to the person who typed it", async () => {
@@ -524,6 +579,53 @@ test("the participant route refuses a thread the person cannot reach", async () 
   );
   assert.equal(response.status, 404);
   assert.deepEqual(participants, [], "a refused write leaves no row behind");
+});
+
+test("opening a teamless agent's thread is refused without leaving a row behind", async () => {
+  agentTeams = new Map();
+  createdSessions = [];
+  participants = [];
+  sessionUserId = 7;
+  try {
+    const response = await createSessionRoute.POST(
+      new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
+        method: "POST",
+        body: JSON.stringify({ agentId: OPENABLE_AGENT }),
+      }),
+    );
+    assert.equal(response.status, 404);
+    assert.deepEqual(
+      createdSessions,
+      [],
+      "creating the conversation and then refusing the caller leaves an orphan row",
+    );
+  } finally {
+    sessionUserId = 6;
+    agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);
+  }
+});
+
+test("its owner still gets the thread when the agent has no team", async () => {
+  agentTeams = new Map();
+  createdSessions = [];
+  participants = [];
+  try {
+    const response = await createSessionRoute.POST(
+      new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
+        method: "POST",
+        body: JSON.stringify({ agentId: OPENABLE_AGENT }),
+      }),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(createdSessions[0].userId, 6, "keyed on the agent's owner");
+    assert.deepEqual(
+      participants.map((row) => row.userId),
+      [6],
+      "opening the thread records the person who opened it",
+    );
+  } finally {
+    agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);
+  }
 });
 
 test("the shared thread is keyed on the agent's owner, not on whoever opens it", () => {

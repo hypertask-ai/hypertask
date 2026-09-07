@@ -134,24 +134,26 @@ export async function GET(
 
     // Opening the thread is taking part in it, which is what gives this person
     // an unread marker and a draft slot. Skipped on a paged read: scrolling
-    // back through history is not arriving.
-    const viewer = before ? null : await loadViewerState(session.id, userId);
-    const participants = before
-      ? null
-      : await prisma.chatSessionParticipant.findMany({
-          where: { sessionId: session.id },
-          orderBy: { joinedAt: "asc" },
-          select: {
-            userId: true,
-            joinedAt: true,
-            user: { select: { displayName: true, email: true } },
-          },
-        });
-
-    const subscription = await prisma.agentWebhookSubscription.findUnique({
-      where: { agentId: access.agentId },
-      select: { active: true, events: true },
-    });
+    // back through history is not arriving. Three independent reads, so they
+    // go together rather than costing two extra round trips per load.
+    const [viewer, participants, subscription] = await Promise.all([
+      before ? null : loadViewerState(session.id, userId),
+      before
+        ? null
+        : prisma.chatSessionParticipant.findMany({
+            where: { sessionId: session.id },
+            orderBy: { joinedAt: "asc" },
+            select: {
+              userId: true,
+              joinedAt: true,
+              user: { select: { displayName: true, email: true } },
+            },
+          }),
+      prisma.agentWebhookSubscription.findUnique({
+        where: { agentId: access.agentId },
+        select: { active: true, events: true },
+      }),
+    ]);
     const chatEnabled = Boolean(
       subscription?.active && subscription.events.includes("chat.message")
     );

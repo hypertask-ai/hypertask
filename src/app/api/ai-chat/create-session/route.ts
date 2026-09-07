@@ -59,6 +59,12 @@ export async function POST(request: NextRequest) {
       // concurrent "open this agent's chat" requests converge on one row
       // instead of forking two.
       const teamId = (await getAgentTeamIds([agent.id])).get(agent.id) ?? null;
+      // A conversation with no team of its own belongs to whoever opened it, so
+      // there is nothing here for anyone else. Refused before the upsert, or
+      // this would write a session row and then 404 the caller who asked for it.
+      if (teamId === null && agent.userId !== userId) {
+        return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+      }
       const session = await prisma.chatSession.upsert({
         where: { userId_agentId: { userId: agent.userId, agentId: agent.id } },
         update: {},

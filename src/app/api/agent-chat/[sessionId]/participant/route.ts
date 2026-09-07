@@ -27,7 +27,10 @@ export async function PATCH(
 
     const { sessionId } = await params;
     const body = await request.json().catch(() => null);
-    const hasDraft = body !== null && "draft" in body;
+    // `request.json()` happily returns a bare primitive, and `in` throws on
+    // one, which would surface as a 500 instead of the 400 it is.
+    const hasDraft =
+      typeof body === "object" && body !== null && "draft" in body;
     const draft =
       typeof body?.draft === "string" ? body.draft : null;
     if (hasDraft && draft !== null && draft.length > MAX_DRAFT_LENGTH) {
