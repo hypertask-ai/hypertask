@@ -256,6 +256,7 @@ import {
 } from "@/lib/aiModelOptions";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
+import { AGENT_CHAT_SKILLS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { HOUSE_OUTPUT_STYLE } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
 import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
@@ -9100,7 +9101,7 @@ function buildTools(
           input.scope,
           input.project_id
         );
-        const parsed = await importSkillsFromGitHub(input.url);
+        const parsed = await importSkillsFromGitHub(input.url, user.id);
         const selected = input.slugs
           ? parsed.filter((skill) => input.slugs?.includes(skill.slug))
           : parsed;
@@ -10167,9 +10168,17 @@ export async function POST(request: NextRequest) {
       };
 
       try {
+        const agentChatSkillsEnabled = await isFeatureEnabled(
+          AGENT_CHAT_SKILLS_FLAG,
+          dbUser.id,
+        ).catch(async (error) => {
+          await reportHandledChatError(error, "skills-feature-flag");
+          return false;
+        });
         const skillResolution = await resolveSkills(requestMessage, {
           userId: dbUser.id,
           projectId: body.default_context?.project_id,
+          allowInstalledSkills: agentChatSkillsEnabled,
         });
         const resolvedBody = {
           ...body,

@@ -1,4 +1,9 @@
 import {
+  AGENT_CHAT_SKILLS_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
+
+import {
   parseSkillMarkdown,
   MAX_SKILL_BODY_BYTES,
   type ParsedSkillMarkdown,
@@ -18,6 +23,14 @@ const GITHUB_HEADERS = {
 };
 
 type ImportedSkill = ParsedSkillMarkdown & { sourceUrl: string };
+
+export class SkillImportDisabledError extends Error {
+  constructor() {
+    super("Not available");
+    this.name = "SkillImportDisabledError";
+  }
+}
+
 type GitHubContent = {
   content?: string;
   download_url?: string | null;
@@ -27,7 +40,18 @@ type GitHubContent = {
   type: "dir" | "file" | "symlink" | "submodule";
 };
 
-export async function importSkillsFromGitHub(input: string): Promise<ImportedSkill[]> {
+export async function importSkillsFromGitHub(
+  input: string,
+  userId: number,
+): Promise<ImportedSkill[]> {
+  let enabled = false;
+  try {
+    enabled = await isFeatureEnabled(AGENT_CHAT_SKILLS_FLAG, userId);
+  } catch (error) {
+    console.error("[skill-import] feature flag check failed", error);
+  }
+  if (!enabled) throw new SkillImportDisabledError();
+
   const url = new URL(input);
   if (url.protocol !== "https:") throw new Error("GitHub URL must use HTTPS");
   if (url.hostname !== "github.com" && url.hostname !== "raw.githubusercontent.com") {

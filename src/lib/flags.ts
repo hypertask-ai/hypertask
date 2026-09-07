@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
   AGENT_CHAT_BRIEF_FLAG,
+  AGENT_CHAT_SKILLS_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
@@ -37,6 +38,12 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: AGENT_CHAT_SKILLS_FLAG,
+    shippedOn: "2026-09-07",
+    description:
+      "Lets people import skills from GitHub and invoke installed skills in Agent Chat with /slug.",
+  },
   {
     key: "htpr-5913-consistent-comment-shortcuts",
     shippedOn: "2026-09-04",

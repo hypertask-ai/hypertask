@@ -3,6 +3,9 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useFlag } from "@/hooks/useFlag";
+import { AGENT_CHAT_SKILLS_FLAG } from "@/lib/flags/keys";
+
 import SettingsCard from "./SettingsCard";
 import SettingsToggle from "./SettingsToggle";
 
@@ -35,6 +38,7 @@ export default function SkillLibrary({
   projectId?: number;
   teamId?: string | null;
 }) {
+  const agentChatSkillsEnabled = useFlag(AGENT_CHAT_SKILLS_FLAG);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -231,57 +235,59 @@ export default function SkillLibrary({
         )}
       </SettingsCard>
 
-      <SettingsCard title="Import from GitHub">
-        <div className="flex gap-2">
-          <input
-            className={inputClass}
-            onChange={(event) => setImportUrl(event.target.value)}
-            placeholder="https://github.com/owner/repository"
-            type="url"
-            value={importUrl}
-          />
-          <button
-            className={buttonClass}
-            disabled={!importUrl.trim() || importing}
-            onClick={() => void previewImport()}
-            type="button"
-          >
-            Preview
-          </button>
-        </div>
-        {preview.length > 0 && (
-          <div className="flex flex-col gap-2 px-2 py-2">
-            {preview.map((skill) => (
-              <label className="flex items-start gap-2" key={skill.slug}>
-                <input
-                  checked={selectedSlugs.has(skill.slug)}
-                  className="mt-1"
-                  onChange={() =>
-                    setSelectedSlugs((current) => {
-                      const next = new Set(current);
-                      next.has(skill.slug) ? next.delete(skill.slug) : next.add(skill.slug);
-                      return next;
-                    })
-                  }
-                  type="checkbox"
-                />
-                <span>
-                  <strong>{skill.name}</strong>{" "}
-                  <span className="text-text-light-gray">/{skill.slug}</span>
-                </span>
-              </label>
-            ))}
+      {agentChatSkillsEnabled && (
+        <SettingsCard title="Import from GitHub">
+          <div className="flex gap-2">
+            <input
+              className={inputClass}
+              onChange={(event) => setImportUrl(event.target.value)}
+              placeholder="https://github.com/owner/repository"
+              type="url"
+              value={importUrl}
+            />
             <button
-              className={`${buttonClass} self-start`}
-              disabled={selectedSlugs.size === 0 || importing}
-              onClick={() => void confirmImport()}
+              className={buttonClass}
+              disabled={!importUrl.trim() || importing}
+              onClick={() => void previewImport()}
               type="button"
             >
-              Import selected
+              Preview
             </button>
           </div>
-        )}
-      </SettingsCard>
+          {preview.length > 0 && (
+            <div className="flex flex-col gap-2 px-2 py-2">
+              {preview.map((skill) => (
+                <label className="flex items-start gap-2" key={skill.slug}>
+                  <input
+                    checked={selectedSlugs.has(skill.slug)}
+                    className="mt-1"
+                    onChange={() =>
+                      setSelectedSlugs((current) => {
+                        const next = new Set(current);
+                        next.has(skill.slug) ? next.delete(skill.slug) : next.add(skill.slug);
+                        return next;
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  <span>
+                    <strong>{skill.name}</strong>{" "}
+                    <span className="text-text-light-gray">/{skill.slug}</span>
+                  </span>
+                </label>
+              ))}
+              <button
+                className={`${buttonClass} self-start`}
+                disabled={selectedSlugs.size === 0 || importing}
+                onClick={() => void confirmImport()}
+                type="button"
+              >
+                Import selected
+              </button>
+            </div>
+          )}
+        </SettingsCard>
+      )}
 
       <SettingsCard title={editing ? "Edit skill" : "New skill"}>
         <textarea

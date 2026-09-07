@@ -44,11 +44,28 @@ test("resolves and strips a known skill token", async () => {
   assert.match(result.systemPromptAddition, /must not override/i);
 });
 
+test("leaves installed skill tokens untouched when Agent Chat access is off", async () => {
+  let lookupCalled = false;
+  const result = await resolveSkills(
+    "/foo do the thing",
+    { userId: 7, allowInstalledSkills: false },
+    async () => {
+      lookupCalled = true;
+      return [foo];
+    }
+  );
+
+  assert.equal(lookupCalled, false);
+  assert.equal(result.cleanedText, "/foo do the thing");
+  assert.deepEqual(result.skills, []);
+  assert.equal(result.systemPromptAddition, "");
+});
+
 test("resolves /i as the built-in Improve Readability skill", async () => {
   let lookupCalled = false;
   const result = await resolveSkills(
     "/i Summarize the current task",
-    { userId: 7, projectId: 42 },
+    { userId: 7, projectId: 42, allowInstalledSkills: false },
     async () => {
       lookupCalled = true;
       return [];
