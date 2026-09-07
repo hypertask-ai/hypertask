@@ -39,7 +39,7 @@ import {
 } from "@/lib/sectionAutoAssign";
 import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
 import { useFlag } from "@/hooks/useFlag";
-import { COLUMN_ALL_VIEWS_FLAG } from "@/lib/flags";
+import { COLUMN_ALL_VIEWS_FLAG } from "@/lib/flags/keys";
 import {
   applyColumnVisibilityToProject,
   countViewsShowingColumn,

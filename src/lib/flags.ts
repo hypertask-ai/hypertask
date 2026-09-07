@@ -5,6 +5,24 @@ import type {
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
+import {
+  AGENT_CHAT_BRIEF_FLAG,
+  AGENT_CHAT_TICKET_CONFIRM_FLAG,
+  AUTO_TASK_DESCRIPTIONS_FLAG,
+  COLUMN_ALL_VIEWS_FLAG,
+  FEATURE_FLAG_DETAILS_FLAG,
+  FIGMA_CONNECT_FLAG,
+  FLAG_SHIP_DATE_CLUSTER_FLAG,
+  FLAG_SORT_FILTER_FLAG,
+  FLAG_TICKET_TITLE_FLAG,
+  INBOX_ARCHIVE_CLUSTER_FLAG,
+  PAGE_MENTIONS_FLAG,
+} from "@/lib/flags/keys";
+
+// Re-exported so server code keeps importing keys from here. Client components must
+// import "@/lib/flags/keys" directly: this module reaches ioredis through the auth
+// stack and cannot enter a browser bundle.
+export * from "@/lib/flags/keys";
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
 const FEATURE_FLAG_OWNER = {
@@ -16,18 +34,6 @@ const FEATURE_FLAG_QA_USER = {
   userId: FEATURE_FLAG_QA_USER_ID,
   email: "valentin@hypertask.ai",
 } as const;
-
-export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
-export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
-export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
-export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
-export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
-export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
-export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
-export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
-export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
-export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
-export const COLUMN_ALL_VIEWS_FLAG = "htpr-5937-show-column-in-all-views";
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
