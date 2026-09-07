@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 import { assertProjectAccess } from "./customInstructions";
+import { SkillImportDisabledError } from "./skillImport";
 
 export type SkillScope = "user" | "project";
 
@@ -39,9 +40,13 @@ export async function getAccessibleSkill(userId: number, id: number) {
 export function skillErrorResponse(error: unknown) {
   const conflict =
     error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+  const disabled = error instanceof SkillImportDisabledError;
   const message = error instanceof Error ? error.message : "Skill request failed";
+  let status = 400;
+  if (conflict) status = 409;
+  else if (disabled) status = 404;
   return NextResponse.json(
     { error: conflict ? "A skill with this slug already exists in this scope" : message },
-    { status: conflict ? 409 : 400 }
+    { status }
   );
 }

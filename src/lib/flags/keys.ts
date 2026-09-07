@@ -10,6 +10,7 @@
 
 export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
 export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
+export const AGENT_CHAT_SKILLS_FLAG = "htpr-6035-agent-chat-skills";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
