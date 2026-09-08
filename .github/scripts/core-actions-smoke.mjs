@@ -176,6 +176,18 @@ export async function provision() {
   };
 }
 
+const FIXTURE_SETTING_NAMES = [
+  "CORE_SMOKE_PROJECT_ID",
+  "CORE_SMOKE_TASK_ID",
+  "CORE_SMOKE_BASE_SECTION_ID",
+  "CORE_SMOKE_ALT_SECTION_ID",
+  "CORE_SMOKE_AGENT_ID",
+];
+
+export function missingFixtureSettings(env = process.env) {
+  return FIXTURE_SETTING_NAMES.filter((name) => !env[name]);
+}
+
 export function readFixtureSettings(env = process.env) {
   const fixture = {
     projectId: integer(
@@ -409,6 +421,14 @@ async function main() {
     process.stdout.write(`${JSON.stringify(fixture)}\n`);
     return;
   }
+  if (command === "check-settings") {
+    const missing = missingFixtureSettings();
+    if (missing.length) {
+      process.stdout.write(`${missing.join(", ")} missing\n`);
+      process.exitCode = 1;
+    }
+    return;
+  }
   if (command === "run") {
     let result;
     try {
@@ -447,7 +467,7 @@ async function main() {
     return;
   }
   throw new Error(
-    "Usage: core-actions-smoke.mjs <provision|run|report|rollback-decision>",
+    "Usage: core-actions-smoke.mjs <provision|check-settings|run|report|rollback-decision>",
   );
 }
 

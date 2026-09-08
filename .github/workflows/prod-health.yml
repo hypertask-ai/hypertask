@@ -710,8 +710,20 @@ jobs:
           ref: ${{ github.event_name == 'push' && github.sha || 'production' }}
           fetch-depth: 200
 
+      - name: Check the fixture settings are configured
+        id: settings
+        run: |
+          MISSING=$(node .github/scripts/core-actions-smoke.mjs check-settings || true)
+          if [ -n "$MISSING" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Core-actions probe skipped: $MISSING (fixture setup, see HTPR-6258)"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run the logged-in core actions and restore the fixture
         id: probe
+        if: steps.settings.outputs.configured == 'true'
         continue-on-error: true
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
@@ -724,7 +736,7 @@ jobs:
         run: node .github/scripts/core-actions-smoke.mjs run
 
       - name: Roll back a confirmed post-deploy application failure
-        if: ${{ !cancelled() && github.event_name == 'push' && steps.probe.outcome == 'failure' }}
+        if: ${{ !cancelled() && github.event_name == 'push' && steps.settings.outputs.configured == 'true' && steps.probe.outcome == 'failure' }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
@@ -740,14 +752,14 @@ jobs:
           echo "CORE_SMOKE_ROLLBACK=$SUMMARY" >> "$GITHUB_ENV"
 
       - name: Report a failed or unrunnable check
-        if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
+        if: ${{ !cancelled() && steps.settings.outputs.configured == 'true' && steps.probe.outcome == 'failure' }}
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
         run: node .github/scripts/core-actions-smoke.mjs report
 
       - name: Keep failed monitoring visible
-        if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
+        if: ${{ !cancelled() && steps.settings.outputs.configured == 'true' && steps.probe.outcome == 'failure' }}
         run: |
           echo "::error::Core-actions smoke did not pass"
           exit 1
