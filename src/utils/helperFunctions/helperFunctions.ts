@@ -7,6 +7,7 @@ import { NotificationType, SortingOrder } from "@prisma/client";
 import { getActiveColumnsViewFromProject, getActiveSortingModeFromProject, getActiveSortingOrderFromProject, getActiveSortingStackFromProject } from "./Views/ViewsHelperFunctions";
 import type { FileItem } from "@/components/Common/AttachmentsUpload";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
+import { prepareUploadFile } from "@/lib/media/heicToJpeg";
 import { agentSplitName, inboxConfig, staleSplitName } from "@/lib/configs/inbox.config";
 import { count } from "console";
 import { TBoardSortingViewMode, TBoardSortingViewOrder } from "@/models/Views/model";
@@ -525,7 +526,11 @@ export const isImage = (file: File): boolean => {
 
 export const processFiles = async (files: FileList, startingId: number) => {
     const  newFileItems: FileItem[] = await Promise.all(
-      Array.from(files).map(async (file, index) => {
+      Array.from(files).map(async (original, index) => {
+        // HTPR-6257: a HEIC becomes a JPEG here, before anything else looks at
+        // it, so the optimistic tile paints a real thumbnail and the resizer
+        // below gets a format its canvas can actually decode.
+        const file = await prepareUploadFile(original);
         if (isImage(file)) {
           if (file.size / (1024 ** 2) > 2) {
             const resizedImage = await imageResizer(file);
