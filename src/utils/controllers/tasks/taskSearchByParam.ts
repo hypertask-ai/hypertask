@@ -6,7 +6,10 @@ import {
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
 import { isFeatureEnabled, PAGE_MENTIONS_FLAG } from "@/lib/flags";
-import { matchesMentionName } from "@/utils/helperFunctions/mentionSearch";
+import {
+  matchesMentionName,
+  selectMentionAgents,
+} from "@/utils/helperFunctions/mentionSearch";
 
 const taskSearchByParam = async (
   rawParam: string,
@@ -46,6 +49,10 @@ const taskSearchByParam = async (
       // whole @ list (people, agents, tasks, boards) for everyone.
       isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
     ]);
+
+    if (!projectIds.includes(projectId)) {
+      return { status: 403, json: [] };
+    }
 
     let hyperAIObject = { ...hyperAI, displayName: "HyperAI" };
 
@@ -146,13 +153,15 @@ const taskSearchByParam = async (
         identifier: (item?.uniqueIdentifier ?? "").toString().toUpperCase(),
       }));
 
-      const updatedAgents = boardAgentRows.slice(0, 5).map((row) => ({
-        id: row.agent.id,
-        name: row.agent.displayName,
-        userId: row.agent.userId,
+      const updatedAgents = selectMentionAgents(
+        boardAgentRows.map((row) => row.agent),
+        param,
+      ).map((agent) => ({
+        id: agent.id,
+        name: agent.displayName,
+        userId: agent.userId,
         type: "agent",
       }));
- 
 
       return {
         status: 200,
@@ -240,15 +249,15 @@ const taskSearchByParam = async (
         identifier: (item?.uniqueIdentifier ?? "").toString().toUpperCase(),
       }));
 
-      const updatedAgents = boardAgentRows
-        .filter((row) => matchesMentionName(row.agent.displayName, param))
-        .slice(0, 5)
-        .map((row) => ({
-          id: row.agent.id,
-          name: row.agent.displayName,
-          userId: row.agent.userId,
-          type: "agent",
-        }));
+      const updatedAgents = selectMentionAgents(
+        boardAgentRows.map((row) => row.agent),
+        param,
+      ).map((agent) => ({
+        id: agent.id,
+        name: agent.displayName,
+        userId: agent.userId,
+        type: "agent",
+      }));
 
       return {
         status: 200,
