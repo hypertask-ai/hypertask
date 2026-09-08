@@ -313,7 +313,10 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
     };
 
     const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
-    return agent ? { ...mapped, agent } : mapped;
+    // Count the already-filtered, visibility-checked assignee list so the
+    // number always matches what the response actually lists (HTPR-6279).
+    const withAssigneeCount = { ...mapped, assigneeCount: mapped.assignees.length };
+    return agent ? { ...withAssigneeCount, agent } : withAssigneeCount;
 }
 
 export function mapTaskToDetail(task: any, userId: number): TaskDetail {

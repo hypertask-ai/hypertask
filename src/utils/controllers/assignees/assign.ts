@@ -30,6 +30,23 @@ import {
 
 export type AssigneeIntent = "assign" | "unassign" | "toggle";
 
+// Partial unique indexes from the 20260908160000 migration. A losing
+// concurrent insert violates one of these; any other P2002 is a real bug and
+// must propagate. The name can appear in `meta.target` (classic client) or in
+// the driver adapter's original message (driver-adapter client).
+const ASSIGNEE_UNIQUE_INDEXES = [
+  "Assignees_taskId_userId_person_key",
+  "Assignees_taskId_agentId_key",
+] as const;
+
+export function isAssigneeUniqueIndexError(error: unknown): boolean {
+  if ((error as { code?: string } | null)?.code !== "P2002") return false;
+  const metaText = JSON.stringify(
+    (error as { meta?: unknown } | null)?.meta ?? ""
+  );
+  return ASSIGNEE_UNIQUE_INDEXES.some((name) => metaText.includes(name));
+}
+
 const assigneesAssign = async (
   currentUser: IUser,
   userId: number | null,
@@ -316,7 +333,12 @@ const createAssignee = async ({
   expectedSectionId,
   allowHumanOverride,
 }: ICreateAssigneeProps) => {
-  const result = await prisma.$transaction(async (tx) => {
+  const assigneeIdentity = agentId
+    ? { agentId }
+    : { userId, agentId: null };
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
     // Human and agent assignments share the discovery/take fence. Otherwise a
     // person can be assigned after require_unassigned succeeds but before the
     // autonomous self-assignment commits.
@@ -460,6 +482,26 @@ const createAssignee = async ({
       boardWebhookDeliveryIds,
     };
   });
+  } catch (error) {
+    if (isAssigneeUniqueIndexError(error)) {
+      // A concurrent assign won the unique index (HTPR-6279). The transaction
+      // rolled back with no writes of ours; confirm the winner's row exists
+      // before reporting the assignment as already done.
+      const winner = await prisma.assignees.findFirst({
+        where: { taskId, ...assigneeIdentity },
+        select: { id: true },
+      });
+      if (winner) {
+        return {
+          assign: null,
+          outcome: "already-assigned" as const,
+          webhookDeliveryIds: [],
+          boardWebhookDeliveryIds: [],
+        };
+      }
+    }
+    throw error;
+  }
   if (result.outcome === "created") {
     await publishAgentWebhookDeliveries(result.webhookDeliveryIds);
     await publishBoardWebhookDeliveries(result.boardWebhookDeliveryIds);
