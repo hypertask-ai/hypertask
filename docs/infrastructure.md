@@ -24,8 +24,8 @@ A `/` route exists here (`src/app/page.tsx`) but is not the marketing homepage.
 
 ## Compute
 
-Vercel project **`hypertasks-prod`**, deploying the **`staging`** branch. Pushing or merging
-to `staging` deploys `app.hypertask.ai` in ~3 minutes. There is no other production gate.
+Vercel project **`hypertasks-prod`**, deploying the **`production`** branch. Pushing or merging
+to `production` deploys `app.hypertask.ai` in ~3 minutes. There is no other production gate.
 
 `main` is frozen legacy. Do not base work on it, do not open PRs against it.
 
@@ -54,47 +54,42 @@ key must therefore be the percent-decoded path with `+` left literal. Cloudflare
 
 ## Deploy pipeline
 
-1. Branch off `origin/staging`.
+1. Branch off `origin/production`.
 2. Push. A Vercel preview builds automatically and the bot comments the URL on the PR.
-3. Open a PR with base `staging`. CI runs `ci-build`, the provider-portable `claude-review`
-   compatibility check, `next-public-secrets`, and `revert-guard`. Preview smoke runs only
-   when an opt-in preview exists.
-4. Merge to `staging` -> production deploys in ~3 min.
+3. Open a PR with base `production`. The required checks are `claude-review`, `next-public-secrets`,
+   `secret-scan`, `revert-guard`, and `pr-title`; CI Tests and App Smoke run before merge via the
+   `full-ci` flow. Preview smoke runs only when an opt-in preview exists.
+4. Merge to `production` -> production deploys in ~3 min.
 
-Rollback: promote the previous production deployment in Vercel, or `git revert` on `staging`.
+Rollback: promote the previous production deployment in Vercel, or `git revert` on `production`.
 
-### CI runners (HTPR-5105, 2026-08-06)
+### CI runners (HTPR-5105, 2026-08-06; reconciled 2026-09-08, HTPR-6301)
 
-CI runs on five **self-hosted runner services**
-(`contabo-1` … `contabo-5`) on the Contabo-UK VPS (80.190.82.74). General-purpose
-jobs use the low-privilege `ghrunner` account. Subscription review uses the separate
-`htreviewrunner` account and private `valentinyeo/hypertask-reviewer` repository, so application PR-controlled jobs cannot schedule its runners or invoke its wrappers. Free minutes;
-GitHub-hosted billing had trended ~$175/mo.
+Since the 2026-08-30 move to the public `hypertask-ai` org, **app CI runs on
+GitHub-hosted `ubuntu-latest` runners** — the repository is public, so hosted
+minutes are free. No self-hosted runner is registered to this repository; do
+not re-register one without a recorded decision.
 
-The services use three lanes:
+The Contabo-UK VPS (80.190.82.74) still hosts the **private** lanes:
 
-- `ai-review`: AI review only. `contabo-1` and `contabo-2` are registered only to `valentinyeo/hypertask-reviewer` and run as `htreviewrunner`.
-- `ci-fast`: secret guard, revert guard, and auto-merge. `contabo-4` is exclusive to this lane.
-- `contabo`: CI Build, production health, and other heavy work on `contabo-3` and `contabo-5`.
+- `ai-review`: `contabo-1` is registered only to `valentinyeo/hypertask-reviewer`
+  and runs as `htreviewrunner`. Application PR jobs cannot schedule it or invoke
+  its subscription wrappers (the low-privilege `ghrunner` account is not used by
+  app jobs at all anymore).
+- The analytics publisher runs its own `analytics-ci-fast-1` review runner.
+- The shared root-owned action archive cache at `/opt/github-actions/action-archive-cache`
+  accelerates only those self-hosted lanes; hosted app runners download actions normally.
 
-All six local Actions runner services share the root-owned, read-only action archive cache at `/opt/github-actions/action-archive-cache`. Populate it from a trusted `staging` checkout with `.github/scripts/install-action-archive-cache.sh`; use `--install-services` only while lanes are idle because it restarts the services. Exact action commits and recovery behavior are canonical in `openwiki/deployment.md` and `docs/ci.md`.
-
-This reserves two secure review slots without another host or VPN. All services still share the same physical VPS, so a host outage stops every lane.
-
-Five is a capacity choice, not a limit: the box has 18 cores but also runs every
-agent session. Two runners left checks queueing for
-hours (2026-08-07). If the queue backs up again, add runners the same way (copy the
-runner dir, `config.sh --name contabo-N --labels contabo`, `svc.sh install ghrunner`)
-and watch `uptime`. **Live queue and runner health: https://hypertask.app/ci**
+Live runner health: https://hypertask.app/ci
 
 prod-health's page curls can hit Vercel's bot challenge on the VPS IP, so its health
 check treats an `x-vercel-mitigated: challenge` response as INCONCLUSIVE (Telegram
 warning, no rollback) — never weaken that guard, a challenged curl proves nothing
 about the app.
 
-AI review and `claude-mention` are also self-hosted. A validated local broker dispatches AI review to the private reviewer repository, which tries GPT-5.6 Luna through the
-ChatGPT/Codex subscription, then Claude Sonnet through the Claude Code subscription, then GPT-5.6 Luna through Vercel AI Gateway. Its
-job checks out only the trusted `staging` reviewer implementation and never executes PR code.
+AI review and `claude-mention` are also self-hosted. A validated local broker dispatches AI review to the private reviewer repository, which fails over subscription-first
+between its configured backends (the reviewer repository owns the provider order and models). Its
+job checks out only the trusted `production` reviewer implementation and never executes PR code.
 `claude-mention` still uses `CLAUDE_CODE_OAUTH_TOKEN`. External/fork PRs are excluded from review.
 
 Deliberately still GitHub-hosted: **preview-smoke** (bot-challenge risk on preview URLs,
@@ -162,5 +157,5 @@ aws s3api list-buckets --query 'length(Buckets)'
 aws ec2 describe-instances --region eu-west-2 \
   --query 'length(Reservations[].Instances[?State.Name!=`terminated`][])'
 
-# what production actually is: Vercel project hypertasks-prod, production branch = staging
+# what production actually is: Vercel project hypertasks-prod, production branch = production
 ```
