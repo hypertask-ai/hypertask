@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import "@/styles/AttachmentView.scss";
 import { IAttachment, TCarousalItems } from "@/models/model";
 import { Paperclip } from "lucide-react";
+import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 
 interface IProps {
   attachments: IAttachment[];
@@ -16,6 +17,14 @@ interface IProps {
 
 const AttachmentView = (props: IProps) => {
   const compact = Boolean(props.compact);
+  // HTPR-6254: a HEIC that no browser can decode still 404s nothing and still
+  // downloads, but its <img> paints a broken icon. Once one has failed, fall
+  // back to the paperclip tile for the rest of the session.
+  const [unrenderable, setUnrenderable] = useState<Set<string>>(new Set());
+  const markUnrenderable = (source: string) =>
+    setUnrenderable((previous) =>
+      previous.has(source) ? previous : new Set(previous).add(source)
+    );
   const [attachments, setAttachments] = useState<IAttachment[]>(
     props.attachments ?? []
   );
@@ -44,7 +53,11 @@ const AttachmentView = (props: IProps) => {
           }`}
         >
           {attachments?.map((attachment, index) => {
-            const isImage = attachment?.fileType?.startsWith("image/");
+            const isImage =
+              isBrowserRenderableImage(
+                attachment?.fileType,
+                attachment?.fileName
+              ) && !unrenderable.has(attachment?.fileSource);
             if (compact) {
               return (
                 <div
@@ -61,6 +74,7 @@ const AttachmentView = (props: IProps) => {
                           className="h-full w-full rounded-md object-contain"
                           src={attachment.fileSource}
                           alt={attachment.fileName}
+                          onError={() => markUnrenderable(attachment.fileSource)}
                         />
                       ) : (
                         <Paperclip size={18} className="text-display text-white/90" strokeWidth={1.75} />
@@ -94,6 +108,7 @@ const AttachmentView = (props: IProps) => {
                         className="object-cover rounded-md"
                         src={attachment.fileSource}
                         alt={attachment.fileName}
+                        onError={() => markUnrenderable(attachment.fileSource)}
                       />
                     ) : (
                       <Paperclip size={18} className="text-heading text-center rounded-md" strokeWidth={1.75} />

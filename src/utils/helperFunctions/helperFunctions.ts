@@ -6,6 +6,7 @@ import Resizer from "react-image-file-resizer";
 import { NotificationType, SortingOrder } from "@prisma/client";
 import { getActiveColumnsViewFromProject, getActiveSortingModeFromProject, getActiveSortingOrderFromProject, getActiveSortingStackFromProject } from "./Views/ViewsHelperFunctions";
 import type { FileItem } from "@/components/Common/AttachmentsUpload";
+import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import { agentSplitName, inboxConfig, staleSplitName } from "@/lib/configs/inbox.config";
 import { count } from "console";
 import { TBoardSortingViewMode, TBoardSortingViewOrder } from "@/models/Views/model";
@@ -512,8 +513,14 @@ function getMonthDifference(startDate:Date, endDate:Date) {
 }
 
 
+// HTPR-6254: this gates the pre-upload resize, which runs the file through a
+// canvas. A canvas can only draw what the browser can decode, so handing it a
+// HEIC from a Mac produced a WEBP of nothing, and worse, imageResizer's promise
+// has no reject path, so a decode that never fires onload left the attach
+// hanging forever. Only resize formats the browser can actually read; anything
+// else uploads untouched, which is also what makes it downloadable later.
 export const isImage = (file: File): boolean => {
-  return file.type.startsWith("image/");
+  return isBrowserRenderableImage(file.type, file.name);
 };
 
 export const processFiles = async (files: FileList, startingId: number) => {

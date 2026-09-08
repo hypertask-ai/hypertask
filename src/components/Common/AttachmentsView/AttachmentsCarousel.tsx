@@ -1,4 +1,5 @@
 import { IAttachment } from "@/models/model";
+import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import React, { useState, useEffect, useContext } from "react";
 import "@/styles/AttachmentView.scss";
 import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
@@ -61,7 +62,10 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
   const slides: Slide[] = attachments.map((attachment) => {
     const attachmentUpdated = attachment.fileSource;
 
-    if (attachment.fileType.startsWith("image/")) {
+    // HTPR-6254: HEIC is an "image/" the lightbox cannot paint. Send it down
+    // the same route as a PDF, where the slide keeps its download button,
+    // instead of leaving the viewer on a broken image.
+    if (isBrowserRenderableImage(attachment.fileType, attachment.fileName)) {
       return {
         src: attachmentUpdated,
         alt: attachment.fileName,
@@ -163,7 +167,10 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     // --- Handle Generic Embed Slides (PDFs, etc.) ---
     else if (
       (slide as any).fileType &&
-      !(slide as any).fileType.startsWith("image/") &&
+      !isBrowserRenderableImage(
+        (slide as any).fileType,
+        (slide as any).fileName
+      ) &&
       !(slide as any).fileType.startsWith("video/")
     ) {
       const customSlide = slide as any;

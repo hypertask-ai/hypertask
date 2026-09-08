@@ -4,9 +4,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
+import { Paperclip } from "lucide-react";
 import type { NodeViewProps } from "@tiptap/react";
 import { resizableMediaActions } from "./resizableMediaMenuUtil";
 import { normalizeImageSource } from "@/utils/helperFunctions/normalizeImageSource";
+import {
+  getFileTypeFromUrl,
+  IMAGE_FALLBACK_MIME,
+} from "@/utils/helperFunctions/getFileTypeFromUrl";
+import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import "./styles.scss";
 
 // Loading spinner component
@@ -19,6 +25,32 @@ const Spinner = () => (
 // ! had to manage this state outside of the component because `useState` isn't fast enough and creates problem cause
 // ! the function is getting old data even though new data is set by `useState` before the execution of function
 let lastClientX: number;
+
+// HTPR-6254. A Mac attaches photos as HEIC. The paste/drop handler accepts
+// anything whose type starts with "image/", so a HEIC became an <img> node, and
+// no browser except Safari decodes HEIF: the comment showed a broken-image icon
+// on a file that had uploaded perfectly well. Comments already posted that way
+// are in the database, so the fix has to live here, at render time, rather than
+// at insertion time.
+const fileNameFromSource = (src?: string | null) => {
+  if (!src) return "attachment";
+  const path = src.split(/[?#]/)[0];
+  return decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)) || "attachment";
+};
+
+const UnrenderableMedia = ({ src }: { src: string }) => (
+  <a
+    href={src}
+    target="_blank"
+    rel="noreferrer"
+    download
+    className="my-1 inline-flex max-w-full items-center gap-2 rounded-lg border border-white/15 bg-secondary px-3 py-2 text-dense text-white-black no-underline"
+  >
+    <Paperclip size={16} strokeWidth={1.75} aria-hidden />
+    <span className="truncate">{fileNameFromSource(src)}</span>
+    <span className="shrink-0 opacity-60">preview unavailable</span>
+  </a>
+);
 
 const MAX_HEIGHT = 320;
 
@@ -74,9 +106,25 @@ export const ResizableMediaNodeView = ({
   deleteNode,
 }: NodeViewProps) => {
   const [mediaType, setMediaType] = useState<"img" | "video">();
+  const [imageFailed, setImageFailed] = useState(false);
   const [isLoading, setIsLoading] = useState<boolean>(!!node.attrs.isLoading);
   const [dimensionsCalculated, setDimensionsCalculated] =
     useState<boolean>(false);
+
+  // A format the browser cannot decode (HEIC/HEIF/TIFF), or one that decoded
+  // into an error, gets the download chip instead of a dead <img>. The src
+  // carries no MIME, so the extension is what we have; an unknown extension
+  // still renders, and onError catches it if that guess was wrong.
+  const canRenderImage =
+    !imageFailed &&
+    isBrowserRenderableImage(
+      getFileTypeFromUrl(node.attrs.src ?? "", IMAGE_FALLBACK_MIME),
+      node.attrs.src
+    );
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [node.attrs.src]);
 
   useEffect(() => {
     setMediaType(node.attrs["media-type"]);
@@ -338,9 +386,14 @@ export const ResizableMediaNodeView = ({
       `}
     >
       <div className="w-fit flex relative group transition-all ease-in-out">
-        {mediaType === "img" && (
+        {mediaType === "img" && !canRenderImage && (
+          <UnrenderableMedia src={normalizeImageSource(node.attrs.src)} />
+        )}
+
+        {mediaType === "img" && canRenderImage && (
           <img
             src={normalizeImageSource(node.attrs.src)}
+            onError={() => setImageFailed(true)}
             ref={resizableImgRef as any}
             className={`rounded-lg ${isLoading ? "opacity-50" : ""}`}
             alt={node.attrs.alt || node.attrs.src}

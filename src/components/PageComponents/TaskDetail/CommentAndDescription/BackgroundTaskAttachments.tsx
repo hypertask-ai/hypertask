@@ -5,6 +5,7 @@ import { CircleAlert, Paperclip, RotateCcw } from "lucide-react";
 import { buildStyles, CircularProgressbar } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import type { IAttachment } from "@/models/model";
+import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import {
   acknowledgeCreateTaskUpload,
   createTaskUploadsForTask,
@@ -32,7 +33,9 @@ function PendingImage({ file }: { file: File }) {
 }
 
 function PendingAttachment({ upload }: { upload: CreateTaskUploadSnapshot }) {
-  const isImage = upload.file.type.startsWith("image/");
+  // HTPR-6254: a HEIC from a Mac is an "image/" the browser cannot decode, so
+  // its object URL paints a broken icon. Show the paperclip tile instead.
+  const isImage = isBrowserRenderableImage(upload.file.type, upload.file.name);
   const failed = upload.status === "upload-failed" || upload.status === "link-failed";
 
   return (
