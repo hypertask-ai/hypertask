@@ -639,6 +639,11 @@ export const AudioButton = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuOpen]);
 
+  // The Agent Chat composer sits on the viewport's bottom edge, so tooltips
+  // that open downward are clipped below the fold (HTPR-6292); open them
+  // upward there instead.
+  const tooltipsOpenUpward = id === "agent-chat-audio-button";
+
   let recordingSubmitClassName =
     "h-[28px] w-[28px] bg-hypertasks-ai-purple text-white";
   if (isMobileView) {
@@ -785,13 +790,13 @@ export const AudioButton = ({
                   <>
                     <Tooltip
                       left={0}
-                      bottom={-45}
+                      bottom={tooltipsOpenUpward ? 45 : -45}
                       keyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "D"]}
                       text={"Speech to text"}
                     />
                     <Tooltip
                       left={0}
-                      bottom={-80}
+                      bottom={tooltipsOpenUpward ? 80 : -80}
                       keyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "F"]}
                       text={"Dictate and Improve"}
                     />
@@ -891,7 +896,7 @@ export const AudioButton = ({
             <Check size={18} strokeWidth={2.2} className="keep-stroke" />
             <Tooltip
               left={0}
-              bottom={-45}
+              bottom={tooltipsOpenUpward ? 45 : -45}
               keyCombination={["ENTER"]}
               text={"Send recording"}
             />
