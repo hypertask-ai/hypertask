@@ -38,6 +38,7 @@ import {
 } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import {
+  aiChatExplicitOpenAtAtom,
   currentProjectAtom,
   currentUserAtom,
   dockedChatScopeAtom,
@@ -56,6 +57,12 @@ const SCREENSHOT_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
+
+// How long after an explicit open the mounted composer may still claim focus —
+// generous enough to cover the first-ever load of the lazily-imported chat
+// chunk on a slow network. Auto-open never sets the timestamp, so this window
+// never applies to it.
+const FOCUS_REQUEST_WINDOW_MS = 5000;
 
 export function AI_Tiptap_Container() {
   const pathname = usePathname();
@@ -116,14 +123,27 @@ export function AI_Tiptap_Container() {
     void handleDroppedFiles(imageFiles);
   };
 
-  // Focus the composer as soon as it is on screen. The focus call in
-  // useAiChat fires when the open-toggle flips, before the dynamically
-  // imported panel has mounted this editor, so it silently no-ops. Live
-  // tracing (HTPR-4565) showed the Tiptap command path also no-ops during
-  // the open transition, while plain DOM .focus() on the mounted
-  // contenteditable sticks — so retry exactly that until it lands.
+  // Focus the composer as soon as it is on screen — but only when an explicit
+  // user action just opened the panel. Auto-open ("Open AI chat by default",
+  // reload restore) mounts this panel at page load; focusing then steals the
+  // cursor so board shortcuts like c, j, k type into the chat box (HTPR-6317).
+  // The loop itself exists because the focus call in useAiChat fires when the
+  // open-toggle flips, before the dynamically imported panel has mounted this
+  // editor, so it silently no-ops (HTPR-4565). Live tracing showed the Tiptap
+  // command path also no-ops during the open transition, while plain DOM
+  // .focus() on the mounted contenteditable sticks — so retry exactly that.
+  const [explicitOpenAt, setExplicitOpenAt] = useRecoilState(
+    aiChatExplicitOpenAtAtom
+  );
   const focusRootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (
+      explicitOpenAt == null ||
+      Date.now() - explicitOpenAt > FOCUS_REQUEST_WINDOW_MS
+    ) {
+      return;
+    }
+    setExplicitOpenAt(null);
     let tries = 0;
     const tick = () => {
       tries += 1;
@@ -154,6 +174,9 @@ export function AI_Tiptap_Container() {
     };
     const interval = window.setInterval(tick, 60);
     return () => window.clearInterval(interval);
+    // Only the mount-time value matters: the decision is made once, when the
+    // panel appears.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Dictation shortcuts (desktop): at rest, Chrome swallows CTRL+SHIFT+D

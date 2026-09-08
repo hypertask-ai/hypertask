@@ -30,6 +30,7 @@ import { useRecoilState } from "@/lib/state";
 import toast from "react-hot-toast";
 import {
   aiChatAutoOpenSuppressedAtom,
+  aiChatExplicitOpenAtAtom,
   aiChatPinnedAtom,
   showAIChatInterfaceAtom,
 } from "@/store";
@@ -110,6 +111,7 @@ export const ChatHeader = () => {
   const [isStartingNewSession, setIsStartingNewSession] = useState(false);
   const isStartingNewSessionRef = useRef(false);
   const [aiChatPinned, setAiChatPinned] = useRecoilState(aiChatPinnedAtom);
+  const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
     aiChatAutoOpenSuppressedAtom
@@ -355,6 +357,7 @@ export const ChatHeader = () => {
                   const nextPinned = !aiChatPinned;
                   setAiChatPinned(nextPinned);
                   if (nextPinned) {
+                    setAiChatExplicitOpenAt(Date.now());
                     setShowAiChatInterface(true);
                     setAiChatAutoOpenSuppressed(false);
                   }

@@ -13,6 +13,7 @@ import {
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { IChatSession, IProject, ITeam } from "@/models/model";
 import {
+  aiChatExplicitOpenAtAtom,
   aiChatPinnedSessionIdsAtom,
   currentUserAtom,
   fullScreenChatRailWidthAtom,
@@ -354,6 +355,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
     setAiChatAutoOpenSuppressed,
     editor,
   } = useAiChatContext();
+  const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
 
   useEffect(() => {
     if (
@@ -464,6 +466,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
 
   const switchToDocked = () => {
     setChatMounted(true);
+    setAiChatExplicitOpenAt(Date.now());
     setShowAIChat(true);
     setAiChatAutoOpenSuppressed(false);
 

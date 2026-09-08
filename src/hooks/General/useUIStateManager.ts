@@ -4,6 +4,7 @@ import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import { useRecoilState, useResetRecoilState, useSetRecoilState } from '@/lib/state';
 import {
   aiChatAutoOpenSuppressedAtom,
+  aiChatExplicitOpenAtAtom,
   aiChatPinnedAtom,
   showBoardManagerAtom,
   showShortcutsAtom,
@@ -115,6 +116,7 @@ export const useUIStateManager = (stateKey: UIStateKey) => {
   const [isOpen, setIsOpen] = useRecoilState(getAtom());
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
   const setAiChatPinned = useSetRecoilState(aiChatPinnedAtom);
+  const setAiChatExplicitOpenAt = useSetRecoilState(aiChatExplicitOpenAtAtom);
   const resetCommands = useResetRecoilState(showCommandsAtom);
   
   // Get reset functions for other UI elements
@@ -173,6 +175,7 @@ export const useUIStateManager = (stateKey: UIStateKey) => {
       const nextIsOpen = !isOpen;
       setAiChatAutoOpenSuppressed(!nextIsOpen);
       if (!nextIsOpen) setAiChatPinned(false);
+      if (nextIsOpen) setAiChatExplicitOpenAt(Date.now());
       setIsOpen(nextIsOpen);
       return;
     }
@@ -190,6 +193,7 @@ export const useUIStateManager = (stateKey: UIStateKey) => {
     closeOthers,
     setAiChatAutoOpenSuppressed,
     setAiChatPinned,
+    setAiChatExplicitOpenAt,
     setIsOpen,
   ]);
 
@@ -199,9 +203,14 @@ export const useUIStateManager = (stateKey: UIStateKey) => {
   const open = useCallback(() => {
     if (stateKey === 'aiChatInterface' && isLoginPage) return;
     closeOthers();
-    if (stateKey === 'aiChatInterface') setAiChatAutoOpenSuppressed(false);
+    if (stateKey === 'aiChatInterface') {
+      setAiChatAutoOpenSuppressed(false);
+      // Explicit opens let the mounted composer take focus (HTPR-6317); the
+      // reload-restore caller clears this right after to stay auto-open.
+      setAiChatExplicitOpenAt(Date.now());
+    }
     setIsOpen(true);
-  }, [stateKey, isLoginPage, closeOthers, setAiChatAutoOpenSuppressed, setIsOpen]);
+  }, [stateKey, isLoginPage, closeOthers, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, setIsOpen]);
 
   /**
    * Close the UI element
