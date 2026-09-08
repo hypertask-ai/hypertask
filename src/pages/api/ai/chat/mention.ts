@@ -5,6 +5,7 @@ import type { AgentMentionItem } from "@/models/model";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "@/utils/controllers/search/document";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { selectMentionAgents } from "@/utils/helperFunctions/mentionSearch";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -54,21 +55,15 @@ const handler: NextApiHandler = async (
         parsedProjectId && projectIds.includes(parsedProjectId)
           ? await getBoardAgentMembers(parsedProjectId, userId)
           : [];
-      const updatedAgents: AgentMentionItem[] = boardAgentRows
-        .filter(
-          (row) =>
-            proccessedParam === "all" ||
-            row.agent.displayName
-              .toLowerCase()
-              .includes(proccessedParam.toLowerCase())
-        )
-        .slice(0, 5)
-        .map((row) => ({
-          id: row.agent.id,
-          name: row.agent.displayName,
-          photoURL: row.agent.photoURL,
-          type: "agent",
-        }));
+      const updatedAgents: AgentMentionItem[] = selectMentionAgents(
+        boardAgentRows.map((row) => row.agent),
+        proccessedParam,
+      ).map((agent) => ({
+        id: agent.id,
+        name: agent.displayName,
+        photoURL: agent.photoURL,
+        type: "agent",
+      }));
 
       const members_array: any[] | undefined = owner_members?.members.map(
         (item) => item.user
