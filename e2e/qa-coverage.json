@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "repository": "hypertask-ai/hypertask",
+  "branch": "production",
+  "checks": [
+    {
+      "id": "pre-merge-app",
+      "label": "Before merge: build, start, and core actions",
+      "kind": "github-job",
+      "ticket": 6237,
+      "workflowFile": "app-smoke.yml",
+      "event": "workflow_run",
+      "job": "run app-smoke",
+      "freshHours": 48,
+      "source": {
+        "file": ".github/workflows/app-smoke.yml",
+        "token": "name: run app-smoke"
+      }
+    },
+    {
+      "id": "live-core-actions",
+      "label": "Live core actions after a release",
+      "kind": "github-job",
+      "ticket": 6236,
+      "workflowFile": "prod-health.yml",
+      "event": "push",
+      "branch": "production",
+      "job": "core-actions",
+      "freshHours": 24,
+      "source": {
+        "file": ".github/workflows/prod-health.yml",
+        "token": "  core-actions:"
+      }
+    },
+    {
+      "id": "live-screen-loads",
+      "label": "Live screen loads after a release",
+      "kind": "github-job",
+      "ticket": 6199,
+      "workflowFile": "prod-health.yml",
+      "event": "push",
+      "branch": "production",
+      "job": "smoke",
+      "freshHours": 24,
+      "source": {
+        "file": ".github/workflows/prod-health.yml",
+        "token": "  smoke:"
+      }
+    },
+    {
+      "id": "code-tests",
+      "label": "Automated code tests",
+      "kind": "github-job",
+      "ticket": 6237,
+      "workflowFile": "ci-tests.yml",
+      "event": "push",
+      "branch": "production",
+      "job": "ci-tests",
+      "freshHours": 24,
+      "source": {
+        "file": ".github/workflows/ci-tests.yml",
+        "token": "  ci-tests:"
+      }
+    },
+    {
+      "id": "nightly-browser",
+      "label": "Nightly browser checks",
+      "kind": "snapshot",
+      "ticket": 5720,
+      "freshHours": 48,
+      "source": {
+        "file": "e2e/midscene/flows/index.mjs",
+        "token": "export const flows"
+      }
+    },
+    {
+      "id": "release-click-through",
+      "label": "Five-minute check after a release",
+      "kind": "github-job",
+      "ticket": 6239,
+      "workflowFile": "prod-health.yml",
+      "event": "push",
+      "branch": "production",
+      "job": "glm-qa",
+      "freshHours": 24,
+      "resultMeaning": "request",
+      "source": {
+        "file": ".github/workflows/prod-health.yml",
+        "token": "  glm-qa:"
+      }
+    },
+    {
+      "id": "qa-agent-web",
+      "label": "QA agent checks the changed feature in the browser",
+      "kind": "per-ticket",
+      "ticket": 6240,
+      "source": {
+        "file": ".github/workflows/prod-health.yml",
+        "token": "# on the merged pull request's ticket; the agent explores and reports there."
+      }
+    }
+  ],
+  "functions": [
+    {
+      "id": "build-start",
+      "label": "Build and start the app",
+      "detail": "A proposed release is built and started before it can merge.",
+      "checkIds": ["pre-merge-app"],
+      "sources": [
+        { "file": "scripts/run-app-smoke-isolated.sh", "token": "next build --webpack" },
+        { "file": "scripts/run-app-smoke-isolated.sh", "token": "next start -p 3100" }
+      ]
+    },
+    {
+      "id": "open-board-list",
+      "label": "Open the board list",
+      "detail": "The signed-in list of boards and tasks finishes loading.",
+      "checkIds": ["live-screen-loads"],
+      "sources": [{ "file": "e2e/smoke/prod.spec.ts", "token": "board list" }]
+    },
+    {
+      "id": "open-board",
+      "label": "Open a board",
+      "detail": "A real board returns its task and column data and renders on desktop and mobile.",
+      "checkIds": ["pre-merge-app", "live-core-actions", "live-screen-loads", "nightly-browser"],
+      "sources": [
+        { "file": "src/lib/productionSmoke/coreActions.ts", "token": "open board" },
+        { "file": "e2e/smoke/prod.spec.ts", "token": "kanban board" },
+        { "file": "e2e/midscene/flows/board-demo.mjs", "token": "board-demo" }
+      ]
+    },
+    {
+      "id": "open-task",
+      "label": "Open a task",
+      "detail": "A real task returns its data and its detail view renders on desktop and mobile.",
+      "checkIds": ["pre-merge-app", "live-core-actions", "live-screen-loads", "nightly-browser"],
+      "sources": [
+        { "file": "src/lib/productionSmoke/coreActions.ts", "token": "open task" },
+        { "file": "e2e/smoke/prod.spec.ts", "token": "task detail" },
+        { "file": "e2e/midscene/flows/task-detail-demo.mjs", "token": "task-detail-demo" }
+      ]
+    },
+    {
+      "id": "load-comments",
+      "label": "Load task comments",
+      "detail": "The comment list returns usable data for a real task.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "load comments" }]
+    },
+    {
+      "id": "post-comment",
+      "label": "Post a comment",
+      "detail": "A comment saves and appears when the task is read again.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "post comment and mention user and agent" }]
+    },
+    {
+      "id": "mention-person-agent",
+      "label": "Mention a person and an agent",
+      "detail": "Both mention links survive saving and reloading a comment.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "post comment and mention user and agent" }]
+    },
+    {
+      "id": "load-columns",
+      "label": "Load the move-to-column choices",
+      "detail": "The move menu receives both columns needed for the check.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "load move-to-column columns" }]
+    },
+    {
+      "id": "move-task",
+      "label": "Move a task to another column",
+      "detail": "The task moves, the activity appears, and the check restores the original column.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "move task" }]
+    },
+    {
+      "id": "assign-person",
+      "label": "Assign and unassign a person",
+      "detail": "Both assignment changes persist and the check restores the task.",
+      "checkIds": ["pre-merge-app", "live-core-actions"],
+      "sources": [{ "file": "src/lib/productionSmoke/coreActions.ts", "token": "assign and unassign" }]
+    },
+    {
+      "id": "search",
+      "label": "Search for a task",
+      "detail": "Search returns the known task and the signed-in search screen renders.",
+      "checkIds": ["pre-merge-app", "live-core-actions", "live-screen-loads"],
+      "sources": [
+        { "file": "src/lib/productionSmoke/coreActions.ts", "token": "search" },
+        { "file": "e2e/smoke/prod.spec.ts", "token": "AI search" }
+      ]
+    },
+    {
+      "id": "open-inbox",
+      "label": "Open notifications",
+      "detail": "The signed-in inbox finishes loading on desktop and mobile.",
+      "checkIds": ["live-screen-loads"],
+      "sources": [{ "file": "e2e/smoke/prod.spec.ts", "token": "inbox" }]
+    },
+    {
+      "id": "open-calendar",
+      "label": "Open the calendar",
+      "detail": "The signed-in calendar renders on desktop and mobile.",
+      "checkIds": ["live-screen-loads"],
+      "sources": [{ "file": "e2e/smoke/prod.spec.ts", "token": "calendar" }]
+    },
+    {
+      "id": "open-settings",
+      "label": "Open settings",
+      "detail": "The signed-in settings screen renders on desktop and mobile.",
+      "checkIds": ["live-screen-loads"],
+      "sources": [{ "file": "e2e/smoke/prod.spec.ts", "token": "settings" }]
+    },
+    {
+      "id": "open-new-task",
+      "label": "Open the new-task form",
+      "detail": "The signed-in new-task form renders on desktop and mobile.",
+      "checkIds": ["live-screen-loads"],
+      "sources": [{ "file": "e2e/smoke/prod.spec.ts", "token": "new-task modal" }]
+    },
+    {
+      "id": "create-demo-task",
+      "label": "Create a task on the demo board",
+      "detail": "The public demo saves a new task and shows it on the board.",
+      "checkIds": ["nightly-browser"],
+      "sources": [{ "file": "e2e/midscene/flows/task-create-demo.mjs", "token": "task-create-demo" }]
+    },
+    {
+      "id": "open-login",
+      "label": "Open the login screen",
+      "detail": "The public login screen renders. It does not complete a login.",
+      "checkIds": ["nightly-browser"],
+      "sources": [{ "file": "e2e/midscene/flows/login-screen.mjs", "token": "login-screen" }]
+    },
+    {
+      "id": "open-marketing",
+      "label": "Open the marketing page",
+      "detail": "The public landing page renders its main heading and actions.",
+      "checkIds": ["nightly-browser"],
+      "sources": [{ "file": "e2e/midscene/flows/landing.mjs", "token": "id: 'landing'" }]
+    },
+    {
+      "id": "attachment-rules",
+      "label": "Validate and save attachment uploads",
+      "detail": "Automated code tests cover upload receipts, file limits, and attachment links.",
+      "checkIds": ["code-tests"],
+      "sources": [
+        { "file": "tests/task-attachment-upload-receipt.test.cjs", "token": "test(" },
+        { "file": "tests/upload-size-limit.test.cjs", "token": "test(" }
+      ]
+    },
+    {
+      "id": "notification-rules",
+      "label": "Save and mark notifications",
+      "detail": "Automated code tests cover notification access and seen state.",
+      "checkIds": ["code-tests"],
+      "sources": [{ "file": "tests/notification-seen-authz.test.cjs", "token": "test(" }]
+    },
+    {
+      "id": "complete-login",
+      "label": "Complete a real login",
+      "detail": "No browser check submits a login and proves the account opens.",
+      "checkIds": [],
+      "sources": []
+    },
+    {
+      "id": "create-signed-in-task",
+      "label": "Create a task while signed in",
+      "detail": "The form opens, but no live signed-in check submits and reloads the new task.",
+      "checkIds": [],
+      "sources": []
+    },
+    {
+      "id": "upload-in-browser",
+      "label": "Attach a file in the browser",
+      "detail": "Code tests cover upload rules, but no live browser check uploads and reopens a file.",
+      "checkIds": [],
+      "sources": []
+    },
+    {
+      "id": "notification-delivery",
+      "label": "Receive a new notification",
+      "detail": "The inbox loads, but no live check triggers and receives a notification.",
+      "checkIds": [],
+      "sources": []
+    },
+    {
+      "id": "realtime-sync",
+      "label": "See a change from another session",
+      "detail": "No automated check opens two signed-in sessions and proves live updates arrive.",
+      "checkIds": [],
+      "sources": []
+    },
+    {
+      "id": "reminder-delivery",
+      "label": "Receive a reminder",
+      "detail": "No live browser check schedules a reminder and proves it arrives.",
+      "checkIds": [],
+      "sources": []
+    },
+    {
+      "id": "ai-answer",
+      "label": "Get an answer from the AI assistant",
+      "detail": "No live browser check sends an AI request because that spends money and changes data.",
+      "checkIds": [],
+      "sources": []
+    }
+  ]
+}
