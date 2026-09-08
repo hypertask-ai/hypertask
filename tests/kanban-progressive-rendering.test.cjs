@@ -66,7 +66,7 @@ test("loading cards do not render transient full outlines", () => {
 // `border` class paints its #dee2e6 color over Tailwind's border-transparent.
 test("progressive placeholder never uses the bare border class", () => {
   assert.doesNotMatch(placeholder, /className="[^"]*\bborder\b(?!-)/);
-  assert.match(placeholder, /border-\[1px\] border-transparent/);
+  assert.match(placeholder, /border-thin border-transparent/);
 });
 
 test("progressive placeholders preserve navigation and focus identity", () => {
