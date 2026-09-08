@@ -271,7 +271,9 @@ const useTiptap = ({
   );
   useEffect(() => {
     if (!lazyEmojiList) {
-      void ensureEmojiData().catch(() => {});
+      void ensureEmojiData().catch((error) => {
+        console.warn("[emoji] eager emoji dataset load failed", error);
+      });
     }
   }, [lazyEmojiList]);
   const editor = useEditor({

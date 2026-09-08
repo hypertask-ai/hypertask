@@ -153,6 +153,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6035-agent-chat-skills", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6059-lazy-emoji-list", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6072-shallow-board-switch", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6091-feature-flags", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6094-agent-activity-rows", mode: "OWNER_AND_QA", updatedAt: null },

@@ -24,7 +24,6 @@ import type { EmojiItem } from "@tiptap/extension-emoji";
 import emojiRegex from "emoji-regex";
 import { isEmojiSupported } from "is-emoji-supported";
 import {
-  ensureEmojiData,
   getEmojiItems,
   onEmojiDataInstalled,
 } from "./lazyEmojiData";
