@@ -188,6 +188,9 @@ test("app smoke validates the head before isolated build and route checks", asyn
     isolated,
     /candidate_root=\$\(cd "\$candidate_root" && pwd -P\)/,
   );
+  assert.match(isolated, /for candidate_mount in node_modules \.next/);
+  assert.match(isolated, /\[ -L "\$mount_target" \]/);
+  assert.match(isolated, /mkdir -p "\$mount_target"/);
   assert.match(isolated, /invocation_key=\$\{scratch##\*\.\}/);
   assert.match(isolated, /app-smoke\.Dockerfile/);
   assert.match(isolated, /runtime_image="ht-smoke-runtime-\$run_key"/);
