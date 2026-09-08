@@ -27,6 +27,7 @@ import {
   acquireAiChatToolFence,
   assertAiChatToolCanStart,
   createTurnDeadline,
+  isAiChatCancellationRequested,
   AI_CHAT_TURN_DEADLINE_REASON,
   AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS,
   AI_CHAT_TURN_DEADLINE_USER_MESSAGE,
@@ -10170,6 +10171,32 @@ export async function POST(request: NextRequest) {
       // Cleanup steps run concurrently — the 15-second reserve before the
       // platform kill cannot fit them sequentially.
       const endDeadlineTurn = async () => {
+        // A Stop recorded in Redis just before the deadline fired outranks it:
+        // the turn was user-cancelled, not timed out (AI review finding).
+        if (body.session_id && streamId) {
+          try {
+            if (
+              await isAiChatCancellationRequested(
+                streamLease.redis,
+                dbUser.id,
+                body.session_id,
+                streamId,
+              )
+            ) {
+              finish("error", { cancelled: true, content: "Stream cancelled." });
+              if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
+                await failHeartbeatExecution(
+                  heartbeatExecutionId,
+                  "AI reply cancelled",
+                ).catch(() => undefined);
+                heartbeatExecutionTerminal = true;
+              }
+              return;
+            }
+          } catch {
+            // Unreadable cancellation state: fall through to the deadline path.
+          }
+        }
         send("error", { content: AI_CHAT_TURN_DEADLINE_USER_MESSAGE });
         finish("error");
         const steps: Array<[string, Promise<unknown>]> = [

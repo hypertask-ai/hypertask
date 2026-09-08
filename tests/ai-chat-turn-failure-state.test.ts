@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createTurnDeadline,
+  isAiChatCancellationRequested,
   AI_CHAT_TURN_DEADLINE_REASON,
   AI_CHAT_TURN_DEADLINE_USER_MESSAGE,
 } from "../src/app/api/ai/chat/stream/streamLease";
@@ -46,6 +47,27 @@ test("the deadline survives a negative budget instead of throwing", async () => 
 
 test("the user message is plain, retryable wording", () => {
   assert.ok(AI_CHAT_TURN_DEADLINE_USER_MESSAGE.includes("Try again"));
+});
+
+test("a recorded Stop outranks the deadline; missing marker does not", async () => {
+  assert.equal(
+    await isAiChatCancellationRequested(
+      { async get() { return "1"; } } as never,
+      6,
+      "session-a",
+      "stream-a",
+    ),
+    true,
+  );
+  assert.equal(
+    await isAiChatCancellationRequested(
+      { async get() { return null; } } as never,
+      6,
+      "session-a",
+      "stream-a",
+    ),
+    false,
+  );
 });
 
 test("the refusal parser reads the server's error frame", () => {

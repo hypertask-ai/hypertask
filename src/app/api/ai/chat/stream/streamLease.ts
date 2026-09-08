@@ -267,6 +267,18 @@ export async function requestAiChatCancellation(
   throw new Error("Timed out waiting for the active AI operation");
 }
 
+/** True when a Stop has been recorded for this exact stream attempt. */
+export function isAiChatCancellationRequested(
+  redis: StreamRedis,
+  userId: number,
+  sessionId: string,
+  streamId: string,
+) {
+  return redis
+    .get(cancellationKey(userId, sessionId, streamId))
+    .then((value) => value === "1");
+}
+
 /** Polls Redis while a provider stream is alive and aborts it cooperatively. */
 export function watchAiChatCancellation(
   redis: StreamRedis,
