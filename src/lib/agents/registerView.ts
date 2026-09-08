@@ -102,46 +102,6 @@ export function chatRosterStatus(
 }
 
 /**
- * The shared AI allowance is funded per team, so one native agent's
- * current-period stop notice means every native agent on the same teams is
- * blocked too — not just the one that happened to take the failing turn.
- * Boards are the only team evidence the caller carries; restrict the input to
- * the agents that can actually be blocked (native) at the call site.
- *
- * ponytail: the blocked team is resolved per chat session server-side and can
- * fall back to the owner's strongest team, which no roster board may match;
- * such siblings stay unmarked rather than wrongly marked. The upgrade path is
- * stamping the team on the notice itself and propagating on that.
- */
-export type TOutOfTokensScope = {
-  id: string;
-  boards?: { teamId?: string | null }[];
-};
-
-export function propagateOutOfTokens<A extends TOutOfTokensScope>(
-  agents: A[],
-  notifiedIds: ReadonlySet<string>,
-): Set<string> {
-  const blockedTeams = new Set<string>();
-  for (const a of agents) {
-    if (!notifiedIds.has(a.id)) continue;
-    for (const board of a.boards ?? []) {
-      if (board.teamId) blockedTeams.add(board.teamId);
-    }
-  }
-  const result = new Set<string>();
-  for (const a of agents) {
-    if (
-      notifiedIds.has(a.id) ||
-      (a.boards ?? []).some((b) => b.teamId && blockedTeams.has(b.teamId))
-    ) {
-      result.add(a.id);
-    }
-  }
-  return result;
-}
-
-/**
  * How recent an agent is, as a number to sort on. An agent holding a live lease
  * outranks every timestamp: it is working right now, which is more recent than
  * anything that already finished. Never-active agents fall to the bottom rather

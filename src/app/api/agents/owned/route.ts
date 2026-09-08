@@ -9,7 +9,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { aiAllowancePeriod } from "@/lib/aiAllowancePolicy";
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
-import { propagateOutOfTokens } from "@/lib/agents/registerView";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
@@ -130,10 +129,10 @@ export async function GET(request: NextRequest) {
   const unreadByAgent = await unreadChatCounts(userId);
 
   // A spent shared AI allowance writes one durable stop notice per native
-  // agent per period. The allowance itself is funded per team, so a
-  // current-period notice blocks that agent's team-mates too, not just the
-  // agent that happened to take the failing turn. External runtimes bring
-  // their own key and never hit the shared allowance.
+  // agent per period, the first time a turn of that agent ends on the stop.
+  // Mark only agents with a current-period notice of their own: siblings are
+  // covered as soon as their next turn fails the same allowance, so the set
+  // converges without guessing team boundaries from boards.
   const nativeIds = agents
     .filter((agent) => agent.runtimeType === "NATIVE")
     .map((agent) => agent.id);
@@ -151,7 +150,6 @@ export async function GET(request: NextRequest) {
       },
       select: { fromAgentId: true, message: true },
     });
-    const notifiedIds = new Set<string>();
     for (const notice of notices) {
       if (!notice.fromAgentId) continue;
       if (
@@ -159,22 +157,7 @@ export async function GET(request: NextRequest) {
           agentMessageMarker(heartbeatAllowanceNoticeId(notice.fromAgentId, period.key)),
         )
       ) {
-        notifiedIds.add(notice.fromAgentId);
-      }
-    }
-    if (notifiedIds.size > 0) {
-      for (const id of propagateOutOfTokens(
-        agents
-          .filter((agent) => agent.runtimeType === "NATIVE")
-          .map((agent) => ({
-            id: agent.id,
-            boards: agent.members.map(({ project }) => ({
-              teamId: project.team?.id ?? null,
-            })),
-          })),
-        notifiedIds,
-      )) {
-        outOfTokensByAgent.add(id);
+        outOfTokensByAgent.add(notice.fromAgentId);
       }
     }
   }

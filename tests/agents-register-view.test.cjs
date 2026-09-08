@@ -24,7 +24,6 @@ const {
   statusOf,
   isWorking,
   chatRosterStatus,
-  propagateOutOfTokens,
   defaultAgentFilters,
   sortByActivity,
   viewAgents,
@@ -432,17 +431,4 @@ test("chat status: active, idle with elapsed time, then inactive", () => {
   });
   const stale = agent("stale", [PRODUCT], { heartbeatAt: ago(1441) });
   assert.deepEqual(chatRosterStatus(stale, NOW), { kind: "inactive" });
-});
-
-test("out-of-tokens spreads to native team-mates via shared boards", () => {
-  // The allowance is funded per team, so the sibling that never took the
-  // failing turn is equally blocked and must not read as plain Idle.
-  const notified = agent("notified", [PRODUCT]);
-  const sibling = agent("sibling", [ANDROID]);
-  const otherTeam = agent("other", [CLIENT]);
-  const spread = propagateOutOfTokens(
-    [notified, sibling, otherTeam],
-    new Set(["notified"]),
-  );
-  assert.deepEqual([...spread].sort(), ["notified", "sibling"]);
 });
