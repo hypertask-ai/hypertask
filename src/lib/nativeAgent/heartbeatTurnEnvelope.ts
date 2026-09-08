@@ -16,7 +16,7 @@ const HEARTBEAT_TURN_SUFFIX = /\n<!--ht-heartbeat:v1:([A-Za-z0-9_-]+)-->\s*$/;
  */
 export const streamStoppedOnSpentAllowance = (
   streamBody: string,
-): { periodKey: string | null } | null => {
+): { periodKey: string | null; teamId: string | null } | null => {
   const lines = streamBody.split("\n");
   for (const [index, line] of lines.entries()) {
     if (line.trim() !== "event: error") continue;
@@ -29,12 +29,20 @@ export const streamStoppedOnSpentAllowance = (
       continue;
     }
     if (typeof payload !== "object" || payload === null) continue;
-    const frame = payload as { content?: unknown; allowancePeriod?: unknown };
+    const frame = payload as {
+      content?: unknown;
+      allowancePeriod?: unknown;
+      allowanceTeamId?: unknown;
+    };
     if (frame.content !== SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE) continue;
     return {
       periodKey:
         typeof frame.allowancePeriod === "string" && frame.allowancePeriod
           ? frame.allowancePeriod
+          : null,
+      teamId:
+        typeof frame.allowanceTeamId === "string" && frame.allowanceTeamId
+          ? frame.allowanceTeamId
           : null,
     };
   }

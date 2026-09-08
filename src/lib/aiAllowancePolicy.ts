@@ -34,3 +34,20 @@ export function teamAiAllowanceUsd(plan: StorePlanKind): number {
     ? FREE_TEAM_AI_ALLOWANCE_USD
     : PAID_TEAM_AI_ALLOWANCE_USD;
 }
+
+/**
+ * Marks which team's allowance actually rejected, as an invisible HTML
+ * comment appended to the "agent paused" notice. The notice id is keyed by
+ * agent and period only, so the team rides on the content: a reader can then
+ * attribute the stop to exactly one team instead of guessing from the agent's
+ * board memberships (an agent can sit on several teams).
+ */
+export const allowanceTeamStamp = (teamId: string) =>
+  `<!--ht-allowance-team:${teamId}-->`;
+
+export function parseAllowanceTeamStamp(
+  content: string | null | undefined,
+): string | null {
+  const match = content?.match(/<!--ht-allowance-team:([A-Za-z0-9_-]+)-->/);
+  return match?.[1] ?? null;
+}

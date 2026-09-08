@@ -1040,3 +1040,13 @@ test("price tiers two and three are premium while tier one stays included", () =
   assert.equal(isPremiumAiModelKey("gpt-5.6-luna"), true);
   assert.equal(isPremiumAiModelKey("gpt-5.5"), true);
 });
+
+test("the allowance team stamp round-trips and ignores unmarked content", () => {
+  const { allowanceTeamStamp, parseAllowanceTeamStamp } = loadTs(
+    "src/lib/aiAllowancePolicy.ts",
+  );
+  const content = "<p><strong>paused</strong></p>" + allowanceTeamStamp("team-1");
+  assert.equal(parseAllowanceTeamStamp(content), "team-1");
+  assert.equal(parseAllowanceTeamStamp("<p>old notice, no stamp</p>"), null);
+  assert.equal(parseAllowanceTeamStamp(null), null);
+});
