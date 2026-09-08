@@ -46,5 +46,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  throw new Error("HTPR-6238 preview error tracking verification");
+  // This string becomes the PostHog issue name and the auto-filed ticket title,
+  // so it is the evidence a human reads. Keep it environment-neutral.
+  throw new Error("HTPR-6238 deliberate error tracking verification");
 }
