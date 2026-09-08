@@ -5,6 +5,7 @@ import { Metadata } from "next";
 import prisma from "@/lib/prisma";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { verifyConsentToken } from "@/lib/oauth/consent";
+import { buildRedirectUrl } from "@/lib/oauth/redirect-uri";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
 export const metadata: Metadata = {
@@ -76,10 +77,15 @@ export default async function OAuthConsentPage(props: {
     const value = searchParams?.[key];
     return typeof value === "string" ? value : "";
   };
+  const optionalSingle = (key: string): string | null => {
+    const value = searchParams?.[key];
+    return typeof value === "string" ? value : null;
+  };
 
   const clientId = single("client_id");
   const redirectUri = single("redirect_uri");
   const codeChallenge = single("code_challenge");
+  const state = optionalSingle("state");
   const agentId = single("agent_id");
   const consentToken = single("consent_token");
 
@@ -93,6 +99,7 @@ export default async function OAuthConsentPage(props: {
       clientId,
       redirectUri,
       codeChallenge,
+      state,
       agentId: agentId || null,
     })
   ) {
@@ -119,6 +126,9 @@ export default async function OAuthConsentPage(props: {
   }
 
   const clientName = safeClientName(client.client_name);
+  const denialParams: Record<string, string> = { error: "access_denied" };
+  if (state !== null) denialParams.state = state;
+  const denialUrl = buildRedirectUrl(redirectUri, denialParams);
 
   return (
     <div className={cn(PANEL)}>
@@ -154,17 +164,17 @@ export default async function OAuthConsentPage(props: {
           <input type="hidden" name="redirect_uri" value={redirectUri} />
           <input type="hidden" name="code_challenge" value={codeChallenge} />
           <input type="hidden" name="code_challenge_method" value="S256" />
-          <input type="hidden" name="state" value={single("state")} />
+          {state !== null ? <input type="hidden" name="state" value={state} /> : null}
           <input type="hidden" name="agent_id" value={agentId} />
           <input type="hidden" name="consent_token" value={consentToken} />
-          <button type="submit" className={cn(PRIMARY_BUTTON)}>
+          <button type="submit" autoFocus className={cn(PRIMARY_BUTTON)}>
             Approve and connect
           </button>
         </form>
 
-        <Link href="/" className={cn(SECONDARY_BUTTON)}>
+        <a href={denialUrl} className={cn(SECONDARY_BUTTON)}>
           Cancel
-        </Link>
+        </a>
       </div>
     </div>
   );

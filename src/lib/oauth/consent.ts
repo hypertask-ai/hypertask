@@ -6,9 +6,10 @@ import { createHmac, timingSafeEqual } from 'crypto'
  * into handing over full board access. The code is now minted only by a POST that
  * carries one of these tokens, which the consent screen embeds in its approve form.
  *
- * The token binds the parts of the request that decide who gets access: user,
- * client, redirect URI, PKCE challenge and agent. An approval for one connector
- * can never be replayed against another. response_type and code_challenge_method
+ * The token binds the parts that determine access and where the result goes:
+ * user, client, redirect URI, PKCE challenge, state and agent. A
+ * response for one connector can never be replayed against another.
+ * response_type and code_challenge_method
  * are not bound because the POST rejects anything but "code" and "S256" outright.
  *
  * ponytail: stateless HMAC, so one approval can mint more than one code inside its
@@ -25,6 +26,7 @@ export type ConsentRequest = {
   clientId: string
   redirectUri: string
   codeChallenge: string
+  state: string | null
   agentId?: string | null
 }
 
@@ -38,11 +40,12 @@ function getSecret(): string {
 
 function canonical(request: ConsentRequest, expiresAt: number): string {
   return JSON.stringify([
-    'v1',
+    'v2',
     request.userId,
     request.clientId,
     request.redirectUri,
     request.codeChallenge,
+    request.state,
     request.agentId ?? null,
     expiresAt,
   ])

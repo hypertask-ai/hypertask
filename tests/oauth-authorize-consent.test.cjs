@@ -3,6 +3,10 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { NextRequest } = require("next/server");
+const React = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
+const originalGlobalReact = global.React;
+global.React = React;
 
 // HTPR-6200: /oauth/authorize used to mint an authorization code on a plain GET, so
 // any site could top-level-navigate a signed-in user into handing it board access.
@@ -65,13 +69,21 @@ stubModule(path.join(root, "src/lib/prisma.ts"), {
   },
 });
 
-const jiti = require("jiti")(
+const jitiModule = require("jiti");
+const jiti = jitiModule(
   path.join(root, "tests/oauth-authorize-consent-entry.cjs"),
-  { interopDefault: true, alias: { "@": path.join(root, "src") }, cache: false },
+  {
+    interopDefault: true,
+    alias: { "@": path.join(root, "src") },
+    cache: false,
+    jsx: true,
+  },
 );
 const { signSession } = jiti(path.join(root, "src/lib/auth/session.ts"));
 const { signConsentToken } = jiti(path.join(root, "src/lib/oauth/consent.ts"));
 const { GET, POST } = jiti(path.join(root, "src/app/oauth/authorize/route.ts"));
+const consentPageModule = jiti(path.join(root, "src/app/oauth/consent/page.tsx"));
+const OAuthConsentPage = consentPageModule.default || consentPageModule;
 
 const USER_ID = 42;
 const REDIRECT_URI = "https://client.example.test/callback";
@@ -118,6 +130,7 @@ function consentTokenFor(overrides = {}) {
     clientId: "test-client",
     redirectUri: REDIRECT_URI,
     codeChallenge: PKCE_CHALLENGE,
+    state: "test-state",
     agentId: null,
     ...overrides,
   });
@@ -145,6 +158,8 @@ function reset() {
 test.after(() => {
   if (originalSessionSecret === undefined) delete process.env.SESSION_SECRET;
   else process.env.SESSION_SECRET = originalSessionSecret;
+  if (originalGlobalReact === undefined) delete global.React;
+  else global.React = originalGlobalReact;
 });
 
 test("a signed-in GET stops at the consent screen and mints nothing", async () => {
@@ -209,6 +224,20 @@ test("the token the consent redirect carries is the one approval accepts", async
   assert.equal(createdCode.user_id, USER_ID);
 });
 
+test("approval without state accepts the token rendered by the consent screen", async () => {
+  reset();
+
+  const response = await POST(
+    authorizePost({
+      ...baseParams({ state: undefined }),
+      consent_token: consentTokenFor({ state: null }),
+    }),
+  );
+
+  assert.equal(response.status, 303);
+  assert.equal(createdCode.user_id, USER_ID);
+});
+
 test("a POST without a consent token mints nothing", async () => {
   reset();
 
@@ -236,6 +265,7 @@ test("an expired consent token mints nothing", async () => {
       clientId: "test-client",
       redirectUri: REDIRECT_URI,
       codeChallenge: PKCE_CHALLENGE,
+      state: "test-state",
       agentId: null,
     },
     -1,
@@ -274,6 +304,97 @@ test("a consent token approved for another redirect_uri mints nothing", async ()
   );
 
   assertSentBackToConsent(response);
+});
+
+test("a consent token with another state mints nothing", async () => {
+  reset();
+
+  const response = await POST(
+    authorizePost({
+      ...baseParams({ state: "changed-state" }),
+      consent_token: consentTokenFor(),
+    }),
+  );
+
+  assertSentBackToConsent(response);
+});
+
+test("the consent screen focuses native approval and denies directly to the client", async () => {
+  reset();
+  const searchParams = {
+    ...baseParams(),
+    consent_token: consentTokenFor(),
+  };
+
+  const page = await OAuthConsentPage({ searchParams: Promise.resolve(searchParams) });
+  const html = renderToStaticMarkup(page);
+
+  assert.match(
+    html,
+    /<form[^>]*action="\/oauth\/authorize"[^>]*method="post"[^>]*>[\s\S]*?<button type="submit" autofocus=""/,
+  );
+  assert.match(
+    html,
+    /href="https:\/\/client\.example\.test\/callback\?error=access_denied&amp;state=test-state"[^>]*>Cancel<\/a>/,
+  );
+  assert.equal(createdCode, undefined);
+  assert.equal(upsertedGrant, undefined);
+});
+
+test("the consent screen does not add an empty state to a denial", async () => {
+  reset();
+  const searchParams = {
+    ...baseParams({ state: undefined }),
+    consent_token: consentTokenFor({ state: null }),
+  };
+
+  const page = await OAuthConsentPage({ searchParams: Promise.resolve(searchParams) });
+  const html = renderToStaticMarkup(page);
+
+  assert.match(
+    html,
+    /href="https:\/\/client\.example\.test\/callback\?error=access_denied"[^>]*>Cancel<\/a>/,
+  );
+  assert.doesNotMatch(html, /name="state"/);
+  assert.doesNotMatch(html, /error=access_denied(?:&amp;|&)state=/);
+});
+
+test("the consent screen preserves an explicitly empty state", async () => {
+  reset();
+  const searchParams = {
+    ...baseParams({ state: "" }),
+    consent_token: consentTokenFor({ state: "" }),
+  };
+
+  const page = await OAuthConsentPage({ searchParams: Promise.resolve(searchParams) });
+  const html = renderToStaticMarkup(page);
+
+  assert.match(html, /name="state" value=""/);
+  assert.match(html, /error=access_denied&amp;state=/);
+});
+
+test("denial links preserve HTTPS, loopback, and desktop callback schemes", async () => {
+  reset();
+
+  for (const redirectUri of [
+    "https://client.example.test/callback?existing=1",
+    "http://127.0.0.1:8123/callback",
+    "cursor://oauth/callback",
+  ]) {
+    const searchParams = {
+      ...baseParams({ redirect_uri: redirectUri, state: "state with spaces" }),
+      consent_token: consentTokenFor({
+        redirectUri,
+        state: "state with spaces",
+      }),
+    };
+
+    const page = await OAuthConsentPage({ searchParams: Promise.resolve(searchParams) });
+    const html = renderToStaticMarkup(page);
+
+    assert.match(html, /error=access_denied/);
+    assert.match(html, /state=state(?:%20|\+)with(?:%20|\+)spaces/);
+  }
 });
 
 test("a consent token approved without an agent cannot smuggle one in", async () => {

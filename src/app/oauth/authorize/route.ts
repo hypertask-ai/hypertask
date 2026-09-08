@@ -252,6 +252,7 @@ export async function GET(request: NextRequest) {
           clientId: validated.clientId,
           redirectUri: validated.redirectUri,
           codeChallenge: validated.codeChallenge,
+          state: validated.state,
           agentId: agent.agentId,
         })
       )
@@ -310,6 +311,7 @@ export async function POST(request: NextRequest) {
         clientId: validated.clientId,
         redirectUri: validated.redirectUri,
         codeChallenge: validated.codeChallenge,
+        state: validated.state,
         agentId: agent.agentId,
       }
     )
