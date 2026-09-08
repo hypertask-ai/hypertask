@@ -697,6 +697,65 @@ jobs:
           echo "::error::$MSG"
           exit 1
 
+  # ── Pusher status: are live updates (board moves, comments) actually live? ──
+  # HTPR-6289: a column move didn't live-update and there was no signal telling
+  # us whether Pusher (the realtime service the app uses to push board/task
+  # changes to open tabs) was degraded. This just asks Pusher's own status page.
+  pusher-status:
+    if: ${{ github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *') || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check Pusher status
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -uo pipefail
+
+          STATUS_JSON=$(curl -s --max-time 15 "https://status.pusher.com/api/v2/status.json") || STATUS_JSON=""
+          INDICATOR=$(echo "$STATUS_JSON" | jq -r '.status.indicator // empty')
+          DESCRIPTION=$(echo "$STATUS_JSON" | jq -r '.status.description // "unknown"')
+
+          if [ -z "$INDICATOR" ]; then
+            echo "::warning::Could not read Pusher status page; skipping"
+            exit 0
+          fi
+
+          echo "Pusher status: $INDICATOR ($DESCRIPTION)"
+
+          if [ "$INDICATOR" = "none" ]; then
+            echo "Pusher is operational."
+            exit 0
+          fi
+
+          # Also surface which Channels component is affected, for a useful alert.
+          COMPONENTS_JSON=$(curl -s --max-time 15 "https://status.pusher.com/api/v2/components.json") || COMPONENTS_JSON=""
+          AFFECTED=$(echo "$COMPONENTS_JSON" | jq -r '[.components[]? | select(.name | test("Channels"; "i")) | select(.status != "operational") | "\(.name): \(.status)"] | join(", ")')
+          [ -z "$AFFECTED" ] && AFFECTED="no Channels component reported as degraded"
+
+          notify() {
+            curl -s -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d chat_id="$TG_CHAT" --data-urlencode text="$1" || true
+          }
+
+          case "$INDICATOR" in
+            critical|major)
+              notify "🔴 hypertasks: Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
+              echo "::error::Pusher status is $INDICATOR: $DESCRIPTION ($AFFECTED)"
+              exit 1
+              ;;
+            minor)
+              notify "⚠️ hypertasks: Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
+              echo "::warning::Pusher status is $INDICATOR: $DESCRIPTION ($AFFECTED)"
+              exit 0
+              ;;
+            *)
+              echo "::warning::Pusher status is unrecognized indicator '$INDICATOR': $DESCRIPTION"
+              exit 0
+              ;;
+          esac
+
   core-actions:
     needs: health
     if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '3-58/5 * * * *')) }}
