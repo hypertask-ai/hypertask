@@ -848,6 +848,9 @@ export async function POST(request: NextRequest) {
     // HTPR-6281: reconcile-then-broadcast. When the merge both moved the task
     // and changed assignments, the move-branch event above fired before the
     // reconcile, so this extra task event carries the assignment change.
+    // ponytail: two near-identical blocks because the !moved one edits code
+    // HTPR-5974 landed 5 days ago and revert-guard blocks deleting it; merge
+    // them into one block after the 14-day guard window expires.
     if (assignmentsChanged && moved) {
       try {
         await broadcastTaskChange(task.id, {

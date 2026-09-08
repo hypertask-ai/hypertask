@@ -52,8 +52,7 @@ function makeResponse() {
       statusCode = code;
       return res;
     },
-    json(body) {
-      res.payload = body;
+    json() {
       return res;
     },
   };

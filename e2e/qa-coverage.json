@@ -96,7 +96,7 @@
       "ticket": 6240,
       "source": {
         "file": ".github/workflows/prod-health.yml",
-        "token": "# on the merged pull request's ticket; the agent explores and reports there."
+        "token": "# The merge (head) commit's associated pull request is the deploy's"
       }
     }
   ],
