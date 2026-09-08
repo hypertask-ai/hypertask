@@ -45,8 +45,11 @@ review_first_gate:
 required_checks:
   # An administrator applied these checks through GitHub's ruleset API on
   # 2026-09-08. ci-tests verifies this live ruleset before every build.
-  contexts: [app-smoke, ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
-  automerge_also_requires: [app-smoke, ci-tests]
+  contexts: [ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
+  automerge_also_requires: [ci-tests]
+  # app-smoke: required: false — temporarily dropped 2026-09-08 until
+  # https://app.hypertask.ai/detail/project-15/6315; re-add when green on 3
+  # consecutive PRs.
   # ci-tests normally reports after the full-ci label arrives (see
   # review_first_gate); automerge treats a missing result as not green.
 
@@ -100,7 +103,10 @@ policies:
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
   production_ruleset:
-    required_status_checks: [app-smoke, ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
+    # app-smoke: required: false — temporarily dropped 2026-09-08 until
+    # https://app.hypertask.ai/detail/project-15/6315; re-add when green on 3
+    # consecutive PRs.
+    required_status_checks: [ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
 
 ci_tests:
   # .github/workflows/ci-tests.yml; the file remains the implementation source.

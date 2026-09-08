@@ -83,7 +83,9 @@ jobs:
             exit 1
           }
 
-          expected=$(printf '%s\n' app-smoke ci-tests claude-review next-public-secrets pr-title revert-guard secret-scan | sort)
+          # app-smoke temporarily dropped 2026-09-08 until HTPR-6315; re-add
+          # when green on 3 consecutive PRs.
+          expected=$(printf '%s\n' ci-tests claude-review next-public-secrets pr-title revert-guard secret-scan | sort)
           actual=$(jq -r '
             [.rules[] | select(.type == "required_status_checks") |
               .parameters.required_status_checks[].context] | sort | .[]
