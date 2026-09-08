@@ -262,6 +262,21 @@ export function shouldRollback(result, eventName) {
   );
 }
 
+// A credential or workspace problem is not a monitoring signal: no deploy can
+// cause it and no code change fixes it. It still fails the job, but reporting
+// it to the board on every five-minute run would bury the real alerts.
+const SETUP_ERROR_MESSAGES = [
+  "must be a user token",
+  "CORE_SMOKE_TEAM_ID is required",
+];
+
+export function isSetupFailure(error) {
+  const status = error instanceof ApiRequestError ? error.status : undefined;
+  if (status === 401 || status === 403) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return SETUP_ERROR_MESSAGES.some((needle) => message.includes(needle));
+}
+
 export function classifyProbeStartFailure(error) {
   const status = error instanceof ApiRequestError ? error.status : undefined;
   return {
@@ -269,6 +284,7 @@ export function classifyProbeStartFailure(error) {
     kind: "unrunnable",
     action: "start core-actions probe",
     ...(status !== undefined ? { status } : {}),
+    ...(isSetupFailure(error) ? { setupError: true } : {}),
     detail:
       error instanceof Error
         ? error.message.slice(0, 240)
@@ -279,6 +295,13 @@ export function classifyProbeStartFailure(error) {
 }
 
 export async function report(result) {
+  if (result?.setupError === true) {
+    // Loud in the run log, silent on the board: see SETUP_ERROR_MESSAGES.
+    process.stderr.write(
+      `::error::Core-actions smoke cannot run until its credentials are fixed: ${result.detail}\n`,
+    );
+    return;
+  }
   const rollback = process.env.CORE_SMOKE_ROLLBACK || "not requested";
   const runUrl =
     process.env.GITHUB_SERVER_URL &&

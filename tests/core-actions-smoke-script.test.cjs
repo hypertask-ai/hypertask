@@ -413,6 +413,40 @@ test("the monitor runs the probe unconditionally and stays loud when it fails", 
   }
 });
 
+test("a credential problem fails the job without spamming the board", async () => {
+  const { classifyProbeStartFailure, isSetupFailure, report, shouldRollback } =
+    await import(scriptUrl);
+
+  assert.equal(
+    isSetupFailure(
+      new Error("HYPERTASK_MCP_TOKEN must be a user token, not an agent token"),
+    ),
+    true,
+  );
+  assert.equal(isSetupFailure(new Error("route failed")), false);
+
+  const result = classifyProbeStartFailure(
+    new Error("HYPERTASK_MCP_TOKEN must be a user token, not an agent token"),
+  );
+  assert.equal(result.kind, "unrunnable");
+  assert.equal(result.setupError, true);
+  // Still red and still un-rollbackable; just not a new ticket every 5 minutes.
+  assert.equal(shouldRollback(result, "push"), false);
+
+  const originalFetch = global.fetch;
+  let posted = 0;
+  global.fetch = async () => {
+    posted += 1;
+    return Response.json({});
+  };
+  try {
+    await report(result);
+    assert.equal(posted, 0);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("a failed parent-ticket report does not suppress the incident report", async () => {
   const requests = [];
   const originalFetch = global.fetch;
