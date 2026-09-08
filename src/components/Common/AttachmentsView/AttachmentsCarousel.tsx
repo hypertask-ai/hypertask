@@ -68,6 +68,15 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       ? isBrowserRenderableImage(fileType, fileName)
       : Boolean(fileType?.startsWith("image/"));
 
+  // An image an <embed> cannot show either, so it needs the download card
+  // rather than the document branch. Matches isBrowserRenderableImage on
+  // casing, and treats a missing MIME as a candidate: the attachment on
+  // HTPR-6254 is stored with no fileType at all.
+  const isUnsupportedImageType = (fileType?: string | null) => {
+    const mime = (fileType ?? "").trim().toLowerCase().split(";")[0];
+    return mime === "" || mime.startsWith("image/");
+  };
+
   // Transform attachments to lightbox slides format
   const slides: Slide[] = attachments.map((attachment) => {
     const attachmentUpdated = attachment.fileSource;
@@ -179,11 +188,10 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     // MIME at all, so the document branch below would miss it and the lightbox
     // would fall through to a blank slide (HTPR-6254). Offer the download.
     else if (
+      heicFallbackEnabled &&
       (slide as any).fileSource &&
       !renderableImage((slide as any).fileType, (slide as any).fileName) &&
-      !((slide as any).fileType ?? "").startsWith("video/") &&
-      (!(slide as any).fileType ||
-        ((slide as any).fileType as string).startsWith("image/"))
+      isUnsupportedImageType((slide as any).fileType)
     ) {
       const customSlide = slide as any;
       return (
@@ -194,15 +202,15 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
           <span className="text-micro opacity-70">
             This image format cannot be shown in a browser.
           </span>
-          <a
-            href={customSlide.fileSource}
-            target="_blank"
-            rel="noreferrer"
-            download
-            className="rounded-[5px] bg-secondary px-3 py-2 text-dense text-white no-underline"
+          <button
+            type="button"
+            onClick={() =>
+              handleDownload(customSlide.fileSource, customSlide.fileName)
+            }
+            className="rounded-[5px] bg-secondary px-3 py-2 text-dense text-white"
           >
             Download
-          </a>
+          </button>
         </div>
       );
     }
