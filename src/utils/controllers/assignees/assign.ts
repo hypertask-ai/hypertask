@@ -376,36 +376,52 @@ const createAssignee = async ({
     if (allowHumanOverride) {
       await cancelAgentMutationLeaseForHumanOverride(tx, taskId, currentUser.id);
     }
-    const assign = await tx.assignees.create({
-      data: {
-        assignerId: currentUser.id,
-        taskId,
-        userId,
-        agentId,
-        agentAssignerId,
-      },
-      include: {
-        user: {
-          select: assignmentActivityUserSelect,
+    let assign;
+    try {
+      assign = await tx.assignees.create({
+        data: {
+          assignerId: currentUser.id,
+          taskId,
+          userId,
+          agentId,
+          agentAssignerId,
         },
-        agent: {
-          select: {
-            id: true,
-            userId: true,
-            photoURL: true,
-            displayName: true,
+        include: {
+          user: {
+            select: assignmentActivityUserSelect,
+          },
+          agent: {
+            select: {
+              id: true,
+              userId: true,
+              photoURL: true,
+              displayName: true,
+            },
+          },
+          agentAssigner: {
+            select: {
+              id: true,
+              userId: true,
+              photoURL: true,
+              displayName: true,
+            },
           },
         },
-        agentAssigner: {
-          select: {
-            id: true,
-            userId: true,
-            photoURL: true,
-            displayName: true,
-          },
-        },
-      },
-    });
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code === "P2002") {
+        // A concurrent assign won the unique index (HTPR-6279): the row exists,
+        // so the assignment is already done, not a failure. Returning here
+        // commits an empty transaction and skips every side effect below.
+        return {
+          assign: null,
+          outcome: "already-assigned" as const,
+          webhookDeliveryIds: [],
+          boardWebhookDeliveryIds: [],
+        };
+      }
+      throw error;
+    }
     const follower = await tx.follower.findFirst({
       where: { userId, taskId },
       select: { id: true },

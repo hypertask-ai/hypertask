@@ -205,6 +205,14 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
           )
         : [];
 
+    const mappedAssignees = (task.assignees ?? [])
+        .map((assignee: any) =>
+            mapTaskAssignee(assignee, userId, task.projectId)
+        )
+        .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
+            Boolean(assignee)
+        );
+
     const mapped = {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
@@ -248,13 +256,8 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         riskLevel: task.riskLevel ? (task.riskLevel.toLowerCase() as 'low' | 'medium' | 'high') : undefined,
         acceptanceCriteria: task.acceptanceCriteria || undefined,
         verifyCommand: task.verifyCommand || undefined,
-        assignees: (task.assignees ?? [])
-            .map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId)
-            )
-            .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
-                Boolean(assignee)
-            ),
+        assignees: mappedAssignees,
+        assigneeCount: mappedAssignees.length,
         followers: (task.followers ?? []).map((f: { user: { id: number; email: string; displayName: string | null } }) => ({
             id: f.user.id,
             email: f.user.email,
