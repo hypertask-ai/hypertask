@@ -41,6 +41,25 @@ async function unreadChatCounts(userId: number): Promise<Map<string, number>> {
 }
 
 /**
+ * Most recent Agent Chat message timestamp per agent, for one person's own
+ * thread with that agent. Distinct from `lastCommentByAgent` below, which
+ * tracks board comments, not chat messages -- the Agent Chat list needs the
+ * latter to reorder on real chat activity (HTPR-6283).
+ */
+async function lastChatMessageAtByAgent(userId: number): Promise<Map<string, Date>> {
+  const rows = await prisma.$queryRaw<{ agentId: string; lastMessageAt: Date }[]>`
+    SELECT s."agentId" AS "agentId", MAX(m."createdAt") AS "lastMessageAt"
+    FROM "ChatSessionParticipant" p
+    JOIN "ChatSession" s ON s.id = p."sessionId"
+    JOIN "ChatMessage" m ON m."sessionId" = s.id
+    WHERE p."userId" = ${userId}
+      AND s."agentId" IS NOT NULL
+    GROUP BY s."agentId"
+  `;
+  return new Map(rows.map((row) => [row.agentId, row.lastMessageAt]));
+}
+
+/**
  * Every agent the signed-in user owns, across every team and board.
  *
  * The sibling routes answer different questions: `/api/agents` lists a single
@@ -130,6 +149,7 @@ export async function GET(request: NextRequest) {
   );
 
   const unreadByAgent = await unreadChatCounts(userId);
+  const lastChatMessageByAgent = await lastChatMessageAtByAgent(userId);
 
   // A spent shared AI allowance writes one durable stop notice per native
   // agent per period, the first time a turn of that agent ends on the stop.
@@ -189,6 +209,8 @@ export async function GET(request: NextRequest) {
       archivedAt: agent.archivedAt?.toISOString() ?? null,
       heartbeatAt: agent.heartbeatAt?.toISOString() ?? null,
       lastPostedAt: lastCommentByAgent.get(agent.id)?.toISOString() ?? null,
+      // Real Agent Chat activity, separate from lastPostedAt's board comments.
+      lastChatMessageAt: lastChatMessageByAgent.get(agent.id)?.toISOString() ?? null,
       // An unexpired task lease is the agent saying "I am on this right now",
       // which is what the card's spinner reports.
       working: workingByAgent.get(agent.id) ?? null,

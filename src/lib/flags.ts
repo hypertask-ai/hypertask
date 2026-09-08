@@ -320,6 +320,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     description:
       "Adds a priority filter to the My Tasks page. Picking one or more priority levels shows only those tasks; the choice resets when the page reloads.",
   },
+  {
+    key: "htpr-6283-agent-chat-live-sort",
+    shippedOn: "2026-09-08",
+    description:
+      "Sorts the Agent Chat list by most recent chat message instead of a fixed order, and reorders live as messages arrive.",
+  },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
   // `git log -S"<key>" --format=%cd --date=short production | tail -1`. An author adding a flag

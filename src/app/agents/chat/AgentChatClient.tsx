@@ -67,6 +67,7 @@ import {
 import { userChannel } from "@/lib/realtime/shared";
 import AgentDetail from "../[agentId]/AgentDetail";
 import type { TAgent } from "../AgentsRegister";
+import { sortRosterByActivity } from "./rosterSort";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import axios from "axios";
@@ -591,6 +592,7 @@ const AgentChatClient = (props: IProp) => {
     const tick = setInterval(() => setRosterNow(Date.now()), 30_000);
     return () => clearInterval(tick);
   }, [rosterStatusEnabled]);
+  const liveSortEnabled = useFlag("htpr-6283-agent-chat-live-sort");
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const mobileAgentChatViewport = useMobileVisualViewport(
     isMbl && mobileAgentChatViewportEnabled,
@@ -1240,15 +1242,17 @@ const AgentChatClient = (props: IProp) => {
         payload: { sessionId?: string; agentId?: string } | undefined,
       ) => {
         const currentSessionId = sessionIdRef.current;
-        if (
-          currentSessionId &&
+        const isOpenSessionEvent =
+          currentSessionId !== null &&
           (payload?.sessionId === currentSessionId ||
             (activityRowsEnabled &&
               payload?.agentId &&
-              payload.agentId === selectedIdRef.current))
-        ) {
+              payload.agentId === selectedIdRef.current));
+        if (isOpenSessionEvent) {
           void loadMessages(currentSessionId);
-          return;
+          // The roster's own recency sort otherwise never hears about a
+          // message in the chat that is already open (HTPR-6283).
+          if (!liveSortEnabled) return;
         }
         // A message in a thread this person is not looking at: the roster
         // carries the unread count, so it is the roster that has to refresh.
@@ -1274,7 +1278,7 @@ const AgentChatClient = (props: IProp) => {
       cancelled = true;
       unsubscribe?.();
     };
-  }, [currentUser.id, loadMessages, loadAgents, activityRowsEnabled]);
+  }, [currentUser.id, loadMessages, loadAgents, activityRowsEnabled, liveSortEnabled]);
 
   const selectedAgent = useMemo(
     () => (agents ?? []).find((a) => a.id === selectedId) ?? null,
@@ -1341,15 +1345,8 @@ const AgentChatClient = (props: IProp) => {
     const matching = needle
       ? inTeam.filter((a) => a.displayName.toLowerCase().includes(needle))
       : inTeam;
-    // Most recent post first; agents that never posted sink below the rest,
-    // with a name tiebreak so the order is stable.
-    return [...matching].sort((a, b) => {
-      const at = a.lastPostedAt ?? "";
-      const bt = b.lastPostedAt ?? "";
-      if (at !== bt) return at < bt ? 1 : -1;
-      return a.displayName.localeCompare(b.displayName);
-    });
-  }, [agents, search, teamId, teams]);
+    return sortRosterByActivity(matching, liveSortEnabled);
+  }, [agents, search, teamId, teams, liveSortEnabled]);
 
   // The actual POST, used by both a direct send and a drained queue item.
   // Reads the target session off sessionIdRef (not the `session` state
