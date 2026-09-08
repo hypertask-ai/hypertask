@@ -23,8 +23,33 @@ jobs:
         with:
           ref: production
 
+      - name: Check the fixture settings are configured
+        id: settings
+        env:
+          CORE_SMOKE_PROJECT_ID: ${{ vars.CORE_SMOKE_PROJECT_ID }}
+          CORE_SMOKE_TASK_ID: ${{ vars.CORE_SMOKE_TASK_ID }}
+          CORE_SMOKE_BASE_SECTION_ID: ${{ vars.CORE_SMOKE_BASE_SECTION_ID }}
+          CORE_SMOKE_ALT_SECTION_ID: ${{ vars.CORE_SMOKE_ALT_SECTION_ID }}
+          CORE_SMOKE_AGENT_ID: ${{ vars.CORE_SMOKE_AGENT_ID }}
+        run: |
+          OUT=$(node .github/scripts/core-actions-smoke.mjs check-settings)
+          case "$OUT" in
+            configured)
+              echo "configured=true" >> "$GITHUB_OUTPUT"
+              ;;
+            missing:*)
+              echo "configured=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Core-actions probe skipped: $OUT (fixture setup, see HTPR-6258)"
+              ;;
+            *)
+              echo "::error::Unexpected check-settings output: $OUT"
+              exit 1
+              ;;
+          esac
+
       - name: Run the logged-in core actions and restore the fixture
         id: probe
+        if: steps.settings.outputs.configured == 'true'
         continue-on-error: true
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
@@ -47,4 +72,10 @@ jobs:
         if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
         run: |
           echo "::error::Core-actions smoke did not pass"
+          exit 1
+
+      - name: Fail until the fixture settings are configured
+        if: ${{ !cancelled() && steps.settings.outputs.configured != 'true' }}
+        run: |
+          echo "::error::Core-actions probe did not run: the CORE_SMOKE_* fixture variables are missing. Configure the fixture (see HTPR-6258) to arm the monitor."
           exit 1

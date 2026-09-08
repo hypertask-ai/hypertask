@@ -195,6 +195,23 @@ test("the probe rejects each missing fixture setting", async () => {
   }
 });
 
+test("the preflight names each absent fixture setting without throwing", async () => {
+  const { missingFixtureSettings } = await import(scriptUrl);
+  const valid = {
+    CORE_SMOKE_PROJECT_ID: "71",
+    CORE_SMOKE_TASK_ID: "81",
+    CORE_SMOKE_BASE_SECTION_ID: "91",
+    CORE_SMOKE_ALT_SECTION_ID: "92",
+    CORE_SMOKE_AGENT_ID: "00000000-0000-4000-8000-000000000001",
+  };
+
+  assert.deepEqual(missingFixtureSettings(valid), []);
+  for (const name of Object.keys(valid)) {
+    assert.deepEqual(missingFixtureSettings({ ...valid, [name]: "" }), [name]);
+  }
+  assert.equal(missingFixtureSettings({}).length, Object.keys(valid).length);
+});
+
 test("the workflow schedules and serializes the production fixture", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
   const scheduled = await readFile(
@@ -230,6 +247,33 @@ test("the workflow schedules and serializes the production fixture", async () =>
   );
   assert.doesNotMatch(workflow, /gh variable set CORE_SMOKE_/);
   assert.match(workflow, /SUMMARY=.*gsub/);
+});
+
+test("an unconfigured fixture skips the probe instead of failing the monitor", async () => {
+  for (const file of [
+    ".github/workflows/prod-health.yml",
+    ".github/workflows/core-actions-smoke.yml",
+  ]) {
+    const text = await readFile(file, "utf8");
+    assert.match(text, /check-settings/);
+    assert.match(
+      text,
+      /id: settings[\s\S]*?id: probe\s+if: steps\.settings\.outputs\.configured == 'true'/,
+    );
+    // The failure reporter must never treat a skipped probe as a probe result.
+    // A skipped probe reports outcome "skipped", so the unchanged
+    // `probe.outcome == 'failure'` conditions keep the report, rollback, and
+    // "keep visible" steps off; the preflight gate lives only on the probe.
+    assert.match(
+      text,
+      /name: Report a failed or unrunnable check\s+if: \$\{\{ !cancelled\(\) && steps\.probe\.outcome == 'failure' \}\}/,
+    );
+    // An unconfigured fixture is still a failing monitor, never a green one.
+    assert.match(
+      text,
+      /Fail until the fixture settings are configured[\s\S]*?steps\.settings\.outputs\.configured != 'true'[\s\S]*?exit 1/,
+    );
+  }
 });
 
 test("a failed parent-ticket report does not suppress the incident report", async () => {
