@@ -184,3 +184,19 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
     /requestAnimationFrame\(\(\) => \{\s*runInitialPositioning\(\(\) => \{/
   );
 });
+
+test("the task detail virtualizer leaves row-resize scroll compensation to the browser (HTPR-6277)", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"),
+    "utf8"
+  );
+  const optionsStart = source.indexOf("const virtualizerOptions = {");
+  assert.notEqual(optionsStart, -1, "virtualizer options block must exist");
+  const options = sourceBetween(source, "const virtualizerOptions = {", "};");
+
+  assert.match(
+    options,
+    /shouldAdjustScrollPositionOnItemSizeChange:\s*\(\)\s*=>\s*false/,
+    "tanstack's JS scroll correction must stay off; native scroll anchoring owns re-measure compensation, otherwise opening a modal (Share task) re-scrolls the window and the task detail jumps"
+  );
+});
