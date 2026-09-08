@@ -162,6 +162,7 @@ const useAddDeleteTaskInBoards = () => {
       else updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection());
       } catch (error) {
         console.log("🚀 ~ createItem ~ local update error:", error);
+        void queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
       }
       return true;
     } catch (error) {
