@@ -1,0 +1,1 @@
+-- HTPR-6195 live merge-guard probe. This fixture is never executed.
