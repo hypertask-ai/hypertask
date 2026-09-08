@@ -3,6 +3,8 @@ import "@/styles/AttachmentView.scss";
 import { IAttachment, TCarousalItems } from "@/models/model";
 import { Paperclip } from "lucide-react";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
+import { useFlag } from "@/hooks/useFlag";
+import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   attachments: IAttachment[];
@@ -17,6 +19,7 @@ interface IProps {
 
 const AttachmentView = (props: IProps) => {
   const compact = Boolean(props.compact);
+  const heicFallbackEnabled = useFlag(HEIC_ATTACHMENTS_FLAG);
   // HTPR-6254: a HEIC that no browser can decode still 404s nothing and still
   // downloads, but its <img> paints a broken icon. Once one has failed, fall
   // back to the paperclip tile for the rest of the session.
@@ -53,11 +56,12 @@ const AttachmentView = (props: IProps) => {
           }`}
         >
           {attachments?.map((attachment, index) => {
-            const isImage =
-              isBrowserRenderableImage(
-                attachment?.fileType,
-                attachment?.fileName
-              ) && !unrenderable.has(attachment?.fileSource);
+            const isImage = heicFallbackEnabled
+              ? isBrowserRenderableImage(
+                  attachment?.fileType,
+                  attachment?.fileName
+                ) && !unrenderable.has(attachment?.fileSource)
+              : attachment?.fileType?.startsWith("image/");
             if (compact) {
               return (
                 <div

@@ -13,6 +13,8 @@ import {
   IMAGE_FALLBACK_MIME,
 } from "@/utils/helperFunctions/getFileTypeFromUrl";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
+import { useFlag } from "@/hooks/useFlag";
+import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import "./styles.scss";
 
 // Loading spinner component
@@ -44,7 +46,7 @@ const UnrenderableMedia = ({ src }: { src: string }) => (
     target="_blank"
     rel="noreferrer"
     download
-    className="my-1 inline-flex max-w-full items-center gap-2 rounded-lg border border-white/15 bg-secondary px-3 py-2 text-dense text-white-black no-underline"
+    className="my-1 inline-flex max-w-full items-center gap-2 rounded-[5px] bg-secondary px-3 py-2 text-dense text-white-black no-underline"
   >
     <Paperclip size={16} strokeWidth={1.75} aria-hidden />
     <span className="truncate">{fileNameFromSource(src)}</span>
@@ -115,12 +117,15 @@ export const ResizableMediaNodeView = ({
   // into an error, gets the download chip instead of a dead <img>. The src
   // carries no MIME, so the extension is what we have; an unknown extension
   // still renders, and onError catches it if that guess was wrong.
+  // Flag off keeps today's behaviour: always an <img>, broken icon and all.
+  const heicFallbackEnabled = useFlag(HEIC_ATTACHMENTS_FLAG);
   const canRenderImage =
-    !imageFailed &&
-    isBrowserRenderableImage(
-      getFileTypeFromUrl(node.attrs.src ?? "", IMAGE_FALLBACK_MIME),
-      node.attrs.src
-    );
+    !heicFallbackEnabled ||
+    (!imageFailed &&
+      isBrowserRenderableImage(
+        getFileTypeFromUrl(node.attrs.src ?? "", IMAGE_FALLBACK_MIME),
+        node.attrs.src
+      ));
 
   useEffect(() => {
     setImageFailed(false);
