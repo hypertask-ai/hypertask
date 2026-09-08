@@ -95,7 +95,7 @@ export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agen
     `<p>Deploy ${escapeHtml(sha)} merged as “${escapeHtml(prTitle)}”. ${escapeHtml(smokeLine)}</p>`,
     `<p>Changed screens:</p><ul>${screenItems}</ul>`,
     `<ol><li>Open ${escapeHtml(appUrl)} as a signed-in user and explore the changed screens and their nearest neighbours for five minutes.</li><li>Post one comment on this ticket with screenshots attached and a one-line verdict (pass, or defect list).</li><li>File one Bugs ticket per defect, labelled <code>post-deploy</code>, with the reproduction steps.</li></ol>`,
-    `<p>Rules: look, do not act. Never submit forms, edit, delete, invite, or change settings; never roll back and never trigger a deployment action. Keep screenshots to the changed screens and never capture tokens, credentials, or personal data. Reply without mentioning anyone.</p>`,
+    `<p>Rules: on the app, look only — never submit forms, edit, delete, invite, or change settings. On Hypertask, you do write: your verdict comment here and the Bugs tickets. Never roll back and never trigger a deployment action. Keep screenshots to the changed screens and never capture tokens, credentials, or personal data. Reply without mentioning anyone.</p>`,
     `<p>${mention} — brief marker <code>glm-qa-brief:${escapeHtml(sha)}</code></p>`,
   ].join('')
 }
@@ -165,6 +165,9 @@ async function main() {
   // `live` output is a stale snapshot, and a newer deploy may have taken the
   // production alias while this run waited (HTPR-6239 review). The /api/version
   // endpoint is unauthenticated (no secret in CI) and returns the live buildId.
+  // ponytail: a request failure (not a mismatch) stays fail-open with a
+  // warning — a transient /api/version blip must not kill every dispatch; the
+  // fixed concurrency group and the health gate narrow the stale window.
   try {
     const version = await apiGet(`${base}/api/version`, '')
     const liveBuild = version?.buildId
@@ -172,7 +175,7 @@ async function main() {
       return refuse(`production now serves ${liveBuild}, not ${args.sha}; there is nothing of this deploy left to explore`)
     }
     if (!liveBuild) {
-      console.log('::warning::live build id unavailable (/api/version); briefing without a liveness recheck')
+      return refuse('live build id unavailable (/api/version answered without a buildId); cannot prove this deploy is still live')
     }
   } catch (err) {
     console.log(`::warning::live recheck failed (${String(err.message || err)}); briefing without a liveness recheck`)

@@ -68,8 +68,8 @@ test("the brief names the agent, the screens, the marker, and the read-only rule
   assert.match(text, new RegExp(`glm-qa-brief:${"a".repeat(40)}`));
   assert.match(text, /smoke check passed/);
   // The agent is ordered to report and never to touch deploy state.
-  assert.match(text, /never roll back/);
-  assert.match(text, /Never submit forms/);
+  assert.match(text, /never roll back/i);
+  assert.match(text, /never submit forms/i);
 
   const failed = buildBriefText({
     sha: "b".repeat(40),
