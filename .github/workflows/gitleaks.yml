@@ -14,6 +14,15 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run gitleaks
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz gitleaks
-          ./gitleaks detect --no-banner --source . --redact
+          if [ -n "$PR_BASE_SHA" ]; then
+            # A pull request scans only the commits it adds. Everything already on the base branch is
+            # covered by the push scan, so one old finding cannot turn every open PR red.
+            ./gitleaks detect --no-banner --source . --redact --log-opts "$PR_BASE_SHA..$PR_HEAD_SHA"
+          else
+            ./gitleaks detect --no-banner --source . --redact
+          fi
