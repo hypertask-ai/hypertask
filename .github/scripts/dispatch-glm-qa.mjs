@@ -1,0 +1,266 @@
+// HTPR-6239 — dispatch the GLM exploratory QA brief after a production deploy.
+//
+// Called by the `glm-qa` job in prod-health.yml after the smoke checks actually
+// executed and nothing rolled back. Posts one comment on the merged pull
+// request's Hypertask ticket that mentions the configured GLM worker; the agent
+// then explores the changed screens on the live app for five minutes and
+// reports there. Read-only dispatcher: it never touches Vercel and never rolls
+// back anything.
+//
+// Every refusal is exit 0 (a skip is normal operation); only a failed comment
+// POST exits nonzero so the workflow can alert on Telegram.
+import { pathToFileURL } from 'node:url'
+
+// Board 15 is the product board every deploy ticket lives on; verified at
+// startup below (HTPR-6239 review: a silent wrong-board post is worse than a
+// loud refusal).
+const PROJECT_ID = 15
+// Screens the brief can name, mapped from changed file paths. Keep names in
+// sync with what the smoke suite (e2e/smoke/prod.spec.ts) calls the main views.
+const SCREEN_PREFIXES = [
+  ['all-tasks', 'board list (All tasks)'],
+  ['detail/', 'kanban board and task detail'],
+  ['inbox', 'inbox'],
+  ['calendar', 'calendar'],
+  ['search', 'AI search'],
+  ['settings', 'settings'],
+  ['new', 'new-task modal'],
+  ['chat', 'agent chat'],
+  ['api/', 'API behaviour'],
+]
+
+export function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&': return '&amp;'
+      case '<': return '&lt;'
+      case '>': return '&gt;'
+      case '"': return '&quot;'
+      case "'": return '&#39;'
+      default: return char
+    }
+  })
+}
+
+export function parseTicketNumber(prTitle) {
+  // Token boundaries: "XHTPR-123" must not match, and "HTPR-123abc" is not a
+  // ticket reference either.
+  const match = /(?<!\w)HTPR-(\d+)\b(?!\w)/.exec(String(prTitle || ''))
+  return match ? Number(match[1]) : null
+}
+
+/** Map changed file paths to at most 3 known screen names (fallback: top-level dirs). */
+export function mapScreens(changedFiles) {
+  const files = String(changedFiles || '').split(/\s+/).filter(Boolean)
+  const screens = []
+  const fallbackDirs = []
+  for (const file of files) {
+    const normalized = file.replace(/^.*?(src\/|e2e\/)/, '$1')
+    // Every prefix is a path-segment match, slash-suffixed or not, so
+    // "graphql-api/x.ts" never matches "api/" and "notdetail/page.tsx" never
+    // matches "detail/".
+    const hit = SCREEN_PREFIXES.find(([prefix]) =>
+      new RegExp(`(^|/)${prefix.replace(/\/$/, '')}([/.])`).test(normalized),
+    )
+    if (hit) {
+      if (!screens.includes(hit[1])) screens.push(hit[1])
+    } else {
+      const top = file.split('/')[0]
+      if (top && !fallbackDirs.includes(top)) fallbackDirs.push(top)
+    }
+    if (screens.length >= 3) break
+  }
+  if (screens.length === 0 && fallbackDirs.length > 0) {
+    return fallbackDirs.slice(0, 3).map((dir) => `the ${dir} area`)
+  }
+  return screens.slice(0, 3)
+}
+
+export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agentId, appUrl = 'https://app.hypertask.ai' }) {
+  const screenItems = screens
+    .map((screen) => `<li>${escapeHtml(screen)}</li>`)
+    .join('')
+  let smokeLine = 'The automated smoke check left no clear verdict this deploy — look carefully at the changed screens.'
+  if (smokeOk === true) {
+    smokeLine = 'The automated smoke check passed on this deploy.'
+  } else if (smokeOk === false) {
+    smokeLine = 'The automated smoke check failed without a confirmed break (no rollback) — treat that as a strong defect hint.'
+  }
+  // Hand-written mention span: the server-side agent-mention extraction
+  // (extractTipTapContent) matches data-label="agent-<uuid>" directly, so the
+  // wake does not depend on @-token resolution succeeding for the MCP identity.
+  const mention = `<span data-type="mention" class="mention" data-id="${escapeHtml(agentName)}" data-label="agent-${escapeHtml(agentId)}">${escapeHtml(agentName)}</span>`
+  return [
+    `<p><strong>GLM post-deploy QA pass requested: five minutes, read-only.</strong></p>`,
+    `<p>Deploy ${escapeHtml(sha)} merged as “${escapeHtml(prTitle)}”. ${escapeHtml(smokeLine)}</p>`,
+    `<p>Changed screens:</p><ul>${screenItems}</ul>`,
+    `<ol><li>Open ${escapeHtml(appUrl)} as a signed-in user and explore the changed screens and their nearest neighbours for five minutes.</li><li>Post one comment on this ticket with screenshots attached and a one-line verdict (pass, or defect list).</li><li>File one Bugs ticket per defect, labelled <code>post-deploy</code>, with the reproduction steps.</li></ol>`,
+    `<p>Rules: on the app, look only — never submit forms, edit, delete, invite, or change settings. On Hypertask, you do write: your verdict comment here and the Bugs tickets. Never roll back and never trigger a deployment action. Keep screenshots to the changed screens and never capture tokens, credentials, or personal data. Reply without mentioning anyone.</p>`,
+    `<p>${mention} — brief marker <code>glm-qa-brief:${escapeHtml(sha)}</code></p>`,
+  ].join('')
+}
+
+function parseArgs(argv) {
+  const args = {}
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i]
+    if (arg === '--sha') args.sha = argv[++i]
+    else if (arg === '--pr-title') args.prTitle = argv[++i]
+    else if (arg === '--changed-files') args.changedFiles = argv[++i]
+    else if (arg === '--smoke-ok') args.smokeOk = argv[++i]
+    else if (arg === '--smoke-unknown') args.smokeUnknown = true
+    else if (arg === '--dry-run') args.dryRun = true
+  }
+  return args
+}
+
+function refuse(reason) {
+  console.log(`glm-qa dispatch skipped: ${reason}`)
+  return 0
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function verifyProject(base, token) {
+  const projects = await apiGet(`${base}/api/mcp/projects?limit=100`, token)
+  const list = projects?.projects || []
+  const hit = list.find((project) => Number(project.id) === PROJECT_ID)
+  if (!hit) throw new Error(`project ${PROJECT_ID} not found on ${base}; refusing to post to a guessed board`)
+  return hit
+}
+
+async function apiGet(url, token) {
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const response = await fetch(url, { headers })
+  if (!response.ok) throw new Error(`GET ${url} -> HTTP ${response.status}`)
+  return response.json()
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2))
+  const token = process.env.MCP_TOKEN
+  const base = (process.env.MCP_BASE_URL || 'https://app.hypertask.ai').replace(/\/$/, '')
+  const agentId = (process.env.GLM_QA_AGENT_ID || '').trim()
+  const agentName = (process.env.GLM_QA_AGENT_NAME || '').trim()
+
+  if (!/^[0-9a-f]{40}$/i.test(String(args.sha || ''))) {
+    return refuse('a full 40-character commit SHA is required')
+  }
+  if (!agentId || !UUID_RE.test(agentId) || !agentName) {
+    return refuse('GLM_QA_AGENT_ID (uuid) / GLM_QA_AGENT_NAME repo variables are not configured')
+  }
+  const ticket = parseTicketNumber(args.prTitle)
+  if (!ticket) {
+    return refuse(`no HTPR-<n> ticket in the pull request title "${args.prTitle}"`)
+  }
+  // Mandatory board check: verifyProject throws when board 15 is missing, and
+  // a refusal here is the correct behavior.
+  try {
+    await verifyProject(base, token)
+  } catch (err) {
+    return refuse(String(err.message || err))
+  }
+  // Revalidate live production immediately before briefing: the health job's
+  // `live` output is a stale snapshot, and a newer deploy may have taken the
+  // production alias while this run waited (HTPR-6239 review). The /api/version
+  // endpoint is unauthenticated (no secret in CI) and returns the live buildId.
+  // ponytail: a request failure (not a mismatch) stays fail-open with a
+  // warning — a transient /api/version blip must not kill every dispatch; the
+  // fixed concurrency group and the health gate narrow the stale window.
+  try {
+    const version = await apiGet(`${base}/api/version`, '')
+    const liveBuild = version?.buildId
+    if (liveBuild && liveBuild !== args.sha) {
+      return refuse(`production now serves ${liveBuild}, not ${args.sha}; there is nothing of this deploy left to explore`)
+    }
+    if (!liveBuild) {
+      return refuse('live build id unavailable (/api/version answered without a buildId); cannot prove this deploy is still live')
+    }
+  } catch (err) {
+    console.log(`::warning::live recheck failed (${String(err.message || err)}); briefing without a liveness recheck`)
+  }
+
+  // Mandatory ticket lookup: refusing here is the correct behavior — the
+  // brief must never land on a guessed or missing ticket.
+  let taskId
+  try {
+    const task = await apiGet(`${base}/api/mcp/tasks?ticket_number=HTPR-${ticket}&project_id=${PROJECT_ID}`, token)
+    taskId = task?.tasks?.[0]?.id
+  } catch (err) {
+    return refuse(`ticket lookup for HTPR-${ticket} failed: ${String(err.message || err)}`)
+  }
+  if (!taskId) return refuse(`ticket HTPR-${ticket} not found on board ${PROJECT_ID}`)
+
+  // Duplicate-run guard: one brief per deploy SHA. The workflow's fixed
+  // concurrency group (glm-qa, cancel-in-progress) is the primary dedup; this
+  // comment scan is belt-and-braces.
+  // ponytail: a failed comment READ continues without dedup (the marker scan is
+  // best-effort) so a token that can write but not read comments cannot
+  // silently kill the feature; upgrade path: an idempotency key on the POST.
+  let alreadyBriefed = false
+  try {
+    const comments = await apiGet(`${base}/api/mcp/comments?task_id=${taskId}&project_id=${PROJECT_ID}`, token)
+    const marker = `glm-qa-brief:${args.sha}`
+    alreadyBriefed = (comments?.comments || []).some(
+      (comment) => String(comment.text || comment.commentText || '').includes(marker),
+    )
+  } catch (err) {
+    console.log(`::warning::glm-qa duplicate scan failed (${err.message}); relying on the workflow concurrency group`)
+  }
+  if (alreadyBriefed) {
+    return refuse(`deploy ${args.sha} was already briefed on HTPR-${ticket}`)
+  }
+
+  const screens = mapScreens(args.changedFiles)
+  // Smoke state must be passed explicitly; a missing flag reads as "unknown",
+  // never as a silent pass (HTPR-6239 review).
+  let smokeOk = null
+  if (!args.smokeUnknown) {
+    if (args.smokeOk === 'true') smokeOk = true
+    else if (args.smokeOk === 'false') smokeOk = false
+  }
+  const text = buildBriefText({
+    sha: args.sha,
+    prTitle: args.prTitle,
+    screens: screens.length > 0 ? screens : ['the whole app (no known screens matched)'],
+    smokeOk,
+    agentName,
+    agentId,
+    // The brief's exploration target is the same deployment the MCP API serves.
+    appUrl: base,
+  })
+
+  if (args.dryRun) {
+    console.log('glm-qa dry run — would POST this comment:')
+    console.log(text)
+    return 0
+  }
+
+  const response = await fetch(`${base}/api/mcp/comments`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ unique_index: ticket, project_id: PROJECT_ID, content_type: 'html', text }),
+  })
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    console.error(`glm-qa dispatch FAILED: comment POST -> HTTP ${response.status}: ${body.slice(0, 300)}`)
+    return 1
+  }
+  console.log(`glm-qa brief posted on HTPR-${ticket} mentioning ${agentName}`)
+  return 0
+}
+
+// Run only when executed directly, so the test suite can import the helpers.
+const invoked = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false
+if (invoked) {
+  main().then(
+    (code) => process.exit(code ?? 0),
+    (err) => {
+      console.error(`glm-qa dispatch FAILED: ${err && err.stack ? err.stack : err}`)
+      process.exit(1)
+    },
+  )
+}
