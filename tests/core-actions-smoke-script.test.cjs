@@ -34,7 +34,11 @@ function fixtureFetch({ probeResult, onRequest, overrides = {} } = {}) {
         projects: [{ id: PROJECT_ID, title: BOARD_TITLE, ownerId: 6 }],
       });
     if (path === "/api/mcp/tasks")
-      return Response.json({ tasks: [{ id: TASK_ID, title: TASK_TITLE }] });
+      return Response.json({
+        tasks: [
+          { id: TASK_ID, title: TASK_TITLE, labels: [{ name: "qa-fixture" }] },
+        ],
+      });
     if (path === "/api/mcp/agents")
       return Response.json({
         agents: [
@@ -413,6 +417,36 @@ test("the monitor runs the probe unconditionally and stays loud when it fails", 
   }
 });
 
+test("an existing fixture task without the qa-fixture label is refused", async () => {
+  // Labels are only settable at creation, so a pre-existing unlabelled task
+  // cannot be relabelled here; driving it anyway risks colliding with an agent.
+  const originalFetch = global.fetch;
+  global.fetch = fixtureFetch({
+    overrides: {
+      "/api/mcp/tasks": async () =>
+        Response.json({ tasks: [{ id: TASK_ID, title: TASK_TITLE, labels: [] }] }),
+    },
+  });
+
+  try {
+    const { run, classifyProbeStartFailure, shouldRollback } =
+      await import(scriptUrl);
+    let result;
+    try {
+      result = await run();
+    } catch (error) {
+      result = classifyProbeStartFailure(error);
+    }
+    assert.equal(result.kind, "unrunnable");
+    assert.match(result.detail, /missing the qa-fixture label/);
+    // Needs a human, so it is red and loud but never a board report.
+    assert.equal(result.setupError, true);
+    assert.equal(shouldRollback(result, "push"), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("a credential problem fails the job without spamming the board", async () => {
   const { classifyProbeStartFailure, isSetupFailure, report, shouldRollback } =
     await import(scriptUrl);
@@ -421,6 +455,10 @@ test("a credential problem fails the job without spamming the board", async () =
     isSetupFailure(
       new Error("HYPERTASK_MCP_TOKEN must be a user token, not an agent token"),
     ),
+    true,
+  );
+  assert.equal(
+    isSetupFailure(new Error("HYPERTASK_MCP_TOKEN is required")),
     true,
   );
   assert.equal(isSetupFailure(new Error("route failed")), false);

@@ -122,6 +122,17 @@ export async function provision() {
       `/api/mcp/tasks?project_id=${project.id}&status=Normal&search=${encodeURIComponent(TASK_TITLE)}&limit=10`,
     );
     task = tasks.tasks?.find((item) => item.title === TASK_TITLE);
+    // Labels can only be set when a task is created, so a pre-existing fixture
+    // cannot be relabelled from here. Refuse to drive an unlabelled task
+    // rather than mutate one a dev agent might also pick up.
+    if (
+      task &&
+      !(task.labels ?? []).some((label) => label?.name === FIXTURE_LABEL)
+    ) {
+      throw new Error(
+        `The fixture task is missing the ${FIXTURE_LABEL} label; add it by hand so agents skip it`,
+      );
+    }
   }
   if (!task) throw new Error("The fixture task is missing");
 
@@ -267,7 +278,9 @@ export function shouldRollback(result, eventName) {
 // it to the board on every five-minute run would bury the real alerts.
 const SETUP_ERROR_MESSAGES = [
   "must be a user token",
+  "HYPERTASK_MCP_TOKEN is required",
   "CORE_SMOKE_TEAM_ID is required",
+  `is missing the ${FIXTURE_LABEL} label`,
 ];
 
 export function isSetupFailure(error) {
