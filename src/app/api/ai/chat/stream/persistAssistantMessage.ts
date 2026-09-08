@@ -9,6 +9,14 @@ type PersistAssistantMessageArgs = {
   userId: number;
   content: string;
   linkify: (content: string, userId: number) => Promise<string>;
+  /**
+   * Tri-state: undefined keeps the existing rule (a native agent session
+   * attributes its reply to that agent, a plain AI chat stays unattributed);
+   * an explicit id attributes the reply to that agent (HTPR-6284 routed
+   * @mention turn); explicit null forces unattributed even in an agent
+   * session, e.g. a synthetic failure message the agent never wrote.
+   */
+  authorAgentId?: string | null;
 };
 
 /**
@@ -25,6 +33,7 @@ export async function persistAssistantMessage({
   userId,
   content,
   linkify,
+  authorAgentId,
 }: PersistAssistantMessageArgs): Promise<boolean> {
   if (!content.trim()) return false;
 
@@ -33,6 +42,10 @@ export async function persistAssistantMessage({
     select: { id: true, agentId: true },
   });
   if (!session) return false;
+
+  // Undefined means "decide from the session"; null is a deliberate override.
+  const resolvedAuthorAgentId =
+    authorAgentId === undefined ? session.agentId : authorAgentId;
 
   let storedContent = content;
   try {
@@ -54,7 +67,7 @@ export async function persistAssistantMessage({
         isDelivered: true,
         // A native agent's reply is that agent's. In a plain AI chat there is
         // no Agent row to point at, so the reply stays unattributed.
-        authorAgentId: session.agentId,
+        authorAgentId: resolvedAuthorAgentId,
       },
     ],
     skipDuplicates: true,

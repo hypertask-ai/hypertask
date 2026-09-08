@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
           },
           include: {
             attachments: true,
+            // HTPR-6284: agent-attributed replies keep their author on reload.
+            authorAgent: { select: { displayName: true } },
           },
         },
       },

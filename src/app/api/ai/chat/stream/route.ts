@@ -17,6 +17,8 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRefs";
 import { persistAssistantMessage } from "./persistAssistantMessage";
+import { decideAgentMentionRouting, extractMentionedAgentIds } from "./agentMention";
+import { askFleetAgent } from "./fleetAsk";
 import {
   ensureNativeChatTurn,
   findNativeAssistantReplay,
@@ -51,6 +53,7 @@ import {
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6284_AGENT_MENTION_ROUTING_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
 import { searchHelpDocs } from "@/lib/help-docs/searchHelpDocs";
 import { retrieveBoardKnowledge } from "@/lib/rag/retrieveBoardKnowledge";
@@ -328,7 +331,7 @@ type ProviderId =
   | "gateway"
   | "custom";
 type AuthedUser = { id: number; email: string; displayName?: string | null };
-type SseEvent = "status" | "content" | "title" | "done" | "error";
+type SseEvent = "status" | "content" | "title" | "done" | "error" | "agent";
 type ToolExecution = { name: string; result: unknown };
 type ToolExecutionRecorder = (execution: ToolExecution) => void;
 type ToolStartRelease = () => void | Promise<void>;
@@ -2910,68 +2913,15 @@ function buildTools(
             };
           }
 
-          const url = process.env.AGENT_FLEET_ASK_URL;
-          const secret = process.env.AGENT_FLEET_ASK_SECRET;
-          if (!url || !secret) {
-            return { success: false, error: "Agent bridge is not configured." };
-          }
-
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 45_000);
-          try {
-            const response = await fetch(url, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-fleet-ask-secret": secret,
-              },
-              body: JSON.stringify({
-                agentId: input.agent_id,
-                question: input.question,
-                context: {
-                  boardId,
-                  taskId: body.default_context?.task_id,
-                  requesterName: user.displayName || undefined,
-                },
-              }),
-              signal: controller.signal,
-            });
-
-            if (!response.ok) {
-              return {
-                success: false,
-                error: "The agent request failed.",
-              };
-            }
-
-            const result = (await response.json()) as {
-              success?: boolean;
-              answer?: string;
-            };
-            if (
-              !result.success ||
-              typeof result.answer !== "string" ||
-              !result.answer.trim()
-            ) {
-              return {
-                success: false,
-                error: "The agent returned a malformed response.",
-              };
-            }
-
-            return { success: true, answer: result.answer };
-          } catch (error) {
-            console.error("[AI chat ask agent]", error);
-            return {
-              success: false,
-              error:
-                error instanceof Error && error.name === "AbortError"
-                  ? "The agent did not respond in time."
-                  : "The agent request failed.",
-            };
-          } finally {
-            clearTimeout(timeout);
-          }
+          return askFleetAgent({
+            agentId: input.agent_id,
+            question: input.question,
+            context: {
+              boardId,
+              taskId: body.default_context?.task_id,
+              requesterName: user.displayName || undefined,
+            },
+          });
         } catch (error) {
           console.error("[AI chat ask agent]", error);
           return { success: false, error: "The agent request failed." };
@@ -10300,6 +10250,201 @@ export async function POST(request: NextRequest) {
           // body in the system prompt still carries the intent.
           message: skillResolution.cleanedText || requestMessage,
         };
+
+        // HTPR-6284: a single @<agent> mention routes the whole turn to that
+        // fleet agent and the assistant model loop below is skipped. Anything
+        // else — no or several mentions, attachments, no board context, a
+        // native agent's own session, the flag off — falls through unchanged.
+        const mentionDecision = decideAgentMentionRouting({
+          routingEnabled: await isFeatureEnabled(
+            HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
+            dbUser.id,
+          ),
+          mentionedAgentIds: extractMentionedAgentIds(resolvedBody.context_list),
+          hasAttachments:
+            (resolvedBody.attachments?.length ?? 0) > 0 ||
+            (resolvedBody.images64?.length ?? 0) > 0 ||
+            (resolvedBody.pdfs64?.length ?? 0) > 0 ||
+            (resolvedBody.docx64?.length ?? 0) > 0,
+          hasBoardContext:
+            Number.isInteger(body.default_context?.project_id) &&
+            Number(body.default_context?.project_id) > 0,
+          hasActingAgent: Boolean(actingAgent),
+        });
+
+        if (mentionDecision.route) {
+          const routedBoardId = Number(body.default_context?.project_id);
+          let routedAgent: { id: string; displayName: string } | null = null;
+          // Same proven-access rule the hypertask_ask_agent tool applies: the
+          // board comes from the client, so the caller's access is proven
+          // before its agents are reachable.
+          if (await getAccessibleAgentBoard(routedBoardId, dbUser.id)) {
+            const boardAgents = await getBoardAgentMembers(
+              routedBoardId,
+              dbUser.id,
+            );
+            const memberRow = boardAgents.find(
+              (candidate) => candidate.agent.id === mentionDecision.agentId,
+            );
+            // getBoardAgentMembers already filters revoked, archived and
+            // invisible agents, so a found row is an active visible agent.
+            if (memberRow) {
+              routedAgent = {
+                id: memberRow.agent.id,
+                displayName: memberRow.agent.displayName,
+              };
+            }
+          }
+
+          if (routedAgent) {
+            send("status", {
+              content: `Asking ${routedAgent.displayName}...`,
+            });
+            const fleet = await askFleetAgent({
+              agentId: routedAgent.id,
+              question: resolvedBody.message,
+              context: {
+                boardId: routedBoardId,
+                taskId: body.default_context?.task_id,
+                requesterName: dbUser.displayName || undefined,
+              },
+              abortSignal: providerAbort.signal,
+            });
+
+            if (turnDeadlineHit) {
+              await endDeadlineTurn();
+              return;
+            }
+            // Deadline wins over the generic cancelled branch: both abort the
+            // provider signal, and only the deadline path runs its cleanup.
+            if (cancelled || providerAbort.signal.aborted) {
+              if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
+                await failHeartbeatExecution(
+                  heartbeatExecutionId,
+                  "AI reply cancelled",
+                ).catch(() => undefined);
+                heartbeatExecutionTerminal = true;
+              }
+              finish("error", { cancelled: true, content: "Stream cancelled." });
+              return;
+            }
+
+            const failureMessage =
+              fleet.success || fleet.error === "aborted"
+                ? null
+                : `<p>${escapeHtml(routedAgent.displayName)} could not be reached just now. Try again in a moment.</p>`;
+            // The bridge answer is the agent's own words; keep it verbatim
+            // (escaped, plain paragraphs) instead of paraphrasing it through
+            // the model. ponytail: once the bridge guarantees an HTML reply,
+            // render it as-is behind sanitizeAiHtml.
+            const replyHtml = fleet.success
+              ? fleet.answer
+                  .split(/\n{2,}/)
+                  .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+                  .join("")
+              : failureMessage;
+
+            // Tell the client who is answering before the first content frame,
+            // so attribution lands on this message and nothing after it.
+            if (fleet.success) {
+              send("agent", {
+                agentId: routedAgent.id,
+                agentName: routedAgent.displayName,
+              });
+            }
+
+            const chunks = replyHtml ? [replyHtml] : [];
+            if (replyHtml) {
+              send("content", { content: replyHtml });
+            }
+
+            let assistantPersisted = false;
+            if (body.session_id && body.assistant_message_id && chunks.length) {
+              let completionFenceToken: string | null = null;
+              if (streamId) {
+                completionFenceToken = await acquireAiChatCompletionFence(
+                  streamLease.redis,
+                  dbUser.id,
+                  body.session_id,
+                  streamId,
+                  body.assistant_message_id,
+                );
+                if (!completionFenceToken) {
+                  finish("error", {
+                    cancelled: true,
+                    content: "Stream cancelled.",
+                  });
+                  return;
+                }
+              }
+              try {
+                assistantPersisted = await persistAssistantMessage({
+                  db: prisma,
+                  messageId: body.assistant_message_id,
+                  sessionId: body.session_id,
+                  userId: dbUser.id,
+                  content: chunks.join(""),
+                  linkify: linkifyTicketRefs,
+                  // The reply (or the failure sentence) is this agent's turn,
+                  // except a failure sentence, which the agent never wrote.
+                  authorAgentId: fleet.success ? routedAgent.id : null,
+                });
+              } catch (error) {
+                console.error(
+                  "[ai/chat/stream] assistant persistence failed; client will retry",
+                  error,
+                );
+              } finally {
+                if (completionFenceToken) {
+                  try {
+                    if (assistantPersisted) {
+                      await finishAiChatCompletionFence(
+                        streamLease.redis,
+                        dbUser.id,
+                        body.session_id,
+                        body.assistant_message_id,
+                        completionFenceToken,
+                      );
+                    } else {
+                      await releaseAiChatCompletionFence(
+                        streamLease.redis,
+                        dbUser.id,
+                        body.session_id,
+                        body.assistant_message_id,
+                        completionFenceToken,
+                      );
+                    }
+                  } catch (error) {
+                    console.error(
+                      "[ai/chat/stream] completion fence will expire automatically",
+                      error,
+                    );
+                  }
+                }
+              }
+            }
+
+            if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
+              if (assistantPersisted) {
+                await completeHeartbeatExecution(heartbeatExecutionId);
+              } else {
+                await failHeartbeatExecution(
+                  heartbeatExecutionId,
+                  "assistant reply was not persisted",
+                );
+              }
+              heartbeatExecutionTerminal = true;
+            }
+
+            finish("complete", {
+              user_message_persisted: userMessagePersisted,
+              assistant_persisted: assistantPersisted,
+            });
+            return;
+          }
+          // Not routable (agent gone from the board): the assistant turn below
+          // is exactly the pre-HTPR-6284 behavior for that mention.
+        }
         const agentPromptAddition = actingAgent
           ? `You are acting as "${actingAgent.displayName}", a native Hypertask agent. ` +
             `Comments, assignments, moves, and tasks you create are attributed to this ` +
