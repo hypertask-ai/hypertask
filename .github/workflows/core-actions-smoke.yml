@@ -67,3 +67,9 @@ jobs:
         run: |
           echo "::error::Core-actions smoke did not pass"
           exit 1
+
+      - name: Fail until the fixture settings are configured
+        if: ${{ !cancelled() && steps.settings.outputs.configured != 'true' }}
+        run: |
+          echo "::error::Core-actions probe did not run: the CORE_SMOKE_* fixture variables are missing. Configure the fixture (see HTPR-6258) to arm the monitor."
+          exit 1

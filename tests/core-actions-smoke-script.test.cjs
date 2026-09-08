@@ -265,6 +265,11 @@ test("an unconfigured fixture skips the probe instead of failing the monitor", a
       text,
       /steps\.settings\.outputs\.configured == 'true' && steps\.probe\.outcome == 'failure'/,
     );
+    // An unconfigured fixture is still a failing monitor, never a green one.
+    assert.match(
+      text,
+      /Fail until the fixture settings are configured[\s\S]*?steps\.settings\.outputs\.configured != 'true'[\s\S]*?exit 1/,
+    );
   }
 });
 
