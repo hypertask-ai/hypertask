@@ -14,6 +14,10 @@ import {
 } from "@/lib/storage/hypertasksS3";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import {
+  HEIC_PREVIEW_CONTENT_TYPE,
+  heicPreviewKey,
+} from "@/lib/media/heicPreview";
 import { signUploadGrant } from "@/lib/storage/uploadGrant";
 import { TASK_ATTACHMENT_PREFIX } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { randomUUID } from "node:crypto";
@@ -36,6 +40,15 @@ type RequestedFile = {
   name: unknown;
   size: unknown;
   type?: unknown;
+  previewOfIndex?: unknown;
+};
+
+export type ParsedRequestFile = {
+  name: string;
+  size: number;
+  type: string | null;
+  /** Set when this entry is the JPEG copy of an earlier entry (HTPR-6264). */
+  previewOfIndex?: number;
 };
 
 class UploadUrlRequestError extends Error {
@@ -64,23 +77,22 @@ async function resolveBetterAuthSession(
   return session ? { id: session.userId } : null;
 }
 
-export function parseRequestedFiles(body: unknown): {
-  name: string;
-  size: number;
-  type: string | null;
-}[] {
+export function parseRequestedFiles(body: unknown): ParsedRequestFile[] {
   const files = (body as { files?: unknown } | null)?.files;
   if (!Array.isArray(files) || files.length === 0) {
     throw new UploadUrlRequestError("No files provided", 400);
   }
-  if (files.length > DIRECT_UPLOAD_MAX_FILES) {
+  // A HEIC contributes two entries (HTPR-6264), so the hard ceiling on the
+  // array is twice the ceiling on files the user picked. The user-facing count
+  // is checked below, once the preview entries can be told apart.
+  if (files.length > DIRECT_UPLOAD_MAX_FILES * 2) {
     throw new UploadUrlRequestError(
       `A maximum of ${DIRECT_UPLOAD_MAX_FILES} files may be uploaded at once`,
       400
     );
   }
 
-  const parsed = files.map((entry) => {
+  const parsed: ParsedRequestFile[] = files.map((entry, index) => {
     const file = entry as RequestedFile;
     const name = typeof file?.name === "string" ? file.name.trim() : "";
     if (!name) {
@@ -93,12 +105,68 @@ export function parseRequestedFiles(body: unknown): {
     if (typeof size !== "number" || !Number.isSafeInteger(size) || size < 0) {
       throw new UploadUrlRequestError(`Invalid size for "${name}"`, 400);
     }
+
+    // A preview's key is derived from its original's, so the reference has to
+    // point backwards at a real entry that is not itself a preview. Anything
+    // else and the key could not be built, or could be aimed somewhere the
+    // caller was never issued.
+    const previewOf = file?.previewOfIndex;
+    if (previewOf !== undefined) {
+      if (
+        typeof previewOf !== "number" ||
+        !Number.isInteger(previewOf) ||
+        previewOf < 0 ||
+        previewOf >= index
+      ) {
+        throw new UploadUrlRequestError(
+          `Invalid preview reference for "${name}"`,
+          400
+        );
+      }
+      const target = files[previewOf] as RequestedFile;
+      if (target?.previewOfIndex !== undefined) {
+        throw new UploadUrlRequestError(
+          `A preview cannot be a preview of a preview ("${name}")`,
+          400
+        );
+      }
+      return {
+        name,
+        size,
+        type: typeof file?.type === "string" ? file.type : null,
+        previewOfIndex: previewOf,
+      };
+    }
+
     return {
       name,
       size,
       type: typeof file?.type === "string" ? file.type : null,
     };
   });
+
+  // At most one preview per original: two entries claiming the same parent
+  // would be signed for the same derived key and the second would overwrite
+  // the first.
+  const claimed = new Set<number>();
+  for (const file of parsed) {
+    if (file.previewOfIndex === undefined) continue;
+    if (claimed.has(file.previewOfIndex)) {
+      throw new UploadUrlRequestError(
+        `Duplicate preview for "${parsed[file.previewOfIndex].name}"`,
+        400
+      );
+    }
+    claimed.add(file.previewOfIndex);
+  }
+
+  if (parsed.filter((file) => file.previewOfIndex === undefined).length >
+    DIRECT_UPLOAD_MAX_FILES) {
+    throw new UploadUrlRequestError(
+      `A maximum of ${DIRECT_UPLOAD_MAX_FILES} files may be uploaded at once`,
+      400
+    );
+  }
 
   const sizeError = getDirectUploadSizeError(parsed);
   if (sizeError) {
@@ -169,12 +237,28 @@ export default async function handler(
     }
     const files = parseRequestedFiles(req.body);
 
+    // Keys first, then signatures, because a preview's key is its original's
+    // with a suffix (HTPR-6264) and so cannot be minted until that one exists.
+    // The client never picks a key here either: it only says which entry a
+    // preview belongs to, and the derivation is the server's.
+    const keys: string[] = [];
+    const contentTypes: string[] = [];
+    files.forEach((file, index) => {
+      if (file.previewOfIndex !== undefined) {
+        keys[index] = heicPreviewKey(keys[file.previewOfIndex]);
+        contentTypes[index] = HEIC_PREVIEW_CONTENT_TYPE;
+        return;
+      }
+      keys[index] = `${TASK_ATTACHMENT_PREFIX}/${Date.now()}_${randomUUID()}_${safeDirectUploadNameSegment(
+        file.name
+      )}`;
+      contentTypes[index] = directUploadContentType(file.type);
+    });
+
     const uploads: DirectUploadTicket[] = await Promise.all(
-      files.map(async (file) => {
-        const contentType = directUploadContentType(file.type);
-        const key = `${TASK_ATTACHMENT_PREFIX}/${Date.now()}_${randomUUID()}_${safeDirectUploadNameSegment(
-          file.name
-        )}`;
+      files.map(async (file, index) => {
+        const key = keys[index];
+        const contentType = contentTypes[index];
         const uploadUrl = await signUpload(key, contentType, file.size);
         return {
           uploadUrl,
@@ -194,11 +278,16 @@ export default async function handler(
         keys: uploads.map((upload) => upload.key),
         ...(taskLinkRequested
           ? {
-              taskLinkFiles: uploads.map((upload) => ({
-                key: upload.key,
-                fileName: upload.fileName,
-                contentType: upload.contentType,
-              })),
+              // A preview is storage, not an attachment: it must never become a
+              // row of its own, so it is not offered as a linkable file
+              // (HTPR-6264).
+              taskLinkFiles: uploads
+                .filter((_, index) => files[index].previewOfIndex === undefined)
+                .map((upload) => ({
+                  key: upload.key,
+                  fileName: upload.fileName,
+                  contentType: upload.contentType,
+                })),
             }
           : {}),
       },

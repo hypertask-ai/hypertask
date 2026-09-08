@@ -1,5 +1,6 @@
 /* eslint-disable jsx-a11y/alt-text */
 /* eslint-disable @next/next/no-img-element */
+import { settledPreviewFor } from "@/lib/media/heicToJpeg";
 import React, { useState, useEffect, useCallback } from "react";
 import { Modal, ModalBody, Container } from "reactstrap";
 import "@/styles/AttachmentView.scss";
@@ -195,7 +196,11 @@ const ImageGallery = (props: IProps) => {
                   src={
                     selectedFile.source
                       ? selectedFile.source
-                      : URL.createObjectURL(selectedFile)
+                      // HTPR-6264: show the decoded copy of a HEIC, not the
+                      // file itself, which no browser here can paint.
+                      : URL.createObjectURL(
+                          settledPreviewFor(selectedFile) ?? selectedFile
+                        )
                   }
                 />
               ) : (

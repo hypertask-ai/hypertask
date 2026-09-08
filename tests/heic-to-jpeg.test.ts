@@ -7,7 +7,7 @@ import {
   isHeicByMetadata,
   jpegFileName,
   needsHeicConversion,
-  prepareUploadFile,
+  planUploadFile,
 } from "../src/lib/media/heicToJpeg";
 
 /** An ISO base-media header: 4 size bytes, "ftyp", then the major brand. */
@@ -84,7 +84,8 @@ test("a HEIC is uploaded as a JPEG named after the original", async () => {
   const converted = new Blob([new Uint8Array([9, 9, 9])], { type: "image/jpeg" });
   let seenQuality: number | undefined;
 
-  const result = await prepareUploadFile(fileOf("IMG_4821.HEIC", "image/heic"), {
+  const original = fileOf("IMG_4821.HEIC", "image/heic");
+  const plan = await planUploadFile(original, {
     loadConverter: async () => ({
       default: async ({ quality }) => {
         seenQuality = quality;
@@ -93,9 +94,15 @@ test("a HEIC is uploaded as a JPEG named after the original", async () => {
     }),
   });
 
-  assert.equal(result.name, "IMG_4821.jpg");
-  assert.equal(result.type, "image/jpeg");
-  assert.equal(result.size, 3);
+  // HTPR-6264: the original is kept, byte for byte and under its own name, so
+  // it is still what the attachment records and what the user downloads.
+  assert.equal(plan.file, original);
+  assert.equal(plan.file.name, "IMG_4821.HEIC");
+  assert.equal(plan.file.type, "image/heic");
+
+  assert.equal(plan.preview?.name, "IMG_4821.jpg");
+  assert.equal(plan.preview?.type, "image/jpeg");
+  assert.equal(plan.preview?.size, 3);
   assert.equal(seenQuality, HEIC_JPEG_QUALITY);
 });
 
@@ -106,44 +113,49 @@ test("a live photo decoding to several frames uploads the first one", async () =
     new Blob([new Uint8Array([1])], { type: "image/jpeg" }),
     new Blob([new Uint8Array([2, 2])], { type: "image/jpeg" }),
   ];
-  const result = await prepareUploadFile(fileOf("live.heic", "image/heic"), {
+  const plan = await planUploadFile(fileOf("live.heic", "image/heic"), {
     loadConverter: async () => ({ default: async () => frames }),
   });
 
-  assert.equal(result.type, "image/jpeg");
-  assert.equal(result.size, 1);
+  assert.equal(plan.preview?.type, "image/jpeg");
+  assert.equal(plan.preview?.size, 1);
 });
 
-test("a conversion that throws still uploads the original HEIC", async () => {
+test("a conversion that throws still uploads the original HEIC alone", async () => {
   // Failing the upload would be worse than the bug being fixed: the user could
   // no longer attach the photo at all. They get the HTPR-6254 download chip.
   const original = fileOf("IMG_9.heic", "image/heic");
-  const result = await prepareUploadFile(original, {
+  const plan = await planUploadFile(original, {
     loadConverter: async () => {
       throw new Error("libheif failed to load");
     },
   });
 
-  assert.equal(result, original);
-  assert.equal(result.name, "IMG_9.heic");
+  assert.equal(plan.file, original);
+  assert.equal(plan.file.name, "IMG_9.heic");
+  // No preview means nothing is uploaded to derive a preview URL from, which is
+  // what tells every render site to stay on the download chip.
+  assert.equal(plan.preview, null);
 });
 
-test("a decoder returning nothing usable falls back to the original", async () => {
+test("a decoder returning nothing usable leaves the original unpaired", async () => {
   const original = fileOf("IMG_9.heic", "image/heic");
-  const empty = await prepareUploadFile(original, {
+  const plan = await planUploadFile(original, {
     loadConverter: async () => ({ default: async () => new Blob([]) }),
   });
-  assert.equal(empty, original);
+  assert.equal(plan.file, original);
+  assert.equal(plan.preview, null);
 });
 
-test("a non-HEIC file is returned untouched and never loads the decoder", async () => {
+test("a non-HEIC file is planned alone and never loads the decoder", async () => {
   const jpeg = fileOf("shot.jpg", "image/jpeg");
-  const result = await prepareUploadFile(jpeg, {
+  const plan = await planUploadFile(jpeg, {
     loadConverter: async () => {
       throw new Error("the decoder must never be loaded for a JPEG");
     },
   });
-  assert.equal(result, jpeg);
+  assert.equal(plan.file, jpeg);
+  assert.equal(plan.preview, null);
 });
 
 test("the converted name keeps a dotted base and survives an odd original", () => {

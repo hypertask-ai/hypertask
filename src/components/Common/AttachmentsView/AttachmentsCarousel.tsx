@@ -3,6 +3,7 @@ import {
   isBrowserRenderableImage,
   isUnrenderableImage,
 } from "@/lib/media/browserRenderableImage";
+import { heicPreviewUrl } from "@/lib/media/heicPreview";
 import { useFlag } from "@/hooks/useFlag";
 import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import React, { useState, useEffect, useContext } from "react";
@@ -75,6 +76,30 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
   // Transform attachments to lightbox slides format
   const slides: Slide[] = attachments.map((attachment) => {
     const attachmentUpdated = attachment.fileSource;
+
+    // HTPR-6264: a HEIC now has a JPEG copy stored beside it, so the lightbox
+    // and its thumbnail strip get an ordinary image slide again. It stays an
+    // image slide rather than a custom one on purpose: that is what keeps zoom,
+    // the thumbnail strip and the toolbar working.
+    //
+    // Both download paths below resolve the file from `attachments[index]`
+    // rather than from the slide, so they already hand back the original HEIC
+    // and need no change here.
+    const previewUrl = heicFallbackEnabled
+      ? heicPreviewUrl(
+          attachment.fileSource,
+          attachment.fileType,
+          attachment.fileName
+        )
+      : null;
+    if (previewUrl) {
+      return {
+        src: previewUrl,
+        alt: attachment.fileName,
+        width: 1200,
+        height: 800,
+      } as Slide;
+    }
 
     // HTPR-6254: HEIC is an "image/" the lightbox cannot paint. Send it down
     // the same route as a PDF, where the slide keeps its download button,

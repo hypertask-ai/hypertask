@@ -7,7 +7,7 @@ import { NotificationType, SortingOrder } from "@prisma/client";
 import { getActiveColumnsViewFromProject, getActiveSortingModeFromProject, getActiveSortingOrderFromProject, getActiveSortingStackFromProject } from "./Views/ViewsHelperFunctions";
 import type { FileItem } from "@/components/Common/AttachmentsUpload";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
-import { prepareUploadFile } from "@/lib/media/heicToJpeg";
+import { planUploadFile } from "@/lib/media/heicToJpeg";
 import { agentSplitName, inboxConfig, staleSplitName } from "@/lib/configs/inbox.config";
 import { count } from "console";
 import { TBoardSortingViewMode, TBoardSortingViewOrder } from "@/models/Views/model";
@@ -527,10 +527,13 @@ export const isImage = (file: File): boolean => {
 export const processFiles = async (files: FileList, startingId: number) => {
     const  newFileItems: FileItem[] = await Promise.all(
       Array.from(files).map(async (original, index) => {
-        // HTPR-6257: a HEIC becomes a JPEG here, before anything else looks at
-        // it, so the optimistic tile paints a real thumbnail and the resizer
-        // below gets a format its canvas can actually decode.
-        const file = await prepareUploadFile(original);
+        // HTPR-6264: a HEIC is decoded here, before anything else looks at it,
+        // so the optimistic tile has a JPEG copy to paint. The file itself is
+        // deliberately left alone: it is what gets uploaded, what the
+        // attachment is named after and what the user downloads again later.
+        // The decode is cached per file, so the upload layer reuses this one
+        // rather than doing it a second time.
+        const { file } = await planUploadFile(original);
         if (isImage(file)) {
           if (file.size / (1024 ** 2) > 2) {
             const resizedImage = await imageResizer(file);

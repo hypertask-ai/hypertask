@@ -3,6 +3,7 @@ import "@/styles/AttachmentView.scss";
 import { IAttachment, TCarousalItems } from "@/models/model";
 import { Paperclip } from "lucide-react";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
+import { attachmentDisplaySrc, heicPreviewUrl } from "@/lib/media/heicPreview";
 import { useFlag } from "@/hooks/useFlag";
 import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 
@@ -56,11 +57,30 @@ const AttachmentView = (props: IProps) => {
           }`}
         >
           {attachments?.map((attachment, index) => {
+            // HTPR-6264: a HEIC is shown through the JPEG copy stored beside
+            // it. `displaySrc` is a claim rather than a fact - a photo
+            // uploaded before this shipped, or one whose conversion failed, has
+            // no copy and 404s - so the tile still keeps the HTPR-6254
+            // paperclip fallback and drops to it on the image's onError, keyed
+            // by the same fileSource either way.
+            const displaySrc = attachmentDisplaySrc(
+              attachment?.fileSource,
+              attachment?.fileType,
+              attachment?.fileName
+            );
+            const hasPreview =
+              heicPreviewUrl(
+                attachment?.fileSource,
+                attachment?.fileType,
+                attachment?.fileName
+              ) !== null;
             const isImage = heicFallbackEnabled
-              ? isBrowserRenderableImage(
+              ? (isBrowserRenderableImage(
                   attachment?.fileType,
                   attachment?.fileName
-                ) && !unrenderable.has(attachment?.fileSource)
+                ) ||
+                  hasPreview) &&
+                !unrenderable.has(attachment?.fileSource)
               : attachment?.fileType?.startsWith("image/");
             if (compact) {
               return (
@@ -76,7 +96,7 @@ const AttachmentView = (props: IProps) => {
                       {isImage ? (
                         <img
                           className="h-full w-full rounded-md object-contain"
-                          src={attachment.fileSource}
+                          src={displaySrc}
                           alt={attachment.fileName}
                           onError={() => markUnrenderable(attachment.fileSource)}
                         />
@@ -110,7 +130,7 @@ const AttachmentView = (props: IProps) => {
                       <img
                         style={{ height: "68px", width: "68px" }}
                         className="object-cover rounded-md"
-                        src={attachment.fileSource}
+                        src={displaySrc}
                         alt={attachment.fileName}
                         onError={() => markUnrenderable(attachment.fileSource)}
                       />

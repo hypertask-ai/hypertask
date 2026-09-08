@@ -73,7 +73,21 @@ export type DirectUploadRequestFile = {
   name?: string | null;
   size: number;
   type?: string | null;
+  /**
+   * Index of the entry in the same batch this file is the JPEG copy of
+   * (HTPR-6264), or undefined for an ordinary upload.
+   *
+   * A preview is a second object the browser generates for a HEIC, not a second
+   * attachment: it never gets its own row, it is not something the user picked,
+   * and it must not count against the "10 files at once" limit they see.
+   */
+  previewOfIndex?: number;
 };
+
+/** True for a batch entry that is a generated preview rather than a picked file. */
+export function isPreviewEntry(file: DirectUploadRequestFile): boolean {
+  return typeof file.previewOfIndex === "number";
+}
 
 export type DirectUploadTicket = {
   /** Short-lived signed PUT URL. */
@@ -94,7 +108,11 @@ export type DirectUploadTicket = {
 export function getDirectUploadSizeError(
   files: DirectUploadRequestFile[]
 ): string | null {
-  if (files.length > DIRECT_UPLOAD_MAX_FILES) {
+  // The file count the user is held to is the number of files they chose.
+  // HTPR-6264 doubles the objects for a batch of Mac photos, and telling
+  // someone who dragged six pictures that the limit is ten would be nonsense.
+  const pickedCount = files.filter((file) => !isPreviewEntry(file)).length;
+  if (pickedCount > DIRECT_UPLOAD_MAX_FILES) {
     return `A maximum of ${DIRECT_UPLOAD_MAX_FILES} files may be uploaded at once.`;
   }
 

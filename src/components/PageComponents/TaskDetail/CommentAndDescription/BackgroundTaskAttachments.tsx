@@ -6,6 +6,7 @@ import { buildStyles, CircularProgressbar } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import type { IAttachment } from "@/models/model";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
+import { settledPreviewFor } from "@/lib/media/heicToJpeg";
 import { useFlag } from "@/hooks/useFlag";
 import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import {
@@ -20,7 +21,10 @@ import {
 function PendingImage({ file }: { file: File }) {
   const imageRef = useRef<HTMLImageElement>(null);
   useEffect(() => {
-    const url = URL.createObjectURL(file);
+    // HTPR-6264: a HEIC uploads as itself, so the tile paints the JPEG copy
+    // made when the file was picked rather than a photo the browser cannot
+    // decode.
+    const url = URL.createObjectURL(settledPreviewFor(file) ?? file);
     if (imageRef.current) imageRef.current.src = url;
     return () => URL.revokeObjectURL(url);
   }, [file]);
@@ -39,7 +43,9 @@ function PendingAttachment({ upload }: { upload: CreateTaskUploadSnapshot }) {
   // its object URL paints a broken icon. Show the paperclip tile instead.
   const heicFallbackEnabled = useFlag(HEIC_ATTACHMENTS_FLAG);
   const isImage = heicFallbackEnabled
-    ? isBrowserRenderableImage(upload.file.type, upload.file.name)
+    ? isBrowserRenderableImage(upload.file.type, upload.file.name) ||
+      // A HEIC with a decoded copy is a picture again (HTPR-6264).
+      settledPreviewFor(upload.file) !== null
     : upload.file.type.startsWith("image/");
   const failed = upload.status === "upload-failed" || upload.status === "link-failed";
 
