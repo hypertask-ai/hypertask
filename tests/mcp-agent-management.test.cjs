@@ -369,6 +369,7 @@ test('delete clears task assignments and board memberships before the agent', as
   ])
   assert.deepEqual(calls.transactionOptions[0], {
     isolationLevel: 'Serializable',
+    timeout: 30_000,
   })
 })
 
