@@ -89,6 +89,17 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
    */
   const [previewLoaded, setPreviewLoaded] = useState<Record<string, boolean>>({});
 
+  /**
+   * Optimistic while the probe is in flight, exactly like the tile.
+   *
+   * A carousel does not always open from a tile that has already loaded the
+   * copy (the AI chat and the links modal both mount one directly), so an
+   * unanswered probe is a state a user really reaches. Assuming the copy is
+   * there matches what the tile does and keeps the common case flicker-free;
+   * only a probe that has actually come back empty falls to the download panel.
+   */
+  const previewIsShowable = (url: string) => previewLoaded[url] !== false;
+
   useEffect(() => {
     if (!heicFallbackEnabled) return;
     let cancelled = false;
@@ -144,7 +155,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
           attachment.fileName
         )
       : null;
-    if (previewUrl && previewLoaded[previewUrl]) {
+    if (previewUrl && previewIsShowable(previewUrl)) {
       return {
         src: previewUrl,
         alt: attachment.fileName,
