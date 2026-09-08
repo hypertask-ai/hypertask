@@ -1,4 +1,10 @@
 import { IAttachment } from "@/models/model";
+import {
+  isBrowserRenderableImage,
+  isUnrenderableImage,
+} from "@/lib/media/browserRenderableImage";
+import { useFlag } from "@/hooks/useFlag";
+import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import React, { useState, useEffect, useContext } from "react";
 import "@/styles/AttachmentView.scss";
 import DocViewer, { DocViewerRenderers } from "react-doc-viewer";
@@ -57,11 +63,23 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
 
   const filesToCheck = ["xlsx", "docx", "doc", "pptx", "ppt"];
 
+  // HTPR-6254. Flag off keeps the old behaviour exactly: anything typed
+  // "image/" goes to the lightbox's image renderer, HEIC included.
+  const heicFallbackEnabled = useFlag(HEIC_ATTACHMENTS_FLAG);
+  const renderableImage = (fileType?: string | null, fileName?: string | null) =>
+    heicFallbackEnabled
+      ? isBrowserRenderableImage(fileType, fileName)
+      : Boolean(fileType?.startsWith("image/"));
+
+
   // Transform attachments to lightbox slides format
   const slides: Slide[] = attachments.map((attachment) => {
     const attachmentUpdated = attachment.fileSource;
 
-    if (attachment.fileType.startsWith("image/")) {
+    // HTPR-6254: HEIC is an "image/" the lightbox cannot paint. Send it down
+    // the same route as a PDF, where the slide keeps its download button,
+    // instead of leaving the viewer on a broken image.
+    if (renderableImage(attachment.fileType, attachment.fileName)) {
       return {
         src: attachmentUpdated,
         alt: attachment.fileName,
@@ -160,10 +178,40 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
         </div>
       );
     }
+    // --- Handle Images No Browser Can Decode (HEIC/HEIF/TIFF) ---
+    // An <embed> cannot show these either, and the file often arrives with no
+    // MIME at all, so the document branch below would miss it and the lightbox
+    // would fall through to a blank slide (HTPR-6254). Offer the download.
+    else if (
+      heicFallbackEnabled &&
+      (slide as any).fileSource &&
+      isUnrenderableImage((slide as any).fileType, (slide as any).fileName)
+    ) {
+      const customSlide = slide as any;
+      return (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-white-black">
+          <span className="max-w-[80vw] truncate text-dense">
+            {customSlide.fileName}
+          </span>
+          <span className="text-micro text-text-light-gray">
+            This image format cannot be shown in a browser.
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              handleDownload(customSlide.fileSource, customSlide.fileName)
+            }
+            className="rounded-[5px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground"
+          >
+            Download
+          </button>
+        </div>
+      );
+    }
     // --- Handle Generic Embed Slides (PDFs, etc.) ---
     else if (
       (slide as any).fileType &&
-      !(slide as any).fileType.startsWith("image/") &&
+      !renderableImage((slide as any).fileType, (slide as any).fileName) &&
       !(slide as any).fileType.startsWith("video/")
     ) {
       const customSlide = slide as any;

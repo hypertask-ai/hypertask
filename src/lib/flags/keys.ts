@@ -26,3 +26,4 @@ export const CONFIRMED_PROPOSAL_HEADING_FLAG = "htpr-6197-confirmed-proposal-hea
 export const MANAGER_LOOP_ACTIVITY_FLAG = "htpr-6243-manager-loop-activity";
 export const LAZY_EMOJI_LIST_FLAG = "htpr-6059-lazy-emoji-list";
 export const CORE_ACTIONS_SMOKE_FLAG = "htpr-6236-core-actions-smoke";
+export const HEIC_ATTACHMENTS_FLAG = "htpr-6254-heic-heif-attachments";
