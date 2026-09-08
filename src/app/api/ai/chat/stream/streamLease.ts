@@ -29,18 +29,11 @@ export function createTurnDeadline(
   abort: (reason: string) => void,
   budgetSeconds: number,
 ) {
-  let hit = false;
   const timer = setTimeout(
-    () => {
-      hit = true;
-      abort(AI_CHAT_TURN_DEADLINE_REASON);
-    },
+    () => abort(AI_CHAT_TURN_DEADLINE_REASON),
     Math.max(budgetSeconds, 0) * 1000,
   );
   return {
-    get hit() {
-      return hit;
-    },
     clear() {
       clearTimeout(timer);
     },

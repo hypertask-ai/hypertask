@@ -10,16 +10,15 @@ import {
   extractSseErrorMessage,
 } from "../src/lib/aiChat/streamRefusal";
 
-test("the turn deadline aborts with its reason and reports itself", async () => {
+test("the turn deadline aborts with its reason", async () => {
   let abortedWith: string | null = null;
-  const deadline = createTurnDeadline((reason) => {
+  createTurnDeadline((reason) => {
     abortedWith = reason;
   }, 0.01);
 
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   assert.equal(abortedWith, AI_CHAT_TURN_DEADLINE_REASON);
-  assert.equal(deadline.hit, true);
 });
 
 test("a cleared deadline never fires", async () => {
@@ -32,19 +31,17 @@ test("a cleared deadline never fires", async () => {
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   assert.equal(aborted, false);
-  assert.equal(deadline.hit, false);
 });
 
 test("the deadline survives a negative budget instead of throwing", async () => {
   let abortedWith: string | null = null;
-  const deadline = createTurnDeadline((reason) => {
+  createTurnDeadline((reason) => {
     abortedWith = reason;
   }, -10);
 
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   assert.equal(abortedWith, AI_CHAT_TURN_DEADLINE_REASON);
-  assert.equal(deadline.hit, true);
 });
 
 test("the user message is plain, retryable wording", () => {
