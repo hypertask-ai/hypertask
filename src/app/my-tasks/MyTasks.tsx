@@ -9,6 +9,7 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MY_TASKS_PRIORITY_FILTER_FLAG } from "@/lib/flags/keys";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
@@ -143,7 +144,7 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
               aria-haspopup="menu"
               aria-expanded={filterOpen}
               onClick={() => setFilterOpen((open) => !open)}
-              className="inline-flex h-7 items-center gap-1 rounded-[4px] border-0 px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none"
+              className={`${isMbl ? MOBILE_TARGET : "inline-flex h-7 items-center"} gap-1 rounded-[4px] border-0 px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none`}
             >
               <Filter size={14} strokeWidth={1.75} />
               <span className="sr-only">Filter by priority</span>
