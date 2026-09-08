@@ -1,0 +1,79 @@
+name: Feature Flag Gate
+
+# Every UI change ships behind a feature flag, enabled for Owner + QA first
+# (Valentin, 2026-09-08). The rule is mechanical, keyed off the PR title tag
+# the pr-title check already enforces: [BUGFIX]/[INFRA]/auto-revert titles
+# pass without a flag, anything else touching UI files must add or reference
+# one from src/lib/flags.ts. See .github/scripts/feature-flag-gate.mjs for
+# the exact decision logic (the same script backs the local dry-run).
+
+on:
+  pull_request:
+    branches: [production]
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: feature-flag-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  feature-flag-gate:
+    name: feature-flag-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Evaluate feature-flag requirement
+        id: gate
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true
+
+          if node .github/scripts/feature-flag-gate.mjs "$PR_TITLE" "$BASE_SHA" "$HEAD_SHA" > /tmp/gate-reason.txt 2>&1; then
+            echo "PASS: $(cat /tmp/gate-reason.txt)"
+            exit 0
+          fi
+
+          REASON=$(cat /tmp/gate-reason.txt)
+          echo "$REASON"
+
+          MARKER="<!-- feature-flag-gate -->"
+          BODY=$(cat <<EOF
+          $MARKER
+          **feature-flag-gate failed.**
+
+          $REASON
+
+          Add a flag in \`src/lib/flags.ts\` (see \`src/lib/flags/keys.ts\` for the id
+          convention), reference an existing one from a changed UI file, or retitle
+          the PR \`[BUGFIX]\`/\`[INFRA]\` if this genuinely is not a new feature.
+          EOF
+          )
+
+          EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate --jq \
+            ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
+          if [ -n "$EXISTING" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" -f body="$BODY" >/dev/null
+          else
+            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$BODY" >/dev/null
+          fi
+
+          exit 1

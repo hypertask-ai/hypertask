@@ -307,7 +307,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
-    /REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title"/,
+    /REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title feature-flag-gate"/,
   );
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
