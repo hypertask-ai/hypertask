@@ -257,6 +257,13 @@ const useTaskDetailGlobalStates = (
     // buffer of editors stays mounted; desktop keeps its existing dynamic value.
     overscan: _mbl ? Math.min(8, dynamicOverscan) : dynamicOverscan,
     scrollMargin: 0,
+    // Opening a reactstrap modal (e.g. Share task, HTPR-6277) mutates body
+    // styles, mounted rows re-measure, and tanstack's scroll correction then
+    // re-scrolls the window on its own — the task detail jumps to the top
+    // while the user reads. Native browser scroll anchoring already keeps the
+    // view stable across those re-measurements, so the JS correction only
+    // double-compensates here. Leave positioning to the platform.
+    shouldAdjustScrollPositionOnItemSizeChange: () => false,
     // HTPR-4950: keep the description row mounted at all times. Scrolling it out
     // of the virtual window unmounted the whole subtree, and an embedded Figma,
     // Loom or YouTube iframe cannot survive that: it cold-reloaded every time you

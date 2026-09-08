@@ -56,7 +56,7 @@ function projectMatches(project, where) {
 }
 
 const state = { session: { userId: owner.id } };
-const calls = { assign: [], broadcasts: [] };
+const calls = { assign: [], broadcasts: [], taskBroadcasts: [] };
 
 stubModule("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => state.session,
@@ -88,6 +88,9 @@ stubModule("src/lib/prisma.ts", {
 stubModule("src/lib/realtime/server.ts", {
   broadcastBoardChange: async (projectId) => {
     calls.broadcasts.push(projectId);
+  },
+  broadcastTaskChange: async (taskId) => {
+    calls.taskBroadcasts.push(taskId);
   },
 });
 
@@ -130,6 +133,7 @@ function mockResponse() {
 async function post(body, { method = "POST" } = {}) {
   calls.assign.length = 0;
   calls.broadcasts.length = 0;
+  calls.taskBroadcasts.length = 0;
   const { res, result } = mockResponse();
   await handler({ method, body, headers: {} }, res);
   return result;

@@ -829,6 +829,10 @@ export async function POST(request: NextRequest) {
           await broadcastBoardChange(task.projectId, {
             originUserId: generalConfig.hyperAiId,
           });
+          // HTPR-6281: the open task detail view listens only on the task channel.
+          await broadcastTaskChange(task.id, {
+            originUserId: generalConfig.hyperAiId,
+          });
         } catch (error) {
           console.warn(
             `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
@@ -841,9 +845,31 @@ export async function POST(request: NextRequest) {
     const assignmentsChanged = pullRequest.merged
       ? await reconcileMergedPullRequestAssignees(task)
       : false;
+    // HTPR-6281: reconcile-then-broadcast. When the merge both moved the task
+    // and changed assignments, the move-branch event above fired before the
+    // reconcile, so this extra task event carries the assignment change.
+    // ponytail: two near-identical blocks because the !moved one edits code
+    // HTPR-5974 landed 5 days ago and revert-guard blocks deleting it; merge
+    // them into one block after the 14-day guard window expires.
+    if (assignmentsChanged && moved) {
+      try {
+        await broadcastTaskChange(task.id, {
+          originUserId: generalConfig.hyperAiId,
+        });
+      } catch (error) {
+        console.warn(
+          `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
+          error,
+        );
+      }
+    }
     if (assignmentsChanged && !moved) {
       try {
         await broadcastBoardChange(task.projectId, {
+          originUserId: generalConfig.hyperAiId,
+        });
+        // HTPR-6281: the open task detail view listens only on the task channel.
+        await broadcastTaskChange(task.id, {
           originUserId: generalConfig.hyperAiId,
         });
       } catch (error) {

@@ -3,7 +3,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import createLabelActivity from '@/utils/controllers/activities/createLabelActivity';
-import { broadcastBoardChange } from '@/lib/realtime/server';
+import { broadcastBoardChange, broadcastTaskChange } from '@/lib/realtime/server';
 import {
   persistAgentTaskUpdatedWebhook,
   publishAgentWebhookDeliveries,
@@ -134,6 +134,8 @@ export default  async function handler(
     }
     
     void broadcastBoardChange(projectId, { originUserId: userObj.id })
+    // HTPR-6281: the open task detail view listens only on the task channel.
+    void broadcastTaskChange(Number(taskId), { originUserId: userObj.id })
     return res.status(200).json(taskLabels)
 
   } catch (error) {
