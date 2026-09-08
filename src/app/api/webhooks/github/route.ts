@@ -826,17 +826,13 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-          // broadcast() never rejects (it logs internally); Promise.all keeps
-          // a genuine failure visible to the surrounding catch.
-          await Promise.all([
-            broadcastBoardChange(task.projectId, {
-              originUserId: generalConfig.hyperAiId,
-            }),
-            // HTPR-6281: the open task detail view listens only on the task channel.
-            broadcastTaskChange(task.id, {
-              originUserId: generalConfig.hyperAiId,
-            }),
-          ]);
+          await broadcastBoardChange(task.projectId, {
+            originUserId: generalConfig.hyperAiId,
+          });
+          // HTPR-6281: the open task detail view listens only on the task channel.
+          await broadcastTaskChange(task.id, {
+            originUserId: generalConfig.hyperAiId,
+          });
         } catch (error) {
           console.warn(
             `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
@@ -849,19 +845,30 @@ export async function POST(request: NextRequest) {
     const assignmentsChanged = pullRequest.merged
       ? await reconcileMergedPullRequestAssignees(task)
       : false;
-    // HTPR-6281: reconcile-then-broadcast. If the merge both moved the task and
-    // changed assignments, the earlier move-branch event fired too early — this
-    // final task event carries the assignment change to the open detail view.
-    if (assignmentsChanged) {
+    // HTPR-6281: reconcile-then-broadcast. When the merge both moved the task
+    // and changed assignments, the move-branch event above fired before the
+    // reconcile, so this extra task event carries the assignment change.
+    if (assignmentsChanged && moved) {
       try {
-        await Promise.all([
-          broadcastBoardChange(task.projectId, {
-            originUserId: generalConfig.hyperAiId,
-          }),
-          broadcastTaskChange(task.id, {
-            originUserId: generalConfig.hyperAiId,
-          }),
-        ]);
+        await broadcastTaskChange(task.id, {
+          originUserId: generalConfig.hyperAiId,
+        });
+      } catch (error) {
+        console.warn(
+          `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
+          error,
+        );
+      }
+    }
+    if (assignmentsChanged && !moved) {
+      try {
+        await broadcastBoardChange(task.projectId, {
+          originUserId: generalConfig.hyperAiId,
+        });
+        // HTPR-6281: the open task detail view listens only on the task channel.
+        await broadcastTaskChange(task.id, {
+          originUserId: generalConfig.hyperAiId,
+        });
       } catch (error) {
         console.warn(
           `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
