@@ -159,7 +159,7 @@ export type AgentManagementDatabase = AgentManagementTransaction & {
   }
   $transaction<T>(
     callback: (transaction: AgentManagementTransaction) => Promise<T>,
-    options?: { isolationLevel: 'Serializable' }
+    options?: { isolationLevel: 'Serializable'; timeout: number }
   ): Promise<T>
 }
 
@@ -343,7 +343,7 @@ export async function deleteOwnedAgent(
             runtime_generation: agent.runtimeGeneration,
           }
         },
-        { isolationLevel: 'Serializable' }
+        { isolationLevel: 'Serializable', timeout: 30_000 }
       )
       break
     } catch (error) {
