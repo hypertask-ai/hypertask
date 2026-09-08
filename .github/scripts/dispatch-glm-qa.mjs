@@ -76,7 +76,7 @@ export function mapScreens(changedFiles) {
   return screens.slice(0, 3)
 }
 
-export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agentId }) {
+export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agentId, appUrl = 'https://app.hypertask.ai' }) {
   const screenItems = screens
     .map((screen) => `<li>${escapeHtml(screen)}</li>`)
     .join('')
@@ -94,7 +94,7 @@ export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agen
     `<p><strong>GLM post-deploy QA pass requested: five minutes, read-only.</strong></p>`,
     `<p>Deploy ${escapeHtml(sha)} merged as “${escapeHtml(prTitle)}”. ${escapeHtml(smokeLine)}</p>`,
     `<p>Changed screens:</p><ul>${screenItems}</ul>`,
-    `<ol><li>Open https://app.hypertask.ai as a signed-in user and explore the changed screens and their nearest neighbours for five minutes.</li><li>Post one comment on this ticket with screenshots attached and a one-line verdict (pass, or defect list).</li><li>File one Bugs ticket per defect, labelled <code>post-deploy</code>, with the reproduction steps.</li></ol>`,
+    `<ol><li>Open ${escapeHtml(appUrl)} as a signed-in user and explore the changed screens and their nearest neighbours for five minutes.</li><li>Post one comment on this ticket with screenshots attached and a one-line verdict (pass, or defect list).</li><li>File one Bugs ticket per defect, labelled <code>post-deploy</code>, with the reproduction steps.</li></ol>`,
     `<p>Rules: look, do not act. Never submit forms, edit, delete, invite, or change settings; never roll back and never trigger a deployment action. Keep screenshots to the changed screens and never capture tokens, credentials, or personal data. Reply without mentioning anyone.</p>`,
     `<p>${mention} — brief marker <code>glm-qa-brief:${escapeHtml(sha)}</code></p>`,
   ].join('')
@@ -224,6 +224,8 @@ async function main() {
     smokeOk,
     agentName,
     agentId,
+    // The brief's exploration target is the same deployment the MCP API serves.
+    appUrl: base,
   })
 
   if (args.dryRun) {
