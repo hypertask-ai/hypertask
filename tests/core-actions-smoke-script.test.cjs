@@ -177,6 +177,24 @@ test("an unrunnable probe stays failed and cannot request rollback", async () =>
   }
 });
 
+test("the probe rejects each missing fixture setting", async () => {
+  const { readFixtureSettings } = await import(scriptUrl);
+  const valid = {
+    CORE_SMOKE_PROJECT_ID: "71",
+    CORE_SMOKE_TASK_ID: "81",
+    CORE_SMOKE_BASE_SECTION_ID: "91",
+    CORE_SMOKE_ALT_SECTION_ID: "92",
+    CORE_SMOKE_AGENT_ID: "00000000-0000-4000-8000-000000000001",
+  };
+
+  for (const name of Object.keys(valid)) {
+    assert.throws(
+      () => readFixtureSettings({ ...valid, [name]: "" }),
+      new RegExp(name),
+    );
+  }
+});
+
 test("the workflow schedules and serializes the production fixture", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
   const scheduled = await readFile(
@@ -231,7 +249,12 @@ test("a failed parent-ticket report does not suppress the incident report", asyn
     if (url.pathname === "/api/mcp/tasks") return Response.json({ tasks: [] });
     if (url.pathname === "/api/mcp/projects") {
       return Response.json({
-        projects: [{ id: 15, sections: [{ id: 12, section_title: "Bugs" }] }],
+        projects: [
+          {
+            id: 15,
+            sections: [{ id: 4389, section_title: "Bugs" }],
+          },
+        ],
       });
     }
     if (url.pathname === "/api/mcp/tasks/create") {
@@ -267,4 +290,39 @@ test("a failed parent-ticket report does not suppress the incident report", asyn
         request.path === "/api/mcp/comments" && request.body?.task_id === 777,
     ),
   );
+});
+
+test("an invalid report destination names the attempted section", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    const body = init.body ? JSON.parse(String(init.body)) : null;
+
+    if (url.pathname === "/api/mcp/comments" && body?.ticket_number) {
+      return Response.json({ success: true });
+    }
+    if (url.pathname === "/api/mcp/tasks") return Response.json({ tasks: [] });
+    if (url.pathname === "/api/mcp/projects") {
+      return Response.json({
+        projects: [
+          { id: 15, sections: [{ id: 228, section_title: "Bugs" }] },
+        ],
+      });
+    }
+    return Response.json({ message: "unhandled request" }, { status: 500 });
+  };
+
+  try {
+    const { report } = await import(scriptUrl);
+    await assert.rejects(
+      report({
+        kind: "unrunnable",
+        action: "start core-actions probe",
+        detail: "fixture settings absent",
+      }),
+      /section 4389 \(Bugs\) is missing from project 15/,
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
