@@ -49,6 +49,51 @@ jobs:
     outputs:
       test_failed: ${{ steps.test-outcome.outputs.failed }}
     steps:
+      # An administrator applied HTPR-6237 on 2026-09-08. Run 34278240903
+      # proved this read-only token can verify both live settings.
+      - name: Verify live required-check settings
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_branch=$(gh api "repos/$REPO" --jq .default_branch)
+          [ "$default_branch" = production ] || {
+            echo "::error::Repository default branch is $default_branch, expected production."
+            exit 1
+          }
+
+          ruleset_id=$(gh api "repos/$REPO/rulesets?per_page=100" --jq '
+            [.[] | select(.name == "production-required-checks" and .enforcement == "active")] |
+            if length == 1 then .[0].id else empty end
+          ')
+          [ -n "$ruleset_id" ] || {
+            echo "::error::Expected one active production-required-checks ruleset."
+            exit 1
+          }
+
+          ruleset_json=$(gh api "repos/$REPO/rulesets/$ruleset_id")
+          jq -e '
+            .target == "branch" and
+            (.conditions.ref_name.include | index("refs/heads/production") != null) and
+            (.conditions.ref_name.exclude | index("refs/heads/production") == null)
+          ' <<<"$ruleset_json" >/dev/null || {
+            echo "::error::The required-check ruleset does not protect production."
+            exit 1
+          }
+
+          expected=$(printf '%s\n' app-smoke ci-tests claude-review next-public-secrets pr-title revert-guard secret-scan | sort)
+          actual=$(jq -r '
+            [.rules[] | select(.type == "required_status_checks") |
+              .parameters.required_status_checks[].context] | sort | .[]
+          ' <<<"$ruleset_json")
+          [ "$actual" = "$expected" ] || {
+            echo "::error::Live required checks do not match docs/ci-policy.yml."
+            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+            exit 1
+          }
+
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
       # normal; only an existing red verdict stops the build before it starts.

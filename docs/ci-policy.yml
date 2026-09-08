@@ -22,7 +22,10 @@ topology:
     # contabo-2 is not currently registered; the wiki's alerting treats a single
     # offline review lane as an incident rather than a capacity change.
   production_branch: production
-  repository_default_branch: main
+  # An administrator applied this setting through GitHub's repository API on
+  # 2026-09-08. workflow_run loads its workflow file from the default branch,
+  # so App Smoke depends on production remaining the default.
+  repository_default_branch: production
   production_target: "Vercel project hypertasks-prod"
   # Non-gating housekeeping workflows (pr-size, gitleaks, vercel-deploy-log,
   # app-smoke-request, parity-contract-trusted, preview-smoke) also run on
@@ -40,8 +43,9 @@ review_first_gate:
   local_agent_verification: [tsc-noEmit, targeted-tests]
 
 required_checks:
-  # Live ruleset "production-required-checks" (branch production).
-  contexts: [claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
+  # An administrator applied these checks through GitHub's ruleset API on
+  # 2026-09-08. ci-tests verifies this live ruleset before every build.
+  contexts: [app-smoke, ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
   automerge_also_requires: [app-smoke, ci-tests]
   # ci-tests normally reports after the full-ci label arrives (see
   # review_first_gate); automerge treats a missing result as not green.
@@ -96,7 +100,7 @@ policies:
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
   production_ruleset:
-    required_status_checks: [claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
+    required_status_checks: [app-smoke, ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
 
 ci_tests:
   # .github/workflows/ci-tests.yml; the file remains the implementation source.

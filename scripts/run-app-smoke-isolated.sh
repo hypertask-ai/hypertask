@@ -8,6 +8,16 @@ trusted_root=${2:?trusted checkout is required}
 candidate_root=$(cd "$candidate_root" && pwd -P)
 trusted_root=$(cd "$trusted_root" && pwd -P)
 
+# Docker cannot create nested mount targets beneath the read-only /app bind.
+for candidate_mount in node_modules .next; do
+  mount_target="$candidate_root/$candidate_mount"
+  if [ -L "$mount_target" ] || { [ -e "$mount_target" ] && [ ! -d "$mount_target" ]; }; then
+    echo "Candidate mount target must be a directory: $candidate_mount" >&2
+    exit 1
+  fi
+  mkdir -p "$mount_target"
+done
+
 scratch=$(mktemp -d "${RUNNER_TEMP:-/tmp}/ht-app-smoke.XXXXXX")
 invocation_key=${scratch##*.}
 run_key=$(printf '%s-%s-%s' "${GITHUB_RUN_ID:-$$}" "${GITHUB_RUN_ATTEMPT:-1}" "$invocation_key" | tr -cd 'a-zA-Z0-9_-' | tr '[:upper:]' '[:lower:]')

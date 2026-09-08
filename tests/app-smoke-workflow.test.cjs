@@ -188,6 +188,9 @@ test("app smoke validates the head before isolated build and route checks", asyn
     isolated,
     /candidate_root=\$\(cd "\$candidate_root" && pwd -P\)/,
   );
+  assert.match(isolated, /for candidate_mount in node_modules \.next/);
+  assert.match(isolated, /\[ -L "\$mount_target" \]/);
+  assert.match(isolated, /mkdir -p "\$mount_target"/);
   assert.match(isolated, /invocation_key=\$\{scratch##\*\.\}/);
   assert.match(isolated, /app-smoke\.Dockerfile/);
   assert.match(isolated, /runtime_image="ht-smoke-runtime-\$run_key"/);
@@ -280,11 +283,42 @@ test("app smoke validates the head before isolated build and route checks", asyn
 
 test("auto-merge waits for app smoke and runs when it completes", async () => {
   const workflow = await readFile(".github/workflows/automerge.yml", "utf8");
+  const ciWorkflow = await readFile(".github/workflows/ci-tests.yml", "utf8");
 
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
     /REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title"/,
+  );
+  assert.match(ciWorkflow, /name: Verify live required-check settings/);
+  assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
+  assert.match(ciWorkflow, /name == "production-required-checks"/);
+  assert.match(ciWorkflow, /\.target == "branch"/);
+  assert.match(ciWorkflow, /index\("refs\/heads\/production"\)/);
+  assert.match(ciWorkflow, /Live required checks do not match docs\/ci-policy\.yml/);
+});
+
+test("CI policy keeps the protected smoke producer live and required", async () => {
+  const policy = yaml.load(await readFile("docs/ci-policy.yml", "utf8"));
+  const required = [
+    "app-smoke",
+    "ci-tests",
+    "claude-review",
+    "pr-title",
+    "revert-guard",
+    "next-public-secrets",
+    "secret-scan",
+  ];
+
+  assert.equal(policy.topology.repository_default_branch, "production");
+  assert.deepEqual(policy.required_checks.contexts, required);
+  assert.deepEqual(policy.required_checks.automerge_also_requires, [
+    "app-smoke",
+    "ci-tests",
+  ]);
+  assert.deepEqual(
+    policy.policies.production_ruleset.required_status_checks,
+    required,
   );
 });
 
