@@ -93,7 +93,7 @@ const NotificationRow = (props: Props) => {
                     onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation(); // Prevent the click event from propagating to the parent div
-                        eHandler(false, index, "mouse");
+                        eHandler(false, index, e.detail === 0 ? "keyboard" : "mouse");
                     }}
                 >
                     <Tooltip
