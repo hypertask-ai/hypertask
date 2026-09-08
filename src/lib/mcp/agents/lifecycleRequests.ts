@@ -1,6 +1,6 @@
 /**
  * `PATCH /api/mcp/agents/[agentId]`: rename an owned agent, switch it back on,
- * or file it away in the register.
+ * file it away in the register, or change who can see it (PRIVATE/TEAM).
  * Board membership changes use the same owned-agent operation.
  *
  * Launch is the missing opposite of revoke. It lives on the shared `/api/mcp/*`
@@ -8,6 +8,7 @@
  * inherit it from one place instead of each keeping a copy (CLAUDE.md,
  * HTPR-5418).
  */
+import { isAgentVisibility, setOwnedAgentVisibility, type AgentVisibility } from '@/lib/agents/visibility'
 import { clearAgentRuntimeSnapshot } from '@/lib/agents/runtimeState'
 import {
   agentTokenCredentialFields,
@@ -41,6 +42,7 @@ type AgentPatchBody = {
   display_name?: unknown
   add_project_ids?: unknown
   remove_project_ids?: unknown
+  visibility?: unknown
 }
 
 export const agentLifecycleDeps: AgentLifecycleDeps = {
@@ -196,10 +198,11 @@ export async function handlePatchAgentRequest(
   const wantsLaunch = body.revoked !== undefined
   const wantsArchive = body.archived !== undefined
   const wantsRename = body.display_name !== undefined
+  const wantsVisibility = body.visibility !== undefined
   const wantsBoardUpdate =
     body.add_project_ids !== undefined || body.remove_project_ids !== undefined
   if (wantsBoardUpdate) {
-    if (wantsLaunch || wantsArchive || wantsRename) {
+    if (wantsLaunch || wantsArchive || wantsRename || wantsVisibility) {
       return NextResponse.json(
         buildFieldError(
           'invalid_field',
@@ -242,6 +245,61 @@ export async function handlePatchAgentRequest(
         { status: 500 }
       )
     }
+  }
+  if (wantsVisibility) {
+    if (wantsLaunch || wantsArchive || wantsRename) {
+      return NextResponse.json(
+        buildFieldError(
+          'invalid_field',
+          'visibility',
+          'Visibility cannot be combined with other agent updates'
+        ),
+        { status: 400 }
+      )
+    }
+    // Same visibility-only rule as the web route: any other supplied field,
+    // recognized or not, makes the request ambiguous.
+    const supplied = Object.values(body).filter((value) => value !== undefined)
+    if (supplied.length !== 1 || !isAgentVisibility(body.visibility)) {
+      return NextResponse.json(
+        buildFieldError(
+          'invalid_field',
+          'visibility',
+          'Send visibility TEAM or PRIVATE as the only field in the body'
+        ),
+        { status: 400 }
+      )
+    }
+    const result = await setOwnedAgentVisibility(
+      agentId,
+      ctx.user.id,
+      body.visibility as AgentVisibility
+    )
+    if (!result.ok) {
+      // Notably the 409 refusing TEAM sharing while no provider key is enabled.
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: result.status }
+      )
+    }
+    const row = await prisma.agent.findFirst({
+      where: { id: agentId },
+      select: {
+        id: true,
+        displayName: true,
+        photoURL: true,
+        revokedAt: true,
+        archivedAt: true,
+        runtimeType: true,
+        mcpTokenHash: true,
+        mcpTokenJti: true,
+      },
+    })
+    if (!row) return notFound()
+    return NextResponse.json({
+      success: true,
+      agent: { ...describe(row), visibility: result.visibility },
+    })
   }
   if (!wantsLaunch && !wantsArchive && !wantsRename) {
     return NextResponse.json(
