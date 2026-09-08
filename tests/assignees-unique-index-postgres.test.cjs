@@ -58,12 +58,16 @@ let state = {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function withTimeout(promise, ms, label) {
+  let timer;
+  const cleanup = () => {
+    if (timer) clearTimeout(timer);
+  };
   return Promise.race([
     promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), ms)
-    ),
-  ]);
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), ms);
+    }),
+  ]).finally(cleanup);
 }
 
 function run(cmd, args, opts = {}) {
@@ -358,12 +362,7 @@ test("migration dedupes assignees and blocks duplicates", async (t) => {
     data: { taskId: task.id, userId: person.id, agentId: agent.id, agentAssignerId: null, assignerId: owner.id },
   });
 
-  const applied = psql(
-    container,
-    // prisma migrate deploy runs each migration inside a transaction; LOCK
-    // TABLE needs one, so mirror that here.
-    `BEGIN;\n${fs.readFileSync(MIGRATION, "utf8")}\nCOMMIT;`
-  );
+  const applied = psql(container, fs.readFileSync(MIGRATION, "utf8"));
   assert.equal(
     applied.status,
     0,
@@ -377,6 +376,7 @@ test("migration dedupes assignees and blocks duplicates", async (t) => {
   assert.equal(rows.length, 2, "exactly one person row and one agent row survive");
   assert.equal(rows[0].id, personFirst.id, "oldest person row survives");
   assert.equal(rows[0].agentId, null);
+  assert.equal(rows[1].id, agentFirst.id, "oldest agent row survives");
   assert.equal(rows[1].agentId, agent.id, "agent row keeps its identity");
 
   const indexes = await prisma.$queryRawUnsafe(
@@ -410,9 +410,6 @@ test("concurrent assigns produce one row and an already-assigned outcome", async
 
   const owner = await prisma.user.create({
     data: { uid: "htpr6279-racer", email: "racer@htpr6279.test", displayName: "Racer" },
-  });
-  const person = await prisma.user.create({
-    data: { uid: "htpr6279-target", email: "target@htpr6279.test", displayName: "Target" },
   });
   const project = await prisma.project.create({
     data: { name: `htpr6279-race-${Date.now()}`, title: "Race board", ownerId: owner.id },

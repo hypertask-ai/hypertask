@@ -30,6 +30,23 @@ import {
 
 export type AssigneeIntent = "assign" | "unassign" | "toggle";
 
+// Partial unique indexes from the 20260908160000 migration. A losing
+// concurrent insert violates one of these; any other P2002 is a real bug and
+// must propagate. The name can appear in `meta.target` (classic client) or in
+// the driver adapter's original message (driver-adapter client).
+const ASSIGNEE_UNIQUE_INDEXES = [
+  "Assignees_taskId_userId_person_key",
+  "Assignees_taskId_agentId_key",
+] as const;
+
+export function isAssigneeUniqueIndexError(error: unknown): boolean {
+  if ((error as { code?: string } | null)?.code !== "P2002") return false;
+  const metaText = JSON.stringify(
+    (error as { meta?: unknown } | null)?.meta ?? ""
+  );
+  return ASSIGNEE_UNIQUE_INDEXES.some((name) => metaText.includes(name));
+}
+
 const assigneesAssign = async (
   currentUser: IUser,
   userId: number | null,
@@ -409,7 +426,7 @@ const createAssignee = async ({
         },
       });
     } catch (error) {
-      if ((error as { code?: string })?.code === "P2002") {
+      if (isAssigneeUniqueIndexError(error)) {
         // A concurrent assign won the unique index (HTPR-6279): the row exists,
         // so the assignment is already done, not a failure. Returning here
         // commits an empty transaction and skips every side effect below.

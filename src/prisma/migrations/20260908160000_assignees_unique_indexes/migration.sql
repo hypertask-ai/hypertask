@@ -5,6 +5,14 @@
 -- NULL for the removed rows) — then block new duplicates with partial unique
 -- indexes. Prisma cannot express partial indexes (same as AgentRun_nonterminal_*),
 -- so these live here only.
+--
+-- BEGIN/COMMIT keeps the table lock held across dedupe and index creation:
+-- CREATE UNIQUE INDEX without CONCURRENTLY only serializes against writers
+-- while it runs, so a duplicate sneaking in between the DELETEs and the index
+-- build would fail the migration. An explicit transaction makes that window
+-- empty whether or not the runner wraps the file in one.
+
+BEGIN;
 
 LOCK TABLE "Assignees" IN ACCESS EXCLUSIVE MODE;
 
@@ -33,3 +41,6 @@ CREATE UNIQUE INDEX "Assignees_taskId_userId_person_key"
 CREATE UNIQUE INDEX "Assignees_taskId_agentId_key"
     ON "Assignees"("taskId", "agentId")
     WHERE "agentId" IS NOT NULL;
+
+COMMIT;
+
