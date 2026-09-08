@@ -119,9 +119,6 @@ stubSourceModule("src/styles/tiptap.module.scss", {
 const { MobileViewContext } = jiti(
   path.join(root, "src/lib/contexts/mobileContext.tsx"),
 );
-const { AudioButton: RealAudioButton } = jiti(
-  path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
-);
 stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
   default: () => null,
 });

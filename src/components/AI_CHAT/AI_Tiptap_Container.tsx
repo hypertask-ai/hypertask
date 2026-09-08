@@ -138,7 +138,7 @@ export function AI_Tiptap_Container() {
   const focusRootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (
-      explicitOpenAt == null ||
+      explicitOpenAt === null ||
       Date.now() - explicitOpenAt > FOCUS_REQUEST_WINDOW_MS
     ) {
       return;

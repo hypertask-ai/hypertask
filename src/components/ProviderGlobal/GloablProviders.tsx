@@ -467,7 +467,7 @@ export default function GlobalProvider({
       // must mount without stealing the cursor (HTPR-6317).
       setAiChatExplicitOpenAt(null);
     }
-  }, [currentUser?.id, openAIChatInterface, pathname]);
+  }, [currentUser?.id, openAIChatInterface, pathname, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;
