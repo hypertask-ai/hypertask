@@ -154,6 +154,13 @@ async function main() {
   if (!ticket) {
     return refuse(`no HTPR-<n> ticket in the pull request title "${args.prTitle}"`)
   }
+  // Mandatory board check: verifyProject throws when board 15 is missing, and
+  // a refusal here is the correct behavior.
+  try {
+    await verifyProject(base, token)
+  } catch (err) {
+    return refuse(String(err.message || err))
+  }
   // Revalidate live production immediately before briefing: the health job's
   // `live` output is a stale snapshot, and a newer deploy may have taken the
   // production alias while this run waited (HTPR-6239 review). The /api/version
@@ -171,6 +178,17 @@ async function main() {
     console.log(`::warning::live recheck failed (${String(err.message || err)}); briefing without a liveness recheck`)
   }
 
+  // Mandatory ticket lookup: refusing here is the correct behavior — the
+  // brief must never land on a guessed or missing ticket.
+  let taskId
+  try {
+    const task = await apiGet(`${base}/api/mcp/tasks?ticket_number=HTPR-${ticket}&project_id=${PROJECT_ID}`, token)
+    taskId = task?.tasks?.[0]?.id
+  } catch (err) {
+    return refuse(`ticket lookup for HTPR-${ticket} failed: ${String(err.message || err)}`)
+  }
+  if (!taskId) return refuse(`ticket HTPR-${ticket} not found on board ${PROJECT_ID}`)
+
   // Duplicate-run guard: one brief per deploy SHA. The workflow's fixed
   // concurrency group (glm-qa, cancel-in-progress) is the primary dedup; this
   // comment scan is belt-and-braces.
@@ -179,9 +197,6 @@ async function main() {
   // silently kill the feature; upgrade path: an idempotency key on the POST.
   let alreadyBriefed = false
   try {
-    const task = await apiGet(`${base}/api/mcp/tasks?ticket_number=HTPR-${ticket}&project_id=${PROJECT_ID}`, token)
-    const taskId = task?.tasks?.[0]?.id
-    if (!taskId) return refuse(`ticket HTPR-${ticket} not found on board ${PROJECT_ID}`)
     const comments = await apiGet(`${base}/api/mcp/comments?task_id=${taskId}&project_id=${PROJECT_ID}`, token)
     const marker = `glm-qa-brief:${args.sha}`
     alreadyBriefed = (comments?.comments || []).some(

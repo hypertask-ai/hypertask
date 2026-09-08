@@ -621,10 +621,11 @@ jobs:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+          if ! curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
             -d chat_id="$TG_CHAT" \
-            --data-urlencode text="⚠️ hypertasks: the GLM exploratory QA brief for ${{ github.sha }} could not be dispatched (see the glm-qa job log). NOT a deploy failure — verify manually: https://app.hypertask.ai" \
-          || echo "::warning::GLM QA dispatch alert could not be delivered"
+            --data-urlencode text="⚠️ hypertasks: the GLM exploratory QA brief for ${{ github.sha }} could not be dispatched (see the glm-qa job log). NOT a deploy failure — verify manually: https://app.hypertask.ai"; then
+            echo "::warning::GLM QA dispatch alert could not be delivered"
+          fi
 
   # ── Deploy drift: is production actually serving the production tip? ──────────
   # A newer merge can go READY and then an older build from another session's
