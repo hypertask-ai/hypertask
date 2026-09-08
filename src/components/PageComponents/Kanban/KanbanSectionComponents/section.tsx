@@ -8,7 +8,7 @@ const Task = dynamic(loadTask, {
   ssr: false,
   loading: () => <TaskSkeleton />,
 });
-import { currentProjectAtom, activeItemAtom, activeSectionAtom, activeSectionIdAtom, showCommandsAtom, isActiveSectionSelector, tasksPlayListAtom } from "@/store";
+import { activeItemAtom, activeSectionAtom, activeSectionIdAtom, showCommandsAtom, isActiveSectionSelector, tasksPlayListAtom } from "@/store";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { Draggable, Droppable, type DraggableProvided } from "@hello-pangea/dnd";
 // const Droppable = dynamic(()=>import("@hello-pangea/dnd").then(x=>x.Droppable));
@@ -21,7 +21,7 @@ import { useKanbanModalStatesContext } from "@/lib/contexts/Kanban/KanbanContain
 import "@/styles/kanban/column.scss";
 import globalConstants from "@/lib/constants";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
-import { ISection, ITask, IUser } from "@/models/model";
+import { IProject, ISection, ITask, IUser } from "@/models/model";
 import {
   sortingModeLabel,
   TBoardSortingViewMode,
@@ -103,6 +103,7 @@ const Section = ({
   progressiveRendering,
   renderAllTasks,
   dragDisabled = false,
+  project,
 }: {
   section: ISection;
   currentSetting: TBoardSubtaskSetting;
@@ -125,8 +126,9 @@ const Section = ({
   progressiveRendering: boolean;
   renderAllTasks: boolean;
   dragDisabled?: boolean;
+  project: IProject;
 }) => {
-  const currentProject = useRecoilValue(currentProjectAtom);
+  const currentProject = project;
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
   const setActiveSection = useSetRecoilState(activeSectionAtom);
@@ -508,7 +510,7 @@ const Section = ({
                           updateAssignees={updateAssignees}
                           sectionId={section.sectionId!}
                           index={i}
-                          project={currentProject!}
+                          project={currentProject}
                           currentSetting={currentSetting}
                           dragProvided={provided}
                           dragSnapshot={snapshot}
@@ -540,7 +542,7 @@ const Section = ({
                     sectionId={section.sectionId!}
                     key={`archived-task-${task.id}`}
                     index={(section.items?.length ?? 0) + i}
-                    project={currentProject!}
+                    project={currentProject}
                     currentSetting={currentSetting}
                     isArchivedOnBoard
                     blockingUser={

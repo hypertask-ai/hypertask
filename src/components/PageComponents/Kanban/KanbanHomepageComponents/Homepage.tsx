@@ -838,7 +838,7 @@ const HomePage = ({
     ? detectEmptyBoardState(_sections, filteredSections, _currentProject)
     : null;
 
-  const renderSections = useCallback((archivedTasks?: ITask[]) =>
+  const renderSections = (archivedTasks?: ITask[]) =>
     displaySections && displaySections.map((sec, index) => (
               <Draggable
                 key={`section-${sec.sectionId ?? index}`}
@@ -871,26 +871,10 @@ const HomePage = ({
                 progressiveRendering={progressiveRendering}
                 renderAllTasks={renderAllTasks}
                 dragDisabled={mobileBoardZoomedOut}
+                project={_currentProject}
               />)}
               </Draggable>
-            )), [
-              _activeSortingMode,
-              archiveNotification,
-              mobileBoardZoomedOut,
-              currentSetting,
-              displaySections,
-              hiddenSectionIndexes,
-              markAsDone,
-              membersById,
-              moveItemDown,
-              moveItemLeft,
-              moveItemRight,
-              moveItemUp,
-              progressiveRendering,
-              renderAllTasks,
-              showArchivedOnBoard,
-              updateAssignees,
-            ]);
+            ));
 
 
   return (

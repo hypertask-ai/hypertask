@@ -3,7 +3,6 @@ import {
   inViewObjectAtom,
   isActiveTaskSelector,
   tasksPlayListAtom,
-  currentProjectAtom,
   activeSectionAtom,
   showCommandsAtom,
   currentUserAtom,
@@ -103,7 +102,6 @@ const Task = ({
     handleBulkKeyDown,
   } = useKanbanBulkSelection();
   const taskRef = useRef<HTMLDivElement | null>(null);
-  const [_currentProject, ____] = useRecoilState(currentProjectAtom);
   // HTPR-3814: subscribe to a per-card selector instead of activeItemAtom so
   // moving the selection only re-renders the cards whose active-state flips,
   // not all of them.
@@ -763,7 +761,7 @@ const Task = ({
         task.id,
         task.projectId,
         task.sectionId,
-        _currentProject
+        project
       );
       toast(`Starred Task ${task.ticketNumber?.toUpperCase()}`);
     } else {
@@ -773,7 +771,7 @@ const Task = ({
         task.id,
         task.projectId,
         task.sectionId,
-        _currentProject
+        project
       );
       toast(`Unstarred Task ${task.ticketNumber?.toUpperCase()}`);
     }
@@ -806,7 +804,7 @@ const Task = ({
         task.id,
         task.projectId,
         task.sectionId,
-        _currentProject
+        project
       );
     }
   };
@@ -931,7 +929,7 @@ const Task = ({
   const renderTaskCard = (provided?: any, snapshot?: any) => (
     <KanbanTaskCard
       task={task}
-      project={_currentProject ?? project}
+      project={project}
       currentSetting={currentSetting}
       assignedUsers={humanAssignees}
       agentAssignees={agentAssignees}
