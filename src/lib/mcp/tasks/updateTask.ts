@@ -798,7 +798,11 @@ export async function executeTaskUpdate({
                     })
                 })
                 if (!moveResponse.ok) {
-                    const errorData = await moveResponse.json().catch(() => ({ message: 'Failed to move task' }))
+                    // A body that fails to parse must not mask the HTTP status:
+                    // a fabricated message here replaced the status-bearing
+                    // fallback and reached the CLI as a bare "Failed to move
+                    // task" (HTPR-6224).
+                    const errorData = await moveResponse.json().catch(() => null)
                     throw new Error(
                         toErrorMessage(
                             errorData,
@@ -824,7 +828,7 @@ export async function executeTaskUpdate({
                     })
                 })
                 if (!archiveResponse.ok) {
-                    const errorData = await archiveResponse.json().catch(() => ({ message: 'Failed to update status' }))
+                    const errorData = await archiveResponse.json().catch(() => null)
                     throw new Error(
                         toErrorMessage(
                             errorData,
@@ -859,7 +863,7 @@ export async function executeTaskUpdate({
                     })
                 })
                 if (!singleResponse.ok) {
-                    const errorData = await singleResponse.json().catch(() => ({ message: 'Failed to update task' }))
+                    const errorData = await singleResponse.json().catch(() => null)
                     throw new Error(
                         toErrorMessage(
                             errorData,
@@ -886,7 +890,7 @@ export async function executeTaskUpdate({
                     }),
                 })
                 if (!dueDateResponse.ok) {
-                    const errorData = await dueDateResponse.json().catch(() => ({ message: 'Failed to set due date' }))
+                    const errorData = await dueDateResponse.json().catch(() => null)
                     throw new Error(
                         toErrorMessage(
                             errorData,

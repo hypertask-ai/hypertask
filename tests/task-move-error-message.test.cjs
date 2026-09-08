@@ -64,6 +64,13 @@ test("toErrorMessage unwraps nested API error payloads to a printable string", (
   assert.equal(toErrorMessage({}, "fallback"), "fallback");
   assert.equal(toErrorMessage(null, "fallback"), "fallback");
   assert.equal(toErrorMessage({ message: "   " }, "fallback"), "fallback");
+  // `new Error(someObject)` stringifies to "[object Object]"; a hop that
+  // receives one must fall back instead of printing the placeholder.
+  assert.equal(
+    toErrorMessage(new Error("[object Object]"), "fallback"),
+    "fallback",
+  );
+  assert.equal(toErrorMessage("[object Object]", "fallback"), "fallback");
   // A cycle must not hang the relay that is trying to report a failure.
   const cyclic = { message: {} };
   cyclic.message.message = cyclic;
