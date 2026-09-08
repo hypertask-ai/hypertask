@@ -111,6 +111,23 @@ export function shouldAutoScrollToBottom(args: {
   return args.feedChanged && (args.isFirstContent || !args.userScrolledAway);
 }
 
+/**
+ * The queued-follow-up strip and the "is working" typing row render inside
+ * the same scroll container as the feed but aren't part of it, so a change
+ * here needs to count as a feed change too or the scroll trigger above never
+ * fires for them (HTPR-6291).
+ */
+export function agentChatExtraRowsRevision(args: {
+  queuedMessageIds: string[];
+  queuedRowsVisible: boolean;
+  typingRowVisible: boolean;
+}): string {
+  return JSON.stringify([
+    args.queuedRowsVisible ? args.queuedMessageIds : [],
+    args.typingRowVisible,
+  ]);
+}
+
 export function lastAgentChatMessage(
   feed: AgentChatFeedItem[],
 ): AgentChatMessage | null {

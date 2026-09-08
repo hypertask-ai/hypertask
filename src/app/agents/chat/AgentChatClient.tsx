@@ -84,6 +84,7 @@ import {
   saveDraftToServer,
 } from "@/lib/agents/chatViewerState";
 import {
+  agentChatExtraRowsRevision,
   displayAgentChatFeed,
   mergeAgentChatFeed,
   shouldAutoScrollToBottom,
@@ -1007,10 +1008,21 @@ const AgentChatClient = (props: IProp) => {
     setShowScrollToBottom(scrollTop + clientHeight < scrollHeight - 4);
   }, []);
 
+  // The queued-follow-up strip and the "is working" typing row sit in the
+  // same scroll container as the feed (see the JSX below) but aren't part of
+  // `visibleFeed`, so a queued send or the typing row appearing must count as
+  // a feed change too or the list silently stops following (HTPR-6291).
+  const extraRowsRevision = agentChatExtraRowsRevision({
+    queuedMessageIds: queuedMessages.map((item) => item.id),
+    queuedRowsVisible: chatStopAndTimeoutEnabled && activeFeedFilter !== "activity",
+    typingRowVisible: awaiting && activeFeedFilter !== "activity" && !deliveryNotice,
+  });
+
   // Jump to the bottom when the feed gains or replaces an item (own send,
   // poll, or realtime nudge), including when the capped feed stays the same
   // length. Filter changes still need a fresh overflow measurement.
   const prevFeedRevisionRef = useRef("");
+  const prevExtraRowsRevisionRef = useRef("");
   // The first time a session's real content paints, force the landing to the
   // bottom no matter what showScrollToBottom says: the user cannot have
   // legitimately scrolled away from content that has never been on screen.
@@ -1021,8 +1033,11 @@ const AgentChatClient = (props: IProp) => {
   // and the button never clears itself without a manual scroll.
   const initialScrollDoneRef = useRef(false);
   useLayoutEffect(() => {
-    const changed = visibleFeedRevision !== prevFeedRevisionRef.current;
+    const changed =
+      visibleFeedRevision !== prevFeedRevisionRef.current ||
+      extraRowsRevision !== prevExtraRowsRevisionRef.current;
     prevFeedRevisionRef.current = visibleFeedRevision;
+    prevExtraRowsRevisionRef.current = extraRowsRevision;
     const isFirstContent = !initialScrollDoneRef.current && visibleFeed.length > 0;
     // "auto" (instant), not "smooth": handleMessageListScroll below reads
     // scrollTop synchronously right after, and a smooth scroll hasn't moved
@@ -1039,12 +1054,13 @@ const AgentChatClient = (props: IProp) => {
     if (visibleFeed.length > 0) initialScrollDoneRef.current = true;
     handleMessageListScroll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleFeedRevision, activeFeedFilter]);
+  }, [visibleFeedRevision, activeFeedFilter, extraRowsRevision]);
   useLayoutEffect(() => {
     // A different chat's feed identity has nothing to do with this one's;
     // don't let it suppress the next genuine feed update, and don't let it
     // borrow this new session's "have we shown its first content yet" state.
     prevFeedRevisionRef.current = "";
+    prevExtraRowsRevisionRef.current = "";
     initialScrollDoneRef.current = false;
     scrollMessagesToBottom("auto");
     handleMessageListScroll();
