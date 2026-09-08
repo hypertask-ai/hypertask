@@ -849,13 +849,15 @@ export async function POST(request: NextRequest) {
     const assignmentsChanged = pullRequest.merged
       ? await reconcileMergedPullRequestAssignees(task)
       : false;
-    if (assignmentsChanged && !moved) {
+    // HTPR-6281: reconcile-then-broadcast. If the merge both moved the task and
+    // changed assignments, the earlier move-branch event fired too early — this
+    // final task event carries the assignment change to the open detail view.
+    if (assignmentsChanged) {
       try {
         await Promise.all([
           broadcastBoardChange(task.projectId, {
             originUserId: generalConfig.hyperAiId,
           }),
-          // HTPR-6281: the open task detail view listens only on the task channel.
           broadcastTaskChange(task.id, {
             originUserId: generalConfig.hyperAiId,
           }),
