@@ -138,6 +138,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
     [
       { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
       {
         key: "htpr-5913-consistent-comment-shortcuts",
         mode: "OWNER_AND_QA",

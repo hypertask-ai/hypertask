@@ -13,11 +13,20 @@ import {
 } from "react";
 import { useRecoilState } from "@/lib/state";
 import {
+  archiveShortcutNudgeAtom,
   showCommandsAtom,
+  showQuickTipsAtom,
   tasksPlayListAtom,
   globalNotificationFocusAtom,
   currentProjectAtom,
 } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
+import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
+import {
+  clearArchiveShortcutNudge,
+  recordArchiveShortcutAction,
+  type ArchiveShortcutSource,
+} from "@/lib/notifications/archiveShortcutNudge";
 import { markAsUnseen, markNotificationSeen } from "@/utils/api/Inbox";
 import Link from "next/link";
 import { NotificationProvider } from "@/lib/contexts/NotificationContext";
@@ -60,6 +69,7 @@ import {
   reconcileInboxKeyboardRow,
 } from "@/lib/inboxKeyboardNavigation";
 import { markTaskDetailNavigationStart } from "@/lib/analytics/taskDetailReadiness";
+import toast from "react-hot-toast";
 
 interface Props {
   onLoadCallback: () => void;
@@ -71,7 +81,7 @@ interface Props {
     notification: INotification,
     index: number,
     mode: TRemoveFromInboxMode,
-  ) => Promise<void>;
+  ) => Promise<boolean | void>;
   starTaskUpdateInCache: (notification: INotification) => Promise<void>;
   initialFocus: number;
   updateNotification: (notificationIndex: string) => void;
@@ -316,6 +326,9 @@ const InboxSplit = ({
   const [showCommands, ____] = useRecoilState(showCommandsAtom);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
+  const [tipsEnabled] = useRecoilState(showQuickTipsAtom);
+  const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
+  const shortcutNudgesEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
   const currentUser = useCurrentUser();
@@ -806,7 +819,7 @@ const InboxSplit = ({
       (e.keyCode === KeyCodes.E && cmdControl)
     ) {
       e.preventDefault();
-      eHandler(cmdControl);
+      void eHandler(cmdControl, undefined, "keyboard");
     }
 
     if (e.keyCode === KeyCodes.S && e.altKey) {
@@ -817,7 +830,11 @@ const InboxSplit = ({
 
   // =============== [e] mark as done handler
   //This is where the error is coming from ofcourse.
-  const eHandler = (cmdControl: boolean, specificIndex?: number) => {
+  const eHandler = async (
+    cmdControl: boolean,
+    specificIndex: number | undefined,
+    source: ArchiveShortcutSource,
+  ) => {
     if (selectedIdsArray.length > 0) return;
     if (lastgClick.current !== null) {
     } else {
@@ -827,12 +844,37 @@ const InboxSplit = ({
       } else if (selectedKeyboardRow?.item.kind === "notification") {
         targetNotification = selectedKeyboardRow.item.notification;
       }
-      if (targetNotification)
-        void markAsDone(
-          targetNotification,
-          index,
-          cmdControl ? "Task" : "Notification",
-        );
+      if (targetNotification) {
+        const accountId = currentUser?.id;
+        const enabled = shortcutNudgesEnabled && tipsEnabled;
+        if (source === "keyboard" && typeof accountId === "number") {
+          setArchiveNudge((current) =>
+            clearArchiveShortcutNudge(current, accountId),
+          );
+        }
+        let succeeded = false;
+        try {
+          const result = await markAsDone(
+            targetNotification,
+            index,
+            cmdControl ? "Task" : "Notification",
+          );
+          succeeded = result !== false;
+        } catch (error) {
+          console.error("Inbox archive failed", error);
+          toast.error("Could not archive this notification");
+        }
+        if (source === "mouse" && typeof accountId === "number") {
+          setArchiveNudge((current) =>
+            recordArchiveShortcutAction(current, {
+              accountId,
+              source,
+              succeeded,
+              enabled,
+            }),
+          );
+        }
+      }
     }
   };
 
@@ -1188,7 +1230,9 @@ const InboxSplit = ({
                       >
                         <MaybeSwipeable
                           enabled={isMbl && !isWaitingOnSynthetic}
-                          onArchive={() => eHandler(false, globalIndex)}
+                          onArchive={() =>
+                            void eHandler(false, globalIndex, "swipe")
+                          }
                           onSnooze={() => setSnoozeTarget(notification)}
                         >
                           <div

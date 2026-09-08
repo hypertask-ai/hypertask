@@ -19,6 +19,7 @@ import {
   FLAG_TICKET_TITLE_FLAG,
   INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
+  SHORTCUT_NUDGES_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -194,6 +195,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-07",
     description:
       "Counts down the 14 days before an Everyone flag is removed from the code, with a Keep switch that stops it. Set this flag itself to Everyone to let the daily sweep file the removal tickets.",
+  },
+  {
+    key: SHORTCUT_NUDGES_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Shows a shortcut tip on the next task page after three mouse-click notification archives in the inbox.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
