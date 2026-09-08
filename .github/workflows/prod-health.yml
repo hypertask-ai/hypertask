@@ -27,12 +27,15 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      live: ${{ steps.check.outputs.live }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 200
 
       - name: Wait for deploy, health-check, rollback if broken
+        id: check
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
@@ -129,6 +132,14 @@ jobs:
             echo "::error::Production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back"
             exit 1
           fi
+
+          # Production is confirmed serving this exact commit right now. The
+          # smoke job (HTPR-6199) reads this to decide whether there's a live
+          # build worth opening a browser against — a job-success check alone
+          # isn't enough, since this job also exits 0 on "nothing to check"
+          # (NOTFOUND/superseded/canceled) and exits 1 on "reads pass but the
+          # write probe was inconclusive", which is still genuinely live.
+          echo "live=true" >> "$GITHUB_OUTPUT"
 
           # ── 2. Health-check the live app (3 attempts, 20s apart) ───────────
           # Vercel sometimes bot-challenges the hosted runner's IP
@@ -337,6 +348,173 @@ jobs:
             notify "🔴🔴 hypertasks: $SHA UNHEALTHY and auto-rollback FAILED (HTTP $code). Promote previous deployment manually in Vercel NOW."
             echo "::error::Health check failed AND rollback failed"
           fi
+          exit 1
+
+  # ── Playwright smoke QA (HTPR-6199): open every main view as a real user ──
+  # The curl-based `health` job above proves the app responds; this proves the
+  # main screens actually render for a logged-in user. `live` is set as soon
+  # as health confirms this SHA is live, before its own probes run, so it
+  # alone would still be true after a rollback or cancellation further down
+  # that same job. Requiring a successful health result excludes both cases;
+  # an inconclusive write-probe run also exits non-zero, so it's skipped here
+  # too rather than smoke-tested.
+  # workflow_dispatch runs the checks without any of this (nothing to gate
+  # on, `health` doesn't run) so this job is dispatchable for manual
+  # verification; rollback is skipped there too, since a manual run is
+  # exploratory, not a deploy signal.
+  smoke:
+    needs: health
+    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
+      # signup + email verification). Check first so production pushes do not
+      # install dependencies and Chromium only to skip the browser tests.
+      - name: Check the smoke session secret is provisioned
+        id: provisioned
+        run: echo "ok=${{ secrets.SMOKE_SESSION_STATE != '' }}" >> "$GITHUB_OUTPUT"
+
+      # Setup steps expose their outcomes so the classifier below can alert
+      # without mistaking a runner problem for a broken application.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        id: setup-checkout
+        if: steps.provisioned.outputs.ok == 'true'
+        continue-on-error: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        id: setup-node
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-checkout.outcome == 'success'
+        continue-on-error: true
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        id: setup-npm
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-node.outcome == 'success'
+        continue-on-error: true
+        run: npm ci
+
+      - name: Restore Playwright browser cache
+        id: pw-cache
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-npm.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install the Chromium browser
+        id: setup-pw
+        if: steps.setup-checkout.outcome == 'success' && steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success'
+        continue-on-error: true
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+
+      # A failed npm ci / playwright install is an UNRUNNABLE check, not a
+      # broken app: record it as a failed preflight so the decision step below
+      # alerts on Telegram and never rolls back (PR #366 review).
+      - name: Record a setup failure as unrunnable
+        if: always() && (steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
+        run: |
+          mkdir -p e2e/smoke/.state
+          echo '{"ok":false,"reason":"setup failed (checkout, Node, npm ci, or playwright install)"}' > e2e/smoke/.state/preflight.json
+          echo "::error::Smoke setup failed — classified as unrunnable, not a broken app"
+
+      - name: Save Playwright browser cache
+        if: steps.pw-cache.outputs.cache-hit != 'true' && steps.setup-pw.outcome == 'success'
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Write the smoke session (never logged, never uploaded as an artifact)
+        if: steps.provisioned.outputs.ok == 'true'
+        env:
+          SMOKE_SESSION_STATE: ${{ secrets.SMOKE_SESSION_STATE }}
+        run: |
+          mkdir -p e2e/smoke/.state
+          printf '%s' "$SMOKE_SESSION_STATE" > e2e/smoke/.state/smoke-state.json
+
+      - name: Run the smoke checks
+        id: smoke
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-checkout.outcome == 'success' && steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success' && steps.setup-pw.outcome == 'success'
+        continue-on-error: true
+        env:
+          SMOKE_BASE_URL: https://app.hypertask.ai
+          SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
+          SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
+        run: npx playwright test -c playwright.config.smoke.ts
+
+      # Playwright traces are disabled because they include authenticated
+      # network traffic. Only screenshots from the isolated smoke account are
+      # retained; the Actions log carries the failed route and assertion.
+      - name: Upload screenshots for the failing run
+        if: steps.smoke.outcome == 'failure'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: smoke-failure-evidence
+          path: test-results/
+          retention-days: 7
+
+      - name: Not provisioned yet — see e2e/smoke/README.md
+        if: steps.provisioned.outputs.ok != 'true'
+        run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See e2e/smoke/README.md to provision it."
+
+      - name: Decide unrunnable vs. real failure, rollback if confirmed
+        if: ${{ !cancelled() && steps.provisioned.outputs.ok == 'true' && (steps.smoke.outcome == 'failure' || steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure') }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          notify() {
+            curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+              -d chat_id="$TG_CHAT" --data-urlencode text="$1" || \
+              echo "::warning::Smoke rollback alert could not be delivered"
+          }
+
+          PREFLIGHT=e2e/smoke/.state/preflight.json
+          APPLICATION_FAILURE=e2e/smoke/.state/application-failure.json
+          if [ ! -f "$PREFLIGHT" ] || [ "$(jq -r '.ok' "$PREFLIGHT" 2>/dev/null)" != "true" ]; then
+            REASON=$(jq -r '.reason // "no preflight result written"' "$PREFLIGHT" 2>/dev/null || echo "playwright/install failure before the login check ran")
+            notify "⚠️ hypertasks: smoke QA for $SHA could not run ($REASON). NOT rolling back — this is an unrunnable check, not a proven break. https://app.hypertask.ai"
+            echo "::error::Smoke QA unrunnable: $REASON"
+            exit 1
+          fi
+
+          if [ ! -f "$APPLICATION_FAILURE" ]; then
+            notify "⚠️ hypertasks: smoke QA for $SHA failed without a confirmed application-failure verdict. NOT rolling back — check the runner logs. https://app.hypertask.ai"
+            echo "::error::Smoke QA failed without a confirmed application-failure verdict"
+            exit 1
+          fi
+
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "::error::Smoke QA failed on a manual run; not rolling back (workflow_dispatch never rolls back)"
+            exit 1
+          fi
+
+          echo "Smoke QA confirmed a real failure on $SHA. Rolling back."
+          RESULT=$(node .github/scripts/emergency-rollback.mjs "$SHA")
+          echo "$RESULT"
+          ACTION=$(echo "$RESULT" | jq -r '.action // "failed"')
+
+          case "$ACTION" in
+            requested)
+              notify "🔴 hypertasks: $SHA passed the curl health check but FAILED Playwright smoke QA (a real view broke for a logged-in user). Auto-rolled back. Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+              ;;
+            skip)
+              notify "⚠️ hypertasks: smoke QA failed for $SHA but production already moved on ($(echo "$RESULT" | jq -r '.reason // "unknown"')); not rolling back. Verify manually."
+              ;;
+            *)
+              notify "🔴🔴 hypertasks: smoke QA failed for $SHA and auto-rollback FAILED ($(echo "$RESULT" | jq -r '.reason // "unknown"')). Promote previous deployment manually in Vercel NOW."
+              ;;
+          esac
           exit 1
 
   # ── Deploy drift: is production actually serving the production tip? ──────────
