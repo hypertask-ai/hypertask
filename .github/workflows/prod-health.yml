@@ -370,17 +370,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # continue-on-error here too (OCR review): without it, a checkout or
-      # setup-node failure skips every later step including setup-npm, so
-      # the "unrunnable" classification below never triggers and the job
-      # just goes red with no Telegram alert. With it, setup-npm still runs,
-      # predictably fails (no repo/no node), and gets classified correctly.
+      # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
+      # signup + email verification). Check first so production pushes do not
+      # install dependencies and Chromium only to skip the browser tests.
+      - name: Check the smoke session secret is provisioned
+        id: provisioned
+        run: echo "ok=${{ secrets.SMOKE_SESSION_STATE != '' }}" >> "$GITHUB_OUTPUT"
+
+      # Setup steps expose their outcomes so the classifier below can alert
+      # without mistaking a runner problem for a broken application.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         id: setup-checkout
+        if: steps.provisioned.outputs.ok == 'true'
         continue-on-error: true
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         id: setup-node
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-checkout.outcome == 'success'
         continue-on-error: true
         with:
           node-version: 20
@@ -388,11 +394,13 @@ jobs:
 
       - name: Install dependencies
         id: setup-npm
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-node.outcome == 'success'
         continue-on-error: true
         run: npm ci
 
       - name: Restore Playwright browser cache
         id: pw-cache
+        if: steps.provisioned.outputs.ok == 'true' && steps.setup-npm.outcome == 'success'
         continue-on-error: true
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -422,13 +430,6 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-
-      # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
-      # signup + email verification). Until it exists, skip the checks
-      # instead of alerting on every production push over a known gap.
-      - name: Check the smoke session secret is provisioned
-        id: provisioned
-        run: echo "ok=${{ secrets.SMOKE_SESSION_STATE != '' }}" >> "$GITHUB_OUTPUT"
 
       - name: Write the smoke session (never logged, never uploaded as an artifact)
         if: steps.provisioned.outputs.ok == 'true'
