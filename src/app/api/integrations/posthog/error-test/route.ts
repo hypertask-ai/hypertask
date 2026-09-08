@@ -22,8 +22,16 @@ function authorized(request: NextRequest) {
   );
 }
 
+// Server capture only runs on preview and production (see
+// capturePostHogExceptionOnServer), and this repo does not build previews by
+// default, so production is the only place the pipeline can actually be
+// demonstrated. Three independent gates keep that safe: the deployment
+// environment, the Owner-only feature flag, and a shared secret that only an
+// operator can set. Any one of them being unset makes the route a 404.
+const TRIGGERABLE_ENVIRONMENTS = new Set(["preview", "production"]);
+
 export async function POST(request: NextRequest) {
-  if (process.env.VERCEL_ENV !== "preview") {
+  if (!TRIGGERABLE_ENVIRONMENTS.has(process.env.VERCEL_ENV || "")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (

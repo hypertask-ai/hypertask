@@ -5,6 +5,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const checks = [];
+let flagEnabled = false;
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -21,7 +22,7 @@ stubModule("src/lib/flags.ts", {
   POSTHOG_ERROR_ALERT_FLAG: "htpr-6238-posthog-error-alert",
   isFeatureEnabled: async (key, userId) => {
     checks.push({ key, userId });
-    return false;
+    return flagEnabled;
   },
 });
 stubModule("src/lib/redis.ts", {
@@ -76,5 +77,45 @@ test("disabled flag hides the preview error trigger before token checks", async 
   } finally {
     if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = previousEnvironment;
+  }
+});
+
+// Server capture only runs on preview and production, and this repo does not
+// build previews by default. A production-only 404 left the pipeline with no
+// way to be demonstrated at all, which is how HTPR-6238 shipped unproven.
+test("the error trigger stays hidden outside preview and production", async () => {
+  checks.length = 0;
+  const previousEnvironment = process.env.VERCEL_ENV;
+  process.env.VERCEL_ENV = "development";
+  try {
+    const response = await testPost({ headers: new Headers() });
+    assert.equal(response.status, 404);
+    assert.deepEqual(checks, [], "the flag must not be read off a dead route");
+  } finally {
+    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousEnvironment;
+  }
+});
+
+test("production reaches the shared-secret gate once the flag is on", async () => {
+  checks.length = 0;
+  flagEnabled = true;
+  const previousEnvironment = process.env.VERCEL_ENV;
+  const previousToken = process.env.POSTHOG_ERROR_TEST_TOKEN;
+  process.env.VERCEL_ENV = "production";
+  delete process.env.POSTHOG_ERROR_TEST_TOKEN;
+  try {
+    const response = await testPost({ headers: new Headers() });
+    assert.equal(response.status, 401);
+    assert.deepEqual(checks, [
+      { key: "htpr-6238-posthog-error-alert", userId: 6 },
+    ]);
+  } finally {
+    flagEnabled = false;
+    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousEnvironment;
+    if (previousToken !== undefined) {
+      process.env.POSTHOG_ERROR_TEST_TOKEN = previousToken;
+    }
   }
 });

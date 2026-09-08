@@ -32,7 +32,7 @@ function postHogClient() {
   if (!token) return undefined;
   if (!client) {
     client = new PostHog(token, {
-      host: process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com",
+      host: process.env.POSTHOG_SERVER_HOST || "https://us.i.posthog.com",
       flushAt: 1,
       flushInterval: 0,
       requestTimeout: CAPTURE_TIMEOUT_MS,
