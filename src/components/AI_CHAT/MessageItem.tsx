@@ -63,6 +63,12 @@ export const MessageItem: FC<IMessageItemProps> = ({
               setCarousalItems={setCarouselItems}
             />
         )}
+        {message.role === "assistant" && message.authorAgent?.displayName && (
+          // HTPR-6284: a routed @mention reply names the agent that wrote it.
+          <div className="text-micro text-icon-dark-gray px-2">
+            {message.authorAgent.displayName}
+          </div>
+        )}
         <div
           className={`flex flex-col min-w-0 max-w-full py-1 px-2 rounded gap-2 w-full ${
             message.role === "human"

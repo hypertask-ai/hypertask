@@ -29,3 +29,5 @@ export const CORE_ACTIONS_SMOKE_FLAG = "htpr-6236-core-actions-smoke";
 export const HEIC_ATTACHMENTS_FLAG = "htpr-6254-heic-heif-attachments";
 export const HTPR_6278_CHAT_TURN_FAILURE_FLAG =
   "htpr-6278-chat-turn-failure-state";
+export const HTPR_6284_AGENT_MENTION_ROUTING_FLAG =
+  "htpr-6284-agent-mention-routing";

@@ -61,6 +61,8 @@ export interface IChatMessage {
   attachments?: IAttachment[];
   /** SSE `event: status` steps shown as stacked tool-call rows above the reply */
   statusSteps?: string[];
+  /** Set when the reply came from a fleet agent routed by an @mention (HTPR-6284). */
+  authorAgent?: { displayName: string } | null;
 }
 
 export type RedirectMode =

@@ -1283,6 +1283,9 @@ export function useAiChat() {
       let aiContent = "";
       let buffer = "";
       let currentEventType = "";
+      // HTPR-6284: set by the "agent" frame that precedes a routed @mention
+      // reply. Scoped to this send, so it cannot leak into another message.
+      let replyAuthorAgent: { id: string; name: string } | null = null;
       let streamErrorHandled = false;
       let sawDone = false;
 
@@ -1335,6 +1338,19 @@ export function useAiChat() {
                   case "thinking":
                     console.log(`🔥 Received thinking: ${parsed.content}`);
                     break;
+                  case "agent":
+                    // HTPR-6284: the reply about to stream comes from this
+                    // fleet agent, not the assistant.
+                    if (
+                      typeof parsed.agentId === "string" &&
+                      typeof parsed.agentName === "string"
+                    ) {
+                      replyAuthorAgent = {
+                        id: parsed.agentId,
+                        name: parsed.agentName,
+                      };
+                    }
+                    break;
                   case "content":
                     setAgentStatus(undefined);
                     aiContent += parsed.content;
@@ -1347,6 +1363,13 @@ export function useAiChat() {
                       createdAt: new Date(),
                       sessionId: session.id,
                       isDelivered: false,
+                      ...(replyAuthorAgent
+                        ? {
+                            authorAgent: {
+                              displayName: replyAuthorAgent.name,
+                            },
+                          }
+                        : {}),
                     };
 
                     addMessageToSessionQuery(
