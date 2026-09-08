@@ -238,6 +238,23 @@ test("approval without state accepts the token rendered by the consent screen", 
   assert.equal(createdCode.user_id, USER_ID);
 });
 
+test("approval preserves an explicitly empty state", async () => {
+  reset();
+
+  const response = await POST(
+    authorizePost({
+      ...baseParams({ state: "" }),
+      consent_token: consentTokenFor({ state: "" }),
+    }),
+  );
+
+  assert.equal(response.status, 303);
+  const successUrl = new URL(response.headers.get("location"));
+  const callbackUrl = new URL(successUrl.searchParams.get("redirect_uri"));
+  assert.equal(callbackUrl.searchParams.has("state"), true);
+  assert.equal(callbackUrl.searchParams.get("state"), "");
+});
+
 test("a POST without a consent token mints nothing", async () => {
   reset();
 
@@ -376,10 +393,19 @@ test("the consent screen preserves an explicitly empty state", async () => {
 test("denial links preserve HTTPS, loopback, and desktop callback schemes", async () => {
   reset();
 
-  for (const redirectUri of [
-    "https://client.example.test/callback?existing=1",
-    "http://127.0.0.1:8123/callback",
-    "cursor://oauth/callback",
+  for (const [redirectUri, expectedHref] of [
+    [
+      "https://client.example.test/callback?existing=1",
+      "https://client.example.test/callback?existing=1&error=access_denied&state=state+with+spaces",
+    ],
+    [
+      "http://127.0.0.1:8123/callback",
+      "http://127.0.0.1:8123/callback?error=access_denied&state=state+with+spaces",
+    ],
+    [
+      "cursor://oauth/callback",
+      "cursor://oauth/callback?error=access_denied&state=state+with+spaces",
+    ],
   ]) {
     const searchParams = {
       ...baseParams({ redirect_uri: redirectUri, state: "state with spaces" }),
@@ -392,8 +418,8 @@ test("denial links preserve HTTPS, loopback, and desktop callback schemes", asyn
     const page = await OAuthConsentPage({ searchParams: Promise.resolve(searchParams) });
     const html = renderToStaticMarkup(page);
 
-    assert.match(html, /error=access_denied/);
-    assert.match(html, /state=state(?:%20|\+)with(?:%20|\+)spaces/);
+    const cancelHref = html.match(/href="([^"]+)"[^>]*>Cancel<\/a>/)?.[1];
+    assert.equal(cancelHref, expectedHref.replaceAll("&", "&amp;"));
   }
 });
 

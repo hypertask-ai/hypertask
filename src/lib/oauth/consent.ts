@@ -38,6 +38,8 @@ function getSecret(): string {
   return secret
 }
 
+// v2 rejects v1 tokens for at most their five-minute lifetime. v1 did not sign
+// state, so accepting it here would reopen the tampering gap this version closes.
 function canonical(request: ConsentRequest, expiresAt: number): string {
   return JSON.stringify([
     'v2',

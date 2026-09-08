@@ -163,7 +163,7 @@ async function issueCodeAndRedirect(
   }
 
   const redirectParams: Record<string, string> = { code: authCode }
-  if (validated.state) {
+  if (validated.state !== null) {
     redirectParams.state = validated.state
   }
 
