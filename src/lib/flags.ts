@@ -26,6 +26,7 @@ import {
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
   MANAGER_LOOP_ACTIVITY_FLAG,
+  HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -45,6 +46,12 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "When you @name an agent in the AI chat, your message goes to that agent and its reply appears in the chat under its name, instead of the AI assistant answering for it.",
+  },
   {
     key: HTPR_6278_CHAT_TURN_FAILURE_FLAG,
     shippedOn: "2026-09-08",

@@ -799,7 +799,7 @@ const MESSAGE_WRITERS = [
   ["src/app/api/ai/chat/stream/ensureNativeChatTurn.ts", "authorUserId: userId"],
   [
     "src/app/api/ai/chat/stream/persistAssistantMessage.ts",
-    "authorAgentId: session.agentId",
+    "authorAgentId: resolvedAuthorAgentId",
   ],
   [
     "src/app/api/ai-chat/add-message/route.ts",
