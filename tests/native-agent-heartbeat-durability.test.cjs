@@ -335,7 +335,7 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
         toolsExecuted: false,
       }),
     ),
-    { periodKey: "2026-09" },
+    { periodKey: "2026-09", teamId: null },
   );
   // A stop streamed by a deployment without the field still registers, and the
   // caller falls back to its claim period.
@@ -343,7 +343,7 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
     streamStoppedOnSpentAllowance(
       frame("error", { content: SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE }),
     ),
-    { periodKey: null },
+    { periodKey: null, teamId: null },
   );
 
   // An inbox item can ask the agent to explain why it stopped, so the model can
@@ -420,11 +420,16 @@ test("the allowance error carries the period it was rejected against", () => {
   // Without this the cron has nothing authoritative to deduplicate on.
   assert.match(allowance, /new SharedAiAllowanceExceededError\(month\.key\)/);
   assert.match(allowance, /readonly periodKey: string;/);
-  assert.match(stream, /allowancePeriod: periodKey/);
+  assert.match(stream, /allowancePeriod: periodKey,/);
+  // The charged team rides with it, so a stop can be attributed to exactly
+  // one team instead of guessed from the agent's board memberships.
+  assert.match(stream, /allowanceTeamId: teamId/);
   // Both streamed error exits must carry it, or the stop that happens to take
   // the other path silently loses its period.
   assert.equal(
-    (stream.match(/\.\.\.userFacingErrorDetails\(error\)/g) ?? []).length,
+    (
+      stream.match(/\.\.\.userFacingErrorDetails\(error, gatewayTags\.teamId \?\? null\)/g) ?? []
+    ).length,
     2,
   );
 });

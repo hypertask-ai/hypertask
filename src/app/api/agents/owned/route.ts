@@ -6,7 +6,10 @@ import { workingOnByAgent } from "@/lib/agents/working";
 import { ownedAgentSlugs } from "@/lib/agents/ownedSlugs";
 import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { aiAllowancePeriod } from "@/lib/aiAllowancePolicy";
+import {
+  aiAllowancePeriod,
+  parseAllowanceTeamStamp,
+} from "@/lib/aiAllowancePolicy";
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
 
@@ -130,9 +133,11 @@ export async function GET(request: NextRequest) {
 
   // A spent shared AI allowance writes one durable stop notice per native
   // agent per period, the first time a turn of that agent ends on the stop.
-  // Mark only agents with a current-period notice of their own: siblings are
-  // covered as soon as their next turn fails the same allowance, so the set
-  // converges without guessing team boundaries from boards.
+  // The notice carries the charged team as an invisible stamp, so the stop is
+  // propagated to native agents on exactly that team — the allowance is
+  // funded per team, and board membership is only used where the stamp names
+  // the team outright. External runtimes bring their own key and never hit
+  // the shared allowance.
   const nativeIds = agents
     .filter((agent) => agent.runtimeType === "NATIVE")
     .map((agent) => agent.id);
@@ -153,11 +158,22 @@ export async function GET(request: NextRequest) {
     for (const notice of notices) {
       if (!notice.fromAgentId) continue;
       if (
-        notice.message?.startsWith(
+        !notice.message?.startsWith(
           agentMessageMarker(heartbeatAllowanceNoticeId(notice.fromAgentId, period.key)),
         )
       ) {
-        outOfTokensByAgent.add(notice.fromAgentId);
+        continue;
+      }
+      outOfTokensByAgent.add(notice.fromAgentId);
+      const chargedTeamId = parseAllowanceTeamStamp(notice.message);
+      if (!chargedTeamId) continue;
+      for (const agent of agents) {
+        if (agent.runtimeType !== "NATIVE") continue;
+        if (
+          agent.members.some(({ project }) => project.team?.id === chargedTeamId)
+        ) {
+          outOfTokensByAgent.add(agent.id);
+        }
       }
     }
   }
