@@ -137,7 +137,7 @@ test("happy path stores one agent-authored activity message and broadcasts", asy
   assert.deepEqual(broadcastCalls, ["session-1"]);
 });
 
-test("replay with the same clientMessageId does not duplicate or broadcast again", async () => {
+test("replay with the same clientMessageId stores nothing new but repairs the broadcast", async () => {
   resetState();
   const { POST } = await loadRoute();
   const first = await json(
