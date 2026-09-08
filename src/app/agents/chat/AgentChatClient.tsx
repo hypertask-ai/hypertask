@@ -47,7 +47,13 @@ import {
   interceptMessageLinkClick,
 } from "@/utils/helperFunctions/messageHtmlLinks";
 import formatDateDifference from "@/utils/generateTime";
-import { isWorking, statusOf, listTeams } from "@/lib/agents/registerView";
+import {
+  chatRosterStatus,
+  isWorking,
+  statusOf,
+  listTeams,
+  type TChatRosterStatus,
+} from "@/lib/agents/registerView";
 import {
   tokenizeMessageLinks,
   extractMessageLinks,
@@ -134,6 +140,39 @@ function chatStatusText(agent: TAgent): string {
 /** Roster status dot: green on any proof of life within the last 24h. */
 function rosterDotClass(agent: TAgent): string {
   return statusOf(agent) === "running" ? "bg-green-500" : "bg-gray-400";
+}
+
+// HTPR-6287: per-agent roster status replaces the flat green/gray dot. Amber
+// is the shared-allowance stop, the only state the owner can act on from here.
+const rosterStatusDotClass: Record<TChatRosterStatus["kind"], string> = {
+  active: "bg-green-500",
+  "out-of-tokens": "bg-amber-500",
+  idle: "bg-gray-400",
+  inactive: "bg-gray-500 opacity-50",
+};
+
+function rosterIdleFor(since: string, now: number): string {
+  const min = Math.floor((now - new Date(since).getTime()) / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs} h`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+function rosterStatusLine(agent: TAgent, status: TChatRosterStatus, now: number): string {
+  const type = agent.runtimeType === "EXTERNAL" ? "External" : "Native";
+  switch (status.kind) {
+    case "active":
+      return agent.working ? `${type} · ${agent.working.ticket}` : type;
+    case "out-of-tokens":
+      return `${type} · Out of tokens`;
+    case "idle":
+      return `${type} · Idle ${rosterIdleFor(status.since, now)}`;
+    case "inactive":
+      return `${type} · Inactive`;
+  }
 }
 
 // Typography for the rendered markdown (paragraphs, links, inline code, code
@@ -467,11 +506,15 @@ function RosterRow({
   agent,
   selected,
   onSelect,
+  now,
 }: {
   agent: TAgent;
   selected: boolean;
   onSelect: (agent: TAgent) => void;
+  now: number;
 }) {
+  const statusViewEnabled = useFlag("htpr-6287-agent-chat-roster-status");
+  const status = statusViewEnabled ? chatRosterStatus(agent, now) : null;
   return (
     <button
       type="button"
@@ -484,15 +527,24 @@ function RosterRow({
     >
       <AgentAvatar agentId={agent.id} name={agent.displayName} photoURL={agent.photoURL} size={28} className="text-[11px]" />
       <span
-        className={cn("w-2 h-2 rounded-full shrink-0", rosterDotClass(agent))}
+        className={cn(
+          "w-2 h-2 rounded-full shrink-0",
+          status ? rosterStatusDotClass[status.kind] : rosterDotClass(agent),
+        )}
       />
       <span className="min-w-0 flex-1">
         <span className="block text-dense font-medium truncate">
           {agent.displayName}
         </span>
         <span className="block text-[11px] text-text-light-gray truncate">
-          {agent.runtimeType === "EXTERNAL" ? "External" : "Native"}
-          {isWorking(agent) && agent.working ? ` · ${agent.working.ticket}` : ""}
+          {status ? (
+            rosterStatusLine(agent, status, now)
+          ) : (
+            <>
+              {agent.runtimeType === "EXTERNAL" ? "External" : "Native"}
+              {isWorking(agent) && agent.working ? ` · ${agent.working.ticket}` : ""}
+            </>
+          )}
         </span>
       </span>
       {/* The thread is shared, so a teammate's message is news to this person
@@ -527,6 +579,15 @@ const AgentChatClient = (props: IProp) => {
     "htpr-6129-mobile-agent-chat-viewport",
   );
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
+  const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
+  // Idle durations and the idle-to-inactive flip have to move while the chat
+  // sits open, so the roster re-renders on a clock; no refetch involved.
+  const [rosterNow, setRosterNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!rosterStatusEnabled) return;
+    const tick = setInterval(() => setRosterNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, [rosterStatusEnabled]);
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const mobileAgentChatViewport = useMobileVisualViewport(
     isMbl && mobileAgentChatViewportEnabled,
@@ -1874,6 +1935,7 @@ const AgentChatClient = (props: IProp) => {
             agent={agent}
             selected={agent.id === selectedId}
             onSelect={selectAgent}
+            now={rosterNow}
           />
         ))}
       </div>

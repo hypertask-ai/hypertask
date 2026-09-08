@@ -31,6 +31,12 @@ export type TRegisterAgent = {
   lastPostedAt?: string | null;
   working?: TRegisterWork | null;
   boards?: TRegisterBoard[];
+  /**
+   * Server-computed: a current-period shared-allowance stop notice exists for
+   * this agent's owner, so its next model call will fail. Never set on the
+   * client; see chatRosterStatus for how it ranks.
+   */
+  outOfTokens?: boolean | null;
 };
 
 /**
@@ -67,6 +73,32 @@ export function lastSignalAt(agent: TRegisterAgent): string | null {
   );
   if (times.length === 0) return null;
   return times.reduce((latest, t) => (t > latest ? t : latest));
+}
+
+/**
+ * What an Agent Chat roster row shows. `out-of-tokens` outranks `active` on
+ * purpose: the pause notice is durable for the allowance period, while a task
+ * lease can outlive the turn that failed, so the lease must not mask the stop.
+ * Revocation outranks everything, like statusOf.
+ */
+export type TChatRosterStatus =
+  | { kind: "active" }
+  | { kind: "out-of-tokens" }
+  | { kind: "idle"; since: string }
+  | { kind: "inactive" };
+
+export function chatRosterStatus(
+  agent: TRegisterAgent,
+  now = Date.now(),
+): TChatRosterStatus {
+  if (agent.revokedAt) return { kind: "inactive" };
+  if (agent.outOfTokens) return { kind: "out-of-tokens" };
+  if (isWorking(agent, now)) return { kind: "active" };
+  const last = lastSignalAt(agent);
+  if (last && now - new Date(last).getTime() < ACTIVE_WINDOW_MS) {
+    return { kind: "idle", since: last };
+  }
+  return { kind: "inactive" };
 }
 
 /**

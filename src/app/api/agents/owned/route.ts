@@ -6,6 +6,12 @@ import { workingOnByAgent } from "@/lib/agents/working";
 import { ownedAgentSlugs } from "@/lib/agents/ownedSlugs";
 import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import {
+  aiAllowancePeriod,
+  parseAllowanceTeamStamp,
+} from "@/lib/aiAllowancePolicy";
+import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
+import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
@@ -125,6 +131,53 @@ export async function GET(request: NextRequest) {
 
   const unreadByAgent = await unreadChatCounts(userId);
 
+  // A spent shared AI allowance writes one durable stop notice per native
+  // agent per period, the first time a turn of that agent ends on the stop.
+  // The notice carries the charged team as an invisible stamp, so the stop is
+  // propagated to native agents on exactly that team — the allowance is
+  // funded per team, and board membership is only used where the stamp names
+  // the team outright. External runtimes bring their own key and never hit
+  // the shared allowance.
+  const nativeIds = agents
+    .filter((agent) => agent.runtimeType === "NATIVE")
+    .map((agent) => agent.id);
+  const outOfTokensByAgent = new Set<string>();
+  if (nativeIds.length > 0) {
+    const period = aiAllowancePeriod();
+    // The period start bounds the scan: a notice for this period cannot be
+    // older than the period, and prior periods' notices are dead state.
+    const notices = await prisma.notification.findMany({
+      where: {
+        type: "AgentMessage",
+        userId,
+        fromAgentId: { in: nativeIds },
+        createdAt: { gte: new Date(`${period.startDate}T00:00:00.000Z`) },
+      },
+      select: { fromAgentId: true, message: true },
+    });
+    for (const notice of notices) {
+      if (!notice.fromAgentId) continue;
+      if (
+        !notice.message?.startsWith(
+          agentMessageMarker(heartbeatAllowanceNoticeId(notice.fromAgentId, period.key)),
+        )
+      ) {
+        continue;
+      }
+      outOfTokensByAgent.add(notice.fromAgentId);
+      const chargedTeamId = parseAllowanceTeamStamp(notice.message);
+      if (!chargedTeamId) continue;
+      for (const agent of agents) {
+        if (agent.runtimeType !== "NATIVE") continue;
+        if (
+          agent.members.some(({ project }) => project.team?.id === chargedTeamId)
+        ) {
+          outOfTokensByAgent.add(agent.id);
+        }
+      }
+    }
+  }
+
   return NextResponse.json({
     success: true,
     agents: agents.map(({ permissions, members, byokApiKeys, ...agent }) => ({
@@ -142,6 +195,7 @@ export async function GET(request: NextRequest) {
       // Messages in this agent's shared thread that arrived after this person
       // last caught up. Private to them: it reads their own participant row.
       unreadCount: unreadByAgent.get(agent.id) ?? 0,
+      outOfTokens: outOfTokensByAgent.has(agent.id),
       postsToImportant:
         (permissions as AgentScopes | null)?.postsToImportant !== false,
       // Teams come from the boards, since an agent belongs to its owner rather

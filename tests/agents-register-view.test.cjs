@@ -23,6 +23,7 @@ const {
   writeRememberedAgentGrouping,
   statusOf,
   isWorking,
+  chatRosterStatus,
   defaultAgentFilters,
   sortByActivity,
   viewAgents,
@@ -387,4 +388,47 @@ test("an agent on two boards is still listed under both when grouped", () => {
   assert.equal(grouped.length, 2);
   const flat = viewAgents([both], { ...defaultAgentFilters, group: "none" }, NOW);
   assert.equal(flat[0].agents.length, 1);
+});
+
+// HTPR-6287: the chat roster's per-agent status.
+
+test("chat status: revoked wins over every other signal", () => {
+  // An agent the owner switched off is not working, whatever a stale lease or
+  // an allowance notice still claims.
+  const off = agent("off", [PRODUCT], {
+    revokedAt: ago(1),
+    outOfTokens: true,
+    working: lease(30),
+  });
+  assert.deepEqual(chatRosterStatus(off, NOW), { kind: "inactive" });
+});
+
+test("chat status: out-of-tokens outranks a lease that outlived the failed turn", () => {
+  // The pause notice is durable for the allowance period; the lease is not
+  // cleared atomically when the turn ends on the stop, so letting the lease
+  // win would show Active for an agent that cannot run a single model call.
+  const paused = agent("paused", [PRODUCT], {
+    outOfTokens: true,
+    working: lease(30),
+  });
+  assert.deepEqual(chatRosterStatus(paused, NOW), { kind: "out-of-tokens" });
+});
+
+test("chat status: active, idle with elapsed time, then inactive", () => {
+  const working = agent("working", [PRODUCT], { working: lease(4) });
+  assert.deepEqual(chatRosterStatus(working, NOW), { kind: "active" });
+
+  const idleSince = ago(4);
+  const idle = agent("idle", [PRODUCT], { heartbeatAt: idleSince });
+  assert.deepEqual(chatRosterStatus(idle, NOW), {
+    kind: "idle",
+    since: idleSince,
+  });
+
+  // No proof of life inside the window reads as inactive, like statusOf.
+  assert.deepEqual(chatRosterStatus(agent("gone", [PRODUCT]), NOW), {
+    kind: "inactive",
+  });
+  const stale = agent("stale", [PRODUCT], { heartbeatAt: ago(1441) });
+  assert.deepEqual(chatRosterStatus(stale, NOW), { kind: "inactive" });
 });

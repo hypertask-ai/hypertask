@@ -227,6 +227,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      {
+        key: "htpr-6287-agent-chat-roster-status",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

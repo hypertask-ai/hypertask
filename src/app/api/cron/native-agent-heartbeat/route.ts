@@ -18,7 +18,10 @@ import {
   type HeartbeatRecoveryOutcome,
   type HeartbeatExecutionState,
 } from "@/app/api/ai/_lib/heartbeatExecution";
-import { aiAllowancePeriod } from "@/lib/aiAllowancePolicy";
+import {
+  aiAllowancePeriod,
+  allowanceTeamStamp,
+} from "@/lib/aiAllowancePolicy";
 import { deliverAgentMessageNotification } from "./agentMessageDelivery";
 import {
   decideDurableReservationRecovery,
@@ -177,13 +180,17 @@ const deliverCompletedExecution = async (
 const deliverAllowanceExhaustedNotice = async (
   agent: AgentCandidate,
   periodKey: string,
+  teamId: string | null,
 ) => {
   const delivery = await deliverAgentMessageNotification({
     db: prisma,
     assistantMessageId: heartbeatAllowanceNoticeId(agent.id, periodKey),
     userId: agent.userId,
     agentId: agent.id,
-    content: ALLOWANCE_NOTICE,
+    // The team stamp rides as an invisible HTML comment so a reader of the
+    // notice can attribute the stop to exactly the team whose allowance is
+    // spent; the notice id itself stays keyed by agent and period only.
+    content: teamId ? ALLOWANCE_NOTICE + allowanceTeamStamp(teamId) : ALLOWANCE_NOTICE,
   });
   if (delivery === "created") {
     void broadcastInboxChange(agent.userId, { originUserId: agent.userId });
@@ -631,6 +638,7 @@ export async function GET(request: NextRequest) {
         await deliverAllowanceExhaustedNotice(
           agent,
           allowanceStop.periodKey ?? aiAllowancePeriod(claimedAt).key,
+          allowanceStop.teamId,
         ).catch((error) => {
           failures.push(`${agent.id}: allowance notice ${errorText(error)}`);
         });

@@ -865,11 +865,16 @@ function userFacingErrorMessage(error: unknown, stage: string) {
  * Extra fields for a streamed error event. The allowance period travels with
  * the stop so a background caller can deduplicate against the period that
  * actually rejected, instead of re-deriving one from its own clock and keying
- * the wrong month at a rollover.
+ * the wrong month at a rollover. The charged team travels with it so the
+ * caller can attribute the stop to exactly the team whose allowance is spent.
  */
-function userFacingErrorDetails(error: unknown) {
+function userFacingErrorDetails(error: unknown, teamId: string | null) {
   const periodKey = includedAllowanceError(error)?.periodKey;
-  return periodKey ? { allowancePeriod: periodKey } : {};
+  if (!periodKey) return {};
+  return {
+    allowancePeriod: periodKey,
+    ...(teamId ? { allowanceTeamId: teamId } : {}),
+  };
 }
 
 function requestErrorMessage(
@@ -10582,7 +10587,7 @@ export async function POST(request: NextRequest) {
             send("error", {
               content: userFacingErrorMessage(error, "model-stream"),
               toolsExecuted: toolExecutions.length > 0,
-              ...userFacingErrorDetails(error),
+              ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
             });
             finish("error");
             if (heartbeatExecutionId) {
@@ -10841,7 +10846,7 @@ export async function POST(request: NextRequest) {
           errorSent = true;
           send("error", {
             content: userFacingErrorMessage(error, "stream-handler"),
-            ...userFacingErrorDetails(error),
+            ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
           });
           finish("error");
         }

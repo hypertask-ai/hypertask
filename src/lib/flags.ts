@@ -150,6 +150,11 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Keeps the full Agent Chat visible on mobile when the keyboard is open.",
   },
   {
+    key: "htpr-6287-agent-chat-roster-status",
+    shippedOn: "2026-09-08",
+    description: "Shows real per-agent status (active, idle, out of tokens, inactive) in the Agent Chat sidebar.",
+  },
+  {
     key: "htpr-6130-mobile-reminder-safe-area",
     shippedOn: "2026-09-04",
     description: "Keeps the mobile reminder time selector aligned and clear of bottom controls.",
