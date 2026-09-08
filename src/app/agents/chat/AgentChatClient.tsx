@@ -173,7 +173,9 @@ function ProposalCard({
       <div className="mb-1 flex items-center gap-1.5 font-medium text-white-black">
         <TicketIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         <span>
-          {confirmedHeadingEnabled && proposal.status === "CONFIRMED"
+          {confirmedHeadingEnabled &&
+          proposal.status === "CONFIRMED" &&
+          proposal.task
             ? "Ticket created"
             : "Ticket proposed, nothing done yet"}
         </span>
