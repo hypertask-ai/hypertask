@@ -139,12 +139,15 @@ export async function GET(request: NextRequest) {
     .map((agent) => agent.id);
   const outOfTokensByAgent = new Set<string>();
   if (nativeIds.length > 0) {
-    const periodKey = aiAllowancePeriod().key;
+    const period = aiAllowancePeriod();
+    // The period start bounds the scan: a notice for this period cannot be
+    // older than the period, and prior periods' notices are dead state.
     const notices = await prisma.notification.findMany({
       where: {
         type: "AgentMessage",
         userId,
         fromAgentId: { in: nativeIds },
+        createdAt: { gte: new Date(`${period.startDate}T00:00:00.000Z`) },
       },
       select: { fromAgentId: true, message: true },
     });
@@ -153,7 +156,7 @@ export async function GET(request: NextRequest) {
       if (!notice.fromAgentId) continue;
       if (
         notice.message?.startsWith(
-          agentMessageMarker(heartbeatAllowanceNoticeId(notice.fromAgentId, periodKey)),
+          agentMessageMarker(heartbeatAllowanceNoticeId(notice.fromAgentId, period.key)),
         )
       ) {
         notifiedIds.add(notice.fromAgentId);
@@ -161,12 +164,14 @@ export async function GET(request: NextRequest) {
     }
     if (notifiedIds.size > 0) {
       for (const id of propagateOutOfTokens(
-        agents.map((agent) => ({
-          id: agent.id,
-          boards: agent.members.map(({ project }) => ({
-            teamId: project.team?.id ?? null,
+        agents
+          .filter((agent) => agent.runtimeType === "NATIVE")
+          .map((agent) => ({
+            id: agent.id,
+            boards: agent.members.map(({ project }) => ({
+              teamId: project.team?.id ?? null,
+            })),
           })),
-        })),
         notifiedIds,
       )) {
         outOfTokensByAgent.add(id);
