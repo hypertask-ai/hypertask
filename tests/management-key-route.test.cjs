@@ -136,11 +136,13 @@ stubModule("src/lib/mcp/managementKeyTeamScope.ts", {
   getManagementKeyTeam: async (_userId, teamId) => ({
     id: teamId,
     title: teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" ? "Team A" : "Team B",
-    isOwner: teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    isOwner: teamId !== "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     accessBinding:
       teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         ? "owner:account-a"
-        : "member:membership-b",
+        : teamId === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+          ? "owner:account-b"
+          : "member:membership-c",
   }),
   listManagementKeyTeams: async () => [],
 });
@@ -364,6 +366,10 @@ test("team keys cannot widen themselves or request full data access", serial, as
     request({ name: "Other team", scope: "management", teamId: otherTeamId }),
   );
   assert.equal(crossTeam.status, 403);
+  assert.equal(
+    (await crossTeam.json()).error,
+    "The authenticated management key cannot create a key for another team.",
+  );
 
   const full = await POST(request({ name: "Too broad", scope: "full" }));
   assert.equal(full.status, 400);
@@ -382,7 +388,7 @@ test("team usage keys require ownership of the selected team", serial, async () 
     request({
       name: "Member usage",
       scope: "usage",
-      teamId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      teamId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
     }),
   );
 
