@@ -29,7 +29,7 @@ import {
 import { buildAgentBoardAccess } from "@/lib/agents/boardAccess";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
-  isAgentVisibility,
+  isVisibilityOnlyBody,
   setOwnedAgentVisibility,
 } from "@/lib/agents/visibility";
 
@@ -417,10 +417,7 @@ export async function PATCH(
   }
 
   if (body.visibility !== undefined) {
-    const suppliedFields = Object.entries(body).filter(
-      ([, value]) => value !== undefined,
-    );
-    if (suppliedFields.length !== 1 || !isAgentVisibility(body.visibility)) {
+    if (!isVisibilityOnlyBody(body)) {
       return NextResponse.json(
         { success: false, error: "Invalid visibility" },
         { status: 400 },

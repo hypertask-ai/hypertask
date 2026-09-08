@@ -8,7 +8,11 @@
  * inherit it from one place instead of each keeping a copy (CLAUDE.md,
  * HTPR-5418).
  */
-import { isAgentVisibility, setOwnedAgentVisibility, type AgentVisibility } from '@/lib/agents/visibility'
+import {
+  isVisibilityOnlyBody,
+  setOwnedAgentVisibility,
+} from '@/lib/agents/visibility'
+import { AGENT_VISIBILITY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { clearAgentRuntimeSnapshot } from '@/lib/agents/runtimeState'
 import {
   agentTokenCredentialFields,
@@ -257,10 +261,21 @@ export async function handlePatchAgentRequest(
         { status: 400 }
       )
     }
+    // Gated on the server like every other user-visible behavior: the flag
+    // decides, not the client. Fail closed as 404 so the verb simply does not
+    // exist while the flag is off.
+    let visibilityEnabled = false
+    try {
+      visibilityEnabled = await isFeatureEnabled(AGENT_VISIBILITY_FLAG, ctx.user.id)
+    } catch (error) {
+      console.error('[MCP Update Agent Visibility] feature flag check failed', error)
+    }
+    if (!visibilityEnabled) {
+      return NextResponse.json({ success: false, error: 'Not found.' }, { status: 404 })
+    }
     // Same visibility-only rule as the web route: any other supplied field,
     // recognized or not, makes the request ambiguous.
-    const supplied = Object.values(body).filter((value) => value !== undefined)
-    if (supplied.length !== 1 || !isAgentVisibility(body.visibility)) {
+    if (!isVisibilityOnlyBody(body)) {
       return NextResponse.json(
         buildFieldError(
           'invalid_field',
@@ -270,11 +285,7 @@ export async function handlePatchAgentRequest(
         { status: 400 }
       )
     }
-    const result = await setOwnedAgentVisibility(
-      agentId,
-      ctx.user.id,
-      body.visibility as AgentVisibility
-    )
+    const result = await setOwnedAgentVisibility(agentId, ctx.user.id, body.visibility)
     if (!result.ok) {
       // Notably the 409 refusing TEAM sharing while no provider key is enabled.
       return NextResponse.json(

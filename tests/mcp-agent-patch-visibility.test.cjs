@@ -13,6 +13,7 @@ const state = {
   user: null,
   visibilityResult: null,
   agentRow: null,
+  flagEnabled: true,
 };
 
 function transpile(relativePath) {
@@ -39,11 +40,12 @@ function loadReal(relativePath) {
   return loaded.exports;
 }
 
-function loadHandler({ user, visibilityResult, agentRow } = {}) {
+function loadHandler({ user, visibilityResult, agentRow, flagEnabled } = {}) {
   state.user =
     user ?? { user: { id: 6, email: "owner@example.test" }, agentId: null };
   state.visibilityResult =
     visibilityResult ?? { ok: true, visibility: "PRIVATE" };
+  state.flagEnabled = flagEnabled ?? true;
   state.agentRow = agentRow ?? {
     id: "agent-1",
     displayName: "GLM Dev 1",
@@ -69,7 +71,17 @@ function loadHandler({ user, visibilityResult, agentRow } = {}) {
         TEAM_VISIBILITY_KEY_REQUIRED_ERROR:
           "Enable a provider key before sharing this agent with the team",
         isAgentVisibility: (value) => value === "PRIVATE" || value === "TEAM",
+        isVisibilityOnlyBody: (body) =>
+          Object.values(body).filter((value) => value !== undefined).length ===
+            1 && (body.visibility === "PRIVATE" || body.visibility === "TEAM"),
         setOwnedAgentVisibility: async () => state.visibilityResult,
+      };
+    }
+    if (request === "@/lib/flags") {
+      return {
+        __esModule: true,
+        AGENT_VISIBILITY_FLAG: "htpr-6268-agent-visibility",
+        isFeatureEnabled: async () => state.flagEnabled,
       };
     }
     if (request === "@/lib/agents/runtimeState") {
@@ -187,6 +199,18 @@ test("visibility cannot hide extra fields, recognized or not", async () => {
     const parsed = await response.json();
     assert.equal(parsed.code, "invalid_field");
   }
+});
+
+test("with the flag off the verb does not exist (fail closed)", async () => {
+  const { handlePatchAgentRequest } = loadHandler({ flagEnabled: false });
+  const response = await handlePatchAgentRequest(
+    request({ visibility: "TEAM" }),
+    "agent-1"
+  );
+  assert.equal(response.status, 404);
+  const body = await response.json();
+  assert.equal(body.success, false);
+  assert.equal(body.error, "Not found.");
 });
 
 test("an agent credential may not manage agents", async () => {

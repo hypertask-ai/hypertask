@@ -14,6 +14,7 @@ import {
   CORE_ACTIONS_SMOKE_FLAG,
   HEIC_ATTACHMENTS_FLAG,
   HTPR_6278_CHAT_TURN_FAILURE_FLAG,
+  AGENT_VISIBILITY_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
@@ -59,6 +60,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Ends AI Chat turns that run out of time with a clear, saved failure message instead of a silent disconnect, and shows the server's real refusal instead of 'Connection lost'.",
+  },
+  {
+    key: AGENT_VISIBILITY_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Lets the CLI and MCP change an agent's visibility between PRIVATE and TEAM, like the web dashboard already can.",
   },
   {
     key: HEIC_ATTACHMENTS_FLAG,

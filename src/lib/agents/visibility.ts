@@ -11,6 +11,18 @@ export function isAgentVisibility(value: unknown): value is AgentVisibility {
   return AGENT_VISIBILITIES.includes(value as AgentVisibility);
 }
 
+/**
+ * The PATCH contract for a visibility change, shared by the web route
+ * (`/api/agents/[agentId]`) and the MCP layer so the two can never disagree:
+ * the body must carry `visibility` and nothing else.
+ */
+export function isVisibilityOnlyBody(
+  body: Record<string, unknown>,
+): body is Record<string, unknown> & { visibility: AgentVisibility } {
+  const supplied = Object.values(body).filter((value) => value !== undefined);
+  return supplied.length === 1 && isAgentVisibility(body.visibility);
+}
+
 export function isAgentVisibleToUser(
   agent: {
     userId: number;
