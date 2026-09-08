@@ -3,6 +3,7 @@ import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
 import { isMobileDevice } from "@/utils/serverActions";
@@ -158,6 +159,7 @@ export default async function RootLayout(
           authenticatedIsGuest={analyticsIsGuest}
         />
         <DeploySkewGuard />
+        <SpeedInsights />
         <Provider
           initialIsMobile={device.isMobile}
           initialIsApple={device.isApple}
