@@ -114,29 +114,26 @@ const useAddDeleteTaskInBoards = () => {
 
     if (!_currentProject || _currentProject.id !== projectId) return false;
     try {
-      const { allData, projectToUpdateIndex } =
-        await getProjectIdxAndAllData(_currentProject.id)
+    const { allData, projectToUpdateIndex } = await getProjectIdxAndAllData(_currentProject?.id)
       console.log("🚀 ~ createItem ~ projectToUpdateIndex:", projectToUpdateIndex)
       console.log("🚀 ~ createItem ~ allData:", allData)
 
-      if (
-        !allData?.updatedProjects ||
-        projectToUpdateIndex === undefined ||
-        projectToUpdateIndex === -1
-      ) return false;
+    // if (!allData || !projectToUpdateIndex) return;
+    if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return false;
 
-      const sections = allData.updatedProjects[projectToUpdateIndex]?.sections;
-      const sectionIndex = sections?.findIndex((item) => item.sectionId === sectionId) ?? -1;
-      if (!sections || sectionIndex === -1) return false;
-      const targetSection = sections[sectionIndex];
-      const sectionItems = targetSection.items ?? [];
-      const ranking = generateRanking(
-        position === "top"
-          ? undefined
-          : sectionItems[sectionItems.length - 1]?.ranking,
-        position === "top" ? sectionItems[0]?.ranking : undefined,
-      );
+    const sections = allData?.updatedProjects[projectToUpdateIndex]?.sections
+    console.log("🚀 ~ createItem ~ sections:", sections)
 
+
+    const sectionIndex = _currentProject.sections.findIndex((sec) => sec.sectionId === sectionId);
+    console.log("🚀 ~ createItem ~ sectionIndex:", sectionIndex)
+
+    const ranking = generateRanking(
+      position === "top" ? undefined : sections[sectionIndex]?.items[sections[sectionIndex]?.items.length - 1]?.ranking,
+      position === "top" ? sections[sectionIndex]?.items[0]?.ranking : undefined
+    );
+
+    console.log("🚀 ~ createItem ~ ranking:", ranking)
       const res = await axios.post("/api/tasks/create", {
         ...item,
         sectionId,
@@ -145,20 +142,18 @@ const useAddDeleteTaskInBoards = () => {
         userId: currentUser?.id,
         projectId,
         ranking,
-        index:
-          _currentProject.sorting_mode === "Priority" && position === "top"
-            ? 0
-            : sectionItems.length,
+      index: _currentProject?.sorting_mode === "Priority" && position === "top" ? 0 : sections[sectionIndex]?.items.length,
       });
 
       if (res.status !== 200) return false;
 
       const task = res.data;
-      const updatedItems =
-        position === "top" ? [task, ...sectionItems] : [...sectionItems, task];
+      const targetSection = sections[sectionIndex];
+
+      const updatedItems = position === "top" ? [task, ...(targetSection?.items || [])] : [...(targetSection?.items || []), task];
 
       const updatedSections = sections.map((sec, index) =>
-        index === sectionIndex ? { ...targetSection, items: updatedItems } : sec,
+        index === sectionIndex ? { ...targetSection, items: updatedItems } : sec
       );
       console.log("🚀 ~ createItem ~ updatedSections:", updatedSections);
 
