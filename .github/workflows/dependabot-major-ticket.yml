@@ -53,8 +53,15 @@ jobs:
           MARKER="<!-- stack-upgrade-ticket -->"
 
           # Re-labelling a PR fires this again. One ticket per PR, ever.
-          if gh pr view "$PR" --repo "$REPO" --json comments \
-               --jq '[.comments[].body] | join("\n")' | grep -qF "$MARKER"; then
+          # A failed read must NOT be read as "no ticket exists": that would
+          # create a duplicate ticket on every rate limit or 5xx. Capture the
+          # exit status separately from the grep.
+          if ! EXISTING=$(gh pr view "$PR" --repo "$REPO" --json comments \
+               --jq '[.comments[].body] | join("\n")'); then
+            echo "::error::Cannot read this PR's comments, so the duplicate check cannot run. Not creating a ticket."
+            exit 1
+          fi
+          if grep -qF "$MARKER" <<<"$EXISTING"; then
             echo "This PR already has an upgrade ticket; nothing to do."
             exit 0
           fi
