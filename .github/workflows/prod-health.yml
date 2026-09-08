@@ -710,11 +710,12 @@ jobs:
           ref: ${{ github.event_name == 'push' && github.sha || 'production' }}
           fetch-depth: 200
 
+      # HTPR-6258: core-actions runs as the dedicated Health Check user.
       - name: Run the logged-in core actions and restore the fixture
         id: probe
         continue-on-error: true
         env:
-          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}
           CORE_SMOKE_TEAM_ID: ${{ vars.CORE_SMOKE_TEAM_ID }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
         run: node .github/scripts/core-actions-smoke.mjs run
@@ -738,7 +739,7 @@ jobs:
       - name: Report a failed or unrunnable check
         if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
         env:
-          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
         run: node .github/scripts/core-actions-smoke.mjs report
 
@@ -764,7 +765,7 @@ jobs:
 
       - name: Create or reuse the dedicated fixture
         env:
-          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}
           CORE_SMOKE_TEAM_ID: ${{ vars.CORE_SMOKE_TEAM_ID }}
           CORE_SMOKE_FIXTURE_FILE: ${{ runner.temp }}/core-smoke-fixture.json
         run: node .github/scripts/core-actions-smoke.mjs provision
