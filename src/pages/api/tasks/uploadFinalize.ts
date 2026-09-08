@@ -1,4 +1,5 @@
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { isHeicPreviewUrl } from "@/lib/media/heicPreview";
 import {
   DIRECT_UPLOAD_MAX_BATCH_BYTES,
   DIRECT_UPLOAD_MAX_FILES,
@@ -44,7 +45,10 @@ export function parseKeys(
   granted?: string[]
 ): string[] {
   if (value === undefined || value === null) return [];
-  if (!Array.isArray(value) || value.length > DIRECT_UPLOAD_MAX_FILES) {
+  // A HEIC is two objects, the original and its generated preview
+  // (HTPR-6264), so a full batch of them is twice the file count the user is
+  // allowed to pick.
+  if (!Array.isArray(value) || value.length > DIRECT_UPLOAD_MAX_FILES * 2) {
     throw new Error(`Invalid "${field}"`);
   }
   return value.map((key) => {
@@ -222,21 +226,29 @@ export default async function handler(
     });
   }
 
+  // A generated preview (HTPR-6264) is verified and kept like any other object
+  // but is never linkable: it has no attachment row of its own, so the grant
+  // deliberately does not list it and it gets no receipt.
   const taskLinkReceipts = issueTaskLinkReceipts
-    ? keep.map((key, index) => {
-        const file = grant.taskLinkFiles?.find((candidate) => candidate.key === key);
-        if (!file) return null;
-        return signTaskAttachmentLinkReceipt(
-          {
-            userId: session.id,
-            key,
-            fileName: file.fileName,
-            contentType: file.contentType,
-            fileSize: verified[index],
-          },
-          TASK_ATTACHMENT_LINK_RECEIPT_TTL_SECONDS,
-        );
-      })
+    ? keep
+        .map((key, index) => ({ key, index }))
+        .filter(({ key }) => !isHeicPreviewUrl(key))
+        .map(({ key, index }) => {
+          const file = grant.taskLinkFiles?.find(
+            (candidate) => candidate.key === key,
+          );
+          if (!file) return null;
+          return signTaskAttachmentLinkReceipt(
+            {
+              userId: session.id,
+              key,
+              fileName: file.fileName,
+              contentType: file.contentType,
+              fileSize: verified[index],
+            },
+            TASK_ATTACHMENT_LINK_RECEIPT_TTL_SECONDS,
+          );
+        })
     : undefined;
   if (taskLinkReceipts?.some((receipt) => receipt === null)) {
     return res.status(400).json({ error: "Upload metadata is incomplete" });

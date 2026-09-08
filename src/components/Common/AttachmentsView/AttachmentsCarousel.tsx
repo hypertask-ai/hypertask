@@ -3,6 +3,7 @@ import {
   isBrowserRenderableImage,
   isUnrenderableImage,
 } from "@/lib/media/browserRenderableImage";
+import { heicPreviewUrl } from "@/lib/media/heicPreview";
 import { useFlag } from "@/hooks/useFlag";
 import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import React, { useState, useEffect, useContext } from "react";
@@ -71,10 +72,97 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       ? isBrowserRenderableImage(fileType, fileName)
       : Boolean(fileType?.startsWith("image/"));
 
+  /**
+   * Which HEIC previews actually exist (HTPR-6264).
+   *
+   * A preview URL is derived arithmetically, so it is a claim rather than a
+   * fact: a photo attached before this shipped, or one whose conversion failed,
+   * has no copy and the URL 404s. The tile in AttachmentsView finds that out
+   * with an `onError`, but the lightbox renders through the library's own image
+   * slide, which gives us no error hook to hang a fallback on. So the copy is
+   * probed once, and only a preview that has really loaded is shown as a
+   * picture. Anything else keeps the download panel it shows today.
+   *
+   * The probe is close to free: the tile has already requested the same URL, so
+   * this is a cache hit in every case where the lightbox was opened by clicking
+   * a thumbnail.
+   */
+  const [previewLoaded, setPreviewLoaded] = useState<Record<string, boolean>>({});
+
+  /**
+   * Optimistic while the probe is in flight, exactly like the tile.
+   *
+   * A carousel does not always open from a tile that has already loaded the
+   * copy (the AI chat and the links modal both mount one directly), so an
+   * unanswered probe is a state a user really reaches. Assuming the copy is
+   * there matches what the tile does and keeps the common case flicker-free;
+   * only a probe that has actually come back empty falls to the download panel.
+   */
+  const previewIsShowable = (url: string) => previewLoaded[url] !== false;
+
+  useEffect(() => {
+    if (!heicFallbackEnabled) return;
+    let cancelled = false;
+    const images: HTMLImageElement[] = [];
+
+    attachments.forEach((attachment) => {
+      const url = heicPreviewUrl(
+        attachment.fileSource,
+        attachment.fileType,
+        attachment.fileName
+      );
+      if (!url) return;
+      const image = new Image();
+      images.push(image);
+      const settle = (ok: boolean) => {
+        if (cancelled) return;
+        setPreviewLoaded((current) =>
+          current[url] === ok ? current : { ...current, [url]: ok }
+        );
+      };
+      image.onload = () => settle(true);
+      image.onerror = () => settle(false);
+      image.src = url;
+    });
+
+    return () => {
+      cancelled = true;
+      // Drop the handlers so a late response cannot set state after unmount.
+      images.forEach((image) => {
+        image.onload = null;
+        image.onerror = null;
+      });
+    };
+  }, [attachments, heicFallbackEnabled]);
+
 
   // Transform attachments to lightbox slides format
   const slides: Slide[] = attachments.map((attachment) => {
     const attachmentUpdated = attachment.fileSource;
+
+    // HTPR-6264: a HEIC now has a JPEG copy stored beside it, so the lightbox
+    // and its thumbnail strip get an ordinary image slide again. It stays an
+    // image slide rather than a custom one on purpose: that is what keeps zoom,
+    // the thumbnail strip and the toolbar working.
+    //
+    // Both download paths below resolve the file from `attachments[index]`
+    // rather than from the slide, so they already hand back the original HEIC
+    // and need no change here.
+    const previewUrl = heicFallbackEnabled
+      ? heicPreviewUrl(
+          attachment.fileSource,
+          attachment.fileType,
+          attachment.fileName
+        )
+      : null;
+    if (previewUrl && previewIsShowable(previewUrl)) {
+      return {
+        src: previewUrl,
+        alt: attachment.fileName,
+        width: 1200,
+        height: 800,
+      } as Slide;
+    }
 
     // HTPR-6254: HEIC is an "image/" the lightbox cannot paint. Send it down
     // the same route as a PDF, where the slide keeps its download button,

@@ -40,16 +40,30 @@ const fileNameFromSource = (src?: string | null) => {
   return decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)) || "attachment";
 };
 
-const UnrenderableMedia = ({ src }: { src: string }) => (
+/**
+ * The download chip shown in place of a picture the browser cannot paint.
+ *
+ * `src` is what failed to render; `downloadSrc` is what the user should
+ * actually get. HTPR-6264 makes those different for a HEIC: the node paints the
+ * generated JPEG copy, so when even that will not load, the link still has to
+ * hand back the photo that was attached, under its own name.
+ */
+const UnrenderableMedia = ({
+  src,
+  downloadSrc,
+}: {
+  src: string;
+  downloadSrc?: string | null;
+}) => (
   <a
-    href={src}
+    href={downloadSrc || src}
     target="_blank"
     rel="noreferrer"
     download
     className="my-1 inline-flex max-w-full items-center gap-2 rounded-[5px] bg-secondary px-3 py-2 text-dense text-white-black no-underline"
   >
     <Paperclip size={16} strokeWidth={1.75} aria-hidden />
-    <span className="truncate">{fileNameFromSource(src)}</span>
+    <span className="truncate">{fileNameFromSource(downloadSrc || src)}</span>
     <span className="shrink-0 opacity-60">preview unavailable</span>
   </a>
 );
@@ -392,7 +406,14 @@ export const ResizableMediaNodeView = ({
     >
       <div className="w-fit flex relative group transition-all ease-in-out">
         {mediaType === "img" && !canRenderImage && (
-          <UnrenderableMedia src={normalizeImageSource(node.attrs.src)} />
+          <UnrenderableMedia
+            src={normalizeImageSource(node.attrs.src)}
+            downloadSrc={
+              node.attrs.originalSrc
+                ? normalizeImageSource(node.attrs.originalSrc)
+                : null
+            }
+          />
         )}
 
         {mediaType === "img" && canRenderImage && (

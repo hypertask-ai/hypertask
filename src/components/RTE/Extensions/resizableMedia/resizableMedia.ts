@@ -103,6 +103,23 @@ export const ResizableMedia = Node.create<MediaOptions>({
       uploadId: {
         default: null,
       },
+      /**
+       * The untouched file this image is a preview of (HTPR-6264).
+       *
+       * A HEIC cannot be painted, so `src` points at the JPEG copy generated at
+       * upload time. The photo the user attached is still in storage, and this
+       * is where its URL lives, so the download action can hand back the real
+       * file rather than the copy. Null for everything else, where `src` is
+       * already the original.
+       */
+      originalSrc: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-original-src"),
+        renderHTML: (attributes) =>
+          attributes.originalSrc
+            ? { "data-original-src": attributes.originalSrc }
+            : {},
+      },
     };
   },
 
