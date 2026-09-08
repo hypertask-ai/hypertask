@@ -1,11 +1,21 @@
 import { ReactRenderer } from '@tiptap/react'
 import tippy from 'tippy.js'
 import { EmojiList } from './EmojiList'
+import { ensureEmojiData } from './Extensions/lazyEmojiData'
 import { stableClientRect } from "./suggestionAnchor";
 
 // eslint-disable-next-line import/no-anonymous-default-export
 export default {
-  items: ({ editor, query }) => {
+  // HTPR-6059: the emoji dataset arrives on the first colon; this first popup
+  // query awaits it (single-flight, effectively instant afterwards) instead of
+  // filtering the still-empty storage list, so the menu never shows empty.
+  items: async ({ editor, query }) => {
+    // The plugin renders an empty loading state while this settles; a failed
+    // chunk load clears the flight inside ensureEmojiData, so the next
+    // keystroke retries. Log it so the failure is visible in the console.
+    await ensureEmojiData().catch((error) => {
+      console.warn("[emoji] emoji dataset failed to load", error);
+    });
     return editor.storage.emoji.emojis
       .filter(({ shortcodes, tags }) => {
         return (

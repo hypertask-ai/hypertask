@@ -15,6 +15,7 @@ import {
   FIGMA_CONNECT_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
+  LAZY_EMOJI_LIST_FLAG,
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_TICKET_TITLE_FLAG,
@@ -215,6 +216,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Shows each scheduled Manager loop cycle in Agent Chat as a timestamped activity entry, including quiet and failed cycles.",
+  },
+  {
+    key: LAZY_EMOJI_LIST_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Downloads the editor's big emoji list only when you type a colon, instead of on every task open. Nothing visible changes.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

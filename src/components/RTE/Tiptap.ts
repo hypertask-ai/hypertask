@@ -26,7 +26,9 @@ import { normalizeEditorHtml, shouldSyncDraft } from "./draftSync";
 import SlashCommands from "./Extensions/SlashCommands/SlashCommands";
 import Snippets from "./Extensions/Snippets/Snippets";
 import Link from "@tiptap/extension-link";
-import Emoji, { emojis } from "@tiptap/extension-emoji";
+import LazyEmoji from "./Extensions/LazyEmoji";
+import { ensureEmojiData } from "./Extensions/lazyEmojiData";
+import { LAZY_EMOJI_LIST_FLAG } from "@/lib/flags/keys";
 import suggestion from "./suggestion";
 import { createMentionData } from "./MentionData";
 import { Figma } from "./Extensions/FigmaTiptap";
@@ -42,6 +44,7 @@ import {
   unregisterTiptapEditor,
 } from "@/lib/snippets";
 import { ReplyBlockquote } from "./Extensions/ReplyBlockquote";
+import { useFlag } from "@/hooks/useFlag";
 import { withMentionBackspaceDeletion } from "./Extensions/DeleteMentionOnBackspace";
 import { LinkableMention } from "./Extensions/LinkableMention";
 import { writingAssistanceEditorProps } from "./writingAssistance";
@@ -89,6 +92,11 @@ const useTiptap = ({
   placeholder,
 }: IProps) => {
   const isApple = useDeviceContext();
+  // HTPR-6059: with the flag on, the emoji dataset downloads only when the
+  // first colon is typed (see suggestion.js items). With the flag off, the
+  // eager fetch below restores the old availability, as one async chunk
+  // instead of bytes bundled into the editor chunk.
+  const lazyEmojiList = useFlag(LAZY_EMOJI_LIST_FLAG);
   // A phone has no CTRL key, so the "CTRL+J for Ai" tip is dead copy there
   // (HTPR-5517). Mobile descriptions get a plain placeholder instead.
   const isMobileView = useContext(MobileViewContext);
@@ -214,8 +222,7 @@ const useTiptap = ({
         // validate: href => /^https?:\/\//.test(href),
       }),
       ReplyBlockquote,
-      Emoji.configure({
-        emojis: emojis,
+      LazyEmoji.configure({
         enableEmoticons: true,
         suggestion: suggestion,
       }),
@@ -262,6 +269,13 @@ const useTiptap = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
+  useEffect(() => {
+    if (!lazyEmojiList) {
+      void ensureEmojiData().catch((error) => {
+        console.warn("[emoji] eager emoji dataset load failed", error);
+      });
+    }
+  }, [lazyEmojiList]);
   const editor = useEditor({
     extensions,
     content: initialContent,
