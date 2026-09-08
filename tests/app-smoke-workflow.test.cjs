@@ -191,6 +191,21 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(isolated, /for candidate_mount in node_modules \.next/);
   assert.match(isolated, /\[ -L "\$mount_target" \]/);
   assert.match(isolated, /mkdir -p "\$mount_target"/);
+  assert.match(
+    isolated,
+    /next_env_target="\$candidate_root\/next-env\.d\.ts"/,
+  );
+  assert.match(
+    isolated,
+    /Candidate next-env\.d\.ts mount target must be a regular file/,
+  );
+  assert.match(isolated, /next_env="\$scratch\/next-env\.d\.ts"/);
+  assert.match(isolated, /: >"\$next_env"/);
+  assert.match(isolated, /chmod 0666 "\$next_env"/);
+  assert.match(
+    isolated,
+    /--name "\$builder"[\s\S]*-v "\$next_env:\/app\/next-env\.d\.ts:rw"[\s\S]*next build --webpack/,
+  );
   assert.match(isolated, /invocation_key=\$\{scratch##\*\.\}/);
   assert.match(isolated, /app-smoke\.Dockerfile/);
   assert.match(isolated, /runtime_image="ht-smoke-runtime-\$run_key"/);
