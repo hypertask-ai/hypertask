@@ -184,7 +184,7 @@ test("expected plan-access guidance is not reported as a product bug", () => {
 });
 
 test('no send("error") call site uses model-facing errorMessage', () => {
-  assert.equal((routeSource.match(/send\("error"/g) || []).length, 2);
+  assert.equal((routeSource.match(/send\("error"/g) || []).length, 3);
   assert.doesNotMatch(
     routeSource,
     /send\("error",\s*\{\s*content:\s*errorMessage\(/
