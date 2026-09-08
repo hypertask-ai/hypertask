@@ -38,6 +38,24 @@ async function workflowScript() {
     .replaceAll("${{ github.repository }}", "test/repo");
 }
 
+test("health and drift jobs cannot overlap", async () => {
+  const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
+  // Push and scheduled triggers share one workflow-level "prod-health" lock;
+  // only a signed PostHog dispatch escapes into its own run-scoped group so
+  // an alert is never queued behind a health run. Drift therefore needs no
+  // job-level lock of its own: one named group cannot be held by a workflow
+  // run and one of its own jobs at the same time, so a job-level "prod-health"
+  // on drift would leave the job pending behind its parent run forever.
+  assert.match(
+    workflow,
+    /^concurrency:\n(?:  #[^\n]*\n)*  group: \$\{\{ inputs\.posthog_payload != '' && format\('posthog-error-\{0\}', github\.run_id\) \|\| 'prod-health' \}\}\n  cancel-in-progress: false\n/m,
+  );
+  const driftStart = workflow.indexOf("\n  drift:");
+  const nextJob = workflow.indexOf("\n  core-actions:", driftStart);
+  assert.ok(driftStart !== -1 && nextJob !== -1);
+  assert.doesNotMatch(workflow.slice(driftStart, nextJob), /concurrency:/);
+});
+
 // A stateful curl stub. Probe calls to app.hypertask.ai consume one token each
 // from HC_SEQUENCE; version/Vercel/Telegram calls are served deterministically.
 const CURL_STUB = `#!/usr/bin/env bash

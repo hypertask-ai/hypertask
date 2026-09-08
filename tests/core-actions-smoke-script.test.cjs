@@ -359,7 +359,13 @@ test("the workflow schedules and serializes the production fixture", async () =>
 
   assert.match(workflow, /cron: "\*\/30 \* \* \* \*"/);
   assert.match(workflow, /cron: "3-58\/5 \* \* \* \*"/);
-  assert.match(workflow, /group: prod-health\s+cancel-in-progress: false/);
+  // HTPR-6238: the shared "prod-health" lock is now the fallback arm of the
+  // workflow-level dynamic group, so push/schedule triggers still serialize;
+  // only a signed PostHog dispatch gets its own run-scoped group.
+  assert.match(
+    workflow,
+    /group: \$\{\{ inputs\.posthog_payload != '' && format\('posthog-error-\{0\}', github\.run_id\) \|\| 'prod-health' \}\}\n  cancel-in-progress: false/,
+  );
   assert.match(
     workflow,
     /drift:[\s\S]*github\.event\.schedule == '\*\/30 \* \* \* \*'/,

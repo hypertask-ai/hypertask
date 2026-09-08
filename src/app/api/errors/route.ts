@@ -24,7 +24,7 @@ const errorReportSchema = z
     message: z.string().trim().min(1).max(1000),
     stack: z.string().max(8000).optional(),
     url: z.string().max(2048).optional(),
-    source: z.enum(["client", "server", "handled"]),
+    source: z.enum(["client", "handled"]),
     extra: z
       .record(z.string().max(64), extraValueSchema)
       .refine((value) => Object.keys(value).length <= 10)
@@ -86,7 +86,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid error report" }, { status: 400 });
     }
 
-    await reportError(parsed.data);
+    // This public endpoint only receives browser reports. Never trust a caller
+    // to label its own event as a server error because server spikes can roll
+    // back production.
+    await reportError({
+      ...parsed.data,
+      source: parsed.data.source === "handled" ? "handled" : "client",
+    });
   } catch (error) {
     console.error("[api/errors] failed", error);
   }

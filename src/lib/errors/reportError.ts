@@ -11,6 +11,7 @@ import {
 import { claimThresholdErrorTicket } from "./errorTicketThreshold";
 import { selectErrorBoardSection } from "./errorBoardTarget";
 import { symbolicateStack } from "./symbolicateStack";
+import { capturePostHogException } from "@/lib/telemetry/posthogErrorTracking";
 
 export type ErrorReport = {
   message: string;
@@ -109,7 +110,7 @@ function trace(step: string, extra?: Record<string, unknown>) {
   console.log("[error-reporter]", step, extra ? JSON.stringify(extra) : "");
 }
 
-export async function reportError(report: ErrorReport) {
+async function reportErrorTicket(report: ErrorReport) {
   try {
     if (
       process.env.NODE_ENV !== "production" ||
@@ -211,4 +212,13 @@ export async function reportError(report: ErrorReport) {
   } catch (error) {
     console.error("[error-reporter] failed", error);
   }
+}
+
+export async function reportError(report: ErrorReport) {
+  // Both reporters absorb their own failures. Starting them together keeps a
+  // slow analytics request from delaying the durable error-ticket path.
+  await Promise.all([
+    capturePostHogException(report),
+    reportErrorTicket(report),
+  ]);
 }

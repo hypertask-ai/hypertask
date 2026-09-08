@@ -3,6 +3,7 @@
 const withBundleAnalyzer = require("@next/bundle-analyzer")({
   enabled: process.env.ANALYZE === "true",
 });
+const { withPostHogConfig } = require("@posthog/nextjs-config");
 
 // Stable id for THIS build, inlined into the client bundle + served from
 // /api/version so an open tab can tell when a newer deploy is live and quietly
@@ -218,4 +219,21 @@ const withPWA = require("next-pwa")({
   //...
 });
 // module.exports = withPWA(nextConfig);
-module.exports = nextConfig;
+const hasPostHogSourceMapCredentials =
+  Boolean(process.env.POSTHOG_PERSONAL_API_KEY) &&
+  Boolean(process.env.POSTHOG_SERVER_PROJECT_ID);
+
+module.exports = hasPostHogSourceMapCredentials
+  ? withPostHogConfig(nextConfig, {
+      personalApiKey: process.env.POSTHOG_PERSONAL_API_KEY,
+      projectId: process.env.POSTHOG_SERVER_PROJECT_ID,
+      host: process.env.POSTHOG_UI_HOST || "https://eu.posthog.com",
+      sourcemaps: {
+        enabled: true,
+        releaseName: "hypertask",
+        releaseVersion: process.env.VERCEL_GIT_COMMIT_SHA || resolveBuildId(),
+        releaseMode: "event",
+        deleteAfterUpload: true,
+      },
+    })
+  : nextConfig;
