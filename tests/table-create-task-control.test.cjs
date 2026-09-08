@@ -265,6 +265,8 @@ test("the rendered table create control follows live selection and project scope
       renderControl({ id: 16 }, 0, rows, sections, quickProps),
     ));
     assert.equal(container.querySelector("input"), null);
+    await act(async () => container.querySelector("button").click());
+    assert.equal(container.querySelector("input").value, "");
 
     await act(async () => {
       reactRoot.render(renderControl(null, 0));

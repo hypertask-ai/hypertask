@@ -24,7 +24,6 @@ export type TableCreateTaskControlProps = {
   selectedIndex: number;
   sections: readonly TableCreateTaskSection[];
   toggleCreateTaskGlobally: ToggleCreateTaskGlobally;
-  // HTPR-6175 quick entry. Both come from TableView so this stays a plain component.
   quickEntryEnabled?: boolean;
   quickCreateTask?: QuickCreateTask;
 };
@@ -63,12 +62,10 @@ export const TableCreateTaskControl = ({
   quickEntryEnabled,
   quickCreateTask,
 }: TableCreateTaskControlProps) => {
-  // Locked in when the box opens, so changing the selected row mid-typing
-  // cannot send the card to a different column.
   const [openTarget, setOpenTarget] = useState<
     { projectId: number; sectionId: number; sectionTitle: string } | null
   >(null);
-  const [draftTitle, setDraftTitle] = useState("");
+  const [draft, setDraft] = useState<{ projectId?: number; title: string }>({ title: "" });
 
   const selectedRow = rows[selectedIndex];
   const selectedSectionPayload = resolveTableCreateTaskSectionPayload(
@@ -99,10 +96,10 @@ export const TableCreateTaskControl = ({
 
   if (quickEntry && activeTarget) {
     return (
-      <div className="px-[20px] pb-2 md:px-5">
+      <div className="px-5 pb-2">
         <NewTask
-          title={draftTitle}
-          onTitleChange={setDraftTitle}
+          title={draft.projectId === projectId ? draft.title : ""}
+          onTitleChange={(title) => setDraft({ projectId, title })}
           inputRef={{ current: null }}
           onCancelCreate={() => setOpenTarget(null)}
           invokeCreateItem={(title) =>
