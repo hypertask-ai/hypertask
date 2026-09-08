@@ -10167,37 +10167,54 @@ export async function POST(request: NextRequest) {
       // Ends the turn when the graceful deadline fired: a real in-band error,
       // a heartbeat failure record, diagnostics, and a durable failure message
       // so reopening the chat shows why the turn ended instead of nothing.
+      // Cleanup steps run concurrently — the 15-second reserve before the
+      // platform kill cannot fit them sequentially.
       const endDeadlineTurn = async () => {
         send("error", { content: AI_CHAT_TURN_DEADLINE_USER_MESSAGE });
         finish("error");
+        const steps: Array<[string, Promise<unknown>]> = [
+          [
+            "report",
+            reportHandledChatError(
+              new Error(AI_CHAT_TURN_DEADLINE_REASON),
+              "turn-deadline",
+            ),
+          ],
+        ];
         if (body.session_id && body.assistant_message_id) {
-          try {
-            await persistAssistantMessage({
+          steps.push([
+            "persist-failure-state",
+            persistAssistantMessage({
               db: prisma,
               messageId: body.assistant_message_id,
               sessionId: body.session_id,
               userId: dbUser.id,
               content: AI_CHAT_TURN_DEADLINE_USER_MESSAGE,
               linkify: linkifyTicketRefs,
-            });
-          } catch (error) {
-            console.error(
-              "[ai/chat/stream] deadline failure state could not be persisted",
-              error,
-            );
-          }
+            }),
+          ]);
         }
         if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
-          await failHeartbeatExecution(
-            heartbeatExecutionId,
-            AI_CHAT_TURN_DEADLINE_REASON,
-          ).catch(() => undefined);
+          steps.push([
+            "heartbeat",
+            failHeartbeatExecution(
+              heartbeatExecutionId,
+              AI_CHAT_TURN_DEADLINE_REASON,
+            ),
+          ]);
           heartbeatExecutionTerminal = true;
         }
-        await reportHandledChatError(
-          new Error(AI_CHAT_TURN_DEADLINE_REASON),
-          "turn-deadline",
+        const outcomes = await Promise.allSettled(
+          steps.map(([, promise]) => promise),
         );
+        outcomes.forEach((outcome, index) => {
+          if (outcome.status === "rejected") {
+            console.error(
+              `[ai/chat/stream] deadline cleanup (${steps[index][0]}) failed`,
+              outcome.reason,
+            );
+          }
+        });
       };
       const stopCancellationWatch = body.session_id && streamId
         ? watchAiChatCancellation(

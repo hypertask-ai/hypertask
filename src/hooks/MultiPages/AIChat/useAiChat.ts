@@ -1252,7 +1252,7 @@ export function useAiChat() {
       });
 
       if (!response.ok || !response.body) {
-        if (turnFailureState) {
+        if (turnFailureState && !response.ok) {
           refusalMessage =
             (await extractStreamRefusalMessage(response)) ??
             "The chat server refused this reply. Wait a moment and try again.";
@@ -1483,6 +1483,7 @@ export function useAiChat() {
       // id so it can never compete with a durably persisted reply.
       if (turnFailureState && !sawDone && !streamErrorHandled) {
         const partial = aiContent.trim().length > 0;
+        setAgentStatus(undefined);
         addMessageToSessionQuery(
           session.id,
           {
