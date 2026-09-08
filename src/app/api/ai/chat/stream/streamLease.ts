@@ -8,6 +8,45 @@ const STREAM_RATE_WINDOW_SECONDS = 60;
 const STREAM_RATE_LIMIT = 12;
 const CANCELLATION_RATE_LIMIT = 30;
 
+/** Why a turn aborted itself when it ran out of time (distinct from user Stop). */
+export const AI_CHAT_TURN_DEADLINE_REASON =
+  "AI chat turn exceeded its time budget";
+export const AI_CHAT_TURN_DEADLINE_USER_MESSAGE =
+  "This reply took too long to generate and was stopped. Try again.";
+/** Seconds kept for graceful cleanup between our deadline and the platform kill. */
+export const AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS = 15;
+
+/**
+ * Aborts the provider request just before the platform kills the whole server
+ * function (HTPR-6278). A hard kill skips every finally: the reply is never
+ * persisted, the tool never runs, no error is reported, and the stream lease
+ * keeps other turns out until its TTL lapses. Ending the turn a few seconds
+ * early turns that into a graceful, reported failure. The budget counts from
+ * route entry, not from stream start, because auth and validation already
+ * consumed part of the platform window.
+ */
+export function createTurnDeadline(
+  abort: (reason: string) => void,
+  budgetSeconds: number,
+) {
+  let hit = false;
+  const timer = setTimeout(
+    () => {
+      hit = true;
+      abort(AI_CHAT_TURN_DEADLINE_REASON);
+    },
+    Math.max(budgetSeconds, 0) * 1000,
+  );
+  return {
+    get hit() {
+      return hit;
+    },
+    clear() {
+      clearTimeout(timer);
+    },
+  };
+}
+
 export type StreamRedis = Awaited<ReturnType<typeof getRedis>>;
 
 export type AiChatStreamLease = {

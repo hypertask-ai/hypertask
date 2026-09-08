@@ -50,6 +50,9 @@ import {
   IMAGE_FALLBACK_MIME,
 } from "@/utils/helperFunctions/getFileTypeFromUrl";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
+import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
 import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
@@ -106,6 +109,9 @@ export type AiChatProcessedAttachment = {
 
 export function useAiChat() {
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
+  // HTPR-6278: surfacing real server refusals and silent stream ends instead
+  // of the blanket "Connection lost" message.
+  const turnFailureState = useFlag(HTPR_6278_CHAT_TURN_FAILURE_FLAG);
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -1231,6 +1237,10 @@ export function useAiChat() {
     streamingRequestRef.current = streamId;
 
     let assistantPlaceholderAdded = false;
+    // HTPR-6278: the server's refusal message when it rejects the request
+    // outright (busy, rate-limited, unavailable) — shown instead of the
+    // misleading "Connection lost" text.
+    let refusalMessage: string | null = null;
     try {
       const response = await fetch(chatRoute, {
         method: "POST",
@@ -1242,6 +1252,11 @@ export function useAiChat() {
       });
 
       if (!response.ok || !response.body) {
+        if (turnFailureState) {
+          refusalMessage =
+            (await extractStreamRefusalMessage(response)) ??
+            "The chat server refused this reply. Wait a moment and try again.";
+        }
         throw new Error("Network response was not ok or body is missing");
       }
 
@@ -1269,6 +1284,7 @@ export function useAiChat() {
       let buffer = "";
       let currentEventType = "";
       let streamErrorHandled = false;
+      let sawDone = false;
 
       while (!done) {
         const { value, done: doneReading } = await reader.read();
@@ -1371,6 +1387,7 @@ export function useAiChat() {
                   }
                   case "done":
                     setAgentStatus(undefined);
+                    sawDone = true;
                     console.log("🔥 Stream complete:", parsed);
                     // HTPR-6095: chat-driven inbox changes (archive/unarchive)
                     // only reach this tab via the Pusher broadcast, which
@@ -1459,16 +1476,39 @@ export function useAiChat() {
           }
         }
       }
+
+      // HTPR-6278: a stream that ends without a done frame is a failed turn.
+      // Without this the empty placeholder just sits there and the thread
+      // looks wedged with no explanation.
+      if (turnFailureState && !sawDone && !streamErrorHandled && !aiContent.trim()) {
+        addMessageToSessionQuery(
+          session.id,
+          {
+            id: assistantMessageId,
+            content:
+              "The reply stream ended before the reply finished. Try again.",
+            role: "assistant",
+            createdAt: new Date(),
+            sessionId: session.id,
+            isDelivered: true,
+          } as IChatMessage,
+          false,
+          true
+        );
+      }
     } catch (error) {
       setAgentStatus(undefined);
       console.error("Error generating AI response:", error);
+      // HTPR-6278: a refused request carries the server's real message in its
+      // body; only a genuine transport failure keeps the connection wording.
       const errorMessage: IChatMessage = {
         id: isDemo
           ? assistantMessageId
           : `transport-${assistantMessageId}`,
         content: isDemo
           ? "Sorry, I'm having trouble responding right now."
-          : "Connection lost. Reopen this chat shortly to check for the completed reply.",
+          : refusalMessage ??
+            "Connection lost. Reopen this chat shortly to check for the completed reply.",
         role: "assistant",
         createdAt: new Date(),
         sessionId: session.id,
