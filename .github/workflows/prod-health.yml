@@ -509,19 +509,26 @@ jobs:
           fi
 
           echo "Smoke QA confirmed a real failure on $SHA. Rolling back."
-          echo "rolledback=true" >> "$GITHUB_OUTPUT"
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$SHA")
           echo "$RESULT"
           ACTION=$(echo "$RESULT" | jq -r '.action // "failed"')
 
           case "$ACTION" in
             requested)
+              # The previous deployment was promoted: there is no live build of
+              # this SHA left for GLM QA to explore (HTPR-6239).
+              echo "rolledback=true" >> "$GITHUB_OUTPUT"
               notify "🔴 hypertasks: $SHA passed the curl health check but FAILED Playwright smoke QA (a real view broke for a logged-in user). Auto-rolled back. Investigate: https://github.com/${{ github.repository }}/commit/$SHA"
               ;;
             skip)
+              # Production moved on before the rollback landed, so this SHA is
+              # not live either; suppress GLM QA the same way.
+              echo "rolledback=true" >> "$GITHUB_OUTPUT"
               notify "⚠️ hypertasks: smoke QA failed for $SHA but production already moved on ($(echo "$RESULT" | jq -r '.reason // "unknown"')); not rolling back. Verify manually."
               ;;
             *)
+              # Rollback FAILED: the broken build is still live and the incident
+              # lane owns it. GLM QA still runs (read-only evidence only).
               notify "🔴🔴 hypertasks: smoke QA failed for $SHA and auto-rollback FAILED ($(echo "$RESULT" | jq -r '.reason // "unknown"')). Promote previous deployment manually in Vercel NOW."
               ;;
           esac
@@ -553,30 +560,35 @@ jobs:
       # The merge (head) commit's associated pull request is the deploy's
       # ticket source of truth; a commit subject is forgeable and ambiguous.
       # A push without an associated PR (rare, e.g. an ignored build step) is a
-      # normal skip, not a failure: the job must stay green.
+      # normal skip: the step exits 0 with skipped=true and the job stays
+      # green. A GitHub API failure exits nonzero and fails the job visibly —
+      # it must not look like an ordinary skip (HTPR-6239 review).
       - name: Resolve the merged pull request
         id: pr
-        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          PR_JSON=$(curl -sS --fail-with-body -H "Authorization: Bearer $GITHUB_TOKEN" \
-            "https://api.github.com/repos/$REPO/commits/$SHA/pulls")
+          if ! PR_JSON=$(curl -sS --fail-with-body -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/commits/$SHA/pulls"); then
+            echo "::error::GitHub API call to resolve the merged pull request failed; GLM QA cannot pick its deploy ticket"
+            exit 1
+          fi
           PR_NUMBER=$(echo "$PR_JSON" | jq -r '.[0].number // empty')
           PR_TITLE=$(echo "$PR_JSON" | jq -r '.[0].title // empty')
           if [ -z "$PR_NUMBER" ] || [ -z "$PR_TITLE" ]; then
             echo "::warning::No pull request associated with $SHA; no deploy ticket to brief. Skipping GLM QA."
-            exit 1
+            echo "skipped=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
 
       - name: Dispatch the GLM exploratory QA brief
         id: dispatch
-        if: steps.pr.outcome == 'success'
+        if: steps.pr.outcome == 'success' && steps.pr.outputs.skipped != 'true'
         continue-on-error: true
         env:
           MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}

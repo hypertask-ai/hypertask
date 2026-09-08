@@ -40,7 +40,9 @@ export function escapeHtml(value) {
 }
 
 export function parseTicketNumber(prTitle) {
-  const match = /HTPR-(\d+)/.exec(String(prTitle || ''))
+  // Token boundaries: "XHTPR-123" must not match, and "HTPR-123abc" is not a
+  // ticket reference either.
+  const match = /(?<!\w)HTPR-(\d+)\b(?!\w)/.exec(String(prTitle || ''))
   return match ? Number(match[1]) : null
 }
 
@@ -126,6 +128,9 @@ async function main() {
   const agentId = (process.env.GLM_QA_AGENT_ID || '').trim()
   const agentName = (process.env.GLM_QA_AGENT_NAME || '').trim()
 
+  if (!/^[0-9a-f]{40}$/i.test(String(args.sha || ''))) {
+    return refuse('a full 40-character commit SHA is required')
+  }
   if (!agentId || !UUID_RE.test(agentId) || !agentName) {
     return refuse('GLM_QA_AGENT_ID (uuid) / GLM_QA_AGENT_NAME repo variables are not configured')
   }

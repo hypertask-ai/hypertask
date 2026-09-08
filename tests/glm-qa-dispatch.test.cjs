@@ -18,6 +18,9 @@ test("the pull request title yields the deploy ticket number", async () => {
     6197,
   );
   assert.equal(parseTicketNumber("Revert \"accidental push\" (#401)"), null);
+  // Token boundaries: lookalikes and glued text must never match.
+  assert.equal(parseTicketNumber("XHTPR-123 fix the thing"), null);
+  assert.equal(parseTicketNumber("HTPR-123abc fix the thing"), null);
   assert.equal(parseTicketNumber(""), null);
 });
 
