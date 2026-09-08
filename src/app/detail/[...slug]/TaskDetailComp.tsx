@@ -34,6 +34,7 @@ import {
   appShellRailAtom,
   tasksPlayListAtom,
   taskDetailNonEssentialReadyAtom,
+  archiveShortcutNudgeAtom,
 } from "@/store";
 import axios from "axios";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
@@ -128,6 +129,7 @@ import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import { shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
 import useCopyURL from "@/hooks/General/useCopyURL";
 import { usePreventFigmaReload } from "@/hooks/Task Detail/usePreventEmbedReload";
+import { clearArchiveShortcutNudge } from "@/lib/notifications/archiveShortcutNudge";
 import { CommandMode } from "@/models/enums";
 import { useGetTaskShareLinks } from "@/hooks/Task Detail/useGetShareLinks";
 import RemoveSubtaskModal from "@/components/Modals/SubtaskLinkingModal/RemoveSubtask";
@@ -210,6 +212,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const [nonEssentialReady, setNonEssentialReady] = useRecoilState(
     taskDetailNonEssentialReadyAtom
   );
+  const setArchiveNudge = useSetRecoilState(archiveShortcutNudgeAtom);
 
   const {
     currentId,
@@ -863,6 +866,9 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
       e.preventDefault();
       if (lastGPress.current === null) {
         if (!shouldRunArchiveShortcut(e)) return;
+        setArchiveNudge((current) =>
+          clearArchiveShortcutNudge(current, currentUser.id),
+        );
         return markAsDone();
       }
     }
@@ -914,6 +920,9 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
     // press [e]
     if (e.keyCode === KeyCodes.E && !cmdControl) {
       if (lastGPress.current !== null) return;
+      setArchiveNudge((current) =>
+        clearArchiveShortcutNudge(current, currentUser.id),
+      );
       const inboxFlow = searchParams?.get("inboxFlow");
       navigateToNextTask(
         true,

@@ -76,8 +76,8 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     notification_reminder: INotification | IRemindBody,
     cmdControl: TRemoveFromInboxMode,
     undoHandler: any,
-  ) => {
-    if (isWaitingOnSynthetic(notification_reminder)) return;
+  ): Promise<boolean> => {
+    if (isWaitingOnSynthetic(notification_reminder)) return false;
 
     if (cmdControl === "Remind") {
       removeElementFromState(notification_reminder, undoHandler, cmdControl);
@@ -86,6 +86,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       } finally {
         await reconcileInbox();
       }
+      return true;
     } else {
       const tutorialArchive = searchParams?.get("tutorial") === "1";
       if (!tutorialArchive) {
@@ -125,7 +126,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
           );
         }
         await reconcileInbox();
-        return;
+        return false;
       }
       if (tutorialArchive) {
         removeElementFromState(notification_reminder, undoHandler, cmdControl);
@@ -145,6 +146,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
         );
       }
       await reconcileInbox();
+      return true;
     }
   };
 
