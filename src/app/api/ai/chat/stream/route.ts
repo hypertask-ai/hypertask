@@ -26,6 +26,11 @@ import {
   acquireAiChatCompletionFence,
   acquireAiChatToolFence,
   assertAiChatToolCanStart,
+  createTurnDeadline,
+  isAiChatCancellationRequested,
+  AI_CHAT_TURN_DEADLINE_REASON,
+  AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS,
+  AI_CHAT_TURN_DEADLINE_USER_MESSAGE,
   finishAiChatCompletionFence,
   keepAiChatCompletionFenceAlive,
   releaseAiChatStreamLease,
@@ -44,6 +49,8 @@ import {
   type HeartbeatTurnMetadata,
 } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
 import { searchHelpDocs } from "@/lib/help-docs/searchHelpDocs";
 import { retrieveBoardKnowledge } from "@/lib/rag/retrieveBoardKnowledge";
@@ -9678,6 +9685,9 @@ async function generateConversationTitle(
 }
 
 export async function POST(request: NextRequest) {
+  // The platform time budget starts here, so the graceful deadline below must
+  // count from here too, not from when the stream body starts.
+  const turnStartedAtMs = Date.now();
   const requestUser =
     (await getAiRequestUser(request)) ??
     (await getCronServiceRequestUser(request));
@@ -9738,6 +9748,18 @@ export async function POST(request: NextRequest) {
   if (!dbUser) {
     return createSseErrorResponse("Unauthorized");
   }
+
+  // HTPR-6278: the platform kills this function at maxDuration with no
+  // finally, so the turn ends with nothing persisted, no tool run, no error
+  // report, and a stream lease that blocks the next turn for 30 more seconds.
+  // Under the flag, end the turn gracefully just before that kill instead.
+  // ponytail: phases that ignore the abort signal (a hung tool, a non-stream
+  // DB call) can still run into the platform kill; the upgrade path is
+  // per-phase timeouts at each trust boundary.
+  const turnDeadlineEnabled = await isFeatureEnabled(
+    HTPR_6278_CHAT_TURN_FAILURE_FLAG,
+    dbUser.id,
+  );
 
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
@@ -10126,6 +10148,101 @@ export async function POST(request: NextRequest) {
       let errorSent = false;
       let cancelled = false;
       const providerAbort = new AbortController();
+      // Single winner: if user Stop already aborted the signal, the deadline
+      // must not claim the termination.
+      let turnDeadlineHit = false;
+      const turnDeadline = turnDeadlineEnabled
+        ? createTurnDeadline(
+            (reason) => {
+              if (providerAbort.signal.aborted) return;
+              turnDeadlineHit = true;
+              providerAbort.abort(reason);
+            },
+            // Remaining budget is computed here, at timer creation, so the
+            // setup work between route entry and stream start is counted.
+            maxDuration -
+              AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS -
+              (Date.now() - turnStartedAtMs) / 1000,
+          )
+        : null;
+      // Ends the turn when the graceful deadline fired: a real in-band error,
+      // a heartbeat failure record, diagnostics, and a durable failure message
+      // so reopening the chat shows why the turn ended instead of nothing.
+      // Cleanup steps run concurrently — the 15-second reserve before the
+      // platform kill cannot fit them sequentially.
+      const endDeadlineTurn = async () => {
+        // A Stop recorded in Redis just before the deadline fired outranks it:
+        // the turn was user-cancelled, not timed out (AI review finding).
+        if (body.session_id && streamId) {
+          try {
+            if (
+              await isAiChatCancellationRequested(
+                streamLease.redis,
+                dbUser.id,
+                body.session_id,
+                streamId,
+              )
+            ) {
+              finish("error", { cancelled: true, content: "Stream cancelled." });
+              if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
+                await failHeartbeatExecution(
+                  heartbeatExecutionId,
+                  "AI reply cancelled",
+                ).catch(() => undefined);
+                heartbeatExecutionTerminal = true;
+              }
+              return;
+            }
+          } catch {
+            // Unreadable cancellation state: fall through to the deadline path.
+          }
+        }
+        send("error", { content: AI_CHAT_TURN_DEADLINE_USER_MESSAGE });
+        finish("error");
+        const steps: Array<[string, Promise<unknown>]> = [
+          [
+            "report",
+            reportHandledChatError(
+              new Error(AI_CHAT_TURN_DEADLINE_REASON),
+              "turn-deadline",
+            ),
+          ],
+        ];
+        if (body.session_id && body.assistant_message_id) {
+          steps.push([
+            "persist-failure-state",
+            persistAssistantMessage({
+              db: prisma,
+              messageId: body.assistant_message_id,
+              sessionId: body.session_id,
+              userId: dbUser.id,
+              content: AI_CHAT_TURN_DEADLINE_USER_MESSAGE,
+              linkify: linkifyTicketRefs,
+            }),
+          ]);
+        }
+        if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
+          steps.push([
+            "heartbeat",
+            failHeartbeatExecution(
+              heartbeatExecutionId,
+              AI_CHAT_TURN_DEADLINE_REASON,
+            ),
+          ]);
+          heartbeatExecutionTerminal = true;
+        }
+        const outcomes = await Promise.allSettled(
+          steps.map(([, promise]) => promise),
+        );
+        outcomes.forEach((outcome, index) => {
+          if (outcome.status === "rejected") {
+            console.error(
+              `[ai/chat/stream] deadline cleanup (${steps[index][0]}) failed`,
+              outcome.reason,
+            );
+          }
+        });
+      };
       const stopCancellationWatch = body.session_id && streamId
         ? watchAiChatCancellation(
             streamLease.redis,
@@ -10306,6 +10423,10 @@ export async function POST(request: NextRequest) {
               finish("error", { cancelled: true, content: "Stream cancelled." });
               return;
             }
+            if (turnDeadlineHit) {
+              await endDeadlineTurn();
+              return;
+            }
             // This is the only path that can end the turn with no assistant
             // message ever persisted (every other exit reaches
             // persistAssistantMessage, even the empty-completion fallback).
@@ -10423,6 +10544,10 @@ export async function POST(request: NextRequest) {
           send("content", { content: fallback });
           chunks.push(fallback);
         }
+
+        // The provider/tool phase is over: a deadline from here on must not
+        // misclassify a persist-phase failure as a timeout.
+        turnDeadline?.clear();
 
         let completionFenceToken: string | null = null;
         let stopCompletionFenceRenewal: (() => Promise<void>) | null = null;
@@ -10555,6 +10680,16 @@ export async function POST(request: NextRequest) {
           }
           return;
         }
+        // The deadline abort lands here as an iterator error. Its own message,
+        // persistence, heartbeat, and diagnostics already ran (or run here
+        // once); the generic handler must not report the abort again.
+        if (turnDeadlineHit) {
+          if (!errorSent) {
+            errorSent = true;
+            await endDeadlineTurn();
+          }
+          return;
+        }
         console.error("[ai/chat/stream] stream error", error);
         await reportHandledChatError(error, "stream-handler");
         if (!errorSent) {
@@ -10573,6 +10708,7 @@ export async function POST(request: NextRequest) {
           heartbeatExecutionTerminal = true;
         }
       } finally {
+        turnDeadline?.clear();
         stopCancellationWatch();
         await releaseAiChatStreamLease(streamLease);
       }

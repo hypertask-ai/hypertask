@@ -13,6 +13,7 @@ import {
   COLUMN_ALL_VIEWS_FLAG,
   CORE_ACTIONS_SMOKE_FLAG,
   HEIC_ATTACHMENTS_FLAG,
+  HTPR_6278_CHAT_TURN_FAILURE_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
@@ -44,6 +45,12 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6278_CHAT_TURN_FAILURE_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Ends AI Chat turns that run out of time with a clear, saved failure message instead of a silent disconnect, and shows the server's real refusal instead of 'Connection lost'.",
+  },
   {
     key: HEIC_ATTACHMENTS_FLAG,
     shippedOn: "2026-09-08",
