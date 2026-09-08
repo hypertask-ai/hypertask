@@ -13,11 +13,14 @@ export const TEAM_VISIBILITY_KEY_REQUIRED_ERROR =
  * name the provider account that pays. An EXTERNAL agent runs on its owner's
  * own runtime and never reaches `resolveAgentByokApiKey`, so demanding a key it
  * will never spend only blocks sharing (HTPR-6260).
+ *
+ * Phrased as "not EXTERNAL" so a runtime type added later inherits the key
+ * requirement instead of silently slipping past it.
  */
 export function requiresProviderKeyToShare(
   runtimeType: "EXTERNAL" | "NATIVE",
 ): boolean {
-  return runtimeType === "NATIVE";
+  return runtimeType !== "EXTERNAL";
 }
 
 export function isAgentVisibility(value: unknown): value is AgentVisibility {
