@@ -11,10 +11,9 @@ const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
 
-const { shouldAutoScrollToBottom, agentChatExtraRowsRevision } = createJiti(
-  __filename,
-  { interopDefault: true },
-)(path.join(__dirname, "..", "src/lib/agents/chatActivityFeed.ts"));
+const { shouldAutoScrollToBottom, agentChatExtraRowsRevision } = createJiti(__filename, {
+  interopDefault: true,
+})(path.join(__dirname, "..", "src/lib/agents/chatActivityFeed.ts"));
 
 test("a session's first content always scrolls to bottom, even if scroll state was mismeasured as scrolled-away", () => {
   assert.equal(
