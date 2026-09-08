@@ -374,8 +374,8 @@ jobs:
     # a confirmed failure promoted the previous deployment, so there is no
     # live build of this SHA left to explore.
     outputs:
-      ran: ${{ steps.smoke.outputs.outcome != 'skipped' && steps.smoke.outputs.outcome != 'cancelled' && steps.smoke.outputs.outcome != '' }}
-      ok: ${{ steps.smoke.outputs.outcome == 'success' }}
+      ran: ${{ steps.smoke.outcome != 'skipped' && steps.smoke.outcome != 'cancelled' && steps.smoke.outcome != '' }}
+      ok: ${{ steps.smoke.outcome == 'success' }}
       rolledback: ${{ steps.decide.outputs.rolledback == 'true' }}
     steps:
       # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
