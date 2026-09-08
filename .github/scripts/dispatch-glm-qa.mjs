@@ -77,12 +77,12 @@ export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agen
   const screenItems = screens
     .map((screen) => `<li>${escapeHtml(screen)}</li>`)
     .join('')
-  const smokeLine =
-    smokeOk === true
-      ? 'The automated smoke check passed on this deploy.'
-      : smokeOk === false
-        ? 'The automated smoke check failed without a confirmed break (no rollback) — treat that as a strong defect hint.'
-        : 'The automated smoke check left no clear verdict this deploy — look carefully at the changed screens.'
+  let smokeLine = 'The automated smoke check left no clear verdict this deploy — look carefully at the changed screens.'
+  if (smokeOk === true) {
+    smokeLine = 'The automated smoke check passed on this deploy.'
+  } else if (smokeOk === false) {
+    smokeLine = 'The automated smoke check failed without a confirmed break (no rollback) — treat that as a strong defect hint.'
+  }
   // Hand-written mention span: the server-side agent-mention extraction
   // (extractTipTapContent) matches data-label="agent-<uuid>" directly, so the
   // wake does not depend on @-token resolution succeeding for the MCP identity.
@@ -98,7 +98,7 @@ export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agen
 }
 
 function parseArgs(argv) {
-  const args = { _: [] }
+  const args = {}
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
     if (arg === '--sha') args.sha = argv[++i]
@@ -107,7 +107,6 @@ function parseArgs(argv) {
     else if (arg === '--smoke-ok') args.smokeOk = argv[++i]
     else if (arg === '--smoke-unknown') args.smokeUnknown = true
     else if (arg === '--dry-run') args.dryRun = true
-    else args._.push(arg)
   }
   return args
 }
@@ -169,7 +168,11 @@ async function main() {
   const screens = mapScreens(args.changedFiles)
   // Smoke state must be passed explicitly; a missing flag reads as "unknown",
   // never as a silent pass (HTPR-6239 review).
-  const smokeOk = args.smokeUnknown ? null : args.smokeOk === 'true' ? true : args.smokeOk === 'false' ? false : null
+  let smokeOk = null
+  if (!args.smokeUnknown) {
+    if (args.smokeOk === 'true') smokeOk = true
+    else if (args.smokeOk === 'false') smokeOk = false
+  }
   const text = buildBriefText({
     sha: args.sha,
     prTitle: args.prTitle,
