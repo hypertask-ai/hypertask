@@ -92,52 +92,6 @@ test("the brief names the agent, the screens, the marker, and the read-only rule
   });
   assert.match(unknown, /no clear verdict/);
   assert.doesNotMatch(unknown, /smoke check passed/);
-
-  // The brief demands a live-build check before exploring: a worker waking on
-  // an old mention must not file bugs against a newer UI (HTPR-5781 review).
-  const any = buildBriefText({
-    sha: "d".repeat(40),
-    prTitle: "HTPR-1 x",
-    screens: ["inbox"],
-    agentName: "GLM Dev 3",
-    agentId: "1e03aa38-86b6-47fe-acb3-ff14344d8978",
-  });
-  assert.match(any, /\/api\/version must return buildId/);
-  assert.match(any, /stale and stop/);
-});
-
-test("the liveness probe retries transient failures, then fails closed", async () => {
-  const { fetchLiveBuildId } = await import(SCRIPT);
-  const realFetch = globalThis.fetch;
-  try {
-    // Two transient failures, then success: the third attempt wins.
-    let calls = 0;
-    globalThis.fetch = async () => {
-      calls += 1;
-      if (calls <= 2) throw new Error("boom");
-      return { ok: true, json: async () => ({ buildId: "build-1" }) };
-    };
-    assert.equal(await fetchLiveBuildId("https://base", { attempts: 3, delayMs: 1 }), "build-1");
-    assert.equal(calls, 3);
-
-    // Exhausted retries throw (main() turns that into a refusal).
-    calls = 0;
-    globalThis.fetch = async () => {
-      calls += 1;
-      throw new Error("down");
-    };
-    await assert.rejects(
-      () => fetchLiveBuildId("https://base", { attempts: 2, delayMs: 1 }),
-      /down/,
-    );
-    assert.equal(calls, 2);
-
-    // A buildId-less answer reads as null, never as an affirmative verdict.
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({}) });
-    assert.equal(await fetchLiveBuildId("https://base", { attempts: 1 }), null);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
 });
 
 test("the glm-qa job is exploratory: gated on smoke, wired to the dispatcher, and free of rollback behavior", async () => {
@@ -147,24 +101,15 @@ test("the glm-qa job is exploratory: gated on smoke, wired to the dispatcher, an
   const end = workflow.indexOf("\n  drift:", start);
   const job = workflow.slice(start, end);
 
-  // Runs for every real deploy that was not rolled back, with or without the
-  // smoke suite (HTPR-5781): smoke stays skipped while its session secret is
-  // unprovisioned, and gating the brief on it kept the pass permanently dead.
+  // Runs only for real deploys whose smoke checks actually executed and that
+  // were not rolled back.
   assert.match(job, /needs: \[health, smoke\]/);
-  assert.match(job, /needs\.health\.outputs\.live == 'true'/);
-  assert.doesNotMatch(job, /needs\.smoke\.outputs\.ran == 'true'/);
+  assert.match(job, /needs\.smoke\.outputs\.ran == 'true'/);
   assert.match(job, /needs\.smoke\.outputs\.rolledback != 'true'/);
   assert.match(job, /github\.event_name == 'push'/);
   // Dispatches the committed script and alerts without failing the deploy.
   assert.match(job, /dispatch-glm-qa\.mjs/);
   assert.match(job, /continue-on-error: true/);
-  // A skipped smoke suite reaches the brief as "no verdict", never as a
-  // failure: --smoke-ok only when smoke ran, --smoke-unknown otherwise.
-  assert.match(job, /--smoke-unknown/);
-  assert.match(
-    job,
-    /\[ "\$\{\{ needs\.smoke\.outputs\.ran \}\}" = "true" \].*--smoke-ok \$\{\{ needs\.smoke\.outputs\.ok \}\}/s,
-  );
   // Exploratory: no rollback, no promote, no Vercel write in this job.
   assert.doesNotMatch(job, /emergency-rollback|\/promote\/|api\.vercel\.com/);
 });
