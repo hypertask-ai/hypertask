@@ -578,10 +578,18 @@ jobs:
             echo "::error::GitHub API call to resolve the merged pull request failed; GLM QA cannot pick its deploy ticket"
             exit 1
           fi
-          PR_NUMBER=$(echo "$PR_JSON" | jq -r '.[0].number // empty')
-          PR_TITLE=$(echo "$PR_JSON" | jq -r '.[0].title // empty')
+          # The endpoint lists every PR containing the commit; only the merged
+          # one is this deployment's PR. Head-PR matches (the commit sitting on
+          # an open branch) must not win the ticket.
+          MERGED_COUNT=$(echo "$PR_JSON" | jq '[.[] | select(.merged_at != null)] | length')
+          if [ "$MERGED_COUNT" -gt 1 ]; then
+            echo "::error::$MERGED_COUNT merged pull requests contain $SHA; refusing to guess the deploy ticket"
+            exit 1
+          fi
+          PR_NUMBER=$(echo "$PR_JSON" | jq -r '[.[] | select(.merged_at != null)][0].number // empty')
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '[.[] | select(.merged_at != null)][0].title // empty')
           if [ -z "$PR_NUMBER" ] || [ -z "$PR_TITLE" ]; then
-            echo "::warning::No pull request associated with $SHA; no deploy ticket to brief. Skipping GLM QA."
+            echo "::warning::No merged pull request associated with $SHA; no deploy ticket to brief. Skipping GLM QA."
             echo "skipped=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi

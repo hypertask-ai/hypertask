@@ -30,9 +30,11 @@ test("changed files map to at most 3 known screens and never to lookalike names"
     mapScreens("src/app/inbox/page.tsx src/app/inbox/InboxList.tsx src/components/search/SearchBar.tsx"),
     ["inbox", "AI search"],
   );
-  // "search" inside another word must not match; path-segment matching only,
-  // so the lookalike file falls back to its top-level area instead.
+  // Prefixes are path-segment matches: a lookalike inside another word never
+  // maps to a screen and falls back to its top-level area instead.
   assert.deepEqual(mapScreens("src/lib/browser-search-helper.ts"), ["the src area"]);
+  assert.deepEqual(mapScreens("src/lib/graphql-api/foo.ts"), ["the src area"]);
+  assert.deepEqual(mapScreens("src/app/notdetail/page.tsx"), ["the src area"]);
   // Capped at 3.
   const six = mapScreens(
     "src/app/inbox/x.tsx src/app/calendar/x.tsx src/app/search/x.tsx src/app/settings/x.tsx src/app/new/x.tsx",
@@ -78,6 +80,18 @@ test("the brief names the agent, the screens, the marker, and the read-only rule
     agentId: "1e03aa38-86b6-47fe-acb3-ff14344d8978",
   });
   assert.match(failed, /smoke check failed without a confirmed break/);
+
+  // An absent smoke verdict must read as unknown, never as a pass.
+  const unknown = buildBriefText({
+    sha: "c".repeat(40),
+    prTitle: "HTPR-1 x",
+    screens: ["inbox"],
+    smokeOk: null,
+    agentName: "GLM Dev 3",
+    agentId: "1e03aa38-86b6-47fe-acb3-ff14344d8978",
+  });
+  assert.match(unknown, /no clear verdict/);
+  assert.doesNotMatch(unknown, /smoke check passed/);
 });
 
 test("the glm-qa job is exploratory: gated on smoke, wired to the dispatcher, and free of rollback behavior", async () => {

@@ -53,12 +53,12 @@ export function mapScreens(changedFiles) {
   const fallbackDirs = []
   for (const file of files) {
     const normalized = file.replace(/^.*?(src\/|e2e\/)/, '$1')
-    const hit = SCREEN_PREFIXES.find(([prefix]) => {
-      // Slash-suffixed prefixes match anywhere; bare names must be path
-      // segments so "search" never matches "browser-search.tsx".
-      if (prefix.endsWith('/')) return normalized.includes(prefix)
-      return new RegExp(`(^|/)${prefix}([/.])`).test(normalized)
-    })
+    // Every prefix is a path-segment match, slash-suffixed or not, so
+    // "graphql-api/x.ts" never matches "api/" and "notdetail/page.tsx" never
+    // matches "detail/".
+    const hit = SCREEN_PREFIXES.find(([prefix]) =>
+      new RegExp(`(^|/)${prefix.replace(/\/$/, '')}([/.])`).test(normalized),
+    )
     if (hit) {
       if (!screens.includes(hit[1])) screens.push(hit[1])
     } else {
@@ -77,9 +77,12 @@ export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agen
   const screenItems = screens
     .map((screen) => `<li>${escapeHtml(screen)}</li>`)
     .join('')
-  const smokeLine = smokeOk
-    ? 'The automated smoke check passed on this deploy.'
-    : 'The automated smoke check failed without a confirmed break (no rollback) — treat that as a strong defect hint.'
+  const smokeLine =
+    smokeOk === true
+      ? 'The automated smoke check passed on this deploy.'
+      : smokeOk === false
+        ? 'The automated smoke check failed without a confirmed break (no rollback) — treat that as a strong defect hint.'
+        : 'The automated smoke check left no clear verdict this deploy — look carefully at the changed screens.'
   // Hand-written mention span: the server-side agent-mention extraction
   // (extractTipTapContent) matches data-label="agent-<uuid>" directly, so the
   // wake does not depend on @-token resolution succeeding for the MCP identity.
@@ -101,7 +104,8 @@ function parseArgs(argv) {
     if (arg === '--sha') args.sha = argv[++i]
     else if (arg === '--pr-title') args.prTitle = argv[++i]
     else if (arg === '--changed-files') args.changedFiles = argv[++i]
-    else if (arg === '--smoke-ok') args.smokeOk = argv[++i] === 'true'
+    else if (arg === '--smoke-ok') args.smokeOk = argv[++i]
+    else if (arg === '--smoke-unknown') args.smokeUnknown = true
     else if (arg === '--dry-run') args.dryRun = true
     else args._.push(arg)
   }
@@ -163,11 +167,14 @@ async function main() {
   }
 
   const screens = mapScreens(args.changedFiles)
+  // Smoke state must be passed explicitly; a missing flag reads as "unknown",
+  // never as a silent pass (HTPR-6239 review).
+  const smokeOk = args.smokeUnknown ? null : args.smokeOk === 'true' ? true : args.smokeOk === 'false' ? false : null
   const text = buildBriefText({
     sha: args.sha,
     prTitle: args.prTitle,
     screens: screens.length > 0 ? screens : ['the whole app (no known screens matched)'],
-    smokeOk: args.smokeOk !== false,
+    smokeOk,
     agentName,
     agentId,
   })
