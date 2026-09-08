@@ -86,7 +86,10 @@ const nextConfig = {
     ],
   },
   experimental: {
-    // webpackBuildWorker: true,
+    // The smoke build runs server tracing beside the client compiler. This
+    // keeps the required real build below ten minutes without changing Vercel.
+    webpackBuildWorker: process.env.CORE_APP_SMOKE === "true",
+    parallelServerBuildTraces: process.env.CORE_APP_SMOKE === "true",
     // Tree-shake heavy barrel-export libs so only the icons/helpers actually
     // imported get bundled, not the whole package (HTPR-3815).
     optimizePackageImports: ["react-icons", "@heroicons/react", "date-fns"],

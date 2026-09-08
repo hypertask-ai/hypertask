@@ -150,6 +150,7 @@ export async function runCoreActionsSmoke(options: {
   runId: string;
   fetchImpl?: FetchLike;
   signal?: AbortSignal;
+  persistOwnership?: boolean;
 }): Promise<CoreActionsSmokeResult> {
   const fetchImpl = options.fetchImpl ?? fetch;
   if (!CORE_SMOKE_RUN_ID_PATTERN.test(options.runId)) {
@@ -304,6 +305,30 @@ export async function runCoreActionsSmoke(options: {
     return data;
   };
 
+  const getBoardTask = async (action: string) => {
+    const { data } = await request(action, "/api/projects/boardTasks", {
+      method: "POST",
+      body: JSON.stringify({
+        projectId: fixture.projectId,
+        userId: fixture.userId,
+      }),
+    });
+    const task = Array.isArray(data?.tasks)
+      ? data.tasks.find(
+          (row: unknown) => isRecord(row) && Number(row.id) === fixture.taskId,
+        )
+      : null;
+    if (!task) {
+      throw new SmokeFailure(
+        "application",
+        action,
+        200,
+        "fixture task was missing from boardTasks",
+      );
+    }
+    return task;
+  };
+
   const getComments = async (action: string) => {
     const { data } = await request(
       action,
@@ -340,7 +365,7 @@ export async function runCoreActionsSmoke(options: {
   };
 
   const assign = async (action: string, intent: "assign" | "unassign") => {
-    await request(action, "/api/assignees/assign", {
+    return request(action, "/api/assignees/assign", {
       method: "POST",
       body: JSON.stringify({
         userId: fixture.userId,
@@ -358,7 +383,7 @@ export async function runCoreActionsSmoke(options: {
   };
 
   const persistOwnedCommentIds = async () => {
-    if (markerId === null) return;
+    if (markerId === null || options.persistOwnership === false) return;
     await request("record smoke ownership", "/api/comments/updateComment", {
       method: "PUT",
       body: JSON.stringify({
@@ -397,8 +422,7 @@ export async function runCoreActionsSmoke(options: {
         if (persist) await persistOwnedCommentIds();
         return;
       }
-      if (attempt < 2)
-        await new Promise((resolve) => setTimeout(resolve, 250));
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250));
     }
     if (!requireOne) return;
     throw new SmokeFailure(
@@ -563,24 +587,7 @@ export async function runCoreActionsSmoke(options: {
   try {
     await reconcile();
 
-    const board = await request("open board", "/api/projects/boardTasks", {
-      method: "POST",
-      body: JSON.stringify({
-        projectId: fixture.projectId,
-        userId: fixture.userId,
-      }),
-    });
-    if (
-      !Array.isArray(board.data?.tasks) ||
-      !board.data.tasks.some((task: any) => Number(task?.id) === fixture.taskId)
-    ) {
-      throw new SmokeFailure(
-        "application",
-        "open board",
-        200,
-        "fixture task was missing from boardTasks",
-      );
-    }
+    await getBoardTask("open board");
     steps.push("open board");
 
     await getTask("open task");
@@ -680,7 +687,7 @@ export async function runCoreActionsSmoke(options: {
 
     await assign("assign user", "assign");
     await captureNewFixtureActivity("capture assignment activity", true, true);
-    const assigned = await getTask("verify assignment");
+    const assigned = await getBoardTask("verify assignment");
     if (!assigneeHasUser(assigned, fixture.userId)) {
       throw new SmokeFailure(
         "application",
@@ -695,7 +702,7 @@ export async function runCoreActionsSmoke(options: {
       true,
       true,
     );
-    const unassigned = await getTask("verify unassignment");
+    const unassigned = await getBoardTask("verify unassignment");
     if (assigneeHasUser(unassigned, fixture.userId)) {
       throw new SmokeFailure(
         "application",
