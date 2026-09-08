@@ -57,6 +57,7 @@ function reset(overrides = {}) {
   state.task = null;
   state.project = null;
   state.outerAssignee = null;
+  state.reAssignee = null;
   state.txAssignee = null;
   state.createdRow = null;
   state.createError = null;

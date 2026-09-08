@@ -261,7 +261,6 @@ function psql(container, sql) {
 const unhandledRejections = [];
 const onUnhandledRejection = (reason) => {
   unhandledRejections.push(reason);
-  return true; // prevent the default crash
 };
 process.on("unhandledRejection", onUnhandledRejection);
 
