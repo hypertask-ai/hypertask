@@ -18,7 +18,17 @@ for candidate_mount in node_modules .next; do
   mkdir -p "$mount_target"
 done
 
+next_env_target="$candidate_root/next-env.d.ts"
+if [ -L "$next_env_target" ] || { [ -e "$next_env_target" ] && [ ! -f "$next_env_target" ]; }; then
+  echo "Candidate next-env.d.ts mount target must be a regular file." >&2
+  exit 1
+fi
+next_env_target_created=false
 scratch=$(mktemp -d "${RUNNER_TEMP:-/tmp}/ht-app-smoke.XXXXXX")
+next_env="$scratch/next-env.d.ts"
+: >"$next_env"
+# The builder may run under a remapped uid. Only this file is writable outside its private scratch directory.
+chmod 0666 "$next_env"
 invocation_key=${scratch##*.}
 run_key=$(printf '%s-%s-%s' "${GITHUB_RUN_ID:-$$}" "${GITHUB_RUN_ATTEMPT:-1}" "$invocation_key" | tr -cd 'a-zA-Z0-9_-' | tr '[:upper:]' '[:lower:]')
 network="ht-smoke-net-$run_key"
@@ -49,12 +59,18 @@ cleanup() {
   docker network rm "$network" "$egress_network" >/dev/null 2>&1 || true
   docker volume rm "$build" "$state" "$dependencies" >/dev/null 2>&1 || true
   docker image rm "$runtime_image" >/dev/null 2>&1 || true
+  if [ "$next_env_target_created" = true ]; then rm -f -- "$next_env_target"; fi
   rm -rf "$scratch"
   exit "$result"
 }
 trap cleanup EXIT
 trap 'cleanup 130' INT
 trap 'cleanup 143' TERM
+
+if [ ! -e "$next_env_target" ]; then
+  : >"$next_env_target"
+  next_env_target_created=true
+fi
 
 docker network create --internal "$network" >/dev/null
 docker network create "$egress_network" >/dev/null
@@ -267,6 +283,7 @@ docker run --rm --name "$builder" --network "$network" "${runtime[@]}" "${common
   -e NODE_OPTIONS=--max-old-space-size=8192 \
   -e CORE_APP_SMOKE=true \
   -e NEXT_FONT_GOOGLE_MOCKED_RESPONSES=/trusted/next-font-smoke-mock.cjs \
+  -v "$next_env:/app/next-env.d.ts:rw" \
   -v "$trusted_root/scripts:/trusted:ro" \
   "$runtime_image" timeout --signal=KILL 10m node node_modules/next/dist/bin/next build --webpack
 
