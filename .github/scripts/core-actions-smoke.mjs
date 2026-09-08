@@ -8,6 +8,9 @@ const TOKEN = process.env.HYPERTASK_MCP_TOKEN || "";
 const BOARD_TITLE = "Hypertask production core-actions smoke";
 const TASK_TITLE = "Core actions smoke fixture";
 const AGENT_NAME = "Core Actions Smoke Agent";
+// Dev agents skip anything carrying this label (HT_EXCLUDE_LABELS), so the
+// fixture task can never be picked up as real work.
+const FIXTURE_LABEL = "qa-fixture";
 
 export class ApiRequestError extends Error {
   constructor(path, status, message) {
@@ -15,13 +18,6 @@ export class ApiRequestError extends Error {
     this.status = status;
   }
 }
-
-const integer = (name, value) => {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1)
-    throw new Error(`${name} must be a positive integer`);
-  return parsed;
-};
 
 const ALERT_PROJECT_ID = 15;
 const ALERT_SECTION_ID = 4389;
@@ -67,19 +63,27 @@ async function api(path, options = {}) {
   return data;
 }
 
+// Resolves the dedicated fixture by NAME on every run, creating it once if it
+// is absent. Nothing here is keyed on a stored id, so a renamed column or a
+// re-created board can never point the probe at a real user's work
+// (HTPR-6255, HTPR-6258).
 export async function provision() {
   const context = await api("/api/mcp/user/context");
   if (context.connected_agent)
     throw new Error(
       "HYPERTASK_MCP_TOKEN must be a user token, not an agent token",
     );
-  const team = process.env.CORE_SMOKE_TEAM_ID
-    ? context.teams?.find((item) => item.id === process.env.CORE_SMOKE_TEAM_ID)
-    : context.teams?.find((item) => item.title === "Hypertask");
-  if (!team)
-    throw new Error(
-      "CORE_SMOKE_TEAM_ID is required when the health identity has no Hypertask team",
-    );
+
+  const findTeam = () => {
+    const team = process.env.CORE_SMOKE_TEAM_ID
+      ? context.teams?.find((item) => item.id === process.env.CORE_SMOKE_TEAM_ID)
+      : context.teams?.find((item) => item.title === "Hypertask");
+    if (!team)
+      throw new Error(
+        "CORE_SMOKE_TEAM_ID is required when the health identity has no Hypertask team",
+      );
+    return team;
+  };
 
   let project = context.projects?.find(
     (item) => item.title === BOARD_TITLE && item.ownerId === context.user.id,
@@ -87,7 +91,7 @@ export async function provision() {
   let task;
   if (!project) {
     const created = await api(
-      `/api/mcp/teams/${encodeURIComponent(team.id)}/boards`,
+      `/api/mcp/teams/${encodeURIComponent(findTeam().id)}/boards`,
       {
         method: "POST",
         headers: { "Idempotency-Key": "htpr-6236-core-actions-fixture" },
@@ -96,12 +100,14 @@ export async function provision() {
           description:
             "Persistent production fixture for HTPR-6236. Do not edit by hand.",
           sections: [{ title: "Baseline" }, { title: "Alternate" }],
+          labels: [{ name: FIXTURE_LABEL }],
           tasks: [
             {
               title: TASK_TITLE,
               description:
                 "Persistent smoke target. The monitor restores it after every run.",
               section_index: 0,
+              label_names: [FIXTURE_LABEL],
               priority: 0,
               estimate: 0,
             },
@@ -116,6 +122,17 @@ export async function provision() {
       `/api/mcp/tasks?project_id=${project.id}&status=Normal&search=${encodeURIComponent(TASK_TITLE)}&limit=10`,
     );
     task = tasks.tasks?.find((item) => item.title === TASK_TITLE);
+    // Labels can only be set when a task is created, so a pre-existing fixture
+    // cannot be relabelled from here. Refuse to drive an unlabelled task
+    // rather than mutate one a dev agent might also pick up.
+    if (
+      task &&
+      !(task.labels ?? []).some((label) => label?.name === FIXTURE_LABEL)
+    ) {
+      throw new Error(
+        `The fixture task is missing the ${FIXTURE_LABEL} label; add it by hand so agents skip it`,
+      );
+    }
   }
   if (!task) throw new Error("The fixture task is missing");
 
@@ -176,42 +193,9 @@ export async function provision() {
   };
 }
 
-const FIXTURE_SETTING_NAMES = [
-  "CORE_SMOKE_PROJECT_ID",
-  "CORE_SMOKE_TASK_ID",
-  "CORE_SMOKE_BASE_SECTION_ID",
-  "CORE_SMOKE_ALT_SECTION_ID",
-  "CORE_SMOKE_AGENT_ID",
-];
-
-export function missingFixtureSettings(env = process.env) {
-  return FIXTURE_SETTING_NAMES.filter((name) => !env[name]);
-}
-
-export function readFixtureSettings(env = process.env) {
-  const fixture = {
-    projectId: integer(
-      "CORE_SMOKE_PROJECT_ID",
-      env.CORE_SMOKE_PROJECT_ID,
-    ),
-    taskId: integer("CORE_SMOKE_TASK_ID", env.CORE_SMOKE_TASK_ID),
-    baseSectionId: integer(
-      "CORE_SMOKE_BASE_SECTION_ID",
-      env.CORE_SMOKE_BASE_SECTION_ID,
-    ),
-    altSectionId: integer(
-      "CORE_SMOKE_ALT_SECTION_ID",
-      env.CORE_SMOKE_ALT_SECTION_ID,
-    ),
-    agentId: env.CORE_SMOKE_AGENT_ID,
-  };
-  if (!fixture.agentId) throw new Error("CORE_SMOKE_AGENT_ID is required");
-  return fixture;
-}
-
 export async function run(options = {}) {
   const fixture = {
-    ...readFixtureSettings(),
+    ...(await provision()),
     runId: process.env.GITHUB_RUN_ID || `local-${Date.now()}`,
   };
 
@@ -289,6 +273,23 @@ export function shouldRollback(result, eventName) {
   );
 }
 
+// A credential or workspace problem is not a monitoring signal: no deploy can
+// cause it and no code change fixes it. It still fails the job, but reporting
+// it to the board on every five-minute run would bury the real alerts.
+const SETUP_ERROR_MESSAGES = [
+  "must be a user token",
+  "HYPERTASK_MCP_TOKEN is required",
+  "CORE_SMOKE_TEAM_ID is required",
+  `is missing the ${FIXTURE_LABEL} label`,
+];
+
+export function isSetupFailure(error) {
+  const status = error instanceof ApiRequestError ? error.status : undefined;
+  if (status === 401 || status === 403) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return SETUP_ERROR_MESSAGES.some((needle) => message.includes(needle));
+}
+
 export function classifyProbeStartFailure(error) {
   const status = error instanceof ApiRequestError ? error.status : undefined;
   return {
@@ -296,6 +297,7 @@ export function classifyProbeStartFailure(error) {
     kind: "unrunnable",
     action: "start core-actions probe",
     ...(status !== undefined ? { status } : {}),
+    ...(isSetupFailure(error) ? { setupError: true } : {}),
     detail:
       error instanceof Error
         ? error.message.slice(0, 240)
@@ -306,6 +308,14 @@ export function classifyProbeStartFailure(error) {
 }
 
 export async function report(result) {
+  if (result?.setupError === true) {
+    // Loud in the run log, silent on the board: see SETUP_ERROR_MESSAGES.
+    // Workflow commands are only parsed off stdout, never stderr.
+    process.stdout.write(
+      `::error::Core-actions smoke cannot run until its credentials are fixed: ${result.detail}\n`,
+    );
+    return;
+  }
   const rollback = process.env.CORE_SMOKE_ROLLBACK || "not requested";
   const runUrl =
     process.env.GITHUB_SERVER_URL &&
@@ -421,13 +431,6 @@ async function main() {
     process.stdout.write(`${JSON.stringify(fixture)}\n`);
     return;
   }
-  if (command === "check-settings") {
-    // Machine-readable for the workflow preflight: "configured" or
-    // "missing: ..."; any other exit or output is treated as an error there.
-    const missing = missingFixtureSettings();
-    process.stdout.write(missing.length ? `missing: ${missing.join(", ")}\n` : "configured\n");
-    return;
-  }
   if (command === "run") {
     let result;
     try {
@@ -466,7 +469,7 @@ async function main() {
     return;
   }
   throw new Error(
-    "Usage: core-actions-smoke.mjs <provision|check-settings|run|report|rollback-decision>",
+    "Usage: core-actions-smoke.mjs <provision|run|report|rollback-decision>",
   );
 }
 

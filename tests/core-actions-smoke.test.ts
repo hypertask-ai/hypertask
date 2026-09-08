@@ -334,6 +334,7 @@ function fakeApp(
     failColumns?: boolean;
     emptyColumns?: boolean;
     failUpdate?: boolean;
+    columnsWithoutTarget?: boolean;
     loseCommentResponse?: boolean;
     omitCommentId?: boolean;
     otherSmokeMarkerAfter?: boolean;
@@ -509,6 +510,10 @@ function fakeApp(
       if (options.failColumns)
         return json({ error: "Cannot read properties of null" }, 500);
       if (options.emptyColumns) return json([]);
+      if (options.columnsWithoutTarget)
+        return json([
+          { id: fixture.baseSectionId, section_title: "Baseline", visibility: true },
+        ]);
       return json([
         {
           id: fixture.baseSectionId,
@@ -630,6 +635,25 @@ test("reports an empty move-to-column list as the columns action", async () => {
   assert.equal(result.kind, "application");
   assert.equal(result.action, "load move-to-column columns");
   assert.match(result.detail, /column list was empty/);
+  assert.equal(app.state.sectionId, fixture.baseSectionId);
+});
+
+test("a move-to-column list missing the move target fails the columns action", async () => {
+  // HTPR-6262: the move step targets Alternate, so a dialog that never offers
+  // Alternate means move-to-column is broken even though the list is non-empty.
+  const app = fakeApp({ columnsWithoutTarget: true });
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai",
+    cookieHeader: "ht_session=signed; nookies_user=user",
+    fixture,
+    runId: "run-columns-missing-target",
+    fetchImpl: app.fetchImpl,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.kind, "application");
+  assert.equal(result.action, "load move-to-column columns");
+  assert.match(result.detail, /missing a fixture column/);
   assert.equal(app.state.sectionId, fixture.baseSectionId);
 });
 
