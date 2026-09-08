@@ -661,6 +661,22 @@ export async function runCoreActionsSmoke(options: {
           : "response was not a columns array",
       );
     }
+    // A non-empty list is not enough: the move below targets Alternate, so the
+    // dialog has to offer both fixture columns or the move is untestable.
+    const offeredSections = new Set(
+      columns.data.map((column: any) => Number(column?.id)),
+    );
+    if (
+      !offeredSections.has(fixture.baseSectionId) ||
+      !offeredSections.has(fixture.altSectionId)
+    ) {
+      throw new SmokeFailure(
+        "application",
+        "load move-to-column columns",
+        200,
+        "the move-to-column list was missing a fixture column",
+      );
+    }
     steps.push("load move-to-column columns");
 
     const moveResponse = await move(

@@ -4,37 +4,85 @@ const { readFile } = require("node:fs/promises");
 const { pathToFileURL } = require("node:url");
 
 process.env.HYPERTASK_MCP_TOKEN = "test-token";
-process.env.CORE_SMOKE_PROJECT_ID = "71";
-process.env.CORE_SMOKE_TASK_ID = "81";
-process.env.CORE_SMOKE_BASE_SECTION_ID = "91";
-process.env.CORE_SMOKE_ALT_SECTION_ID = "92";
-process.env.CORE_SMOKE_AGENT_ID = "00000000-0000-4000-8000-000000000001";
 
 const scriptUrl = pathToFileURL(
   `${process.cwd()}/.github/scripts/core-actions-smoke.mjs`,
 ).href;
 
+
+const BOARD_TITLE = "Hypertask production core-actions smoke";
+const TASK_TITLE = "Core actions smoke fixture";
+const AGENT_NAME = "Core Actions Smoke Agent";
+const AGENT_ID = "00000000-0000-4000-8000-000000000001";
+const PROJECT_ID = 71;
+const TASK_ID = 81;
+const BASE_SECTION_ID = 91;
+const ALT_SECTION_ID = 92;
+
+// The probe resolves its fixture by name on every run, so any mock has to
+// answer the whole resolution conversation, not just the probe call.
+function fixtureFetch({ probeResult, onRequest, overrides = {} } = {}) {
+  return async (input, init) => {
+    const url = new URL(String(input));
+    const path = url.pathname;
+    if (onRequest) onRequest(url, init);
+    if (overrides[path]) return overrides[path](url, init);
+    if (path === "/api/mcp/user/context")
+      return Response.json({
+        user: { id: 6 },
+        teams: [{ id: "team-1", title: "Hypertask" }],
+        projects: [{ id: PROJECT_ID, title: BOARD_TITLE, ownerId: 6 }],
+      });
+    if (path === "/api/mcp/tasks")
+      return Response.json({ tasks: [{ id: TASK_ID, title: TASK_TITLE }] });
+    if (path === "/api/mcp/agents")
+      return Response.json({
+        agents: [
+          {
+            id: AGENT_ID,
+            display_name: AGENT_NAME,
+            revoked: false,
+            boards: [{ id: PROJECT_ID }],
+          },
+        ],
+      });
+    if (path === "/api/mcp/assignees/assign") return Response.json({});
+    if (path === "/api/mcp/projects")
+      return Response.json({
+        projects: [
+          {
+            id: PROJECT_ID,
+            sections: [
+              { id: BASE_SECTION_ID, section_title: "Baseline" },
+              { id: ALT_SECTION_ID, section_title: "Alternate" },
+            ],
+          },
+        ],
+      });
+    if (path === "/api/ops/core-actions-smoke")
+      return Response.json({
+        result: probeResult ?? {
+          ok: true,
+          kind: "pass",
+          action: "complete",
+          detail: "all actions passed",
+          steps: [],
+          cleanup: [],
+        },
+      });
+    throw new Error(`unexpected request to ${path}`);
+  };
+}
+
 test("the probe target cannot be redirected away from production", async () => {
   const originalFetch = global.fetch;
-  let requestedUrl;
-  global.fetch = async (input) => {
-    requestedUrl = String(input);
-    return Response.json({
-      result: {
-        ok: true,
-        kind: "pass",
-        action: "complete",
-        detail: "all actions passed",
-        steps: [],
-        cleanup: [],
-      },
-    });
-  };
+  const origins = new Set();
+  global.fetch = fixtureFetch({ onRequest: (url) => origins.add(url.origin) });
 
   try {
     const { run } = await import(scriptUrl);
     await run();
-    assert.equal(new URL(requestedUrl).origin, "https://app.hypertask.ai");
+    assert.deepEqual([...origins], ["https://app.hypertask.ai"]);
   } finally {
     global.fetch = originalFetch;
   }
@@ -42,7 +90,12 @@ test("the probe target cannot be redirected away from production", async () => {
 
 test("a truncated probe response is unrunnable, never green", async () => {
   const originalFetch = global.fetch;
-  global.fetch = async () => Response.json({ result: { ok: true } });
+  global.fetch = fixtureFetch({
+    overrides: {
+      "/api/ops/core-actions-smoke": async () =>
+        Response.json({ result: { ok: true } }),
+    },
+  });
 
   try {
     const { run } = await import(scriptUrl);
@@ -92,20 +145,20 @@ test("rollback is limited to application failures after a production push", asyn
 test("rollback needs the same application failure twice", async () => {
   const originalFetch = global.fetch;
   let calls = 0;
-  global.fetch = async () => {
-    calls += 1;
-    return Response.json({
-      result: {
-        ok: false,
-        kind: "application",
-        action: "open task",
-        status: 500,
-        detail: "route failed",
-        steps: ["open board"],
-        cleanup: [],
-      },
-    });
-  };
+  global.fetch = fixtureFetch({
+    onRequest: (url) => {
+      if (url.pathname === "/api/ops/core-actions-smoke") calls += 1;
+    },
+    probeResult: {
+      ok: false,
+      kind: "application",
+      action: "open task",
+      status: 500,
+      detail: "route failed",
+      steps: ["open board"],
+      cleanup: [],
+    },
+  });
 
   try {
     const { run, shouldRollback } = await import(scriptUrl);
@@ -139,7 +192,12 @@ test("a transient application failure passes on confirmation without rollback", 
       cleanup: [],
     },
   ];
-  global.fetch = async () => Response.json({ result: results.shift() });
+  global.fetch = fixtureFetch({
+    overrides: {
+      "/api/ops/core-actions-smoke": async () =>
+        Response.json({ result: results.shift() }),
+    },
+  });
 
   try {
     const { run, shouldRollback } = await import(scriptUrl);
@@ -154,17 +212,16 @@ test("a transient application failure passes on confirmation without rollback", 
 
 test("an unrunnable probe stays failed and cannot request rollback", async () => {
   const originalFetch = global.fetch;
-  global.fetch = async () =>
-    Response.json({
-      result: {
-        ok: false,
-        kind: "unrunnable",
-        action: "check feature flag",
-        detail: "the core-actions smoke flag is disabled for this user",
-        steps: [],
-        cleanup: [],
-      },
-    });
+  global.fetch = fixtureFetch({
+    probeResult: {
+      ok: false,
+      kind: "unrunnable",
+      action: "check feature flag",
+      detail: "the core-actions smoke flag is disabled for this user",
+      steps: [],
+      cleanup: [],
+    },
+  });
 
   try {
     const { run, shouldRollback } = await import(scriptUrl);
@@ -177,39 +234,120 @@ test("an unrunnable probe stays failed and cannot request rollback", async () =>
   }
 });
 
-test("the probe rejects each missing fixture setting", async () => {
-  const { readFixtureSettings } = await import(scriptUrl);
-  const valid = {
-    CORE_SMOKE_PROJECT_ID: "71",
-    CORE_SMOKE_TASK_ID: "81",
-    CORE_SMOKE_BASE_SECTION_ID: "91",
-    CORE_SMOKE_ALT_SECTION_ID: "92",
-    CORE_SMOKE_AGENT_ID: "00000000-0000-4000-8000-000000000001",
-  };
+test("the probe resolves its fixture by name, never from a stored id", async () => {
+  const originalFetch = global.fetch;
+  let sent;
+  global.fetch = fixtureFetch({
+    onRequest: (url, init) => {
+      if (url.pathname === "/api/ops/core-actions-smoke")
+        sent = JSON.parse(init.body);
+    },
+  });
 
-  for (const name of Object.keys(valid)) {
-    assert.throws(
-      () => readFixtureSettings({ ...valid, [name]: "" }),
-      new RegExp(name),
-    );
+  try {
+    const { run } = await import(scriptUrl);
+    const result = await run();
+    assert.equal(result.ok, true);
+    assert.equal(sent.projectId, PROJECT_ID);
+    assert.equal(sent.taskId, TASK_ID);
+    assert.equal(sent.baseSectionId, BASE_SECTION_ID);
+    assert.equal(sent.altSectionId, ALT_SECTION_ID);
+    assert.equal(sent.agentId, AGENT_ID);
+  } finally {
+    global.fetch = originalFetch;
   }
 });
 
-test("the preflight names each absent fixture setting without throwing", async () => {
-  const { missingFixtureSettings } = await import(scriptUrl);
-  const valid = {
-    CORE_SMOKE_PROJECT_ID: "71",
-    CORE_SMOKE_TASK_ID: "81",
-    CORE_SMOKE_BASE_SECTION_ID: "91",
-    CORE_SMOKE_ALT_SECTION_ID: "92",
-    CORE_SMOKE_AGENT_ID: "00000000-0000-4000-8000-000000000001",
-  };
+test("resolution does not need a team once the fixture board exists", async () => {
+  const originalFetch = global.fetch;
+  const requested = [];
+  global.fetch = fixtureFetch({
+    onRequest: (url) => requested.push(url.pathname),
+    overrides: {
+      "/api/mcp/user/context": async () =>
+        Response.json({
+          user: { id: 6 },
+          teams: [],
+          projects: [{ id: PROJECT_ID, title: BOARD_TITLE, ownerId: 6 }],
+        }),
+    },
+  });
 
-  assert.deepEqual(missingFixtureSettings(valid), []);
-  for (const name of Object.keys(valid)) {
-    assert.deepEqual(missingFixtureSettings({ ...valid, [name]: "" }), [name]);
+  try {
+    const { run } = await import(scriptUrl);
+    const result = await run();
+    assert.equal(result.ok, true);
+    assert.equal(
+      requested.some((path) => path.includes("/boards")),
+      false,
+    );
+  } finally {
+    global.fetch = originalFetch;
   }
-  assert.equal(missingFixtureSettings({}).length, Object.keys(valid).length);
+});
+
+test("the fixture board is created with the qa-fixture label so agents skip it", async () => {
+  const originalFetch = global.fetch;
+  let manifest;
+  global.fetch = fixtureFetch({
+    onRequest: (url, init) => {
+      if (url.pathname.endsWith("/boards")) manifest = JSON.parse(init.body);
+    },
+    overrides: {
+      "/api/mcp/user/context": async () =>
+        Response.json({
+          user: { id: 6 },
+          teams: [{ id: "team-1", title: "Hypertask" }],
+          projects: [],
+        }),
+      "/api/mcp/teams/team-1/boards": async () =>
+        Response.json({
+          board: { id: PROJECT_ID, title: BOARD_TITLE },
+          sections: [],
+          tasks: [{ id: TASK_ID, title: TASK_TITLE }],
+        }),
+    },
+  });
+
+  try {
+    const { run } = await import(scriptUrl);
+    await run();
+    assert.deepEqual(manifest.labels, [{ name: "qa-fixture" }]);
+    assert.deepEqual(manifest.tasks[0].label_names, ["qa-fixture"]);
+    assert.deepEqual(
+      manifest.sections.map((section) => section.title),
+      ["Baseline", "Alternate"],
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a fixture that cannot be resolved is unrunnable and never rolls back", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = fixtureFetch({
+    overrides: {
+      "/api/mcp/user/context": async () =>
+        Response.json({ user: { id: 6 }, teams: [], projects: [] }),
+    },
+  });
+
+  try {
+    const { run, classifyProbeStartFailure, shouldRollback } =
+      await import(scriptUrl);
+    let result;
+    try {
+      result = await run();
+    } catch (error) {
+      result = classifyProbeStartFailure(error);
+    }
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, "unrunnable");
+    assert.equal(result.action, "start core-actions probe");
+    assert.equal(shouldRollback(result, "push"), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
 
 test("the workflow schedules and serializes the production fixture", async () => {
@@ -249,29 +387,28 @@ test("the workflow schedules and serializes the production fixture", async () =>
   assert.match(workflow, /SUMMARY=.*gsub/);
 });
 
-test("an unconfigured fixture skips the probe instead of failing the monitor", async () => {
+test("the monitor runs the probe unconditionally and stays loud when it fails", async () => {
   for (const file of [
     ".github/workflows/prod-health.yml",
     ".github/workflows/core-actions-smoke.yml",
   ]) {
     const text = await readFile(file, "utf8");
-    assert.match(text, /check-settings/);
+    // No preflight gate: a fixture that is absent is provisioned by the probe,
+    // never a reason to skip the check (HTPR-6255, HTPR-6258).
+    assert.doesNotMatch(text, /check-settings/);
+    assert.doesNotMatch(text, /steps\.settings\.outputs\.configured/);
+    assert.doesNotMatch(text, /vars\.CORE_SMOKE_PROJECT_ID/);
     assert.match(
       text,
-      /id: settings[\s\S]*?id: probe\s+if: steps\.settings\.outputs\.configured == 'true'/,
+      /name: Run the logged-in core actions and restore the fixture\s+id: probe\s+continue-on-error: true/,
     );
-    // The failure reporter must never treat a skipped probe as a probe result.
-    // A skipped probe reports outcome "skipped", so the unchanged
-    // `probe.outcome == 'failure'` conditions keep the report, rollback, and
-    // "keep visible" steps off; the preflight gate lives only on the probe.
     assert.match(
       text,
       /name: Report a failed or unrunnable check\s+if: \$\{\{ !cancelled\(\) && steps\.probe\.outcome == 'failure' \}\}/,
     );
-    // An unconfigured fixture is still a failing monitor, never a green one.
     assert.match(
       text,
-      /Fail until the fixture settings are configured[\s\S]*?steps\.settings\.outputs\.configured != 'true'[\s\S]*?exit 1/,
+      /name: Keep failed monitoring visible[\s\S]*?steps\.probe\.outcome == 'failure'[\s\S]*?exit 1/,
     );
   }
 });
