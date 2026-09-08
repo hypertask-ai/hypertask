@@ -297,7 +297,8 @@ export function classifyProbeStartFailure(error) {
 export async function report(result) {
   if (result?.setupError === true) {
     // Loud in the run log, silent on the board: see SETUP_ERROR_MESSAGES.
-    process.stderr.write(
+    // Workflow commands are only parsed off stdout, never stderr.
+    process.stdout.write(
       `::error::Core-actions smoke cannot run until its credentials are fixed: ${result.detail}\n`,
     );
     return;
