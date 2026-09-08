@@ -464,20 +464,21 @@ const useCreateTaskModalGlobalStates = () => {
   };
 
   const hasUnsavedChanges = useCallback(() => {
+    const currentFormValues = formValuesRef.current;
     const areFormValuesEqualToDefault =
-      formValues.assignees.length === 0 &&
-      formValues.attachments.length === 0 &&
-      formValues.description?.replace(/(<p><\/p>)+/g, "") === "" &&
-      formValues.title.trim().length === 0 &&
-      !formValues.dueDate &&
-      !formValues.startDate &&
-      !formValues.priority?.priority_index &&
-      !formValues.estimate &&
-      (!formValues.tags || formValues.tags.length === 0) &&
-      formValues.status?.sectionId === defaultFormValues.status?.sectionId;
+      currentFormValues.assignees.length === 0 &&
+      currentFormValues.attachments.length === 0 &&
+      currentFormValues.description?.replace(/(<p><\/p>)+/g, "") === "" &&
+      currentFormValues.title.trim().length === 0 &&
+      !currentFormValues.dueDate &&
+      !currentFormValues.startDate &&
+      !currentFormValues.priority?.priority_index &&
+      !currentFormValues.estimate &&
+      (!currentFormValues.tags || currentFormValues.tags.length === 0) &&
+      currentFormValues.status?.sectionId === defaultFormValues.status?.sectionId;
 
     return !areFormValuesEqualToDefault;
-  }, [formValues, defaultFormValues]);
+  }, [defaultFormValues]);
 
   // Any draft written by the old persistence behaviour is dropped once, so a
   // returning user never sees a stale entry in a fresh composer (HTPR-5537).
