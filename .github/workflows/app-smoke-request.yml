@@ -1,0 +1,21 @@
+name: App Smoke Request
+
+on:
+  pull_request:
+    branches: [production]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+concurrency:
+  group: app-smoke-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  request:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Request the protected app-smoke workflow
+        run: echo "The production workflow will validate and test ${{ github.event.pull_request.head.sha }}."

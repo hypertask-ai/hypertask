@@ -333,6 +333,7 @@ function fakeApp(
     failSearch?: boolean;
     failColumns?: boolean;
     emptyColumns?: boolean;
+    failUpdate?: boolean;
     loseCommentResponse?: boolean;
     omitCommentId?: boolean;
     otherSmokeMarkerAfter?: boolean;
@@ -399,7 +400,8 @@ function fakeApp(
       state.taskReads += 1;
       if (options.failOpenTask && state.taskReads === 3)
         return json({ message: "Internal server error" }, 500);
-      return json(taskBody());
+      const { assignees: _assignees, ...taskWithoutAssignees } = taskBody();
+      return json(taskWithoutAssignees);
     }
     if (url.pathname === "/api/comments/getByTask") {
       return json({
@@ -435,6 +437,8 @@ function fakeApp(
       return json(options.omitCommentId ? { text: comment.text } : comment);
     }
     if (url.pathname === "/api/comments/updateComment") {
+      if (options.failUpdate)
+        return json({ message: "update unavailable" }, 500);
       const comment = state.comments.find((item) => item.id === body.commentId);
       if (!comment) return json({ message: "comment missing" }, 404);
       comment.text = body.text;
@@ -451,10 +455,7 @@ function fakeApp(
     if (url.pathname === "/api/tasks/moveTask") {
       state.sectionId = body.sectionId;
       state.section = body.section_title;
-      if (
-        options.failRankRestore &&
-        body.sectionId === fixture.altSectionId
-      ) {
+      if (options.failRankRestore && body.sectionId === fixture.altSectionId) {
         state.ranking = "rank-mutated";
       } else if (body.ranking && !options.failRankRestore) {
         state.ranking = body.ranking;
@@ -563,6 +564,21 @@ test("runs every core action and restores the fixture", async () => {
     app.state.assignees.some((row) => !row.agentId),
     false,
   );
+  assert.deepEqual(app.state.comments, []);
+});
+
+test("an ephemeral fixture does not require ownership persistence", async () => {
+  const app = fakeApp({ failUpdate: true });
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai",
+    cookieHeader: "ht_session=signed; nookies_user=user",
+    fixture,
+    runId: "run-ephemeral",
+    fetchImpl: app.fetchImpl,
+    persistOwnership: false,
+  });
+
+  assert.equal(result.ok, true);
   assert.deepEqual(app.state.comments, []);
 });
 
