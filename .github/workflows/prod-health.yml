@@ -545,7 +545,9 @@ jobs:
     needs: [health, smoke]
     if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' && needs.smoke.outputs.ran == 'true' && needs.smoke.outputs.rolledback != 'true' }}
     concurrency:
-      group: glm-qa-${{ github.sha }}
+      # Fixed group: a newer production push cancels a still-running older
+      # run, so a brief can only go out while its own SHA is the live deploy.
+      group: glm-qa
       cancel-in-progress: true
     permissions:
       contents: read

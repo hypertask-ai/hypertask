@@ -139,9 +139,9 @@ async function main() {
     return refuse(`no HTPR-<n> ticket in the pull request title "${args.prTitle}"`)
   }
 
-  // Duplicate-run guard: one brief per deploy SHA. The workflow concurrency
-  // group (glm-qa-<sha>) is the primary dedup; this comment scan is
-  // belt-and-braces.
+  // Duplicate-run guard: one brief per deploy SHA. The workflow's fixed
+  // concurrency group (glm-qa, cancel-in-progress) is the primary dedup; this
+  // comment scan is belt-and-braces.
   // ponytail: a failed comment READ continues without dedup (the marker scan is
   // best-effort) so a token that can write but not read comments cannot
   // silently kill the feature; upgrade path: an idempotency key on the POST.
