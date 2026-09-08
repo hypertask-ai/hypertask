@@ -104,10 +104,6 @@ const BottomSettingsQuickTips = dynamic(
   () => import("../Global/BottomSettings_QuickTips"),
   { ssr: false },
 );
-const ShortcutArchiveNudge = dynamic(
-  () => import("../Global/ShortcutArchiveNudge"),
-  { ssr: false },
-);
 const NotificationPromoteBanner = dynamic(
   () => import("../Global/NotificationPromoteBanner"),
   { ssr: false },
@@ -1278,7 +1274,6 @@ export default function GlobalProvider({ children }: { children: ReactNode }) {
         }}
         position={mbl ? "top-right" : "bottom-left"}
       />
-      <ShortcutArchiveNudge />
 
       {showGlobalCreateHTCTask.show && (
         <CreateTaskGlobally
