@@ -72,6 +72,58 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       ? isBrowserRenderableImage(fileType, fileName)
       : Boolean(fileType?.startsWith("image/"));
 
+  /**
+   * Which HEIC previews actually exist (HTPR-6264).
+   *
+   * A preview URL is derived arithmetically, so it is a claim rather than a
+   * fact: a photo attached before this shipped, or one whose conversion failed,
+   * has no copy and the URL 404s. The tile in AttachmentsView finds that out
+   * with an `onError`, but the lightbox renders through the library's own image
+   * slide, which gives us no error hook to hang a fallback on. So the copy is
+   * probed once, and only a preview that has really loaded is shown as a
+   * picture. Anything else keeps the download panel it shows today.
+   *
+   * The probe is close to free: the tile has already requested the same URL, so
+   * this is a cache hit in every case where the lightbox was opened by clicking
+   * a thumbnail.
+   */
+  const [previewLoaded, setPreviewLoaded] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!heicFallbackEnabled) return;
+    let cancelled = false;
+    const images: HTMLImageElement[] = [];
+
+    attachments.forEach((attachment) => {
+      const url = heicPreviewUrl(
+        attachment.fileSource,
+        attachment.fileType,
+        attachment.fileName
+      );
+      if (!url) return;
+      const image = new Image();
+      images.push(image);
+      const settle = (ok: boolean) => {
+        if (cancelled) return;
+        setPreviewLoaded((current) =>
+          current[url] === ok ? current : { ...current, [url]: ok }
+        );
+      };
+      image.onload = () => settle(true);
+      image.onerror = () => settle(false);
+      image.src = url;
+    });
+
+    return () => {
+      cancelled = true;
+      // Drop the handlers so a late response cannot set state after unmount.
+      images.forEach((image) => {
+        image.onload = null;
+        image.onerror = null;
+      });
+    };
+  }, [attachments, heicFallbackEnabled]);
+
 
   // Transform attachments to lightbox slides format
   const slides: Slide[] = attachments.map((attachment) => {
@@ -92,7 +144,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
           attachment.fileName
         )
       : null;
-    if (previewUrl) {
+    if (previewUrl && previewLoaded[previewUrl]) {
       return {
         src: previewUrl,
         alt: attachment.fileName,
