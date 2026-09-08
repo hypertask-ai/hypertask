@@ -16,6 +16,7 @@ import {
   HTPR_6278_CHAT_TURN_FAILURE_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
+  GOOGLE_CALENDAR_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
   LAZY_EMOJI_LIST_FLAG,
@@ -50,6 +51,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Ends AI Chat turns that run out of time with a clear, saved failure message instead of a silent disconnect, and shows the server's real refusal instead of 'Connection lost'.",
+  },
+  {
+    key: GOOGLE_CALENDAR_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Lets each user connect Google Calendar and keep assigned tasks with due dates in a dedicated Hypertask calendar.",
   },
   {
     key: HEIC_ATTACHMENTS_FLAG,

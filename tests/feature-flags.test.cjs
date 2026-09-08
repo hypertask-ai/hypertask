@@ -137,6 +137,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   assert.deepEqual(
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
     [
+      { key: "htpr-3533-google-calendar", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
       {
@@ -214,6 +215,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6254-heic-heif-attachments",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6278-chat-turn-failure-state",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
