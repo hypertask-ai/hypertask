@@ -18,9 +18,10 @@ import { inboxArchiveTooltip } from "@/lib/inboxClusters";
 import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { decodeAgentMessage } from "@/lib/nativeAgent/agentMessageEnvelope";
+import type { ArchiveShortcutSource } from "@/lib/notifications/archiveShortcutNudge";
 
 interface Props {
-    markAsDone: (notification: INotification, index: number, mode: TRemoveFromInboxMode) => Promise<void>,
+    markAsDone: (notification: INotification, index: number, mode: TRemoveFromInboxMode) => Promise<boolean | void>,
     openTask: (mode: string, notification?: INotification | null, index?: number) => Promise<void>,
     // setSelectedInbox: Dispatch<SetStateAction<INotification | null>>,
     handleMouseLeave: () => void,
@@ -28,7 +29,7 @@ interface Props {
     selected: boolean,
     taskRef: React.RefObject<HTMLDivElement | null>,
     index: number,
-    eHandler: (mode: boolean, specificIndex?: number) => void,
+    eHandler: (mode: boolean, specificIndex: number | undefined, source: ArchiveShortcutSource) => void,
     disableButtons?: boolean,
     appShellRail?: boolean,
 
@@ -92,7 +93,7 @@ const NotificationRow = (props: Props) => {
                     onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation(); // Prevent the click event from propagating to the parent div
-                        eHandler(false, index);
+                        eHandler(false, index, "mouse");
                     }}
                 >
                     <Tooltip
