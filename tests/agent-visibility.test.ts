@@ -12,6 +12,7 @@ async function main() {
     boardAgentVisibilityWhere,
     deleteOwnedAgentProviderKeyInTransaction,
     isAgentVisibleToUser,
+    requiresProviderKeyToShare,
     setOwnedAgentVisibilityInTransaction,
     upsertOwnedAgentProviderKeyInTransaction,
   } = await import("@/lib/agents/visibility");
@@ -169,10 +170,15 @@ async function main() {
     null,
   );
 
+  // HTPR-6260: only a NATIVE agent spends through Hypertask, so only a NATIVE
+  // agent has to name a provider account before the team may use it.
+  assert.equal(requiresProviderKeyToShare("NATIVE"), true);
+  assert.equal(requiresProviderKeyToShare("EXTERNAL"), false);
+
   let updateCount = 0;
   const noKeyTx = {
     agent: {
-      findFirst: async () => ({ id: "owned-agent" }),
+      findFirst: async () => ({ id: "owned-agent", runtimeType: "NATIVE" }),
       update: async () => {
         updateCount += 1;
         return { visibility: "TEAM" };
@@ -192,6 +198,34 @@ async function main() {
     error: TEAM_VISIBILITY_KEY_REQUIRED_ERROR,
   });
   assert.equal(updateCount, 0, "TEAM must not be saved without an enabled key");
+
+  // An external agent runs on its owner's own runtime, so there is no
+  // Hypertask spend to attribute and no key to demand before sharing it.
+  let externalVisibility: "PRIVATE" | "TEAM" = "PRIVATE";
+  const externalNoKeyTx = {
+    agent: {
+      findFirst: async () => ({ id: "owned-agent", runtimeType: "EXTERNAL" }),
+      update: async ({ data }: any) => {
+        externalVisibility = data.visibility;
+        return { visibility: externalVisibility };
+      },
+    },
+    agentByokApiKey: {
+      count: async () => {
+        throw new Error("an external agent must not be key-checked");
+      },
+    },
+  } as any;
+  assert.deepEqual(
+    await setOwnedAgentVisibilityInTransaction(
+      externalNoKeyTx,
+      "owned-agent",
+      42,
+      "TEAM",
+    ),
+    { ok: true, visibility: "TEAM" },
+  );
+  assert.equal(externalVisibility, "TEAM");
 
   let guessedUpdateCount = 0;
   const guessedIdTx = {
@@ -219,9 +253,14 @@ async function main() {
     ["openrouter", { ciphertext: "secret", enabled: true }],
   ]);
   let visibility: "PRIVATE" | "TEAM" = "TEAM";
+  let runtimeType: "EXTERNAL" | "NATIVE" = "NATIVE";
   const keyTx = {
     agent: {
-      findFirst: async () => ({ id: "owned-agent", visibility }),
+      findFirst: async () => ({
+        id: "owned-agent",
+        visibility,
+        runtimeType,
+      }),
       update: async ({ data }: any) => {
         visibility = data.visibility;
         return { visibility };
@@ -285,6 +324,34 @@ async function main() {
     visibility: "TEAM",
     visibilityChanged: false,
   });
+
+  // Removing the last key un-shares a native agent because its spend would fall
+  // back to the team account. An external agent never spent there, so it keeps
+  // the visibility its owner chose (HTPR-6260).
+  runtimeType = "EXTERNAL";
+  visibility = "TEAM";
+  keyState.clear();
+  keyState.set("openrouter", { ciphertext: "secret", enabled: true });
+  assert.deepEqual(
+    await deleteOwnedAgentProviderKeyInTransaction(keyTx, {
+      agentId: "owned-agent",
+      userId: 42,
+      provider: "openrouter",
+    }),
+    { ok: true, visibility: "TEAM", visibilityChanged: false },
+  );
+  assert.deepEqual(
+    await upsertOwnedAgentProviderKeyInTransaction(keyTx, {
+      agentId: "owned-agent",
+      userId: 42,
+      provider: "openrouter",
+      ciphertext: "secret",
+      enabled: false,
+    }),
+    { ok: true, visibility: "TEAM", visibilityChanged: false },
+  );
+  assert.equal(visibility, "TEAM");
+  runtimeType = "NATIVE";
 
   const [
     detail,

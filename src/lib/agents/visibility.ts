@@ -7,6 +7,19 @@ export type AgentVisibility = (typeof AGENT_VISIBILITIES)[number];
 export const TEAM_VISIBILITY_KEY_REQUIRED_ERROR =
   "Add an API key before sharing this agent with the team.";
 
+/**
+ * Sharing an agent with the team hands other people the ability to spend its
+ * budget, so a NATIVE agent (whose turns run on Hypertask's models) must first
+ * name the provider account that pays. An EXTERNAL agent runs on its owner's
+ * own runtime and never reaches `resolveAgentByokApiKey`, so demanding a key it
+ * will never spend only blocks sharing (HTPR-6260).
+ */
+export function requiresProviderKeyToShare(
+  runtimeType: "EXTERNAL" | "NATIVE",
+): boolean {
+  return runtimeType === "NATIVE";
+}
+
 export function isAgentVisibility(value: unknown): value is AgentVisibility {
   return AGENT_VISIBILITIES.includes(value as AgentVisibility);
 }
@@ -108,13 +121,13 @@ export async function setOwnedAgentVisibilityInTransaction(
 ) {
   const agent = await tx.agent.findFirst({
     where: { id: agentId, userId },
-    select: { id: true },
+    select: { id: true, runtimeType: true },
   });
   if (!agent) {
     return { ok: false as const, status: 404, error: "Agent does not exist" };
   }
 
-  if (visibility === "TEAM") {
+  if (visibility === "TEAM" && requiresProviderKeyToShare(agent.runtimeType)) {
     const enabledKeyCount = await tx.agentByokApiKey.count({
       where: { agentId, enabled: true, ciphertext: { not: null } },
     });
@@ -159,7 +172,7 @@ export async function upsertOwnedAgentProviderKeyInTransaction(
 ) {
   const agent = await tx.agent.findFirst({
     where: { id: input.agentId, userId: input.userId },
-    select: { id: true, visibility: true },
+    select: { id: true, visibility: true, runtimeType: true },
   });
   if (!agent) {
     return { ok: false as const, status: 404, error: "Agent does not exist" };
@@ -182,7 +195,11 @@ export async function upsertOwnedAgentProviderKeyInTransaction(
   });
 
   let visibility = agent.visibility;
-  if (!input.enabled && visibility === "TEAM") {
+  if (
+    !input.enabled &&
+    visibility === "TEAM" &&
+    requiresProviderKeyToShare(agent.runtimeType)
+  ) {
     const enabledKeyCount = await tx.agentByokApiKey.count({
       where: {
         agentId: input.agentId,
@@ -222,7 +239,7 @@ export async function deleteOwnedAgentProviderKeyInTransaction(
 ) {
   const agent = await tx.agent.findFirst({
     where: { id: input.agentId, userId: input.userId },
-    select: { id: true, visibility: true },
+    select: { id: true, visibility: true, runtimeType: true },
   });
   if (!agent) {
     return { ok: false as const, status: 404, error: "Agent does not exist" };
@@ -233,7 +250,7 @@ export async function deleteOwnedAgentProviderKeyInTransaction(
   });
 
   let visibility = agent.visibility;
-  if (visibility === "TEAM") {
+  if (visibility === "TEAM" && requiresProviderKeyToShare(agent.runtimeType)) {
     const enabledKeyCount = await tx.agentByokApiKey.count({
       where: {
         agentId: input.agentId,
