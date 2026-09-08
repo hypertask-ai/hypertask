@@ -634,6 +634,28 @@ export async function runCoreActionsSmoke(options: {
     }
     steps.push("post comment and mention user and agent");
 
+    // The move dialog is fed by this pages route, not MCP; a board whose
+    // column list crashed used to escape the smoke entirely (HTPR-6259).
+    const columns = await request(
+      "load move-to-column columns",
+      "/api/section/getProjectSections",
+      {
+        method: "POST",
+        body: JSON.stringify({ projectId: fixture.projectId }),
+      },
+    );
+    if (!Array.isArray(columns.data) || columns.data.length === 0) {
+      throw new SmokeFailure(
+        "application",
+        "load move-to-column columns",
+        200,
+        Array.isArray(columns.data)
+          ? "the move-to-column column list was empty"
+          : "response was not a columns array",
+      );
+    }
+    steps.push("load move-to-column columns");
+
     const moveResponse = await move(
       "move task",
       fixture.altSectionId,

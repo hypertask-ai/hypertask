@@ -331,6 +331,8 @@ function fakeApp(
     failOpenTask?: boolean;
     failRankRestore?: boolean;
     failSearch?: boolean;
+    failColumns?: boolean;
+    emptyColumns?: boolean;
     loseCommentResponse?: boolean;
     omitCommentId?: boolean;
     otherSmokeMarkerAfter?: boolean;
@@ -502,6 +504,23 @@ function fakeApp(
         assignStatus: body.intent === "assign" ? "Assigned" : "Unassigned",
       });
     }
+    if (url.pathname === "/api/section/getProjectSections") {
+      if (options.failColumns)
+        return json({ error: "Cannot read properties of null" }, 500);
+      if (options.emptyColumns) return json([]);
+      return json([
+        {
+          id: fixture.baseSectionId,
+          section_title: "Baseline",
+          visibility: true,
+        },
+        {
+          id: fixture.altSectionId,
+          section_title: "Alternate",
+          visibility: true,
+        },
+      ]);
+    }
     if (url.pathname === "/api/search/document") {
       if (options.failSearch)
         return json({ message: "search unavailable" }, 500);
@@ -533,6 +552,7 @@ test("runs every core action and restores the fixture", async () => {
     "open task",
     "load comments",
     "post comment and mention user and agent",
+    "load move-to-column columns",
     "move task",
     "assign and unassign",
     "search",
@@ -560,6 +580,41 @@ test("reports the task-detail regression as the open-task action", async () => {
   assert.equal(result.kind, "application");
   assert.equal(result.action, "open task");
   assert.equal(result.status, 500);
+});
+
+test("reports a crashed move-to-column route as the columns action", async () => {
+  const app = fakeApp({ failColumns: true });
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai",
+    cookieHeader: "ht_session=signed; nookies_user=user",
+    fixture,
+    runId: "run-columns-crash",
+    fetchImpl: app.fetchImpl,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.kind, "application");
+  assert.equal(result.action, "load move-to-column columns");
+  assert.equal(result.status, 500);
+  assert.equal(app.state.sectionId, fixture.baseSectionId);
+  assert.deepEqual(app.state.comments, []);
+});
+
+test("reports an empty move-to-column list as the columns action", async () => {
+  const app = fakeApp({ emptyColumns: true });
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai",
+    cookieHeader: "ht_session=signed; nookies_user=user",
+    fixture,
+    runId: "run-columns-empty",
+    fetchImpl: app.fetchImpl,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.kind, "application");
+  assert.equal(result.action, "load move-to-column columns");
+  assert.match(result.detail, /column list was empty/);
+  assert.equal(app.state.sectionId, fixture.baseSectionId);
 });
 
 test("restores all visible state after a failure that follows mutations", async () => {
