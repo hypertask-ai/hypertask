@@ -28,6 +28,7 @@ function stubModule(relativePath, exports) {
 function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
   const deliveries = [];
   let briefCalls = 0;
+  const participantUpdates = [];
   const prisma = {
     chatSession: {
       findFirst: async () => ({
@@ -53,7 +54,12 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
           }),
         },
         chatSession: { update: async () => ({}) },
-        chatSessionParticipant: { updateMany: async () => ({ count: 1 }) },
+        chatSessionParticipant: {
+          updateMany: async (args) => {
+            participantUpdates.push(args);
+            return { count: 1 };
+          },
+        },
       }),
   };
 
@@ -103,6 +109,7 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
     ...routeJiti(routePath),
     deliveries,
     briefCalls: () => briefCalls,
+    participantUpdates,
   };
 }
 
@@ -390,6 +397,16 @@ test("message send includes the brief only when its server flag is enabled", asy
   assert.equal((await sendMessage(disabled)).status, 200);
   assert.equal(disabled.briefCalls(), 0);
   assert.equal("agentBrief" in disabled.deliveries[0], false);
+  assert.deepEqual(disabled.participantUpdates[0].where, {
+    sessionId: "session-1",
+    userId: 6,
+  });
+  assert.equal(disabled.participantUpdates[0].data.draft, null);
+  assert.equal(
+    disabled.participantUpdates[0].data.lastReadAt.toISOString(),
+    "2026-09-05T12:00:00.000Z",
+    "turning sharing off cannot leave a sent draft or stale read marker",
+  );
 });
 
 test("message send keeps the exact legacy payload when enrichment fails", async () => {

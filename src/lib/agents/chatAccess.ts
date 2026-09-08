@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
+import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
 
 // One place that decides who may read or write an Agent Chat thread. Every
 // chat route used to carry its own copy of this `findFirst`, so a rule added
@@ -21,6 +22,7 @@ type ChatAccessGranted<TSession> = {
   ok: true;
   session: TSession;
   agentId: string;
+  sharedConversationEnabled?: boolean;
 };
 
 export type ChatAccessResult<TSession> =
@@ -102,15 +104,47 @@ export async function ensureChatParticipant(sessionId: string, userId: number) {
   });
 }
 
-/** Every person with a participant row, for fanning a live update out. */
+/** Every currently authorized participant in a released shared thread. */
 export async function chatParticipantUserIds(
   sessionId: string,
 ): Promise<number[]> {
+  const identity = await findChatSession(
+    { id: sessionId, agentId: { not: null } },
+    { agent: { select: { userId: true } } },
+  );
+  if (
+    !identity?.agentId ||
+    !identity.agent ||
+    !(await isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, identity.agent.userId))
+  ) {
+    return [];
+  }
   const rows = await prisma.chatSessionParticipant.findMany({
     where: { sessionId },
     select: { userId: true },
   });
-  return rows.map((row) => row.userId);
+  // Fail closed per recipient. One stale participant or failed access lookup
+  // must not suppress updates for everyone else who still belongs here.
+  // ponytail: if a thread grows beyond a small team, replace these per-person
+  // checks with one batch authorization query before widening Agent Chat.
+  const authorized = await Promise.all(
+    rows.map(async ({ userId }) => {
+      try {
+        const session = await findChatSession(
+          userAgentChatSessionWhere(
+            sessionId,
+            userId,
+            await userTeamIds(userId),
+          ),
+          {},
+        );
+        return session?.agentId ? userId : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return authorized.filter((userId): userId is number => userId !== null);
 }
 
 /**
@@ -150,8 +184,23 @@ export async function loadUserAgentChatSession<
   userId: number;
   select: TSelect;
 }): Promise<ChatAccessResult<ChatSessionOf<TSelect>>> {
+  // Evaluate rollout against the conversation owner, not the viewer. One
+  // shared resource must never have different rules for two participants.
+  const identity = await findChatSession(
+    { id: sessionId, agentId: { not: null } },
+    { agent: { select: { userId: true } } },
+  );
+  if (!identity?.agentId || !identity.agent) return notFound;
+  const sharedConversationEnabled = await isFeatureEnabled(
+    SHARED_AGENT_CHAT_FLAG,
+    identity.agent.userId,
+  );
   const session = await findChatSession(
-    userAgentChatSessionWhere(sessionId, userId, await userTeamIds(userId)),
+    userAgentChatSessionWhere(
+      sessionId,
+      userId,
+      sharedConversationEnabled ? await userTeamIds(userId) : [],
+    ),
     select,
   );
   if (!session?.agentId) return notFound;
@@ -159,6 +208,7 @@ export async function loadUserAgentChatSession<
     ok: true,
     session: session as ChatSessionOf<TSelect>,
     agentId: session.agentId,
+    sharedConversationEnabled,
   };
 }
 

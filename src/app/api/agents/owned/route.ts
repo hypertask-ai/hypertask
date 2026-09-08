@@ -78,7 +78,6 @@ export async function GET(request: NextRequest) {
       { status: 401 },
     );
   }
-
   const agents = await prisma.agent.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
@@ -152,7 +151,8 @@ export async function GET(request: NextRequest) {
 
   // The chat-recency aggregate only feeds the live-sort flag. Skip it when
   // the flag is off so every roster refresh does not pay for unused work
-  // (OCR advisory on HTPR-6283).
+  // (OCR advisory on HTPR-6283). Unread still runs for private owner chats
+  // even when shared mode is off.
   const liveSortEnabled = await isFeatureEnabled(
     HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
     userId,
