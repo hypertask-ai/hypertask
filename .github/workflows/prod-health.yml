@@ -369,6 +369,14 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The GLM QA job (HTPR-6239) reads these: `ran` says the browser checks
+    # actually executed (not skipped for a missing session), `rolledback` says
+    # a confirmed failure promoted the previous deployment, so there is no
+    # live build of this SHA left to explore.
+    outputs:
+      ran: ${{ steps.smoke.outputs.outcome != 'skipped' && steps.smoke.outputs.outcome != 'cancelled' && steps.smoke.outputs.outcome != '' }}
+      ok: ${{ steps.smoke.outputs.outcome == 'success' }}
+      rolledback: ${{ steps.decide.outputs.rolledback == 'true' }}
     steps:
       # SMOKE_SESSION_STATE isn't provisioned yet (HTPR-6199 needs a real
       # signup + email verification). Check first so production pushes do not
@@ -465,6 +473,7 @@ jobs:
         run: echo "::warning::SMOKE_SESSION_STATE is not set — skipping smoke QA. See e2e/smoke/README.md to provision it."
 
       - name: Decide unrunnable vs. real failure, rollback if confirmed
+        id: decide
         if: ${{ !cancelled() && steps.provisioned.outputs.ok == 'true' && (steps.smoke.outcome == 'failure' || steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure') }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -500,6 +509,7 @@ jobs:
           fi
 
           echo "Smoke QA confirmed a real failure on $SHA. Rolling back."
+          echo "rolledback=true" >> "$GITHUB_OUTPUT"
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$SHA")
           echo "$RESULT"
           ACTION=$(echo "$RESULT" | jq -r '.action // "failed"')
@@ -516,6 +526,83 @@ jobs:
               ;;
           esac
           exit 1
+
+  # ── GLM exploratory QA (HTPR-6239): a 5-minute human-style pass on the live app ──
+  # Runs after the smoke checks actually executed (not skipped for a missing
+  # session) and after nothing rolled back, so the explored build is live
+  # production. It only POSTs a brief that mentions the configured GLM worker
+  # on the merged pull request's ticket; the agent explores and reports there.
+  # Exploratory, never a gate: a dispatch failure alerts on Telegram and never
+  # blocks, fails, or rolls back the deploy itself.
+  glm-qa:
+    needs: [health, smoke]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' && needs.smoke.outputs.ran == 'true' && needs.smoke.outputs.rolledback != 'true' }}
+    concurrency:
+      group: glm-qa-${{ github.sha }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 50
+
+      # The merge (head) commit's associated pull request is the deploy's
+      # ticket source of truth; a commit subject is forgeable and ambiguous.
+      # A push without an associated PR (rare, e.g. an ignored build step) is a
+      # normal skip, not a failure: the job must stay green.
+      - name: Resolve the merged pull request
+        id: pr
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          PR_JSON=$(curl -sS --fail-with-body -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/$REPO/commits/$SHA/pulls")
+          PR_NUMBER=$(echo "$PR_JSON" | jq -r '.[0].number // empty')
+          PR_TITLE=$(echo "$PR_JSON" | jq -r '.[0].title // empty')
+          if [ -z "$PR_NUMBER" ] || [ -z "$PR_TITLE" ]; then
+            echo "::warning::No pull request associated with $SHA; no deploy ticket to brief. Skipping GLM QA."
+            exit 1
+          fi
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch the GLM exploratory QA brief
+        id: dispatch
+        if: steps.pr.outcome == 'success'
+        continue-on-error: true
+        env:
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          MCP_BASE_URL: https://app.hypertask.ai
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          GLM_QA_AGENT_NAME: ${{ vars.GLM_QA_AGENT_NAME }}
+          GLM_QA_AGENT_ID: ${{ vars.GLM_QA_AGENT_ID }}
+          SHA: ${{ github.sha }}
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | tr '\n' ' ')
+          node .github/scripts/dispatch-glm-qa.mjs \
+            --sha "$SHA" \
+            --pr-title "$PR_TITLE" \
+            --smoke-ok "${{ needs.smoke.outputs.ok }}" \
+            --changed-files "$CHANGED_FILES"
+
+      - name: Alert when the dispatch failed
+        if: steps.dispatch.outcome == 'failure'
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+            -d chat_id="$TG_CHAT" \
+            --data-urlencode text="⚠️ hypertasks: the GLM exploratory QA brief for ${{ github.sha }} could not be dispatched (see the glm-qa job log). NOT a deploy failure — verify manually: https://app.hypertask.ai" \
+          || echo "::warning::GLM QA dispatch alert could not be delivered"
 
   # ── Deploy drift: is production actually serving the production tip? ──────────
   # A newer merge can go READY and then an older build from another session's
