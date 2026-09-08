@@ -13,4 +13,5 @@ regexes = [
   '''qwen3\.7-plus''',
   '''sk_test_placeholder''',
   '''htpr-5906-shortcut-nudges''',
+  '''htpr-6254-heic-heif-attachments''',
 ]
