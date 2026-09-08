@@ -12,6 +12,7 @@ import {
   AUTO_TASK_DESCRIPTIONS_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
   CORE_ACTIONS_SMOKE_FLAG,
+  HEIC_ATTACHMENTS_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
@@ -43,6 +44,12 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HEIC_ATTACHMENTS_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Shows a HEIC, HEIF or TIFF attachment as a named file you can download, instead of the broken-image icon a browser paints when it cannot decode the format.",
+  },
   {
     key: CORE_ACTIONS_SMOKE_FLAG,
     shippedOn: "2026-09-08",
