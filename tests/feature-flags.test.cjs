@@ -137,6 +137,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   assert.deepEqual(
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
     [
+      {
+        key: "htpr-4540-team-scoped-management-keys",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
       { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
       {

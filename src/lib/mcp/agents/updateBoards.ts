@@ -1,3 +1,6 @@
+import type { Prisma } from '@prisma/client'
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
+
 const MAX_PROJECT_UPDATES = 100
 const MAX_TRANSACTION_ATTEMPTS = 3
 
@@ -21,7 +24,7 @@ export type AgentBoardUpdateInput = {
 type Membership = { projectId: number; project: { teamId: string | null } }
 type AgentRead = {
   findFirst(args: {
-    where: { id: string; userId: number }
+    where: Prisma.AgentWhereInput
     select: {
       id: true
       userId: true
@@ -124,14 +127,16 @@ export async function updateOwnedAgentBoards(
     userId: number
   ) => Promise<AccessibleAgentBoard | null>,
   userId: number,
-  input: AgentBoardUpdateInput
+  input: AgentBoardUpdateInput,
+  teamId: string | undefined
 ) {
+  const scopeWhere = teamId ? agentWithinTeamWhere(teamId) : {}
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await database.$transaction(
         async ({ agent: agentStore, member }) => {
           const agent = await agentStore.findFirst({
-            where: { id: input.agentId, userId },
+            where: { ...scopeWhere, id: input.agentId, userId },
             select: {
               id: true,
               userId: true,
@@ -168,6 +173,13 @@ export async function updateOwnedAgentBoards(
                 throw new AgentBoardUpdateError(
                   'Agents require a team board',
                   400,
+                  'add_project_ids'
+                )
+              }
+              if (teamId && project.teamId !== teamId) {
+                throw new AgentBoardUpdateError(
+                  `You do not have access to project ${id}`,
+                  403,
                   'add_project_ids'
                 )
               }

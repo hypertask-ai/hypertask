@@ -31,7 +31,7 @@ async function demo() {
   const prismaMock = prisma as any
   const authApi = auth.api as any
   const originalAgentFindFirst = prismaMock.agent.findFirst
-  const originalAgentUpdate = prismaMock.agent.update
+  const originalAgentUpdateMany = prismaMock.agent.updateMany
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst =
     prismaMock.revokedToken.findFirst
@@ -139,7 +139,7 @@ async function demo() {
         ? { id: 'revoked-agent', revokedAt: alreadyRevokedAt }
         : null
     }
-    prismaMock.agent.update = async () => {
+    prismaMock.agent.updateMany = async () => {
       throw new Error('already-revoked agents must not be updated')
     }
     const alreadyRevokedResponse = await POST(
@@ -155,9 +155,9 @@ async function demo() {
       return { id: 'owned-agent', revokedAt: null }
     }
     let revokeUpdate: Record<string, any> | undefined
-    prismaMock.agent.update = async (args: Record<string, any>) => {
+    prismaMock.agent.updateMany = async (args: Record<string, any>) => {
       revokeUpdate = args
-      return { id: args.where.id }
+      return { count: 1 }
     }
     const revokeResponse = await POST(
       request({ agent_id: 'owned-agent' }, 'htmk_management-test')
@@ -177,7 +177,7 @@ async function demo() {
         mcpTokenJti: revokeUpdate?.data.mcpTokenJti,
       },
       {
-        where: { id: 'owned-agent' },
+        where: { id: 'owned-agent', userId: user.id, revokedAt: null },
         mcpTokenHash: null,
         mcpTokenJti: null,
       }
@@ -203,7 +203,7 @@ async function demo() {
     })
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
-    prismaMock.agent.update = originalAgentUpdate
+    prismaMock.agent.updateMany = originalAgentUpdateMany
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst =
       originalRevokedTokenFindFirst

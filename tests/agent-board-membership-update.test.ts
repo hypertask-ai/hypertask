@@ -17,6 +17,7 @@ function fakeDatabase(
   const created: Array<Record<string, unknown>> = []
   const removed: number[] = []
   const isolationLevels: string[] = []
+  let agentWhere: Record<string, unknown> | undefined
   let transactionAttempts = 0
   const database: AgentBoardUpdateDatabase = {
     $transaction: async (run, options) => {
@@ -24,7 +25,12 @@ function fakeDatabase(
       isolationLevels.push(options.isolationLevel)
       if (transactionAttempts <= serializationFailures) throw { code: 'P2034' }
       return run({
-        agent: { findFirst: async () => agent },
+        agent: {
+          findFirst: async ({ where }) => {
+            agentWhere = where
+            return agent
+          },
+        },
         member: {
           deleteMany: async ({ where }) => {
             removed.push(...where.projectId.in)
@@ -47,6 +53,7 @@ function fakeDatabase(
     created,
     removed,
     isolationLevels,
+    agentWhere: () => agentWhere,
     transactionAttempts: () => transactionAttempts,
   }
 }
@@ -103,7 +110,8 @@ describe('owned agent board membership updates', () => {
       state.database,
       async (id) => ({ id, teamId: 'inne' }),
       6,
-      update('agent-1', [339], [2312])
+      update('agent-1', [339], [2312]),
+      undefined
     )
     assert.deepEqual(state.isolationLevels, ['Serializable'])
     assert.deepEqual(state.removed, [2312])
@@ -126,13 +134,62 @@ describe('owned agent board membership updates', () => {
       state.database,
       async (id) => ({ id, teamId: 'inne' }),
       6,
-      update('agent-1', [339], [])
+      update('agent-1', [339], []),
+      undefined
     )
     assert.equal(state.transactionAttempts(), 3)
     assert.deepEqual(state.created, [
       { projectId: 339, userId: 6, agentId: 'agent-1' },
     ])
     assert.equal(result.addedProjects, 1)
+  })
+
+  it('checks the authenticated team scope inside the write transaction', async () => {
+    const state = fakeDatabase({
+      id: 'agent-1',
+      userId: 6,
+      members: [{ projectId: 339, project: { teamId: 'team-a' } }],
+    })
+    await updateOwnedAgentBoards(
+      state.database,
+      async () => null,
+      6,
+      update('agent-1', [], [999]),
+      'team-a'
+    )
+    assert.deepEqual(state.agentWhere(), {
+      id: 'agent-1',
+      userId: 6,
+      members: {
+        some: { project: { teamId: 'team-a' } },
+        none: {
+          project: {
+            OR: [{ teamId: null }, { teamId: { not: 'team-a' } }],
+          },
+        },
+      },
+    })
+  })
+
+  it('rejects a board outside the authenticated team', async () => {
+    const state = fakeDatabase({
+      id: 'agent-1',
+      userId: 6,
+      members: [{ projectId: 339, project: { teamId: 'team-a' } }],
+    })
+    await expectError(
+      updateOwnedAgentBoards(
+        state.database,
+        async (id) => ({ id, teamId: 'team-b' }),
+        6,
+        update('agent-1', [15], []),
+        'team-a'
+      ),
+      403,
+      'add_project_ids'
+    )
+    assert.deepEqual(state.created, [])
+    assert.deepEqual(state.removed, [])
   })
 
   it('makes idempotent retries no-ops', async () => {
@@ -145,7 +202,8 @@ describe('owned agent board membership updates', () => {
       state.database,
       async () => { throw new Error('existing memberships need no access check') },
       6,
-      update('agent-1', [339], [2312])
+      update('agent-1', [339], [2312]),
+      undefined
     )
     assert.deepEqual(state.created, [])
     assert.deepEqual(state.removed, [])
@@ -157,7 +215,7 @@ describe('owned agent board membership updates', () => {
     const missing = fakeDatabase(null)
     await expectError(
       updateOwnedAgentBoards(missing.database, async () => null, 6,
-        update('other-agent', [339], [])),
+        update('other-agent', [339], []), undefined),
       404,
       'agent_id'
     )
@@ -167,7 +225,7 @@ describe('owned agent board membership updates', () => {
     })
     await expectError(
       updateOwnedAgentBoards(inaccessible.database, async () => null, 6,
-        update('agent-1', [339], [])),
+        update('agent-1', [339], []), undefined),
       403,
       'add_project_ids'
     )
@@ -183,14 +241,14 @@ describe('owned agent board membership updates', () => {
     await expectError(
       updateOwnedAgentBoards(crossTeam.database,
         async (id) => ({ id, teamId: 'hypertask' }), 6,
-        update('agent-1', [15], [])),
+        update('agent-1', [15], []), undefined),
       400,
       'add_project_ids'
     )
     const teamMove = fakeDatabase(original)
     const moved = await updateOwnedAgentBoards(teamMove.database,
       async (id) => ({ id, teamId: 'hypertask' }), 6,
-      update('agent-1', [15], [2312]))
+      update('agent-1', [15], [2312]), undefined)
     assert.equal(moved.addedProjects, 1)
     assert.equal(moved.removedProjects, 1)
 
@@ -199,7 +257,7 @@ describe('owned agent board membership updates', () => {
       members: [{ projectId: 7, project: { teamId: null } }],
     })
     const removed = await updateOwnedAgentBoards(legacy.database, async () => null, 6,
-      update('agent-1', [], [7]))
+      update('agent-1', [], [7]), undefined)
     assert.equal(removed.removedProjects, 1)
   })
 })

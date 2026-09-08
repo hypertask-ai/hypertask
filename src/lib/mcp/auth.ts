@@ -26,6 +26,13 @@ import {
   parseManagementPermissions,
 } from '@/lib/mcp/managementPermissions'
 import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry'
+import { isFeatureEnabled } from '@/lib/flags'
+import { TEAM_SCOPED_MANAGEMENT_KEYS_FLAG } from '@/lib/flags/keys'
+import {
+  ACCOUNT_MANAGEMENT_KEY_PREFIX,
+  getManagementKeyTeam,
+  TEAM_MANAGEMENT_KEY_PREFIX,
+} from '@/lib/mcp/managementKeyTeamScope'
 
 const JWT_SECRET = process.env.JWT_SECRET as string
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
@@ -33,9 +40,10 @@ export const JWT_MCP_AUDIENCE = 'mcp-api'
 export const JWT_LEGACY_MCP_AUDIENCE = 'hypertasks-mcp'
 const AGENT_TOKEN_GENERATION_CLAIM = 'agentTokenGeneration'
 const MCP_TOKEN_ISSUED_AT_MS_CLAIM = 'mcpIssuedAtMs'
-export const MANAGEMENT_KEY_PREFIX = 'htmk_'
+export const MANAGEMENT_KEY_PREFIX = ACCOUNT_MANAGEMENT_KEY_PREFIX
 export const isManagementKeyToken = (token: string) =>
-  token.startsWith(MANAGEMENT_KEY_PREFIX)
+  token.startsWith(MANAGEMENT_KEY_PREFIX) ||
+  token.startsWith(TEAM_MANAGEMENT_KEY_PREFIX)
 export function extractBearerToken(authHeader: string | null): string | null {
   return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
 }
@@ -139,6 +147,7 @@ export type McpAuthContext = {
   management?: {
     keyId: string
     permissions: Record<string, string[]>
+    teamId?: string
   }
 }
 
@@ -492,6 +501,44 @@ async function validateManagementApiKey(token: string): Promise<McpAuthContext |
     })
     if (!user) return null
 
+    let teamId: string | undefined
+    if (token.startsWith(TEAM_MANAGEMENT_KEY_PREFIX)) {
+      if (
+        !(await isFeatureEnabled(
+          TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+          user.id
+        ))
+      ) {
+        return null
+      }
+
+      const keyId = Number(result.key.id)
+      if (!Number.isSafeInteger(keyId) || keyId <= 0) return null
+      const keyRow = await prisma.betterAuthApiKey.findFirst({
+        where: {
+          id: keyId,
+          userId: user.id,
+          prefix: TEAM_MANAGEMENT_KEY_PREFIX,
+          enabled: true,
+        },
+        select: { teamId: true, teamAccessBinding: true },
+      })
+      if (!keyRow?.teamId || !keyRow.teamAccessBinding) return null
+
+      const team = await getManagementKeyTeam(user.id, keyRow.teamId)
+      if (!team || team.accessBinding !== keyRow.teamAccessBinding) {
+        // A removed member must not regain a dormant credential when invited
+        // back later with a new membership row. Disabling also gives account
+        // owners a visible audit row.
+        await prisma.betterAuthApiKey.updateMany({
+          where: { id: keyId, userId: user.id, enabled: true },
+          data: { enabled: false },
+        })
+        return null
+      }
+      teamId = team.id
+    }
+
     return {
       user: {
         id: user.id,
@@ -502,6 +549,7 @@ async function validateManagementApiKey(token: string): Promise<McpAuthContext |
       management: {
         keyId: String(result.key.id),
         permissions: parseManagementPermissions(result.key.permissions),
+        ...(teamId ? { teamId } : {}),
       },
     }
   } catch (error) {

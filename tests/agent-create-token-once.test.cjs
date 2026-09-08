@@ -27,6 +27,8 @@ function loadCreateModule({
   mintedToken = "minted-token",
   validateManagementOrSessionAuth = async () => null,
   hasManagementWritePermission = () => true,
+  agentWithinTeamWhere = () => ({}),
+  getAccessibleAgentBoard = async () => null,
 } = {}) {
   const mod = { exports: {} };
   const mockRequire = (request) => {
@@ -55,13 +57,16 @@ function loadCreateModule({
     if (request === "@/lib/mcp/managementPermissions") {
       return { hasManagementWritePermission };
     }
+    if (request === "@/lib/mcp/managementKeyTeamScope") {
+      return { agentWithinTeamWhere };
+    }
     if (request === "@/lib/prisma") {
       // esModuleInterop's __importDefault wraps a plain object as
       // { default: mod } itself, so the mock must NOT pre-wrap it.
       return prisma;
     }
     if (request === "@/utils/controllers/agents/boardMembers") {
-      return { getAccessibleAgentBoard: async () => null };
+      return { getAccessibleAgentBoard };
     }
     if (request === "@/utils/controllers/agents/teamScope") {
       return {
@@ -85,7 +90,10 @@ function request(body) {
 
 test("rejects a missing display_name before touching the database", async () => {
   const { createAgentForUser } = loadCreateModule({ prisma: {} });
-  const res = await createAgentForUser(request({}), { id: 6, email: "a@b.com" });
+  const res = await createAgentForUser(request({}), {
+    id: 6,
+    email: "a@b.com",
+  });
   assert.equal(res.status, 400);
   const data = await res.json();
   assert.equal(data.field, "display_name");
@@ -93,10 +101,10 @@ test("rejects a missing display_name before touching the database", async () => 
 
 test("rejects a non-string display_name before touching the database", async () => {
   const { createAgentForUser } = loadCreateModule({ prisma: {} });
-  const res = await createAgentForUser(
-    request({ display_name: 42 }),
-    { id: 6, email: "a@b.com" },
-  );
+  const res = await createAgentForUser(request({ display_name: 42 }), {
+    id: 6,
+    email: "a@b.com",
+  });
   assert.equal(res.status, 400);
   const data = await res.json();
   assert.equal(data.field, "display_name");
@@ -158,6 +166,51 @@ test("a successful create returns the token exactly once, alongside the agent", 
   // The response is the only place the token appears; nothing else in the
   // payload repeats or derives it.
   assert.doesNotMatch(JSON.stringify(data.agent), /one-time-token/);
+});
+
+test("a team key checks duplicate names only inside its authenticated team", async () => {
+  let duplicateWhere;
+  const prisma = {
+    agent: {
+      findFirst: async ({ where }) => {
+        duplicateWhere = where;
+        return null;
+      },
+      create: async ({ data }) => ({
+        id: "new-agent",
+        displayName: data.displayName,
+        photoURL: null,
+      }),
+      update: async () => ({}),
+    },
+    member: { createMany: async () => ({ count: 1 }) },
+    $transaction: async (fn) => fn(prisma),
+  };
+  const teamScope = {
+    members: { some: { project: { teamId: "team-a" } } },
+  };
+  const { createAgentForUser } = loadCreateModule({
+    prisma,
+    agentWithinTeamWhere: (teamId) => {
+      assert.equal(teamId, "team-a");
+      return teamScope;
+    },
+    getAccessibleAgentBoard: async () => ({ id: 339, teamId: "team-a" }),
+  });
+
+  const response = await createAgentForUser(
+    request({ display_name: "Build Agent", project_ids: [339] }),
+    { id: 6, email: "a@b.com" },
+    "team-a",
+  );
+
+  assert.equal(response.status, 201);
+  assert.deepEqual(duplicateWhere, {
+    userId: 6,
+    displayName: "Build Agent",
+    revokedAt: null,
+    ...teamScope,
+  });
 });
 
 test("the browser-session route rejects an unauthenticated request before any validation", async () => {

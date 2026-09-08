@@ -16,11 +16,10 @@ const loadGatewayUsage = require("jiti")(
     interopDefault: true,
   },
 );
-const {
-  gatewayBillingPeriodRange: realGatewayBillingPeriodRange,
-} = loadGatewayUsage(
-  path.join(root, "src/app/api/settings/ai-usage/gatewayUsage.ts"),
-);
+const { gatewayBillingPeriodRange: realGatewayBillingPeriodRange } =
+  loadGatewayUsage(
+    path.join(root, "src/app/api/settings/ai-usage/gatewayUsage.ts"),
+  );
 const TEST_PERIOD = realGatewayBillingPeriodRange(
   new Date("2026-08-21T12:00:00.000Z"),
 );
@@ -110,8 +109,10 @@ function loadRoute({
   } else {
     stubModule("src/lib/mcp/auth.ts", {
       checkMcpRateLimit: async () => rateLimitResponse,
-      extractBearerToken: (header) => header?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null,
-      isManagementKeyToken: (token) => token.startsWith("htmk_"),
+      extractBearerToken: (header) =>
+        header?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null,
+      isManagementKeyToken: (token) =>
+        token.startsWith("htmk_") || token.startsWith("httk_"),
       validateMcpAuth: async () => authContext,
     });
   }
@@ -167,8 +168,7 @@ function request(
   token = "htmk_usage-test",
   scheme = "Bearer",
 ) {
-  const headers =
-    token === null ? {} : { Authorization: `${scheme} ${token}` };
+  const headers = token === null ? {} : { Authorization: `${scheme} ${token}` };
   return new NextRequest(`https://app.hypertask.ai/api/mcp/ai/usage${search}`, {
     headers,
   });
@@ -355,7 +355,10 @@ test("usage route returns only owner-scoped counts and spend", async () => {
     );
     assert.equal(reportUrl.pathname, "/report");
     assert.equal(reportUrl.searchParams.get("tags"), `team:${TEAM_ID}`);
-    assert.equal(reportUrl.searchParams.get("start_date"), TEST_PERIOD.startDate);
+    assert.equal(
+      reportUrl.searchParams.get("start_date"),
+      TEST_PERIOD.startDate,
+    );
     assert.equal(reportUrl.searchParams.get("end_date"), TEST_PERIOD.endDate);
   } finally {
     restore();
@@ -731,6 +734,35 @@ test("usage route binds ownership to the authenticated key identity", async () =
     assert.deepEqual(prisma.teamFindFirstArgs.where.googleAccount, {
       userId,
     });
+  } finally {
+    restore();
+  }
+});
+
+test("a team key cannot override its bound usage team", async () => {
+  const prisma = prismaFixture();
+  const { route, restore } = loadRoute({
+    authContext: {
+      user: { id: 6, email: "owner@example.test" },
+      agentId: null,
+      management: {
+        keyId: "2",
+        teamId: TEAM_ID,
+        permissions: { usage: ["read"] },
+      },
+    },
+    funding: null,
+    gatewayResponse: Response.json({ results: [] }),
+    prisma,
+  });
+
+  try {
+    const response = await route.GET(
+      request(`?team_id=${OTHER_TEAM_ID}`, "httk_usage-test"),
+    );
+    assert.equal(response.status, 403);
+    assert.equal(prisma.teamFindFirstArgs, undefined);
+    assert.equal(prisma.aggregateCalls ?? 0, 0);
   } finally {
     restore();
   }

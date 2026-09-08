@@ -7,6 +7,7 @@ import {
 } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 import prisma from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -97,6 +98,9 @@ export async function handleRotateAgentTokenRequest(
     )
   }
   const agentId = body.agent_id.trim()
+  const agentScope = ctx.management?.teamId
+    ? agentWithinTeamWhere(ctx.management.teamId)
+    : {}
 
   const agent = await prisma.agent.findFirst({
     where: {
@@ -105,8 +109,9 @@ export async function handleRotateAgentTokenRequest(
       // Native agents run on the in-app loop under the user's own session;
       // they have no external MCP client, so no token to rotate.
       runtimeType: 'EXTERNAL',
+      ...agentScope,
     },
-    select: { id: true },
+    select: { id: true, runtimeGeneration: true },
   })
   if (!agent) {
     return NextResponse.json(
@@ -121,8 +126,14 @@ export async function handleRotateAgentTokenRequest(
     undefined,
     agent.id
   )
-  await prisma.agent.update({
-    where: { id: agent.id },
+  const updated = await prisma.agent.updateMany({
+    where: {
+      ...agentScope,
+      id: agent.id,
+      userId: ctx.user.id,
+      runtimeType: 'EXTERNAL',
+      runtimeGeneration: agent.runtimeGeneration,
+    },
     data: {
       ...agentTokenCredentialFields(token),
       mcpTokenExpiresAt: null,
@@ -130,6 +141,12 @@ export async function handleRotateAgentTokenRequest(
       runtimeGeneration: { increment: 1 },
     },
   })
+  if (updated.count !== 1) {
+    return NextResponse.json(
+      { success: false, error: 'Agent not found' },
+      { status: 404 }
+    )
+  }
 
   return NextResponse.json({
     success: true,

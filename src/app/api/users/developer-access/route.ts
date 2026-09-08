@@ -5,7 +5,13 @@ import jwt from 'jsonwebtoken'
 import prisma from '@/lib/prisma'
 import { API_KEY_SCOPE_LABEL, isApiKeyUsable } from '@/lib/apiKeys'
 import { apiKeySelect, getApiKeyOwnerFromCookies } from '@/lib/apiKeyAccess'
+import { isFeatureEnabled } from '@/lib/flags'
+import { TEAM_SCOPED_MANAGEMENT_KEYS_FLAG } from '@/lib/flags/keys'
 import { parseManagementPermissions } from '@/lib/mcp/managementPermissions'
+import {
+  ACCOUNT_MANAGEMENT_KEY_PREFIX,
+  TEAM_MANAGEMENT_KEY_PREFIX,
+} from '@/lib/mcp/managementKeyTeamScope'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -32,15 +38,27 @@ export async function GET(_request: NextRequest) {
     }
 
     const now = new Date()
-
-    const [restKeys, managementRows, connections] = await Promise.all([
+    const [
+      teamScopedKeysEnabled,
+      restKeys,
+      managementRows,
+      connections,
+    ] = await Promise.all([
+      isFeatureEnabled(TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, user.id),
       prisma.apiKey.findMany({
         where: { userId: user.id },
         select: apiKeySelect,
         orderBy: { createdAt: 'desc' },
       }),
       prisma.betterAuthApiKey.findMany({
-        where: { userId: user.id, prefix: 'htmk_' },
+        where: {
+          userId: user.id,
+          prefix: {
+            // Inventory every credential so rollout changes never hide a key
+            // that the owner may need to revoke.
+            in: [ACCOUNT_MANAGEMENT_KEY_PREFIX, TEAM_MANAGEMENT_KEY_PREFIX],
+          },
+        },
         select: {
           id: true,
           name: true,
@@ -50,6 +68,8 @@ export async function GET(_request: NextRequest) {
           lastRequest: true,
           expiresAt: true,
           createdAt: true,
+          prefix: true,
+          team: { select: { id: true, title: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -112,6 +132,8 @@ export async function GET(_request: NextRequest) {
         lastRequest: row.lastRequest,
         expiresAt: row.expiresAt,
         createdAt: row.createdAt,
+        teamScoped: row.prefix === TEAM_MANAGEMENT_KEY_PREFIX,
+        ...(teamScopedKeysEnabled ? { team: row.team } : {}),
       })),
       // Browser-scoped on purpose: the MCP token lives in a cookie, so this
       // reports the calling browser's token only. A token minted on another

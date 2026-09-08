@@ -31,7 +31,7 @@ async function demo() {
   const prismaMock = prisma as any
   const authApi = auth.api as any
   const originalAgentFindFirst = prismaMock.agent.findFirst
-  const originalAgentUpdate = prismaMock.agent.update
+  const originalAgentUpdateMany = prismaMock.agent.updateMany
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst =
     prismaMock.revokedToken.findFirst
@@ -87,7 +87,7 @@ async function demo() {
     prismaMock.agent.findFirst = async (args: Record<string, any>) =>
       args.select?.mcpTokenJti
         ? { id: 'owned-agent', ...agentTokenCredentialFields(agentToken) }
-        : { id: 'owned-agent' }
+        : { id: 'owned-agent', runtimeGeneration: 1 }
     const agentResponse = await POST(
       request({ agent_id: 'owned-agent' }, agentToken)
     )
@@ -140,11 +140,11 @@ async function demo() {
     let managementUpdate: Record<string, any> | undefined
     prismaMock.agent.findFirst = async (args: Record<string, any>) => {
       managementOwnershipQuery = args
-      return { id: 'owned-agent' }
+      return { id: 'owned-agent', runtimeGeneration: 1 }
     }
-    prismaMock.agent.update = async (args: Record<string, any>) => {
+    prismaMock.agent.updateMany = async (args: Record<string, any>) => {
       managementUpdate = args
-      return { id: args.where.id }
+      return { count: 1 }
     }
     const managementResponse = await POST(
       request({ agent_id: 'owned-agent' }, 'htmk_management-test')
@@ -157,7 +157,12 @@ async function demo() {
       userId: user.id,
       runtimeType: 'EXTERNAL',
     })
-    assert.deepEqual(managementUpdate?.where, { id: 'owned-agent' })
+    assert.deepEqual(managementUpdate?.where, {
+      id: 'owned-agent',
+      userId: user.id,
+      runtimeType: 'EXTERNAL',
+      runtimeGeneration: 1,
+    })
     assert.equal(managementUpdate?.data.mcpTokenExpiresAt, null)
     assert.equal(managementUpdate?.data.revokedAt, null)
 
@@ -170,9 +175,9 @@ async function demo() {
       if (args.select?.mcpTokenJti) {
         return stored ? { id: 'owned-agent', ...stored } : null
       }
-      return { id: 'owned-agent' }
+      return { id: 'owned-agent', runtimeGeneration: 1 }
     }
-    prismaMock.agent.update = async (args: Record<string, any>) => {
+    prismaMock.agent.updateMany = async (args: Record<string, any>) => {
       updateNumber += 1
       const thisUpdate = updateNumber
       if (thisUpdate === 1) {
@@ -183,7 +188,7 @@ async function demo() {
         mcpTokenJti: args.data.mcpTokenJti,
       }
       assert.equal(args.data.mcpTokenExpiresAt, null)
-      return { id: args.where.id }
+      return { count: 1 }
     }
 
     const [firstResponse, secondResponse] = await Promise.all([
@@ -217,7 +222,7 @@ async function demo() {
     )
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
-    prismaMock.agent.update = originalAgentUpdate
+    prismaMock.agent.updateMany = originalAgentUpdateMany
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst =
       originalRevokedTokenFindFirst

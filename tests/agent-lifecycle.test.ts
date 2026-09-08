@@ -46,11 +46,16 @@ function agentRow(overrides: Partial<AgentLifecycleRow> = {}): AgentLifecycleRow
 }
 
 function fakeSetup(state: FakeState) {
+  const findWheres: Record<string, unknown>[] = [];
+  const mutationWheres: Record<string, unknown>[] = [];
   const database = {
     agent: {
-      findFirst: async ({ where }: any) =>
-        state.row && state.row.id === where.id ? { ...state.row } : null,
+      findFirst: async ({ where }: any) => {
+        findWheres.push(where);
+        return state.row && state.row.id === where.id ? { ...state.row } : null;
+      },
       updateMany: async ({ where, data }: any) => {
+        mutationWheres.push(where);
         if (state.loseTransition) return { count: 0 };
         if (!state.row || state.row.revokedAt === null) return { count: 0 };
         assert.equal(where.userId, 6);
@@ -63,7 +68,8 @@ function fakeSetup(state: FakeState) {
         state.updateManyCount += 1;
         return { count: 1 };
       },
-      update: async ({ data }: any) => {
+      update: async ({ where, data }: any) => {
+        mutationWheres.push(where);
         state.row = { ...(state.row as AgentLifecycleRow), ...data };
         return { ...(state.row as AgentLifecycleRow) };
       },
@@ -86,7 +92,7 @@ function fakeSetup(state: FakeState) {
     credentialFields: fakeCredentialFields,
   };
 
-  return { database, deps };
+  return { database, deps, findWheres, mutationWheres };
 }
 
 test("launching a disabled external agent switches it on and reveals one token", async () => {
@@ -259,6 +265,31 @@ test("archiving an agent the caller does not own is not found", async () => {
 
   const result = await archiveOwnedAgent(database, 6, "someone-elses", true);
   assert.equal(result.status, "not_found");
+});
+
+test("team scope is enforced again by every lifecycle mutation", async () => {
+  const state: FakeState = {
+    row: agentRow(),
+    ownerEmail: "valentin@example.com",
+    updateManyCount: 0,
+    mintCalls: 0,
+    clearCalls: 0,
+  };
+  const { database, deps, mutationWheres } = fakeSetup(state);
+  const scope = {
+    members: { some: { project: { teamId: "team-a" } } },
+  };
+
+  await archiveOwnedAgent(database, 6, "agent-1", true, scope);
+  await renameOwnedAgent(database, 6, "agent-1", "Scoped agent", scope);
+  await launchOwnedAgent(database, deps, 6, "agent-1", scope);
+
+  assert.equal(mutationWheres.length, 3);
+  for (const where of mutationWheres) {
+    assert.deepEqual(where.members, scope.members);
+    assert.equal(where.id, "agent-1");
+    assert.equal(where.userId, 6);
+  }
 });
 
 test("renaming an owned agent updates its display name", async () => {

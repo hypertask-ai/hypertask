@@ -1,3 +1,7 @@
+import type { Prisma } from '@prisma/client'
+
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
+
 export type OwnedAgentRow = {
   id: string
   displayName: string
@@ -22,9 +26,13 @@ type AgentRowForDelete = {
 type AgentManagementTransaction = {
   agent: {
     findFirst(args: {
-      where: { id: string; userId: number }
+      where: Prisma.AgentWhereInput
       select: { id: true; displayName: true; runtimeGeneration: true }
     }): Promise<AgentRowForDelete | null>
+    updateMany(args: {
+      where: Prisma.AgentWhereInput
+      data: { runtimeGeneration: { increment: 1 } }
+    }): Promise<WriteCount>
     delete(args: { where: { id: string } }): Promise<unknown>
   }
   assignees: {
@@ -139,7 +147,7 @@ type AgentManagementTransaction = {
 export type AgentManagementDatabase = AgentManagementTransaction & {
   agent: AgentManagementTransaction['agent'] & {
     findMany(args: {
-      where: { userId: number; archivedAt: null }
+      where: Prisma.AgentWhereInput
       orderBy: { createdAt: 'desc' }
       select: {
         id: true
@@ -180,10 +188,15 @@ export type DeleteOwnedAgentResult = {
 
 export async function listOwnedAgents(
   database: AgentManagementDatabase,
-  userId: number
+  userId: number,
+  teamId?: string
 ): Promise<OwnedAgent[]> {
   const agents = await database.agent.findMany({
-    where: { userId, archivedAt: null },
+    where: {
+      userId,
+      archivedAt: null,
+      ...(teamId ? agentWithinTeamWhere(teamId) : {}),
+    },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -235,7 +248,10 @@ export async function deleteOwnedAgent(
   database: AgentManagementDatabase,
   userId: number,
   agentId: string,
-  invalidateRuntime?: (agentId: string, fenceGeneration?: number) => Promise<void>
+  invalidateRuntime:
+    | ((agentId: string, fenceGeneration?: number) => Promise<void>)
+    | undefined,
+  teamId: string | undefined
 ): Promise<DeleteOwnedAgentResult | null> {
   let deleted: (DeleteOwnedAgentResult & { runtime_generation: number }) | null = null
 
@@ -244,10 +260,27 @@ export async function deleteOwnedAgent(
       deleted = await database.$transaction(
         async (transaction) => {
           const agent = await transaction.agent.findFirst({
-            where: { id: agentId, userId },
+            where: {
+              id: agentId,
+              userId,
+              ...(teamId ? agentWithinTeamWhere(teamId) : {}),
+            },
             select: { id: true, displayName: true, runtimeGeneration: true },
           })
           if (!agent) return null
+
+          // Claim the agent with the same team predicate before removing the
+          // membership rows that define that predicate. Serializable isolation
+          // retries this transaction if another request moves those rows.
+          const claimed = await transaction.agent.updateMany({
+            where: {
+              id: agent.id,
+              userId,
+              ...(teamId ? agentWithinTeamWhere(teamId) : {}),
+            },
+            data: { runtimeGeneration: { increment: 1 } },
+          })
+          if (claimed.count !== 1) return null
 
           const tombstonedComments = await transaction.comment.updateMany({
             where: { agentId: agent.id },

@@ -64,15 +64,23 @@ const usageUnauthorized = () =>
  * member grouping, so a usage key can expose only team-wide counts and spend.
  */
 async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
-  // Management keys are account-owner credentials, not team-scoped keys. The
-  // requested team is still checked against the owner's teams below on every
-  // call, so a key cannot cross the account boundary or read a member team.
   const requestedTeamId = request.nextUrl.searchParams.get('team_id')?.trim()
   if (requestedTeamId && !UUID_PATTERN.test(requestedTeamId)) {
     return validationError('team_id must be a valid UUID', 'team_id')
   }
 
-  let teamId = requestedTeamId || null
+  const scopedTeamId = ctx.management?.teamId
+  if (scopedTeamId && requestedTeamId && requestedTeamId !== scopedTeamId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'A team-scoped key can read usage only for its own team.',
+      },
+      { status: 403 },
+    )
+  }
+
+  let teamId = scopedTeamId ?? requestedTeamId ?? null
 
   if (!teamId) {
     let ownedTeams

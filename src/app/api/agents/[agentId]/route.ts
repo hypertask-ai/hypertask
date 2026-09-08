@@ -753,6 +753,7 @@ export async function DELETE(
         user.id,
         resolved.id,
         clearAgentRuntimeSnapshot,
+        undefined,
       )
     : null;
   if (!deleted) {

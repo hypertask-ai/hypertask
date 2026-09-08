@@ -16,6 +16,15 @@ export async function GET(request: NextRequest) {
 
   const ctx = await validateManagementOrSessionAuth(request, "read");
   if (!ctx) return createUnauthorizedResponse();
+  if (ctx.management?.teamId) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Team-scoped keys cannot read account-wide connections.",
+      },
+      { status: 403 },
+    );
+  }
 
   try {
     return NextResponse.json({

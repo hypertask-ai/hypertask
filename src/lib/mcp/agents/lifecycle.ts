@@ -10,6 +10,7 @@
  * The database and the credential/runtime dependencies are arguments so the
  * rules can be tested without a database.
  */
+import type { Prisma } from '@prisma/client'
 
 export type AgentLifecycleRow = {
   id: string
@@ -33,14 +34,20 @@ const LIFECYCLE_SELECT = {
   mcpTokenJti: true,
 } as const
 
+const isRecordNotFoundError = (error: unknown) =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  error.code === 'P2025'
+
 export type AgentLifecycleDatabase = {
   agent: {
     findFirst(args: {
-      where: { id: string; userId: number }
+      where: Prisma.AgentWhereInput
       select: typeof LIFECYCLE_SELECT
     }): Promise<AgentLifecycleRow | null>
     updateMany(args: {
-      where: { id: string; userId: number; revokedAt: { not: null } }
+      where: Prisma.AgentWhereInput
       data: {
         revokedAt: null
         mcpTokenHash: string | null
@@ -50,7 +57,7 @@ export type AgentLifecycleDatabase = {
       }
     }): Promise<{ count: number }>
     update(args: {
-      where: { id: string }
+      where: Prisma.AgentWhereUniqueInput
       data: { archivedAt?: Date | null; displayName?: string }
       select: typeof LIFECYCLE_SELECT
     }): Promise<AgentLifecycleRow>
@@ -99,10 +106,11 @@ export async function launchOwnedAgent(
   database: AgentLifecycleDatabase,
   deps: AgentLifecycleDeps,
   userId: number,
-  agentId: string
+  agentId: string,
+  scopeWhere: Prisma.AgentWhereInput = {}
 ): Promise<LaunchOwnedAgentResult> {
   const existing = await database.agent.findFirst({
-    where: { id: agentId, userId },
+    where: { ...scopeWhere, id: agentId, userId },
     select: LIFECYCLE_SELECT,
   })
   if (!existing) return { status: 'not_found' }
@@ -134,7 +142,12 @@ export async function launchOwnedAgent(
   }
 
   const transition = await database.agent.updateMany({
-    where: { id: existing.id, userId, revokedAt: { not: null } },
+    where: {
+      ...scopeWhere,
+      id: existing.id,
+      userId,
+      revokedAt: { not: null },
+    },
     data: {
       revokedAt: null,
       ...deps.credentialFields(issuedCredential),
@@ -144,7 +157,7 @@ export async function launchOwnedAgent(
   })
 
   const current = await database.agent.findFirst({
-    where: { id: existing.id, userId },
+    where: { ...scopeWhere, id: existing.id, userId },
     select: LIFECYCLE_SELECT,
   })
   if (!current) return { status: 'not_found' }
@@ -182,10 +195,11 @@ export async function archiveOwnedAgent(
   database: AgentLifecycleDatabase,
   userId: number,
   agentId: string,
-  archived: boolean
+  archived: boolean,
+  scopeWhere: Prisma.AgentWhereInput = {}
 ): Promise<ArchiveOwnedAgentResult> {
   const existing = await database.agent.findFirst({
-    where: { id: agentId, userId },
+    where: { ...scopeWhere, id: agentId, userId },
     select: LIFECYCLE_SELECT,
   })
   if (!existing) return { status: 'not_found' }
@@ -198,12 +212,19 @@ export async function archiveOwnedAgent(
     return { status: 'ok', agent: existing }
   }
 
-  const agent = await database.agent.update({
-    where: { id: existing.id },
-    data: { archivedAt },
-    select: LIFECYCLE_SELECT,
-  })
-  return { status: 'ok', agent }
+  try {
+    const agent = await database.agent.update({
+      where: { ...scopeWhere, id: existing.id, userId },
+      data: { archivedAt },
+      select: LIFECYCLE_SELECT,
+    })
+    return { status: 'ok', agent }
+  } catch (error) {
+    if (isRecordNotFoundError(error)) {
+      return { status: 'not_found' }
+    }
+    throw error
+  }
 }
 
 export type RenameOwnedAgentResult =
@@ -215,10 +236,11 @@ export async function renameOwnedAgent(
   database: AgentLifecycleDatabase,
   userId: number,
   agentId: string,
-  displayName: string
+  displayName: string,
+  scopeWhere: Prisma.AgentWhereInput = {}
 ): Promise<RenameOwnedAgentResult> {
   const existing = await database.agent.findFirst({
-    where: { id: agentId, userId },
+    where: { ...scopeWhere, id: agentId, userId },
     select: LIFECYCLE_SELECT,
   })
   if (!existing) return { status: 'not_found' }
@@ -227,10 +249,17 @@ export async function renameOwnedAgent(
     return { status: 'ok', agent: existing }
   }
 
-  const agent = await database.agent.update({
-    where: { id: existing.id },
-    data: { displayName },
-    select: LIFECYCLE_SELECT,
-  })
-  return { status: 'ok', agent }
+  try {
+    const agent = await database.agent.update({
+      where: { ...scopeWhere, id: existing.id, userId },
+      data: { displayName },
+      select: LIFECYCLE_SELECT,
+    })
+    return { status: 'ok', agent }
+  } catch (error) {
+    if (isRecordNotFoundError(error)) {
+      return { status: 'not_found' }
+    }
+    throw error
+  }
 }

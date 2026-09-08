@@ -10,12 +10,17 @@ import {
 import toast from "react-hot-toast";
 
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
+import { useFlag } from "@/hooks/useFlag";
+import { TEAM_SCOPED_MANAGEMENT_KEYS_FLAG } from "@/lib/flags/keys";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import SettingsCard from "./SettingsCard";
 import { settingsActionButtonClass } from "./SettingsBillingRow";
 import SettingsCodeRow from "./SettingsCodeRow";
 import SettingsSectionShell from "./SettingsSectionShell";
-import { managementKeyScopeLabel } from "./managementKeyScope";
+import {
+  managementKeyScopeLabel,
+  managementKeyTeamLabel,
+} from "./managementKeyScope";
 
 const DEVELOPER_ACCESS_URL = "/api/users/developer-access";
 const API_KEYS_URL = "/api/users/api-keys";
@@ -61,6 +66,8 @@ type ManagementKey = {
   lastRequest: string | null;
   expiresAt: string | null;
   createdAt: string;
+  teamScoped: boolean;
+  team?: { id: string; title: string | null } | null;
 };
 
 type DeveloperAccess = {
@@ -108,6 +115,7 @@ const CredentialLine = ({ children }: { children: ReactNode }) => (
 );
 
 const DeveloperAccessSection = () => {
+  const teamScopedKeysEnabled = useFlag(TEAM_SCOPED_MANAGEMENT_KEYS_FLAG);
   const [access, setAccess] = useState<DeveloperAccess | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -187,19 +195,16 @@ const DeveloperAccessSection = () => {
     if (!keyToRotate) return;
     setBusyKeyId(keyToRotate.id);
     try {
-      const response = await fetch(
-        `${API_KEYS_URL}/${keyToRotate.id}/rotate`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          // An expired key carries a past expiry, so the API refuses to copy it
-          // onto the replacement. Give the renewed key a fresh lifetime.
-          body: JSON.stringify(
-            keyToRotate.expired ? { expiresInDays: ROTATE_RENEWAL_DAYS } : {},
-          ),
-        },
-      );
+      const response = await fetch(`${API_KEYS_URL}/${keyToRotate.id}/rotate`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        // An expired key carries a past expiry, so the API refuses to copy it
+        // onto the replacement. Give the renewed key a fresh lifetime.
+        body: JSON.stringify(
+          keyToRotate.expired ? { expiresInDays: ROTATE_RENEWAL_DAYS } : {},
+        ),
+      });
       const data = await response.json();
       if (!response.ok || !data.success || !data.apiKey?.key) {
         throw new Error(data.error || "Failed to rotate API key");
@@ -289,9 +294,9 @@ const DeveloperAccessSection = () => {
         </p>
         <p className="px-2 text-dense font-medium leading-relaxed text-text-light-gray">
           Management keys can be limited to agent and credential administration,
-          team AI usage and spend, or full task and data access. Give each one an
-          expiry, rotate it if it leaks, and revoke it when the script that used
-          it is gone.
+          team AI usage and spend, or full task and data access. Give each one
+          an expiry, rotate it if it leaks, and revoke it when the script that
+          used it is gone.
         </p>
       </SettingsCard>
 
@@ -470,34 +475,44 @@ const DeveloperAccessSection = () => {
           </p>
         ) : managementKeys.length ? (
           <div className="flex flex-col">
-            {managementKeys.map((key) => (
-              <div
-                className="border-b border-border-light-gray-thin px-2 py-3 last:border-b-0"
-                key={key.id}
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-dense font-semibold text-white-black">
-                    {key.name || "Unnamed key"}
-                  </p>
-                  <span className={chipClass}>
-                    {managementKeyScopeLabel(key.permissions)}
-                  </span>
-                  {!key.enabled && (
-                    <span className="text-micro font-medium text-text-light-gray">
-                      Revoked
+            {managementKeys.map((key) => {
+              const teamLabel = managementKeyTeamLabel(
+                key.teamScoped,
+                key.team,
+                teamScopedKeysEnabled,
+              );
+              return (
+                <div
+                  className="border-b border-border-light-gray-thin px-2 py-3 last:border-b-0"
+                  key={key.id}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-dense font-semibold text-white-black">
+                      {key.name || "Unnamed key"}
+                    </p>
+                    <span className={chipClass}>
+                      {managementKeyScopeLabel(key.permissions)}
                     </span>
-                  )}
+                    {teamLabel && (
+                      <span className={chipClass}>{teamLabel}</span>
+                    )}
+                    {!key.enabled && (
+                      <span className="text-micro font-medium text-text-light-gray">
+                        Revoked
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-mono text-micro text-text-light-gray">
+                    {key.start || (key.teamScoped ? "httk_" : "htmk_")}…
+                  </p>
+                  <CredentialLine>
+                    Created {formatDate(key.createdAt)} · Last used{" "}
+                    {formatDate(key.lastRequest)} · Expires{" "}
+                    {formatDate(key.expiresAt)}
+                  </CredentialLine>
                 </div>
-                <p className="font-mono text-micro text-text-light-gray">
-                  {key.start || "htmk_"}…
-                </p>
-                <CredentialLine>
-                  Created {formatDate(key.createdAt)} · Last used{" "}
-                  {formatDate(key.lastRequest)} · Expires{" "}
-                  {formatDate(key.expiresAt)}
-                </CredentialLine>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="px-2 py-2 text-dense font-medium text-text-light-gray">
@@ -518,9 +533,7 @@ const DeveloperAccessSection = () => {
                 ? "Token active in this browser"
                 : "No token in this browser"}
             </p>
-            {mcp?.active && (
-              <span className={chipClass}>{mcp.scope}</span>
-            )}
+            {mcp?.active && <span className={chipClass}>{mcp.scope}</span>}
           </div>
           <CredentialLine>
             {mcp?.active
