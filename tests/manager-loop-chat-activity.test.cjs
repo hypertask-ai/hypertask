@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
@@ -127,7 +126,7 @@ test("happy path stores one agent-authored activity message and broadcasts", asy
   );
   const body = await json(response);
   assert.equal(body.success, true);
-  assert.equal(body.duplicate, undefined);
+  assert.equal(body.duplicate, false);
   assert.equal(messageRows.length, 1);
   assert.equal(messageRows[0].sessionId, "session-1");
   assert.equal(messageRows[0].role, "assistant");
@@ -146,7 +145,7 @@ test("replay with the same clientMessageId does not duplicate or broadcast again
       makeRequest({ text: "Manager loop 07:20 UTC — quiet tick", clientMessageId: "20260908T072000Z" })
     )
   );
-  assert.equal(first.duplicate, undefined);
+  assert.equal(first.duplicate, false);
   const body = await json(
     await POST(
       makeRequest({ text: "Manager loop 07:20 UTC — quiet tick", clientMessageId: "20260908T072000Z" })
@@ -155,7 +154,8 @@ test("replay with the same clientMessageId does not duplicate or broadcast again
   assert.equal(body.success, true);
   assert.equal(body.duplicate, true);
   assert.equal(messageRows.length, 1);
-  assert.deepEqual(broadcastCalls, ["session-1"]);
+  // The replay repairs side effects: the session is refreshed and broadcast again.
+  assert.deepEqual(broadcastCalls, ["session-1", "session-1"]);
 });
 
 test("flag off stores nothing", async () => {

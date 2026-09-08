@@ -138,7 +138,8 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      return NextResponse.json({ success: true, duplicate: true });
+      // A replay after a failed side effect must repair it: the entry exists,
+      // but the session refresh or broadcast may never have happened.
     }
 
     await prisma.chatSession.update({
@@ -147,11 +148,11 @@ export async function POST(request: NextRequest) {
     });
     await broadcastChatSession(session.id, [agent.userId]);
 
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
+    return NextResponse.json({ success: true, duplicate: inserted.count === 0 });
+  } catch (error: unknown) {
     console.error("[mcp chat] POST activity failed:", error);
     return NextResponse.json(
-      { success: false, error: error?.message || "Failed to add chat activity" },
+      { success: false, error: "Failed to add chat activity" },
       { status: 500 }
     );
   }
