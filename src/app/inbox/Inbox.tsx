@@ -451,7 +451,7 @@ const Inbox = ({
     index: number,
     mode: TRemoveFromInboxMode,
   ) => {
-    return archiveNotificationGetter(notification, mode, undoHandler);
+    await archiveNotificationGetter(notification, mode, undoHandler);
   };
 
   // undoHandler function
