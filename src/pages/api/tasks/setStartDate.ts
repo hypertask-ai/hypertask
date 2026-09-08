@@ -1,6 +1,6 @@
 import { NextApiHandler } from "next";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
-import { broadcastBoardChange } from "@/lib/realtime/server";
+import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 
 // HTPR-4884: set/clear a task's planned start date. Mirrors setDueDate.ts but
@@ -34,6 +34,10 @@ const handler: NextApiHandler = async (req, res) => {
 
     if (status === 200) {
       void broadcastBoardChange(task?.projectId, { originUserId: userObj.id });
+      // HTPR-6281: the open task detail view listens only on the task channel.
+      void broadcastTaskChange(task?.id ?? Number(taskId), {
+        originUserId: userObj.id,
+      });
     }
 
     return res.status(status).json(task);

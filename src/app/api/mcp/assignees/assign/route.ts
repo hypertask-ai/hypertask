@@ -11,7 +11,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { IUser } from "@/models/model";
-import { broadcastBoardChange } from "@/lib/realtime/server";
+import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { ACTIVE_TASK_MUTATION_STATUS } from "@/lib/mcp/tasks/activeTaskMutation";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { withAgentMutationLeaseAdoption } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
@@ -434,6 +434,8 @@ export async function POST(request: NextRequest) {
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
 
     void broadcastBoardChange(task.projectId, { originUserId: user.id });
+    // HTPR-6281: the open task detail view listens only on the task channel.
+    void broadcastTaskChange(task.id, { originUserId: user.id });
 
     return NextResponse.json(
       {

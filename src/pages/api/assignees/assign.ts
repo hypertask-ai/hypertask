@@ -3,7 +3,7 @@ import assigneesAssign, {
   type AssigneeIntent,
 } from "@/utils/controllers/assignees/assign";
 import prisma from "@/lib/prisma";
-import { broadcastBoardChange } from "@/lib/realtime/server";
+import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import type { IUser } from "@/models/model";
@@ -66,6 +66,8 @@ const handler: NextApiHandler = async (
       );
       await Promise.all(assignTasks);
       void broadcastBoardChange(task?.projectId, { originUserId: currentUser.id });
+      // HTPR-6281: the open task detail view listens only on the task channel.
+      void broadcastTaskChange(Number(taskId), { originUserId: currentUser.id });
       return res.status(200).json({ message: "Success" });
     } else if (mode && !userIds) {
       return res.status(400).json({
@@ -82,6 +84,8 @@ const handler: NextApiHandler = async (
       );
       if (response.status === 200) {
         void broadcastBoardChange(task?.projectId, { originUserId: currentUser.id });
+        // HTPR-6281: the open task detail view listens only on the task channel.
+        void broadcastTaskChange(Number(taskId), { originUserId: currentUser.id });
       }
       return res.status(response.status).json(response.json);
     }
