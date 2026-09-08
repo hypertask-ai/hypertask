@@ -76,6 +76,7 @@ const useSections = ({
   const setActiveItem = useSetRecoilState(activeItemAtom);
   const [position, setPosition] = useState<"top" | "bottom" | null>(); // top or bottom
   const [showAddItem, setShowAddItem] = useState(false);
+  const [newTaskDraftTitle, setNewTaskDraftTitle] = useState("");
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
   const isMbl = useContext(MobileViewContext);
@@ -379,7 +380,8 @@ const useSections = ({
 
 
   // =================== user presses escape or blurs out
-  const onCancelCreate = () => {
+  const onCancelCreate = (title: string) => {
+    setNewTaskDraftTitle(title);
     setShowAddItem(false);
     setPosition(null);
     console.log(position);
@@ -491,6 +493,7 @@ const useSections = ({
     handleKeyDown,
     tasksPlayList,
     showAddItem,
+    newTaskDraftTitle,
     onCancelCreate,
     invokeCreateItem,
     position,

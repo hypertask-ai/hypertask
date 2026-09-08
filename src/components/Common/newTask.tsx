@@ -4,40 +4,49 @@ import React, { RefObject, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 type Props = {
-    onCancelCreate: () => void;
+    initialTitle?: string;
+    onCancelCreate: (title: string) => void;
     invokeCreateItem: (title: string, createAnother:boolean) => Promise<boolean>;
     inputRef: RefObject<HTMLInputElement | null>;
-    position:"top"|"bottom"
 }
 
 // Quick entry: Enter always saves and keeps the box open for the next card
 // (HTPR-6175). The title only clears once the create actually succeeds, so a
 // failed save never loses what was typed.
 const NewTask = ({
+    initialTitle = "",
     inputRef,
     invokeCreateItem,
-    onCancelCreate,
-    position
+    onCancelCreate
 }: Props) => {
-    const [title, setTitle] = useState('')
+    const [title, setTitle] = useState(initialTitle)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const submittingRef = useRef(false)
 
     const createItem = async () => {
+        if (submittingRef.current) return
         const trimmedTitle = title.trim();
         if (!trimmedTitle) {
           toast("Cannot create tasks with empty title")
           return
         }
+        submittingRef.current = true
         setIsSubmitting(true)
-        const created = await invokeCreateItem(trimmedTitle, true);
-        setIsSubmitting(false)
+        let created = false
+        try {
+          created = await invokeCreateItem(trimmedTitle, true);
+        } catch {
+          created = false
+        } finally {
+          submittingRef.current = false
+          setIsSubmitting(false)
+        }
         if (created) setTitle('')
         else toast("Could not create the task, try again")
     }
 
     const cancelCreate = () => {
-        setTitle('')
-        onCancelCreate()
+        onCancelCreate(title)
     }
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -49,9 +58,12 @@ const NewTask = ({
           <input
             ref={inputRef}
             value={title}
-            disabled={isSubmitting}
+            readOnly={isSubmitting}
+            aria-busy={isSubmitting}
             autoFocus
-            onBlur={cancelCreate}
+            onBlur={() => {
+              if (!submittingRef.current) cancelCreate()
+            }}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {
               if (e.nativeEvent.isComposing || isSubmitting) return;

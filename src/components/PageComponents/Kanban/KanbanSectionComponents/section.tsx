@@ -168,6 +168,7 @@ const Section = ({
     createTaskAt,
     tasksPlayList,
     showAddItem,
+    newTaskDraftTitle,
     position: newTaskPosition,
     invokeCreateItem,
     onCancelCreate,
@@ -477,10 +478,10 @@ const Section = ({
             >
               {showAddItem && newTaskPosition === "top" && (
                 <NewTask
+                  initialTitle={newTaskDraftTitle}
                   inputRef={topInputRef}
                   invokeCreateItem={invokeCreateItem}
                   onCancelCreate={onCancelCreate}
-                  position="top"
                 />
               )}
               {(section.items ?? []).map((task: ITask, i: number) => {
@@ -577,10 +578,10 @@ const Section = ({
               })}
               {showAddItem && newTaskPosition === "bottom" && (
                 <NewTask
+                  initialTitle={newTaskDraftTitle}
                   inputRef={bottomInputRef}
                   invokeCreateItem={invokeCreateItem}
                   onCancelCreate={onCancelCreate}
-                  position="bottom"
                 />
               )}
               <div className="h-[32px]">

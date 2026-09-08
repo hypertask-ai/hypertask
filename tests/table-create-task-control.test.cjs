@@ -335,7 +335,7 @@ test("table quick entry saves on Enter, keeps the box open, and keeps the target
     assert.equal(quickCalls.length, 3);
     assert.equal(container.querySelector("input").value, "Kept on failure");
 
-    // Escape closes the box and brings the button back.
+    // Escape closes the box and preserves the draft for reopening.
     await act(async () => {
       container.querySelector("input").dispatchEvent(
         new dom.window.KeyboardEvent("keydown", {
@@ -346,6 +346,30 @@ test("table quick entry saves on Enter, keeps the box open, and keeps the target
     });
     assert.equal(container.querySelector("input"), null);
     assert.ok(container.querySelector("button"));
+    await act(async () => container.querySelector("button").click());
+    assert.equal(container.querySelector("input").value, "Kept on failure");
+
+    // Two Enter events in one render still produce only one request.
+    let finishCreate;
+    quickResult = new Promise((resolve) => {
+      finishCreate = resolve;
+    });
+    await type(act, container.querySelector("input"), "Only once");
+    await act(async () => {
+      const input = container.querySelector("input");
+      input.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+      input.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+    assert.equal(quickCalls.length, 4);
+    await act(async () => {
+      finishCreate(true);
+      await quickResult;
+    });
+    assert.equal(container.querySelector("input").value, "");
   } finally {
     if (reactRoot && act) await act(async () => reactRoot.unmount());
     if (previousWindow === undefined) delete global.window;

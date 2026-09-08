@@ -893,20 +893,19 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   // HTPR-6175: quick entry creates straight from a title, no modal.
   const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
   const { createItem } = useAddDeleteTaskInBoards();
-  const quickCreateTask = useCallback(
-    (title: string, sectionId: number, sectionTitle: string) =>
-      createItem({
-        sectionId,
-        section: sectionTitle,
-        item: { title, description: "", id: -1 },
-        position: "bottom",
-        createAnother: true,
-        projectId: _currentProject?.id ?? 0,
-      }),
-    // createItem is rebuilt every render by its hook, so it is deliberately not a dependency.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [_currentProject?.id],
-  );
+  const quickCreateTask = (
+    title: string,
+    sectionId: number,
+    sectionTitle: string,
+  ) =>
+    createItem({
+      sectionId,
+      section: sectionTitle,
+      item: { title, description: "", id: -1 },
+      position: "bottom",
+      createAnother: true,
+      projectId: _currentProject?.id ?? 0,
+    });
 
   const createTaskInCurrentTableContext = useCallback(() => {
     createTaskFromTableSelection({

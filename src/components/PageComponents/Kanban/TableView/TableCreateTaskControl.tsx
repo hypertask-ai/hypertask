@@ -64,6 +64,7 @@ export const TableCreateTaskControl = ({
   const [openTarget, setOpenTarget] = useState<
     { sectionId: number; sectionTitle: string } | null
   >(null);
+  const [draftTitle, setDraftTitle] = useState("");
 
   const selectedRow = rows[selectedIndex];
   const selectedSectionPayload = resolveTableCreateTaskSectionPayload(
@@ -94,9 +95,12 @@ export const TableCreateTaskControl = ({
     return (
       <div className="px-[20px] pb-2 md:px-5">
         <NewTask
-          position="bottom"
+          initialTitle={draftTitle}
           inputRef={{ current: null }}
-          onCancelCreate={() => setOpenTarget(null)}
+          onCancelCreate={(title) => {
+            setDraftTitle(title);
+            setOpenTarget(null);
+          }}
           invokeCreateItem={(title) =>
             quickCreateTask!(title, openTarget.sectionId, openTarget.sectionTitle)
           }
