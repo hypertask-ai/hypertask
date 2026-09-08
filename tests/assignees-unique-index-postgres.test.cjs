@@ -233,7 +233,7 @@ async function provision() {
       path.join(root, "src", "utils", "controllers", "assignees", "assign.ts")
     ).default;
 
-    return { prisma, assigneesAssign, url, container, cleanup };
+    return { prisma, assigneesAssign, jiti, url, container, cleanup };
   } catch (err) {
     cleanup();
     return { skipReason: `provisioning failed: ${err.message}` };
@@ -386,13 +386,26 @@ test("migration dedupes assignees and blocks duplicates", async (t) => {
   assert.ok(names.includes("Assignees_taskId_userId_person_key"), names.join(","));
   assert.ok(names.includes("Assignees_taskId_agentId_key"), names.join(","));
 
-  // Post-migration, a duplicate insert is rejected by the database itself.
+  // Post-migration, a duplicate insert is rejected by the database itself, and
+  // the real error shape (Prisma pg driver adapter) satisfies the controller's
+  // idempotency predicate.
+  const assignModule = state.jiti(
+    path.join(root, "src", "utils", "controllers", "assignees", "assign.ts")
+  );
   await assert.rejects(
     () =>
       prisma.assignees.create({
         data: { taskId: task.id, userId: person.id, assignerId: owner.id },
       }),
-    (err) => err && err.code === "P2002"
+    (err) => {
+      assert.equal(err.code, "P2002");
+      assert.equal(
+        assignModule.isAssigneeUniqueIndexError(err),
+        true,
+        `real P2002 must match the predicate: ${JSON.stringify(err.meta)}`
+      );
+      return true;
+    }
   );
   await assert.rejects(
     () =>

@@ -7,6 +7,8 @@ const state = {
   task: null,
   project: null,
   outerAssignee: null,
+  // Row seen by the post-rollback re-read (null = nobody won).
+  reAssignee: null,
   txAssignee: null,
   createdRow: null,
   // Error thrown by tx.assignees.create, or null to succeed.
@@ -45,7 +47,13 @@ const tx = {
   },
 };
 
+// The pre-transaction existence check and the post-rollback re-read share
+// prisma.assignees.findFirst; they return outerAssignee and reAssignee
+// respectively (the re-read only happens after a create attempt).
+let findFirstCalls = 0;
+
 function reset(overrides = {}) {
+  findFirstCalls = 0;
   state.task = null;
   state.project = null;
   state.outerAssignee = null;
@@ -64,7 +72,10 @@ const prisma = {
   project: { findFirst: async () => state.project },
   subscribedDevices: { findMany: async () => [] },
   assignees: {
-    findFirst: async () => state.outerAssignee,
+    findFirst: async () => {
+      findFirstCalls += 1;
+      return findFirstCalls === 1 ? state.outerAssignee : state.reAssignee;
+    },
     findMany: async () => [],
   },
   $transaction: async (cb) => cb(tx),

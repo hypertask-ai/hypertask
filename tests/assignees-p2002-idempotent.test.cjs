@@ -88,6 +88,10 @@ function seedHappyPath() {
       status: "Normal",
     },
     project: { ownerId: owner.id, members: [] },
+    // Pre-check sees nothing (the race window); the post-rollback re-read sees
+    // the winner's row.
+    outerAssignee: null,
+    reAssignee: { id: 99 },
     createdRow: { id: 1, user: { displayName: "Owner" }, agent: null, agentAssigner: null },
   });
 }
@@ -121,6 +125,18 @@ test("an unrelated P2002 is not swallowed", async () => {
   });
   // assigneesAssign's catch-all reports the failure instead of pretending the
   // assignment succeeded.
+  assert.equal(result.status, 500);
+  assert.equal(result.json.assignmentOutcome, undefined);
+});
+
+test("a unique loss without a surviving row is not reported as assigned", async () => {
+  seedHappyPath();
+  stub.state.reAssignee = null; // re-read finds nothing: nobody won
+  stub.state.createError = driverAdapterP2002("Assignees_taskId_agentId_key");
+
+  const result = await assigneesAssign(owner, owner.id, 42, undefined, undefined, {
+    intent: "assign",
+  });
   assert.equal(result.status, 500);
   assert.equal(result.json.assignmentOutcome, undefined);
 });

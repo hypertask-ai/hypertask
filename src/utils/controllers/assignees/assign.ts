@@ -333,7 +333,12 @@ const createAssignee = async ({
   expectedSectionId,
   allowHumanOverride,
 }: ICreateAssigneeProps) => {
-  const result = await prisma.$transaction(async (tx) => {
+  const assigneeIdentity = agentId
+    ? { agentId }
+    : { userId, agentId: null };
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
     // Human and agent assignments share the discovery/take fence. Otherwise a
     // person can be assigned after require_unassigned succeeds but before the
     // autonomous self-assignment commits.
@@ -393,52 +398,36 @@ const createAssignee = async ({
     if (allowHumanOverride) {
       await cancelAgentMutationLeaseForHumanOverride(tx, taskId, currentUser.id);
     }
-    let assign;
-    try {
-      assign = await tx.assignees.create({
-        data: {
-          assignerId: currentUser.id,
-          taskId,
-          userId,
-          agentId,
-          agentAssignerId,
+    const assign = await tx.assignees.create({
+      data: {
+        assignerId: currentUser.id,
+        taskId,
+        userId,
+        agentId,
+        agentAssignerId,
+      },
+      include: {
+        user: {
+          select: assignmentActivityUserSelect,
         },
-        include: {
-          user: {
-            select: assignmentActivityUserSelect,
-          },
-          agent: {
-            select: {
-              id: true,
-              userId: true,
-              photoURL: true,
-              displayName: true,
-            },
-          },
-          agentAssigner: {
-            select: {
-              id: true,
-              userId: true,
-              photoURL: true,
-              displayName: true,
-            },
+        agent: {
+          select: {
+            id: true,
+            userId: true,
+            photoURL: true,
+            displayName: true,
           },
         },
-      });
-    } catch (error) {
-      if (isAssigneeUniqueIndexError(error)) {
-        // A concurrent assign won the unique index (HTPR-6279): the row exists,
-        // so the assignment is already done, not a failure. Returning here
-        // commits an empty transaction and skips every side effect below.
-        return {
-          assign: null,
-          outcome: "already-assigned" as const,
-          webhookDeliveryIds: [],
-          boardWebhookDeliveryIds: [],
-        };
-      }
-      throw error;
-    }
+        agentAssigner: {
+          select: {
+            id: true,
+            userId: true,
+            photoURL: true,
+            displayName: true,
+          },
+        },
+      },
+    });
     const follower = await tx.follower.findFirst({
       where: { userId, taskId },
       select: { id: true },
@@ -493,6 +482,26 @@ const createAssignee = async ({
       boardWebhookDeliveryIds,
     };
   });
+  } catch (error) {
+    if (isAssigneeUniqueIndexError(error)) {
+      // A concurrent assign won the unique index (HTPR-6279). The transaction
+      // rolled back with no writes of ours; confirm the winner's row exists
+      // before reporting the assignment as already done.
+      const winner = await prisma.assignees.findFirst({
+        where: { taskId, ...assigneeIdentity },
+        select: { id: true },
+      });
+      if (winner) {
+        return {
+          assign: null,
+          outcome: "already-assigned" as const,
+          webhookDeliveryIds: [],
+          boardWebhookDeliveryIds: [],
+        };
+      }
+    }
+    throw error;
+  }
   if (result.outcome === "created") {
     await publishAgentWebhookDeliveries(result.webhookDeliveryIds);
     await publishBoardWebhookDeliveries(result.boardWebhookDeliveryIds);
