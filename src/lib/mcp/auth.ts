@@ -501,8 +501,16 @@ async function validateManagementApiKey(token: string): Promise<McpAuthContext |
     })
     if (!user) return null
 
+    const keyPrefix = result.key.prefix
+    if (
+      keyPrefix !== ACCOUNT_MANAGEMENT_KEY_PREFIX &&
+      keyPrefix !== TEAM_MANAGEMENT_KEY_PREFIX
+    ) {
+      return null
+    }
+
     let teamId: string | undefined
-    if (token.startsWith(TEAM_MANAGEMENT_KEY_PREFIX)) {
+    if (keyPrefix === TEAM_MANAGEMENT_KEY_PREFIX) {
       if (
         !(await isFeatureEnabled(
           TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,

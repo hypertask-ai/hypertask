@@ -50,6 +50,7 @@ let flagEnabled = true;
 let teamAccess = true;
 let currentAccessBinding = "owner:account-a";
 let storedAccessBinding = "owner:account-a";
+let storedKeyPrefix;
 let disabledTeamKeys = 0;
 let teamKeyLookup;
 let teamKeyDisable;
@@ -92,6 +93,9 @@ stubModule("src/lib/auth/betterAuth.ts", {
               key: {
                 id: 1,
                 referenceId: body.key === "htmk_missing-user" ? "7" : "6",
+                prefix:
+                  storedKeyPrefix ??
+                  (body.key.startsWith("httk_") ? "httk_" : "htmk_"),
                 permissions: tokenPermissions,
               },
             }
@@ -193,6 +197,7 @@ test.beforeEach(() => {
   teamAccess = true;
   currentAccessBinding = "owner:account-a";
   storedAccessBinding = "owner:account-a";
+  storedKeyPrefix = undefined;
   disabledTeamKeys = 0;
   teamKeyLookup = undefined;
   teamKeyDisable = undefined;
@@ -275,6 +280,23 @@ test("team key auth carries its team and fails closed", async () => {
     null,
   );
   assert.equal(disabledTeamKeys, 2);
+});
+
+test("management auth derives team scope from the stored key prefix", async () => {
+  permissionsByToken.set("htmk_misleading-prefix", {
+    management: ["read", "write"],
+  });
+  storedKeyPrefix = "httk_";
+
+  const scoped = await validateMcpAuth(request("htmk_misleading-prefix"), {
+    deferManagementPermissionCheck: true,
+  });
+
+  assert.equal(
+    scoped?.management?.teamId,
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  );
+  assert.equal(teamKeyLookup.where.prefix, "httk_");
 });
 
 test("successful MCP auth records a recognized CLI after credential validation", async () => {
