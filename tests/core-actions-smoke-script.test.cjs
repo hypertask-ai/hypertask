@@ -261,9 +261,13 @@ test("an unconfigured fixture skips the probe instead of failing the monitor", a
       /id: settings[\s\S]*?id: probe\s+if: steps\.settings\.outputs\.configured == 'true'/,
     );
     // The failure reporter must never treat a skipped probe as a probe result.
-    // A skipped probe reports outcome "skipped", so the report, rollback, and
-    // "keep visible" steps stay off without extra conditions.
-    assert.match(text, /id: probe\s+if: steps\.settings\.outputs\.configured == 'true'/);
+    // A skipped probe reports outcome "skipped", so the unchanged
+    // `probe.outcome == 'failure'` conditions keep the report, rollback, and
+    // "keep visible" steps off; the preflight gate lives only on the probe.
+    assert.match(
+      text,
+      /name: Report a failed or unrunnable check\s+if: \$\{\{ !cancelled\(\) && steps\.probe\.outcome == 'failure' \}\}/,
+    );
     // An unconfigured fixture is still a failing monitor, never a green one.
     assert.match(
       text,
