@@ -100,6 +100,29 @@ test("discard during title generation cancels the pending save", () => {
   );
 });
 
+test("discard checks the latest create-task fields before React renders", () => {
+  const hook = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
+  const guard = hook.slice(
+    hook.indexOf("const hasUnsavedChanges"),
+    hook.indexOf("// Any draft written", hook.indexOf("const hasUnsavedChanges")),
+  );
+
+  assert.match(
+    guard,
+    /const hasUnsavedChanges = useCallback\(\(\) => \{\s*const currentFormValues = formValuesRef\.current;/,
+    "Escape and beforeunload must read the synchronously updated form snapshot",
+  );
+  assert.match(
+    guard,
+    /const areFormValuesEqualToDefault =\s*currentFormValues\.assignees\.length/,
+  );
+  assert.doesNotMatch(
+    guard,
+    /\bformValues\./,
+    "the discard guard must not read a stale render",
+  );
+});
+
 
 // Title generation is async and the description stays editable during it, so
 // the save must re-read the editor afterwards instead of persisting the
