@@ -26,13 +26,20 @@ jobs:
       - name: Check the fixture settings are configured
         id: settings
         run: |
-          MISSING=$(node .github/scripts/core-actions-smoke.mjs check-settings || true)
-          if [ -n "$MISSING" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Core-actions probe skipped: $MISSING (fixture setup, see HTPR-6258)"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
+          OUT=$(node .github/scripts/core-actions-smoke.mjs check-settings)
+          case "$OUT" in
+            configured)
+              echo "configured=true" >> "$GITHUB_OUTPUT"
+              ;;
+            missing:*)
+              echo "configured=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Core-actions probe skipped: $OUT (fixture setup, see HTPR-6258)"
+              ;;
+            *)
+              echo "::error::Unexpected check-settings output: $OUT"
+              exit 1
+              ;;
+          esac
 
       - name: Run the logged-in core actions and restore the fixture
         id: probe

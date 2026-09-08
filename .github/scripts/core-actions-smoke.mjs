@@ -422,11 +422,10 @@ async function main() {
     return;
   }
   if (command === "check-settings") {
+    // Machine-readable for the workflow preflight: "configured" or
+    // "missing: ..."; any other exit or output is treated as an error there.
     const missing = missingFixtureSettings();
-    if (missing.length) {
-      process.stdout.write(`${missing.join(", ")} missing\n`);
-      process.exitCode = 1;
-    }
+    process.stdout.write(missing.length ? `missing: ${missing.join(", ")}\n` : "configured\n");
     return;
   }
   if (command === "run") {
