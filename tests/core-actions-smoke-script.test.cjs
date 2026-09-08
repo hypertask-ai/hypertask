@@ -503,7 +503,7 @@ test("a failed parent-ticket report does not suppress the incident report", asyn
         projects: [
           {
             id: 15,
-            sections: [{ id: 4389, section_title: "Bugs" }],
+            sections: [{ id: 4389, section_title: "Renamed Bugs" }],
           },
         ],
       });
@@ -571,7 +571,7 @@ test("an invalid report destination names the attempted section", async () => {
         action: "start core-actions probe",
         detail: "fixture settings absent",
       }),
-      /section 4389 \(Bugs\) is missing from project 15/,
+      /section 4389 is missing from project 15/,
     );
   } finally {
     global.fetch = originalFetch;

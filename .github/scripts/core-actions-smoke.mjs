@@ -357,12 +357,11 @@ export async function report(result) {
         (item) => item.id === ALERT_PROJECT_ID,
       );
       const bugs = board?.sections?.find(
-        (item) =>
-          item.id === ALERT_SECTION_ID && item.section_title === "Bugs",
+        (item) => item.id === ALERT_SECTION_ID,
       );
       if (!bugs) {
         throw new Error(
-          `Core-smoke report section ${ALERT_SECTION_ID} (Bugs) is missing from project ${ALERT_PROJECT_ID}`,
+          `Core-smoke report section ${ALERT_SECTION_ID} is missing from project ${ALERT_PROJECT_ID}`,
         );
       }
       const key = createHash("sha256")
