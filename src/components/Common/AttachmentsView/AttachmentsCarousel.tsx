@@ -325,8 +325,14 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
   // next to a slide that handles the same file correctly. Give those the
   // plugin's own unknown-file icon (its class carries the size/position), and
   // return nothing for the rest so the default image thumbnail still renders.
+  // The predicate mirrors the main slide: the strip paints an <img> exactly
+  // when the slide area would, never just because `fileType` exists.
   const renderThumbnail = ({ slide }: { slide: Slide }) => {
-    if ((slide as any).fileType) {
+    const customSlide = slide as any;
+    if (
+      customSlide.fileType &&
+      !isBrowserRenderableImage(customSlide.fileType, customSlide.fileName)
+    ) {
       return (
         <svg
           className="yarl__thumbnails_thumbnail_icon"
