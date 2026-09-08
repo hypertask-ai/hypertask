@@ -318,6 +318,31 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     return null;
   };
 
+  // HTPR-6269: the strip's default renderer paints `slide.src` in an <img> for
+  // any slide without an explicit type, and our custom slides keep `src`
+  // pointing at the original file — a HEIC with no preview copy, a PDF, a
+  // docx — which the strip cannot decode, so it showed a broken-image glyph
+  // next to a slide that handles the same file correctly. Give those the
+  // plugin's own unknown-file icon (its class carries the size/position), and
+  // return nothing for the rest so the default image thumbnail still renders.
+  const renderThumbnail = ({ slide }: { slide: Slide }) => {
+    if ((slide as any).fileType) {
+      return (
+        <svg
+          className="yarl__thumbnails_thumbnail_icon"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g fill="currentColor">
+            <path d="M0 0h24v24H0z" fill="none" />
+            <path d="M23 18V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2zM8.5 12.5l2.5 3.01L14.5 11l4.5 6H5l3.5-4.5z" />
+          </g>
+        </svg>
+      );
+    }
+    return undefined;
+  };
+
   const handleClose = () => {
     setIsOpen(false);
     closeCallback();
@@ -409,6 +434,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       }}
       render={{
         slide: renderSlide,
+        thumbnail: renderThumbnail,
         // toolbar: customToolbar, // Use your custom toolbar
       }}
       controller={{
