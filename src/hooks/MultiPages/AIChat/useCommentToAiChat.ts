@@ -5,6 +5,7 @@ import { useRecoilState } from "@/lib/state";
 import {
   showAIChatInterfaceAtom,
   aiChatAutoOpenSuppressedAtom,
+  aiChatExplicitOpenAtAtom,
 } from "@/store";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
@@ -34,6 +35,7 @@ export function useCommentToAiChat() {
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
     aiChatAutoOpenSuppressedAtom
   );
+  const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   // Synchronous re-entry lock: isTyping only flips true after an await inside
   // handleSendMessage, so a fast double-trigger could fire two sends in that
   // gap. This blocks re-entry until the send settles.
@@ -63,7 +65,10 @@ export function useCommentToAiChat() {
 
   const openChat = () => {
     setAiChatAutoOpenSuppressed(false);
-    if (!showAiChatInterface) setShowAiChatInterface(true);
+    if (!showAiChatInterface) {
+      setAiChatExplicitOpenAt(Date.now());
+      setShowAiChatInterface(true);
+    }
   };
 
   const waitForSession = async (timeoutMs = 5000) => {

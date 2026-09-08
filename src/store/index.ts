@@ -400,6 +400,17 @@ export const aiChatAutoOpenSuppressedAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 });
 
+// Timestamp of the last user action that explicitly opened (or restored) the
+// chat panel. The composer's mount-time focus loop runs only when this is
+// fresh, so auto-open at page load (openAiChatByDefaultAtom) and reload
+// restore mount without stealing the cursor from board keyboard shortcuts
+// (HTPR-6317). Not persisted: an explicit open is meaningful only in the
+// seconds before the lazily-imported panel mounts.
+export const aiChatExplicitOpenAtAtom = atom<number | null>({
+    key: "aiChatExplicitOpenAt",
+    default: null,
+});
+
 // Keep AI chat open across task and board navigation until manually unpinned.
 export const aiChatPinnedAtom = atom<boolean>({
     key: "aiChatPinned",

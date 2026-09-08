@@ -29,6 +29,7 @@ import {
   isAiChatSidebarModeAtom,
   openAiChatByDefaultAtom,
   aiChatAutoOpenSuppressedAtom,
+  aiChatExplicitOpenAtAtom,
   aiChatPinnedAtom,
   showCreateTaskModalAtom,
   appShellRailAtom,
@@ -435,6 +436,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(aiChatAutoOpenSuppressedAtom);
+  const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const [showMentionList, setShowMentionList] =
     useRecoilState(showMentionListAtom);
   const showCreateTaskModal = useRecoilValue(showCreateTaskModalAtom);
@@ -1355,6 +1357,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
   const branchInNewChat = () => {
     setAiChatAutoOpenSuppressed(false);
     if(!showAiChatInterface) {
+      setAiChatExplicitOpenAt(Date.now());
       setShowAiChatInterface(true);
     }
     startNewSession();

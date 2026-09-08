@@ -2,7 +2,7 @@
 import nookies from "nookies"
 import {  IFavorites, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 
-import {     activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
+import {     activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import  { lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { debounce, deepCopy } from "@/utils/helperFunctions/helperFunctions";
@@ -670,6 +670,7 @@ useEffect(() => {
 ]);
 const pathname = usePathname()
 const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom)
+const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom)
 const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom)
 const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom)
 const aiChatPinned = useRecoilValue(aiChatPinnedAtom)
@@ -915,6 +916,8 @@ useEffect(() => {
 
   if (params.get("welcome_ai") === "1" && !welcomeAiHandledRef.current) {
     welcomeAiHandledRef.current = true;
+    // A welcome link is an explicit ask for the chat; focus the composer.
+    setAiChatExplicitOpenAt(Date.now());
     setShowAiChatInterface(true);
   }
 

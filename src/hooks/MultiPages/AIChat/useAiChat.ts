@@ -14,6 +14,7 @@ import {
   currentUserAtom,
   aiChatAutoOpenSuppressedAtom,
   aiChatBoardSessionMapAtom,
+  aiChatExplicitOpenAtAtom,
   aiChatPinnedAtom,
   dockedChatScopeAtom,
   fullScreenChatScopeAtom,
@@ -119,6 +120,7 @@ export function useAiChat() {
     showAIChatInterfaceAtom
   );
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
+  const setAiChatExplicitOpenAt = useSetRecoilState(aiChatExplicitOpenAtAtom);
   const [aiChatBoardSessionMap, setAiChatBoardSessionMap] = useRecoilState(
     aiChatBoardSessionMapAtom
   );
@@ -639,6 +641,7 @@ export function useAiChat() {
   }
 
   const toggleSidebarMode = () => {
+    setAiChatExplicitOpenAt(Date.now());
     setIsSidebarMode((prev) => !prev);
   };
 
@@ -657,7 +660,10 @@ export function useAiChat() {
     editor?.commands.blur();
     setMinimized(true);
   };
-  const restoreChat = () => setMinimized(false);
+  const restoreChat = () => {
+    setAiChatExplicitOpenAt(Date.now());
+    setMinimized(false);
+  };
 
   // If message is provided, use it; otherwise, find latest human message
   function retryStream(message?: IChatMessage) {
@@ -825,6 +831,7 @@ export function useAiChat() {
 
       if (!isFullScreenChat && !showAiChatInterface) {
         if (!chatMounted) setChatMounted(true);
+        setAiChatExplicitOpenAt(Date.now());
         setShowAIChat(true);
         setAiChatAutoOpenSuppressed(false);
         setTimeout(() => {

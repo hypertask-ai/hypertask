@@ -12,6 +12,7 @@ import {
   showAIChatInterfaceAtom,
   isAiChatSidebarModeAtom,
   aiChatAutoOpenSuppressedAtom,
+  aiChatExplicitOpenAtAtom,
   aiChatPinnedAtom,
   agentToEditAtom,
   showTaskHistoryAtom,
@@ -243,6 +244,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [isSidebarMode, setIsSidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(aiChatAutoOpenSuppressedAtom);
+  const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const [aiChatPinned, setAiChatPinned] = useRecoilState(aiChatPinnedAtom);
   const { resetShowCommands, toggleCreateTaskGlobally } = useHypertasksRecoilStates();
   const { switchToTheme } = useDarkMode();
@@ -1175,6 +1177,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         if (isMbl || pathname?.startsWith("/login")) break;
         setShowAiChatInterface(!showAiChatInterface);
         setAiChatAutoOpenSuppressed(showAiChatInterface);
+        // Opening (current state closed) is an explicit user action.
+        if (!showAiChatInterface) setAiChatExplicitOpenAt(Date.now());
         if (showAiChatInterface) setAiChatPinned(false);
         boardCloseHandler();
         break;
@@ -1183,6 +1187,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         if (isMbl || pathname?.startsWith("/login")) break;
         setAiChatPinned(!aiChatPinned);
         if (!aiChatPinned) {
+          setAiChatExplicitOpenAt(Date.now());
           setShowAiChatInterface(true);
           setAiChatAutoOpenSuppressed(false);
         }
