@@ -2,6 +2,7 @@ import { Fragment, Slice } from "prosemirror-model";
 import { Plugin, PluginKey } from "prosemirror-state";
 import { v4 as uuidv4 } from "uuid"; // You'll need to install this package
 import { isImageUrl } from "@/lib/media/isImageUrl";
+import { prepareUploadFile } from "@/lib/media/heicToJpeg";
 
 export { isImageUrl };
 
@@ -106,14 +107,19 @@ export const getMediaPasteDropPlugin = (options:any) => {
 };
 
 // Helper function to handle file uploads
-async function handleFileUpload(file:any, view:any, schema:any, options:any, insertPos:number|null = null) {
+async function handleFileUpload(original:any, view:any, schema:any, options:any, insertPos:number|null = null) {
   const uploadId = uuidv4();
-  const mediaType = file.type.includes("image") ? "img" : "video";
-  
+
   // Notify that an upload is starting
   if (options.onUploadStart) {
     options.onUploadStart();
   }
+
+  // HTPR-6257: a HEIC pasted or dropped into the editor is converted to JPEG
+  // before the placeholder is built, so the object URL below shows the photo
+  // instead of a broken icon while the upload runs.
+  const file = await prepareUploadFile(original);
+  const mediaType = file.type.includes("image") ? "img" : "video";
 
   // Create a placeholder node with loading state
   const placeholderNode = schema.nodes.resizableMedia.create({

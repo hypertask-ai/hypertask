@@ -1,5 +1,7 @@
 import axios from "axios";
 
+import { prepareUploadFiles } from "@/lib/media/heicToJpeg";
+
 import {
   getDirectUploadSizeError,
   type DirectUploadTicket,
@@ -206,13 +208,22 @@ async function finalizeUploads(
 }
 
 async function uploadFilesViaApiInternal(
-  files: File[],
+  requestedFiles: File[],
   onProgress?: (progress: number) => void,
   issueTaskLinkReceipts = false,
 ): Promise<UploadResult> {
-  if (issueTaskLinkReceipts && files.length !== 1) {
+  if (issueTaskLinkReceipts && requestedFiles.length !== 1) {
     throw new Error("Task-link uploads must contain exactly one file");
   }
+
+  // HTPR-6257: last stop before the bytes leave the browser. A HEIC becomes a
+  // JPEG here so what storage holds is always something an <img> can paint.
+  // Callers that already converted (the attachment tray, the editor) hand over
+  // a JPEG and this is a no-op. It must run before the size check and before
+  // the handshake, because both read the name, size and type it changes, and
+  // the signed PUT is bound to that exact Content-Type.
+  const files = await prepareUploadFiles(requestedFiles);
+
   // Check before sending: nothing above the direct-upload ceiling is accepted.
   const sizeError = getDirectUploadSizeError(files);
   if (sizeError) {
