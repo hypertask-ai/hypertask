@@ -1,5 +1,8 @@
 import { IAttachment } from "@/models/model";
-import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
+import {
+  isBrowserRenderableImage,
+  isUnrenderableImage,
+} from "@/lib/media/browserRenderableImage";
 import { useFlag } from "@/hooks/useFlag";
 import { HEIC_ATTACHMENTS_FLAG } from "@/lib/flags/keys";
 import React, { useState, useEffect, useContext } from "react";
@@ -68,14 +71,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       ? isBrowserRenderableImage(fileType, fileName)
       : Boolean(fileType?.startsWith("image/"));
 
-  // An image an <embed> cannot show either, so it needs the download card
-  // rather than the document branch. Matches isBrowserRenderableImage on
-  // casing, and treats a missing MIME as a candidate: the attachment on
-  // HTPR-6254 is stored with no fileType at all.
-  const isUnsupportedImageType = (fileType?: string | null) => {
-    const mime = (fileType ?? "").trim().toLowerCase().split(";")[0];
-    return mime === "" || mime.startsWith("image/");
-  };
 
   // Transform attachments to lightbox slides format
   const slides: Slide[] = attachments.map((attachment) => {
@@ -190,16 +185,15 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     else if (
       heicFallbackEnabled &&
       (slide as any).fileSource &&
-      !renderableImage((slide as any).fileType, (slide as any).fileName) &&
-      isUnsupportedImageType((slide as any).fileType)
+      isUnrenderableImage((slide as any).fileType, (slide as any).fileName)
     ) {
       const customSlide = slide as any;
       return (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-white">
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 text-white-black">
           <span className="max-w-[80vw] truncate text-dense">
             {customSlide.fileName}
           </span>
-          <span className="text-micro opacity-70">
+          <span className="text-micro text-text-light-gray">
             This image format cannot be shown in a browser.
           </span>
           <button
@@ -207,7 +201,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
             onClick={() =>
               handleDownload(customSlide.fileSource, customSlide.fileName)
             }
-            className="rounded-[5px] bg-secondary px-3 py-2 text-dense text-white"
+            className="rounded-[5px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground"
           >
             Download
           </button>

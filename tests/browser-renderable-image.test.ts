@@ -6,7 +6,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isBrowserRenderableImage } from "../src/lib/media/browserRenderableImage";
+import {
+  isBrowserRenderableImage,
+  isUnrenderableImage,
+} from "../src/lib/media/browserRenderableImage";
 
 test("browsers paint the ordinary web image formats", () => {
   for (const mime of [
@@ -58,4 +61,32 @@ test("non-images and unknown types are never rendered as images", () => {
 test("MIME parameters and casing do not defeat the match", () => {
   assert.equal(isBrowserRenderableImage("IMAGE/PNG", "a.png"), true);
   assert.equal(isBrowserRenderableImage("image/jpeg; charset=binary", "a.jpg"), true);
+});
+
+// isUnrenderableImage is the narrower question the lightbox asks: not "can I
+// draw this" but "is this an image I owe the user a download button for". A PDF
+// is undrawable too and already has its own viewer, so it must answer no.
+test("an image no browser paints earns the download card", () => {
+  assert.equal(isUnrenderableImage("image/heic", "IMG_0421.heic"), true);
+  assert.equal(isUnrenderableImage("image/heif", "IMG_0421.heif"), true);
+  assert.equal(isUnrenderableImage("image/tiff", "scan.tiff"), true);
+  assert.equal(isUnrenderableImage("IMAGE/HEIC", "IMG_0421.heic"), true);
+});
+
+test("a HEIC the browser declined to type is still caught", () => {
+  // The attachment on HTPR-6254 is stored with fileType "". Safari and some
+  // Finder drags also hand over application/octet-stream.
+  assert.equal(isUnrenderableImage("", "autumn_1440x960.heic"), true);
+  assert.equal(isUnrenderableImage("application/octet-stream", "IMG_0421.HEIC"), true);
+  assert.equal(isUnrenderableImage("application/octet-stream", "live.heics"), true);
+});
+
+test("renderable images and non-images never take the download card", () => {
+  assert.equal(isUnrenderableImage("image/png", "shot.png"), false);
+  assert.equal(isUnrenderableImage("", "shot.png"), false);
+  assert.equal(isUnrenderableImage("application/pdf", "spec.pdf"), false);
+  assert.equal(isUnrenderableImage("video/mp4", "clip.mp4"), false);
+  // An extensionless or unknown upload with no MIME is not assumed to be an image.
+  assert.equal(isUnrenderableImage("", "receipt"), false);
+  assert.equal(isUnrenderableImage("application/octet-stream", "archive.zip"), false);
 });

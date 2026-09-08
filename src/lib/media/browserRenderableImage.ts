@@ -87,3 +87,36 @@ export function isBrowserRenderableImage(
 
   return false;
 }
+
+/** Image subtypes and extensions that exist but no browser paints. */
+const UNRENDERABLE_IMAGE_EXTENSION = new Set([
+  "heic",
+  "heics",
+  "heif",
+  "heifs",
+  "hif",
+  "tif",
+  "tiff",
+]);
+
+/**
+ * True for a file that is an image yet cannot be shown as one.
+ *
+ * The render sites need this as well as `isBrowserRenderableImage`, because
+ * "not renderable" alone also covers PDFs and zips, which already have their
+ * own treatment. This is specifically the HEIC/HEIF/TIFF case that needs a
+ * download affordance instead. An uninformative MIME is only counted when the
+ * file name says image, so an extensionless upload is not swept in.
+ */
+export function isUnrenderableImage(
+  mimeType?: string | null,
+  fileName?: string | null,
+): boolean {
+  if (isBrowserRenderableImage(mimeType, fileName)) return false;
+
+  const mime = (mimeType ?? "").trim().toLowerCase().split(";")[0];
+  if (mime.startsWith("image/")) return true;
+
+  if (!UNINFORMATIVE_MIME.has(mime)) return false;
+  return UNRENDERABLE_IMAGE_EXTENSION.has(extensionOf(fileName));
+}
