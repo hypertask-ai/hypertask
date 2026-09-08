@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
+import { settledPreviewFor } from "@/lib/media/heicToJpeg";
+import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import { UploadTooLargeError } from "@/lib/storage/uploadLimits";
 import {
   createTaskUploadById,
@@ -58,12 +60,24 @@ interface ISingleFile {
       };
     }, [callback, handleRemove, reportUploadFailure]);
 
+    // "image/" alone is the wrong question: it says yes to a HEIC, which no
+    // browser can paint, and no to a Mac photo that arrived with no MIME type
+    // at all. Ask whether it can actually be shown, or whether a JPEG copy of
+    // it exists (HTPR-6264); anything else keeps the paperclip.
+    const isImage =
+      isBrowserRenderableImage(file.type, file.name) ||
+      settledPreviewFor(file) !== null;
+
     useEffect(() => {
-      if (!file.type?.startsWith("image/") || file.source) return;
-      const url = URL.createObjectURL(file);
+      if (!isImage || file.source) return;
+      // A Mac photo is shown through its JPEG copy (HTPR-6264). The copy is
+      // already decoded by the time the file reaches the tray, so this is a
+      // lookup rather than work; a file with no copy falls back to itself and
+      // is caught by the renderable check above.
+      const url = URL.createObjectURL(settledPreviewFor(file) ?? file);
       if (previewImageRef.current) previewImageRef.current.src = url;
       return () => URL.revokeObjectURL(url);
-    }, [file]);
+    }, [file, isImage]);
 
     const hasCallback = Boolean(callback);
     useEffect(() => {
@@ -136,7 +150,6 @@ interface ISingleFile {
       };
     }, [backgroundTaskUpload, file, hasCallback, id, shouldUpload]);
 
-    const isImage = file.type?.startsWith("image/");
     const isChat = variant === "chat";
 
     return (
