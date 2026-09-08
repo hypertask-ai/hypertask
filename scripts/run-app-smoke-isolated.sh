@@ -36,7 +36,7 @@ egress_network="ht-smoke-egress-$run_key"
 database="ht-smoke-db-$run_key"
 app="ht-smoke-app-$run_key"
 install="ht-smoke-install-$run_key"
-rebuild="ht-smoke-rebuild-$run_key"
+generate="ht-smoke-generate-$run_key"
 engine_fetch="ht-smoke-engine-fetch-$run_key"
 posthog_fetch="ht-smoke-posthog-fetch-$run_key"
 registry_proxy="ht-smoke-registry-proxy-$run_key"
@@ -56,7 +56,7 @@ cleanup() {
   result=${1:-$?}
   trap - EXIT INT TERM
   if [ "$result" -ne 0 ]; then docker logs "$app" 2>/dev/null | tail -200 || true; fi
-  docker rm -f "$app" "$database" "$install" "$rebuild" "$engine_fetch" "$posthog_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" >/dev/null 2>&1 || true
+  docker rm -f "$app" "$database" "$install" "$generate" "$engine_fetch" "$posthog_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" >/dev/null 2>&1 || true
   docker network rm "$network" "$egress_network" >/dev/null 2>&1 || true
   docker volume rm "$build" "$state" "$dependencies" >/dev/null 2>&1 || true
   docker image rm "$runtime_image" >/dev/null 2>&1 || true
@@ -172,10 +172,9 @@ if [ "$use_trusted_dependencies" = false ]; then
     -w /app \
     "$runtime_image" node /trusted/fetch-prisma-smoke-engine.mjs
 
-  # @posthog/cli's postinstall downloads its binary from github.com, which the
-  # isolated network blocks, and candidate install scripts must not run with
-  # egress. Run the trusted fetch script instead so npm rebuild finds the
-  # binary already installed and skips its own download.
+  # @posthog/cli normally downloads its binary from github.com during
+  # postinstall. Package lifecycle scripts remain disabled below, so fetch
+  # this one trusted binary explicitly.
   docker run --rm --name "$posthog_fetch" \
     --cap-drop ALL \
     --security-opt no-new-privileges \
@@ -189,7 +188,8 @@ if [ "$use_trusted_dependencies" = false ]; then
     -w /app \
     "$runtime_image" node /trusted/fetch-posthog-smoke-binary.mjs
 
-  docker run --rm --name "$rebuild" --network "$network" \
+  # ponytail: If smoke needs another package lifecycle script, add a trusted package-specific step instead of enabling all scripts.
+  docker run --rm --name "$generate" --network "$network" \
     --cap-drop ALL \
     --security-opt no-new-privileges \
     --read-only \
@@ -203,7 +203,6 @@ if [ "$use_trusted_dependencies" = false ]; then
     -e NPM_CONFIG_CACHE=/tmp/npm-cache \
     -w /app \
     "$runtime_image" bash -euo pipefail -c '
-      timeout --signal=KILL 5m npm rebuild
       timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate
     '
 fi

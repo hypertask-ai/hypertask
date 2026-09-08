@@ -216,9 +216,12 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(isolated, /docker network connect --alias registry-proxy/);
   assert.match(isolated, /node \/trusted\/fetch-prisma-smoke-engine\.mjs/);
   assert.match(isolated, /node \/trusted\/fetch-posthog-smoke-binary\.mjs/);
-  assert.match(isolated, /--name "\$rebuild" --network "\$network"/);
-  assert.match(isolated, /npm rebuild/);
-  assert.match(isolated, /timeout --signal=KILL 5m npm rebuild/);
+  assert.match(isolated, /--name "\$generate" --network "\$network"/);
+  assert.doesNotMatch(isolated, /npm rebuild/);
+  assert.match(
+    isolated,
+    /timeout --signal=KILL 2m env DATABASE_URL=.*prisma generate/,
+  );
   assert.match(
     isolated,
     /diff -qr -- "\$candidate_root\/\$trusted_input" "\$trusted_root\/\$trusted_input"/,
