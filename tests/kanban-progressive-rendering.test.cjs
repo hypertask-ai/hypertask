@@ -62,6 +62,13 @@ test("loading cards do not render transient full outlines", () => {
   assert.doesNotMatch(taskSkeleton, /xs:border-light-black-border-1/);
 });
 
+// HTPR-6298: Bootstrap's `.border` utility ships with `!important`, so a bare
+// `border` class paints its #dee2e6 color over Tailwind's border-transparent.
+test("progressive placeholder never uses the bare border class", () => {
+  assert.doesNotMatch(placeholder, /className="[^"]*\bborder\b(?!-)/);
+  assert.match(placeholder, /border-\[1px\] border-transparent/);
+});
+
 test("progressive placeholders preserve navigation and focus identity", () => {
   assert.match(placeholder, /id={`task-\$\{task\.id\}`}/);
   assert.match(
