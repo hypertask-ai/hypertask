@@ -24,6 +24,7 @@ const integer = (name, value) => {
 };
 
 const ALERT_PROJECT_ID = 15;
+const ALERT_SECTION_ID = 4389;
 const PARENT_TICKET = process.env.CORE_SMOKE_PARENT_TICKET || "HTPR-6225";
 if (!/^HTPR-[1-9][0-9]*$/.test(PARENT_TICKET)) {
   throw new Error("CORE_SMOKE_PARENT_TICKET must be an HTPR ticket number");
@@ -175,25 +176,32 @@ export async function provision() {
   };
 }
 
-export async function run(options = {}) {
+export function readFixtureSettings(env = process.env) {
   const fixture = {
     projectId: integer(
       "CORE_SMOKE_PROJECT_ID",
-      process.env.CORE_SMOKE_PROJECT_ID,
+      env.CORE_SMOKE_PROJECT_ID,
     ),
-    taskId: integer("CORE_SMOKE_TASK_ID", process.env.CORE_SMOKE_TASK_ID),
+    taskId: integer("CORE_SMOKE_TASK_ID", env.CORE_SMOKE_TASK_ID),
     baseSectionId: integer(
       "CORE_SMOKE_BASE_SECTION_ID",
-      process.env.CORE_SMOKE_BASE_SECTION_ID,
+      env.CORE_SMOKE_BASE_SECTION_ID,
     ),
     altSectionId: integer(
       "CORE_SMOKE_ALT_SECTION_ID",
-      process.env.CORE_SMOKE_ALT_SECTION_ID,
+      env.CORE_SMOKE_ALT_SECTION_ID,
     ),
-    agentId: process.env.CORE_SMOKE_AGENT_ID,
-    runId: process.env.GITHUB_RUN_ID || `local-${Date.now()}`,
+    agentId: env.CORE_SMOKE_AGENT_ID,
   };
   if (!fixture.agentId) throw new Error("CORE_SMOKE_AGENT_ID is required");
+  return fixture;
+}
+
+export async function run(options = {}) {
+  const fixture = {
+    ...readFixtureSettings(),
+    runId: process.env.GITHUB_RUN_ID || `local-${Date.now()}`,
+  };
 
   const isProbeResult = (value) =>
     value !== null &&
@@ -327,22 +335,36 @@ export async function report(result) {
         (item) => item.id === ALERT_PROJECT_ID,
       );
       const bugs = board?.sections?.find(
-        (item) => item.section_title === "Bugs",
+        (item) =>
+          item.id === ALERT_SECTION_ID && item.section_title === "Bugs",
       );
+      if (!bugs) {
+        throw new Error(
+          `Core-smoke report section ${ALERT_SECTION_ID} (Bugs) is missing from project ${ALERT_PROJECT_ID}`,
+        );
+      }
       const key = createHash("sha256")
         .update(incidentTitle)
         .digest("hex")
         .slice(0, 24);
-      const created = await api("/api/mcp/tasks/create", {
-        method: "POST",
-        headers: { "Idempotency-Key": `core-smoke-incident-${key}` },
-        body: JSON.stringify({
-          project_id: ALERT_PROJECT_ID,
-          title: incidentTitle,
-          description: html,
-          ...(bugs ? { section_id: bugs.id } : {}),
-        }),
-      });
+      let created;
+      try {
+        created = await api("/api/mcp/tasks/create", {
+          method: "POST",
+          headers: { "Idempotency-Key": `core-smoke-incident-${key}` },
+          body: JSON.stringify({
+            project_id: ALERT_PROJECT_ID,
+            section_id: bugs.id,
+            title: incidentTitle,
+            description: html,
+          }),
+        });
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Core-smoke incident report to project ${ALERT_PROJECT_ID} section ${bugs.id} failed: ${reason}`,
+        );
+      }
       incident = created.task;
     }
     if (!incident?.id) throw new Error("The incident task was not returned");
