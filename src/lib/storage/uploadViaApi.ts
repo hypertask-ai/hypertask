@@ -1,9 +1,14 @@
 import axios from "axios";
 
-import { planUploadFiles, type UploadPlan } from "@/lib/media/heicToJpeg";
+import {
+  isHeicByMetadata,
+  planUploadFiles,
+  type UploadPlan,
+} from "@/lib/media/heicToJpeg";
 import { isHeicPreviewUrl } from "@/lib/media/heicPreview";
 
 import {
+  directUploadContentType,
   DIRECT_UPLOAD_MAX_FILE_BYTES,
   getDirectUploadSizeError,
   type DirectUploadTicket,
@@ -74,6 +79,29 @@ type BatchEntry = {
  * the caller reads results back out of it by position to return only the URLs
  * of the files the user actually picked.
  */
+/**
+ * Whether a generated copy is worth the second object.
+ *
+ * Two ways it is not. It may not fit: JPEG is a worse compressor than HEIC, so
+ * a photo close to the per-file ceiling can decode to something over it, and
+ * sending that would fail the size check for the whole batch and cost the user
+ * the photo itself for the sake of a thumbnail.
+ *
+ * Or it may be unreachable. The decoder identifies a HEIC by its bytes, but
+ * render sites resolve the copy from the attachment's stored type and name, so
+ * a photo that arrives with no usable MIME type AND no extension is converted
+ * successfully and then can never be resolved back. Uploading that copy would
+ * cost storage and change nothing on screen; the original stands alone and
+ * renders as the download tile, which is what it did before this shipped.
+ */
+function isWorthUploading(preview: File, original: File): boolean {
+  if (preview.size > DIRECT_UPLOAD_MAX_FILE_BYTES) return false;
+  return isHeicByMetadata(
+    directUploadContentType(original.type),
+    original.name,
+  );
+}
+
 function buildBatch(plans: UploadPlan[]): {
   entries: BatchEntry[];
   /** Position in `entries` of each picked file, in the order they were picked. */
@@ -85,11 +113,7 @@ function buildBatch(plans: UploadPlan[]): {
     const index = entries.length;
     pickedAt.push(index);
     entries.push({ file: plan.file });
-    // A copy is only worth sending if it fits: JPEG is a worse compressor than
-    // HEIC, so a photo close to the ceiling can decode to something over it,
-    // and letting that through would fail the size check for the whole batch
-    // and cost the user the photo itself for the sake of a thumbnail.
-    if (plan.preview && plan.preview.size <= DIRECT_UPLOAD_MAX_FILE_BYTES) {
+    if (plan.preview && isWorthUploading(plan.preview, plan.file)) {
       entries.push({ file: plan.preview, previewOfIndex: index });
     }
   }

@@ -177,6 +177,31 @@ test("a preview that will not upload never fails the photo", async () => {
   }
 });
 
+test("a photo no render site could resolve is uploaded alone", async () => {
+  // The decoder recognises a HEIC by its bytes, but every render site resolves
+  // the copy from the attachment's stored type and name. A file with neither an
+  // extension nor a usable MIME type converts fine and is then unreachable, so
+  // sending the copy would cost storage and change nothing on screen.
+  const api = stubUploadApi();
+  try {
+    // Real ftyp box: 4-byte size, "ftyp", major brand "heic". This is the only
+    // thing that identifies the file, which is the whole point of the case.
+    const ftyp = Buffer.concat([
+      Buffer.from([0, 0, 0, 24]),
+      Buffer.from("ftypheic"),
+    ]);
+    const anonymous = new File([ftyp], "IMG_4821", { type: "" });
+    const urls = await uploadFilesViaApi([
+      await planWithStubDecoder(anonymous),
+    ]);
+    assert.equal(api.handshakes[0].files.length, 1);
+    assert.equal(api.put.length, 1);
+    assert.deepEqual(urls, [`${STORAGE}/attachments/key0_IMG_4821`]);
+  } finally {
+    api.restore();
+  }
+});
+
 test("an ordinary image is still a single upload with no preview", async () => {
   const api = stubUploadApi();
   try {
