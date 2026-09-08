@@ -70,7 +70,7 @@ function dispatchConfiguration() {
     throw new Error("POSTHOG_SERVER_PROJECT_ID is invalid");
   }
   const uiHost = new URL(
-    process.env.POSTHOG_UI_HOST || "https://us.posthog.com",
+    process.env.POSTHOG_UI_HOST || "https://eu.posthog.com",
   );
   if (
     uiHost.protocol !== "https:" ||

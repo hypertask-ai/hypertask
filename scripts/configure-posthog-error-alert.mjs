@@ -42,7 +42,7 @@ export async function findDestination(endpoint, headers, requestImpl = request) 
 }
 
 export async function configurePostHogErrorAlert() {
-  const hostUrl = new URL(process.env.POSTHOG_UI_HOST || "https://us.posthog.com");
+  const hostUrl = new URL(process.env.POSTHOG_UI_HOST || "https://eu.posthog.com");
   if (
     hostUrl.protocol !== "https:" ||
     !["eu.posthog.com", "us.posthog.com"].includes(hostUrl.hostname) ||

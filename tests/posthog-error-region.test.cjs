@@ -1,7 +1,9 @@
-// The Hypertask PostHog project (id 215180) lives in the US region. Every
-// default in the error-tracking pipeline used to point at the EU cluster, so an
-// unset POSTHOG_SERVER_HOST sent captures to a cluster that silently drops
-// them: the pipeline looked healthy and no error ever arrived (HTPR-6238).
+// The Hypertask PostHog project is hosted in the EU (London). PostHog keeps EU
+// and US accounts on entirely separate clusters and its ingestion endpoint
+// answers 200 to a token it does not know, so a default pointed at the wrong
+// region would drop every capture in silence: the pipeline would look healthy
+// and no error would ever arrive. These tests pin the region so a future edit
+// cannot make that trade by accident (HTPR-6238).
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
@@ -71,24 +73,24 @@ async function captureWith(environmentOverrides) {
   }
 }
 
-test("server capture defaults to the US ingestion host", async () => {
+test("server capture defaults to the EU ingestion host", async () => {
   const { captured, client } = await captureWith({
     POSTHOG_SERVER_HOST: undefined,
   });
 
   assert.equal(captured, true);
-  assert.equal(client.options.host, "https://us.i.posthog.com");
+  assert.equal(client.options.host, "https://eu.i.posthog.com");
 });
 
 test("an explicit POSTHOG_SERVER_HOST still wins", async () => {
   const { client } = await captureWith({
-    POSTHOG_SERVER_HOST: "https://eu.i.posthog.com",
+    POSTHOG_SERVER_HOST: "https://us.i.posthog.com",
   });
 
-  assert.equal(client.options.host, "https://eu.i.posthog.com");
+  assert.equal(client.options.host, "https://us.i.posthog.com");
 });
 
-test("no error-tracking default points at the EU cluster", () => {
+test("no error-tracking default points at the US cluster", () => {
   const fs = require("node:fs");
   const sources = [
     "src/lib/telemetry/posthogErrorTracking.server.ts",
@@ -100,7 +102,7 @@ test("no error-tracking default points at the EU cluster", () => {
     const defaults = [...text.matchAll(/\|\|\s*"(https:\/\/[^"]+posthog\.com)"/g)];
     assert.notEqual(defaults.length, 0, `${source} declares no PostHog default`);
     for (const [, host] of defaults) {
-      assert.match(host, /^https:\/\/(us|us\.i)\.posthog\.com$/, source);
+      assert.match(host, /^https:\/\/(eu|eu\.i)\.posthog\.com$/, source);
     }
   }
 });
