@@ -602,6 +602,8 @@ const AgentChatClient = (props: IProp) => {
   const [mentionStart, setMentionStart] = useState(0);
   const [mentionResults, setMentionResults] = useState<ITask[]>([]);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const [mentionLoadError, setMentionLoadError] = useState(false);
   const mentionOpen = mentionQuery !== null;
 
   // Refs mirror the state that async callbacks and event handlers must read
@@ -635,6 +637,9 @@ const AgentChatClient = (props: IProp) => {
   // post-create-agent refresh both call loadAgents/setAgents, so a slower
   // mount fetch resolving after a refresh must not clobber it.
   const rosterGenRef = useRef(0);
+  // A project refetch or a new query can start before the previous task search
+  // settles. Only the newest generation may update the popover.
+  const mentionSearchGenRef = useRef(0);
 
   const loadAgents = useCallback(async () => {
     const res = await fetch("/api/agents/owned");
@@ -674,9 +679,11 @@ const AgentChatClient = (props: IProp) => {
 
   // Project list backing both the "@" task search and ticket-id link
   // resolution; same query key as the rest of the app, so it is shared cache.
-  const { data: mentionProjects = EMPTY_PROJECTS } = useGetAllProjectsMinimal([
-    "projectsAllMinimal",
-  ]);
+  const {
+    data: mentionProjects = EMPTY_PROJECTS,
+    isFetching: mentionProjectsLoading,
+    isError: mentionProjectsLoadError,
+  } = useGetAllProjectsMinimal(["projectsAllMinimal"]);
   const projectIdByPrefix = useMemo(() => {
     const byPrefix = new Map<string, number>();
     for (const project of mentionProjects as IProject[]) {
@@ -1457,9 +1464,12 @@ const AgentChatClient = (props: IProp) => {
   }, [messages, projectIdForPrefix]);
 
   const dismissMention = () => {
+    mentionSearchGenRef.current += 1;
     setMentionQuery(null);
     setMentionResults([]);
     setMentionIndex(0);
+    setMentionLoading(false);
+    setMentionLoadError(false);
   };
 
   // AudioButton's dictation callback. There is no Tiptap editor here, so this
@@ -1486,6 +1496,10 @@ const AgentChatClient = (props: IProp) => {
       return;
     }
     setMentionStart(cursor - match[1].length - 1);
+    setMentionResults([]);
+    setMentionIndex(0);
+    setMentionLoading(true);
+    setMentionLoadError(false);
     setMentionQuery(match[1]);
   };
 
@@ -1493,17 +1507,20 @@ const AgentChatClient = (props: IProp) => {
   // (src/components/Modals/commands/searchTasks.tsx).
   useEffect(() => {
     if (mentionQuery === null) return;
+    const myGen = ++mentionSearchGenRef.current;
     const projectIds = (mentionProjects as IProject[]).map((p) => p.id);
     if (projectIds.length === 0) {
-      // No projects loaded yet: clear results, but skip the state write
-      // (and the re-render it triggers) when they're already empty, since
-      // mentionProjects can keep changing reference while loading, which
-      // would otherwise re-fire this effect in a loop for as long as the
-      // popover stays open.
       setMentionResults((prev) => (prev.length === 0 ? prev : []));
+      setMentionIndex(0);
+      setMentionLoading(mentionProjectsLoading);
+      setMentionLoadError(mentionProjectsLoadError);
       return;
     }
     let active = true;
+    setMentionResults((prev) => (prev.length === 0 ? prev : []));
+    setMentionIndex(0);
+    setMentionLoading(true);
+    setMentionLoadError(false);
     const timeout = setTimeout(
       async () => {
         try {
@@ -1513,12 +1530,19 @@ const AgentChatClient = (props: IProp) => {
               ? { searchQuery: mentionQuery.trim() }
               : { mode: "recent" }),
           });
-          if (!active) return;
+          if (!active || myGen !== mentionSearchGenRef.current) return;
           const results = Array.isArray(res.data) ? res.data : [];
           setMentionResults(results.slice(0, 8));
           setMentionIndex(0);
         } catch {
-          if (active) setMentionResults([]);
+          if (active && myGen === mentionSearchGenRef.current) {
+            setMentionResults([]);
+            setMentionLoadError(true);
+          }
+        } finally {
+          if (active && myGen === mentionSearchGenRef.current) {
+            setMentionLoading(false);
+          }
         }
       },
       mentionQuery.trim() ? 150 : 0,
@@ -1527,7 +1551,12 @@ const AgentChatClient = (props: IProp) => {
       active = false;
       clearTimeout(timeout);
     };
-  }, [mentionQuery, mentionProjects]);
+  }, [
+    mentionProjects,
+    mentionProjectsLoadError,
+    mentionProjectsLoading,
+    mentionQuery,
+  ]);
 
   const pickMention = (task: ITask) => {
     const ticket = task.ticketNumber ?? `${task.projectId}-${task.uniqueIndex}`;
@@ -2013,7 +2042,15 @@ const AgentChatClient = (props: IProp) => {
             <div className="relative flex items-end gap-2">
               {mentionOpen && (
                 <div className="absolute bottom-full left-0 mb-1 max-h-[220px] w-[320px] overflow-y-auto rounded-[4px] bg-modalBackground py-1 shadow-md">
-                  {mentionResults.length === 0 ? (
+                  {mentionLoading ? (
+                    <p className="px-3 py-2 text-meta text-text-light-gray">
+                      Loading tasks…
+                    </p>
+                  ) : mentionLoadError ? (
+                    <p className="px-3 py-2 text-meta text-text-light-gray">
+                      Couldn&apos;t load tasks. Try searching again.
+                    </p>
+                  ) : mentionResults.length === 0 ? (
                     <p className="px-3 py-2 text-meta text-text-light-gray">
                       {mentionQuery?.trim() ? "No matching tasks" : "Type to search tasks"}
                     </p>
