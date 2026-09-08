@@ -28,10 +28,12 @@ test("HTPR-6196: task cards use the project from their rendered board snapshot",
   assert.match(section, /const currentProject = project;/);
   assert.doesNotMatch(section, /useRecoilValue\(currentProjectAtom\)/);
   assert.equal(section.match(/project=\{currentProject\}/g)?.length, 2);
+  assert.doesNotMatch(task, /currentProjectAtom|_currentProject/);
+  assert.match(task, /<KanbanTaskCard[\s\S]*?project=\{project\}/);
 });
 
-test("HTPR-6196: task cards remain safe if a caller has no project", () => {
-  assert.match(task, /project: IProject \| null;/);
+test("HTPR-6196: task cards retain their defensive missing-project guards", () => {
+  assert.match(task, /project: IProject;/);
   assert.match(task, /!project\?\.name/);
   assert.match(task, /showAssignModal && project\?\.name/);
 });

@@ -21,7 +21,7 @@ import { useKanbanModalStatesContext } from "@/lib/contexts/Kanban/KanbanContain
 import "@/styles/kanban/column.scss";
 import globalConstants from "@/lib/constants";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
-import { ISection, ITask, IUser } from "@/models/model";
+import { IProject, ISection, ITask, IUser } from "@/models/model";
 import {
   sortingModeLabel,
   TBoardSortingViewMode,
