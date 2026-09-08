@@ -10,6 +10,9 @@ const stubbedPaths = [
   "src/lib/mcp/auth.ts",
   "src/lib/auth/betterAuth.ts",
   "src/lib/prisma.ts",
+  "src/lib/flags.ts",
+  "src/lib/flags/keys.ts",
+  "src/lib/mcp/managementKeyTeamScope.ts",
 ];
 const originalModules = new Map(
   stubbedPaths.map((relativePath) => {
@@ -33,17 +36,26 @@ let context = {
   agentId: null,
 };
 let rateLimitResponse = null;
+let teamFlagEnabled = true;
 const calls = [];
+const linkedKeys = [];
+const disabledKeys = [];
+let linkBehavior = "success";
+let listArgs;
+const requiredActions = [];
 const serial = { concurrency: false };
 
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => rateLimitResponse,
   // The sibling integration suite drives the real validator. This unit stub
-  // still enforces the route's required action so it cannot silently weaken
-  // POST authorization while provider behavior is isolated here.
-  validateManagementOrSessionAuth: async (_request, requiredAction) =>
-    requiredAction === "write" ? context : null,
+  // records the route's required action so the assertions below catch a
+  // silently weakened POST authorization check.
+  validateManagementOrSessionAuth: async (_request, requiredAction) => {
+    requiredActions.push(requiredAction);
+    return context;
+  },
   createUnauthorizedResponse: () => Response.json({ success: false }, { status: 401 }),
+  MANAGEMENT_KEY_PREFIX: "htmk_",
 });
 stubModule("src/lib/auth/betterAuth.ts", {
   auth: {
@@ -54,10 +66,10 @@ stubModule("src/lib/auth/betterAuth.ts", {
           throw new Error("provider secret");
         }
         return {
-          id: "42",
-          key: "htmk_created_once",
+          id: body.name === "Invalid provider id" ? "not-an-id" : "42",
+          key: `${body.prefix || "htmk_"}created_once`,
           name: body.name,
-          start: "htmk_",
+          start: body.prefix || "htmk_",
           permissions: body.permissions,
           enabled: true,
           lastRequest: null,
@@ -65,10 +77,80 @@ stubModule("src/lib/auth/betterAuth.ts", {
           createdAt: new Date("2026-08-21T00:00:00.000Z"),
         };
       },
+      updateApiKey: async ({ body }) => {
+        disabledKeys.push(body);
+        return { success: true };
+      },
     },
   },
 });
-stubModule("src/lib/prisma.ts", { default: {} });
+stubModule("src/lib/prisma.ts", {
+  default: {
+    betterAuthApiKey: {
+      findMany: async (args) => {
+        listArgs = args;
+        return [
+          {
+            id: 42,
+            name: "Account key",
+            start: "htmk_",
+            prefix: "htmk_",
+            permissions: { management: ["read"] },
+            enabled: true,
+            lastRequest: null,
+            expiresAt: null,
+            createdAt: new Date("2026-08-21T00:00:00.000Z"),
+            team: null,
+          },
+          {
+            id: 43,
+            name: "Team key",
+            start: "httk_",
+            prefix: "httk_",
+            permissions: { management: ["read"] },
+            enabled: true,
+            lastRequest: null,
+            expiresAt: null,
+            createdAt: new Date("2026-08-21T00:00:00.000Z"),
+            team: { id: "team-a", title: "Team A" },
+          },
+        ];
+      },
+      updateMany: async (args) => {
+        linkedKeys.push(args);
+        if (linkBehavior === "throw") throw new Error("link failed");
+        if (linkBehavior === "zero") return { count: 0 };
+        return { count: 1 };
+      },
+    },
+  },
+});
+stubModule("src/lib/flags.ts", {
+  isFeatureEnabled: async () => teamFlagEnabled,
+});
+stubModule("src/lib/flags/keys.ts", {
+  TEAM_SCOPED_MANAGEMENT_KEYS_FLAG: "htpr-4540-team-scoped-management-keys",
+});
+function accessBindingForTeam(teamId) {
+  if (teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") {
+    return "owner:account-a";
+  }
+  if (teamId === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb") {
+    return "owner:account-b";
+  }
+  return "member:membership-c";
+}
+
+stubModule("src/lib/mcp/managementKeyTeamScope.ts", {
+  TEAM_MANAGEMENT_KEY_PREFIX: "httk_",
+  getManagementKeyTeam: async (_userId, teamId) => ({
+    id: teamId,
+    title: teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" ? "Team A" : "Team B",
+    isOwner: teamId !== "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    accessBinding: accessBindingForTeam(teamId),
+  }),
+  listManagementKeyTeams: async () => [],
+});
 
 const jiti = require("jiti")(
   path.join(root, "tests/management-key-route.test.cjs"),
@@ -78,7 +160,11 @@ const jiti = require("jiti")(
     interopDefault: true,
   },
 );
-const { POST } = jiti(path.join(root, routePath));
+const { GET, POST } = jiti(path.join(root, routePath));
+
+function getRequest() {
+  return new NextRequest("https://app.hypertask.ai/api/mcp/admin/keys");
+}
 
 function request(body) {
   return new NextRequest("https://app.hypertask.ai/api/mcp/admin/keys", {
@@ -112,6 +198,7 @@ test("the key route creates a usage-only key", serial, async () => {
     agentId: null,
   };
   calls.length = 0;
+  requiredActions.length = 0;
 
   const response = await POST(
     request({ name: "Usage automation", scope: "usage", expiresInDays: 1 }),
@@ -125,6 +212,193 @@ test("the key route creates a usage-only key", serial, async () => {
   assert.equal(calls[0].expiresIn, 24 * 60 * 60);
   assert.deepEqual(body.apiKey.permissions, { usage: ["read"] });
   assert.equal(body.key, "htmk_created_once");
+  assert.deepEqual(requiredActions, ["write"]);
+});
+
+test("listing keeps team keys revokable but hides team details while the flag is off", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+  listArgs = undefined;
+  requiredActions.length = 0;
+  teamFlagEnabled = false;
+
+  try {
+    const response = await GET(getRequest());
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(listArgs.where.prefix, { in: ["htmk_", "httk_"] });
+    assert.deepEqual(body.teams, []);
+    assert.equal(body.keys[0].team, null);
+    assert.equal(body.keys[1].team, null);
+    assert.equal(body.keys[0].teamScoped, false);
+    assert.equal(body.keys[1].teamScoped, true);
+    assert.deepEqual(requiredActions, ["read"]);
+  } finally {
+    teamFlagEnabled = true;
+  }
+});
+
+test("the key route creates a fail-closed team key and links its team", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+  calls.length = 0;
+  linkedKeys.length = 0;
+  disabledKeys.length = 0;
+  const teamId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  const response = await POST(
+    request({ name: "Team automation", scope: "management", teamId }),
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 201);
+  assert.equal(calls[0].prefix, "httk_");
+  assert.deepEqual(linkedKeys, [
+    {
+      where: {
+        id: 42,
+        userId: 6,
+        prefix: "httk_",
+        teamId: null,
+      },
+      data: { teamId, teamAccessBinding: "owner:account-a" },
+    },
+  ]);
+  assert.equal(body.key, "httk_created_once");
+  assert.equal(body.apiKey.teamScoped, true);
+  assert.deepEqual(body.apiKey.team, { id: teamId, title: "Team A" });
+  assert.deepEqual(disabledKeys, []);
+});
+
+test("a team key is disabled if its team link is not written", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+  calls.length = 0;
+  linkedKeys.length = 0;
+  disabledKeys.length = 0;
+  const teamId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  try {
+    for (const behavior of ["zero", "throw"]) {
+      linkBehavior = behavior;
+      const disabledBefore = disabledKeys.length;
+      const response = await POST(
+        request({ name: `Broken link ${behavior}`, scope: "management", teamId }),
+      );
+      assert.equal(response.status, 500);
+      assert.equal(disabledKeys.length, disabledBefore + 1);
+    }
+  } finally {
+    linkBehavior = "success";
+  }
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(disabledKeys, [
+    { keyId: "42", userId: "6", enabled: false },
+    { keyId: "42", userId: "6", enabled: false },
+  ]);
+});
+
+test("a team key with an invalid provider id is disabled", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+  calls.length = 0;
+  linkedKeys.length = 0;
+  disabledKeys.length = 0;
+
+  const response = await POST(
+    request({
+      name: "Invalid provider id",
+      scope: "management",
+      teamId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    }),
+  );
+
+  assert.equal(response.status, 500);
+  assert.deepEqual(linkedKeys, []);
+  assert.deepEqual(disabledKeys, [
+    { keyId: "not-an-id", userId: "6", enabled: false },
+  ]);
+});
+
+test("the server blocks team-key creation while the feature flag is off", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+  calls.length = 0;
+  teamFlagEnabled = false;
+
+  try {
+    const response = await POST(
+      request({
+        name: "Flagged off",
+        scope: "management",
+        teamId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      }),
+    );
+    assert.equal(response.status, 403);
+    assert.deepEqual(calls, []);
+  } finally {
+    teamFlagEnabled = true;
+  }
+});
+
+test("team keys cannot widen themselves or request full data access", serial, async () => {
+  const teamId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const otherTeamId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+    management: {
+      keyId: "7",
+      teamId,
+      permissions: { management: ["read", "write"] },
+    },
+  };
+  calls.length = 0;
+
+  const crossTeam = await POST(
+    request({ name: "Other team", scope: "management", teamId: otherTeamId }),
+  );
+  assert.equal(crossTeam.status, 403);
+  assert.equal(
+    (await crossTeam.json()).error,
+    "The authenticated management key cannot create a key for another team.",
+  );
+
+  const full = await POST(request({ name: "Too broad", scope: "full" }));
+  assert.equal(full.status, 400);
+  assert.equal((await full.json()).reason, "unsupported_scope");
+  assert.deepEqual(calls, []);
+});
+
+test("team usage keys require ownership of the selected team", serial, async () => {
+  context = {
+    user: { id: 6, email: "owner@example.test" },
+    agentId: null,
+  };
+  calls.length = 0;
+
+  const response = await POST(
+    request({
+      name: "Member usage",
+      scope: "usage",
+      teamId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    }),
+  );
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(calls, []);
 });
 
 test("the key route stops before creating a key when rate limited", serial, async () => {

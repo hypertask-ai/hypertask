@@ -25,6 +25,7 @@ import {
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
   MANAGER_LOOP_ACTIVITY_FLAG,
+  TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -55,6 +56,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Runs the logged-in core-action production check and restores its isolated fixture after each run.",
+  },
+  {
+    key: TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Lets people limit a management key to their own agents and usage in one team.",
   },
   {
     key: AGENT_CHAT_SKILLS_FLAG,

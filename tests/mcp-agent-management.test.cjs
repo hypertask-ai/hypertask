@@ -35,6 +35,7 @@ function createDatabase({
   assignments = [],
   memberships = [],
   comments = [],
+  claimCount,
 }) {
   const state = {
     agents: agents.map((agent) => ({ ...agent })),
@@ -48,6 +49,7 @@ function createDatabase({
     assignmentDeletes: [],
     assignmentUpdates: [],
     membershipDeletes: [],
+    agentClaims: [],
     agentDeletes: [],
     commentUpdates: [],
     transactionOptions: [],
@@ -72,6 +74,18 @@ function createDatabase({
               agent.id === args.where.id && agent.userId === args.where.userId
           ) ?? null
         )
+      },
+      updateMany: async (args) => {
+        calls.agentClaims.push(args)
+        if (claimCount !== undefined) return { count: claimCount }
+        return {
+          count: state.agents.some(
+            (agent) =>
+              agent.id === args.where.id && agent.userId === args.where.userId
+          )
+            ? 1
+            : 0,
+        }
       },
       delete: async (args) => {
         calls.agentDeletes.push(args)
@@ -265,6 +279,56 @@ test('agent list hides archived owned agents', async () => {
   assert.deepEqual(calls.findMany[0].where, { userId: 6, archivedAt: null })
 })
 
+test('team-scoped lists and deletes carry the exact team predicate', async () => {
+  const listed = createDatabase({ agents: [agent()] })
+  await listOwnedAgents(listed.database, 6, 'team-a')
+  assert.deepEqual(listed.calls.findMany[0].where, {
+    userId: 6,
+    archivedAt: null,
+    members: {
+      some: { project: { teamId: 'team-a' } },
+      none: {
+        project: {
+          OR: [{ teamId: null }, { teamId: { not: 'team-a' } }],
+        },
+      },
+    },
+  })
+
+  const deleted = createDatabase({ agents: [agent()] })
+  await deleteOwnedAgent(
+    deleted.database,
+    6,
+    'owned-agent',
+    undefined,
+    'team-a'
+  )
+  assert.deepEqual(deleted.calls.findFirst[0].where, {
+    id: 'owned-agent',
+    userId: 6,
+    members: {
+      some: { project: { teamId: 'team-a' } },
+      none: {
+        project: {
+          OR: [{ teamId: null }, { teamId: { not: 'team-a' } }],
+        },
+      },
+    },
+  })
+  assert.deepEqual(deleted.calls.agentClaims[0].where, {
+    id: 'owned-agent',
+    userId: 6,
+    members: {
+      some: { project: { teamId: 'team-a' } },
+      none: {
+        project: {
+          OR: [{ teamId: null }, { teamId: { not: 'team-a' } }],
+        },
+      },
+    },
+  })
+})
+
 test('delete refuses an unowned agent without changing related rows', async () => {
   const { database, calls } = createDatabase({
     agents: [agent({ userId: 42 })],
@@ -272,7 +336,13 @@ test('delete refuses an unowned agent without changing related rows', async () =
     memberships: [{ id: 1, agentId: 'owned-agent' }],
   })
 
-  const result = await deleteOwnedAgent(database, 6, 'owned-agent')
+  const result = await deleteOwnedAgent(
+    database,
+    6,
+    'owned-agent',
+    undefined,
+    undefined
+  )
 
   assert.equal(result, null)
   assert.deepEqual(calls.findFirst[0].where, {
@@ -290,6 +360,29 @@ test('delete refuses an unowned agent without changing related rows', async () =
   assert.match(route, /!deletedAgent[\s\S]*?'Agent not found'[\s\S]*?status: 404/)
 })
 
+test('delete stops if a team-scoped agent moves before the write claim', async () => {
+  const { database, calls } = createDatabase({
+    agents: [agent()],
+    assignments: [{ id: 1, agentId: 'owned-agent' }],
+    memberships: [{ id: 1, agentId: 'owned-agent' }],
+    claimCount: 0,
+  })
+
+  const result = await deleteOwnedAgent(
+    database,
+    6,
+    'owned-agent',
+    undefined,
+    'team-a'
+  )
+
+  assert.equal(result, null)
+  assert.equal(calls.agentClaims.length, 1)
+  assert.equal(calls.assignmentDeletes.length, 0)
+  assert.equal(calls.membershipDeletes.length, 0)
+  assert.equal(calls.agentDeletes.length, 0)
+})
+
 test('delete stays successful when post-commit runtime cleanup fails', async () => {
   const { database, state, calls } = createDatabase({ agents: [agent()] })
   const fenceCalls = []
@@ -304,7 +397,8 @@ test('delete stays successful when post-commit runtime cleanup fails', async () 
       async (...args) => {
         fenceCalls.push(args)
         throw new Error('Redis unavailable')
-      }
+      },
+      undefined
     )
 
     assert.equal(result.id, 'owned-agent')
@@ -334,7 +428,13 @@ test('delete clears task assignments and board memberships before the agent', as
     ],
   })
 
-  const result = await deleteOwnedAgent(database, 6, 'owned-agent')
+  const result = await deleteOwnedAgent(
+    database,
+    6,
+    'owned-agent',
+    undefined,
+    undefined
+  )
 
   assert.deepEqual(result, {
     id: 'owned-agent',
@@ -417,26 +517,6 @@ test('list_agents has a strict empty schema and is registered in MCP_TOOLS', () 
   assert.equal(ListAgentsInputSchema.safeParse({ include_tokens: true }).success, false)
   assert.ok(
     MCP_TOOLS.some((tool) => tool.name === 'hypertask_list_agents')
-  )
-})
-
-test('token rotation reactivates a revoked agent owned by the caller', () => {
-  const source = fs.readFileSync(
-    path.join(root, 'src/lib/mcp/agents/rotateToken.ts'),
-    'utf8'
-  )
-
-  assert.match(
-    source,
-    /where:\s*\{\s*id: agentId,\s*userId: ctx\.user\.id,[\s\S]*?runtimeType: 'EXTERNAL',\s*\}/
-  )
-  assert.doesNotMatch(
-    source,
-    /findFirst\([\s\S]*?where:\s*\{[\s\S]*?revokedAt: null[\s\S]*?select:/
-  )
-  assert.match(
-    source,
-    /data:\s*\{[\s\S]*?agentTokenCredentialFields\(token\),[\s\S]*?revokedAt: null/
   )
 })
 

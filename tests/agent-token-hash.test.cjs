@@ -42,9 +42,13 @@ const oauthClientId = "owned-oauth-client";
 
 const state = {
   agent: null,
+  agentMatchesTeam: true,
+  teamFlagEnabled: true,
+  teamMembershipId: "membership-a",
   oauthClientExists: true,
   oauthLegacyTokensRevoked: false,
 };
+let agentLookupWhere;
 
 stubModule("src/lib/prisma.ts", {
   default: {
@@ -67,19 +71,36 @@ stubModule("src/lib/prisma.ts", {
           ? { client_id: oauthClientId }
           : null,
     },
+    team: {
+      findFirst: async ({ where }) =>
+        state.teamMembershipId && where.id === "team-a"
+          ? {
+              id: "team-a",
+              title: "Team A",
+              googleAccount: { id: "account-a", userId: 99 },
+              members: [{ id: state.teamMembershipId }],
+            }
+          : null,
+    },
     agent: {
       // The real query filters on id, owner and liveness. Answering on the id
       // alone would let the route drop the owner check and still look correct.
-      findFirst: async ({ where }) =>
-        state.agent &&
-        state.agent.id === where.id &&
-        state.agent.userId === where.userId &&
-        !state.agent.revokedAt
+      findFirst: async ({ where }) => {
+        agentLookupWhere = where;
+        return state.agent &&
+          state.agent.id === where.id &&
+          state.agent.userId === where.userId &&
+          !state.agent.revokedAt &&
+          (!where.members || state.agentMatchesTeam)
           ? state.agent
-          : null,
+          : null;
+      },
     },
     logs: { create: async () => ({ id: 1 }) },
   },
+});
+stubModule("src/lib/flags.ts", {
+  isFeatureEnabled: async () => state.teamFlagEnabled,
 });
 
 const jiti = require("jiti")(path.join(root, "tests/agent-token-hash.test.cjs"), {
@@ -120,8 +141,12 @@ function mintAndStore() {
 
 test.beforeEach(() => {
   state.agent = null;
+  state.agentMatchesTeam = true;
+  state.teamFlagEnabled = true;
+  state.teamMembershipId = "membership-a";
   state.oauthClientExists = true;
   state.oauthLegacyTokensRevoked = false;
+  agentLookupWhere = undefined;
 });
 
 test("the issued credential still authenticates once only its digest is stored", async () => {
@@ -131,6 +156,44 @@ test("the issued credential still authenticates once only its digest is stored",
 
   assert.equal(ctx?.user.id, owner.id);
   assert.equal(ctx?.agentId, agentId);
+});
+
+test("a team-issued agent token stops working outside its original team", async () => {
+  const token = createMcpToken(
+    owner.id,
+    owner.email,
+    undefined,
+    agentId,
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  );
+  state.agent = {
+    id: agentId,
+    userId: owner.id,
+    revokedAt: null,
+    runtimeGeneration: 1,
+    ...agentTokenCredentialFields(token),
+  };
+
+  assert.equal((await validateMcpAuth(requestWith(token)))?.agentId, agentId);
+  assert.deepEqual(agentLookupWhere.members, {
+    some: { project: { teamId: "team-a" } },
+    none: {
+      project: {
+        OR: [{ teamId: null }, { teamId: { not: "team-a" } }],
+      },
+    },
+  });
+
+  state.teamFlagEnabled = false;
+  assert.equal(await validateMcpAuth(requestWith(token)), null);
+
+  state.teamFlagEnabled = true;
+  state.agentMatchesTeam = false;
+  assert.equal(await validateMcpAuth(requestWith(token)), null);
+
+  state.agentMatchesTeam = true;
+  state.teamMembershipId = "membership-b";
+  assert.equal(await validateMcpAuth(requestWith(token)), null);
 });
 
 test("the stored row holds no value that can be replayed as a credential", async () => {

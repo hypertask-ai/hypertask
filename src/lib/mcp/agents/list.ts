@@ -51,7 +51,8 @@ export async function handleListAgentsRequest(
 
   const agents = await listOwnedAgents(
     prisma as unknown as AgentManagementDatabase,
-    ctx.user.id
+    ctx.user.id,
+    ctx.management?.teamId
   )
 
   return NextResponse.json({ success: true, agents })

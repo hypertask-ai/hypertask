@@ -129,7 +129,10 @@ const keyFixtures = new Map([
       permissions: { usage: ["read"] },
     },
   ],
-].map(([token, fixture]) => [hashApiKeyForProvider(token), fixture]));
+].map(([token, fixture]) => [
+  hashApiKeyForProvider(token),
+  { ...fixture, prefix: "htmk_" },
+]));
 
 stubModule("src/lib/prisma.ts", {
   default: {

@@ -7,6 +7,7 @@ import {
 } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 import prisma from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -52,12 +53,13 @@ export async function handleRevokeAgentRequest(
     )
   }
 
-  return revokeAgentForUser(request, ctx.user)
+  return revokeAgentForUser(request, ctx.user, ctx.management?.teamId)
 }
 
 export async function revokeAgentForUser(
   request: NextRequest,
-  user: McpAuthContext['user']
+  user: McpAuthContext['user'],
+  teamId?: string
 ): Promise<NextResponse> {
 
   let body: RevokeAgentBody
@@ -101,11 +103,13 @@ export async function revokeAgentForUser(
     )
   }
   const agentId = body.agent_id.trim()
+  const agentScope = teamId ? agentWithinTeamWhere(teamId) : {}
 
   const agent = await prisma.agent.findFirst({
     where: {
       id: agentId,
       userId: user.id,
+      ...agentScope,
     },
     select: { id: true, revokedAt: true },
   })
@@ -123,14 +127,39 @@ export async function revokeAgentForUser(
   }
 
   const revokedAt = new Date()
-  await prisma.agent.update({
-    where: { id: agent.id },
+  const updated = await prisma.agent.updateMany({
+    where: {
+      ...agentScope,
+      id: agent.id,
+      userId: user.id,
+      revokedAt: null,
+    },
     data: {
       revokedAt,
       ...agentTokenCredentialFields(null),
       runtimeGeneration: { increment: 1 },
     },
   })
+  if (updated.count !== 1) {
+    const current = await prisma.agent.findFirst({
+      where: {
+        id: agent.id,
+        userId: user.id,
+        ...agentScope,
+      },
+      select: { revokedAt: true },
+    })
+    if (current?.revokedAt) {
+      return NextResponse.json(
+        { success: false, error: 'Agent already revoked' },
+        { status: 409 }
+      )
+    }
+    return NextResponse.json(
+      { success: false, error: 'Agent not found' },
+      { status: 404 }
+    )
+  }
 
   return NextResponse.json({
     success: true,

@@ -1,15 +1,21 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
+import { TEAM_SCOPED_MANAGEMENT_KEYS_FLAG } from "@/lib/flags/keys";
+import { useFlag } from "@/hooks/useFlag";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import SettingsCard from "./SettingsCard";
 import { settingsActionButtonClass } from "./SettingsBillingRow";
 import SettingsCodeRow from "./SettingsCodeRow";
 import SettingsSectionShell from "./SettingsSectionShell";
-import { managementKeyScopeLabel } from "./managementKeyScope";
+import {
+  managementKeyScopeLabel,
+  managementKeyTeamIdForRequest,
+  managementKeyTeamLabel,
+} from "./managementKeyScope";
 import {
   useManagementKeys,
   type ManagementKey,
@@ -32,10 +38,12 @@ const inputClass =
 const ChoiceButton = ({
   active,
   children,
+  disabled = false,
   onClick,
 }: {
   active: boolean;
   children: string;
+  disabled?: boolean;
   onClick: () => void;
 }) => (
   <button
@@ -43,7 +51,9 @@ const ChoiceButton = ({
     className={cn(
       settingsActionButtonClass,
       active ? "bg-active-modal-element" : "text-text-light-gray",
+      disabled && "cursor-not-allowed opacity-50",
     )}
+    disabled={disabled}
     onClick={onClick}
     type="button"
   >
@@ -53,9 +63,34 @@ const ChoiceButton = ({
 
 const formatDate = (value: string) => new Date(value).toLocaleDateString();
 
+const revokeButtonLabel = (enabled: boolean, revoking: boolean) => {
+  if (revoking) return "Revoking";
+  return enabled ? "Revoke" : "Revoked";
+};
+
+const teamScopeDescription = (
+  scope: ManagementKeyScope,
+  teamId: string | null,
+) => {
+  if (scope === "full") {
+    return "Full access stays account-wide because data routes are not team-scoped.";
+  }
+  if (!teamId) {
+    return scope === "usage"
+      ? "This key can read usage for any team you own."
+      : "This key can manage agents and keys across your account.";
+  }
+  if (scope === "usage") {
+    return "A team usage key reads totals only for a team you own.";
+  }
+  return "A team key manages only your agents and keys in that team.";
+};
+
 const ManagementKeysSection = () => {
+  const teamScopedKeysEnabled = useFlag(TEAM_SCOPED_MANAGEMENT_KEYS_FLAG);
   const {
     keys,
+    teams,
     error,
     isCreating,
     isLoading,
@@ -65,24 +100,35 @@ const ManagementKeysSection = () => {
   } = useManagementKeys();
   const [name, setName] = useState("");
   const [scope, setScope] = useState<ManagementKeyScope>("management");
+  const [teamId, setTeamId] = useState<string | null>(null);
   const [expiresInDays, setExpiresInDays] = useState<number | undefined>();
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [keyToRevoke, setKeyToRevoke] = useState<ManagementKey | null>(null);
+
+  useEffect(() => {
+    if (!teamScopedKeysEnabled) setTeamId(null);
+  }, [teamScopedKeysEnabled]);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    const requestTeamId = managementKeyTeamIdForRequest(
+      teamScopedKeysEnabled,
+      teamId,
+    );
 
     try {
       const result = await createKey({
         name: trimmedName,
         scope,
+        ...(requestTeamId ? { teamId: requestTeamId } : {}),
         ...(expiresInDays ? { expiresInDays } : {}),
       });
       setCreatedKey(result.key);
       setName("");
       setScope("management");
+      setTeamId(null);
       setExpiresInDays(undefined);
       toast.success("Management key created");
     } catch (requestError) {
@@ -156,18 +202,58 @@ const ManagementKeysSection = () => {
               </ChoiceButton>
               <ChoiceButton
                 active={scope === "usage"}
-                onClick={() => setScope("usage")}
+                onClick={() => {
+                  setScope("usage");
+                  if (
+                    teamId &&
+                    !teams.find((team) => team.id === teamId)?.isOwner
+                  ) {
+                    setTeamId(null);
+                  }
+                }}
               >
                 Usage
               </ChoiceButton>
               <ChoiceButton
                 active={scope === "full"}
+                disabled={teamId !== null}
                 onClick={() => setScope("full")}
               >
                 Full access
               </ChoiceButton>
             </div>
           </div>
+
+          {teamScopedKeysEnabled && (
+            <div className="flex flex-col gap-1 px-2">
+              <span className="text-dense font-semibold text-white-black">
+                Team
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <ChoiceButton
+                  active={teamId === null}
+                  onClick={() => setTeamId(null)}
+                >
+                  Whole account
+                </ChoiceButton>
+                {teams.map((team) => (
+                  <ChoiceButton
+                    active={teamId === team.id}
+                    disabled={
+                      scope === "full" || (scope === "usage" && !team.isOwner)
+                    }
+                    key={team.id}
+                    onClick={() => setTeamId(team.id)}
+                  >
+                    {team.title || "Untitled team"}
+                  </ChoiceButton>
+                ))}
+              </div>
+              <span className="text-micro font-medium text-text-light-gray">
+                {teamScopeDescription(scope, teamId)}
+              </span>
+            </div>
+          )}
 
           <div className="flex flex-col gap-1 px-2">
             <span className="text-dense font-semibold text-white-black">
@@ -232,48 +318,58 @@ const ManagementKeysSection = () => {
           </p>
         ) : keys.length ? (
           <div className="flex flex-col">
-            {keys.map((key) => (
-              <div
-                className="flex flex-wrap items-start justify-between gap-3 border-b border-border-light-gray-thin px-2 py-3 last:border-b-0"
-                key={key.id}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-dense font-semibold text-white-black">
-                      {key.name || "Unnamed key"}
-                    </p>
-                    <span className="rounded-[4px] bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray">
-                      {managementKeyScopeLabel(key.permissions)}
-                    </span>
-                    {!key.enabled && (
-                      <span className="text-micro font-medium text-text-light-gray">
-                        Revoked
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-mono text-micro text-text-light-gray">
-                    {key.start || "htmk_"}…
-                  </p>
-                  <p className="mt-1 text-micro font-medium text-text-light-gray">
-                    Created {formatDate(key.createdAt)} · Last used{" "}
-                    {key.lastRequest ? formatDate(key.lastRequest) : "Never"} ·
-                    Expires {key.expiresAt ? formatDate(key.expiresAt) : "Never"}
-                  </p>
-                </div>
-                <button
-                  className={settingsActionButtonClass}
-                  disabled={!key.enabled || revokingKeyId === key.id}
-                  onClick={() => setKeyToRevoke(key)}
-                  type="button"
+            {keys.map((key) => {
+              const teamLabel = managementKeyTeamLabel(
+                key.teamScoped,
+                key.team,
+                teamScopedKeysEnabled,
+              );
+              const isRevoking = revokingKeyId === key.id;
+              return (
+                <div
+                  className="flex flex-wrap items-start justify-between gap-3 border-b border-border-light-gray-thin px-2 py-3 last:border-b-0"
+                  key={key.id}
                 >
-                  {revokingKeyId === key.id
-                    ? "Revoking"
-                    : key.enabled
-                      ? "Revoke"
-                      : "Revoked"}
-                </button>
-              </div>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-dense font-semibold text-white-black">
+                        {key.name || "Unnamed key"}
+                      </p>
+                      <span className="rounded-[4px] bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray">
+                        {managementKeyScopeLabel(key.permissions)}
+                      </span>
+                      {teamLabel && (
+                        <span className="rounded-[4px] bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray">
+                          {teamLabel}
+                        </span>
+                      )}
+                      {!key.enabled && (
+                        <span className="text-micro font-medium text-text-light-gray">
+                          Revoked
+                        </span>
+                      )}
+                    </div>
+                    <p className="font-mono text-micro text-text-light-gray">
+                      {key.start || (key.teamScoped ? "httk_" : "htmk_")}…
+                    </p>
+                    <p className="mt-1 text-micro font-medium text-text-light-gray">
+                      Created {formatDate(key.createdAt)} · Last used{" "}
+                      {key.lastRequest ? formatDate(key.lastRequest) : "Never"}{" "}
+                      · Expires{" "}
+                      {key.expiresAt ? formatDate(key.expiresAt) : "Never"}
+                    </p>
+                  </div>
+                  <button
+                    className={settingsActionButtonClass}
+                    disabled={!key.enabled || isRevoking}
+                    onClick={() => setKeyToRevoke(key)}
+                    type="button"
+                  >
+                    {revokeButtonLabel(key.enabled, isRevoking)}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="px-2 py-2 text-dense font-medium text-text-light-gray">

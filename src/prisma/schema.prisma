@@ -429,6 +429,14 @@ model BetterAuthApiKey {
   key                 String
   userId              Int
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Null keeps the existing account-wide behavior. A team-scoped key uses a
+  // distinct prefix, so an older deployment rejects it instead of treating it
+  // as an account key during a rolling release.
+  teamId              String?
+  team                Team?     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  // Binds the key to the exact owner account or membership row that granted
+  // access when the key was created. A later invitation cannot revive it.
+  teamAccessBinding   String?
   refillInterval      Int?
   refillAmount        Int?
   lastRefillAt        DateTime?
@@ -448,6 +456,8 @@ model BetterAuthApiKey {
   @@index([configId])
   @@index([key])
   @@index([userId])
+  @@index([userId, teamId])
+  @@index([teamId])
 }
 
 //Using this model for User Profile. Creating another model for name would be weird given both
@@ -612,6 +622,7 @@ model Team {
   googleAccount                GoogleAccount      @relation(fields: [googleAccountId], references: [id])
   team_activity                Team_Activity?
   byokApiKeys                  TeamByokApiKey[]
+  managementApiKeys            BetterAuthApiKey[]
   slackInstall                 SlackInstall?
   aiProviderSettings           Json?
   webhookSubscriptions         WebhookSubscription[]

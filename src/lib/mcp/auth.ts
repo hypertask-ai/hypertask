@@ -26,16 +26,27 @@ import {
   parseManagementPermissions,
 } from '@/lib/mcp/managementPermissions'
 import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry'
+import { isFeatureEnabled } from '@/lib/flags'
+import { TEAM_SCOPED_MANAGEMENT_KEYS_FLAG } from '@/lib/flags/keys'
+import {
+  ACCOUNT_MANAGEMENT_KEY_PREFIX,
+  agentWithinTeamWhere,
+  getManagementKeyTeam,
+  TEAM_MANAGEMENT_KEY_PREFIX,
+} from '@/lib/mcp/managementKeyTeamScope'
 
 const JWT_SECRET = process.env.JWT_SECRET as string
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 export const JWT_MCP_AUDIENCE = 'mcp-api'
 export const JWT_LEGACY_MCP_AUDIENCE = 'hypertasks-mcp'
 const AGENT_TOKEN_GENERATION_CLAIM = 'agentTokenGeneration'
+const AGENT_TEAM_ID_CLAIM = 'agentTeamId'
+const AGENT_TEAM_ACCESS_BINDING_CLAIM = 'agentTeamAccessBinding'
 const MCP_TOKEN_ISSUED_AT_MS_CLAIM = 'mcpIssuedAtMs'
-export const MANAGEMENT_KEY_PREFIX = 'htmk_'
+export const MANAGEMENT_KEY_PREFIX = ACCOUNT_MANAGEMENT_KEY_PREFIX
 export const isManagementKeyToken = (token: string) =>
-  token.startsWith(MANAGEMENT_KEY_PREFIX)
+  token.startsWith(MANAGEMENT_KEY_PREFIX) ||
+  token.startsWith(TEAM_MANAGEMENT_KEY_PREFIX)
 export function extractBearerToken(authHeader: string | null): string | null {
   return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
 }
@@ -139,6 +150,26 @@ export type McpAuthContext = {
   management?: {
     keyId: string
     permissions: Record<string, string[]>
+    teamId?: string
+    teamAccessBinding?: string
+  }
+}
+
+export type AgentTokenTeamScope = {
+  teamId: string
+  accessBinding: string
+}
+
+export const managementAgentTokenScope = (
+  management: McpAuthContext['management']
+): AgentTokenTeamScope | undefined => {
+  if (!management?.teamId) return undefined
+  if (!management.teamAccessBinding) {
+    throw new Error('Team-scoped management context has no access binding')
+  }
+  return {
+    teamId: management.teamId,
+    accessBinding: management.teamAccessBinding,
   }
 }
 
@@ -492,6 +523,54 @@ async function validateManagementApiKey(token: string): Promise<McpAuthContext |
     })
     if (!user) return null
 
+    const keyPrefix = result.key.prefix
+    if (
+      keyPrefix !== ACCOUNT_MANAGEMENT_KEY_PREFIX &&
+      keyPrefix !== TEAM_MANAGEMENT_KEY_PREFIX
+    ) {
+      return null
+    }
+
+    let teamId: string | undefined
+    let teamAccessBinding: string | undefined
+    if (keyPrefix === TEAM_MANAGEMENT_KEY_PREFIX) {
+      if (
+        !(await isFeatureEnabled(
+          TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+          user.id
+        ))
+      ) {
+        return null
+      }
+
+      const keyId = Number(result.key.id)
+      if (!Number.isSafeInteger(keyId) || keyId <= 0) return null
+      const keyRow = await prisma.betterAuthApiKey.findFirst({
+        where: {
+          id: keyId,
+          userId: user.id,
+          prefix: TEAM_MANAGEMENT_KEY_PREFIX,
+          enabled: true,
+        },
+        select: { teamId: true, teamAccessBinding: true },
+      })
+      if (!keyRow?.teamId || !keyRow.teamAccessBinding) return null
+
+      const team = await getManagementKeyTeam(user.id, keyRow.teamId)
+      if (!team || team.accessBinding !== keyRow.teamAccessBinding) {
+        // A removed member must not regain a dormant credential when invited
+        // back later with a new membership row. Disabling also gives account
+        // owners a visible audit row.
+        await prisma.betterAuthApiKey.updateMany({
+          where: { id: keyId, userId: user.id, enabled: true },
+          data: { enabled: false },
+        })
+        return null
+      }
+      teamId = team.id
+      teamAccessBinding = team.accessBinding
+    }
+
     return {
       user: {
         id: user.id,
@@ -502,6 +581,7 @@ async function validateManagementApiKey(token: string): Promise<McpAuthContext |
       management: {
         keyId: String(result.key.id),
         permissions: parseManagementPermissions(result.key.permissions),
+        ...(teamId ? { teamId, teamAccessBinding } : {}),
       },
     }
   } catch (error) {
@@ -784,12 +864,44 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
     let agentId: string | null = null
     let agentRuntimeGeneration: number | null = null
     const rawAgentId = decoded.agentId
+    const rawAgentTeamId = decoded[AGENT_TEAM_ID_CLAIM]
+    const rawAgentTeamAccessBinding =
+      decoded[AGENT_TEAM_ACCESS_BINDING_CLAIM]
+    const hasAgentTeamScope =
+      rawAgentTeamId !== undefined || rawAgentTeamAccessBinding !== undefined
+    if (
+      hasAgentTeamScope &&
+      (typeof rawAgentId !== 'string' ||
+        rawAgentId.length === 0 ||
+        typeof rawAgentTeamId !== 'string' ||
+        rawAgentTeamId.length === 0 ||
+        typeof rawAgentTeamAccessBinding !== 'string' ||
+        rawAgentTeamAccessBinding.length === 0)
+    ) {
+      return null
+    }
     if (typeof rawAgentId === 'string' && rawAgentId.length > 0) {
+      const agentTeamId = rawAgentTeamId as string | undefined
+      if (agentTeamId) {
+        if (
+          !(await isFeatureEnabled(
+            TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+            user.id
+          ))
+        ) {
+          return null
+        }
+        const team = await getManagementKeyTeam(user.id, agentTeamId)
+        if (!team || team.accessBinding !== rawAgentTeamAccessBinding) {
+          return null
+        }
+      }
       const agent = await prisma.agent.findFirst({
         where: {
           id: rawAgentId,
           userId: user.id,
           revokedAt: null,
+          ...(agentTeamId ? agentWithinTeamWhere(agentTeamId) : {}),
         },
         select: {
           id: true,
@@ -877,13 +989,15 @@ async function validateJwtToken(token: string): Promise<McpAuthContext | null> {
  * @param email User email
  * @param expiresIn Expiration time (default: 30 days). Ignored when agentId is set (no JWT exp).
  * @param agentId Optional agent UUID; when set, token has no expiry (revoked via Agent.mcpToken / jti).
+ * @param agentTeamScope Optional team grant for a token issued through a team-scoped management key.
  * @returns JWT token string
  */
 export function createMcpToken(
   userId: number,
   email: string,
   expiresIn: string | number = '30d',
-  agentId?: string
+  agentId?: string,
+  agentTeamScope?: AgentTokenTeamScope
 ): string {
   if (!JWT_SECRET) {
     throw new Error('JWT_SECRET not configured')
@@ -900,6 +1014,16 @@ export function createMcpToken(
     [MCP_TOKEN_ISSUED_AT_MS_CLAIM]: issuedAt,
   }
   if (agentId) payload.agentId = agentId
+  if (agentTeamScope) {
+    if (!agentId) {
+      throw new Error('A team-bound token requires an agent id')
+    }
+    if (!agentTeamScope.teamId || !agentTeamScope.accessBinding) {
+      throw new Error('A team-bound token requires a complete team scope')
+    }
+    payload[AGENT_TEAM_ID_CLAIM] = agentTeamScope.teamId
+    payload[AGENT_TEAM_ACCESS_BINDING_CLAIM] = agentTeamScope.accessBinding
+  }
 
   // If agentId is specified, generate a token *without* expiry (no expiresIn)
   const signOptions: jwt.SignOptions = {
