@@ -434,6 +434,8 @@ export async function POST(request: NextRequest) {
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
 
     void broadcastBoardChange(task.projectId, { originUserId: user.id });
+    // HTPR-6281: the open task detail view listens only on the task channel.
+    void broadcastTaskChange(task.id, { originUserId: user.id });
 
     return NextResponse.json(
       {

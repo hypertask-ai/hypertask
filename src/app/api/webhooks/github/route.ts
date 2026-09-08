@@ -826,9 +826,17 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-          await broadcastBoardChange(task.projectId, {
-            originUserId: generalConfig.hyperAiId,
-          });
+          // broadcast() never rejects (it logs internally); Promise.all keeps
+          // a genuine failure visible to the surrounding catch.
+          await Promise.all([
+            broadcastBoardChange(task.projectId, {
+              originUserId: generalConfig.hyperAiId,
+            }),
+            // HTPR-6281: the open task detail view listens only on the task channel.
+            broadcastTaskChange(task.id, {
+              originUserId: generalConfig.hyperAiId,
+            }),
+          ]);
         } catch (error) {
           console.warn(
             `[GitHub webhook] Task ${task.id} moved, but a follow-up side effect failed.`,
@@ -843,9 +851,15 @@ export async function POST(request: NextRequest) {
       : false;
     if (assignmentsChanged && !moved) {
       try {
-        await broadcastBoardChange(task.projectId, {
-          originUserId: generalConfig.hyperAiId,
-        });
+        await Promise.all([
+          broadcastBoardChange(task.projectId, {
+            originUserId: generalConfig.hyperAiId,
+          }),
+          // HTPR-6281: the open task detail view listens only on the task channel.
+          broadcastTaskChange(task.id, {
+            originUserId: generalConfig.hyperAiId,
+          }),
+        ]);
       } catch (error) {
         console.warn(
           `[GitHub webhook] Task ${task.id} assignments changed, but realtime delivery failed.`,
