@@ -1,38 +1,46 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { RefObject, useEffect, useRef, useState } from "react";
+import React, { RefObject, useEffect, useRef, useState } from "react";
 
-import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import toast from "react-hot-toast";
 
 type Props = {
+    title: string;
+    onTitleChange: (title: string) => void;
     onCancelCreate: () => void;
-    invokeCreateItem: (title: string, createAnother:boolean) => void;
+    invokeCreateItem: (title: string, createAnother:boolean) => Promise<boolean>;
     inputRef: RefObject<HTMLInputElement | null>;
-    position:"top"|"bottom"
 }
 
 const NewTask = ({
+    title,
+    onTitleChange,
     inputRef,
     invokeCreateItem,
-    onCancelCreate,
-    position
+    onCancelCreate
 }: Props) => {
-  const isApple = useDeviceContext()
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const submittingRef = useRef(false)
 
-    const [title, setTitle] = useState('')
-
-    const createItem = (createAnother:boolean) => {
-        const res =schemaCheck() 
-        if (res){
-          invokeCreateItem(res, createAnother);
-          setTitle('')
+    const createItem = async () => {
+        const res = schemaCheck()
+        if (!res) {
+          toast("Cannot create tasks with empty title")
+          return
         }
-        else toast("Cannot create tasks with empty title")
-    }
-
-    const cancelCreate = () => {
-        setTitle('')
-        onCancelCreate()
+        if (submittingRef.current) return
+        submittingRef.current = true
+        setIsSubmitting(true)
+        let created = false
+        try {
+          created = await invokeCreateItem(res, true);
+        } catch {
+          created = false
+        } finally {
+          submittingRef.current = false
+          setIsSubmitting(false)
+        }
+        if (created) onTitleChange('')
+        else toast("Could not create the task, try again")
     }
 
     const schemaCheck = ()=>{
@@ -48,30 +56,28 @@ const NewTask = ({
     }
   useEffect(()=>{
     document.getElementById("newTask")?.scrollIntoView({behavior:"smooth",block:"center"})
-    // position==="top"&&document.getElementById("newTask")?.scrollIntoView({behavior:"smooth" as ScrollBehavior,block:"start"})
   },[])
   return (
         <div id="newTask" className="rounded-md bg-cardBackground px-3 py-[10px]"  style={{ cursor: 'pointer', width: '100%'}}>
           <input
             ref={inputRef}
             value={title}
-            onBlur={cancelCreate}
-            onChange={(e) => setTitle(e.target.value)}
+            readOnly={isSubmitting}
+            aria-busy={isSubmitting}
+            autoFocus
+            onBlur={() => {
+              if (!submittingRef.current) onCancelCreate()
+            }}
+            onChange={(e) => onTitleChange(e.target.value)}
             onKeyDown={(e) => {
-              var cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;
-              if (e.key==="Enter" && cmdControl){
-                createItem(true)
+              if (e.nativeEvent.isComposing || isSubmitting) return;
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createItem();
               }
-
-              // ======= pressing enter
-              else if (e.key === "Enter" && title.length > 0) {
-                createItem(false);
-              }
-              
-              // esc to cancel add new item
               if (e.key === "Escape") {
                 e.preventDefault();
-                cancelCreate()
+                onCancelCreate()
               }
             }}
             style={{ resize: 'none', background: 'transparent', width: '100%', outline: 'none' }}

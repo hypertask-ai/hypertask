@@ -118,7 +118,6 @@ test("mouse and keyboard task creation use the selected table column", () => {
     { sectionId: 42, sectionTitle: "Backlog", position: "bottom" },
   );
 });
-
 test("table create control labels match the selected-row context", () => {
   const sections = [{ sectionId: 20, section_title: "Doing" }];
   assert.deepEqual(getTableCreateTaskButtonLabelsForSelection({ sid: 20 }, sections), {
@@ -149,6 +148,7 @@ test("the rendered table create control follows live selection and project scope
     selectedIndex,
     controlRows = rows,
     controlSections = sections,
+    controlOverrides = {},
   ) =>
     React.createElement(
       TableCreateTaskControl,
@@ -158,6 +158,7 @@ test("the rendered table create control follows live selection and project scope
         selectedIndex,
         sections: controlSections,
         toggleCreateTaskGlobally,
+        ...controlOverrides,
       }),
     );
   let act;
@@ -208,6 +209,64 @@ test("the rendered table create control follows live selection and project scope
     assert.equal(emptyButton.getAttribute("aria-label"), "Create task");
     await act(async () => emptyButton.click());
     assert.equal(createCalls.length, 2);
+
+    // Quick entry saves repeatedly, keeps failed drafts, and stays in its project.
+    dom.window.Element.prototype.scrollIntoView = () => {};
+    const quickCalls = [];
+    let quickResult = true;
+    let finishCreate;
+    const quickCreateTask = async (...args) => {
+      quickCalls.push(args);
+      return quickResult;
+    };
+    const quickProps = { quickEntryEnabled: true, quickCreateTask };
+    const type = async (input, value) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(
+          dom.window.HTMLInputElement.prototype,
+          "value",
+        ).set.call(input, value);
+        input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      });
+    };
+    const press = async (input, key) => {
+      await act(async () => input.dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key, bubbles: true }),
+      ));
+    };
+
+    await act(async () => reactRoot.render(
+      renderControl({ id: 15 }, 0, rows, sections, quickProps),
+    ));
+    await act(async () => container.querySelector("button").click());
+    await type(container.querySelector("input"), "First card");
+    await press(container.querySelector("input"), "Enter");
+    assert.deepEqual(quickCalls[0], ["First card", 15, 20, "Doing"]);
+    assert.equal(container.querySelector("input").value, "");
+
+    quickResult = false;
+    await type(container.querySelector("input"), "Keep this draft");
+    await press(container.querySelector("input"), "Enter");
+    await press(container.querySelector("input"), "Escape");
+    await act(async () => container.querySelector("button").click());
+    assert.equal(container.querySelector("input").value, "Keep this draft");
+
+    quickResult = new Promise((resolve) => { finishCreate = resolve; });
+    await type(container.querySelector("input"), "Only once");
+    await act(async () => {
+      const input = container.querySelector("input");
+      input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    assert.equal(quickCalls.length, 3);
+    await act(async () => { finishCreate(true); await quickResult; });
+
+    await act(async () => reactRoot.render(
+      renderControl({ id: 16 }, 0, rows, sections, quickProps),
+    ));
+    assert.equal(container.querySelector("input"), null);
+    await act(async () => container.querySelector("button").click());
+    assert.equal(container.querySelector("input").value, "");
 
     await act(async () => {
       reactRoot.render(renderControl(null, 0));

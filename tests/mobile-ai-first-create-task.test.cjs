@@ -260,7 +260,10 @@ test("board create entry points follow the AI-first flag", async () => {
   let aiFirstTaskWriterEnabled = false;
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
-      useFlag: () => aiFirstTaskWriterEnabled,
+      // Key-aware: useSections also reads the quick-entry flag, which must not
+      // follow the AI-first flag's value here.
+      useFlag: (key) =>
+        key === "htpr-6141-ai-first-task-writer" && aiFirstTaskWriterEnabled,
     }],
     [path.join(root, "src/lib/state.tsx"), {
       useRecoilState: (atom) => React.useState(atom.default),

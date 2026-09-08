@@ -61,6 +61,8 @@ import {
   getTableCreateTaskControlProps,
   TableCreateTaskControl,
 } from "./TableCreateTaskControl";
+import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
+import { useFlag } from "@/hooks/useFlag";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 
@@ -888,6 +890,24 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     if (selectedIndex > rows.length - 1) focusTo(rows.length - 1);
   }, [focusTo, rows.length, selectedIndex]);
 
+  // HTPR-6175: quick entry creates straight from a title, no modal.
+  const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
+  const { createItem } = useAddDeleteTaskInBoards();
+  const quickCreateTask = (
+    title: string,
+    projectId: number,
+    sectionId: number,
+    sectionTitle: string,
+  ) =>
+    createItem({
+      sectionId,
+      section: sectionTitle,
+      item: { title, description: "", id: -1 },
+      position: "bottom",
+      createAnother: true,
+      projectId,
+    });
+
   const createTaskInCurrentTableContext = useCallback(() => {
     createTaskFromTableSelection({
       hasCurrentProject: Boolean(_currentProject),
@@ -1204,6 +1224,8 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
             selectedIndex,
             sections,
             toggleCreateTaskGlobally,
+            quickEntryEnabled,
+            quickCreateTask,
           })}
         />
         <div ref={tableWrapperRef} style={{ minWidth: tableMinWidth }} className="relative">

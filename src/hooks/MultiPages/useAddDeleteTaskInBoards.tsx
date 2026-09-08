@@ -105,19 +105,19 @@ const useAddDeleteTaskInBoards = () => {
   };
   
 
-  const createItem = async (props: CreateItemParams) => {
+  const createItem = async (props: CreateItemParams): Promise<boolean> => {
     console.log("🚀 ~ createItem ~ props:", props)
     const { sectionId, section, item, position, createAnother, projectId } = props
     console.log("🚀 ~ createItem ~ _currentProject:", _currentProject)
 
-    if (!_currentProject) return;
+    if (!_currentProject || _currentProject.id !== projectId) return false;
+    try {
     const { allData, projectToUpdateIndex } = await getProjectIdxAndAllData(_currentProject?.id)
-    console.log("🚀 ~ createItem ~ projectToUpdateIndex:", projectToUpdateIndex)
-    console.log("🚀 ~ createItem ~ allData:", allData)
+      console.log("🚀 ~ createItem ~ projectToUpdateIndex:", projectToUpdateIndex)
+      console.log("🚀 ~ createItem ~ allData:", allData)
 
     // if (!allData || !projectToUpdateIndex) return;
-    if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return;
-
+    if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return false;
 
     const sections = allData?.updatedProjects[projectToUpdateIndex]?.sections
     console.log("🚀 ~ createItem ~ sections:", sections)
@@ -132,25 +132,27 @@ const useAddDeleteTaskInBoards = () => {
     );
 
     console.log("🚀 ~ createItem ~ ranking:", ranking)
-    const res = await axios.post("/api/tasks/create", {
-      ...item,
-      sectionId,
-      section,
-      assignees: [],
-      userId: currentUser?.id,
-      projectId,
-      ranking,
+      const res = await axios.post("/api/tasks/create", {
+        ...item,
+        sectionId,
+        section,
+        assignees: [],
+        userId: currentUser?.id,
+        projectId,
+        ranking,
       index: _currentProject?.sorting_mode === "Priority" && position === "top" ? 0 : sections[sectionIndex]?.items.length,
-    });
+      });
 
-    if (res.status === 200) {
+      if (res.status !== 200) return false;
+
       const task = res.data;
-      const section = sections[sectionIndex];
+      try {
+      const targetSection = sections[sectionIndex];
 
-      const updatedItems = position === "top" ? [task, ...(section?.items || [])] : [...(section?.items || []), task];
+      const updatedItems = position === "top" ? [task, ...(targetSection?.items || [])] : [...(targetSection?.items || []), task];
 
       const updatedSections = sections.map((sec, index) =>
-        index === sectionIndex ? { ...section, items: updatedItems } : sec
+        index === sectionIndex ? { ...targetSection, items: updatedItems } : sec
       );
       console.log("🚀 ~ createItem ~ updatedSections:", updatedSections);
 
@@ -158,8 +160,15 @@ const useAddDeleteTaskInBoards = () => {
 
       if (!createAnother) updateActiveItemAndItemInView(task.id, _currentProject.id, getActiveSection());
       else updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection());
+      } catch (error) {
+        console.log("🚀 ~ createItem ~ local update error:", error);
+        void queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
+      }
+      return true;
+    } catch (error) {
+      console.log("🚀 ~ createItem ~ error:", error);
+      return false;
     }
-
   };
 
   return { createItem, createTaskGlobally }

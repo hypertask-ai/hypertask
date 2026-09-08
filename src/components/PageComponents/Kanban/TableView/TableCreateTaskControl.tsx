@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   createTaskFromTableSelection,
   getTableCreateTaskButtonLabelsForSelection,
@@ -8,19 +8,30 @@ import {
   type ToggleCreateTaskGlobally,
 } from "./tableCreateTask";
 import { TableCreateTaskButton } from "./TableCreateTaskButton";
+import NewTask from "../../../Common/newTask";
+
+export type QuickCreateTask = (
+  title: string,
+  projectId: number,
+  sectionId: number,
+  sectionTitle: string,
+) => Promise<boolean>;
 
 export type TableCreateTaskControlProps = {
   hasCurrentProject: boolean;
+  projectId?: number;
   rows: readonly TableCreateTaskRow[];
   selectedIndex: number;
   sections: readonly TableCreateTaskSection[];
   toggleCreateTaskGlobally: ToggleCreateTaskGlobally;
+  quickEntryEnabled?: boolean;
+  quickCreateTask?: QuickCreateTask;
 };
 
 export type TableCreateTaskControlInput = Omit<
   TableCreateTaskControlProps,
   "hasCurrentProject"
-> & { currentProject: unknown };
+> & { currentProject: { id?: number } | null | undefined };
 
 export const getTableCreateTaskControlProps = ({
   currentProject,
@@ -28,34 +39,82 @@ export const getTableCreateTaskControlProps = ({
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
+  quickEntryEnabled,
+  quickCreateTask,
 }: TableCreateTaskControlInput): TableCreateTaskControlProps => ({
   hasCurrentProject: Boolean(currentProject),
+  projectId: Number.isSafeInteger(currentProject?.id) ? currentProject?.id : undefined,
   rows,
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
+  quickEntryEnabled,
+  quickCreateTask,
 });
 
 export const TableCreateTaskControl = ({
   hasCurrentProject,
+  projectId,
   rows,
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
+  quickEntryEnabled,
+  quickCreateTask,
 }: TableCreateTaskControlProps) => {
+  const [openTarget, setOpenTarget] = useState<
+    { projectId: number; sectionId: number; sectionTitle: string } | null
+  >(null);
+  const [draft, setDraft] = useState<{ projectId?: number; title: string }>({ title: "" });
+
   const selectedRow = rows[selectedIndex];
   const selectedSectionPayload = resolveTableCreateTaskSectionPayload(
     selectedRow?.sid,
     sections,
   );
   const labels = getTableCreateTaskButtonLabelsForSelection(selectedRow, sections);
-  const onCreate = () =>
-    createTaskFromTableSelection({
-      hasCurrentProject,
-      selectedRow,
-      sections,
-      toggleCreateTaskGlobally,
+  const quickEntry = Boolean(quickEntryEnabled && quickCreateTask && projectId);
+  const activeTarget = openTarget?.projectId === projectId ? openTarget : null;
+
+  const onCreate = () => {
+    if (!quickEntry) {
+      createTaskFromTableSelection({
+        hasCurrentProject,
+        selectedRow,
+        sections,
+        toggleCreateTaskGlobally,
+      });
+      return;
+    }
+    if (!hasCurrentProject || !projectId || !selectedSectionPayload) return;
+    setOpenTarget({
+      projectId,
+      sectionId: selectedSectionPayload.sectionId,
+      sectionTitle: selectedSectionPayload.sectionTitle,
     });
+  };
+
+  if (quickEntry && activeTarget) {
+    return (
+      <div className="px-5 pb-2">
+        <NewTask
+          title={draft.projectId === projectId ? draft.title : ""}
+          onTitleChange={(title) => setDraft({ projectId, title })}
+          inputRef={{ current: null }}
+          onCancelCreate={() => setOpenTarget(null)}
+          invokeCreateItem={(title) =>
+            quickCreateTask!(
+              title,
+              activeTarget.projectId,
+              activeTarget.sectionId,
+              activeTarget.sectionTitle,
+            )
+          }
+        />
+      </div>
+    );
+  }
+
   return (
     <TableCreateTaskButton
       hasCurrentProject={hasCurrentProject}

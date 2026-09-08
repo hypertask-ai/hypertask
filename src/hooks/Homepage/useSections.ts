@@ -76,10 +76,12 @@ const useSections = ({
   const setActiveItem = useSetRecoilState(activeItemAtom);
   const [position, setPosition] = useState<"top" | "bottom" | null>(); // top or bottom
   const [showAddItem, setShowAddItem] = useState(false);
+  const [newTaskDraftTitle, setNewTaskDraftTitle] = useState("");
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
   const isMbl = useContext(MobileViewContext);
   const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
+  const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -96,34 +98,29 @@ const useSections = ({
 
   // ======================== create new task at given position
   const createTaskAt = (position: "top"|"bottom", sectionPayload?:TSectionPayload, defaultEditFocus?:TDefaultEditFocus) => {
-    // if (position === "top") {
-      // setShowAddItem(true);
-      // setPosition("top");
-      // topInputRef.current?.focus();
-      toggleCreateTaskGlobally(
-        sectionPayload,
-        defaultEditFocus ??
-          (isMbl && aiFirstTaskWriterEnabled
-            ? MOBILE_AI_TASK_WRITER_FOCUS
-            : undefined),
-      )
-    // }
-    //  else {
-    //   setShowAddItem(true);
-    //   setPosition("bottom");
-    //   bottomInputRef.current?.focus();
-    // }
+    const editFocus =
+      defaultEditFocus ??
+      (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
+    // Quick entry only replaces the plain "add a card" path. Asking for a
+    // specific editor focus (the AI writer on Ctrl+J or mobile) still opens
+    // the full modal, which is the only place that focus means anything.
+    if (quickEntryEnabled && !editFocus) {
+      setShowAddItem(true);
+      setPosition(position);
+      return;
+    }
+    toggleCreateTaskGlobally(sectionPayload, editFocus)
   };
 
-  // ======================== user presses [Enter] / [CTRL] to CREATE a task
-  const invokeCreateItem = async (taskTitle: any, createAnother: any) => {
+  // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
+  const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
     const itemToCreate = {
       title: taskTitle,
       description: "",
       id: -1,
     };
-    if (!position) return;
-    createItem({
+    if (!position) return false;
+    const created = await createItem({
       sectionId: sectionId,
       item: itemToCreate,
       position,
@@ -132,12 +129,14 @@ const useSections = ({
       section: title,
     });
 
-    if (createAnother) createTaskAt(position);
-    else {
+    if (!created) return false;
+
+    if (!createAnother) {
       setPosition(null);
       setShowAddItem(false);
       sectionRef.current?.focus();
     }
+    return true;
   };
 
   const latestRef = useRef({
@@ -493,6 +492,8 @@ const useSections = ({
     handleKeyDown,
     tasksPlayList,
     showAddItem,
+    newTaskDraftTitle,
+    setNewTaskDraftTitle,
     onCancelCreate,
     invokeCreateItem,
     position,
