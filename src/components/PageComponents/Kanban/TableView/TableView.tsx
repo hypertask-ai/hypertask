@@ -52,6 +52,7 @@ import {
   parseTableRowDragData,
   type TableRowDragData,
 } from "./tableRowDrag";
+import { shouldFlattenSortedRows } from "./tableSortFlatten";
 import {
   createTaskFromTableSelection,
   tableSectionKey,
@@ -63,6 +64,7 @@ import {
 } from "./TableCreateTaskControl";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useFlag } from "@/hooks/useFlag";
+import { MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG } from "@/lib/flags/keys";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 
@@ -618,8 +620,20 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   const normalizedColumnOrder = useMemo(() => normalizeTableVisibleColumns(storedVisibleColumns), [storedVisibleColumns]);
   const storedColumnKeys = useMemo(() => new Set(normalizedColumnOrder), [normalizedColumnOrder]);
 
+  // HTPR-6215: sorting My Tasks by priority interleaves every board's tasks by
+  // priority level, since priority (unlike most sort columns) is already
+  // comparable across boards. Off by default; see tableSortFlatten.ts.
+  const crossBoardPrioritySortEnabled = useFlag(MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG);
+  const isPrioritySort = sortState[0]?.column === "priority";
+
   const rows = useMemo(() => {
     if (sortState.length > 0) {
+      const flattenSort = shouldFlattenSortedRows(
+        Boolean(_currentProject),
+        true,
+        isPrioritySort,
+        crossBoardPrioritySortEnabled
+      );
       // sectionId and sid share a numeric namespace only when there's a current
       // project (real sections); on /my-tasks, sid is the boardId (see
       // myTasksGrouping.ts), so sectionOrder would compare unrelated ids (HTPR-4887).
@@ -643,10 +657,11 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
           return 0;
         });
 
-      // Flat sort only when there's one project: on /my-tasks the board
-      // grouping IS the point, so a sort must reorder within each board's
-      // section rather than flattening it away (HTPR-4887).
-      if (_currentProject) {
+      // Flat sort on a real board (there's only one project, so "flat" and
+      // "grouped by board" are the same thing), or on /my-tasks when priority
+      // sort is flattening it across boards (HTPR-6215). Otherwise /my-tasks
+      // keeps the board grouping while sorting within it (HTPR-4887).
+      if (flattenSort) {
         const allTasks = sections.flatMap((section) => section.items || []);
         return sortTasks(allTasks).map((task) => ({ type: "task" as const, task, sid: task.sectionId ?? "flat" }));
       }
@@ -673,7 +688,17 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
         next.push({ type: "more", sid, hidden: items.length - shown.length });
     });
     return next;
-  }, [sections, expanded, sortState, sectionOrderBySid, _currentProject, timeNow, timeTotals]);
+  }, [
+    sections,
+    expanded,
+    sortState,
+    sectionOrderBySid,
+    _currentProject,
+    timeNow,
+    timeTotals,
+    isPrioritySort,
+    crossBoardPrioritySortEnabled,
+  ]);
 
   // HTPR-4876: table view rendered <HypertasksCommands /> with no context, so
   // the palette fell back to "Others" and every Task- or Kanban-gated command
@@ -1325,7 +1350,12 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
               );
             })}
           </div>
-          {sortState.length > 0 && _currentProject ? (
+          {shouldFlattenSortedRows(
+            Boolean(_currentProject),
+            sortState.length > 0,
+            isPrioritySort,
+            crossBoardPrioritySortEnabled
+          ) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
                 {rows.filter(isTaskRow).map(({ task }, index) => renderTaskRow(task, index))}
