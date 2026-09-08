@@ -712,6 +712,12 @@ jobs:
 
       - name: Check the fixture settings are configured
         id: settings
+        env:
+          CORE_SMOKE_PROJECT_ID: ${{ vars.CORE_SMOKE_PROJECT_ID }}
+          CORE_SMOKE_TASK_ID: ${{ vars.CORE_SMOKE_TASK_ID }}
+          CORE_SMOKE_BASE_SECTION_ID: ${{ vars.CORE_SMOKE_BASE_SECTION_ID }}
+          CORE_SMOKE_ALT_SECTION_ID: ${{ vars.CORE_SMOKE_ALT_SECTION_ID }}
+          CORE_SMOKE_AGENT_ID: ${{ vars.CORE_SMOKE_AGENT_ID }}
         run: |
           OUT=$(node .github/scripts/core-actions-smoke.mjs check-settings)
           case "$OUT" in
