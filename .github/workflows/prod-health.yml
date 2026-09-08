@@ -544,15 +544,17 @@ jobs:
           exit 1
 
   # ── GLM exploratory QA (HTPR-6239): a 5-minute human-style pass on the live app ──
-  # Runs after the smoke checks actually executed (not skipped for a missing
-  # session) and after nothing rolled back, so the explored build is live
-  # production. It only POSTs a brief that mentions the configured GLM worker
-  # on the merged pull request's ticket; the agent explores and reports there.
-  # Exploratory, never a gate: a dispatch failure alerts on Telegram and never
-  # blocks, fails, or rolls back the deploy itself.
+  # Runs whenever a production push is actually live and nothing rolled back,
+  # independent of the smoke suite (HTPR-5781): smoke stays skipped while its
+  # session secret is unprovisioned, and gating the brief on it kept the pass
+  # permanently dead. The dispatcher tells the brief honestly when smoke did
+  # not run. A smoke-confirmed break that promoted the previous deployment
+  # (rolledback) still suppresses the brief: there is no live build of this
+  # SHA left to explore. Exploratory, never a gate: a dispatch failure alerts
+  # on Telegram and never blocks, fails, or rolls back the deploy itself.
   glm-qa:
     needs: [health, smoke]
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' && needs.smoke.outputs.ran == 'true' && needs.smoke.outputs.rolledback != 'true' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' && needs.smoke.outputs.rolledback != 'true' }}
     concurrency:
       # Fixed group: a newer production push cancels a still-running older
       # run, so a brief can only go out while its own SHA is the live deploy.
@@ -618,10 +620,17 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | tr '\n' ' ')
+          # Only claim a smoke verdict when smoke actually executed; a skipped
+          # smoke suite must reach the brief as "no verdict", not as a failure.
+          if [ "${{ needs.smoke.outputs.ran }}" = "true" ]; then
+            SMOKE_ARGS="--smoke-ok ${{ needs.smoke.outputs.ok }}"
+          else
+            SMOKE_ARGS="--smoke-unknown"
+          fi
           node .github/scripts/dispatch-glm-qa.mjs \
             --sha "$SHA" \
             --pr-title "$PR_TITLE" \
-            --smoke-ok "${{ needs.smoke.outputs.ok }}" \
+            $SMOKE_ARGS \
             --changed-files "$CHANGED_FILES"
 
       - name: Alert when the dispatch failed

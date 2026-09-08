@@ -15,6 +15,10 @@ import { pathToFileURL } from 'node:url'
 // startup below (HTPR-6239 review: a silent wrong-board post is worse than a
 // loud refusal).
 const PROJECT_ID = 15
+// Liveness/ownership probe: the unauthenticated build id endpoint is the one
+// place production proves which build is live (no secret in CI).
+const VERSION_PATH = '/api/version'
+
 // Screens the brief can name, mapped from changed file paths. Keep names in
 // sync with what the smoke suite (e2e/smoke/prod.spec.ts) calls the main views.
 const SCREEN_PREFIXES = [
@@ -86,6 +90,7 @@ export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agen
   } else if (smokeOk === false) {
     smokeLine = 'The automated smoke check failed without a confirmed break (no rollback) — treat that as a strong defect hint.'
   }
+
   // Hand-written mention span: the server-side agent-mention extraction
   // (extractTipTapContent) matches data-label="agent-<uuid>" directly, so the
   // wake does not depend on @-token resolution succeeding for the MCP identity.
@@ -94,7 +99,7 @@ export function buildBriefText({ sha, prTitle, screens, smokeOk, agentName, agen
     `<p><strong>GLM post-deploy QA pass requested: five minutes, read-only.</strong></p>`,
     `<p>Deploy ${escapeHtml(sha)} merged as “${escapeHtml(prTitle)}”. ${escapeHtml(smokeLine)}</p>`,
     `<p>Changed screens:</p><ul>${screenItems}</ul>`,
-    `<ol><li>Open ${escapeHtml(appUrl)} as a signed-in user and explore the changed screens and their nearest neighbours for five minutes.</li><li>Post one comment on this ticket with screenshots attached and a one-line verdict (pass, or defect list).</li><li>File one Bugs ticket per defect, labelled <code>post-deploy</code>, with the reproduction steps.</li></ol>`,
+    `<ol><li>Before exploring, confirm production still serves this deploy: GET ${escapeHtml(appUrl + VERSION_PATH)} must return buildId ${escapeHtml(sha)}. If it reports anything else, post one comment saying the QA pass is stale and stop without exploring.</li><li>Open ${escapeHtml(appUrl)} as a signed-in user and explore the changed screens and their nearest neighbours for five minutes.</li><li>Post one comment on this ticket with screenshots attached and a one-line verdict (pass, or defect list).</li><li>File one Bugs ticket per defect, labelled <code>post-deploy</code>, with the reproduction steps.</li></ol>`,
     `<p>Rules: on the app, look only — never submit forms, edit, delete, invite, or change settings. On Hypertask, you do write: your verdict comment here and the Bugs tickets. Never roll back and never trigger a deployment action. Keep screenshots to the changed screens and never capture tokens, credentials, or personal data. Reply without mentioning anyone.</p>`,
     `<p>${mention} — brief marker <code>glm-qa-brief:${escapeHtml(sha)}</code></p>`,
   ].join('')
@@ -137,6 +142,23 @@ async function apiGet(url, token) {
   return response.json()
 }
 
+// Liveness probe with retries: transient /api/version blips must not kill the
+// dispatch, but after the retries are exhausted we fail closed so a brief is
+// never sent without proof its deploy is the live one (HTPR-5781 review).
+export async function fetchLiveBuildId(base, { attempts = 3, delayMs = 2000 } = {}) {
+  let lastError = null
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const version = await apiGet(`${base}${VERSION_PATH}`, '')
+      return version?.buildId || null
+    } catch (err) {
+      lastError = err
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+  throw lastError
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   const token = process.env.MCP_TOKEN
@@ -165,20 +187,20 @@ async function main() {
   // `live` output is a stale snapshot, and a newer deploy may have taken the
   // production alias while this run waited (HTPR-6239 review). The /api/version
   // endpoint is unauthenticated (no secret in CI) and returns the live buildId.
-  // ponytail: a request failure (not a mismatch) stays fail-open with a
-  // warning — a transient /api/version blip must not kill every dispatch; the
-  // fixed concurrency group and the health gate narrow the stale window.
+  // Retry a few times, then fail closed (HTPR-5781 review): the fixed
+  // concurrency group narrows the stale window, but a brief for a dead SHA
+  // waking the worker is worse than skipping this deploy's pass.
+  let liveBuild = null
   try {
-    const version = await apiGet(`${base}/api/version`, '')
-    const liveBuild = version?.buildId
-    if (liveBuild && liveBuild !== args.sha) {
-      return refuse(`production now serves ${liveBuild}, not ${args.sha}; there is nothing of this deploy left to explore`)
-    }
-    if (!liveBuild) {
-      return refuse('live build id unavailable (/api/version answered without a buildId); cannot prove this deploy is still live')
-    }
+    liveBuild = await fetchLiveBuildId(base)
   } catch (err) {
-    console.log(`::warning::live recheck failed (${String(err.message || err)}); briefing without a liveness recheck`)
+    return refuse(`live build id unavailable (/api/version) after retries: ${String(err.message || err)}`)
+  }
+  if (liveBuild && liveBuild !== args.sha) {
+    return refuse(`production now serves ${liveBuild}, not ${args.sha}; there is nothing of this deploy left to explore`)
+  }
+  if (!liveBuild) {
+    return refuse('live build id unavailable (/api/version answered without a buildId); cannot prove this deploy is still live')
   }
 
   // Mandatory ticket lookup: refusing here is the correct behavior — the
