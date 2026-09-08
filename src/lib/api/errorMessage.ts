@@ -10,10 +10,14 @@ export function toErrorMessage(payload: unknown, fallback: string): string {
 function resolve(payload: unknown, depth: number): string | null {
   if (depth > 4) return null;
   if (typeof payload === "string") {
-    return payload.trim() ? payload : null;
+    const trimmed = payload.trim();
+    // `new Error(someObject)` stringifies to "[object Object]", which hides
+    // the reason just as surely as an empty message would.
+    return trimmed && trimmed !== "[object Object]" ? trimmed : null;
   }
   if (payload instanceof Error) {
-    return payload.message.trim() ? payload.message : null;
+    const message = payload.message.trim();
+    return message && message !== "[object Object]" ? message : null;
   }
   if (payload && typeof payload === "object") {
     const record = payload as Record<string, unknown>;
