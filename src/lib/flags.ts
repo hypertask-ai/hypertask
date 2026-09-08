@@ -26,6 +26,7 @@ import {
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
   MANAGER_LOOP_ACTIVITY_FLAG,
+  MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
 } from "@/lib/flags/keys";
@@ -267,6 +268,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Lets signed PostHog server errors alert the Manager and request a guarded rollback after a fresh release.",
+  },
+  {
+    key: MY_TASKS_PRIORITY_FILTER_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Adds a priority filter to the My Tasks page. Picking one or more priority levels shows only those tasks; the choice resets when the page reloads.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
