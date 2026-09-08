@@ -11,6 +11,9 @@
 // POST exits nonzero so the workflow can alert on Telegram.
 import { pathToFileURL } from 'node:url'
 
+// Board 15 is the product board every deploy ticket lives on; verified at
+// startup below (HTPR-6239 review: a silent wrong-board post is worse than a
+// loud refusal).
 const PROJECT_ID = 15
 // Screens the brief can name, mapped from changed file paths. Keep names in
 // sync with what the smoke suite (e2e/smoke/prod.spec.ts) calls the main views.
@@ -118,8 +121,18 @@ function refuse(reason) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+async function verifyProject(base, token) {
+  const projects = await apiGet(`${base}/api/mcp/projects?limit=100`, token)
+  const list = projects?.projects || []
+  const hit = list.find((project) => Number(project.id) === PROJECT_ID)
+  if (!hit) throw new Error(`project ${PROJECT_ID} not found on ${base}; refusing to post to a guessed board`)
+  return hit
+}
+
 async function apiGet(url, token) {
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+  const headers = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const response = await fetch(url, { headers })
   if (!response.ok) throw new Error(`GET ${url} -> HTTP ${response.status}`)
   return response.json()
 }
@@ -140,6 +153,22 @@ async function main() {
   const ticket = parseTicketNumber(args.prTitle)
   if (!ticket) {
     return refuse(`no HTPR-<n> ticket in the pull request title "${args.prTitle}"`)
+  }
+  // Revalidate live production immediately before briefing: the health job's
+  // `live` output is a stale snapshot, and a newer deploy may have taken the
+  // production alias while this run waited (HTPR-6239 review). The /api/version
+  // endpoint is unauthenticated (no secret in CI) and returns the live buildId.
+  try {
+    const version = await apiGet(`${base}/api/version`, '')
+    const liveBuild = version?.buildId
+    if (liveBuild && liveBuild !== args.sha) {
+      return refuse(`production now serves ${liveBuild}, not ${args.sha}; there is nothing of this deploy left to explore`)
+    }
+    if (!liveBuild) {
+      console.log('::warning::live build id unavailable (/api/version); briefing without a liveness recheck')
+    }
+  } catch (err) {
+    console.log(`::warning::live recheck failed (${String(err.message || err)}); briefing without a liveness recheck`)
   }
 
   // Duplicate-run guard: one brief per deploy SHA. The workflow's fixed
