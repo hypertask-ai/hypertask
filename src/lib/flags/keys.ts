@@ -22,3 +22,4 @@ export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
 export const COLUMN_ALL_VIEWS_FLAG = "htpr-5937-show-column-in-all-views";
 export const FLAG_REMOVAL_COUNTDOWN_FLAG = "htpr-6193-flag-removal-countdown";
 export const SHORTCUT_NUDGES_FLAG = "htpr-5906-shortcut-nudges";
+export const CONFIRMED_PROPOSAL_HEADING_FLAG = "htpr-6197-confirmed-proposal-heading";

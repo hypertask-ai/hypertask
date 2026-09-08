@@ -14,6 +14,7 @@ import {
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
+  CONFIRMED_PROPOSAL_HEADING_FLAG,
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_TICKET_TITLE_FLAG,
@@ -201,6 +202,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Shows a shortcut tip on the next task page after three mouse-click notification archives in the inbox.",
+  },
+  {
+    key: CONFIRMED_PROPOSAL_HEADING_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Head the Agent Chat proposal card 'Ticket created' once the ticket exists, instead of 'Ticket proposed, nothing done yet'.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
