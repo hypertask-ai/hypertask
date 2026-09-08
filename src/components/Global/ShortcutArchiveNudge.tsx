@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useContext, useEffect } from "react";
 import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -11,6 +11,8 @@ import {
 } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
   ARCHIVE_SHORTCUT_NUDGE_THRESHOLD,
   beginArchiveShortcutNudge,
@@ -20,6 +22,7 @@ import {
 
 export default function ShortcutArchiveNudge() {
   const pathname = usePathname();
+  const isMobile = useContext(MobileViewContext);
   const flagEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
   const currentUser = useRecoilValue(currentUserAtom);
   const [tipsEnabled, setTipsEnabled] = useRecoilState(showQuickTipsAtom);
@@ -109,7 +112,7 @@ export default function ShortcutArchiveNudge() {
         <button
           type="button"
           aria-label="Dismiss shortcut tip"
-          className="rounded-sm text-text-light-gray hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none"
+          className={`${isMobile ? MOBILE_TARGET : ""} rounded-sm text-text-light-gray hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none`}
           onClick={dismiss}
         >
           <X aria-hidden="true" size={14} strokeWidth={1.5} />

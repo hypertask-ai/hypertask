@@ -94,6 +94,10 @@ test("the archive shortcut nudge appears on a mobile task page", async () => {
     });
 
     assert.match(document.body.textContent, /Tip: press E to archive/);
+    assert.match(
+      document.querySelector('[aria-label="Dismiss shortcut tip"]').className,
+      /min-h-\[44px\]/,
+    );
   } finally {
     if (reactRoot) {
       await React.act(async () => reactRoot.unmount());
