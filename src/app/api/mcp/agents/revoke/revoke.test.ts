@@ -97,6 +97,7 @@ async function demo() {
       key: {
         id: 'management-key',
         referenceId: String(user.id),
+        prefix: 'htmk_',
         permissions:
           body.key === 'htmk_management-test'
             ? { management: ['read', 'write'] }
@@ -149,6 +150,21 @@ async function demo() {
     assert.equal(alreadyRevokedResponse.status, 409)
     assert.equal(alreadyRevokedBody.error, 'Agent already revoked')
     assert.deepEqual(ownershipQuery?.select, { id: true, revokedAt: true })
+
+    let revokeRaceRead = 0
+    prismaMock.agent.findFirst = async () => {
+      revokeRaceRead += 1
+      return revokeRaceRead === 1
+        ? { id: 'raced-agent', revokedAt: null }
+        : { revokedAt: alreadyRevokedAt }
+    }
+    prismaMock.agent.updateMany = async () => ({ count: 0 })
+    const revokeRaceResponse = await POST(
+      request({ agent_id: 'raced-agent' }, 'htmk_management-test')
+    )
+    const revokeRaceBody = await json(revokeRaceResponse)
+    assert.equal(revokeRaceResponse.status, 409)
+    assert.equal(revokeRaceBody.error, 'Agent already revoked')
 
     prismaMock.agent.findFirst = async (args: Record<string, any>) => {
       ownershipQuery = args

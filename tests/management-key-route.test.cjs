@@ -131,18 +131,23 @@ stubModule("src/lib/flags.ts", {
 stubModule("src/lib/flags/keys.ts", {
   TEAM_SCOPED_MANAGEMENT_KEYS_FLAG: "htpr-4540-team-scoped-management-keys",
 });
+function accessBindingForTeam(teamId) {
+  if (teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa") {
+    return "owner:account-a";
+  }
+  if (teamId === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb") {
+    return "owner:account-b";
+  }
+  return "member:membership-c";
+}
+
 stubModule("src/lib/mcp/managementKeyTeamScope.ts", {
   TEAM_MANAGEMENT_KEY_PREFIX: "httk_",
   getManagementKeyTeam: async (_userId, teamId) => ({
     id: teamId,
     title: teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" ? "Team A" : "Team B",
     isOwner: teamId !== "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-    accessBinding:
-      teamId === "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        ? "owner:account-a"
-        : teamId === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-          ? "owner:account-b"
-          : "member:membership-c",
+    accessBinding: accessBindingForTeam(teamId),
   }),
   listManagementKeyTeams: async () => [],
 });

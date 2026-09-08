@@ -141,6 +141,20 @@ export async function revokeAgentForUser(
     },
   })
   if (updated.count !== 1) {
+    const current = await prisma.agent.findFirst({
+      where: {
+        id: agent.id,
+        userId: user.id,
+        ...agentScope,
+      },
+      select: { revokedAt: true },
+    })
+    if (current?.revokedAt) {
+      return NextResponse.json(
+        { success: false, error: 'Agent already revoked' },
+        { status: 409 }
+      )
+    }
     return NextResponse.json(
       { success: false, error: 'Agent not found' },
       { status: 404 }
