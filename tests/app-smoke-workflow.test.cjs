@@ -288,6 +288,30 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
 });
 
+test("CI policy keeps the protected smoke producer live and required", async () => {
+  const policy = yaml.load(await readFile("docs/ci-policy.yml", "utf8"));
+  const required = [
+    "app-smoke",
+    "ci-tests",
+    "claude-review",
+    "pr-title",
+    "revert-guard",
+    "next-public-secrets",
+    "secret-scan",
+  ];
+
+  assert.equal(policy.topology.repository_default_branch, "production");
+  assert.deepEqual(policy.required_checks.contexts, required);
+  assert.deepEqual(policy.required_checks.automerge_also_requires, [
+    "app-smoke",
+    "ci-tests",
+  ]);
+  assert.deepEqual(
+    policy.policies.production_ruleset.required_status_checks,
+    required,
+  );
+});
+
 test("npm registry proxy refuses arbitrary CONNECT targets", async (t) => {
   const port = await startProxy(t);
   const response = await connectThroughProxy(port, "127.0.0.1:80");
