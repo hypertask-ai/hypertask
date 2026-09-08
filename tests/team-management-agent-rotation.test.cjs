@@ -43,17 +43,29 @@ let foundAgent = null;
 let findArgs;
 let updateArgs;
 let updateCount = 1;
+let mintArgs;
 
 stubModule("src/lib/mcp/auth.ts", {
   agentTokenCredentialFields: () => ({ mcpTokenHash: "digest" }),
   checkMcpRateLimit: async () => null,
-  createMcpToken: () => "one-time-agent-token",
+  createMcpToken: (...args) => {
+    mintArgs = args;
+    return "one-time-agent-token";
+  },
+  managementAgentTokenScope: (management) =>
+    management?.teamId
+      ? {
+          teamId: management.teamId,
+          accessBinding: management.teamAccessBinding,
+        }
+      : undefined,
   validateManagementOrSessionAuth: async () => ({
     user: { id: 6, email: "owner@example.test" },
     agentId: null,
     management: {
       keyId: "1",
       teamId: "team-a",
+      teamAccessBinding: "member:membership-a",
       permissions: { management: ["read", "write"] },
     },
   }),
@@ -110,6 +122,7 @@ test("team-key rotation rejects an out-of-team agent without writing", async () 
   findArgs = undefined;
   updateArgs = undefined;
   updateCount = 1;
+  mintArgs = undefined;
 
   const response = await handleRotateAgentTokenRequest(
     request(),
@@ -132,6 +145,7 @@ test("team-key rotation repeats its team predicate on the write", async () => {
   findArgs = undefined;
   updateArgs = undefined;
   updateCount = 1;
+  mintArgs = undefined;
 
   const response = await handleRotateAgentTokenRequest(
     request(),
@@ -154,6 +168,13 @@ test("team-key rotation repeats its team predicate on the write", async () => {
     revokedAt: null,
     runtimeGeneration: { increment: 1 },
   });
+  assert.deepEqual(mintArgs, [
+    6,
+    "owner@example.test",
+    undefined,
+    "agent-1",
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  ]);
 });
 
 test("team-key rotation stops if the agent changes before the write", async () => {
@@ -161,6 +182,7 @@ test("team-key rotation stops if the agent changes before the write", async () =
   findArgs = undefined;
   updateArgs = undefined;
   updateCount = 0;
+  mintArgs = undefined;
 
   const response = await handleRotateAgentTokenRequest(
     request(),

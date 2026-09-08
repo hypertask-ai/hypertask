@@ -7,9 +7,19 @@ const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
-const { managementKeyScopeLabel, managementKeyTeamLabel } = jiti(
+const {
+  managementKeyScopeLabel,
+  managementKeyTeamIdForRequest,
+  managementKeyTeamLabel,
+} = jiti(
   path.join(root, "src/components/Modals/Settings/managementKeyScope.ts"),
 );
+
+test("hidden team scope is removed from create requests", () => {
+  assert.equal(managementKeyTeamIdForRequest(false, "team-a"), undefined);
+  assert.equal(managementKeyTeamIdForRequest(true, "team-a"), "team-a");
+  assert.equal(managementKeyTeamIdForRequest(true, null), undefined);
+});
 
 test("team labels distinguish disabled team keys from account keys", () => {
   assert.equal(managementKeyTeamLabel(true, null, false), "Team key disabled");

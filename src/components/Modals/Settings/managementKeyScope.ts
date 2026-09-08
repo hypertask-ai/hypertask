@@ -9,6 +9,11 @@ export type ManagementKeyPermissionMap = Record<string, string[]>;
 
 type ManagementKeyTeam = { title: string | null } | null | undefined;
 
+export const managementKeyTeamIdForRequest = (
+  teamScopedKeysEnabled: boolean,
+  teamId: string | null,
+) => (teamScopedKeysEnabled ? teamId ?? undefined : undefined);
+
 export const managementKeyTeamLabel = (
   teamScoped: boolean,
   team: ManagementKeyTeam,

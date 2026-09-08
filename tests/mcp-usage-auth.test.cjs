@@ -237,6 +237,7 @@ test("team key auth carries its team and fails closed", async () => {
     scoped?.management?.teamId,
     "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   );
+  assert.equal(scoped?.management?.teamAccessBinding, "owner:account-a");
   assert.deepEqual(teamKeyLookup, {
     where: {
       id: 1,

@@ -11,6 +11,7 @@
  * rules can be tested without a database.
  */
 import type { Prisma } from '@prisma/client'
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth'
 
 export type AgentLifecycleRow = {
   id: string
@@ -72,7 +73,12 @@ export type AgentLifecycleDatabase = {
 
 export type AgentLifecycleDeps = {
   /** Mints a fresh agent-scoped MCP credential for an external agent. */
-  mintToken(userId: number, email: string, agentId: string): string
+  mintToken(
+    userId: number,
+    email: string,
+    agentId: string,
+    teamScope?: AgentTokenTeamScope
+  ): string
   /** Best-effort runtime snapshot invalidation; failures must not block. */
   clearRuntime(agentId: string): Promise<void>
   /** Turns an issued credential into the digest columns the row stores. */
@@ -107,7 +113,8 @@ export async function launchOwnedAgent(
   deps: AgentLifecycleDeps,
   userId: number,
   agentId: string,
-  scopeWhere: Prisma.AgentWhereInput = {}
+  scopeWhere: Prisma.AgentWhereInput = {},
+  tokenTeamScope?: AgentTokenTeamScope
 ): Promise<LaunchOwnedAgentResult> {
   const existing = await database.agent.findFirst({
     where: { ...scopeWhere, id: agentId, userId },
@@ -138,7 +145,12 @@ export async function launchOwnedAgent(
       select: { email: true },
     })
     if (!owner) return { status: 'owner_missing' }
-    issuedCredential = deps.mintToken(userId, owner.email, existing.id)
+    issuedCredential = deps.mintToken(
+      userId,
+      owner.email,
+      existing.id,
+      tokenTeamScope
+    )
   }
 
   const transition = await database.agent.updateMany({

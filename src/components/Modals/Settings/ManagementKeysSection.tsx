@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
@@ -13,6 +13,7 @@ import SettingsCodeRow from "./SettingsCodeRow";
 import SettingsSectionShell from "./SettingsSectionShell";
 import {
   managementKeyScopeLabel,
+  managementKeyTeamIdForRequest,
   managementKeyTeamLabel,
 } from "./managementKeyScope";
 import {
@@ -104,16 +105,24 @@ const ManagementKeysSection = () => {
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [keyToRevoke, setKeyToRevoke] = useState<ManagementKey | null>(null);
 
+  useEffect(() => {
+    if (!teamScopedKeysEnabled) setTeamId(null);
+  }, [teamScopedKeysEnabled]);
+
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+    const requestTeamId = managementKeyTeamIdForRequest(
+      teamScopedKeysEnabled,
+      teamId,
+    );
 
     try {
       const result = await createKey({
         name: trimmedName,
         scope,
-        ...(teamId ? { teamId } : {}),
+        ...(requestTeamId ? { teamId: requestTeamId } : {}),
         ...(expiresInDays ? { expiresInDays } : {}),
       });
       setCreatedKey(result.key);

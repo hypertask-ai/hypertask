@@ -98,6 +98,7 @@ async function demo() {
       key: {
         id: 'management-key',
         referenceId: String(user.id),
+        prefix: 'htmk_',
         permissions:
           body.key === 'htmk_management-test'
             ? { management: ['read', 'write'] }

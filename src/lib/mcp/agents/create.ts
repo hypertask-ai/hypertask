@@ -1,7 +1,9 @@
 import {
   agentTokenCredentialFields,
+  type AgentTokenTeamScope,
   checkMcpRateLimit,
   createMcpToken,
+  managementAgentTokenScope,
   type McpAuthContext,
   validateManagementOrSessionAuth,
   validateMcpAuth,
@@ -74,15 +76,19 @@ export async function handleCreateAgentRequest(
     )
   }
 
-  return createAgentForUser(request, ctx.user, ctx.management?.teamId)
+  return createAgentForUser(
+    request,
+    ctx.user,
+    managementAgentTokenScope(ctx.management)
+  )
 }
 
 export async function createAgentForUser(
   request: NextRequest,
   user: McpAuthContext['user'],
-  teamId?: string
+  teamScope?: AgentTokenTeamScope
 ): Promise<NextResponse> {
-
+  const teamId = teamScope?.teamId
   let body: CreateAgentBody
   try {
     body = (await request.json()) as CreateAgentBody
@@ -246,7 +252,8 @@ export async function createAgentForUser(
       user.id,
       user.email,
       undefined,
-      createdAgent.id
+      createdAgent.id,
+      teamScope
     )
 
     await tx.agent.update({

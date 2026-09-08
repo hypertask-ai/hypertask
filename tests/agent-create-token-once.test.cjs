@@ -29,6 +29,7 @@ function loadCreateModule({
   hasManagementWritePermission = () => true,
   agentWithinTeamWhere = () => ({}),
   getAccessibleAgentBoard = async () => null,
+  onMintToken = () => {},
 } = {}) {
   const mod = { exports: {} };
   const mockRequire = (request) => {
@@ -37,7 +38,17 @@ function loadCreateModule({
         checkMcpRateLimit: async () => null,
         validateManagementOrSessionAuth,
         validateMcpAuth: async () => null,
-        createMcpToken: () => mintedToken,
+        createMcpToken: (...args) => {
+          onMintToken(args);
+          return mintedToken;
+        },
+        managementAgentTokenScope: (management) =>
+          management?.teamId
+            ? {
+                teamId: management.teamId,
+                accessBinding: management.teamAccessBinding,
+              }
+            : undefined,
         agentTokenCredentialFields: () => ({
           mcpTokenHash: "hash",
           mcpTokenJti: "jti",
@@ -170,6 +181,7 @@ test("a successful create returns the token exactly once, alongside the agent", 
 
 test("a team key checks duplicate names only inside its authenticated team", async () => {
   let duplicateWhere;
+  let mintArgs;
   const prisma = {
     agent: {
       findFirst: async ({ where }) => {
@@ -196,12 +208,15 @@ test("a team key checks duplicate names only inside its authenticated team", asy
       return teamScope;
     },
     getAccessibleAgentBoard: async () => ({ id: 339, teamId: "team-a" }),
+    onMintToken: (args) => {
+      mintArgs = args;
+    },
   });
 
   const response = await createAgentForUser(
     request({ display_name: "Build Agent", project_ids: [339] }),
     { id: 6, email: "a@b.com" },
-    "team-a",
+    { teamId: "team-a", accessBinding: "member:membership-a" },
   );
 
   assert.equal(response.status, 201);
@@ -211,6 +226,13 @@ test("a team key checks duplicate names only inside its authenticated team", asy
     revokedAt: null,
     ...teamScope,
   });
+  assert.deepEqual(mintArgs, [
+    6,
+    "a@b.com",
+    undefined,
+    "new-agent",
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  ]);
 });
 
 test("the browser-session route rejects an unauthenticated request before any validation", async () => {

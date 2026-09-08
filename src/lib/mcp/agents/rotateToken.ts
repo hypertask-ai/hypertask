@@ -2,6 +2,7 @@ import {
   agentTokenCredentialFields,
   checkMcpRateLimit,
   createMcpToken,
+  managementAgentTokenScope,
   validateManagementOrSessionAuth,
   validateMcpAuth,
 } from '@/lib/mcp/auth'
@@ -124,7 +125,8 @@ export async function handleRotateAgentTokenRequest(
     ctx.user.id,
     ctx.user.email,
     undefined,
-    agent.id
+    agent.id,
+    managementAgentTokenScope(ctx.management)
   )
   const updated = await prisma.agent.updateMany({
     where: {

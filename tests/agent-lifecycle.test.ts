@@ -48,6 +48,9 @@ function agentRow(overrides: Partial<AgentLifecycleRow> = {}): AgentLifecycleRow
 function fakeSetup(state: FakeState) {
   const findWheres: Record<string, unknown>[] = [];
   const mutationWheres: Record<string, unknown>[] = [];
+  const mintedTeamScopes: Array<
+    { teamId: string; accessBinding: string } | undefined
+  > = [];
   const database = {
     agent: {
       findFirst: async ({ where }: any) => {
@@ -81,8 +84,14 @@ function fakeSetup(state: FakeState) {
   } as unknown as AgentLifecycleDatabase;
 
   const deps = {
-    mintToken: (userId: number, email: string, agentId: string) => {
+    mintToken: (
+      userId: number,
+      email: string,
+      agentId: string,
+      teamScope?: { teamId: string; accessBinding: string },
+    ) => {
       state.mintCalls += 1;
+      mintedTeamScopes.push(teamScope);
       return `token-${userId}-${email}-${agentId}`;
     },
     clearRuntime: async () => {
@@ -92,7 +101,7 @@ function fakeSetup(state: FakeState) {
     credentialFields: fakeCredentialFields,
   };
 
-  return { database, deps, findWheres, mutationWheres };
+  return { database, deps, findWheres, mutationWheres, mintedTeamScopes };
 }
 
 test("launching a disabled external agent switches it on and reveals one token", async () => {
@@ -275,14 +284,17 @@ test("team scope is enforced again by every lifecycle mutation", async () => {
     mintCalls: 0,
     clearCalls: 0,
   };
-  const { database, deps, mutationWheres } = fakeSetup(state);
+  const { database, deps, mutationWheres, mintedTeamScopes } = fakeSetup(state);
   const scope = {
     members: { some: { project: { teamId: "team-a" } } },
   };
 
   await archiveOwnedAgent(database, 6, "agent-1", true, scope);
   await renameOwnedAgent(database, 6, "agent-1", "Scoped agent", scope);
-  await launchOwnedAgent(database, deps, 6, "agent-1", scope);
+  await launchOwnedAgent(database, deps, 6, "agent-1", scope, {
+    teamId: "team-a",
+    accessBinding: "member:membership-a",
+  });
 
   assert.equal(mutationWheres.length, 3);
   for (const where of mutationWheres) {
@@ -290,6 +302,9 @@ test("team scope is enforced again by every lifecycle mutation", async () => {
     assert.equal(where.id, "agent-1");
     assert.equal(where.userId, 6);
   }
+  assert.deepEqual(mintedTeamScopes, [
+    { teamId: "team-a", accessBinding: "member:membership-a" },
+  ]);
 });
 
 test("renaming an owned agent updates its display name", async () => {

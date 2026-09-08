@@ -13,6 +13,7 @@ import {
   agentTokenCredentialFields,
   checkMcpRateLimit,
   createMcpToken,
+  managementAgentTokenScope,
   validateMcpAuth,
 } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -45,8 +46,8 @@ type AgentPatchBody = {
 }
 
 export const agentLifecycleDeps: AgentLifecycleDeps = {
-  mintToken: (userId, email, agentId) =>
-    createMcpToken(userId, email, undefined, agentId),
+  mintToken: (userId, email, agentId, teamScope) =>
+    createMcpToken(userId, email, undefined, agentId, teamScope),
   clearRuntime: (agentId) => clearAgentRuntimeSnapshot(agentId),
   credentialFields: (token) => agentTokenCredentialFields(token),
 }
@@ -328,7 +329,8 @@ export async function handlePatchAgentRequest(
       agentLifecycleDeps,
       ctx.user.id,
       agentId,
-      agentScope
+      agentScope,
+      managementAgentTokenScope(ctx.management)
     )
     if (result.status === 'not_found') return notFound()
     if (result.status === 'runtime_invalidation_failed') {
