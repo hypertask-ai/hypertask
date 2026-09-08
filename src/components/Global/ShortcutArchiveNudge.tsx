@@ -9,9 +9,10 @@ import {
   currentUserAtom,
   showQuickTipsAtom,
 } from "@/store";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
 import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
   ARCHIVE_SHORTCUT_NUDGE_THRESHOLD,
   beginArchiveShortcutNudge,
@@ -37,10 +38,10 @@ export default function ShortcutArchiveNudge() {
       if (current.accountId !== accountId) {
         return clearArchiveShortcutNudge(current, accountId);
       }
-      if (current.stage === "showing" && (!onTaskPage || isMobile)) {
+      if (current.stage === "showing" && !onTaskPage) {
         return clearArchiveShortcutNudge(current, accountId);
       }
-      if (current.stage === "pending" && onTaskPage && !isMobile) {
+      if (current.stage === "pending" && onTaskPage) {
         return beginArchiveShortcutNudge(current, accountId, Date.now());
       }
       return current;
@@ -48,7 +49,6 @@ export default function ShortcutArchiveNudge() {
   }, [
     accountId,
     flagEnabled,
-    isMobile,
     nudge.accountId,
     nudge.stage,
     onTaskPage,
@@ -75,7 +75,6 @@ export default function ShortcutArchiveNudge() {
     accountId === null ||
     !flagEnabled ||
     !tipsEnabled ||
-    isMobile ||
     !onTaskPage ||
     nudge.accountId !== accountId ||
     nudge.stage !== "showing"
@@ -89,7 +88,7 @@ export default function ShortcutArchiveNudge() {
   return (
     <div className="pointer-events-none fixed left-1/2 top-0 z-[120] -translate-x-1/2">
       <div
-        className="shortcut-archive-nudge pointer-events-auto flex items-center gap-2 rounded-b-[5px] bg-modalBackground px-4 py-2 text-dense text-white-black shadow-md"
+        className="shortcut-archive-nudge pointer-events-auto flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-center gap-2 rounded-b-[5px] bg-modalBackground px-4 py-2 text-dense text-white-black shadow-md sm:max-w-none sm:flex-nowrap sm:justify-start"
         role="region"
         aria-label="Keyboard shortcut tip"
       >
@@ -113,7 +112,7 @@ export default function ShortcutArchiveNudge() {
         <button
           type="button"
           aria-label="Dismiss shortcut tip"
-          className="rounded-sm text-text-light-gray hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none"
+          className={`${isMobile ? MOBILE_TARGET : ""} rounded-sm text-text-light-gray hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none`}
           onClick={dismiss}
         >
           <X aria-hidden="true" size={14} strokeWidth={1.5} />
