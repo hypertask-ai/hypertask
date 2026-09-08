@@ -532,6 +532,28 @@ model FigmaConnectionOperation {
   updatedAt    DateTime  @updatedAt
 }
 
+model GoogleCalendarConnection {
+  // Deliberately a soft reference: account deletion must leave the encrypted
+  // grant long enough for the sweep to revoke it and remove Google-side data.
+  userId                Int      @id
+  encryptedAccessToken  String   @db.Text
+  encryptedRefreshToken String   @db.Text
+  expiresAt             DateTime
+  googleSubject         String
+  googleEmail           String?
+  calendarId            String
+  calendarSummary       String   @default("Hypertask")
+  syncEnabled           Boolean  @default(true)
+  cleanupPending        Boolean  @default(false)
+  disconnectRequestedAt DateTime?
+  lastSyncedAt          DateTime?
+  syncError             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([cleanupPending, syncEnabled, updatedAt])
+}
+
 model UserSetting {
   id                       String        @id @default(uuid())
   userId                   Int           @unique

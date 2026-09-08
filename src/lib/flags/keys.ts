@@ -18,6 +18,7 @@ export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
 export const INBOX_ARCHIVE_CLUSTER_FLAG = "htpr-6160-inbox-archive-cluster";
 export const FLAG_SHIP_DATE_CLUSTER_FLAG = "htpr-6191-flag-ship-date-clusters";
 export const FIGMA_CONNECT_FLAG = "htpr-6136-figma-connect";
+export const GOOGLE_CALENDAR_FLAG = "htpr-3533-google-calendar";
 export const PAGE_MENTIONS_FLAG = "htpr-5898-page-mentions";
 export const COLUMN_ALL_VIEWS_FLAG = "htpr-5937-show-column-in-all-views";
 export const FLAG_REMOVAL_COUNTDOWN_FLAG = "htpr-6193-flag-removal-countdown";
