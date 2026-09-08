@@ -12,6 +12,9 @@ on:
     # worktree, so an older build can take the production alias minutes after a
     # newer merge went READY and nothing warns you.
     - cron: "*/30 * * * *"
+    # HTPR-6267: run the production core-actions probe every five minutes. The
+    # three-minute offset keeps it from colliding with the drift schedule.
+    - cron: "3-58/5 * * * *"
   workflow_dispatch:
     inputs:
       provision_core_actions:
@@ -638,7 +641,7 @@ jobs:
   # (HTPR-4781: two features disappeared for ~20 minutes and only a manual API
   # check caught it). Nothing else notices, so this asks every 30 minutes.
   drift:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -696,7 +699,7 @@ jobs:
 
   core-actions:
     needs: health
-    if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '3-58/5 * * * *')) }}
     concurrency:
       group: production-core-actions-smoke-fixture
       cancel-in-progress: false

@@ -356,25 +356,26 @@ test("a fixture that cannot be resolved is unrunnable and never rolls back", asy
 
 test("the workflow schedules and serializes the production fixture", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
-  const scheduled = await readFile(
-    ".github/workflows/core-actions-smoke.yml",
-    "utf8",
-  );
 
   assert.match(workflow, /cron: "\*\/30 \* \* \* \*"/);
-  assert.match(scheduled, /cron: "\*\/5 \* \* \* \*"/);
+  assert.match(workflow, /cron: "3-58\/5 \* \* \* \*"/);
   assert.match(workflow, /group: prod-health\s+cancel-in-progress: false/);
   assert.match(
-    scheduled,
-    /group: scheduled-core-actions-smoke\s+cancel-in-progress: false/,
+    workflow,
+    /drift:[\s\S]*github\.event\.schedule == '\*\/30 \* \* \* \*'/,
+  );
+  assert.match(
+    workflow,
+    /core-actions:[\s\S]*github\.event\.schedule == '3-58\/5 \* \* \* \*'/,
   );
   assert.equal(
-    [workflow, scheduled]
-      .join("\n")
-      .match(/group: production-core-actions-smoke-fixture/g)?.length,
-    3,
+    workflow.match(/group: production-core-actions-smoke-fixture/g)?.length,
+    2,
   );
-  assert.doesNotMatch(scheduled, /emergency-rollback|VERCEL_TOKEN/);
+  await assert.rejects(
+    readFile(".github/workflows/core-actions-smoke.yml", "utf8"),
+    { code: "ENOENT" },
+  );
   assert.match(
     workflow,
     /name: Roll back a confirmed post-deploy application failure\s+if: .*github\.event_name == 'push'/,
@@ -392,10 +393,7 @@ test("the workflow schedules and serializes the production fixture", async () =>
 });
 
 test("the monitor runs the probe unconditionally and stays loud when it fails", async () => {
-  for (const file of [
-    ".github/workflows/prod-health.yml",
-    ".github/workflows/core-actions-smoke.yml",
-  ]) {
+  for (const file of [".github/workflows/prod-health.yml"]) {
     const text = await readFile(file, "utf8");
     // No preflight gate: a fixture that is absent is provisioned by the probe,
     // never a reason to skip the check (HTPR-6255, HTPR-6258).
