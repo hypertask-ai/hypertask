@@ -1,6 +1,6 @@
 # Gitleaks allowlist for known false positives.
-# Firebase web API keys (AIza...) are public by design; the rest are UI strings
-# and model names the generic rules mistake for credentials.
+# Firebase web API keys (AIza...) are public by design; the rest are UI strings,
+# model names and feature-flag keys the generic rules mistake for credentials.
 [extend]
 useDefault = true
 
@@ -12,6 +12,6 @@ regexes = [
   '''claude-haiku-4\.5''',
   '''qwen3\.7-plus''',
   '''sk_test_placeholder''',
-  '''htpr-5906-shortcut-nudges''',
-  '''htpr-6254-heic-heif-attachments''',
+  # Feature-flag keys are always "htpr-<ticket>-<slug>", never credentials.
+  '''htpr-[0-9]{3,6}-[a-z0-9-]+''',
 ]
