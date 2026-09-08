@@ -13,6 +13,12 @@ on:
     # newer merge went READY and nothing warns you.
     - cron: "*/30 * * * *"
   workflow_dispatch:
+    inputs:
+      provision_core_actions:
+        description: Create the dedicated core-actions fixture before testing
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: prod-health
@@ -626,7 +632,6 @@ jobs:
             --data-urlencode text="⚠️ hypertasks: the GLM exploratory QA brief for ${{ github.sha }} could not be dispatched (see the glm-qa job log). NOT a deploy failure — verify manually: https://app.hypertask.ai"; then
             echo "::warning::GLM QA dispatch alert could not be delivered"
           fi
-
   # ── Deploy drift: is production actually serving the production tip? ──────────
   # A newer merge can go READY and then an older build from another session's
   # worktree takes the production alias, silently reverting shipped work
@@ -688,3 +693,89 @@ jobs:
             -d chat_id="$TG_CHAT" --data-urlencode text="$MSG" || true
           echo "::error::$MSG"
           exit 1
+
+  core-actions:
+    needs: health
+    if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
+    concurrency:
+      group: production-core-actions-smoke-fixture
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.sha || 'production' }}
+          fetch-depth: 200
+
+      - name: Run the logged-in core actions and restore the fixture
+        id: probe
+        continue-on-error: true
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          CORE_SMOKE_PROJECT_ID: ${{ vars.CORE_SMOKE_PROJECT_ID }}
+          CORE_SMOKE_TASK_ID: ${{ vars.CORE_SMOKE_TASK_ID }}
+          CORE_SMOKE_BASE_SECTION_ID: ${{ vars.CORE_SMOKE_BASE_SECTION_ID }}
+          CORE_SMOKE_ALT_SECTION_ID: ${{ vars.CORE_SMOKE_ALT_SECTION_ID }}
+          CORE_SMOKE_AGENT_ID: ${{ vars.CORE_SMOKE_AGENT_ID }}
+          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+        run: node .github/scripts/core-actions-smoke.mjs run
+
+      - name: Roll back a confirmed post-deploy application failure
+        if: ${{ !cancelled() && github.event_name == 'push' && steps.probe.outcome == 'failure' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+        run: |
+          SHOULD_ROLLBACK=$(node .github/scripts/core-actions-smoke.mjs rollback-decision)
+          if [ "$SHOULD_ROLLBACK" != "true" ]; then
+            echo "CORE_SMOKE_ROLLBACK=not requested for this result" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA")
+          echo "$RESULT"
+          SUMMARY=$(echo "$RESULT" | jq -r '[.action // "failed", .reason // "no reason returned"] | map(tostring | gsub("[\\r\\n]+"; " ")) | join(": ")')
+          echo "CORE_SMOKE_ROLLBACK=$SUMMARY" >> "$GITHUB_ENV"
+
+      - name: Report a failed or unrunnable check
+        if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+        run: node .github/scripts/core-actions-smoke.mjs report
+
+      - name: Keep failed monitoring visible
+        if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
+        run: |
+          echo "::error::Core-actions smoke did not pass"
+          exit 1
+
+  provision-core-actions:
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' && inputs.provision_core_actions == true && github.ref == 'refs/heads/production' }}
+    concurrency:
+      group: production-core-actions-smoke-fixture
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+
+      - name: Create or reuse the dedicated fixture
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          CORE_SMOKE_TEAM_ID: ${{ vars.CORE_SMOKE_TEAM_ID }}
+          CORE_SMOKE_FIXTURE_FILE: ${{ runner.temp }}/core-smoke-fixture.json
+        run: node .github/scripts/core-actions-smoke.mjs provision
+
+      - name: Upload fixture identifiers for release setup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: core-actions-fixture-${{ github.run_id }}
+          path: ${{ runner.temp }}/core-smoke-fixture.json
+          retention-days: 1

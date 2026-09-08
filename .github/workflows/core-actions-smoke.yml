@@ -1,0 +1,50 @@
+name: Scheduled Core Actions Smoke
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-core-actions-smoke
+  cancel-in-progress: false
+
+jobs:
+  core-actions:
+    concurrency:
+      group: production-core-actions-smoke-fixture
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+
+      - name: Run the logged-in core actions and restore the fixture
+        id: probe
+        continue-on-error: true
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          CORE_SMOKE_PROJECT_ID: ${{ vars.CORE_SMOKE_PROJECT_ID }}
+          CORE_SMOKE_TASK_ID: ${{ vars.CORE_SMOKE_TASK_ID }}
+          CORE_SMOKE_BASE_SECTION_ID: ${{ vars.CORE_SMOKE_BASE_SECTION_ID }}
+          CORE_SMOKE_ALT_SECTION_ID: ${{ vars.CORE_SMOKE_ALT_SECTION_ID }}
+          CORE_SMOKE_AGENT_ID: ${{ vars.CORE_SMOKE_AGENT_ID }}
+          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+        run: node .github/scripts/core-actions-smoke.mjs run
+
+      - name: Report a failed or unrunnable check
+        if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+        run: node .github/scripts/core-actions-smoke.mjs report
+
+      - name: Keep failed monitoring visible
+        if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
+        run: |
+          echo "::error::Core-actions smoke did not pass"
+          exit 1
