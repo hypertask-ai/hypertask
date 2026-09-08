@@ -22,9 +22,19 @@ on:
         required: false
         type: boolean
         default: false
+      posthog_payload:
+        description: Signed PostHog error payload relayed by the app
+        required: false
+        default: ""
 
 concurrency:
-  group: prod-health
+  # A signed PostHog dispatch must alert within minutes, so it gets its own
+  # per-run group instead of queuing behind whatever push/schedule run is
+  # already using the shared "prod-health" lock; the Redis claim in the app
+  # already stops duplicate dispatches for the same alert. Every other
+  # trigger (push, schedule, and the other workflow_dispatch inputs) keeps
+  # sharing "prod-health" so health/smoke/drift/core-actions never overlap.
+  group: ${{ inputs.posthog_payload != '' && format('posthog-error-{0}', github.run_id) || 'prod-health' }}
   cancel-in-progress: false
 
 env:
@@ -32,6 +42,29 @@ env:
   TEAM_ID: team_yureFlJZ6ibwebaOOkKc5whs
 
 jobs:
+  posthog-error-alert:
+    if: github.event_name == 'workflow_dispatch' && inputs.posthog_payload != ''
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Alert Manager and roll back a fresh server-error spike
+        env:
+          ERROR_ALERT_APP_URL: https://app.hypertask.ai
+          ERROR_ALERT_BOARD_ID: "15"
+          ERROR_ALERT_BUGS_SECTION_ID: "4389"
+          ERROR_ALERT_MANAGER_AGENT_ID: cca791d8-b96d-4f1e-8abf-e2344263aa21
+          ERROR_ALERT_MANAGER_THREAD: "6225"
+          ERROR_ALERT_VERCEL_PROJECT: hypertasks-prod
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          POSTHOG_ALERT_DISPATCH_SECRET: ${{ secrets.POSTHOG_ALERT_DISPATCH_SECRET }}
+          POSTHOG_ALERT_PAYLOAD: ${{ inputs.posthog_payload }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: node .github/scripts/posthog-error-alert.mjs
+
   health:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

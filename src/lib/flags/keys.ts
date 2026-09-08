@@ -31,3 +31,4 @@ export const HTPR_6278_CHAT_TURN_FAILURE_FLAG =
   "htpr-6278-chat-turn-failure-state";
 export const HTPR_6284_AGENT_MENTION_ROUTING_FLAG =
   "htpr-6284-agent-mention-routing";
+export const POSTHOG_ERROR_ALERT_FLAG = "htpr-6238-posthog-error-alert";

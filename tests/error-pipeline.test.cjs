@@ -234,3 +234,26 @@ test("empty-completion reporting uses a stable key and explicit retry failure st
     /reportEmptyCompletion\(\s*emptyCompletionRetryFailed,\s*emptyCompletionError\s*\)/,
   );
 });
+
+test("browser error intake preserves handled reports without trusting their source", () => {
+  const route = fs.readFileSync(
+    path.join(root, "src/app/api/errors/route.ts"),
+    "utf8",
+  );
+  assert.match(route, /source: z\.enum\(\["client", "handled"\]\)/);
+  assert.match(
+    route,
+    /source: parsed\.data\.source === "handled" \? "handled" : "client"/,
+  );
+});
+
+test("shared error reporting stays loadable outside Next without exposing server telemetry", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/lib/telemetry/posthogErrorTracking.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /import ["']server-only["']/);
+  assert.match(source, /typeof window !== "undefined"/);
+  assert.doesNotMatch(source, /node:crypto|posthog-node/);
+  assert.doesNotMatch(source, /NEXT_PUBLIC_POSTHOG_SERVER/);
+});
