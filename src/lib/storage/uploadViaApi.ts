@@ -4,6 +4,7 @@ import { planUploadFiles, type UploadPlan } from "@/lib/media/heicToJpeg";
 import { isHeicPreviewUrl } from "@/lib/media/heicPreview";
 
 import {
+  DIRECT_UPLOAD_MAX_FILE_BYTES,
   getDirectUploadSizeError,
   type DirectUploadTicket,
 } from "./directUpload";
@@ -84,7 +85,13 @@ function buildBatch(plans: UploadPlan[]): {
     const index = entries.length;
     pickedAt.push(index);
     entries.push({ file: plan.file });
-    if (plan.preview) entries.push({ file: plan.preview, previewOfIndex: index });
+    // A copy is only worth sending if it fits: JPEG is a worse compressor than
+    // HEIC, so a photo close to the ceiling can decode to something over it,
+    // and letting that through would fail the size check for the whole batch
+    // and cost the user the photo itself for the sake of a thumbnail.
+    if (plan.preview && plan.preview.size <= DIRECT_UPLOAD_MAX_FILE_BYTES) {
+      entries.push({ file: plan.preview, previewOfIndex: index });
+    }
   }
   return { entries, pickedAt };
 }
