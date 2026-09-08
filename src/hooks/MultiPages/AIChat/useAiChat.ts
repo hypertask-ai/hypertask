@@ -1457,6 +1457,15 @@ export function useAiChat() {
                         createdAt: new Date(),
                         sessionId: session.id,
                         isDelivered: true,
+                        // Keep the routed @mention attribution through the
+                        // final replacement (HTPR-6284).
+                        ...(replyAuthorAgent
+                          ? {
+                              authorAgent: {
+                                displayName: replyAuthorAgent.name,
+                              },
+                            }
+                          : {}),
                       };
 
                       addMessageToSessionQuery(

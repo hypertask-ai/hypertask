@@ -10262,6 +10262,7 @@ export async function POST(request: NextRequest) {
           ),
           mentionedAgentIds: extractMentionedAgentIds(resolvedBody.context_list),
           hasAttachments:
+            (resolvedBody.attachments?.length ?? 0) > 0 ||
             (resolvedBody.images64?.length ?? 0) > 0 ||
             (resolvedBody.pdfs64?.length ?? 0) > 0 ||
             (resolvedBody.docx64?.length ?? 0) > 0,
