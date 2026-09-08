@@ -1,0 +1,87 @@
+name: Dependabot Stack Updates
+
+# Sorts every Dependabot PR into one of two lanes (Valentin, 2026-09-08):
+#
+#   small (patch + minor)  -> label `full-ci` so the test gate runs, label
+#                             `stack-minor`, turn on GitHub's native auto-merge,
+#                             and let it land the same day once checks are green.
+#   major (or unparseable) -> label `major-upgrade`, never auto-merge. A ticket
+#                             is opened by `dependabot-major-ticket.yml`.
+#
+# `pull_request_target` on purpose, copying `pr-size.yml`: a `pull_request` run
+# on a Dependabot PR gets a read-only token and NO repository secrets, so it
+# could neither label nor enable auto-merge. This job never checks out or runs
+# PR code, it only reads PR metadata through the API, so holding a write token
+# has no code-injection surface.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    branches: [production]
+
+concurrency:
+  group: dependabot-stack-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  triage:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Classify the update and set the lane
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title || '';
+
+            // Grouped PRs come from the `stack-minor` group, which is configured
+            // to contain patch and minor updates ONLY, so group membership is
+            // itself the proof that nothing major is in the diff.
+            const grouped = /\bstack-minor group\b/.test(title);
+
+            // Individual PR: "Build(deps): Bump <pkg> from 1.2.3 to 1.3.0".
+            const versions = title.match(/\bfrom (\d+)\.\S* to (\d+)\.\S*/);
+
+            let small;
+            if (grouped) {
+              small = true;
+            } else if (versions) {
+              small = versions[1] === versions[2];
+            } else {
+              // Multi-package security PRs carry no versions in the title
+              // ("Bump pacote and npm"). Unknown is treated as major: the cost
+              // of a needless ticket is far below an unreviewed major merge.
+              small = false;
+            }
+
+            core.info(`title="${title}" grouped=${grouped} small=${small}`);
+
+            // `full-ci` is what makes ci-tests actually run (see ci-tests.yml).
+            // Both lanes need the test signal; only the small lane auto-merges on it.
+            const labels = ['full-ci', small ? 'stack-minor' : 'major-upgrade'];
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: pr.number,
+              labels,
+            });
+
+            core.setOutput('small', String(small));
+        id: classify
+
+      - name: Enable auto-merge for a small update
+        if: steps.classify.outputs.small == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Native auto-merge, not a direct merge: GitHub holds it until every
+          # branch-protection check is green, so "tests green" stays the gate.
+          gh pr merge "$PR" --repo "$REPO" --auto --squash

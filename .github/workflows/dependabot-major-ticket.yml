@@ -1,0 +1,110 @@
+name: Dependabot Major Upgrade Ticket
+
+# A major dependency bump is a week of someone's attention, not a same-day
+# merge (Valentin, 2026-09-08). The moment `dependabot-stack.yml` labels a PR
+# `major-upgrade`, this opens a board-15 ticket in Bugs and links it back on the
+# PR, so the upgrade is on the board the day it lands instead of rotting as an
+# open PR nobody owns.
+#
+# `pull_request_target` for the same reason as `pr-size.yml`: a `pull_request`
+# run on a Dependabot PR receives no repository secrets, so HYPERTASK_MCP_TOKEN
+# would arrive empty and the ticket would silently never be created. No PR code
+# is checked out or executed here.
+
+on:
+  pull_request_target:
+    types: [labeled]
+    branches: [production]
+
+concurrency:
+  group: dependabot-major-ticket-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  pull-requests: write
+
+jobs:
+  ticket:
+    if: github.event.label.name == 'major-upgrade'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Open the upgrade ticket and link it on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          MCP_BASE_URL: https://app.hypertask.ai
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${MCP_TOKEN:-}" ]; then
+            echo "::error::HYPERTASK_MCP_TOKEN is empty; no ticket can be created."
+            exit 1
+          fi
+
+          # Board 15 = the product board; section 4389 = its "Bugs" column.
+          PROJECT_ID=15
+          SECTION_ID=4389
+          MARKER="<!-- stack-upgrade-ticket -->"
+
+          # Re-labelling a PR fires this again. One ticket per PR, ever.
+          if gh pr view "$PR" --repo "$REPO" --json comments \
+               --jq '[.comments[].body] | join("\n")' | grep -qF "$MARKER"; then
+            echo "This PR already has an upgrade ticket; nothing to do."
+            exit 0
+          fi
+
+          # "Build(deps): Bump @tiptap/core from 3.29.2 to 3.30.4"
+          PKG=$(sed -n 's/.*Bump \([^ ]*\) from .*/\1/p' <<<"$PR_TITLE")
+          FROM=$(sed -n 's/.*from \([^ ]*\) to .*/\1/p' <<<"$PR_TITLE")
+          TO=$(sed -n 's/.* to \([^ ]*\).*/\1/p' <<<"$PR_TITLE")
+          if [ -z "$PKG" ]; then
+            # Multi-package or grouped shape: fall back to the raw title.
+            PKG="$PR_TITLE"; FROM="?"; TO="?"
+            TITLE="Stack upgrade: $PR_TITLE"
+          else
+            TITLE="Stack upgrade: $PKG $FROM -> $TO"
+          fi
+
+          # Dependabot names the advisory in the body of a security update.
+          PRIORITY=0
+          SECURITY_NOTE=""
+          if grep -qiE 'CVE-[0-9]{4}-|GHSA-|security (advisory|update|vulnerabilit)' <<<"${PR_BODY:-}"; then
+            PRIORITY=1   # 1 = Urgent
+            SECURITY_NOTE="<p><strong>Security update.</strong> Dependabot flagged an advisory on this package, so this is urgent.</p>"
+          fi
+
+          DESC="<p><strong>Upgrade <code>$PKG</code> from $FROM to $TO and get it merged within a week.</strong></p>$SECURITY_NOTE<p>Dependabot opened this as a major version bump, so it is deliberately NOT auto-merged. A dev takes it, reads the upstream changelog, fixes whatever breaks, and lands the PR.</p><ul><li><strong>Pull request:</strong> <a href=\"$PR_URL\">$PR_URL</a></li><li><strong>Gate:</strong> ci-tests green on the PR, then the post-deploy GLM QA pass once it is live. The dev drives that pass; CI does not block on it.</li><li><strong>Do not</strong> enable auto-merge on this PR.</li></ul>"
+
+          BODY=$(jq -n \
+            --argjson project_id "$PROJECT_ID" \
+            --argjson section_id "$SECTION_ID" \
+            --argjson priority "$PRIORITY" \
+            --arg title "$TITLE" \
+            --arg description "$DESC" \
+            '{project_id: $project_id, section_id: $section_id, title: $title, description: $description, priority: $priority}')
+
+          RESP=$(curl -sS --fail-with-body -X POST "$MCP_BASE_URL/api/mcp/tasks/create" \
+            -H "Authorization: Bearer $MCP_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$BODY") || {
+              echo "::error::Could not create the board-15 ticket. Create it by hand: $TITLE ($PR_URL)"
+              exit 1
+            }
+
+          TICKET=$(jq -r '.task.ticketNumber // ""' <<<"$RESP")
+          NUM=$(sed 's/^.*-//' <<<"$TICKET")
+          if [ -z "$NUM" ]; then
+            echo "::error::Ticket was created but its number could not be read; link it by hand. Response: $(head -c 400 <<<"$RESP")"
+            exit 1
+          fi
+          URL="https://app.hypertask.ai/detail/project-$PROJECT_ID/$NUM"
+          echo "Created $TICKET -> $URL"
+
+          COMMENT="$MARKER"$'\n'"Major upgrade, so this PR is not auto-merged. Tracked on $TICKET: $URL"$'\n\n'"A dev picks it up from the board, lands it within a week, and drives the post-deploy QA pass."
+          gh pr comment "$PR" --repo "$REPO" --body "$COMMENT"
