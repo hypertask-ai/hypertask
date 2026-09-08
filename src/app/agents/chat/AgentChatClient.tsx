@@ -161,12 +161,6 @@ function rosterIdleFor(since: string, now: number): string {
   return `${days} day${days === 1 ? "" : "s"}`;
 }
 
-function rosterLegacyLine(agent: TAgent): string {
-  return `${agent.runtimeType === "EXTERNAL" ? "External" : "Native"}${
-    isWorking(agent) && agent.working ? ` · ${agent.working.ticket}` : ""
-  }`;
-}
-
 function rosterStatusLine(agent: TAgent, status: TChatRosterStatus, now: number): string {
   const type = agent.runtimeType === "EXTERNAL" ? "External" : "Native";
   switch (status.kind) {
@@ -543,7 +537,14 @@ function RosterRow({
           {agent.displayName}
         </span>
         <span className="block text-[11px] text-text-light-gray truncate">
-          {status ? rosterStatusLine(agent, status, now) : rosterLegacyLine(agent)}
+          {status ? (
+            rosterStatusLine(agent, status, now)
+          ) : (
+            <>
+              {agent.runtimeType === "EXTERNAL" ? "External" : "Native"}
+              {isWorking(agent) && agent.working ? ` · ${agent.working.ticket}` : ""}
+            </>
+          )}
         </span>
       </span>
       {/* The thread is shared, so a teammate's message is news to this person
