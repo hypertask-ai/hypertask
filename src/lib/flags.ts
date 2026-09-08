@@ -11,6 +11,7 @@ import {
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
+  CORE_ACTIONS_SMOKE_FLAG,
   FEATURE_FLAG_DETAILS_FLAG,
   FIGMA_CONNECT_FLAG,
   FLAG_REMOVAL_COUNTDOWN_FLAG,
@@ -42,6 +43,12 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: CORE_ACTIONS_SMOKE_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Runs the logged-in core-action production check and restores its isolated fixture after each run.",
+  },
   {
     key: AGENT_CHAT_SKILLS_FLAG,
     shippedOn: "2026-09-07",

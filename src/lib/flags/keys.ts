@@ -25,3 +25,4 @@ export const SHORTCUT_NUDGES_FLAG = "htpr-5906-shortcut-nudges";
 export const CONFIRMED_PROPOSAL_HEADING_FLAG = "htpr-6197-confirmed-proposal-heading";
 export const MANAGER_LOOP_ACTIVITY_FLAG = "htpr-6243-manager-loop-activity";
 export const LAZY_EMOJI_LIST_FLAG = "htpr-6059-lazy-emoji-list";
+export const CORE_ACTIONS_SMOKE_FLAG = "htpr-6236-core-actions-smoke";

@@ -50,6 +50,7 @@
       "matches": {
         "api": [
           "^(GET|POST) /api/mcp/chat/sessions/\\[sessionId\\]/messages$",
+          "^POST /api/mcp/chat/activity$",
           "^POST /api/mcp/agents/runs/\\[id\\]/activities$",
           "^POST /api/mcp/agents/runs/\\[id\\]/activities/\\[activityId\\]/select$"
         ]
