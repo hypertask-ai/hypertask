@@ -6,6 +6,10 @@ import { workingOnByAgent } from "@/lib/agents/working";
 import { ownedAgentSlugs } from "@/lib/agents/ownedSlugs";
 import { maskAgentProviderKey } from "@/lib/agents/maskAgentProviderKey";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { aiAllowancePeriod } from "@/lib/aiAllowancePolicy";
+import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
+import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
+import { propagateOutOfTokens } from "@/lib/agents/registerView";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
@@ -125,6 +129,51 @@ export async function GET(request: NextRequest) {
 
   const unreadByAgent = await unreadChatCounts(userId);
 
+  // A spent shared AI allowance writes one durable stop notice per native
+  // agent per period. The allowance itself is funded per team, so a
+  // current-period notice blocks that agent's team-mates too, not just the
+  // agent that happened to take the failing turn. External runtimes bring
+  // their own key and never hit the shared allowance.
+  const nativeIds = agents
+    .filter((agent) => agent.runtimeType === "NATIVE")
+    .map((agent) => agent.id);
+  const outOfTokensByAgent = new Set<string>();
+  if (nativeIds.length > 0) {
+    const periodKey = aiAllowancePeriod().key;
+    const notices = await prisma.notification.findMany({
+      where: {
+        type: "AgentMessage",
+        userId,
+        fromAgentId: { in: nativeIds },
+      },
+      select: { fromAgentId: true, message: true },
+    });
+    const notifiedIds = new Set<string>();
+    for (const notice of notices) {
+      if (!notice.fromAgentId) continue;
+      if (
+        notice.message?.startsWith(
+          agentMessageMarker(heartbeatAllowanceNoticeId(notice.fromAgentId, periodKey)),
+        )
+      ) {
+        notifiedIds.add(notice.fromAgentId);
+      }
+    }
+    if (notifiedIds.size > 0) {
+      for (const id of propagateOutOfTokens(
+        agents.map((agent) => ({
+          id: agent.id,
+          boards: agent.members.map(({ project }) => ({
+            teamId: project.team?.id ?? null,
+          })),
+        })),
+        notifiedIds,
+      )) {
+        outOfTokensByAgent.add(id);
+      }
+    }
+  }
+
   return NextResponse.json({
     success: true,
     agents: agents.map(({ permissions, members, byokApiKeys, ...agent }) => ({
@@ -142,6 +191,7 @@ export async function GET(request: NextRequest) {
       // Messages in this agent's shared thread that arrived after this person
       // last caught up. Private to them: it reads their own participant row.
       unreadCount: unreadByAgent.get(agent.id) ?? 0,
+      outOfTokens: outOfTokensByAgent.has(agent.id),
       postsToImportant:
         (permissions as AgentScopes | null)?.postsToImportant !== false,
       // Teams come from the boards, since an agent belongs to its owner rather

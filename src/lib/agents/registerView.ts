@@ -31,6 +31,12 @@ export type TRegisterAgent = {
   lastPostedAt?: string | null;
   working?: TRegisterWork | null;
   boards?: TRegisterBoard[];
+  /**
+   * Server-computed: a current-period shared-allowance stop notice exists for
+   * this agent's owner, so its next model call will fail. Never set on the
+   * client; see chatRosterStatus for how it ranks.
+   */
+  outOfTokens?: boolean | null;
 };
 
 /**
@@ -67,6 +73,72 @@ export function lastSignalAt(agent: TRegisterAgent): string | null {
   );
   if (times.length === 0) return null;
   return times.reduce((latest, t) => (t > latest ? t : latest));
+}
+
+/**
+ * What an Agent Chat roster row shows. `out-of-tokens` outranks `active` on
+ * purpose: the pause notice is durable for the allowance period, while a task
+ * lease can outlive the turn that failed, so the lease must not mask the stop.
+ * Revocation outranks everything, like statusOf.
+ */
+export type TChatRosterStatus =
+  | { kind: "active" }
+  | { kind: "out-of-tokens" }
+  | { kind: "idle"; since: string }
+  | { kind: "inactive" };
+
+export function chatRosterStatus(
+  agent: TRegisterAgent,
+  now = Date.now(),
+): TChatRosterStatus {
+  if (agent.revokedAt) return { kind: "inactive" };
+  if (agent.outOfTokens) return { kind: "out-of-tokens" };
+  if (isWorking(agent, now)) return { kind: "active" };
+  const last = lastSignalAt(agent);
+  if (last && now - new Date(last).getTime() < ACTIVE_WINDOW_MS) {
+    return { kind: "idle", since: last };
+  }
+  return { kind: "inactive" };
+}
+
+/**
+ * The shared AI allowance is funded per team, so one native agent's
+ * current-period stop notice means every native agent on the same teams is
+ * blocked too — not just the one that happened to take the failing turn.
+ * Boards are the only team evidence the caller carries; restrict the input to
+ * the agents that can actually be blocked (native) at the call site.
+ *
+ * ponytail: the blocked team is resolved per chat session server-side and can
+ * fall back to the owner's strongest team, which no roster board may match;
+ * such siblings stay unmarked rather than wrongly marked. The upgrade path is
+ * stamping the team on the notice itself and propagating on that.
+ */
+export type TOutOfTokensScope = {
+  id: string;
+  boards?: { teamId?: string | null }[];
+};
+
+export function propagateOutOfTokens<A extends TOutOfTokensScope>(
+  agents: A[],
+  notifiedIds: ReadonlySet<string>,
+): Set<string> {
+  const blockedTeams = new Set<string>();
+  for (const a of agents) {
+    if (!notifiedIds.has(a.id)) continue;
+    for (const board of a.boards ?? []) {
+      if (board.teamId) blockedTeams.add(board.teamId);
+    }
+  }
+  const result = new Set<string>();
+  for (const a of agents) {
+    if (
+      notifiedIds.has(a.id) ||
+      (a.boards ?? []).some((b) => b.teamId && blockedTeams.has(b.teamId))
+    ) {
+      result.add(a.id);
+    }
+  }
+  return result;
 }
 
 /**
