@@ -1,34 +1,20 @@
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { NextApiHandler } from "next";
+import { getHyperUser } from "@/utils/controllers/users/getHyper";
 
-import prisma from "@/lib/prisma";
+const handler: NextApiHandler = async (req, res) => {
+  if (req.method !== "GET") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
 
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "GET") {
-    try {
-      const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
-
-      const user = await prisma.user.findFirst({
-        where: {
-          id: hyperAiId,
-        },
-      });
-
-      if (!user) {
-        return res
-          .status(400)
-          .json({ message: "Unable to find HyperAI from DB" });
-      }
-
-      return res.status(200).json(user);
-    } catch (error) {
-      console.log(error);
-      return res.status(400).json({ message: JSON.stringify(error) });
+  try {
+    const user = await getHyperUser();
+    if (!user) {
+      return res.status(400).json({ message: "Unable to find HyperAI from DB" });
     }
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
+    return res.status(200).json(user);
+  } catch (error) {
+    console.log(error);
+    return res.status(400).json({ message: "Unable to find HyperAI from DB" });
   }
 };
 

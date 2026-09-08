@@ -1,29 +1,22 @@
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { NextApiHandler } from "next";
 import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 
+const handler: NextApiHandler = async (req, res) => {
+  if (req.method !== "GET") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
 
-const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
-    if (req.method === "GET") {
-        const user = req.cookies.nookies_user
-        const {mode} = req.query
-        if(!user){
-            return res.status(400).json({message:"User isn't logged in"})
-        }
-        let _parsedUser;
-        try {
-            _parsedUser = JSON.parse(user);
-        } catch (e) {
-            return res.status(400).json({ message: "Invalid user cookie" });
-        }
-        if (!_parsedUser || !_parsedUser.id) {
-            return res.status(400).json({ message: "User data is invalid or missing id" });
-        }
-        const response = await getAllMinimal(_parsedUser.id, mode as string as "ExtraMinimal")
-        return res.status(response.status).json(response.json)
-       
-    } else {
-        return res.status(405).json({ message: "Method not allowed" });
-    }
+  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  if (!session) {
+    return res
+      .status(401)
+      .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
+  }
+
+  const mode = req.query.mode as "ExtraMinimal" | "Calendar" | undefined;
+  const response = await getAllMinimal(session.id, mode);
+  return res.status(response.status).json(response.json);
 };
 
 export default handler;

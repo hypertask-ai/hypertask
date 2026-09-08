@@ -3,6 +3,7 @@ import { APIError, createAuthEndpoint, getSessionFromCtx } from 'better-auth/api
 import { setSessionCookie } from 'better-auth/cookies'
 
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
+import { getAppShellBootstrap } from '@/lib/appShellBootstrap/server'
 
 export function bridgeSessionPlugin() {
   return {
@@ -23,6 +24,12 @@ export function bridgeSessionPlugin() {
             })
           }
 
+          ctx.setHeader('cache-control', 'private, no-store')
+          ctx.setHeader('pragma', 'no-cache')
+          const bootstrapPromise = getAppShellBootstrap(legacySession.id).catch(
+            () => null,
+          )
+
           // Better Auth's public adapter types assume string IDs, while this
           // installation maps IDs directly to the existing integer User.id.
           const userId = legacySession.id as unknown as string
@@ -35,7 +42,7 @@ export function bridgeSessionPlugin() {
 
           const currentSession = await getSessionFromCtx(ctx)
           if (currentSession && Number(currentSession.user.id) === legacySession.id) {
-            return ctx.json({ ok: true })
+            return ctx.json({ ok: true, bootstrap: await bootstrapPromise })
           }
 
           const session = await ctx.context.internalAdapter.createSession(userId, false)
@@ -47,7 +54,7 @@ export function bridgeSessionPlugin() {
 
           await setSessionCookie(ctx, { session, user })
 
-          return ctx.json({ ok: true })
+          return ctx.json({ ok: true, bootstrap: await bootstrapPromise })
         }
       ),
     },

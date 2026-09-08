@@ -7,6 +7,7 @@ import {
   decideIdleReload,
   isDeploySkewReloadEligiblePath,
 } from "./deploySkewGuardLogic";
+import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 
 // Silent auto-update (deploy-skew guard, HTPR-4574). A single-page tab keeps
 // running whatever bundle it loaded, so a shipped fix can be live for days
@@ -45,6 +46,9 @@ const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchst
 
 async function fetchServerBuildId(): Promise<string | null> {
   try {
+    const bootstrapped =
+      await consumeEarlyAppShellBootstrapSlice<string>("buildId");
+    if (typeof bootstrapped === "string") return bootstrapped;
     const res = await fetch("/api/version", { cache: "no-store" });
     if (!res.ok) return null;
     const data = await res.json();

@@ -4,6 +4,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getUserAnnouncements } from "@/utils/controllers/users/getAnnouncements";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -18,54 +19,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
     if (req.method === "GET") {
         try {
-            const user = await prisma.user.findUnique({
-                where: {
-                    id:session.id
-                }
-            })
-
-            if (!user) throw "No such user"
-
-            // UserAnnouncement rows are only materialized when an announcement
-            // is sent, so anyone created afterwards (guests, fresh signups) had
-            // an empty Latest Updates panel. Backfill the recent ones on read;
-            // readAt stays null so they show as new.
-            const missing = await prisma.announcments.findMany({
-                where: {
-                    isActive: true,
-                    userAnnouncements: { none: { userId: user.id } },
-                },
-                orderBy: { createdAt: "desc" },
-                take: 15,
-                select: { id: true },
-            })
-            if (missing.length) {
-                await prisma.userAnnouncement.createMany({
-                    data: missing.map((announcement) => ({
-                        userId: user.id,
-                        announcementId: announcement.id,
-                    })),
-                    skipDuplicates: true,
-                })
-            }
-
-            const user_announcements = await prisma.userAnnouncement.findMany({
-                where:{
-                    userId:user.id
-                },
-                include:{
-                    announcement:true,
-                },
-
-                orderBy:{
-                    createdAt:"desc"
-                },
-                take:15,
-                
-            })
-            // console.log("🚀 ~ consthandler:NextApiHandler= ~ user_announcements:", user_announcements)
-            
-            return res.status(200).json(user_announcements)
+            const announcements = await getUserAnnouncements(session.id)
+            if (!announcements) return res.status(404).json(null)
+            return res.status(200).json(announcements)
         } catch (error) {
             console.log(error);
             return res.status(500).json(null)

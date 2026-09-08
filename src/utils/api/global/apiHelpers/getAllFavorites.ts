@@ -1,3 +1,4 @@
+import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 import axios from "axios"
 
 
@@ -6,7 +7,9 @@ import axios from "axios"
 export const getAllFavorites = async (userSettingId:string|null) => {
     if (userSettingId){
         try {
-            const favoritesAll = await axios.get(`/api/favorites/getFavorites?userSettingId=${userSettingId}`)
+            const bootstrapped = await consumeEarlyAppShellBootstrapSlice<unknown[]>("favorites");
+            if (Array.isArray(bootstrapped)) return bootstrapped;
+            const favoritesAll = await axios.get("/api/favorites/getFavorites")
             return favoritesAll.data;
         } catch (error) {
             // Handle the error or return a default value

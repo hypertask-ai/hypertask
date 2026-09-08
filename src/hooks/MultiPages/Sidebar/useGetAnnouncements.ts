@@ -1,7 +1,8 @@
 
-import { IAnnouncementPosts } from "@/models/Announcements/model";
+import { IAnnouncement } from "@/models/Announcements/model";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
+import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
 
 export const prefixUseGetAnnouncements = 'In-App Announcements'
 
@@ -30,9 +31,14 @@ export const useGetAnnouncements = (
 
 
 
-const getUserAnnouncements = async(userId:number|undefined):Promise<IAnnouncementPosts|null|undefined>=>{
+const getUserAnnouncements = async(userId:number|undefined):Promise<IAnnouncement[]|null|undefined>=>{
     if (!userId) return null
     try {
+        const bootstrapped = await consumeEarlyAppShellBootstrapSlice<IAnnouncement[]>(
+            "announcements",
+            userId,
+        )
+        if (Array.isArray(bootstrapped)) return bootstrapped
         const response = await axios.get(`/api/users/announcements/getUserAnnouncements?userId=${userId}`)
         return response.data
     } catch (error) {

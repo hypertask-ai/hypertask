@@ -18,6 +18,7 @@ import {
   resolveThemePreference,
 } from "@/lib/themePreferences";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
+import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 
 export async function generateViewport() {
   const device = await isMobileDevice(); // execute the function
@@ -140,6 +141,17 @@ export default async function RootLayout(
       </head>
       <body style={{fontFamily:"inherit !important"}} id={DIV_ID_CONSTANTS.bodyLayout}>
         <div id="portal-root"></div>
+        {analyticsSession ? (
+          <script
+            id="ht-early-app-shell-bootstrap"
+            dangerouslySetInnerHTML={{
+              __html: buildEarlyAppShellBootstrapScript({
+                accountId: analyticsSession.id,
+                betterAuthEnabled: process.env.BETTER_AUTH_ENABLED === "1",
+              }),
+            }}
+          />
+        ) : null}
         <ClientErrorReporter />
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
