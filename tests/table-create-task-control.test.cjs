@@ -247,15 +247,15 @@ test("table quick entry saves on Enter, keeps the box open, and keeps the target
   const modalCalls = [];
   const quickCalls = [];
   let quickResult = true;
-  const quickCreateTask = async (title, sectionId, sectionTitle) => {
-    quickCalls.push({ title, sectionId, sectionTitle });
+  const quickCreateTask = async (title, projectId, sectionId, sectionTitle) => {
+    quickCalls.push({ title, projectId, sectionId, sectionTitle });
     return quickResult;
   };
-  const renderControl = (selectedIndex) =>
+  const renderControl = (selectedIndex, currentProject = { id: 15 }) =>
     React.createElement(
       TableCreateTaskControl,
       getTableCreateTaskControlProps({
-        currentProject: { id: 15 },
+        currentProject,
         rows,
         selectedIndex,
         sections,
@@ -312,7 +312,7 @@ test("table quick entry saves on Enter, keeps the box open, and keeps the target
     await type(act, input, "First card");
     await pressEnter(act, input);
     assert.deepEqual(quickCalls, [
-      { title: "First card", sectionId: 20, sectionTitle: "Doing" },
+      { title: "First card", projectId: 15, sectionId: 20, sectionTitle: "Doing" },
     ]);
     // Box stays open and clears, ready for the next card.
     assert.ok(container.querySelector("input"));
@@ -324,6 +324,7 @@ test("table quick entry saves on Enter, keeps the box open, and keeps the target
     await pressEnter(act, container.querySelector("input"));
     assert.deepEqual(quickCalls[1], {
       title: "Second card",
+      projectId: 15,
       sectionId: 20,
       sectionTitle: "Doing",
     });
@@ -370,6 +371,19 @@ test("table quick entry saves on Enter, keeps the box open, and keeps the target
       await quickResult;
     });
     assert.equal(container.querySelector("input").value, "");
+
+    await act(async () => {
+      container.querySelector("input").dispatchEvent(
+        new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await act(async () => container.querySelector("button").click());
+    assert.equal(container.querySelector("input").value, "");
+
+    // A board switch closes the old target before it can submit there.
+    await act(async () => reactRoot.render(renderControl(0, { id: 16 })));
+    assert.equal(container.querySelector("input"), null);
+    assert.ok(container.querySelector("button"));
   } finally {
     if (reactRoot && act) await act(async () => reactRoot.unmount());
     if (previousWindow === undefined) delete global.window;

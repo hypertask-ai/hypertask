@@ -169,6 +169,7 @@ const Section = ({
     tasksPlayList,
     showAddItem,
     newTaskDraftTitle,
+    setNewTaskDraftTitle,
     position: newTaskPosition,
     invokeCreateItem,
     onCancelCreate,
@@ -478,7 +479,8 @@ const Section = ({
             >
               {showAddItem && newTaskPosition === "top" && (
                 <NewTask
-                  initialTitle={newTaskDraftTitle}
+                  title={newTaskDraftTitle}
+                  onTitleChange={setNewTaskDraftTitle}
                   inputRef={topInputRef}
                   invokeCreateItem={invokeCreateItem}
                   onCancelCreate={onCancelCreate}
@@ -578,7 +580,8 @@ const Section = ({
               })}
               {showAddItem && newTaskPosition === "bottom" && (
                 <NewTask
-                  initialTitle={newTaskDraftTitle}
+                  title={newTaskDraftTitle}
+                  onTitleChange={setNewTaskDraftTitle}
                   inputRef={bottomInputRef}
                   invokeCreateItem={invokeCreateItem}
                   onCancelCreate={onCancelCreate}

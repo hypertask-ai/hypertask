@@ -12,12 +12,14 @@ import NewTask from "../../../Common/newTask";
 
 export type QuickCreateTask = (
   title: string,
+  projectId: number,
   sectionId: number,
   sectionTitle: string,
 ) => Promise<boolean>;
 
 export type TableCreateTaskControlProps = {
   hasCurrentProject: boolean;
+  projectId?: number;
   rows: readonly TableCreateTaskRow[];
   selectedIndex: number;
   sections: readonly TableCreateTaskSection[];
@@ -30,7 +32,7 @@ export type TableCreateTaskControlProps = {
 export type TableCreateTaskControlInput = Omit<
   TableCreateTaskControlProps,
   "hasCurrentProject"
-> & { currentProject: unknown };
+> & { currentProject: { id?: number } | null | undefined };
 
 export const getTableCreateTaskControlProps = ({
   currentProject,
@@ -42,6 +44,7 @@ export const getTableCreateTaskControlProps = ({
   quickCreateTask,
 }: TableCreateTaskControlInput): TableCreateTaskControlProps => ({
   hasCurrentProject: Boolean(currentProject),
+  projectId: Number.isSafeInteger(currentProject?.id) ? currentProject?.id : undefined,
   rows,
   selectedIndex,
   sections,
@@ -52,6 +55,7 @@ export const getTableCreateTaskControlProps = ({
 
 export const TableCreateTaskControl = ({
   hasCurrentProject,
+  projectId,
   rows,
   selectedIndex,
   sections,
@@ -62,7 +66,7 @@ export const TableCreateTaskControl = ({
   // Locked in when the box opens, so changing the selected row mid-typing
   // cannot send the card to a different column.
   const [openTarget, setOpenTarget] = useState<
-    { sectionId: number; sectionTitle: string } | null
+    { projectId: number; sectionId: number; sectionTitle: string } | null
   >(null);
   const [draftTitle, setDraftTitle] = useState("");
 
@@ -72,7 +76,8 @@ export const TableCreateTaskControl = ({
     sections,
   );
   const labels = getTableCreateTaskButtonLabelsForSelection(selectedRow, sections);
-  const quickEntry = Boolean(quickEntryEnabled && quickCreateTask);
+  const quickEntry = Boolean(quickEntryEnabled && quickCreateTask && projectId);
+  const activeTarget = openTarget?.projectId === projectId ? openTarget : null;
 
   const onCreate = () => {
     if (!quickEntry) {
@@ -84,25 +89,29 @@ export const TableCreateTaskControl = ({
       });
       return;
     }
-    if (!hasCurrentProject || !selectedSectionPayload) return;
+    if (!hasCurrentProject || !projectId || !selectedSectionPayload) return;
     setOpenTarget({
+      projectId,
       sectionId: selectedSectionPayload.sectionId,
       sectionTitle: selectedSectionPayload.sectionTitle,
     });
   };
 
-  if (quickEntry && openTarget) {
+  if (quickEntry && activeTarget) {
     return (
       <div className="px-[20px] pb-2 md:px-5">
         <NewTask
-          initialTitle={draftTitle}
+          title={draftTitle}
+          onTitleChange={setDraftTitle}
           inputRef={{ current: null }}
-          onCancelCreate={(title) => {
-            setDraftTitle(title);
-            setOpenTarget(null);
-          }}
+          onCancelCreate={() => setOpenTarget(null)}
           invokeCreateItem={(title) =>
-            quickCreateTask!(title, openTarget.sectionId, openTarget.sectionTitle)
+            quickCreateTask!(
+              title,
+              activeTarget.projectId,
+              activeTarget.sectionId,
+              activeTarget.sectionTitle,
+            )
           }
         />
       </div>

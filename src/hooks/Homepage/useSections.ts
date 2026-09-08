@@ -113,7 +113,7 @@ const useSections = ({
   };
 
   // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
-  const invokeCreateItem = async (taskTitle: any, createAnother: any): Promise<boolean> => {
+  const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
     const itemToCreate = {
       title: taskTitle,
       description: "",
@@ -380,8 +380,7 @@ const useSections = ({
 
 
   // =================== user presses escape or blurs out
-  const onCancelCreate = (title: string) => {
-    setNewTaskDraftTitle(title);
+  const onCancelCreate = () => {
     setShowAddItem(false);
     setPosition(null);
     console.log(position);
@@ -494,6 +493,7 @@ const useSections = ({
     tasksPlayList,
     showAddItem,
     newTaskDraftTitle,
+    setNewTaskDraftTitle,
     onCancelCreate,
     invokeCreateItem,
     position,

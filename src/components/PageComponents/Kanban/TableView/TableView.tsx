@@ -895,6 +895,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   const { createItem } = useAddDeleteTaskInBoards();
   const quickCreateTask = (
     title: string,
+    projectId: number,
     sectionId: number,
     sectionTitle: string,
   ) =>
@@ -904,7 +905,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       item: { title, description: "", id: -1 },
       position: "bottom",
       createAnother: true,
-      projectId: _currentProject?.id ?? 0,
+      projectId,
     });
 
   const createTaskInCurrentTableContext = useCallback(() => {
