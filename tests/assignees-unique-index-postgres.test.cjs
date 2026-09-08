@@ -458,5 +458,8 @@ test("concurrent assigns produce one row and an already-assigned outcome", async
   assert.equal(rows.length, 1, "the unique index collapsed the race to one row");
   assert.equal(rows[0].userId, owner.id);
 
+  // createAssignedActivity is fire-and-forget; give it time to finish so its
+  // queries do not race the suite's prisma.$disconnect() in after().
+  await sleep(1500);
   assertNoUnexpectedRejections();
 });
