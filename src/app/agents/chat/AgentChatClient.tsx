@@ -67,6 +67,7 @@ import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useFlag } from "@/hooks/useFlag";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
+import { CONFIRMED_PROPOSAL_HEADING_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
@@ -165,12 +166,19 @@ function ProposalCard({
     }
   };
   const open = proposal.status === "PENDING" || proposal.status === "FAILED";
+  const confirmedHeadingEnabled = useFlag(CONFIRMED_PROPOSAL_HEADING_FLAG);
   const confirmLabel = busy === "confirm" ? "Creating…" : "Create ticket";
   return (
     <div className="mt-1 max-w-[80%] rounded-[5px] bg-cardBackground px-3 py-2 text-meta">
       <div className="mb-1 flex items-center gap-1.5 font-medium text-white-black">
         <TicketIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-        <span>Ticket proposed, nothing done yet</span>
+        <span>
+          {confirmedHeadingEnabled &&
+          proposal.status === "CONFIRMED" &&
+          proposal.task
+            ? "Ticket created"
+            : "Ticket proposed, nothing done yet"}
+        </span>
       </div>
       <p className="text-white-black">{proposal.ticketTitle}</p>
       <p className="text-text-light-gray">{proposal.outcome}</p>
