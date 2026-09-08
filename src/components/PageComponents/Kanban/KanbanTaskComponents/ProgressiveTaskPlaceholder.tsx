@@ -40,7 +40,11 @@ const ProgressiveTaskPlaceholder = ({
     id={`task-${task.id}`}
     data-progressive-task-id={task.id}
     aria-label={task.title}
-    className="block rounded-[5px] border border-transparent bg-cardBackground px-2 py-2 text-dense text-white-black"
+    // HTPR-6298: a bare `border` class collides with Bootstrap's `.border`
+    // utility (imported !important into layer(bootstrap)) and renders a light
+    // #dee2e6 outline instead of transparent. `border-thin` is the canonical
+    // 1px width token and doesn't collide with Bootstrap's `.border`.
+    className="block rounded-[5px] border-thin border-transparent bg-cardBackground px-2 py-2 text-dense text-white-black"
     {...provided.draggableProps}
     {...provided.dragHandleProps}
     style={{
