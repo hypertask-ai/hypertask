@@ -9755,13 +9755,10 @@ export async function POST(request: NextRequest) {
   // ponytail: phases that ignore the abort signal (a hung tool, a non-stream
   // DB call) can still run into the platform kill; the upgrade path is
   // per-phase timeouts at each trust boundary.
-  const turnDeadlineBudgetSeconds = (
-    await isFeatureEnabled(HTPR_6278_CHAT_TURN_FAILURE_FLAG, dbUser.id)
-  )
-    ? maxDuration -
-      AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS -
-      (Date.now() - turnStartedAtMs) / 1000
-    : null;
+  const turnDeadlineEnabled = await isFeatureEnabled(
+    HTPR_6278_CHAT_TURN_FAILURE_FLAG,
+    dbUser.id,
+  );
 
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
@@ -10153,17 +10150,20 @@ export async function POST(request: NextRequest) {
       // Single winner: if user Stop already aborted the signal, the deadline
       // must not claim the termination.
       let turnDeadlineHit = false;
-      const turnDeadline =
-        turnDeadlineBudgetSeconds != null
-          ? createTurnDeadline(
-              (reason) => {
-                if (providerAbort.signal.aborted) return;
-                turnDeadlineHit = true;
-                providerAbort.abort(reason);
-              },
-              turnDeadlineBudgetSeconds,
-            )
-          : null;
+      const turnDeadline = turnDeadlineEnabled
+        ? createTurnDeadline(
+            (reason) => {
+              if (providerAbort.signal.aborted) return;
+              turnDeadlineHit = true;
+              providerAbort.abort(reason);
+            },
+            // Remaining budget is computed here, at timer creation, so the
+            // setup work between route entry and stream start is counted.
+            maxDuration -
+              AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS -
+              (Date.now() - turnStartedAtMs) / 1000,
+          )
+        : null;
       // Ends the turn when the graceful deadline fired: a real in-band error,
       // a heartbeat failure record, diagnostics, and a durable failure message
       // so reopening the chat shows why the turn ended instead of nothing.

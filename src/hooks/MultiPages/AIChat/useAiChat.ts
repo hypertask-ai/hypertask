@@ -1478,13 +1478,17 @@ export function useAiChat() {
       }
 
       // HTPR-6278: a stream that ends without a done frame is a failed turn.
-      // Without this the empty placeholder just sits there and the thread
-      // looks wedged with no explanation.
-      if (turnFailureState && !sawDone && !streamErrorHandled && !aiContent.trim()) {
+      // Without this the thread looks wedged with no explanation. Partial
+      // content stays visible; the notice appends below it under a temporary
+      // id so it can never compete with a durably persisted reply.
+      if (turnFailureState && !sawDone && !streamErrorHandled) {
+        const partial = aiContent.trim().length > 0;
         addMessageToSessionQuery(
           session.id,
           {
-            id: assistantMessageId,
+            id: partial
+              ? `transport-${assistantMessageId}`
+              : assistantMessageId,
             content:
               "The reply stream ended before the reply finished. Try again.",
             role: "assistant",
@@ -1493,7 +1497,7 @@ export function useAiChat() {
             isDelivered: true,
           } as IChatMessage,
           false,
-          true
+          !partial
         );
       }
     } catch (error) {
