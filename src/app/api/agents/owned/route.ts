@@ -148,8 +148,10 @@ export async function GET(request: NextRequest) {
     userId,
   );
 
-  const unreadByAgent = await unreadChatCounts(userId);
-  const lastChatMessageByAgent = await lastChatMessageAtByAgent(userId);
+  const [unreadByAgent, lastChatMessageByAgent] = await Promise.all([
+    unreadChatCounts(userId),
+    lastChatMessageAtByAgent(userId),
+  ]);
 
   // A spent shared AI allowance writes one durable stop notice per native
   // agent per period, the first time a turn of that agent ends on the stop.
