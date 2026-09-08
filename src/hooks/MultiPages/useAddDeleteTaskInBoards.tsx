@@ -105,8 +105,6 @@ const useAddDeleteTaskInBoards = () => {
   };
   
 
-  // Returns whether the create succeeded, so an inline quick-add box can
-  // decide whether it's safe to clear the typed title.
   const createItem = async (props: CreateItemParams): Promise<boolean> => {
     console.log("🚀 ~ createItem ~ props:", props)
     const { sectionId, section, item, position, createAnother, projectId } = props
@@ -148,6 +146,7 @@ const useAddDeleteTaskInBoards = () => {
       if (res.status !== 200) return false;
 
       const task = res.data;
+      try {
       const targetSection = sections[sectionIndex];
 
       const updatedItems = position === "top" ? [task, ...(targetSection?.items || [])] : [...(targetSection?.items || []), task];
@@ -161,6 +160,9 @@ const useAddDeleteTaskInBoards = () => {
 
       if (!createAnother) updateActiveItemAndItemInView(task.id, _currentProject.id, getActiveSection());
       else updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection());
+      } catch (error) {
+        console.log("🚀 ~ createItem ~ local update error:", error);
+      }
       return true;
     } catch (error) {
       console.log("🚀 ~ createItem ~ error:", error);

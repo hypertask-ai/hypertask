@@ -11,8 +11,6 @@ type Props = {
     inputRef: RefObject<HTMLInputElement | null>;
 }
 
-// Enter saves and keeps the box open. Clear the title only after the task is
-// created, so a failed save never discards what the user typed.
 const NewTask = ({
     title,
     onTitleChange,
