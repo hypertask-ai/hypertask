@@ -336,6 +336,14 @@ end
 return 0
 `;
 
+const RELEASE_ALERT_CLAIM_SCRIPT = `
+local claimed = redis.call('GET', KEYS[1])
+if claimed and tonumber(claimed) == tonumber(ARGV[1]) then
+  return redis.call('DEL', KEYS[1], KEYS[2])
+end
+return 0
+`;
+
 /**
  * Posts at most one comment per ongoing problem: the claim key is held (and
  * refreshed) for as long as the window keeps breaching, and deleted the moment
@@ -364,6 +372,14 @@ async function raiseAiChatTurnAlert(
       deliveredAlertKey(),
       String(now),
       AI_CHAT_TURN_ALERT_TTL_SECONDS,
+    );
+  const releaseClaim = () =>
+    redis.eval(
+      RELEASE_ALERT_CLAIM_SCRIPT,
+      2,
+      alertKey(),
+      deliveredAlertKey(),
+      String(now),
     );
   let deliveryStarted = false;
   let taskId: number | undefined;
@@ -429,8 +445,9 @@ async function raiseAiChatTurnAlert(
         return false;
       }
     }
-    // No matching row committed, so let the next breach retry delivery.
-    await redis.del(alertKey()).catch(() => undefined);
+    // No matching row committed, so let the next breach retry delivery without
+    // deleting a newer caller's claim if this delivery stalled.
+    await releaseClaim().catch(() => undefined);
     return false;
   }
 }

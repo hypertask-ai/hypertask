@@ -69,6 +69,18 @@ function createFakeRedis() {
         }
         return 0;
       }
+      if (
+        !script.includes("ZRANGEBYSCORE") &&
+        script.includes("redis.call('DEL', KEYS[1], KEYS[2])")
+      ) {
+        const claimed = strings.get(key);
+        if (claimed !== undefined && Number(claimed) === Number(args[0])) {
+          strings.delete(key);
+          strings.delete(keys[1]);
+          return 1;
+        }
+        return 0;
+      }
       if (!script.includes("ZRANGEBYSCORE")) {
         throw new Error("unexpected script");
       }
@@ -124,6 +136,9 @@ function createFakeRedis() {
     value(key) {
       return strings.get(key);
     },
+    overwrite(key, value) {
+      strings.set(key, value);
+    },
   };
 }
 
@@ -133,6 +148,7 @@ const state = {
   redis: createFakeRedis(),
   comments: [],
   commentError: null,
+  claimReplacement: null,
   commitBeforeCommentError: false,
   task: { id: 38547, userId: 6 },
   taskError: null,
@@ -171,7 +187,15 @@ stubModule("src/lib/flags.ts", {
 stubModule("src/utils/controllers/comments/createCommentService.ts", {
   createCommentService: async (params) => {
     if (state.commitBeforeCommentError) state.comments.push(params);
-    if (state.commentError) throw state.commentError;
+    if (state.commentError) {
+      if (state.claimReplacement) {
+        state.redis.overwrite(
+          "ai:chat-turn-alert:production",
+          state.claimReplacement,
+        );
+      }
+      throw state.commentError;
+    }
     state.comments.push(params);
     return { id: 1 };
   },
@@ -189,6 +213,7 @@ function reset(task = { id: 38547, userId: 6 }) {
   state.redis = createFakeRedis();
   state.comments = [];
   state.commentError = null;
+  state.claimReplacement = null;
   state.commitBeforeCommentError = false;
   state.task = task;
   state.taskError = null;
@@ -485,6 +510,20 @@ test("a failed alert comment releases the claim so the next turn retries", async
   );
   assert.equal(state.comments.length, 0);
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
+});
+
+test("a failed delivery cannot release a newer caller's claim", async () => {
+  reset();
+  state.commentError = new Error("comment unavailable");
+  state.claimReplacement = "1000001";
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    1_000_000,
+  );
+  assert.equal(
+    state.redis.value("ai:chat-turn-alert:production"),
+    "1000001",
+  );
 });
 
 test("a prior incident cannot reconcile a failed current delivery", async () => {
