@@ -35,3 +35,5 @@ export const POSTHOG_ERROR_ALERT_FLAG = "htpr-6238-posthog-error-alert";
 export const MY_TASKS_PRIORITY_FILTER_FLAG =
   "htpr-6312-my-tasks-priority-filter";
 export const AGENT_VISIBILITY_FLAG = "htpr-6268-agent-visibility";
+export const SCOPED_BOARD_REFETCH_FLAG =
+  "htpr-6166-scoped-board-refetch";
