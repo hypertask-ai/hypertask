@@ -1,5 +1,8 @@
 const CLI_AUTH_PREFIX = '/cli-auth';
 const SLACK_LINK_PATH = '/settings/slack/link';
+// HTPR-4857: exact first-party path so a Slack Marketplace install can resume
+// into Settings after sign-in; the query string is dropped for it.
+export const SLACK_SETTINGS_PATH = '/settings/slack';
 
 /** sessionStorage key for resuming /cli-auth after sign-in */
 export const POST_LOGIN_REDIRECT_STORAGE_KEY = 'postLoginRedirect';
@@ -54,10 +57,10 @@ export function parseSafeReturnTo(raw: string | null | undefined): string | null
 
   const isCliAuth =
     path === CLI_AUTH_PREFIX || path.startsWith(`${CLI_AUTH_PREFIX}/`);
-  if (!isCliAuth && path !== SLACK_LINK_PATH) {
-    return null;
-  }
-  return path + search;
+  if (isCliAuth) return path + search;
+  if (path === SLACK_SETTINGS_PATH) return path; // HTPR-4857: exact path, no query
+  if (path === SLACK_LINK_PATH) return path + search;
+  return null;
 }
 
 /** Call from Google login/signup handlers before any await, only when CLI return is queued */

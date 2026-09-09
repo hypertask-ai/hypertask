@@ -518,8 +518,10 @@ test("truncates Slack transcripts from the head and keeps recent messages", () =
 });
 
 test("Slack manifest covers commands, chat events, and required scopes", () => {
-  const installRoute = fs.readFileSync(
-    path.join(root, "src/app/api/slack/install/route.ts"),
+  // HTPR-4857: the scope list now lives in the shared authorize module used by
+  // both the Settings install route and the public /add-to-slack page.
+  const authorizeModule = fs.readFileSync(
+    path.join(root, "src/lib/slack/authorize.ts"),
     "utf8",
   );
   const manifest = JSON.parse(
@@ -541,7 +543,7 @@ test("Slack manifest covers commands, chat events, and required scopes", () => {
     "users:read.email",
   ]) {
     assert.ok(scopes.includes(scope), scope);
-    assert.match(installRoute, new RegExp(`"${scope.replace(".", "\\.")}"`));
+    assert.match(authorizeModule, new RegExp(`"${scope.replace(".", "\\.")}"`));
   }
   assert.equal(
     manifest.features.slash_commands[0].url,

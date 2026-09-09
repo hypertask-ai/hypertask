@@ -40,3 +40,4 @@ export const MY_TASKS_PRIORITY_FILTER_FLAG =
 export const AGENT_VISIBILITY_FLAG = "htpr-6268-agent-visibility";
 export const HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG =
   "htpr-4228-admin-only-time-reports";
+export const HTPR_4857_ADD_TO_SLACK_FLAG = "htpr-4857-add-to-slack";

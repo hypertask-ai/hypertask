@@ -142,6 +142,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "htpr-4857-add-to-slack", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
       {

@@ -242,6 +242,8 @@ async function authMiddleware(request: NextRequest) {
       currentPath.startsWith(share) ||
       currentPath.startsWith('/demo') ||
       currentPath.startsWith('/verify-email') ||
+      // HTPR-4857: public Slack Marketplace install page (flag-gated in the page itself).
+      currentPath === '/add-to-slack' ||
       currentPath.startsWith('/firebase-messaging-sw.js')) {
       // console.log('✅ Allowing public route:', currentPath);
       return NextResponse.next();

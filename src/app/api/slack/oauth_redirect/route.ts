@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
+import { SLACK_SETTINGS_PATH } from "@/lib/auth/safeReturnTo";
+import { isFeatureEnabled } from "@/lib/flags";
 import { encryptSecret } from "@/lib/crypto/byokCipher";
+import { HTPR_4857_ADD_TO_SLACK_FLAG } from "@/lib/flags/keys";
 import { verifySlackOAuthState } from "@/lib/slack/oauthState";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
@@ -24,10 +27,28 @@ export async function GET(request: NextRequest) {
     return redirectWithError(request, "not_configured");
   }
 
-  const state = verifySlackOAuthState(
-    request.nextUrl.searchParams.get("state"),
-    clientSecret,
-  );
+  const rawState = request.nextUrl.searchParams.get("state");
+  if (!rawState) {
+    // HTPR-4857: Slack Marketplace "Add to Slack" lands here with a code and no
+    // state. Slack has already added the bot; we store nothing and send the
+    // visitor through login, then Settings completes the link (the second
+    // authorize is instant — Slack skips consent for an already-authorized app).
+    // Never claim success: the code was not exchanged by us.
+    const user = await getServerCookieUser();
+    // Anonymous visitors pass -1: only an EVERYONE flag passes the mode check.
+    if (await isFeatureEnabled(HTPR_4857_ADD_TO_SLACK_FLAG, user?.id ?? -1)) {
+      const settingsUrl = new URL(SLACK_SETTINGS_PATH, request.url);
+      if (user) {
+        return NextResponse.redirect(settingsUrl);
+      }
+      const login = new URL("/login", request.url);
+      login.searchParams.set("returnTo", SLACK_SETTINGS_PATH);
+      return NextResponse.redirect(login);
+    }
+    return redirectWithError(request, "invalid_state");
+  }
+
+  const state = verifySlackOAuthState(rawState, clientSecret);
   if (!state) return redirectWithError(request, "invalid_state");
 
   const currentUser = await getServerCookieUser();

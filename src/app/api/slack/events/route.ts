@@ -18,6 +18,7 @@ import {
 import { latestSlackTs } from "@/lib/slack/idle";
 import { verifySlackSignature } from "@/lib/slack/signature";
 import { claimSlackEventOnce } from "@/lib/slack/taskCreateIntent";
+import { deleteSlackInstallForRevocation } from "@/lib/slack/uninstall";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +29,7 @@ type SlackEventEnvelope = {
   challenge?: string;
   event?: SlackEvent;
   event_id?: string;
+  event_time?: number;
   team_id?: string;
   type?: string;
 };
@@ -56,6 +58,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ challenge: payload.challenge ?? "" });
   }
   if (payload.type !== "event_callback") {
+    return NextResponse.json({ ok: true });
+  }
+
+  // HTPR-4857: the app left the workspace (or its bot token was revoked) —
+  // delete everything stored for that install. Retries stay harmless because
+  // the second pass finds no install. A failure surfaces as 500 so Slack retries.
+  if (
+    payload.event?.type === "app_uninstalled" ||
+    payload.event?.type === "tokens_revoked"
+  ) {
+    const result = await deleteSlackInstallForRevocation(prisma, payload);
+    console.info(
+      "Slack revocation handled",
+      payload.team_id,
+      payload.event.type,
+      result,
+    );
     return NextResponse.json({ ok: true });
   }
 

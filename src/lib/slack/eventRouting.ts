@@ -6,6 +6,13 @@ export type SlackEvent = {
     thread_ts?: string;
     user_id?: string;
   };
+  // tokens_revoked payload fields (HTPR-4857): the revoked token strings,
+  // split by OAuth kind.
+  event_ts?: string;
+  tokens?: {
+    oauth?: string[];
+    bot?: string[];
+  };
   bot_id?: string;
   channel?: string;
   channel_type?: string;
