@@ -250,7 +250,10 @@ function llmObservabilityUrl() {
   return `${uiHost.replace(/\/$/, "")}/project/${projectId}/llm-observability`;
 }
 
-function alertCommentText(metrics: AiChatTurnWindowMetrics) {
+function alertCommentText(
+  metrics: AiChatTurnWindowMetrics,
+  incidentId: string,
+) {
   const failedPercent = Math.round(metrics.errorRate * 100);
   const p95Seconds = (metrics.p95LatencyMs / 1000).toFixed(1);
   const problems: string[] = [];
@@ -269,7 +272,8 @@ function alertCommentText(metrics: AiChatTurnWindowMetrics) {
       ? `<p>Per-user and per-model detail: <a href="${detailUrl}">${detailUrl}</a></p>`
       : "") +
     `<p>Filed automatically by the AI Chat health watch. This stays quiet until the ` +
-    `window recovers, so one comment means one ongoing problem.</p>`
+    `window recovers, so one comment means one ongoing problem.</p>` +
+    `<p>Incident: <code>${incidentId}</code></p>`
   );
 }
 
@@ -280,7 +284,11 @@ function alertCommentText(metrics: AiChatTurnWindowMetrics) {
  */
 const CLAIM_ALERT_SCRIPT = `
 local existing = redis.call('GET', KEYS[1])
-redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+local claimed_at = tonumber(ARGV[1])
+if existing and tonumber(existing) and tonumber(existing) > claimed_at then
+  claimed_at = tonumber(existing)
+end
+redis.call('SET', KEYS[1], tostring(claimed_at), 'EX', ARGV[2])
 if existing then return 0 end
 return 1
 `;
@@ -303,6 +311,7 @@ async function raiseAiChatTurnAlert(
     AI_CHAT_TURN_ALERT_TTL_SECONDS,
   );
   if (Number(claimed) !== 1) return false;
+  const incidentId = randomUUID();
   let deliveryStarted = false;
   let taskId: number | undefined;
   try {
@@ -329,7 +338,7 @@ async function raiseAiChatTurnAlert(
     );
     deliveryStarted = true;
     await createCommentService({
-      text: alertCommentText(metrics),
+      text: alertCommentText(metrics, incidentId),
       creatorId: FEATURE_FLAG_OWNER_USER_ID,
       taskId: task.id,
       ownerId: task.userId,
@@ -349,8 +358,7 @@ async function raiseAiChatTurnAlert(
           where: {
             taskId,
             creatorId: FEATURE_FLAG_OWNER_USER_ID,
-            text: { startsWith: "<p><strong>AI Chat is unhealthy:" },
-            createdAt: { gte: new Date(now - AI_CHAT_TURN_WINDOW_MS) },
+            text: { contains: `<code>${incidentId}</code>` },
           },
           select: { id: true },
         });

@@ -42,9 +42,14 @@ function createFakeRedis() {
     async eval(script, keyCount, key, ...args) {
       this.calls.push(["eval", key, ...args]);
       if (script.includes("local existing")) {
-        const existing = strings.has(key);
-        strings.set(key, args[0]);
-        return existing ? 0 : 1;
+        const existing = strings.get(key);
+        strings.set(
+          key,
+          existing !== undefined && Number(existing) > Number(args[0])
+            ? existing
+            : args[0],
+        );
+        return existing !== undefined ? 0 : 1;
       }
       if (!script.includes("tonumber(claimed)")) {
         throw new Error("unexpected script");
@@ -80,6 +85,9 @@ function createFakeRedis() {
     has(key) {
       return strings.has(key);
     },
+    value(key) {
+      return strings.get(key);
+    },
   };
 }
 
@@ -104,9 +112,12 @@ stubModule("src/lib/prisma.ts", {
       },
     },
     comment: {
-      findFirst: async () =>
-        state.comments.find((comment) =>
-          comment.text.startsWith("<p><strong>AI Chat is unhealthy:"),
+      findFirst: async ({ where }) =>
+        state.comments.find(
+          (comment) =>
+            comment.taskId === where.taskId &&
+            comment.creatorId === where.creatorId &&
+            comment.text.includes(where.text.contains),
         ) ?? null,
     },
     user: { findUnique: async () => ({ displayName: "Valentin Yeo" }) },
@@ -168,6 +179,14 @@ test("the stream records routed and empty-reply terminal outcomes", () => {
   assert.match(
     stream,
     /emptyCompletionError \?\? "AI generation returned no visible reply"/,
+  );
+  assert.doesNotMatch(
+    stream,
+    /if \(finishReason === "error"\) recordTurnOutcome\("failed"\)/,
+  );
+  assert.match(
+    stream,
+    /if \(retryText\) \{\s*generationFinishedWithError = false;/,
   );
 });
 
@@ -289,6 +308,24 @@ test("a recovery snapshot cannot delete a claim refreshed after it", async () =>
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
 });
 
+test("an older breach cannot regress a newer claim timestamp", async () => {
+  reset();
+  const redis = state.redis;
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed" },
+    1,
+  );
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed" },
+    1_000_000,
+  );
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed" },
+    500_000,
+  );
+  assert.equal(redis.value("ai:chat-turn-alert:production"), "1000000");
+});
+
 test("a healthy snapshot cannot delete a claim from the same millisecond", async () => {
   reset();
   await state.redis.set(
@@ -387,6 +424,22 @@ test("a failed alert comment releases the claim so the next turn retries", async
     1_000_000,
   );
   assert.equal(state.comments.length, 0);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
+});
+
+test("a prior incident cannot reconcile a failed current delivery", async () => {
+  reset();
+  state.comments.push({
+    text: "<p><strong>AI Chat is unhealthy: old incident</strong></p><p>Incident: <code>old-incident</code></p>",
+    creatorId: 6,
+    taskId: 38547,
+  });
+  state.commentError = new Error("comment unavailable");
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    1_000_000,
+  );
+  assert.equal(state.comments.length, 1);
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
 });
 
