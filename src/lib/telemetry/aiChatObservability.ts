@@ -44,7 +44,7 @@ export type AiChatTurnWindowMetrics = {
 export const AI_CHAT_TURN_WINDOW_MS = 15 * 60 * 1000;
 const AI_CHAT_TURN_ERROR_RATE_THRESHOLD = 0.05;
 const AI_CHAT_TURN_P95_LATENCY_THRESHOLD_MS = 20_000;
-/** Held as long as the window keeps breaching, so one incident = one comment. */
+/** Delivered claims refresh while breaching; pending delivery retries after this. */
 const AI_CHAT_TURN_ALERT_TTL_SECONDS = 15 * 60;
 const AI_CHAT_TURN_ERROR_LIMIT = 1000;
 const CAPTURE_TIMEOUT_MS = 1500;
@@ -191,6 +191,10 @@ function alertKey() {
   return `ai:chat-turn-alert:${deploymentEnvironment()}`;
 }
 
+function deliveredAlertKey() {
+  return `ai:chat-turn-alert-delivered:${deploymentEnvironment()}`;
+}
+
 /**
  * Members are `${nonce}|${latencyMs}|${outcome}`. Cancelled turns are
  * recorded so a turn never vanishes from the count, but they are neither
@@ -260,7 +264,7 @@ if total > 0 then
 end
 local claimed = redis.call('GET', KEYS[1])
 if claimed and tonumber(claimed) < tonumber(ARGV[2]) then
-  return redis.call('DEL', KEYS[1])
+  return redis.call('DEL', KEYS[1], KEYS[3])
 end
 return 0
 `;
@@ -300,19 +304,36 @@ function alertCommentText(
 }
 
 /**
- * Atomically refresh every ongoing breach while identifying the first caller,
- * which alone posts the incident comment. A healthy snapshot cannot clear a
- * claim after a concurrent breach has advanced its timestamp.
+ * Identifies the first caller, which alone posts the incident comment. Only a
+ * delivered incident refreshes on later breaches; an undelivered claim expires
+ * after the bounded cooldown so repaired configuration is eventually retried.
  */
 const CLAIM_ALERT_SCRIPT = `
 local existing = redis.call('GET', KEYS[1])
-local claimed_at = tonumber(ARGV[1])
-if existing and tonumber(existing) and tonumber(existing) > claimed_at then
-  claimed_at = tonumber(existing)
+if not existing then
+  redis.call('DEL', KEYS[2])
+  redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+  return 1
 end
-redis.call('SET', KEYS[1], tostring(claimed_at), 'EX', ARGV[2])
-if existing then return 0 end
-return 1
+if redis.call('EXISTS', KEYS[2]) == 1 then
+  local claimed_at = tonumber(ARGV[1])
+  if tonumber(existing) and tonumber(existing) > claimed_at then
+    claimed_at = tonumber(existing)
+  end
+  redis.call('SET', KEYS[1], tostring(claimed_at), 'EX', ARGV[2])
+  redis.call('SET', KEYS[2], tostring(claimed_at), 'EX', ARGV[2])
+end
+return 0
+`;
+
+const MARK_ALERT_DELIVERED_SCRIPT = `
+local claimed = redis.call('GET', KEYS[1])
+if not claimed or tonumber(claimed) == tonumber(ARGV[1]) then
+  redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+  redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
+  return 1
+end
+return 0
 `;
 
 /**
@@ -327,13 +348,23 @@ async function raiseAiChatTurnAlert(
 ) {
   const claimed = await redis.eval(
     CLAIM_ALERT_SCRIPT,
-    1,
+    2,
     alertKey(),
+    deliveredAlertKey(),
     String(now),
     AI_CHAT_TURN_ALERT_TTL_SECONDS,
   );
   if (Number(claimed) !== 1) return false;
   const incidentId = randomUUID();
+  const markDelivered = () =>
+    redis.eval(
+      MARK_ALERT_DELIVERED_SCRIPT,
+      2,
+      alertKey(),
+      deliveredAlertKey(),
+      String(now),
+      AI_CHAT_TURN_ALERT_TTL_SECONDS,
+    );
   let deliveryStarted = false;
   let taskId: number | undefined;
   try {
@@ -371,6 +402,7 @@ async function raiseAiChatTurnAlert(
       accessUserId: FEATURE_FLAG_OWNER_USER_ID,
       processTaskReferences: false,
     });
+    await markDelivered();
     return true;
   } catch (error) {
     console.error("[ai/chat/observability] alert delivery failed", error);
@@ -384,7 +416,10 @@ async function raiseAiChatTurnAlert(
           },
           select: { id: true },
         });
-        if (committed) return true;
+        if (committed) {
+          await markDelivered();
+          return true;
+        }
       } catch (reconciliationError) {
         // Unknown commit state must keep the claim: retrying could post twice.
         console.error(
@@ -433,9 +468,10 @@ export async function recordAiChatTurn(
     if (!aiChatTurnWindowBreached(metrics)) {
       await redis.eval(
         RECOVER_CLAIM_SCRIPT,
-        2,
+        3,
         alertKey(),
         key,
+        deliveredAlertKey(),
         String(now - AI_CHAT_TURN_WINDOW_MS),
         String(now),
         String(AI_CHAT_TURN_ERROR_RATE_THRESHOLD),

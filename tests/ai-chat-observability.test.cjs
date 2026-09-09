@@ -47,13 +47,27 @@ function createFakeRedis() {
       this.calls.push(["eval", ...keys, ...args]);
       if (script.includes("local existing")) {
         const existing = strings.get(key);
-        strings.set(
-          key,
-          existing !== undefined && Number(existing) > Number(args[0])
-            ? existing
-            : args[0],
-        );
-        return existing !== undefined ? 0 : 1;
+        if (existing === undefined) {
+          strings.delete(keys[1]);
+          strings.set(key, args[0]);
+          return 1;
+        }
+        if (strings.has(keys[1])) {
+          const claimedAt =
+            Number(existing) > Number(args[0]) ? existing : args[0];
+          strings.set(key, claimedAt);
+          strings.set(keys[1], claimedAt);
+        }
+        return 0;
+      }
+      if (script.includes("if not claimed or")) {
+        const claimed = strings.get(key);
+        if (claimed === undefined || Number(claimed) === Number(args[0])) {
+          strings.set(key, args[0]);
+          strings.set(keys[1], args[0]);
+          return 1;
+        }
+        return 0;
       }
       if (!script.includes("ZRANGEBYSCORE")) {
         throw new Error("unexpected script");
@@ -78,6 +92,7 @@ function createFakeRedis() {
       const claimed = strings.get(key);
       if (claimed !== undefined && Number(claimed) < Number(args[1])) {
         strings.delete(key);
+        strings.delete(keys[2]);
         return 1;
       }
       return 0;
@@ -402,6 +417,7 @@ test("one breach posts one comment and later breaches stay quiet until it recove
   );
   assert.equal(state.comments.length, 1);
   assert.match(state.comments[0].text, /AI Chat is unhealthy/);
+  assert.equal(redis.has("ai:chat-turn-alert-delivered:production"), true);
   assert.equal(state.comments[0].creatorId, 6);
   assert.equal(state.comments[0].taskId, 38547);
   assert.ok(!state.comments[0].text.includes("<script"));
@@ -417,6 +433,7 @@ test("one breach posts one comment and later breaches stay quiet until it recove
   const recovered = 1_000_000 + 16 * 60 * 1000;
   await observability.recordAiChatTurn({ ...baseTurn, outcome: "ok" }, recovered);
   assert.equal(redis.has("ai:chat-turn-alert:production"), false);
+  assert.equal(redis.has("ai:chat-turn-alert-delivered:production"), false);
   await observability.recordAiChatTurn(
     { ...baseTurn, outcome: "failed", latencyMs: 1000 },
     recovered + 1000,
@@ -424,7 +441,7 @@ test("one breach posts one comment and later breaches stay quiet until it recove
   assert.equal(state.comments.length, 2);
 });
 
-test("a missing alert ticket holds the claim instead of retrying every turn", async () => {
+test("a missing alert ticket keeps only a bounded pending claim", async () => {
   reset(null);
   await observability.recordAiChatTurn(
     { ...baseTurn, outcome: "failed", latencyMs: 1000 },
@@ -432,6 +449,10 @@ test("a missing alert ticket holds the claim instead of retrying every turn", as
   );
   assert.equal(state.comments.length, 0);
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
+  assert.equal(
+    state.redis.has("ai:chat-turn-alert-delivered:production"),
+    false,
+  );
 });
 
 test("a transient alert-ticket lookup failure releases the claim", async () => {
