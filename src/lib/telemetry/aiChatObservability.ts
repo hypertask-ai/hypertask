@@ -3,10 +3,16 @@
  *
  * Two halves, deliberately separate:
  *
- * 1. every generation is sent to PostHog AI observability through the official
- *    `captureAiGeneration` primitive, with the user, model, token counts,
- *    latency and any error, in privacy mode so no prompt or reply text is
- *    ever sent.
+ * 1. every generation is sent to PostHog AI observability as an `$ai_generation`
+ *    event, with the user, model, token counts, latency and any error. No
+ *    prompt or reply text is ever sent.
+ *
+ * The event is emitted directly with the installed posthog-node client rather
+ * than through `@posthog/ai`: that package's Vercel model wrapper only supports
+ * AI SDK v5/v6 models and this app runs v7, and installing it pulls a
+ * postinstall that downloads a binary, which fails the repo's network-isolated
+ * app-smoke job. The `$ai_*` property names below are the ones PostHog's LLM
+ * observability reads.
  * 2. `recordAiChatTurn` writes one tiny tally per turn to Redis and, when the
  *    last 15 minutes breach the ticket's thresholds, posts a single comment on
  *    the Manager's report thread. The thresholds are evaluated from what the
@@ -14,7 +20,6 @@
  *    can never raise an alert.
  */
 import { randomUUID } from "node:crypto";
-import { captureAiGeneration } from "@posthog/ai";
 import type { Redis } from "ioredis";
 import { PostHog } from "posthog-node";
 
@@ -56,12 +61,16 @@ function deploymentEnvironment() {
 // it, because that file sits under the repo's 14-day no-delete guard and a
 // second flushAt-1 client costs nothing. Fold them together once that guard
 // has expired.
+export function postHogIngestionHost() {
+  return process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com";
+}
+
 function postHogClient() {
   const token = process.env.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
   if (!token) return undefined;
   if (!client) {
     client = new PostHog(token, {
-      host: process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com",
+      host: postHogIngestionHost(),
       flushAt: 1,
       flushInterval: 0,
       requestTimeout: CAPTURE_TIMEOUT_MS,
@@ -70,12 +79,6 @@ function postHogClient() {
   }
   return client;
 }
-
-type AiCaptureEvent = {
-  distinctId?: string;
-  event: string;
-  properties?: Record<string, unknown>;
-};
 
 /**
  * The SDK serialises a provider error into `$ai_error` verbatim, and some
@@ -91,20 +94,6 @@ export function redactAiCaptureProperties(
     ...properties,
     $ai_error: redactErrorText(properties.$ai_error, AI_CHAT_TURN_ERROR_LIMIT),
   };
-}
-
-function redactingClient(client: PostHog): PostHog {
-  const forward = (event: AiCaptureEvent, immediate: boolean) => {
-    const payload = {
-      ...event,
-      properties: redactAiCaptureProperties(event.properties ?? {}),
-    };
-    return immediate ? client.captureImmediate(payload) : client.capture(payload);
-  };
-  return {
-    capture: (event: AiCaptureEvent) => forward(event, false),
-    captureImmediate: (event: AiCaptureEvent) => forward(event, true),
-  } as unknown as PostHog;
 }
 
 export type AiChatTurnRecord = {
@@ -125,50 +114,57 @@ export type AiChatTurnRecord = {
 };
 
 /**
- * Builds the `$ai_generation` payload for one turn. Privacy mode is always on
- * and both bodies are null, so no prompt or reply text can reach PostHog even
- * if the client is later reconfigured.
+ * Builds the `$ai_generation` event for one turn: the properties PostHog LLM
+ * observability reads, plus the distinct id it attributes the turn to. No
+ * input or output body is ever included.
  */
 export function buildAiChatTurnCapture(
   turn: AiChatTurnRecord,
   environment: string,
 ) {
-  return {
-    distinctId: String(turn.userId),
-    traceId: turn.traceId,
-    provider: turn.provider,
-    model: turn.model,
-    input: null,
-    output: null,
-    privacyMode: true,
-    // Serverless: the event has to be flushed before the function ends.
-    captureImmediate: true,
-    // A cancelled turn is not a server failure, so it carries no status.
-    httpStatus:
-      turn.outcome === "ok" ? 200 : turn.outcome === "failed" ? 500 : undefined,
-    latency: turn.latencyMs / 1000,
-    usage: {
-      inputTokens: turn.inputTokens,
-      outputTokens: turn.outputTokens,
-    },
-    ...(turn.outcome === "failed" && turn.error !== undefined
-      ? { error: turn.error }
-      : {}),
-    properties: {
-      ht_feature: "chat",
-      ht_user_id: turn.userId,
-      ht_project_id: turn.projectId ?? null,
-      ht_task_id: turn.taskId ?? null,
-      ht_agent_id: turn.agentId ?? null,
-      ht_outcome: turn.outcome,
-      ht_environment: environment,
-    },
+  let httpStatus = 200;
+  const properties: Record<string, unknown> = {
+    $ai_trace_id: turn.traceId,
+    $ai_provider: turn.provider,
+    $ai_model: turn.model,
+    $ai_input_tokens: turn.inputTokens ?? 0,
+    $ai_output_tokens: turn.outputTokens ?? 0,
+    $ai_latency: turn.latencyMs / 1000,
+    $ai_model_parameters: {},
+    ht_feature: "chat",
+    ht_user_id: turn.userId,
+    ht_project_id: turn.projectId ?? null,
+    ht_task_id: turn.taskId ?? null,
+    ht_agent_id: turn.agentId ?? null,
+    ht_outcome: turn.outcome,
+    ht_environment: environment,
   };
+  if (turn.outcome === "failed") {
+    httpStatus = 500;
+    properties.$ai_is_error = true;
+    properties.$ai_error = stringifyAiError(turn.error);
+  } else if (turn.outcome === "cancelled") {
+    // A cancelled turn is neither a success nor a server failure.
+    httpStatus = 0;
+  }
+  properties.$ai_http_status = httpStatus;
+  return { distinctId: String(turn.userId), event: "$ai_generation", properties };
+}
+
+function stringifyAiError(error: unknown) {
+  const trim = (stack: string) => stack.split("\n").slice(0, 20).join("\n");
+  if (error instanceof Error) {
+    return JSON.stringify({
+      name: error.name,
+      message: error.message,
+      stack: trim(error.stack ?? ""),
+    });
+  }
+  return JSON.stringify({ message: String(error) });
 }
 
 /**
- * Sends one `$ai_generation` event through the official PostHog AI primitive.
- * Never throws.
+ * Sends one `$ai_generation` event to PostHog. Never throws.
  */
 async function captureAiChatTurn(
   turn: AiChatTurnRecord,
@@ -177,10 +173,11 @@ async function captureAiChatTurn(
   try {
     const client = postHogClient();
     if (!client) return;
-    await captureAiGeneration(
-      redactingClient(client),
-      buildAiChatTurnCapture(turn, environment),
-    );
+    const capture = buildAiChatTurnCapture(turn, environment);
+    await client.captureImmediate({
+      ...capture,
+      properties: redactAiCaptureProperties(capture.properties),
+    });
   } catch (error) {
     console.warn("[ai/chat/observability] generation capture failed", error);
   }
@@ -232,6 +229,20 @@ export function aiChatTurnWindowBreached(metrics: AiChatTurnWindowMetrics) {
   );
 }
 
+/**
+ * Recovery deletes the claim only if it was made before this evaluation read
+ * the window. A turn that breached a moment later holds a newer claim, which
+ * must survive, or the next breach would post a second comment for the same
+ * incident.
+ */
+const RECOVER_CLAIM_SCRIPT = `
+local claimed = redis.call('GET', KEYS[1])
+if claimed and claimed <= ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+`;
+
 function llmObservabilityUrl() {
   const projectId = process.env.POSTHOG_SERVER_PROJECT_ID?.trim();
   if (!projectId || !/^\d{1,12}$/.test(projectId)) return null;
@@ -266,7 +277,7 @@ async function raiseAiChatTurnAlert(
 ) {
   const claimed = await redis.set(
     alertKey(),
-    new Date().toISOString(),
+    String(Date.now()),
     "EX",
     AI_CHAT_TURN_ALERT_TTL_SECONDS,
     "NX",
@@ -344,7 +355,7 @@ export async function recordAiChatTurn(
       await redis.zrangebyscore(key, now - AI_CHAT_TURN_WINDOW_MS, now),
     );
     if (!aiChatTurnWindowBreached(metrics)) {
-      await redis.del(alertKey());
+      await redis.eval(RECOVER_CLAIM_SCRIPT, 1, alertKey(), String(now));
       return metrics;
     }
     await raiseAiChatTurnAlert(redis, metrics);

@@ -29,12 +29,24 @@ function createFakeRedis() {
     },
     async zremrangebyscore(key, min, max) {
       this.calls.push(["zremrangebyscore", key, min, max]);
+      const low = min === "-inf" ? -Infinity : Number(min);
+      const high = max === "+inf" ? Infinity : Number(max);
       const entries = sets.get(key) ?? [];
       const kept = entries.filter(
-        (entry) => !(entry.score >= min && entry.score <= max),
+        (entry) => !(entry.score >= low && entry.score <= high),
       );
       sets.set(key, kept);
       return entries.length - kept.length;
+    },
+    async eval(script, keyCount, key, arg) {
+      this.calls.push(["eval", key, arg]);
+      if (!script.includes("claimed <=")) throw new Error("unexpected script");
+      const claimed = strings.get(key);
+      if (claimed !== undefined && claimed <= arg) {
+        strings.delete(key);
+        return 1;
+      }
+      return 0;
     },
     async zrangebyscore(key, min, max) {
       this.calls.push(["zrangebyscore", key, min, max]);
@@ -179,34 +191,57 @@ test("the captured generation carries no chat text and tags the right user", () 
     { ...baseTurn, inputTokens: 11, outputTokens: 7, latencyMs: 4000 },
     "production",
   );
+  assert.equal(capture.event, "$ai_generation");
   assert.equal(capture.distinctId, "6");
-  assert.equal(capture.model, "gpt-5.5");
-  assert.equal(capture.provider, "openai");
-  assert.equal(capture.traceId, baseTurn.traceId);
-  assert.equal(capture.input, null);
-  assert.equal(capture.output, null);
-  assert.equal(capture.privacyMode, true);
-  assert.equal(capture.captureImmediate, true);
-  assert.equal(capture.latency, 4);
-  assert.equal(capture.usage.inputTokens, 11);
-  assert.equal(capture.usage.outputTokens, 7);
-  assert.equal(capture.httpStatus, 200);
+  assert.equal(capture.properties.$ai_model, "gpt-5.5");
+  assert.equal(capture.properties.$ai_provider, "openai");
+  assert.equal(capture.properties.$ai_trace_id, baseTurn.traceId);
+  assert.equal(capture.properties.$ai_input_tokens, 11);
+  assert.equal(capture.properties.$ai_output_tokens, 7);
+  assert.equal(capture.properties.$ai_latency, 4);
+  assert.equal(capture.properties.$ai_http_status, 200);
   assert.equal(capture.properties.ht_user_id, 6);
   assert.equal(capture.properties.ht_outcome, "ok");
+  // No prompt or reply body is ever part of the event.
+  assert.deepEqual(
+    Object.keys(capture.properties).filter(
+      (key) => key === "$ai_input" || key === "$ai_output_choices",
+    ),
+    [],
+  );
 
   const failed = observability.buildAiChatTurnCapture(
     { ...baseTurn, outcome: "failed", error: new Error("boom") },
     "production",
   );
-  assert.equal(failed.httpStatus, 500);
-  assert.ok(failed.error instanceof Error);
+  assert.equal(failed.properties.$ai_http_status, 500);
+  assert.equal(failed.properties.$ai_is_error, true);
+  assert.match(failed.properties.$ai_error, /boom/);
 
   const cancelled = observability.buildAiChatTurnCapture(
     { ...baseTurn, outcome: "cancelled" },
     "production",
   );
-  assert.equal(cancelled.httpStatus, undefined);
-  assert.equal("error" in cancelled, false);
+  assert.equal(cancelled.properties.$ai_http_status, 0);
+  assert.equal("$ai_error" in cancelled.properties, false);
+});
+
+test("a recovery snapshot cannot delete a claim made after it", async () => {
+  reset();
+  // A breach claims at 1_000_500; a concurrent healthy snapshot taken at
+  // 1_000_000 must leave that newer claim alone.
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    1_000_500,
+  );
+  assert.equal(state.comments.length, 1);
+  await observability.recordAiChatTurn({ ...baseTurn, outcome: "ok" }, 1_000_000);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    1_000_600,
+  );
+  assert.equal(state.comments.length, 1, "one ongoing problem is one comment");
 });
 
 test("a failed turn redacts secrets out of the captured error line", () => {

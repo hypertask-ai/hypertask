@@ -10916,9 +10916,12 @@ export async function POST(request: NextRequest) {
           heartbeatExecutionTerminal = true;
         }
       } finally {
-        // Idempotent: every exit path above has already named its outcome, so
-        // this only catches a turn that ended without one.
-        recordTurnOutcome(cancelled ? "cancelled" : "ok");
+        // The stream's own callbacks run inside this block, so onFinish or
+        // onError has already named the outcome by the time we get here; this
+        // only covers a turn that ended before the model ever ran. Such a turn
+        // is not a healthy generation, so it is never counted as one: a
+        // fabricated success would drag the failure rate the alert reads.
+        if (cancelled) recordTurnOutcome("cancelled");
         turnDeadline?.clear();
         stopCancellationWatch();
         await releaseAiChatStreamLease(streamLease);

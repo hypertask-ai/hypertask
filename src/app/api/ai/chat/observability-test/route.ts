@@ -9,7 +9,10 @@ import {
   HTPR_6320_AI_OBSERVABILITY_FLAG,
   isFeatureEnabled,
 } from "@/lib/flags";
-import { recordAiChatTurn } from "@/lib/telemetry/aiChatObservability";
+import {
+  postHogIngestionHost,
+  recordAiChatTurn,
+} from "@/lib/telemetry/aiChatObservability";
 import { redactErrorText } from "@/lib/telemetry/errorSanitization";
 
 export const runtime = "nodejs";
@@ -70,7 +73,7 @@ export async function POST(request: NextRequest) {
     error: error ? redactErrorText(String(error), 500) : null,
     metrics,
     posthog: {
-      host: process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com",
+      host: postHogIngestionHost(),
       project_id: process.env.POSTHOG_SERVER_PROJECT_ID ?? null,
     },
   });
