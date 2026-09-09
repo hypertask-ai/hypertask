@@ -33,13 +33,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # Fail closed instead of degrading to github.token: labels made with
+      # GITHUB_TOKEN never fire downstream `labeled` workflows, so a fallback
+      # would arm ci-tests/major-ticket on nothing and every Dependabot PR
+      # would silently sit unlabeled forever.
+      - name: Require the labelling PAT
+        if: ${{ secrets.AUTOMERGE_TOKEN == '' }}
+        run: |
+          echo "::error::AUTOMERGE_TOKEN is not set. Labels made with GITHUB_TOKEN do not fire ci-tests' \`labeled\` trigger or dependabot-major-ticket.yml, so the pipeline would gate on nothing. Set the PAT instead of falling back."
+          exit 1
+
       - name: Classify the update and set the lane
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           # A PAT, not the built-in token: GitHub refuses to start new workflow
           # runs from events authored by GITHUB_TOKEN, so labelling with it would
           # never fire ci-tests' `labeled` trigger or dependabot-major-ticket.yml.
-          github-token: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          github-token: ${{ secrets.AUTOMERGE_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
             const title = pr.title || '';
@@ -72,12 +82,51 @@ jobs:
 
             // `full-ci` is what makes ci-tests actually run (see ci-tests.yml).
             // Both lanes need the test signal; only the small lane auto-merges on it.
-            const labels = ['full-ci', small ? 'stack-minor' : 'major-upgrade'];
+            const lane = small ? 'stack-minor' : 'major-upgrade';
+            const opposite = small ? 'major-upgrade' : 'stack-minor';
+            const labels = ['full-ci', lane];
             await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: pr.number,
               labels,
             });
+
+            // A `synchronize`/`reopened` run can reclassify a PR (a rebase that
+            // changes the version range, for one). Remove the other lane's
+            // stale label so the PR shows exactly one truth.
+            try {
+              await github.rest.issues.removeLabel({
+                ...context.repo,
+                issue_number: pr.number,
+                name: opposite,
+              });
+              core.info(`removed stale "${opposite}" label`);
+            } catch (e) {
+              if (e.status !== 404) throw e; // 404 = label wasn't there
+            }
+
+            // Native auto-merge is sticky: a PR classified small before a push
+            // keeps it armed. On the major path, disarm it explicitly and
+            // verify — an armed major-upgrade PR would merge unreviewed.
+            if (!small) {
+              try {
+                await github.graphql(
+                  `mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { actor { login } } }`,
+                  { id: pr.node_id },
+                );
+              } catch (e) {
+                core.warning(`disablePullRequestAutoMerge: ${e.message}`);
+              }
+              const fresh = await github.rest.pulls.get({
+                ...context.repo,
+                pull_number: pr.number,
+              });
+              if (fresh.data.auto_merge) {
+                throw new Error(
+                  'Auto-merge is still armed on a major-upgrade PR; failing closed.',
+                );
+              }
+            }
 
             core.setOutput('small', String(small));
         id: classify
@@ -85,7 +134,7 @@ jobs:
       - name: Enable auto-merge for a small update
         if: steps.classify.outputs.small == 'true'
         env:
-          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
