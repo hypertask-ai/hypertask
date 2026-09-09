@@ -17,15 +17,29 @@ export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
 export const AGENT_DEV_LOOP_FEATURE_FLAG = "htpr-6124-agent-dev-loop";
 export const AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG =
   "htpr-6154-chat-stop-and-timeout";
+export const AGENT_CHAT_PARKED_REPLY_FLAG =
+  "htpr-6322-agent-chat-parked-reply";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
 export const AGENT_CHAT_TIMEOUT_MESSAGE = "Agent did not answer, try again";
 export const AGENT_CHAT_STOPPED_MESSAGE = "Run stopped";
+// Written when a message goes to an agent no runtime is listening to, so the
+// thread says why nobody will answer instead of leaving the sender waiting.
+export const AGENT_CHAT_PARKED_MESSAGE =
+  "This agent is parked: no runtime is connected to its chat, so it cannot answer right now. Your message is saved here.";
+
+// Shared with the runtime's transcript read, which has to hide the same rows
+// the browser shows as system notices.
+export const AGENT_CHAT_SYSTEM_MESSAGES: readonly string[] = [
+  AGENT_CHAT_TIMEOUT_MESSAGE,
+  AGENT_CHAT_STOPPED_MESSAGE,
+  AGENT_CHAT_PARKED_MESSAGE,
+];
 
 export function isAgentChatSystemMessage(
   message: Pick<ChatMessage, "role" | "content" | "isDelivered">,
 ): boolean {
   return message.role === "assistant" && !message.isDelivered &&
-    (message.content === AGENT_CHAT_TIMEOUT_MESSAGE || message.content === AGENT_CHAT_STOPPED_MESSAGE);
+    AGENT_CHAT_SYSTEM_MESSAGES.includes(message.content);
 }
 export const NONTERMINAL_AGENT_RUN_STATUSES: AgentRunStatus[] = [
   "ACTIVE",
