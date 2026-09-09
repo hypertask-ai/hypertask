@@ -8,6 +8,7 @@ import {
   canUndoDescriptionTakeover,
   hasDescriptionContent,
   hasMeaningfulDescriptionSuggestionTitle,
+  isNewTaskAutoDescriptionEnabled,
   mergeDescriptionTakeoverAttachments,
   resolveTaskWriterSubmitPrompt,
   shouldSuggestCreateDescription,
@@ -22,6 +23,24 @@ const eligible = {
   preferencesHydrated: true,
   dismissed: false,
 };
+
+test("the create-task description deploy switch defaults off and accepts only 1 as on", () => {
+  const original = process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
+  try {
+    delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
+    assert.equal(isNewTaskAutoDescriptionEnabled(), false);
+    process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = "0";
+    assert.equal(isNewTaskAutoDescriptionEnabled(), false);
+    process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = "1";
+    assert.equal(isNewTaskAutoDescriptionEnabled(), true);
+  } finally {
+    if (original === undefined) {
+      delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
+    } else {
+      process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = original;
+    }
+  }
+});
 
 test("task-writer prompts preserve user text and add title context once", () => {
   assert.equal(buildTaskWriterPrompt("Draft details"), "Draft details");
@@ -188,6 +207,10 @@ test("automatic description UI exists only in the new-task form", () => {
 
   assert.match(createForm, /id="create-task-auto-description-writer"/);
   assert.match(createForm, /requestKind="auto-description"/);
+  assert.match(
+    createForm,
+    /isNewTaskAutoDescriptionEnabled\(\)\s*&&\s*autoTaskDescriptionsEnabled/,
+  );
   assert.match(
     createForm,
     /CreateTaskAndDescription\(\s*descriptionAtSave,\s*titleAtSave,\s*formValuesAtSave,?\s*\)/,

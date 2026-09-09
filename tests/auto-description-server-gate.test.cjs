@@ -93,11 +93,23 @@ function request(requestKind) {
 }
 
 test.beforeEach(() => {
+  process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = "1";
   preferenceReads.length = 0;
   featureFlagChecks.length = 0;
   autoTaskDescriptionsEnabled = true;
   autoDescriptionSuggestions = true;
   preferenceFetchMode = "existing";
+});
+
+test("automatic task-writer requests stop when the deploy switch is off", async () => {
+  delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
+
+  await assert.rejects(
+    prepareTaskWriterRun(request("auto-description"), 6),
+    AutoDescriptionSuggestionsDisabledError,
+  );
+  assert.deepEqual(featureFlagChecks, []);
+  assert.deepEqual(preferenceReads, []);
 });
 
 test("automatic task-writer requests stop when the user preference is disabled", async () => {
@@ -115,7 +127,8 @@ test("automatic task-writer requests stop when the user preference is disabled",
   ]);
 });
 
-test("manual task-writer requests do not depend on the automatic preference", async () => {
+test("manual task-writer requests ignore the automatic description controls", async () => {
+  delete process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION;
   autoDescriptionSuggestions = false;
 
   await assert.rejects(

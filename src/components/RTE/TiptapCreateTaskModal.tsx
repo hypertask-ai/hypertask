@@ -69,6 +69,7 @@ import {
   AUTO_DESCRIPTION_SUGGESTION_DELAY_MS,
   canApplyCreateDescriptionSuggestion,
   canUndoDescriptionTakeover,
+  isNewTaskAutoDescriptionEnabled,
   shouldSuggestCreateDescription,
   type AutoDescriptionTakeover,
 } from "@/lib/ai/autoDescriptionSuggestion";
@@ -371,6 +372,7 @@ const TiptapCreateTaskModal = () => {
   // HTPR-6177: fold the flag in once so every eligibility check shares the same
   // switch, rather than relying on the effect below returning early to stay off.
   const autoDescriptionPreferenceEnabled =
+    isNewTaskAutoDescriptionEnabled() &&
     autoTaskDescriptionsEnabled &&
     (userPreferences.autoDescriptionSuggestions ?? true);
   const autoDescriptionEligible = shouldSuggestCreateDescription({
