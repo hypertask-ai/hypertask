@@ -6,6 +6,10 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { manualEntryTimes } from "@/lib/timeManualEntry";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 import {
+  HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
+import {
   createTimeEntryOnActiveBoard,
   deleteTimeEntryOnActiveBoard,
   pauseTimerOnActiveBoard,
@@ -347,16 +351,40 @@ export async function listReport(
     from?: Date;
     to?: Date;
     runningOnly?: boolean;
+    // Precomputed by the web route to avoid a second identical query; the
+    // MCP and AI-chat callers omit it and the query runs here.
+    adminProjectIds?: number[];
   } = {}
 ) {
+  const adminOnly = await isFeatureEnabled(
+    HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+    userId
+  );
+  const adminProjectIds = adminOnly
+    ? (options.adminProjectIds ??
+      (await administeredProjectIds(userId, {
+        teamId: options.teamId,
+        boardIds: options.boardIds ?? (options.boardId ? [options.boardId] : undefined),
+      })))
+    : [];
+  const adminSet = new Set(adminProjectIds);
+  // HTPR-4228: reports show all members' entries only to board owners and
+  // admins; plain members are limited to their own history. Applied in the
+  // query so the 1000-row cap cannot push out a member's own entries.
+  const seesOthers = !adminOnly || adminProjectIds.length > 0;
+
   const entries = await prisma.timeEntry.findMany({
     where: {
       ...(options.taskId ? { taskId: options.taskId } : {}),
-      ...(options.filterUserIds?.length
-        ? { userId: { in: options.filterUserIds } }
-        : options.filterUserId
-          ? { userId: options.filterUserId }
-          : {}),
+      ...(seesOthers
+        ? options.filterUserIds?.length
+          ? { userId: { in: options.filterUserIds } }
+          : options.filterUserId
+            ? { userId: options.filterUserId }
+            : {}
+        : // A member without other-user scope never gets anyone else's rows,
+          // whatever filter the caller passed.
+          { userId }),
       ...(options.from || options.to
         ? {
             startedAt: {
@@ -366,6 +394,9 @@ export async function listReport(
           }
         : {}),
       ...(options.runningOnly ? { endedAt: null } : {}),
+      ...(adminOnly && adminProjectIds.length
+        ? { OR: [{ userId }, { task: { projectId: { in: adminProjectIds } } }] }
+        : {}),
       task: {
         status: { not: "Deleted" },
         ...(options.boardIds?.length
@@ -407,19 +438,22 @@ export async function listReport(
     return runningDifference || b.startedAt.getTime() - a.startedAt.getTime();
   });
 
-  const projectIds = [...new Set(entries.map((entry) => entry.task.projectId))];
-  const manageableProjectIds = new Set(
-    (
-      await Promise.all(
-        projectIds.map(async (projectId) => ({
-          canManage: await isProjectAdmin(userId, projectId),
-          projectId,
-        }))
-      )
-    )
-      .filter(({ canManage }) => canManage)
-      .map(({ projectId }) => projectId)
-  );
+  const manageableProjectIds = adminOnly
+    ? adminSet
+    : new Set(
+        (
+          await Promise.all(
+            [...new Set(entries.map((entry) => entry.task.projectId))].map(
+              async (projectId) => ({
+                canManage: await isProjectAdmin(userId, projectId),
+                projectId,
+              })
+            )
+          )
+        )
+          .filter(({ canManage }) => canManage)
+          .map(({ projectId }) => projectId)
+      );
 
   return entries.map(({ task, user, ...entry }) => ({
     id: entry.id,
@@ -441,6 +475,32 @@ export async function listReport(
     seconds: elapsedSeconds(entry.startedAt, entry.endedAt, entry.pausedAt),
     canManage: manageableProjectIds.has(task.projectId),
   }));
+}
+
+// HTPR-4228: boards in the report scope that the caller owns or administers.
+// Everyone else's entries are only visible on these.
+export async function administeredProjectIds(
+  userId: number,
+  scope: { teamId?: string; boardIds?: number[] } = {}
+) {
+  const projects = await prisma.project.findMany({
+    where: {
+      status: { in: ["Normal", "Archive"] },
+      ...getProjectWhere(userId),
+      ...(scope.boardIds?.length ? { id: { in: scope.boardIds } } : {}),
+      ...(scope.teamId ? { teamId: scope.teamId } : {}),
+      OR: [
+        { ownerId: userId },
+        {
+          members: {
+            some: { userId, status: "Accepted", agentId: null, role: "Admin" },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  return projects.map((project) => project.id);
 }
 
 export async function updateEntry(

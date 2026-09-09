@@ -436,10 +436,12 @@ export function useTimeReport(params: TimeReportParams) {
       if (params.running) searchParams.set("running", "1");
 
       const query = searchParams.toString();
-      const data = await requestJson<{ success: true; entries: TimeReportEntry[] }>(
-        `/api/time/report${query ? `?${query}` : ""}`
-      );
-      return data.entries;
+      const data = await requestJson<{
+        success: true;
+        canViewOthers: boolean;
+        entries: TimeReportEntry[];
+      }>(`/api/time/report${query ? `?${query}` : ""}`);
+      return { canViewOthers: data.canViewOthers, entries: data.entries };
     },
     refetchOnWindowFocus: true,
   });
