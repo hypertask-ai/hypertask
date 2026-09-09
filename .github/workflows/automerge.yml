@@ -141,7 +141,7 @@ jobs:
           for PR in $PRS; do
             echo "::group::PR #$PR"
             sleep 1  # gentle pacing so a multi-PR sweep doesn't burst the token
-            gh_view() { gh pr view "$PR" --repo "$REPO" --json number,title,isDraft,isCrossRepository,mergeStateStatus,mergeable,baseRefName,headRefOid,headRepositoryOwner,labels,statusCheckRollup,comments >"$PR_JSON"; }
+            gh_view() { gh pr view "$PR" --repo "$REPO" --json author,number,title,isDraft,isCrossRepository,mergeStateStatus,mergeable,baseRefName,headRefOid,headRepositoryOwner,labels,statusCheckRollup,comments >"$PR_JSON"; }
             if ! retry gh_view; then
               echo "::error::Cannot read PR #$PR after retries; merge evaluation is incomplete."
               infra_failures=$((infra_failures+1))
@@ -210,6 +210,18 @@ jobs:
             # so this is also the author-trust gate; fork PRs are never auto-merged.
             [ "$crossRepo" = "false" ]  || { echo "skip: fork/cross-repo PR"; echo "::endgroup::"; continue; }
             [ "$headOwner" = "$OWNER" ] || { echo "skip: head owner $headOwner"; echo "::endgroup::"; continue; }
+
+            # Dependabot has its own lane (`dependabot-stack.yml`, 2026-09-08):
+            # small updates ride GitHub's native auto-merge, majors wait on a
+            # board ticket. This sweeper would only park every one of them on the
+            # `package.json` risk path and bury the PR under repeat comments, so
+            # it leaves them alone entirely. GraphQL has reported both login
+            # spellings for bot actors over time, so accept both.
+            author=$(jq -r '.author.login // ""' <<<"$J")
+            if [[ "$author" == "dependabot" || "$author" == "dependabot[bot]" ]]; then
+              echo "skip: dependabot PR (handled by dependabot-stack.yml)"
+              echo "::endgroup::"; continue
+            fi
 
             # Hold / park labels (checked BEFORE the conflict park below so an
             # already-parked PR is skipped early and never re-comments).

@@ -25,14 +25,17 @@ concurrency:
 jobs:
   ci-tests:
     name: ci-tests
-    # Skip drafts and bot-authored PRs (Vercel bot, dependabot); pushes always run.
+    # Skip drafts and bot-authored PRs (the Vercel bot); pushes always run.
+    # Dependabot is the one bot exception (Valentin, 2026-09-08): its patch/minor
+    # PRs auto-merge, and "merged when tests are green" needs a test result to
+    # exist. `dependabot-stack.yml` applies the `full-ci` label that arms this.
     # Review-first gate (owner, 2026-08-26): a PR run also needs the full-ci
     # label, which the pr-feedback timer applies once claude-review is green.
     # This makes the typecheck+test gate run once per ready PR (plus once per
     # fix-up push after that) instead of on open and on every label event.
     # ci-build stays a required automerge check, so an unlabeled PR simply
     # waits: review first, then the gate, then the merge.
-    if: github.event_name == 'push' || (github.event.pull_request.draft == false && !endsWith(github.event.pull_request.user.login, '[bot]') && contains(github.event.pull_request.labels.*.name, 'full-ci'))
+    if: github.event_name == 'push' || (github.event.pull_request.draft == false && (!endsWith(github.event.pull_request.user.login, '[bot]') || github.event.pull_request.user.login == 'dependabot[bot]') && contains(github.event.pull_request.labels.*.name, 'full-ci'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     # This job checks out and executes pull request code, so it never holds a

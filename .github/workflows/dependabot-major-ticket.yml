@@ -1,0 +1,174 @@
+name: Dependabot Major Upgrade Ticket
+
+# A major dependency bump is a week of someone's attention, not a same-day
+# merge (Valentin, 2026-09-08). The moment `dependabot-stack.yml` labels a PR
+# `major-upgrade`, this opens a board-15 ticket in Bugs and links it back on the
+# PR, so the upgrade is on the board the day it lands instead of rotting as an
+# open PR nobody owns.
+#
+# `pull_request_target` for the same reason as `pr-size.yml`: a `pull_request`
+# run on a Dependabot PR receives no repository secrets, so HYPERTASK_MCP_TOKEN
+# would arrive empty and the ticket would silently never be created. No PR code
+# is checked out or executed here.
+
+on:
+  pull_request_target:
+    types: [labeled]
+    branches: [production]
+
+concurrency:
+  group: dependabot-major-ticket-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  pull-requests: write
+
+jobs:
+  ticket:
+    if: github.event.label.name == 'major-upgrade'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Open the upgrade ticket and link it on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          MCP_BASE_URL: https://app.hypertask.ai
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${MCP_TOKEN:-}" ]; then
+            echo "::error::HYPERTASK_MCP_TOKEN is empty; no ticket can be created."
+            exit 1
+          fi
+
+          # Board 15 = the product board; section 4389 = its "Bugs" column.
+          PROJECT_ID=15
+          SECTION_ID=4389
+          MARKER="<!-- stack-upgrade-ticket -->"
+          # Unique, tokenizer-friendly dedupe key for this PR. It goes into the
+          # ticket title, so a retry can find the ticket even when the link
+          # comment below never landed.
+          DEDTOKEN="dep-pr-$PR"
+
+          # Post (or re-post) the PR comment that links the ticket. Retried,
+          # because the marker it carries is the cheapest dedupe probe. If it
+          # still fails, the caller must NOT retry creation: a duplicate ticket
+          # is worse than a missing link, and the next `labeled` event relinks.
+          post_link_comment() {
+            local ticket="$1" url attempt
+            url="https://app.hypertask.ai/detail/project-$PROJECT_ID/${ticket##*-}"
+            local comment="$MARKER"$'\n'"Major upgrade, so this PR is not auto-merged. Tracked on $ticket: $url"$'\n\n'"A dev picks it up from the board, lands it within a week, and drives the post-deploy QA pass."
+            for attempt in 1 2 3; do
+              if gh pr comment "$PR" --repo "$REPO" --body "$comment"; then
+                return 0
+              fi
+              echo "pr comment attempt $attempt failed; retrying"
+              sleep $((attempt * 5))
+            done
+            return 1
+          }
+
+          # Re-labelling a PR fires this again. One ticket per PR, ever.
+          # A failed read must NOT be read as "no ticket exists": that would
+          # create a duplicate ticket on every rate limit or 5xx. Capture the
+          # exit status separately from the grep.
+          if ! EXISTING=$(gh pr view "$PR" --repo "$REPO" --json comments \
+               --jq '[.comments[].body] | join("\n")'); then
+            echo "::error::Cannot read this PR's comments, so the duplicate check cannot run. Not creating a ticket."
+            exit 1
+          fi
+          if grep -qF "$MARKER" <<<"$EXISTING"; then
+            echo "This PR already has an upgrade ticket; nothing to do."
+            exit 0
+          fi
+
+          # Second probe: the marker is only posted after the ticket exists, so
+          # a retry after "ticket created, comment failed" would otherwise
+          # create a duplicate. Search board 15 for this PR's dedupe key in the
+          # title instead. A failed or malformed search is not "no ticket":
+          # fail closed rather than create a duplicate.
+          if ! SEARCH=$(curl -sS --fail-with-body \
+               "$MCP_BASE_URL/api/mcp/tasks/search?q=$DEDTOKEN&project_id=$PROJECT_ID&limit=10" \
+               -H "Authorization: Bearer $MCP_TOKEN"); then
+            echo "::error::Cannot search board $PROJECT_ID, so the duplicate check cannot run. Not creating a ticket."
+            exit 1
+          fi
+          if [ "$(jq -r '.tasks | type' <<<"$SEARCH" 2>/dev/null)" != "array" ]; then
+            echo "::error::Board search returned no task list; not creating a ticket. Response: $(head -c 300 <<<"$SEARCH")"
+            exit 1
+          fi
+          TICKET=$(jq -r --arg t "[$DEDTOKEN]" \
+            '[.tasks[] | select((.title // "") | contains($t))] | .[0].ticketNumber // ""' <<<"$SEARCH")
+          if [ -n "$TICKET" ]; then
+            echo "Found the ticket from a previous run ($TICKET); relinking instead of creating a duplicate."
+            if post_link_comment "$TICKET"; then
+              echo "Relinked $TICKET on the PR."
+            else
+              echo "::error::Ticket $TICKET exists but the PR comment failed; rerun to relink."
+              exit 1
+            fi
+            exit 0
+          fi
+          TICKET=""
+
+          # "Build(deps): Bump @tiptap/core from 3.29.2 to 3.30.4"
+          PKG=$(sed -n 's/.*Bump \([^ ]*\) from .*/\1/p' <<<"$PR_TITLE")
+          FROM=$(sed -n 's/.*from \([^ ]*\) to .*/\1/p' <<<"$PR_TITLE")
+          TO=$(sed -n 's/.* to \([^ ]*\).*/\1/p' <<<"$PR_TITLE")
+          if [ -z "$PKG" ]; then
+            # Multi-package or grouped shape: fall back to the raw title.
+            PKG="$PR_TITLE"; FROM="?"; TO="?"
+            TITLE="Stack upgrade: $PR_TITLE"
+          else
+            TITLE="Stack upgrade: $PKG $FROM -> $TO"
+          fi
+          TITLE="$TITLE [$DEDTOKEN]"
+
+          # Dependabot names the advisory in the body of a security update.
+          PRIORITY=0
+          SECURITY_NOTE=""
+          if grep -qiE 'CVE-[0-9]{4}-|GHSA-|security (advisory|update|vulnerabilit)' <<<"${PR_BODY:-}"; then
+            PRIORITY=1   # 1 = Urgent
+            SECURITY_NOTE="<p><strong>Security update.</strong> Dependabot flagged an advisory on this package, so this is urgent.</p>"
+          fi
+
+          DESC="<p><strong>Upgrade <code>$PKG</code> from $FROM to $TO and get it merged within a week.</strong></p>$SECURITY_NOTE<p>Dependabot opened this as a major version bump, so it is deliberately NOT auto-merged. A dev takes it, reads the upstream changelog, fixes whatever breaks, and lands the PR.</p><ul><li><strong>Pull request:</strong> <a href=\"$PR_URL\">$PR_URL</a></li><li><strong>Gate:</strong> ci-tests green on the PR, then the post-deploy GLM QA pass once it is live. The dev drives that pass; CI does not block on it.</li><li><strong>Do not</strong> enable auto-merge on this PR.</li></ul>"
+
+          BODY=$(jq -n \
+            --argjson project_id "$PROJECT_ID" \
+            --argjson section_id "$SECTION_ID" \
+            --argjson priority "$PRIORITY" \
+            --arg title "$TITLE" \
+            --arg description "$DESC" \
+            '{project_id: $project_id, section_id: $section_id, title: $title, description: $description, priority: $priority}')
+
+          RESP=$(curl -sS --fail-with-body -X POST "$MCP_BASE_URL/api/mcp/tasks/create" \
+            -H "Authorization: Bearer $MCP_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$BODY") || {
+              echo "::error::Could not create the board-15 ticket. Create it by hand: $TITLE ($PR_URL)"
+              exit 1
+            }
+
+          TICKET=$(jq -r '.task.ticketNumber // ""' <<<"$RESP")
+          if [ -z "$TICKET" ]; then
+            echo "::error::Ticket was created but its number could not be read; link it by hand. Response: $(head -c 400 <<<"$RESP")"
+            exit 1
+          fi
+          echo "Created $TICKET"
+
+          if post_link_comment "$TICKET"; then
+            echo "Linked $TICKET on the PR."
+          else
+            # Exit nonzero so the failure is visible and a rerun is prompted;
+            # the board-search probe relinks the existing ticket, so a rerun
+            # never creates a duplicate.
+            echo "::error::Ticket $TICKET was created but the PR comment failed after retries. The next run relinks it via the board-search probe ($DEDTOKEN); do NOT create a second ticket."
+            exit 1
+          fi

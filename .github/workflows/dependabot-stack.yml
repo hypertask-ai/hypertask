@@ -1,0 +1,199 @@
+name: Dependabot Stack Updates
+
+# Sorts every Dependabot PR into one of two lanes (Valentin, 2026-09-08):
+#
+#   small (patch + minor)  -> label `full-ci` so the test gate runs, label
+#                             `stack-minor`, turn on GitHub's native auto-merge,
+#                             and let it land the same day once checks are green.
+#                             Grouped PRs are verified bump-by-bump from the PR
+#                             body's version table, because pre-1.0 "minor"
+#                             bumps are semver majors.
+#   major (or unparseable) -> label `major-upgrade`, never auto-merge. A ticket
+#                             is opened by `dependabot-major-ticket.yml`.
+#
+# `pull_request_target` on purpose, copying `pr-size.yml`: a `pull_request` run
+# on a Dependabot PR gets a read-only token and NO repository secrets, so it
+# could neither label nor enable auto-merge. This job never checks out or runs
+# PR code, it only reads PR metadata through the API, so holding a write token
+# has no code-injection surface.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+    branches: [production]
+
+concurrency:
+  group: dependabot-stack-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  triage:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Fail closed instead of degrading to github.token: labels made with
+      # GITHUB_TOKEN never fire downstream `labeled` workflows, so a fallback
+      # would arm ci-tests/major-ticket on nothing and every Dependabot PR
+      # would silently sit unlabeled forever.
+      - name: Require the labelling PAT
+        env:
+          PAT: ${{ secrets.AUTOMERGE_TOKEN }}
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "::error::AUTOMERGE_TOKEN is not set. Labels made with GITHUB_TOKEN do not fire ci-tests' \`labeled\` trigger or dependabot-major-ticket.yml, so the pipeline would gate on nothing. Set the PAT instead of falling back."
+            exit 1
+          fi
+
+      - name: Classify the update and set the lane
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          # A PAT, not the built-in token: GitHub refuses to start new workflow
+          # runs from events authored by GITHUB_TOKEN, so labelling with it would
+          # never fire ci-tests' `labeled` trigger or dependabot-major-ticket.yml.
+          github-token: ${{ secrets.AUTOMERGE_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const title = pr.title || '';
+            const body = pr.body || '';
+
+            // Below 1.0.0 semver puts breaking changes in the MINOR slot, so a
+            // 0.5.x -> 0.6.0 bump is a major in everything but the number.
+            const isSmall = (fromMajor, fromMinor, toMajor, toMinor) =>
+              fromMajor === toMajor &&
+              (fromMajor !== '0' || fromMinor === toMinor);
+
+            // Grouped PRs come from the `stack-minor` group, which is configured
+            // to contain patch and minor updates ONLY. That alone is not proof:
+            // pre-1.0 packages ride the group as semver majors (see the group's
+            // exclude list). The PR body carries a markdown table of every
+            // member bump ("| pkg | `from` | `to` |"), so verify ALL of them.
+            const grouped = /\bstack-minor group\b/.test(title);
+
+            let small;
+            if (grouped) {
+              // Walk EVERY table line in the body, not just the ones that
+              // happen to parse: header and separator rows are legitimate,
+              // anything else without two backticked x.y.z versions is a
+              // malformed row and must fail closed, never be skipped.
+              const lines = body.split('\n').filter((l) => l.trim().startsWith('|'));
+              const dataRows = [];
+              let malformed = 0;
+              for (const line of lines) {
+                const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+                if (cells.length !== 3) {
+                  malformed++;
+                  continue;
+                }
+                const fromTick = /^`([^`]*)`$/.exec(cells[1]);
+                const toTick = /^`([^`]*)`$/.exec(cells[2]);
+                if (fromTick && toTick) {
+                  dataRows.push([fromTick[1], toTick[1]]);
+                  continue;
+                }
+                const isHeader = /^package$/i.test(cells[0]) &&
+                  /^from$/i.test(cells[1]) && /^to$/i.test(cells[2]);
+                const isSeparator = /^:?-+:?$/.test(cells[1]) && /^:?-+:?$/.test(cells[2]);
+                if (!isHeader && !isSeparator) malformed++;
+              }
+              if (dataRows.length === 0 || malformed > 0) {
+                core.warning(
+                  `Grouped PR body table has ${dataRows.length} parsed rows and ${malformed} malformed; classifying as major (fail closed).`,
+                );
+                small = false;
+              } else {
+                small = true;
+                for (const [fromCell, toCell] of dataRows) {
+                  const from = /^(\d+)\.(\d+)\./.exec(fromCell);
+                  const to = /^(\d+)\.(\d+)\./.exec(toCell);
+                  if (!from || !to) {
+                    core.warning(`Unparseable group row "${fromCell}" -> "${toCell}"; classifying as major (fail closed).`);
+                    small = false;
+                    break;
+                  }
+                  if (!isSmall(from[1], from[2], to[1], to[2])) {
+                    small = false;
+                    break;
+                  }
+                }
+              }
+            } else {
+              // Individual PR: "Build(deps): Bump <pkg> from 1.2.3 to 1.3.0".
+              const versions = title.match(/\bfrom (\d+)\.(\d+)\.\S* to (\d+)\.(\d+)\.\S*/);
+              if (versions) {
+                small = isSmall(versions[1], versions[2], versions[3], versions[4]);
+              } else {
+                // Multi-package security PRs carry no versions in the title
+                // ("Bump pacote and npm"). Unknown is treated as major: the cost
+                // of a needless ticket is far below an unreviewed major merge.
+                small = false;
+              }
+            }
+
+            core.info(`title="${title}" grouped=${grouped} small=${small}`);
+
+            // Native auto-merge is sticky across pushes: a PR classified small
+            // before a `synchronize`/`reopened` run keeps it armed. On the major
+            // path, disarm FIRST — a label API failure later in this step must
+            // never leave an armed major behind — then verify.
+            if (!small) {
+              try {
+                await github.graphql(
+                  `mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { actor { login } } }`,
+                  { id: pr.node_id },
+                );
+              } catch (e) {
+                core.warning(`disablePullRequestAutoMerge: ${e.message}`);
+              }
+              const fresh = await github.rest.pulls.get({
+                ...context.repo,
+                pull_number: pr.number,
+              });
+              if (fresh.data.auto_merge) {
+                throw new Error(
+                  'Auto-merge is still armed on a major-upgrade PR; failing closed.',
+                );
+              }
+            }
+
+            // `full-ci` is what makes ci-tests actually run (see ci-tests.yml).
+            // Both lanes need the test signal; only the small lane auto-merges on it.
+            const lane = small ? 'stack-minor' : 'major-upgrade';
+            const opposite = small ? 'major-upgrade' : 'stack-minor';
+            const labels = ['full-ci', lane];
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: pr.number,
+              labels,
+            });
+
+            // A `synchronize`/`reopened` run can reclassify a PR (a rebase that
+            // changes the version range, for one). Remove the other lane's
+            // stale label so the PR shows exactly one truth.
+            try {
+              await github.rest.issues.removeLabel({
+                ...context.repo,
+                issue_number: pr.number,
+                name: opposite,
+              });
+              core.info(`removed stale "${opposite}" label`);
+            } catch (e) {
+              if (e.status !== 404) throw e; // 404 = label wasn't there
+            }
+
+            core.setOutput('small', String(small));
+        id: classify
+
+      - name: Enable auto-merge for a small update
+        if: steps.classify.outputs.small == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Native auto-merge, not a direct merge: GitHub holds it until every
+          # branch-protection check is green, so "tests green" stays the gate.
+          gh pr merge "$PR" --repo "$REPO" --auto --squash

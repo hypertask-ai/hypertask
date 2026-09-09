@@ -1,0 +1,55 @@
+# Automated stack updates (Valentin, 2026-09-08).
+#
+# Small updates (patch + minor) arrive as ONE grouped PR named `stack-minor`,
+# which `dependabot-stack.yml` labels `full-ci` and puts on GitHub's native
+# auto-merge, so a green one lands the same day without anyone looking at it.
+#
+# Major bumps are deliberately left OUT of the group, so each one arrives as its
+# own PR. `dependabot-stack.yml` labels those `major-upgrade` and never
+# auto-merges them; `dependabot-major-ticket.yml` opens a board-15 ticket so a
+# dev picks it up within the week.
+#
+# This file only takes effect from the repository's DEFAULT branch (`main`).
+# The copy on `production` is the source of truth that `main` is synced from.
+# `target-branch` sends the PRs at `production`, which is what actually deploys.
+# Caveat: Dependabot SECURITY updates ignore `target-branch` and always open
+# against the default branch, so those still need re-targeting by hand.
+version: 2
+updates:
+  - package-ecosystem: npm
+    # Every manifest in the repo. A "/"-only config silently stops updating the
+    # e2e, parity-runner and agent-sdk packages.
+    directories:
+      - "/"
+      - "/e2e/midscene"
+      - "/config/parity/runner"
+      - "/packages/agent-sdk"
+    schedule:
+      interval: daily
+      time: "05:00"
+      timezone: Europe/Berlin
+    target-branch: production
+    # One grouped small PR plus headroom for a few individual majors. Higher
+    # just queues PRs against a CI host with bounded concurrency.
+    open-pull-requests-limit: 6
+    # Nothing is ignored: every package is in scope, by decision.
+    groups:
+      stack-minor:
+        applies-to: version-updates
+        # Pre-1.0 packages are excluded on purpose: their "minor" bumps are
+        # semver majors (0.3.7 -> 0.4.5 breaks), and one of them in the group
+        # would push the WHOLE grouped PR into the major lane. Excluded, they
+        # arrive as individual PRs that dependabot-stack.yml classifies by
+        # version and tickets when needed. Add new pre-1.0 dependencies here;
+        # the workflow's body-table check backstops anything missed.
+        exclude-patterns:
+          - "stripe-cli"
+          - "@better-auth/infra"
+          - "@floating-ui/react"
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+    commit-message:
+      prefix: "Build(deps)"
