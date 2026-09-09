@@ -67,7 +67,7 @@ import {
 import { userChannel } from "@/lib/realtime/shared";
 import AgentDetail from "../[agentId]/AgentDetail";
 import type { TAgent } from "../AgentsRegister";
-import { sortRosterByActivity } from "./rosterSort";
+import { bumpRosterChatRecency, sortRosterByActivity } from "./rosterSort";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import axios from "axios";
@@ -1250,23 +1250,12 @@ const AgentChatClient = (props: IProp) => {
               payload.agentId === selectedIdRef.current));
         if (isOpenSessionEvent) {
           void loadMessages(currentSessionId);
-          // Open-chat recency: bump the selected row locally so the list
-          // reorders without a second /api/agents/owned fetch on every
-          // streamed message (OCR advisory on HTPR-6283).
-          if (liveSortEnabled) {
-            const agentId = selectedIdRef.current;
-            if (agentId) {
-              const now = new Date().toISOString();
-              setAgents((prev) =>
-                prev
-                  ? prev.map((agent) =>
-                      agent.id === agentId
-                        ? { ...agent, lastChatMessageAt: now }
-                        : agent,
-                    )
-                  : prev,
-              );
-            }
+          // Open-chat recency: always bump locally; the flag only controls
+          // sort display. Avoids a second /api/agents/owned fetch per message.
+          const agentId = selectedIdRef.current;
+          if (agentId) {
+            const now = new Date().toISOString();
+            setAgents((prev) => bumpRosterChatRecency(prev, agentId, now));
           }
           return;
         }
@@ -1370,6 +1359,7 @@ const AgentChatClient = (props: IProp) => {
   // still be safely dropped by the same staleness check a direct send uses.
   const sendMessageText = useCallback(async (text: string, queuedId?: string) => {
     const targetSessionId = sessionIdRef.current;
+    const targetAgentId = selectedIdRef.current;
     if (!targetSessionId) return;
     const optimistic: TChatMessage = {
       // react-hooks/purity false-flags this pre-existing, unrelated line
@@ -1410,6 +1400,18 @@ const AgentChatClient = (props: IProp) => {
       setMessages((prev) =>
         (prev ?? []).map((m) => (m.id === optimistic.id ? sentMessage : m)),
       );
+      // Always record chat recency on send; liveSortEnabled only controls
+      // whether the roster sorts by it. Use the agent captured at send start
+      // so a chat switch mid-flight cannot bump the wrong row (HTPR-6283).
+      if (targetAgentId) {
+        setAgents((prev) =>
+          bumpRosterChatRecency(
+            prev,
+            targetAgentId,
+            sentMessage.createdAt ?? new Date().toISOString(),
+          ),
+        );
+      }
       // The webhook outbox had no subscriber for chat.message: the agent will
       // never see this message unless its runtime is set up later.
       if (data.delivered === false && !data.notice) setDeliveryNotice(true);
@@ -1450,7 +1452,7 @@ const AgentChatClient = (props: IProp) => {
       // leaves the ball with the agent (no-op here), and failure reverts the
       // optimistic message, which flips `awaiting` back to false and fires it.
     }
-  }, []);
+  }, [liveSortEnabled]);
 
   const removeQueuedMessage = useCallback((id: string) => {
     messageQueueRef.current = messageQueueRef.current.filter(
