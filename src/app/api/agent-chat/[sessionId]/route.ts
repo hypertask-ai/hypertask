@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
@@ -21,6 +22,15 @@ import { readAgentChatTurn } from "@/lib/agentRuns/service";
 
 export const runtime = "nodejs";
 
+// The parked notice is an undelivered assistant row, like the timeout marker.
+// Matching on role and delivery as well as text keeps a human message that
+// happens to quote the notice out of this filter.
+const PARKED_NOTICE_WHERE: Prisma.ChatMessageWhereInput = {
+  role: "assistant",
+  isDelivered: false,
+  content: AGENT_CHAT_PARKED_MESSAGE,
+};
+
 // History page size, and the cap on ?limit=. Unchanged default so a client
 // that does not page keeps getting exactly what it got before.
 const MAX_HISTORY_PAGE = 200;
@@ -39,14 +49,14 @@ function unreadSince(
   sessionId: string,
   userId: number,
   since: Date,
-  excludeContent?: string,
+  exclude?: Prisma.ChatMessageWhereInput,
 ) {
   return prisma.chatMessage.count({
     where: {
       sessionId,
       createdAt: { gt: since },
       // A row this reader cannot see must not count towards their unread.
-      ...(excludeContent ? { content: { not: excludeContent } } : {}),
+      ...(exclude ? { NOT: exclude } : {}),
       OR: [{ authorUserId: null }, { authorUserId: { not: userId } }],
     },
   });
@@ -155,7 +165,9 @@ export async function GET(
       // reader outside the rollout sees a shorter page, never a shifted one.
       .filter(
         (message) =>
-          parkedReplyEnabled || message.content !== AGENT_CHAT_PARKED_MESSAGE,
+          parkedReplyEnabled ||
+          !(isAgentChatSystemMessage(message) &&
+            message.content === AGENT_CHAT_PARKED_MESSAGE),
       );
 
     // Opening the thread is taking part in it, which is what gives this person
@@ -172,7 +184,7 @@ export async function GET(
             session.id,
             userId,
             participant.lastReadAt ?? participant.joinedAt,
-            parkedReplyEnabled ? undefined : AGENT_CHAT_PARKED_MESSAGE,
+            parkedReplyEnabled ? undefined : PARKED_NOTICE_WHERE,
           )
         : null,
       before

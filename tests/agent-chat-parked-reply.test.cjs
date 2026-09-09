@@ -382,9 +382,13 @@ test("a reader outside the rollout keeps today's thread", async () => {
     "the notice is stored in a shared thread, so it is hidden per reader",
   );
   assert.equal(body.awaiting, true, "for them the message is still unanswered");
-  assert.equal(
-    counts[0].where.content?.not,
-    model.AGENT_CHAT_PARKED_MESSAGE,
+  assert.deepEqual(
+    counts[0].where.NOT,
+    {
+      role: "assistant",
+      isDelivered: false,
+      content: model.AGENT_CHAT_PARKED_MESSAGE,
+    },
     "a hidden row must not bump their unread count either",
   );
 });
