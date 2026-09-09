@@ -248,6 +248,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6283-agent-chat-live-sort",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6284-agent-mention-routing",
         mode: "OWNER_AND_QA",
         updatedAt: null,
