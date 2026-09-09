@@ -4,11 +4,8 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
-import {
-  FEATURE_FLAG_OWNER_USER_ID,
-  HTPR_6320_AI_OBSERVABILITY_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6320_AI_OBSERVABILITY_FLAG } from "@/lib/flags/keys";
 import {
   postHogIngestionHost,
   recordAiChatTurn,
