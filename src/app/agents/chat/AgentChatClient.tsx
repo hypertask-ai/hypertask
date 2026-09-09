@@ -1250,9 +1250,25 @@ const AgentChatClient = (props: IProp) => {
               payload.agentId === selectedIdRef.current));
         if (isOpenSessionEvent) {
           void loadMessages(currentSessionId);
-          // The roster's own recency sort otherwise never hears about a
-          // message in the chat that is already open (HTPR-6283).
-          if (!liveSortEnabled) return;
+          // Open-chat recency: bump the selected row locally so the list
+          // reorders without a second /api/agents/owned fetch on every
+          // streamed message (OCR advisory on HTPR-6283).
+          if (liveSortEnabled) {
+            const agentId = selectedIdRef.current;
+            if (agentId) {
+              const now = new Date().toISOString();
+              setAgents((prev) =>
+                prev
+                  ? prev.map((agent) =>
+                      agent.id === agentId
+                        ? { ...agent, lastChatMessageAt: now }
+                        : agent,
+                    )
+                  : prev,
+              );
+            }
+          }
+          return;
         }
         // A message in a thread this person is not looking at: the roster
         // carries the unread count, so it is the roster that has to refresh.

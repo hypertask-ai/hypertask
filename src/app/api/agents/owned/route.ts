@@ -12,10 +12,12 @@ import {
 } from "@/lib/aiAllowancePolicy";
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
+import { isFeatureEnabled } from "@/lib/flags";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
 const MAX_AGENTS = 200;
+const LIVE_SORT_FLAG = "htpr-6283-agent-chat-live-sort";
 
 export const runtime = "nodejs";
 
@@ -148,9 +150,15 @@ export async function GET(request: NextRequest) {
     userId,
   );
 
+  // The chat-recency aggregate only feeds the live-sort flag. Skip it when
+  // the flag is off so every roster refresh does not pay for unused work
+  // (OCR advisory on HTPR-6283).
+  const liveSortEnabled = await isFeatureEnabled(LIVE_SORT_FLAG, userId);
   const [unreadByAgent, lastChatMessageByAgent] = await Promise.all([
     unreadChatCounts(userId),
-    lastChatMessageAtByAgent(userId),
+    liveSortEnabled
+      ? lastChatMessageAtByAgent(userId)
+      : Promise.resolve(new Map<string, Date>()),
   ]);
 
   // A spent shared AI allowance writes one durable stop notice per native
