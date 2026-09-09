@@ -14,6 +14,9 @@ import SlashCommands from "@/components/RTE/Extensions/SlashCommands/SlashComman
 import { useContext, useRef } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { writingAssistanceEditorProps } from "@/components/RTE/writingAssistance";
+import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
+import { useFlag } from "@/hooks/useFlag";
+import { LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 
 const DisableEnter = Extension.create({
   addKeyboardShortcuts() {
@@ -33,6 +36,9 @@ const useTiptapForAI = ({
 }) => {
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
+  const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
+  const localWritingAssistanceRef = useRef(localWritingAssistance);
+  localWritingAssistanceRef.current = localWritingAssistance;
   // There is no Ctrl key on a phone, so the desktop hint is noise there.
   // Read through a ref: the editor config is built once on mount, and the
   // placeholder is a function so it picks up the current value instead.
@@ -98,6 +104,9 @@ const useTiptapForAI = ({
       // "/slug ", which the chat stream route resolves server-side.
       SlashCommands("ai-chat"),
       DisableEnter,
+      LocalWritingAssistance.configure({
+        localCapitalizationEnabled: () => localWritingAssistanceRef.current,
+      }),
     ],
     // content: defaultContent,
     editorProps: writingAssistanceEditorProps,
