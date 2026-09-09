@@ -6,6 +6,7 @@ import globalConstants from "@/lib/constants";
 import { aiOptions } from "@/lib/constants/constants";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { FOCUS_REQUEST_WINDOW_MS } from "@/utils/aiChat/focusRequestWindow";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
 import { useSessionAndChatHistory } from "@/hooks/MultiPages/AIChat/useSessionAndChatHistory";
@@ -121,6 +122,7 @@ export function useAiChat() {
   );
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
   const setAiChatExplicitOpenAt = useSetRecoilState(aiChatExplicitOpenAtAtom);
+  const aiChatExplicitOpenAt = useRecoilValue(aiChatExplicitOpenAtAtom);
   const [aiChatBoardSessionMap, setAiChatBoardSessionMap] = useRecoilState(
     aiChatBoardSessionMapAtom
   );
@@ -1635,8 +1637,22 @@ export function useAiChat() {
   // on the first open of a page load the chat is shown before the editor chunk
   // has loaded, so focusing only on the flag would leave the caret on the board
   // and send the user's next keystroke to the page-level shortcut handler.
+  //
+  // Gated on an explicit open for the same reason the composer's own retry loop
+  // is (HTPR-6317): this is the call that actually claimed the caret at page
+  // load, and the board owns c, j, k, Tab and / until someone asks for the chat.
+  // Read outside the deps on purpose — the composer clears the timestamp once
+  // it has the focus, and that must not re-run this.
   useEffect(() => {
-    if (showAiChatInterface) editor?.commands.focus("end");
+    if (!showAiChatInterface) return;
+    if (
+      aiChatExplicitOpenAt === null ||
+      Date.now() - aiChatExplicitOpenAt > FOCUS_REQUEST_WINDOW_MS
+    ) {
+      return;
+    }
+    editor?.commands.focus("end");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAiChatInterface, editor]);
 
   useEffect(() => {
