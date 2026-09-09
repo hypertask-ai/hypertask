@@ -9717,8 +9717,8 @@ export async function POST(request: NextRequest) {
   // ponytail: phases that ignore the abort signal (a hung tool, a non-stream
   // DB call) can still run into the platform kill; the upgrade path is
   // per-phase timeouts at each trust boundary.
-  // HTPR-6320: one flag read per turn decides whether this turn is wrapped for
-  // PostHog AI observability and tallied for the health alert.
+  // HTPR-6320: one flag read per turn decides whether this turn is recorded in
+  // PostHog AI observability.
   const [turnDeadlineEnabled, aiObservabilityEnabled] = await Promise.all([
     isFeatureEnabled(HTPR_6278_CHAT_TURN_FAILURE_FLAG, dbUser.id),
     isFeatureEnabled(HTPR_6320_AI_OBSERVABILITY_FLAG, dbUser.id),
@@ -10246,9 +10246,9 @@ export async function POST(request: NextRequest) {
         }
       };
 
-      // HTPR-6320: one turn = one PostHog AI observability generation plus one
-      // tally for the health alert. Declared outside the try below so every
-      // exit path, including the catch and finally, can name its outcome.
+      // HTPR-6320: one turn = one PostHog AI observability generation. Declared
+      // outside the try below so every exit path, including the catch and
+      // finally, can name its outcome.
       // All of it is best effort and never changes what the user receives.
       let generationStartedAt = Date.now();
       let observedAgentId = actingAgent?.id ?? null;
@@ -10952,8 +10952,7 @@ export async function POST(request: NextRequest) {
         // The stream's own callbacks run inside this block, so onFinish or
         // onError has already named the outcome by the time we get here; this
         // only covers a turn that ended before the model ever ran. Such a turn
-        // is not a healthy generation, so it is never counted as one: a
-        // fabricated success would drag the failure rate the alert reads.
+        // is recorded only when cancellation gives it a real terminal outcome.
         if (cancelled) recordTurnOutcome("cancelled");
         turnDeadline?.clear();
         stopCancellationWatch();

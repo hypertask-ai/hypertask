@@ -5,233 +5,10 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = {
-    id: filename,
-    filename,
-    loaded: true,
-    exports,
-  };
-}
-
-function createFakeRedis() {
-  const sets = new Map();
-  const strings = new Map();
-  return {
-    calls: [],
-    beforeClaimEval: null,
-    beforeRecoveryEval: null,
-    async zadd(key, score, member) {
-      this.calls.push(["zadd", key, score, member]);
-      const entries = sets.get(key) ?? [];
-      entries.push({ score, member });
-      sets.set(key, entries);
-      return 1;
-    },
-    async zremrangebyscore(key, min, max) {
-      this.calls.push(["zremrangebyscore", key, min, max]);
-      const low = min === "-inf" ? -Infinity : Number(min);
-      const high = max === "+inf" ? Infinity : Number(max);
-      const entries = sets.get(key) ?? [];
-      const kept = entries.filter(
-        (entry) => !(entry.score >= low && entry.score <= high),
-      );
-      sets.set(key, kept);
-      return entries.length - kept.length;
-    },
-    async eval(script, keyCount, ...params) {
-      const keys = params.slice(0, keyCount);
-      const args = params.slice(keyCount);
-      const key = keys[0];
-      this.calls.push(["eval", ...keys, ...args]);
-      if (script.includes("local existing")) {
-        if (this.beforeClaimEval) {
-          const hook = this.beforeClaimEval;
-          this.beforeClaimEval = null;
-          await hook();
-        }
-        const members = (sets.get(keys[2]) ?? [])
-          .filter(
-            (entry) =>
-              entry.score >= Number(args[0]) && entry.score <= Number(args[1]),
-          )
-          .map((entry) => entry.member);
-        const metrics = observability.evaluateAiChatTurnWindow(members);
-        if (
-          metrics.total === 0 ||
-          (metrics.errorRate <= Number(args[2]) &&
-            metrics.p95LatencyMs <= Number(args[3]))
-        ) {
-          const claimed = strings.get(key);
-          if (claimed !== undefined && Number(claimed) < Number(args[1])) {
-            strings.delete(key);
-            strings.delete(keys[1]);
-          }
-          return 0;
-        }
-        const existing = strings.get(key);
-        if (existing === undefined) {
-          strings.delete(keys[1]);
-          strings.set(key, args[1]);
-          return 1;
-        }
-        if (strings.has(keys[1])) {
-          const claimedAt =
-            Number(existing) > Number(args[1]) ? existing : args[1];
-          strings.set(key, claimedAt);
-          strings.set(keys[1], claimedAt);
-        }
-        return 0;
-      }
-      if (
-        !script.includes("ZRANGEBYSCORE") &&
-        script.includes("redis.call('SET', KEYS[2], ARGV[1]")
-      ) {
-        const claimed = strings.get(key);
-        if (claimed !== undefined && Number(claimed) === Number(args[0])) {
-          strings.set(key, args[0]);
-          strings.set(keys[1], args[0]);
-          return 1;
-        }
-        return 0;
-      }
-      if (
-        !script.includes("ZRANGEBYSCORE") &&
-        script.includes("redis.call('DEL', KEYS[1], KEYS[2])")
-      ) {
-        const claimed = strings.get(key);
-        if (claimed !== undefined && Number(claimed) === Number(args[0])) {
-          strings.delete(key);
-          strings.delete(keys[1]);
-          return 1;
-        }
-        return 0;
-      }
-      if (!script.includes("ZRANGEBYSCORE")) {
-        throw new Error("unexpected script");
-      }
-      if (this.beforeRecoveryEval) {
-        const hook = this.beforeRecoveryEval;
-        this.beforeRecoveryEval = null;
-        await hook();
-      }
-      const members = (sets.get(keys[1]) ?? [])
-        .filter(
-          (entry) => entry.score >= Number(args[0]) && entry.score <= Number(args[1]),
-        )
-        .map((entry) => entry.member);
-      const metrics = observability.evaluateAiChatTurnWindow(members);
-      if (
-        metrics.errorRate > Number(args[2]) ||
-        metrics.p95LatencyMs > Number(args[3])
-      ) {
-        return 0;
-      }
-      const claimed = strings.get(key);
-      if (claimed !== undefined && Number(claimed) < Number(args[1])) {
-        strings.delete(key);
-        strings.delete(keys[2]);
-        return 1;
-      }
-      return 0;
-    },
-    async zrangebyscore(key, min, max) {
-      this.calls.push(["zrangebyscore", key, min, max]);
-      return (sets.get(key) ?? [])
-        .filter((entry) => entry.score >= min && entry.score <= max)
-        .map((entry) => entry.member);
-    },
-    async expire(key, ttl) {
-      this.calls.push(["expire", key, ttl]);
-      return 1;
-    },
-    async set(key, value, expiryMode, ttl, condition) {
-      this.calls.push(["set", key, value, expiryMode, ttl, condition]);
-      if (strings.has(key)) return null;
-      strings.set(key, value);
-      return "OK";
-    },
-    async del(key) {
-      this.calls.push(["del", key]);
-      strings.delete(key);
-      return 1;
-    },
-    has(key) {
-      return strings.has(key);
-    },
-    value(key) {
-      return strings.get(key);
-    },
-    overwrite(key, value) {
-      strings.set(key, value);
-    },
-  };
-}
-
-// One module instance for the whole file: jiti caches resolved modules, and
-// the stubs below are mutable so each test can reset its own state.
-const state = {
-  redis: createFakeRedis(),
-  comments: [],
-  commentError: null,
-  claimReplacement: null,
-  commitBeforeCommentError: false,
-  dropClaimAfterComment: false,
-  task: { id: 38547, userId: 6 },
-  taskError: null,
-};
-
-stubModule("src/lib/redis.ts", { getRedis: async () => state.redis });
-stubModule("src/lib/prisma.ts", {
-  default: {
-    task: {
-      findFirst: async () => {
-        if (state.taskError) throw state.taskError;
-        return state.task;
-      },
-    },
-    comment: {
-      findFirst: async ({ where }) =>
-        state.comments.find(
-          (comment) =>
-            comment.taskId === where.taskId &&
-            comment.creatorId === where.creatorId &&
-            comment.text.includes(where.text.contains),
-        ) ?? null,
-    },
-    user: { findUnique: async () => ({ displayName: "Valentin Yeo" }) },
-  },
-});
-process.env.VERCEL_ENV = "production";
 delete process.env.POSTHOG_SERVER_PROJECT_TOKEN;
 delete process.env.POSTHOG_SERVER_HOST;
 delete process.env.POSTHOG_SERVER_PROJECT_ID;
 delete process.env.POSTHOG_UI_HOST;
-stubModule("src/lib/flags.ts", {
-  FEATURE_FLAG_OWNER_USER_ID: 6,
-  FEATURE_FLAG_TICKET_PROJECT_ID: 15,
-});
-stubModule("src/utils/controllers/comments/createCommentService.ts", {
-  createCommentService: async (params) => {
-    if (state.commitBeforeCommentError) state.comments.push(params);
-    if (state.commentError) {
-      if (state.claimReplacement) {
-        state.redis.overwrite(
-          "ai:chat-turn-alert:production",
-          state.claimReplacement,
-        );
-      }
-      throw state.commentError;
-    }
-    state.comments.push(params);
-    if (state.dropClaimAfterComment) {
-      await state.redis.del("ai:chat-turn-alert:production");
-    }
-    return { id: 1 };
-  },
-});
 
 const jiti = createJiti(__filename, {
   interopDefault: true,
@@ -241,27 +18,18 @@ const observability = jiti(
   path.join(root, "src/lib/telemetry/aiChatObservability.ts"),
 );
 
-function reset(task = { id: 38547, userId: 6 }) {
-  state.redis = createFakeRedis();
-  state.comments = [];
-  state.commentError = null;
-  state.claimReplacement = null;
-  state.commitBeforeCommentError = false;
-  state.dropClaimAfterComment = false;
-  state.task = task;
-  state.taskError = null;
-}
-
 const baseTurn = {
   userId: 6,
   model: "gpt-5.5",
   provider: "openai",
   traceId: "11111111-1111-4111-8111-111111111111",
   outcome: "ok",
-  latencyMs: 1200,
+  latencyMs: 4000,
+  inputTokens: 11,
+  outputTokens: 7,
 };
 
-test("the stream records routed and empty-reply terminal outcomes", () => {
+test("the stream records routed and terminal turn outcomes", () => {
   const stream = fs.readFileSync(
     path.join(root, "src/app/api/ai/chat/stream/route.ts"),
     "utf8",
@@ -274,80 +42,13 @@ test("the stream records routed and empty-reply terminal outcomes", () => {
     stream,
     /emptyCompletionError \?\? "AI generation returned no visible reply"/,
   );
-  assert.doesNotMatch(
-    stream,
-    /if \(finishReason === "error"\) recordTurnOutcome\("failed"\)/,
-  );
-  assert.match(
-    stream,
-    /if \(retryText\) \{\s*generationFinishedWithError = false;/,
-  );
+  assert.match(stream, /waitUntil\(observation\)/);
+  assert.match(stream, /if \(retryText\) \{\s*generationFinishedWithError = false;/);
 });
 
-test("window math counts failures and p95 and ignores cancelled turns", () => {
-  const metrics = observability.evaluateAiChatTurnWindow([
-    "a|1000|ok",
-    "b|2000|failed",
-    "c|900000|cancelled",
-    "d|3000|ok",
-  ]);
-  assert.equal(metrics.total, 3);
-  assert.equal(metrics.failed, 1);
-  assert.ok(Math.abs(metrics.errorRate - 1 / 3) < 1e-9);
-  // Nearest-rank p95 over [1000, 2000, 3000] is the slowest turn.
-  assert.equal(metrics.p95LatencyMs, 3000);
-});
+test("the generation event contains tracking fields but no chat bodies", () => {
+  const capture = observability.buildAiChatTurnCapture(baseTurn, "production");
 
-test("thresholds breach on error rate or slow p95, and an empty window never breaches", () => {
-  assert.equal(
-    observability.aiChatTurnWindowBreached({
-      total: 100,
-      failed: 6,
-      errorRate: 0.06,
-      p95LatencyMs: 1000,
-    }),
-    true,
-  );
-  assert.equal(
-    observability.aiChatTurnWindowBreached({
-      total: 100,
-      failed: 0,
-      errorRate: 0,
-      p95LatencyMs: 20001,
-    }),
-    true,
-  );
-  assert.equal(
-    observability.aiChatTurnWindowBreached({
-      total: 0,
-      failed: 0,
-      errorRate: 0,
-      p95LatencyMs: 0,
-    }),
-    false,
-  );
-});
-
-test("a turn is recorded once and trimmed to the window", async () => {
-  reset();
-  const redis = state.redis;
-  const metrics = await observability.recordAiChatTurn(
-    { ...baseTurn, latencyMs: 4000, inputTokens: 11, outputTokens: 7 },
-    1_000_000,
-  );
-  assert.equal(metrics.total, 1);
-  const zadd = redis.calls.find((call) => call[0] === "zadd");
-  assert.match(zadd[3], /^[0-9a-f-]{36}\|4000\|ok$/);
-  const trimmed = redis.calls.find((call) => call[0] === "zremrangebyscore");
-  assert.equal(trimmed[3], 1_000_000 - observability.AI_CHAT_TURN_WINDOW_MS);
-  assert.equal(state.comments.length, 0);
-});
-
-test("the captured generation carries no chat text and tags the right user", () => {
-  const capture = observability.buildAiChatTurnCapture(
-    { ...baseTurn, inputTokens: 11, outputTokens: 7, latencyMs: 4000 },
-    "production",
-  );
   assert.equal(capture.event, "$ai_generation");
   assert.equal(capture.distinctId, "6");
   assert.equal(capture.properties.$ai_model, "gpt-5.5");
@@ -359,14 +60,15 @@ test("the captured generation carries no chat text and tags the right user", () 
   assert.equal(capture.properties.$ai_http_status, 200);
   assert.equal(capture.properties.ht_user_id, 6);
   assert.equal(capture.properties.ht_outcome, "ok");
-  // No prompt or reply body is ever part of the event.
   assert.deepEqual(
     Object.keys(capture.properties).filter(
       (key) => key === "$ai_input" || key === "$ai_output_choices",
     ),
     [],
   );
+});
 
+test("failed and cancelled turns carry the correct outcomes", () => {
   const failed = observability.buildAiChatTurnCapture(
     { ...baseTurn, outcome: "failed", error: new Error("boom") },
     "production",
@@ -380,103 +82,11 @@ test("the captured generation carries no chat text and tags the right user", () 
     "production",
   );
   assert.equal(cancelled.properties.$ai_http_status, 0);
+  assert.equal(cancelled.properties.ht_outcome, "cancelled");
   assert.equal("$ai_error" in cancelled.properties, false);
 });
 
-test("a recovery snapshot cannot delete a claim refreshed after it", async () => {
-  reset();
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1,
-  );
-  assert.equal(state.comments.length, 1);
-  // A newer breach must advance the claim even though it posts no second comment.
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
-  );
-  assert.equal(state.comments.length, 1);
-  // This snapshot has aged past the first breach but precedes the second one.
-  // It must not clear the claim refreshed by that concurrent newer breach.
-  await observability.recordAiChatTurn({ ...baseTurn, outcome: "ok" }, 950_000);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
-});
-
-test("atomic claiming closes an old incident healed after the caller's snapshot", async () => {
-  reset();
-  const redis = state.redis;
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed" },
-    1,
-  );
-  redis.beforeClaimEval = async () => {
-    for (let index = 0; index < 19; index += 1) {
-      await redis.zadd(
-        "ai:chat-turns:production",
-        1_000_000,
-        `healthy-${index}|1000|ok`,
-      );
-    }
-  };
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed" },
-    1_000_000,
-  );
-  assert.equal(state.comments.length, 1);
-  assert.equal(redis.has("ai:chat-turn-alert:production"), false);
-  assert.equal(redis.has("ai:chat-turn-alert-delivered:production"), false);
-});
-
-test("atomic recovery keeps a claim when a delayed failure enters the window", async () => {
-  reset();
-  const redis = state.redis;
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed" },
-    1,
-  );
-  redis.beforeRecoveryEval = async () => {
-    await redis.zadd(
-      "ai:chat-turns:production",
-      1_000_000,
-      "delayed|1000|failed",
-    );
-  };
-  await observability.recordAiChatTurn(baseTurn, 1_000_000);
-  assert.equal(redis.has("ai:chat-turn-alert:production"), true);
-});
-
-test("an older breach cannot regress a newer claim timestamp", async () => {
-  reset();
-  const redis = state.redis;
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed" },
-    1,
-  );
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed" },
-    1_000_000,
-  );
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed" },
-    500_000,
-  );
-  assert.equal(redis.value("ai:chat-turn-alert:production"), "1000000");
-});
-
-test("a healthy snapshot cannot delete a claim from the same millisecond", async () => {
-  reset();
-  await state.redis.set(
-    "ai:chat-turn-alert:production",
-    "1000000",
-    "EX",
-    900,
-    "NX",
-  );
-  await observability.recordAiChatTurn(baseTurn, 1_000_000);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
-});
-
-test("a failed turn redacts secrets out of the captured error line", () => {
+test("failed turn errors are redacted before capture", () => {
   const redacted = observability.redactAiCaptureProperties({
     $ai_model: "gpt-5.5",
     $ai_error: JSON.stringify({
@@ -484,154 +94,17 @@ test("a failed turn redacts secrets out of the captured error line", () => {
       stack: "Error: at fetch (https://api.openai.com/v1?key=sk-live-abc123)",
     }),
   });
+
   assert.ok(!redacted.$ai_error.includes("sk-live-abc123"));
   assert.match(redacted.$ai_error, /redacted/);
-  // Non-error properties are left exactly as the SDK produced them.
   assert.equal(redacted.$ai_model, "gpt-5.5");
 });
 
-test("one breach posts one comment and later breaches stay quiet until it recovers", async () => {
-  reset();
-  const redis = state.redis;
-
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
+test("the release contains no automatic Manager alert machinery", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/lib/telemetry/aiChatObservability.ts"),
+    "utf8",
   );
-  assert.equal(state.comments.length, 1);
-  assert.match(state.comments[0].text, /AI Chat is unhealthy/);
-  assert.equal(redis.has("ai:chat-turn-alert-delivered:production"), true);
-  assert.equal(state.comments[0].creatorId, 6);
-  assert.equal(state.comments[0].taskId, 38547);
-  assert.ok(!state.comments[0].text.includes("<script"));
-
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_001_000,
-  );
-  assert.equal(state.comments.length, 1, "one ongoing problem is one comment");
-
-  // Once the failures age out of the 15-minute window the incident is over,
-  // which clears the claim so the next one alerts again.
-  const recovered = 1_000_000 + 16 * 60 * 1000;
-  await observability.recordAiChatTurn({ ...baseTurn, outcome: "ok" }, recovered);
-  assert.equal(redis.has("ai:chat-turn-alert:production"), false);
-  assert.equal(redis.has("ai:chat-turn-alert-delivered:production"), false);
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    recovered + 1000,
-  );
-  assert.equal(state.comments.length, 2);
-});
-
-test("a missing alert ticket keeps only a bounded pending claim", async () => {
-  reset(null);
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
-  );
-  assert.equal(state.comments.length, 0);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
-  assert.equal(
-    state.redis.has("ai:chat-turn-alert-delivered:production"),
-    false,
-  );
-});
-
-test("a transient alert-ticket lookup failure releases the claim", async () => {
-  reset();
-  state.taskError = new Error("database unavailable");
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
-  );
-  assert.equal(state.comments.length, 0);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
-});
-
-test("a latency-only breach says latency is the problem", async () => {
-  reset();
-  await observability.recordAiChatTurn(
-    { ...baseTurn, latencyMs: 21_000 },
-    1_000_000,
-  );
-  assert.match(state.comments[0].text, /slowest 5% took 21\.0s/);
-  assert.doesNotMatch(state.comments[0].text, /0 of 1 turns failed/);
-});
-
-test("a failed alert comment releases the claim so the next turn retries", async () => {
-  reset();
-  state.commentError = new Error("comment unavailable");
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
-  );
-  assert.equal(state.comments.length, 0);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
-});
-
-test("a stale successful delivery cannot recreate a recovered claim", async () => {
-  reset();
-  state.dropClaimAfterComment = true;
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
-  );
-  assert.equal(state.comments.length, 1);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
-  assert.equal(
-    state.redis.has("ai:chat-turn-alert-delivered:production"),
-    false,
-  );
-});
-
-test("a failed delivery cannot release a newer caller's claim", async () => {
-  reset();
-  state.commentError = new Error("comment unavailable");
-  state.claimReplacement = "1000001";
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
-  );
-  assert.equal(
-    state.redis.value("ai:chat-turn-alert:production"),
-    "1000001",
-  );
-});
-
-test("a prior incident cannot reconcile a failed current delivery", async () => {
-  reset();
-  state.comments.push({
-    text: "<p><strong>AI Chat is unhealthy: old incident</strong></p><p>Incident: <code>old-incident</code></p>",
-    creatorId: 6,
-    taskId: 38547,
-  });
-  state.commentError = new Error("comment unavailable");
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_000,
-  );
-  assert.equal(state.comments.length, 1);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
-});
-
-test("a post-commit delivery error keeps the claim and avoids a duplicate", async () => {
-  reset();
-  state.commitBeforeCommentError = true;
-  state.commentError = new Error("realtime unavailable after commit");
-  await observability.recordAiChatTurn(
-    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    Date.now(),
-  );
-  assert.equal(state.comments.length, 1);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
-});
-
-test("recording survives a Redis failure without throwing", async () => {
-  reset();
-  state.redis.zadd = async () => {
-    throw new Error("redis down");
-  };
-  const metrics = await observability.recordAiChatTurn(baseTurn, 1_000_000);
-  assert.equal(metrics, null);
+  assert.doesNotMatch(source, /getRedis|createCommentService|AI Chat is unhealthy/);
+  assert.doesNotMatch(source, /CLAIM_ALERT|RECOVER_CLAIM|TURN_WINDOW/);
 });

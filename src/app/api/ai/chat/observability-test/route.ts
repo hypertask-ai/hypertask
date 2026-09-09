@@ -19,15 +19,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PROBE_MODEL = "gpt-5.4-mini";
-// Deliberately invalid: the probe has to fail so the failure path (a redacted
-// `$ai_error` in PostHog plus a tally in the alert window) is really exercised.
+// Deliberately invalid: the probe has to exercise a redacted `$ai_error` in
+// PostHog rather than merely proving the successful capture path.
 const PROBE_API_KEY = "htpr-6320-observability-probe";
 
 /**
  * HTPR-6320: fires one real, deliberately failing AI generation through the
- * same observability path the AI Chat uses, and reports the resulting 15-minute
- * window. Owner-only and flag-gated: it writes a comment on the board when the
- * window breaches, so it is not a public endpoint.
+ * same observability path the AI Chat uses. Owner-only and flag-gated so the
+ * deliberate provider failure is not a public endpoint.
  */
 export async function POST(request: NextRequest) {
   const requestUser = await getAiRequestUser(request);
@@ -58,33 +57,19 @@ export async function POST(request: NextRequest) {
     error = probeError;
   }
 
-  let metrics;
-  try {
-    metrics = await recordAiChatTurn({
-      userId: requestUser.id,
-      model: PROBE_MODEL,
-      provider: "openai",
-      traceId: randomUUID(),
-      outcome,
-      latencyMs: Date.now() - startedAt,
-      error,
-    });
-  } catch (observabilityError) {
-    return NextResponse.json(
-      {
-        outcome,
-        error: error ? redactErrorText(String(error), 500) : null,
-        metrics: null,
-        observability_error: redactErrorText(String(observabilityError), 500),
-      },
-      { status: 503 },
-    );
-  }
+  await recordAiChatTurn({
+    userId: requestUser.id,
+    model: PROBE_MODEL,
+    provider: "openai",
+    traceId: randomUUID(),
+    outcome,
+    latencyMs: Date.now() - startedAt,
+    error,
+  });
 
   return NextResponse.json({
     outcome,
     error: error ? redactErrorText(String(error), 500) : null,
-    metrics,
     posthog: {
       host: postHogIngestionHost(),
       project_id: process.env.POSTHOG_SERVER_PROJECT_ID ?? null,

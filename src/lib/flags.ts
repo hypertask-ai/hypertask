@@ -60,7 +60,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6320_AI_OBSERVABILITY_FLAG,
     shippedOn: "2026-09-09",
     description:
-      "Records every AI Chat turn in PostHog AI observability (user, model, tokens, time taken, failures) and, when more than 5% of turns fail or the slowest 5% take over 20 seconds, posts one alert comment on the Manager's report thread. No chat text is stored.",
+      "Records every AI Chat turn in PostHog AI observability (user, model, tokens, time taken, and failures). No chat text is stored.",
   },
   {
     key: HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
