@@ -74,22 +74,42 @@ jobs:
 
             let small;
             if (grouped) {
-              // Capture every table row's two version cells as raw backticked
-              // strings first, then parse each: a row whose cell is not a
-              // plain x.y.z version must fail closed, never be skipped.
-              const rows = [
-                ...body.matchAll(/^\s*\|\s*[^|]*\|\s*`([^`]*)`\s*\|\s*`([^`]*)`\s*\|/gm),
-              ];
-              if (rows.length === 0) {
-                core.warning('Grouped PR body has no version table; classifying as major (fail closed).');
+              // Walk EVERY table line in the body, not just the ones that
+              // happen to parse: header and separator rows are legitimate,
+              // anything else without two backticked x.y.z versions is a
+              // malformed row and must fail closed, never be skipped.
+              const lines = body.split('\n').filter((l) => l.trim().startsWith('|'));
+              const dataRows = [];
+              let malformed = 0;
+              for (const line of lines) {
+                const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+                if (cells.length !== 3) {
+                  malformed++;
+                  continue;
+                }
+                const fromTick = /^`([^`]*)`$/.exec(cells[1]);
+                const toTick = /^`([^`]*)`$/.exec(cells[2]);
+                if (fromTick && toTick) {
+                  dataRows.push([fromTick[1], toTick[1]]);
+                  continue;
+                }
+                const isHeader = /^package$/i.test(cells[0]) &&
+                  /^from$/i.test(cells[1]) && /^to$/i.test(cells[2]);
+                const isSeparator = /^:?-+:?$/.test(cells[1]) && /^:?-+:?$/.test(cells[2]);
+                if (!isHeader && !isSeparator) malformed++;
+              }
+              if (dataRows.length === 0 || malformed > 0) {
+                core.warning(
+                  `Grouped PR body table has ${dataRows.length} parsed rows and ${malformed} malformed; classifying as major (fail closed).`,
+                );
                 small = false;
               } else {
                 small = true;
-                for (const m of rows) {
-                  const from = /^(\d+)\.(\d+)\./.exec(m[1]);
-                  const to = /^(\d+)\.(\d+)\./.exec(m[2]);
+                for (const [fromCell, toCell] of dataRows) {
+                  const from = /^(\d+)\.(\d+)\./.exec(fromCell);
+                  const to = /^(\d+)\.(\d+)\./.exec(toCell);
                   if (!from || !to) {
-                    core.warning(`Unparseable group row "${m[1]}" -> "${m[2]}"; classifying as major (fail closed).`);
+                    core.warning(`Unparseable group row "${fromCell}" -> "${toCell}"; classifying as major (fail closed).`);
                     small = false;
                     break;
                   }
