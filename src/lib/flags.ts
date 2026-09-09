@@ -35,6 +35,7 @@ import {
   MANAGER_LOOP_ACTIVITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+  HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
@@ -321,7 +322,7 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Adds a priority filter to the My Tasks page. Picking one or more priority levels shows only those tasks; the choice resets when the page reloads.",
   },
   {
-    key: "htpr-6283-agent-chat-live-sort",
+    key: HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
     shippedOn: "2026-09-08",
     description:
       "Sorts the Agent Chat list by most recent chat message instead of a fixed order, and reorders live as messages arrive.",

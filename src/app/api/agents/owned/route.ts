@@ -13,11 +13,11 @@ import {
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
 const MAX_AGENTS = 200;
-const LIVE_SORT_FLAG = "htpr-6283-agent-chat-live-sort";
 
 export const runtime = "nodejs";
 
@@ -153,7 +153,10 @@ export async function GET(request: NextRequest) {
   // The chat-recency aggregate only feeds the live-sort flag. Skip it when
   // the flag is off so every roster refresh does not pay for unused work
   // (OCR advisory on HTPR-6283).
-  const liveSortEnabled = await isFeatureEnabled(LIVE_SORT_FLAG, userId);
+  const liveSortEnabled = await isFeatureEnabled(
+    HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
+    userId,
+  );
   const [unreadByAgent, lastChatMessageByAgent] = await Promise.all([
     unreadChatCounts(userId),
     liveSortEnabled

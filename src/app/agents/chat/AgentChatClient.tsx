@@ -77,7 +77,7 @@ import {
   AGENT_CHAT_PARKED_MESSAGE,
   AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
 } from "@/lib/agentRuns/model";
-import { CONFIRMED_PROPOSAL_HEADING_FLAG } from "@/lib/flags/keys";
+import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
@@ -592,7 +592,7 @@ const AgentChatClient = (props: IProp) => {
     const tick = setInterval(() => setRosterNow(Date.now()), 30_000);
     return () => clearInterval(tick);
   }, [rosterStatusEnabled]);
-  const liveSortEnabled = useFlag("htpr-6283-agent-chat-live-sort");
+  const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const mobileAgentChatViewport = useMobileVisualViewport(
     isMbl && mobileAgentChatViewportEnabled,
