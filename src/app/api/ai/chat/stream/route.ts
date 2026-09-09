@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
+import { waitUntil } from "@vercel/functions";
 import { CustomFieldType, DecisionRequestStatus, Prisma } from "@prisma/client";
 import {
   generateText,
@@ -54,7 +55,12 @@ import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_6284_AGENT_MENTION_ROUTING_FLAG } from "@/lib/flags/keys";
+import { HTPR_6320_AI_OBSERVABILITY_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
+import {
+  recordAiChatTurn,
+  type AiChatTurnOutcome,
+} from "@/lib/telemetry/aiChatObservability";
 import { searchHelpDocs } from "@/lib/help-docs/searchHelpDocs";
 import { retrieveBoardKnowledge } from "@/lib/rag/retrieveBoardKnowledge";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
@@ -9715,6 +9721,12 @@ export async function POST(request: NextRequest) {
     HTPR_6278_CHAT_TURN_FAILURE_FLAG,
     dbUser.id,
   );
+  // HTPR-6320: one flag read per turn decides whether this turn is wrapped for
+  // PostHog AI observability and tallied for the health alert.
+  const aiObservabilityEnabled = await isFeatureEnabled(
+    HTPR_6320_AI_OBSERVABILITY_FLAG,
+    dbUser.id,
+  );
 
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
@@ -10238,6 +10250,41 @@ export async function POST(request: NextRequest) {
         }
       };
 
+      // HTPR-6320: one turn = one PostHog AI observability generation plus one
+      // tally for the health alert. Declared outside the try below so every
+      // exit path, including the catch and finally, can name its outcome.
+      // All of it is best effort and never changes what the user receives.
+      let generationStartedAt = Date.now();
+      let turnUsage: { inputTokens?: number; outputTokens?: number } | undefined;
+      let turnOutcomeRecorded = false;
+      const recordTurnOutcome = (
+        outcome: AiChatTurnOutcome,
+        error?: unknown,
+      ) => {
+        if (!aiObservabilityEnabled || turnOutcomeRecorded) return;
+        turnOutcomeRecorded = true;
+        waitUntil(
+          recordAiChatTurn({
+            userId: dbUser.id,
+            projectId: usageProjectId,
+            taskId: contextTaskId,
+            agentId: actingAgent?.id ?? null,
+            model: selected.modelId,
+            provider: selected.usageProvider,
+            traceId: streamId,
+            outcome,
+            latencyMs: Date.now() - generationStartedAt,
+            inputTokens: turnUsage?.inputTokens,
+            outputTokens: turnUsage?.outputTokens,
+            error,
+          }).catch((observationError) => {
+            console.warn(
+              "[ai/chat/stream] turn observation failed",
+              observationError,
+            );
+          }),
+        );
+      };
       try {
         const skillResolution = await resolveSkillsForAiRequest(
           requestMessage,
@@ -10534,6 +10581,8 @@ export async function POST(request: NextRequest) {
             throw new Error("Heartbeat durable reservation could not start");
           }
         }
+        // $ai_latency measures the generation itself, not the turn setup.
+        generationStartedAt = Date.now();
         const result = streamText({
           model: selected.model,
           instructions,
@@ -10542,7 +10591,14 @@ export async function POST(request: NextRequest) {
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
           maxRetries: 2,
           abortSignal: providerAbort.signal,
-          onFinish: async ({ usage }) => {
+          onFinish: async ({ usage, finishReason }) => {
+            turnUsage = {
+              inputTokens: usage.inputTokens ?? undefined,
+              outputTokens: usage.outputTokens ?? undefined,
+            };
+            // The stream can also finish with an error reason, which must not
+            // be counted as a healthy turn.
+            recordTurnOutcome(finishReason === "error" ? "failed" : "ok");
             await logAiUsage({
               userId: dbUser.id,
               teamId: gatewayTags.teamId ?? null,
@@ -10560,6 +10616,7 @@ export async function POST(request: NextRequest) {
             });
           },
           onError: async ({ error }) => {
+            recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
             if (errorSent) return;
             errorSent = true;
             if (cancelled) {
@@ -10824,6 +10881,7 @@ export async function POST(request: NextRequest) {
           assistant_persisted: assistantPersisted,
         });
       } catch (error) {
+        recordTurnOutcome(cancelled ? "cancelled" : "failed", error);
         if (cancelled) {
           if (!doneSent) {
             finish("error", { cancelled: true, content: "Stream cancelled." });
@@ -10858,6 +10916,9 @@ export async function POST(request: NextRequest) {
           heartbeatExecutionTerminal = true;
         }
       } finally {
+        // Idempotent: every exit path above has already named its outcome, so
+        // this only catches a turn that ended without one.
+        recordTurnOutcome(cancelled ? "cancelled" : "ok");
         turnDeadline?.clear();
         stopCancellationWatch();
         await releaseAiChatStreamLease(streamLease);

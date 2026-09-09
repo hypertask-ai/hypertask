@@ -33,6 +33,8 @@ export const HTPR_6278_CHAT_TURN_FAILURE_FLAG =
   "htpr-6278-chat-turn-failure-state";
 export const HTPR_6284_AGENT_MENTION_ROUTING_FLAG =
   "htpr-6284-agent-mention-routing";
+export const HTPR_6320_AI_OBSERVABILITY_FLAG =
+  "htpr-6320-ai-observability";
 export const POSTHOG_ERROR_ALERT_FLAG = "htpr-6238-posthog-error-alert";
 export const MY_TASKS_PRIORITY_FILTER_FLAG =
   "htpr-6312-my-tasks-priority-filter";
