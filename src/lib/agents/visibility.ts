@@ -4,8 +4,7 @@ import prisma from "@/lib/prisma";
 export const AGENT_VISIBILITIES = ["PRIVATE", "TEAM"] as const;
 export type AgentVisibility = (typeof AGENT_VISIBILITIES)[number];
 
-export const TEAM_VISIBILITY_KEY_REQUIRED_ERROR =
-  "Add an API key before sharing this agent with the team.";
+export const TEAM_VISIBILITY_OWNER_PLAN_WARNING = "team-uses-owner-plan";
 
 export function isAgentVisibility(value: unknown): value is AgentVisibility {
   return AGENT_VISIBILITIES.includes(value as AgentVisibility);
@@ -120,22 +119,19 @@ export async function setOwnedAgentVisibilityInTransaction(
 ) {
   const agent = await tx.agent.findFirst({
     where: { id: agentId, userId },
-    select: { id: true },
+    select: { id: true, runtimeType: true },
   });
   if (!agent) {
     return { ok: false as const, status: 404, error: "Agent does not exist" };
   }
 
-  if (visibility === "TEAM") {
+  let warning: typeof TEAM_VISIBILITY_OWNER_PLAN_WARNING | undefined;
+  if (visibility === "TEAM" && agent.runtimeType === "NATIVE") {
     const enabledKeyCount = await tx.agentByokApiKey.count({
       where: { agentId, enabled: true, ciphertext: { not: null } },
     });
     if (enabledKeyCount === 0) {
-      return {
-        ok: false as const,
-        status: 409,
-        error: TEAM_VISIBILITY_KEY_REQUIRED_ERROR,
-      };
+      warning = TEAM_VISIBILITY_OWNER_PLAN_WARNING;
     }
   }
 
@@ -144,7 +140,11 @@ export async function setOwnedAgentVisibilityInTransaction(
     data: { visibility },
     select: { visibility: true },
   });
-  return { ok: true as const, visibility: updated.visibility };
+  return {
+    ok: true as const,
+    visibility: updated.visibility,
+    ...(warning ? { warning } : {}),
+  };
 }
 
 export async function upsertOwnedAgentProviderKey(input: {
