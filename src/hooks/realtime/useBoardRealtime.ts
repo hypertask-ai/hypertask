@@ -49,7 +49,7 @@ export function useBoardRealtime(
         Promise.all([
           // A single-board change fetches only that board; a reconnect keeps the
           // account-wide reconcile (see reconcileActiveBoardTasks).
-          trigger === "event" && userId != null
+          trigger === "event" && userId !== undefined
             ? reconcileActiveBoardTasks(queryClient, projectId, userId)
             : reconcileActiveBoardQuery(queryClient, projectId),
           queryClient.refetchQueries({
@@ -57,7 +57,7 @@ export function useBoardRealtime(
             queryKey: projectPlanningQueryKey(projectId),
           }),
         ]).then(() => undefined);
-      if (userId == null) {
+      if (userId === undefined) {
         void reconcile().catch(() => undefined);
       } else {
         void runRealtimeReconciliation({
