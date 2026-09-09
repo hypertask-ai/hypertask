@@ -215,6 +215,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(isolated, /SMOKE_PROXY_TOKEN="\$proxy_token"/);
   assert.match(isolated, /docker network connect --alias registry-proxy/);
   assert.match(isolated, /node \/trusted\/fetch-prisma-smoke-engine\.mjs/);
+  assert.match(isolated, /node \/trusted\/fetch-posthog-smoke-binary\.mjs/);
   assert.match(isolated, /--name "\$rebuild" --network "\$network"/);
   assert.match(isolated, /npm rebuild/);
   assert.match(isolated, /timeout --signal=KILL 5m npm rebuild/);
