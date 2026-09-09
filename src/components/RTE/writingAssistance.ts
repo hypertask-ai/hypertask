@@ -12,7 +12,7 @@ export const writingAssistanceEditorProps = Object.freeze({
 });
 
 const lowerCaseLetter = /^\p{Ll}$/u;
-const sentenceStart = /(?:^|[.!?]\s+)[\s"'“‘(\[{]*$/u;
+const sentenceStart = /(?:^|[.!?]["'”’)\]}]*\s+)[\s"'“‘(\[{]*$/u;
 
 export function createWritingAssistanceEditorProps(
   localCapitalizationEnabled: () => boolean,

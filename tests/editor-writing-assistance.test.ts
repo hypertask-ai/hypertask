@@ -136,6 +136,12 @@ test("local writing assistance capitalizes typed sentence starts and remains und
   editor.commands.setTextSelection(editor.state.doc.content.size - 1);
   assert.equal(dispatchTextInput(editor, "w"), true);
   assert.equal(editor.getText(), "hello. “W");
+
+  editor.commands.setContent("<p>He said “stop.”</p>", { emitUpdate: false });
+  editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  editor.commands.insertContent(" ");
+  assert.equal(dispatchTextInput(editor, "w"), true);
+  assert.equal(editor.getText(), "He said “stop.” W");
 });
 
 test("local writing assistance respects its flag and skips prose mid-sentence", (t) => {
