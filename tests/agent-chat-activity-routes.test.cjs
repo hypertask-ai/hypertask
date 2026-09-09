@@ -70,6 +70,9 @@ stub("src/lib/flags.ts", {
     // The history route also reads the ticket-confirmation flag; only the
     // activity flag is under test here.
     if (key === "htpr-6006-chat-confirm-ticket") return false;
+    // HTPR-6322: the history route also reads the parked-reply flag, which
+    // decides whether a stored parked notice is visible to this reader.
+    if (key === "htpr-6322-agent-chat-parked-reply") return false;
     assert.equal(key, "htpr-6094-agent-activity-rows");
     return flagEnabled;
   },

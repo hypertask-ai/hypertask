@@ -275,3 +275,116 @@ test("the runtime's own transcript never carries the parked line", async () => {
     );
   }
 });
+
+/**
+ * The browser's read of the thread. Two rows are stored: the human message
+ * and, after it, the parked notice the send path wrote.
+ */
+function loadHistoryRoute({ flagEnabled }) {
+  const counts = [];
+  // Newest first: the route reads descending and flips, like Prisma would.
+  const rows = [
+    {
+      id: "chatMessage-2",
+      role: "assistant",
+      content: model.AGENT_CHAT_PARKED_MESSAGE,
+      isDelivered: false,
+      createdAt: new Date("2026-09-09T10:00:01Z"),
+    },
+    {
+      id: "chatMessage-1",
+      role: "human",
+      content: "are you there?",
+      isDelivered: true,
+      createdAt: new Date("2026-09-09T10:00:00Z"),
+    },
+  ];
+  db = {
+    chatSession: {
+      findFirst: async () => ({ id: "session-1", agentId: "agent-parked" }),
+    },
+    chatMessage: {
+      findMany: async () => rows,
+      count: async (args) => {
+        counts.push(args);
+        return 0;
+      },
+    },
+    member_Team: { findMany: async () => [] },
+    chatSessionParticipant: {
+      upsert: async () => ({
+        draft: null,
+        lastReadAt: null,
+        joinedAt: new Date("2026-09-09T10:00:00Z"),
+      }),
+      findMany: async () => [],
+    },
+    agentWebhookSubscription: {
+      findUnique: async () => ({ active: false, events: [] }),
+    },
+  };
+  stubModule("src/lib/auth/getSessionUser.ts", {
+    getSessionUser: async () => ({ userId: 6 }),
+  });
+  stubModule("src/lib/flags.ts", {
+    AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
+    isFeatureEnabled: async (key) =>
+      key === model.AGENT_CHAT_PARKED_REPLY_FLAG ? flagEnabled : false,
+  });
+  stubModule("src/lib/agents/agentChatActivity.ts", {
+    listAgentChatActivity: async () => [],
+  });
+  stubModule("src/lib/agents/chatTicketProposal.ts", {
+    chatTicketProposalSelect: {},
+    serializeChatTicketProposal: () => null,
+  });
+  stubModule("src/lib/agentRuns/service.ts", {
+    readAgentChatTurn: async () => null,
+  });
+  stubModule("src/lib/agents/visibility.ts", {
+    accessibleAgentWhere: () => ({}),
+  });
+
+  const routePath = path.join(root, "src/app/api/agent-chat/[sessionId]/route.ts");
+  delete require.cache[routePath];
+  const route = createJiti(
+    path.join(root, `tests/agent-chat-parked-reply-get-${++routeLoad}.cjs`),
+    { alias: { "@": path.join(root, "src") }, interopDefault: true },
+  )(routePath);
+  return { route, counts };
+}
+
+async function readHistory(flagEnabled) {
+  const { route, counts } = loadHistoryRoute({ flagEnabled });
+  const response = await route.GET(
+    new Request("https://app.hypertask.ai/api/agent-chat/session-1"),
+    { params: Promise.resolve({ sessionId: "session-1" }) },
+  );
+  return { body: await response.json(), counts };
+}
+
+test("a reader inside the rollout sees the parked line", async () => {
+  const { body } = await readHistory(true);
+  assert.equal(body.success, true);
+  assert.deepEqual(
+    body.messages.map(({ role }) => role),
+    ["human", "system"],
+  );
+  assert.equal(body.awaiting, false, "the thread is answered, not waiting");
+});
+
+test("a reader outside the rollout keeps today's thread", async () => {
+  const { body, counts } = await readHistory(false);
+  assert.equal(body.success, true);
+  assert.deepEqual(
+    body.messages.map(({ role }) => role),
+    ["human"],
+    "the notice is stored in a shared thread, so it is hidden per reader",
+  );
+  assert.equal(body.awaiting, true, "for them the message is still unanswered");
+  assert.equal(
+    counts[0].where.content?.not,
+    model.AGENT_CHAT_PARKED_MESSAGE,
+    "a hidden row must not bump their unread count either",
+  );
+});
