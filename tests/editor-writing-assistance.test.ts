@@ -6,10 +6,8 @@ import test from "node:test";
 import { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
 import StarterKit from "@tiptap/starter-kit";
-import {
-  createWritingAssistanceEditorProps,
-  writingAssistanceEditorProps,
-} from "../src/components/RTE/writingAssistance";
+import { writingAssistanceEditorProps } from "../src/components/RTE/writingAssistance";
+import { LocalWritingAssistance } from "../src/components/RTE/writingAssistance";
 
 const require = createRequire(import.meta.url);
 const { JSDOM } = require("jsdom");
@@ -83,10 +81,12 @@ test("both editor configurations retain the shared writing assistance props", ()
     "utf8",
   );
 
-  assert.match(sharedEditor, /createWritingAssistanceEditorProps/);
+  assert.match(sharedEditor, /\.\.\.writingAssistanceEditorProps/);
   assert.match(sharedEditor, /scrollThreshold/);
   assert.match(sharedEditor, /scrollMargin/);
-  assert.match(aiChatEditor, /createWritingAssistanceEditorProps/);
+  assert.match(aiChatEditor, /editorProps:\s*writingAssistanceEditorProps/);
+  assert.match(sharedEditor, /LocalWritingAssistance\.configure/);
+  assert.match(aiChatEditor, /LocalWritingAssistance\.configure/);
 });
 
 function dispatchTextInput(editor: Editor, text: string) {
@@ -109,9 +109,14 @@ test("local writing assistance capitalizes typed sentence starts and remains und
   const restoreGlobals = installBrowserGlobals(dom.window);
   const editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      LocalWritingAssistance.configure({
+        localCapitalizationEnabled: () => true,
+      }),
+    ],
     content: "<p>hello.</p>",
-    editorProps: createWritingAssistanceEditorProps(() => true),
+    editorProps: writingAssistanceEditorProps,
   });
   t.after(() => {
     editor.destroy();
@@ -134,9 +139,14 @@ test("local writing assistance respects its flag and skips prose mid-sentence", 
   let enabled = false;
   const editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      LocalWritingAssistance.configure({
+        localCapitalizationEnabled: () => enabled,
+      }),
+    ],
     content: "<p>hello </p>",
-    editorProps: createWritingAssistanceEditorProps(() => enabled),
+    editorProps: writingAssistanceEditorProps,
   });
   t.after(() => {
     editor.destroy();
@@ -162,9 +172,14 @@ test("local writing assistance skips code blocks and unfinished keyboard input",
   const restoreGlobals = installBrowserGlobals(dom.window);
   const editor = new Editor({
     element: dom.window.document.querySelector("#editor"),
-    extensions: [StarterKit],
+    extensions: [
+      StarterKit,
+      LocalWritingAssistance.configure({
+        localCapitalizationEnabled: () => true,
+      }),
+    ],
     content: "<pre><code></code></pre>",
-    editorProps: createWritingAssistanceEditorProps(() => true),
+    editorProps: writingAssistanceEditorProps,
   });
   t.after(() => {
     editor.destroy();

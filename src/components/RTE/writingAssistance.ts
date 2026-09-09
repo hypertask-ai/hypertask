@@ -1,3 +1,5 @@
+import { Extension } from "@tiptap/core";
+import { Plugin } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 export const writingAssistanceEditorProps = Object.freeze({
@@ -60,3 +62,27 @@ export function createWritingAssistanceEditorProps(
     },
   };
 }
+
+export const LocalWritingAssistance = Extension.create<{
+  localCapitalizationEnabled: () => boolean;
+}>({
+  name: "localWritingAssistance",
+
+  addOptions() {
+    return {
+      localCapitalizationEnabled: () => false,
+    };
+  },
+
+  addProseMirrorPlugins() {
+    const { handleTextInput } = createWritingAssistanceEditorProps(
+      this.options.localCapitalizationEnabled,
+    );
+
+    return [
+      new Plugin({
+        props: { handleTextInput },
+      }),
+    ];
+  },
+});

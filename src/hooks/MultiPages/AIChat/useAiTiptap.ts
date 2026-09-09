@@ -13,7 +13,8 @@ import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
 import SlashCommands from "@/components/RTE/Extensions/SlashCommands/SlashCommands";
 import { useContext, useRef } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { createWritingAssistanceEditorProps } from "@/components/RTE/writingAssistance";
+import { writingAssistanceEditorProps } from "@/components/RTE/writingAssistance";
+import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
 import { useFlag } from "@/hooks/useFlag";
 import { LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 
@@ -103,11 +104,12 @@ const useTiptapForAI = ({
       // "/slug ", which the chat stream route resolves server-side.
       SlashCommands("ai-chat"),
       DisableEnter,
+      LocalWritingAssistance.configure({
+        localCapitalizationEnabled: () => localWritingAssistanceRef.current,
+      }),
     ],
     // content: defaultContent,
-    editorProps: createWritingAssistanceEditorProps(
-      () => localWritingAssistanceRef.current,
-    ),
+    editorProps: writingAssistanceEditorProps,
     immediatelyRender: false,
   });
   return {

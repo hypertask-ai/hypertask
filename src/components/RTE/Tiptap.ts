@@ -50,7 +50,8 @@ import { ReplyBlockquote } from "./Extensions/ReplyBlockquote";
 import { useFlag } from "@/hooks/useFlag";
 import { withMentionBackspaceDeletion } from "./Extensions/DeleteMentionOnBackspace";
 import { LinkableMention } from "./Extensions/LinkableMention";
-import { createWritingAssistanceEditorProps } from "./writingAssistance";
+import { writingAssistanceEditorProps } from "./writingAssistance";
+import { LocalWritingAssistance } from "./writingAssistance";
 
 const defaultScrollMargin = 5;
 const descriptionCaretTopGutter = 8;
@@ -118,9 +119,6 @@ const useTiptap = ({
   // itself after mount, so freezing the initial value is safe.
   const [initialContent] = useState(defaultContent);
   const editorProps = useMemo(() => {
-    const writingAssistanceEditorProps = createWritingAssistanceEditorProps(
-      () => localWritingAssistanceRef.current,
-    );
     if (mode !== "read-edit-description") return writingAssistanceEditorProps;
 
     const stickyHeaderOffset = getTaskDetailStickyHeaderOffset();
@@ -269,6 +267,9 @@ const useTiptap = ({
       }),
       DisableEnter,
       HypertaskPasteRule,
+      LocalWritingAssistance.configure({
+        localCapitalizationEnabled: () => localWritingAssistanceRef.current,
+      }),
     ],
     // Build the extensions exactly once for this editor instance. They must be
     // referentially stable: Tiptap v3's useEditor reconfigures the whole plugin
