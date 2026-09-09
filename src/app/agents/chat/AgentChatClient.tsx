@@ -593,8 +593,6 @@ const AgentChatClient = (props: IProp) => {
     return () => clearInterval(tick);
   }, [rosterStatusEnabled]);
   const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
-  const liveSortEnabledRef = useRef(liveSortEnabled);
-  liveSortEnabledRef.current = liveSortEnabled;
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const mobileAgentChatViewport = useMobileVisualViewport(
     isMbl && mobileAgentChatViewportEnabled,
@@ -1407,7 +1405,7 @@ const AgentChatClient = (props: IProp) => {
       // Sender never waits on the realtime nudge for their own POST, so the
       // roster must re-rank here or the open chat stays mid-list until reload
       // (Cursor QA fail on HTPR-6283).
-      if (liveSortEnabledRef.current) {
+      if (liveSortEnabled) {
         const agentId = selectedIdRef.current;
         if (agentId) {
           setAgents((prev) =>
@@ -1459,7 +1457,7 @@ const AgentChatClient = (props: IProp) => {
       // leaves the ball with the agent (no-op here), and failure reverts the
       // optimistic message, which flips `awaiting` back to false and fires it.
     }
-  }, []);
+  }, [liveSortEnabled]);
 
   const removeQueuedMessage = useCallback((id: string) => {
     messageQueueRef.current = messageQueueRef.current.filter(
