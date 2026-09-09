@@ -109,7 +109,7 @@ test("production trigger without an owner session is a 404 before token checks",
       assert.equal(response.status, 404);
       assert.deepEqual(checks, [
         { key: "htpr-6238-posthog-error-alert", userId: 6 },
-        { ownerSession: true },
+        { ownerSession: false },
       ]);
     });
   } finally {
