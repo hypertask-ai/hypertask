@@ -28,7 +28,6 @@ import {
   SHORTCUT_NUDGES_FLAG,
   MANAGER_LOOP_ACTIVITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
-  SCOPED_BOARD_REFETCH_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
 } from "@/lib/flags/keys";
@@ -276,12 +275,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Lets signed PostHog server errors alert the Manager and request a guarded rollback after a fresh release.",
-  },
-  {
-    key: SCOPED_BOARD_REFETCH_FLAG,
-    shippedOn: "2026-09-09",
-    description:
-      "On a live board change, reloads only the board that changed instead of every board in the account, so updates appear with one request. Other boards' names still refresh when the tab reconnects or you move between boards.",
   },
   {
     key: MY_TASKS_PRIORITY_FILTER_FLAG,
