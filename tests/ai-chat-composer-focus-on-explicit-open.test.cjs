@@ -162,9 +162,9 @@ const chatContextValue = {
 
 // Mounts the composer in a fresh JSDOM, lets the 60ms focus loop run, and
 // reports where the cursor ended up.
-const mountComposer = async (primedOpenAt) => {
+const mountComposer = async (primedOpenAt, focusAnotherField = false) => {
   const dom = new JSDOM(
-    "<!doctype html><html><body><div id='root'></div></body></html>",
+    "<!doctype html><html><body><input id='other-field'><div id='root'></div></body></html>",
     { url: "https://app.hypertask.ai/" },
   );
   // React's async act() holds jsdom's own timer queue back, while Node timers
@@ -209,6 +209,8 @@ const mountComposer = async (primedOpenAt) => {
 
   explicitOpenAt = primedOpenAt;
   explicitOpenAtWrites = [];
+  const otherField = dom.window.document.getElementById("other-field");
+  if (focusAnotherField) otherField.focus();
   const reactRoot = createRoot(dom.window.document.getElementById("root"));
   try {
     // Mount effects flush here; the retry loop is scheduled.
@@ -232,6 +234,7 @@ const mountComposer = async (primedOpenAt) => {
     return {
       activeElement: dom.window.document.activeElement,
       composer,
+      otherField,
       writes: explicitOpenAtWrites,
     };
   } finally {
@@ -257,6 +260,12 @@ test("auto-open mounts the composer unfocused", async () => {
   const { activeElement, composer, writes } = await mountComposer(null);
   assert.notEqual(activeElement, composer, "auto-open must not steal the cursor");
   assert.deepEqual(writes, [], "no request to consume");
+});
+
+test("a delayed explicit open does not steal focus from another field", async () => {
+  const { activeElement, otherField, writes } = await mountComposer(Date.now(), true);
+  assert.equal(activeElement, otherField, "the field must keep the cursor");
+  assert.deepEqual(writes, [null], "fresh request must still be consumed");
 });
 
 test("a stale explicit request no longer claims focus", async () => {

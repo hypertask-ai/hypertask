@@ -51,7 +51,10 @@ import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles"
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
 import toast from "react-hot-toast";
-import { FOCUS_REQUEST_WINDOW_MS } from "@/utils/aiChat/focusRequestWindow";
+import {
+  FOCUS_REQUEST_WINDOW_MS,
+  isEditableElement,
+} from "@/utils/aiChat/focusRequestWindow";
 
 const SCREENSHOT_MIME_TYPES = new Set([
   "image/jpeg",
@@ -150,17 +153,9 @@ export function AI_Tiptap_Container() {
         window.clearInterval(interval);
         return;
       }
-      // Auto-open ("Open AI chat by default") mounts this panel at page
-      // load; if the chunk lands after the user already started typing in
-      // a comment or title, don't steal their cursor. Explicit opens pass
-      // this check: clicking the toggle moved focus off the editable.
-      const typingElsewhere =
-        !!active &&
-        (active.isContentEditable ||
-          active.tagName === "INPUT" ||
-          active.tagName === "TEXTAREA" ||
-          active.tagName === "SELECT");
-      if (typingElsewhere) {
+      // The panel can finish loading after an explicit open while the user
+      // has already moved to a comment or title. Do not steal the cursor back.
+      if (isEditableElement(active)) {
         window.clearInterval(interval);
         return;
       }

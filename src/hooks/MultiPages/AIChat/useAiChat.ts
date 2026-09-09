@@ -6,7 +6,10 @@ import globalConstants from "@/lib/constants";
 import { aiOptions } from "@/lib/constants/constants";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { FOCUS_REQUEST_WINDOW_MS } from "@/utils/aiChat/focusRequestWindow";
+import {
+  FOCUS_REQUEST_WINDOW_MS,
+  isEditableElement,
+} from "@/utils/aiChat/focusRequestWindow";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
 import { useSessionAndChatHistory } from "@/hooks/MultiPages/AIChat/useSessionAndChatHistory";
@@ -1649,8 +1652,18 @@ export function useAiChat() {
     ) {
       return;
     }
+    const active = document.activeElement as HTMLElement | null;
+    if (isEditableElement(active)) {
+      setAiChatExplicitOpenAt(null);
+      return;
+    }
     editor?.commands.focus("end");
-  }, [showAiChatInterface, editor, aiChatExplicitOpenAt]);
+  }, [
+    showAiChatInterface,
+    editor,
+    aiChatExplicitOpenAt,
+    setAiChatExplicitOpenAt,
+  ]);
 
   useEffect(() => {
     setChatMounted(showAiChatInterface);
