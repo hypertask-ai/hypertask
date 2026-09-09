@@ -1399,8 +1399,14 @@ const AgentChatClient = (props: IProp) => {
       if (data.delivered === false && !data.notice) setDeliveryNotice(true);
       // The parked notice is the answer: it lands in the thread right away,
       // without waiting for a broadcast that this send can still outrun.
-      if (data.notice) {
-        setMessages((prev) => [...(prev ?? []), data.notice!]);
+      // Upsert, not append: that broadcast can also win, and the same row
+      // would then appear twice.
+      const notice = data.notice;
+      if (notice) {
+        setMessages((prev) => [
+          ...(prev ?? []).filter((m) => m.id !== notice.id),
+          notice,
+        ]);
         setAwaiting(false);
       }
     } catch (e) {

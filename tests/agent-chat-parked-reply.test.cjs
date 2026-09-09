@@ -4,7 +4,6 @@
 // someone had said it.
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
@@ -22,13 +21,25 @@ function stubModule(relativePath, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
+// One database stub for the whole file: each route hands the proxy its own
+// tables by setting `db`. Re-stubbing the module per test does not reach a
+// route that an earlier jiti instance already resolved.
+let db = null;
+stubModule("src/lib/prisma.ts", {
+  default: new Proxy({}, { get: (_target, key) => db[key] }),
+});
+
 let routeLoad = 0;
 
 /**
  * Load the send route with a database that records every write. `deliveryIds`
  * is what the webhook outbox hands back: an empty list is the parked agent.
  */
-function loadMessageRoute({ flagEnabled = true, deliveryIds = [] } = {}) {
+function loadMessageRoute({
+  flag = model.AGENT_CHAT_PARKED_REPLY_FLAG,
+  flagEnabled = true,
+  deliveryIds = [],
+} = {}) {
   const writes = [];
   const broadcasts = [];
   let sequence = 0;
@@ -63,7 +74,7 @@ function loadMessageRoute({ flagEnabled = true, deliveryIds = [] } = {}) {
       }),
   };
 
-  stubModule("src/lib/prisma.ts", { default: prisma });
+  db = prisma;
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),
   });
@@ -85,7 +96,9 @@ function loadMessageRoute({ flagEnabled = true, deliveryIds = [] } = {}) {
   });
   stubModule("src/lib/flags.ts", {
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
-    isFeatureEnabled: async () => flagEnabled,
+    // Keyed, so a notice gated on the wrong flag fails here instead of
+    // passing because some other flag happened to be on.
+    isFeatureEnabled: async (key) => (key === flag ? flagEnabled : false),
   });
   stubModule("src/lib/agents/chatBrief.ts", {
     buildAgentChatBrief: async () => null,
@@ -148,6 +161,7 @@ test("a message a runtime did receive is left for that runtime to answer", async
 
 test("with the flag off the thread keeps today's behaviour", async () => {
   const { route, writes } = loadMessageRoute({
+    flag: model.AGENT_CHAT_PARKED_REPLY_FLAG,
     flagEnabled: false,
     deliveryIds: [],
   });
@@ -158,7 +172,7 @@ test("with the flag off the thread keeps today's behaviour", async () => {
   assert.equal(writes.length, 1);
 });
 
-test("the parked line reads as a system notice, and the runtime never sees it", () => {
+test("the parked line reads as a system notice", () => {
   assert.equal(
     model.isAgentChatSystemMessage({
       role: "assistant",
@@ -168,16 +182,96 @@ test("the parked line reads as a system notice, and the runtime never sees it", 
     true,
     "the browser shows it as a system line, not as the agent's answer",
   );
-  const transcript = fs.readFileSync(
-    path.join(
-      root,
-      "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
+});
+
+/** The runtime's own read of the thread, with the query it builds recorded. */
+function loadTranscriptRoute() {
+  const queries = [];
+  const prisma = {
+    chatSession: {
+      findFirst: async () => ({
+        id: "session-1",
+        agentId: "agent-parked",
+        userId: 6,
+        user: { displayName: "Valentin" },
+      }),
+    },
+    chatMessage: {
+      findMany: async (args) => {
+        queries.push(args);
+        return [
+          {
+            id: "chatMessage-1",
+            role: "human",
+            content: "are you there?",
+            createdAt: new Date("2026-09-09T10:00:00Z"),
+          },
+        ];
+      },
+    },
+  };
+  db = prisma;
+  stubModule("src/lib/mcp/auth.ts", {
+    validateMcpAuth: async () => ({
+      agentId: "agent-parked",
+      user: { id: 6, displayName: "Valentin" },
+    }),
+    checkMcpRateLimit: async () => null,
+  });
+  stubModule("src/lib/flags.ts", {
+    AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
+    isFeatureEnabled: async () => false,
+  });
+  stubModule("src/lib/agents/agentChatActivity.ts", {
+    listAgentChatActivity: async () => [],
+  });
+  stubModule("src/lib/agents/chatActivityFeed.ts", {
+    activityContextMessages: () => [],
+    asksForAgentActivity: () => false,
+  });
+  stubModule("src/lib/agents/chatTicketProposal.ts", {
+    chatTicketProposalSelect: {},
+    serializeChatTicketProposal: () => null,
+  });
+  stubModule("src/lib/agents/visibility.ts", {
+    accessibleAgentWhere: () => ({}),
+  });
+  stubModule("src/lib/realtime/server.ts", {
+    AGENT_CHAT_EVENT: "agent-chat",
+    broadcast: async () => {},
+    userChannel: (userId) => `user-${userId}`,
+  });
+
+  const routePath = path.join(
+    root,
+    "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
+  );
+  delete require.cache[routePath];
+  const route = createJiti(
+    path.join(root, `tests/agent-chat-parked-reply-mcp-${++routeLoad}.cjs`),
+    { alias: { "@": path.join(root, "src") }, interopDefault: true },
+  )(routePath);
+  return { route, queries };
+}
+
+test("the runtime's own transcript never carries the parked line", async () => {
+  const { route, queries } = loadTranscriptRoute();
+  const response = await route.GET(
+    new Request(
+      "https://app.hypertask.ai/api/mcp/chat/sessions/session-1/messages",
     ),
-    "utf8",
+    { params: Promise.resolve({ sessionId: "session-1" }) },
   );
-  assert.match(
-    transcript,
-    /content: \{ in: \[\.\.\.AGENT_CHAT_SYSTEM_MESSAGES\] \}/,
-    "a reconnecting runtime must not read the parked line as something said to it",
-  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.success, true);
+  assert.equal(queries.length, 1, "the transcript is read once");
+  const excluded = queries[0].where.NOT?.content?.in ?? [];
+  for (const content of model.AGENT_CHAT_SYSTEM_MESSAGES) {
+    assert.ok(
+      excluded.includes(content),
+      `a reconnecting runtime must not read "${content}" as something said to it`,
+    );
+  }
 });
