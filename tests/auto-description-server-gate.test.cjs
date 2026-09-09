@@ -6,6 +6,7 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const preferenceReads = [];
 const featureFlagChecks = [];
+let newTaskAutoDescriptionEnabled = true;
 let autoTaskDescriptionsEnabled = true;
 let autoDescriptionSuggestions = true;
 let preferenceFetchMode = "existing";
@@ -32,10 +33,13 @@ stubModule("src/app/api/ai/_lib/providerGate.ts", {
 });
 stubModule("src/lib/systemModelLadder.ts", {});
 stubModule("src/lib/flags.ts", {
+  HTPR_6157_AUTO_DESCRIPTION_FLAG: "htpr-6157-new-task-auto-description",
   AUTO_TASK_DESCRIPTIONS_FLAG: "htpr-6177-auto-task-descriptions",
   isFeatureEnabled: async (key, userId) => {
     featureFlagChecks.push({ key, userId });
-    return autoTaskDescriptionsEnabled;
+    return key === "htpr-6157-new-task-auto-description"
+      ? newTaskAutoDescriptionEnabled
+      : autoTaskDescriptionsEnabled;
   },
 });
 stubModule("src/lib/prisma.ts", {
@@ -96,6 +100,7 @@ test.beforeEach(() => {
   process.env.NEXT_PUBLIC_NEW_TASK_AUTO_DESCRIPTION = "1";
   preferenceReads.length = 0;
   featureFlagChecks.length = 0;
+  newTaskAutoDescriptionEnabled = true;
   autoTaskDescriptionsEnabled = true;
   autoDescriptionSuggestions = true;
   preferenceFetchMode = "existing";
@@ -109,6 +114,19 @@ test("automatic task-writer requests stop when the deploy switch is off", async 
     AutoDescriptionSuggestionsDisabledError,
   );
   assert.deepEqual(featureFlagChecks, []);
+  assert.deepEqual(preferenceReads, []);
+});
+
+test("automatic task-writer requests stop when the ticket feature flag is off", async () => {
+  newTaskAutoDescriptionEnabled = false;
+
+  await assert.rejects(
+    prepareTaskWriterRun(request("auto-description"), 42),
+    AutoDescriptionSuggestionsDisabledError,
+  );
+  assert.deepEqual(featureFlagChecks, [
+    { key: "htpr-6157-new-task-auto-description", userId: 42 },
+  ]);
   assert.deepEqual(preferenceReads, []);
 });
 
@@ -174,6 +192,7 @@ test("automatic task-writer requests stop when the feature flag is off", async (
     AutoDescriptionSuggestionsDisabledError,
   );
   assert.deepEqual(featureFlagChecks, [
+    { key: "htpr-6157-new-task-auto-description", userId: 42 },
     { key: "htpr-6177-auto-task-descriptions", userId: 42 },
   ]);
   // The flag is checked before the preference, so a blocked user is never read.

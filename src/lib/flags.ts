@@ -14,6 +14,7 @@ import {
   AGENT_CHAT_SKILLS_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
   AUTO_TASK_DESCRIPTIONS_FLAG,
+  HTPR_6157_AUTO_DESCRIPTION_FLAG,
   COLUMN_ALL_VIEWS_FLAG,
   CORE_ACTIONS_SMOKE_FLAG,
   HEIC_ATTACHMENTS_FLAG,
@@ -207,6 +208,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: "htpr-6141-ai-first-task-writer",
     shippedOn: "2026-09-04",
     description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
+  },
+  {
+    key: HTPR_6157_AUTO_DESCRIPTION_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Shows automatic Task Writer drafts in the desktop create-task modal after a title pause.",
   },
   {
     key: "htpr-6175-quick-entry-cards",

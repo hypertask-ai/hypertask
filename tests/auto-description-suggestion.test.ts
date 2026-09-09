@@ -209,7 +209,7 @@ test("automatic description UI exists only in the new-task form", () => {
   assert.match(createForm, /requestKind="auto-description"/);
   assert.match(
     createForm,
-    /isNewTaskAutoDescriptionEnabled\(\)\s*&&\s*autoTaskDescriptionsEnabled/,
+    /isNewTaskAutoDescriptionEnabled\(\)\s*&&\s*newTaskAutoDescriptionEnabled\s*&&\s*autoTaskDescriptionsEnabled/,
   );
   assert.match(
     createForm,
