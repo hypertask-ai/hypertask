@@ -15,11 +15,11 @@ const STACK_LIMIT = 16_000;
 const CAPTURE_TIMEOUT_MS = 1500;
 let client: PostHog | undefined;
 
-export function deploymentEnvironment() {
+function deploymentEnvironment() {
   return process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown";
 }
 
-export function releaseSha() {
+function releaseSha() {
   const value =
     process.env.VERCEL_GIT_COMMIT_SHA ||
     process.env.NEXT_PUBLIC_BUILD_ID ||
@@ -27,7 +27,7 @@ export function releaseSha() {
   return /^[0-9a-f]{40}$/i.test(value) ? value.toLowerCase() : undefined;
 }
 
-export function postHogClient() {
+function postHogClient() {
   const token = process.env.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
   if (!token) return undefined;
   if (!client) {
