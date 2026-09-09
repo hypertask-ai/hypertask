@@ -42,6 +42,14 @@ test("the stream records routed and terminal turn outcomes", () => {
     stream,
     /emptyCompletionError \?\? "AI generation returned no visible reply"/,
   );
+  assert.match(
+    stream,
+    /modelId: resolvedModel\.resolvedModelId,[\s\S]*?let observedModel = selected\.modelId/,
+  );
+  assert.match(
+    stream,
+    /onFinish: async \(\{ usage, finishReason \}\)[\s\S]*?generationFinishedWithError = finishReason === "error";[\s\S]*?else if \(generationFinishedWithError\) \{\s*recordTurnOutcome\("failed"/,
+  );
   assert.match(stream, /waitUntil\(observation\)/);
 });
 

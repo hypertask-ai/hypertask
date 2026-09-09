@@ -10259,6 +10259,7 @@ export async function POST(request: NextRequest) {
       let observedModel = selected.modelId;
       let observedProvider = selected.usageProvider;
       let turnUsage: { inputTokens?: number; outputTokens?: number } | undefined;
+      let generationFinishedWithError = false;
       let turnOutcomeRecorded = false;
       const recordTurnOutcome = (
         outcome: AiChatTurnOutcome,
@@ -10611,11 +10612,12 @@ export async function POST(request: NextRequest) {
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
           maxRetries: 2,
           abortSignal: providerAbort.signal,
-          onFinish: async ({ usage }) => {
+          onFinish: async ({ usage, finishReason }) => {
             turnUsage = {
               inputTokens: usage.inputTokens ?? undefined,
               outputTokens: usage.outputTokens ?? undefined,
             };
+            generationFinishedWithError = finishReason === "error";
             await logAiUsage({
               userId: dbUser.id,
               teamId: gatewayTags.teamId ?? null,
@@ -10743,6 +10745,7 @@ export async function POST(request: NextRequest) {
               });
               const retryText = retry.text?.trim() ?? "";
               if (retryText) {
+                generationFinishedWithError = retry.finishReason === "error";
                 chunks.push(retryText);
                 send("content", { content: retryText });
               }
@@ -10777,6 +10780,8 @@ export async function POST(request: NextRequest) {
             "failed",
             emptyCompletionError ?? "AI generation returned no visible reply",
           );
+        } else if (generationFinishedWithError) {
+          recordTurnOutcome("failed", "AI generation finished with an error");
         } else {
           recordTurnOutcome("ok");
         }
@@ -10945,10 +10950,9 @@ export async function POST(request: NextRequest) {
           heartbeatExecutionTerminal = true;
         }
       } finally {
-        // The stream's own callbacks run inside this block, so onFinish or
-        // onError has already named the outcome by the time we get here; this
-        // only covers a turn that ended before the model ever ran. Such a turn
-        // is recorded only when cancellation gives it a real terminal outcome.
+        // Every model exit above names its outcome before reaching here. This
+        // only covers a turn that ended before the model ever ran, and records
+        // it only when cancellation gives it a real terminal outcome.
         if (cancelled) recordTurnOutcome("cancelled");
         turnDeadline?.clear();
         stopCancellationWatch();
