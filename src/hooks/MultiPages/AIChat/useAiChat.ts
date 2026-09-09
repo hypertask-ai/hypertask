@@ -1647,8 +1647,13 @@ export function useAiChat() {
   useEffect(() => {
     if (!showAiChatInterface) return;
     const active = document.activeElement as HTMLElement | null;
-    if (isEditableElement(active)) setAiChatExplicitOpenAt(null);
-    focusAiChatEditorForRequest(editor, aiChatExplicitOpenAt, active);
+    const focused = focusAiChatEditorForRequest(editor, aiChatExplicitOpenAt, active);
+    if (
+      aiChatExplicitOpenAt !== null &&
+      (focused || isEditableElement(active))
+    ) {
+      setAiChatExplicitOpenAt(null);
+    }
   }, [
     showAiChatInterface,
     editor,

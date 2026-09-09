@@ -27,8 +27,8 @@ test("Control+Q switches between docked AI chat and the active workspace", () =>
   assert.match(hook, /editor\?\.commands\.focus\("end"\)/);
   assert.match(
     hook,
-    /if \(!showAiChatInterface\) return;[\s\S]*?isEditableElement\(active\)[\s\S]*?setAiChatExplicitOpenAt\(null\);[\s\S]*?focusAiChatEditorForRequest\(editor, aiChatExplicitOpenAt, active\);[\s\S]*?\[\s*showAiChatInterface,\s*editor,\s*aiChatExplicitOpenAt,\s*setAiChatExplicitOpenAt,\s*\]/,
-    "the shared hook must delegate its focus decision to the tested command"
+    /if \(!showAiChatInterface\) return;[\s\S]*?const focused = focusAiChatEditorForRequest\(editor, aiChatExplicitOpenAt, active\);[\s\S]*?aiChatExplicitOpenAt !== null[\s\S]*?focused \|\| isEditableElement\(active\)[\s\S]*?setAiChatExplicitOpenAt\(null\);[\s\S]*?\[\s*showAiChatInterface,\s*editor,\s*aiChatExplicitOpenAt,\s*setAiChatExplicitOpenAt,\s*\]/,
+    "the shared hook must consume successful and rejected focus requests"
   );
   assert.match(
     hook,
