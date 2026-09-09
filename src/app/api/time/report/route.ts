@@ -1,5 +1,9 @@
-import { canReportOtherUsers, listReport } from "@/lib/timeTracking";
+import { administeredProjectIds, listReport } from "@/lib/timeTracking";
 import { parseTimeReportFilters } from "@/lib/timeReportFilters";
+import {
+  HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { getTimeRequestUser } from "../_lib";
 
@@ -19,18 +23,24 @@ export async function GET(request: NextRequest) {
   );
   if (!parsed.success) return invalidFilterResponse(parsed.filter);
 
-  const canViewOthers = await canReportOtherUsers(auth.userId, {
-    teamId: parsed.filters.teamId,
-    boardIds: parsed.filters.boardIds,
-  });
+  const adminOnly = await isFeatureEnabled(
+    HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+    auth.userId
+  );
+  const adminProjectIds = adminOnly
+    ? await administeredProjectIds(auth.userId, {
+        teamId: parsed.filters.teamId,
+        boardIds: parsed.filters.boardIds,
+      })
+    : [];
+  const canViewOthers = !adminOnly || adminProjectIds.length > 0;
   // A stale "user" URL parameter must not turn the report empty for a plain
   // member (no UI to clear it), so the filter only applies with the scope.
-  const entries = await listReport(
-    auth.userId,
-    canViewOthers
-      ? parsed.filters
-      : { ...parsed.filters, filterUserIds: undefined }
-  );
+  const entries = await listReport(auth.userId, {
+    ...parsed.filters,
+    ...(canViewOthers ? {} : { filterUserIds: undefined }),
+    ...(adminOnly ? { adminProjectIds } : {}),
+  });
 
   return NextResponse.json({
     success: true,
