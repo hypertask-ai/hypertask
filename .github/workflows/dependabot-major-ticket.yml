@@ -103,11 +103,16 @@ jobs:
             echo "::error::Board search returned no task list; not creating a ticket. Response: $(head -c 300 <<<"$SEARCH")"
             exit 1
           fi
-          TICKET=$(jq -r --arg t "$DEDTOKEN" \
+          TICKET=$(jq -r --arg t "[$DEDTOKEN]" \
             '[.tasks[] | select((.title // "") | contains($t))] | .[0].ticketNumber // ""' <<<"$SEARCH")
           if [ -n "$TICKET" ]; then
             echo "Found the ticket from a previous run ($TICKET); relinking instead of creating a duplicate."
-            post_link_comment "$TICKET" || echo "::warning::Ticket exists ($TICKET) but the PR comment could not be posted."
+            if post_link_comment "$TICKET"; then
+              echo "Relinked $TICKET on the PR."
+            else
+              echo "::error::Ticket $TICKET exists but the PR comment failed; rerun to relink."
+              exit 1
+            fi
             exit 0
           fi
           TICKET=""
@@ -161,5 +166,9 @@ jobs:
           if post_link_comment "$TICKET"; then
             echo "Linked $TICKET on the PR."
           else
-            echo "::warning::Ticket $TICKET was created but the PR comment failed after retries. The board search probe ($DEDTOKEN) will relink it on the next run; do NOT create a second ticket by hand unless it is missing from board $PROJECT_ID."
+            # Exit nonzero so the failure is visible and a rerun is prompted;
+            # the board-search probe relinks the existing ticket, so a rerun
+            # never creates a duplicate.
+            echo "::error::Ticket $TICKET was created but the PR comment failed after retries. The next run relinks it via the board-search probe ($DEDTOKEN); do NOT create a second ticket."
+            exit 1
           fi
