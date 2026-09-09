@@ -649,6 +649,9 @@ model SlackInstall {
   installedByUserId Int
   installedBy       User                 @relation(fields: [installedByUserId], references: [id], onDelete: Cascade)
   createdAt         DateTime             @default(now())
+  // HTPR-4857: lets delayed app_uninstalled / tokens_revoked events skip rows
+  // that were reinstalled after the event happened.
+  updatedAt         DateTime             @updatedAt
   watchedThreads    SlackWatchedThread[]
   userLinks         SlackUserLink[]
 

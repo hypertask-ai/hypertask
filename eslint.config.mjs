@@ -26,7 +26,11 @@ export default defineConfig([
     files: ["src/components/**/*.{ts,tsx}", "src/hooks/**/*.{ts,tsx}", "src/app/**/*.tsx"],
     // The one server-rendered page that reads a flag directly. Exempt this file,
     // not every page.tsx: a page carrying "use client" is a browser bundle too.
-    ignores: ["src/app/admin/flags/page.tsx"],
+    ignores: [
+      "src/app/admin/flags/page.tsx",
+      // HTPR-4857: server component; gates the public /add-to-slack page.
+      "src/app/add-to-slack/page.tsx",
+    ],
     rules: {
       // Types are erased, so a type-only import never reaches the bundle.
       "@typescript-eslint/no-restricted-imports": [
