@@ -122,6 +122,9 @@ const { MobileViewContext } = jiti(
 stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
   default: () => null,
 });
+const { focusAiChatEditorForRequest } = jiti(
+  path.join(root, "src/utils/aiChat/focusRequestWindow.ts"),
+);
 const { AI_Tiptap_Container } = jiti(
   path.join(root, "src/components/AI_CHAT/AI_Tiptap_Container.tsx"),
 );
@@ -249,6 +252,18 @@ const mountComposer = async (primedOpenAt, focusAnotherField = false) => {
     }
   }
 };
+
+test("the shared focus command rejects stale requests and active fields", () => {
+  const calls = [];
+  const editor = { commands: { focus: (position) => calls.push(position) } };
+  const input = { tagName: "INPUT", isContentEditable: false };
+
+  assert.equal(focusAiChatEditorForRequest(editor, null, null, 10_000), false);
+  assert.equal(focusAiChatEditorForRequest(editor, 4_000, null, 10_000), false);
+  assert.equal(focusAiChatEditorForRequest(editor, 9_000, input, 10_000), false);
+  assert.equal(focusAiChatEditorForRequest(editor, 9_000, null, 10_000), true);
+  assert.deepEqual(calls, ["end"]);
+});
 
 test("an explicit open mounts the composer focused and consumes the request", async () => {
   const { activeElement, composer, writes } = await mountComposer(Date.now());

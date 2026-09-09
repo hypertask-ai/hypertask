@@ -7,7 +7,7 @@ import { aiOptions } from "@/lib/constants/constants";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import {
-  FOCUS_REQUEST_WINDOW_MS,
+  focusAiChatEditorForRequest,
   isEditableElement,
 } from "@/utils/aiChat/focusRequestWindow";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
@@ -1646,18 +1646,9 @@ export function useAiChat() {
   // load, and the board owns c, j, k, Tab and / until someone asks for the chat.
   useEffect(() => {
     if (!showAiChatInterface) return;
-    if (
-      aiChatExplicitOpenAt === null ||
-      Date.now() - aiChatExplicitOpenAt > FOCUS_REQUEST_WINDOW_MS
-    ) {
-      return;
-    }
     const active = document.activeElement as HTMLElement | null;
-    if (isEditableElement(active)) {
-      setAiChatExplicitOpenAt(null);
-      return;
-    }
-    editor?.commands.focus("end");
+    if (isEditableElement(active)) setAiChatExplicitOpenAt(null);
+    focusAiChatEditorForRequest(editor, aiChatExplicitOpenAt, active);
   }, [
     showAiChatInterface,
     editor,
