@@ -51,9 +51,22 @@ export async function reconcileActiveBoardTasks(
     queryFn: () => fetchBoardTasks(projectId, userId),
     staleTime: 0,
   });
+  // The list is globally keyed, so a response that started under a previous
+  // account must never be patched into the current one. Fall back in that case
+  // too: it is rare (account switch mid-request) and correctness wins.
+  const cachedAccountId = (
+    queryClient.getQueryData(["projectsAll"]) as
+      | { accountId?: number }
+      | undefined
+  )?.accountId;
+  const foreignAccount =
+    cachedAccountId != null && cachedAccountId !== userId;
   // Nothing to patch yet (the account list is still loading) — fall back so the
   // open board can never be left showing stale tasks.
-  if (!patchProjectIntoCache(queryClient, projectId, payload)) {
+  if (
+    foreignAccount ||
+    !patchProjectIntoCache(queryClient, projectId, payload)
+  ) {
     await reconcileActiveBoardQuery(queryClient, projectId);
   }
 }

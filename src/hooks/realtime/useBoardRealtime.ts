@@ -11,6 +11,8 @@ import {
   reconcileActiveBoardTasks,
 } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { runRealtimeReconciliation } from "@/lib/realtime/latencyCanary";
+import { useFlag } from "@/hooks/useFlag";
+import { SCOPED_BOARD_REFETCH_FLAG } from "@/lib/flags/keys";
 
 export const createBoardRealtimeEventHandler = (
   refetch: (trigger: "event") => void,
@@ -31,6 +33,7 @@ export function useBoardRealtime(
   options?: { accountId?: number; enabled?: boolean },
 ): void {
   const queryClient = useQueryClient();
+  const scopedRefetch = useFlag(SCOPED_BOARD_REFETCH_FLAG);
   const wasConnected = useRef(false);
   const needsCatchUp = useRef(options?.enabled === false);
 
@@ -49,7 +52,7 @@ export function useBoardRealtime(
         Promise.all([
           // A single-board change fetches only that board; a reconnect keeps the
           // account-wide reconcile (see reconcileActiveBoardTasks).
-          trigger === "event" && userId !== undefined
+          scopedRefetch && trigger === "event" && userId !== undefined
             ? reconcileActiveBoardTasks(queryClient, projectId, userId)
             : reconcileActiveBoardQuery(queryClient, projectId),
           queryClient.refetchQueries({
@@ -126,5 +129,11 @@ export function useBoardRealtime(
       cancelled = true;
       unsubscribe?.();
     };
-  }, [options?.accountId, options?.enabled, projectId, queryClient]);
+  }, [
+    options?.accountId,
+    options?.enabled,
+    projectId,
+    queryClient,
+    scopedRefetch,
+  ]);
 }

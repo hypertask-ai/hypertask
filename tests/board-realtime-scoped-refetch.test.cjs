@@ -39,12 +39,12 @@ const buildProjects = () => [
 
 // Minimal React Query stand-in: records every cache operation and keeps the
 // single ["projectsAll"] entry the board renders from.
-const buildQueryClient = (projects) => {
+const buildQueryClient = (projects, accountId = USER_ID) => {
   const operations = [];
   let cached =
     projects === null
       ? undefined
-      : { accountId: USER_ID, updatedProjects: projects };
+      : { accountId, updatedProjects: projects };
   return {
     operations,
     cachedProjects: () => cached?.updatedProjects,
@@ -110,6 +110,15 @@ test("a board missing from the account list falls back to the full reconcile", a
   const { queryClient, operations } = buildQueryClient([
     { id: 7, name: "Another board", section: [], tasks: [] },
   ]);
+
+  await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
+
+  assert.deepEqual(operations[0], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[2], ["refetch", PROJECTS_ALL_KEY]);
+});
+
+test("a response fetched under another account never patches the current list", async () => {
+  const { queryClient, operations } = buildQueryClient(buildProjects(), 99);
 
   await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
 
