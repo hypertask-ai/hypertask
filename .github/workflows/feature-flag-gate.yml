@@ -1,79 +1,253 @@
 name: Feature Flag Gate
 
-# Every UI change ships behind a feature flag, enabled for Owner + QA first
-# (Valentin, 2026-09-08). The rule is mechanical, keyed off the PR title tag
-# the pr-title check already enforces: [BUGFIX]/[INFRA]/auto-revert titles
-# pass without a flag, anything else touching UI files must add or reference
-# one from src/lib/flags.ts. See .github/scripts/feature-flag-gate.mjs for
-# the exact decision logic (the same script backs the local dry-run).
-
 on:
-  pull_request:
+  # The required status has write access, so it must always run the workflow
+  # from production and treat pull-request files only as data.
+  pull_request_target:
     branches: [production]
-    types: [opened, synchronize, reopened, edited]
-
-concurrency:
-  group: feature-flag-gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+  push:
+    branches: [production]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
+
+concurrency:
+  group: feature-flag-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   feature-flag-gate:
+    if: github.event_name == 'pull_request_target'
     name: feature-flag-gate
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
 
-      - name: Evaluate feature-flag requirement
-        id: gate
+      - name: Evaluate the current pull-request head with trusted code
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -uo pipefail
-          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true
+          gate_tmp=$(mktemp -d "${RUNNER_TEMP:-/tmp}/feature-flag-gate.XXXXXX") || {
+            echo "::error::Cannot create private feature-flag-gate scratch space."
+            exit 2
+          }
+          trap 'rm -rf "$gate_tmp"' EXIT
+          pr_json="$gate_tmp/pr.json"
+          current_json="$gate_tmp/current.json"
+          reason_file="$gate_tmp/reason.txt"
+          error_file="$gate_tmp/error.txt"
+          payload="$gate_tmp/status.json"
 
-          if node .github/scripts/feature-flag-gate.mjs "$PR_TITLE" "$BASE_SHA" "$HEAD_SHA" > /tmp/gate-reason.txt 2>&1; then
-            echo "PASS: $(cat /tmp/gate-reason.txt)"
+          if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$pr_json"; then
+            echo "::error::Cannot read pull request #$PR_NUMBER."
+            exit 2
+          fi
+          if ! jq -e '
+            .state == "open" and .base.ref == "production" and
+            (.title | type == "string") and (.base.sha | test("^[0-9a-f]{40}$")) and
+            (.head.sha | test("^[0-9a-f]{40}$")) and (.head.repo.full_name | type == "string")
+          ' "$pr_json" >/dev/null; then
+            echo "::error::Pull request #$PR_NUMBER metadata is incomplete."
+            exit 2
+          fi
+
+          title=$(jq -r '.title' "$pr_json")
+          base_sha=$(jq -r '.base.sha' "$pr_json")
+          head_sha=$(jq -r '.head.sha' "$pr_json")
+          head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
+          result=2
+
+          if [ "$head_repo" != "$REPO" ]; then
+            echo "Fork pull requests require owner review." >"$reason_file"
+            result=1
+          elif ! git fetch --no-tags origin production "refs/pull/$PR_NUMBER/head" >"$gate_tmp/fetch.txt" 2>"$error_file"; then
+            result=2
+          elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
+            echo "The pull request commits are unavailable." >"$error_file"
+            result=2
+          else
+            node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"
+            result=$?
+          fi
+
+          if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
+            echo "::error::Cannot re-read pull request #$PR_NUMBER before publishing its result."
+            exit 2
+          fi
+          if [ "$(jq -r '.title' "$current_json")" != "$title" ] ||
+             [ "$(jq -r '.base.sha' "$current_json")" != "$base_sha" ] ||
+             [ "$(jq -r '.head.sha' "$current_json")" != "$head_sha" ]; then
+            echo "Pull request #$PR_NUMBER changed during evaluation; its new event will evaluate the new state."
             exit 0
           fi
 
-          REASON=$(cat /tmp/gate-reason.txt)
-          echo "$REASON"
-
-          MARKER="<!-- feature-flag-gate -->"
-          BODY=$(cat <<EOF
-          $MARKER
-          **feature-flag-gate failed.**
-
-          $REASON
-
-          Add a flag in \`src/lib/flags.ts\` (see \`src/lib/flags/keys.ts\` for the id
-          convention), reference an existing one from a changed UI file, or retitle
-          the PR \`[BUGFIX]\`/\`[INFRA]\` if this genuinely is not a new feature.
-          EOF
-          )
-
-          EXISTING=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --paginate --jq \
-            ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -1)
-          if [ -n "$EXISTING" ]; then
-            gh api -X PATCH "repos/$REPO/issues/comments/$EXISTING" -f body="$BODY" >/dev/null
+          if [ "$result" -eq 0 ]; then
+            state=success
+            description=$(head -1 "$reason_file" | cut -c1-130)
+          elif [ "$result" -eq 1 ]; then
+            state=failure
+            description=$(head -1 "$reason_file" | cut -c1-130)
           else
-            gh api "repos/$REPO/issues/$PR_NUMBER/comments" -f body="$BODY" >/dev/null
+            state=error
+            description="feature-flag-gate could not evaluate this pull request"
+            cat "$error_file"
           fi
 
-          exit 1
+          jq -n --arg state "$state" --arg description "$description" --arg target_url "$RUN_URL" '{
+            state: $state,
+            context: "feature-flag-gate",
+            description: $description,
+            target_url: $target_url
+          }' >"$payload"
+          if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null; then
+            echo "::error::Cannot publish feature-flag-gate for pull request #$PR_NUMBER."
+            exit 2
+          fi
+
+          if [ "$result" -eq 0 ]; then
+            echo "PASS: $(cat "$reason_file")"
+          elif [ "$result" -eq 1 ]; then
+            echo "::error::$(cat "$reason_file")"
+            printf '## feature-flag-gate failed\n\n%s\n' "$(cat "$reason_file")" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::feature-flag-gate could not evaluate this pull request."
+          fi
+          exit "$result"
+
+  reconcile-open-pull-requests:
+    if: github.event_name != 'pull_request_target'
+    name: reconcile-feature-flag-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Reconcile every open production pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          gate_tmp=$(mktemp -d "${RUNNER_TEMP:-/tmp}/feature-flag-reconcile.XXXXXX") || {
+            echo "::error::Cannot create private feature-flag reconciliation scratch space."
+            exit 2
+          }
+          trap 'rm -rf "$gate_tmp"' EXIT
+          pages="$gate_tmp/pulls.json"
+          rows="$gate_tmp/pulls.jsonl"
+          failures=0
+
+          if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$pages"; then
+            echo "::error::Cannot list open production pull requests."
+            exit 2
+          fi
+          if ! jq -c 'flatten[]' "$pages" >"$rows"; then
+            echo "::error::Cannot parse the open production pull-request list."
+            exit 2
+          fi
+
+          while IFS= read -r pull; do
+            if ! jq -e '
+              (.number | type == "number") and (.title | type == "string") and
+              (.base.sha | test("^[0-9a-f]{40}$")) and (.head.sha | test("^[0-9a-f]{40}$")) and
+              (.head.repo.full_name | type == "string")
+            ' <<<"$pull" >/dev/null; then
+              echo "::error::An open pull request has incomplete metadata."
+              failures=$((failures + 1))
+              continue
+            fi
+
+            number=$(jq -r '.number' <<<"$pull")
+            title=$(jq -r '.title' <<<"$pull")
+            base_sha=$(jq -r '.base.sha' <<<"$pull")
+            head_sha=$(jq -r '.head.sha' <<<"$pull")
+            head_repo=$(jq -r '.head.repo.full_name' <<<"$pull")
+            reason_file="$gate_tmp/reason-$number.txt"
+            error_file="$gate_tmp/error-$number.txt"
+            payload="$gate_tmp/status-$number.json"
+            result=2
+
+            if [ "$head_repo" != "$REPO" ]; then
+              echo "Fork pull requests require owner review." >"$reason_file"
+              result=1
+            elif ! git fetch --no-tags origin production "refs/pull/$number/head" >"$gate_tmp/fetch-$number.txt" 2>"$error_file"; then
+              result=2
+            elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
+              echo "The pull request commits are unavailable." >"$error_file"
+              result=2
+            else
+              node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"
+              result=$?
+            fi
+
+            current=$(gh api "repos/$REPO/pulls/$number") || {
+              echo "::error::Cannot re-read pull request #$number before publishing its result."
+              failures=$((failures + 1))
+              continue
+            }
+            if [ "$(jq -r '.title' <<<"$current")" != "$title" ] ||
+               [ "$(jq -r '.base.sha' <<<"$current")" != "$base_sha" ] ||
+               [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ]; then
+              echo "Pull request #$number changed during reconciliation; its own event will evaluate the new state."
+              continue
+            fi
+
+            if [ "$result" -eq 0 ]; then
+              state=success
+              description=$(head -1 "$reason_file" | cut -c1-130)
+            elif [ "$result" -eq 1 ]; then
+              state=failure
+              description=$(head -1 "$reason_file" | cut -c1-130)
+            else
+              state=error
+              description="feature-flag-gate could not evaluate this pull request"
+              cat "$error_file"
+              failures=$((failures + 1))
+            fi
+
+            jq -n --arg state "$state" --arg description "$description" --arg target_url "$RUN_URL" '{
+              state: $state,
+              context: "feature-flag-gate",
+              description: $description,
+              target_url: $target_url
+            }' >"$payload"
+            if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null; then
+              echo "::error::Cannot publish feature-flag-gate for pull request #$number."
+              failures=$((failures + 1))
+            fi
+          done <"$rows"
+
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::Feature flag reconciliation had $failures infrastructure failure(s)."
+            exit 2
+          fi

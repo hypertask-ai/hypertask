@@ -6,26 +6,30 @@ const fs = require("node:fs");
 const { execFileSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 
-const scriptUrl = pathToFileURL(
-  path.resolve(__dirname, "../.github/scripts/feature-flag-gate.mjs"),
-).href;
+const root = path.resolve(__dirname, "..");
+const scriptUrl = pathToFileURL(path.join(root, ".github/scripts/feature-flag-gate.mjs")).href;
 
-// Builds a throwaway git repo with a base commit and a head commit so the
-// script's real `git diff`/`git show` calls run against fixture content,
-// not the actual hypertasks history.
-function makeRepo() {
+function writeFile(dir, relative, content) {
+  const full = path.join(dir, relative);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, content);
+}
+
+function flagsSource(definitions = ["OTHER_FLAG"], mode = "OWNER_AND_QA", suffix = "") {
+  const rows = definitions.map((key) => `  { key: ${key}, description: "fixture" },`).join("\n");
+  return `import { OTHER_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n${rows}\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "${mode}";\n${suffix}`;
+}
+
+function makeRepo(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const git = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
   git(["init", "-q"]);
   git(["config", "user.email", "test@example.com"]);
   git(["config", "user.name", "Test"]);
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\n');
+  writeFile(dir, "src/lib/flags.ts", flagsSource());
   return { dir, git };
-}
-
-function writeFile(dir, rel, content) {
-  const full = path.join(dir, rel);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
-  fs.writeFileSync(full, content);
 }
 
 function commit(git, message) {
@@ -38,106 +42,190 @@ async function evaluate(title, baseSha, headSha, cwd) {
   const original = process.cwd();
   process.chdir(cwd);
   try {
-    const { evaluate } = await import(scriptUrl);
-    return evaluate({ title, baseSha, headSha });
+    const { evaluate: run } = await import(scriptUrl);
+    return run({ title, baseSha, headSha });
   } finally {
     process.chdir(original);
   }
 }
 
-test("non-UI change passes with no flag needed", async () => {
-  const { dir, git } = makeRepo();
-  writeFile(dir, "src/lib/util.ts", "export const x = 1;\n");
+test("non-UI changes do not need a flag", async (t) => {
+  const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/lib/util.ts", "export const x = 2;\n");
-  const head = commit(git, "backend change");
-  const result = await evaluate("HTPR-1 [FEATURE] backend only", base, head, dir);
-  assert.equal(result.pass, true);
+  writeFile(dir, "src/lib/util.ts", "export const value = 1;\n");
+  const head = commit(git, "backend");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
 });
 
-test("[BUGFIX] touching UI files passes without a flag", async () => {
-  const { dir, git } = makeRepo();
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+test("App Router API changes do not need a flag", async (t) => {
+  const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div/>;\n");
-  const head = commit(git, "fix");
-  const result = await evaluate("HTPR-2 [BUGFIX] fix widget", base, head, dir);
-  assert.equal(result.pass, true);
+  writeFile(dir, "src/app/api/example/route.ts", "export function GET() { return new Response(); }\n");
+  const head = commit(git, "backend");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
 });
 
-test("[BUGFIX] smuggling a big UI change fails the cross-check", async () => {
-  const { dir, git } = makeRepo();
+test("small BUGFIX changes are exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
   writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
   const base = commit(git, "base");
-  const bigContent = Array.from({ length: 200 }, (_, i) => `const line${i} = ${i};`).join("\n");
-  writeFile(dir, "src/components/Widget.tsx", bigContent);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const head = commit(git, "fix");
+  assert.equal((await evaluate("HTPR-2 [BUGFIX] fix widget", base, head, dir)).pass, true);
+});
+
+test("large BUGFIX UI additions fail the cross-check", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", Array.from({ length: 151 }, (_, i) => `const line${i} = ${i};`).join("\n"));
+  const head = commit(git, "large fix");
   const result = await evaluate("HTPR-3 [BUGFIX] fix widget", base, head, dir);
   assert.equal(result.pass, false);
-  assert.match(result.reason, /retitle as \[FEATURE\]/);
+  assert.match(result.reason, /Retitle it as \[FEATURE\]/);
 });
 
-test("auto-revert title is exempt regardless of tag", async () => {
-  const { dir, git } = makeRepo();
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+test("undocumented title tags are not exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div/>;\n");
-  const head = commit(git, "revert");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "ui");
+  assert.equal((await evaluate("HTPR-4 [CI] add widget", base, head, dir)).pass, false);
+});
+
+test("a forged auto-revert title is not exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "ordinary commit");
+  const result = await evaluate('Revert "HTPR-4 [FEATURE] add widget"', base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /no valid HTPR ticket and tag/);
+});
+
+test("a one-commit git revert of production is exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const base = commit(git, "HTPR-4 [FEATURE] add widget");
+  git(["revert", "--no-edit", base]);
+  const head = git(["rev-parse", "HEAD"]).trim();
   const result = await evaluate('Revert "HTPR-4 [FEATURE] add widget"', base, head, dir);
   assert.equal(result.pass, true);
+  assert.match(result.reason, /Verified auto-revert/);
 });
 
-test("[FEATURE] touching UI files without a flag fails", async () => {
-  const { dir, git } = makeRepo();
-  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\n');
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+test("FEATURE UI changes without a flag fail", async (t) => {
+  const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div>new</div>;\n");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const head = commit(git, "feature");
-  const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
-  assert.equal(result.pass, false);
-  assert.match(result.reason, /without adding or referencing a feature flag/);
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
 });
 
-test("[FEATURE] passes when it adds a FEATURE_FLAG_DEFINITIONS entry", async () => {
-  const { dir, git } = makeRepo();
-  writeFile(dir, "src/lib/flags.ts", "const FEATURE_FLAG_DEFINITIONS = [];\n");
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+test("unrelated key text outside FEATURE_FLAG_DEFINITIONS does not pass", async (t) => {
+  const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags.ts", flagsSource(undefined, undefined, 'const unrelated = { key: "htpr-5-widget" };\n'));
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
+});
+
+test("definitions resolve string constants imported from local modules", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/lib/external-flags.ts", 'export const EXTERNAL_FLAG =\n  "htpr-1-external";\n');
   writeFile(
     dir,
     "src/lib/flags.ts",
-    'const FEATURE_FLAG_DEFINITIONS = [{ key: "htpr-5-widget", shippedOn: "2026-09-08" }];\n',
+    'import { OTHER_FLAG } from "@/lib/flags/keys";\nimport { EXTERNAL_FLAG } from "@/lib/external-flags";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: EXTERNAL_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";\n',
   );
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div>new</div>;\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const head = commit(git, "feature");
   const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
-  assert.equal(result.pass, true);
-  assert.match(result.reason, /adds a FEATURE_FLAG_DEFINITIONS entry/);
-});
-
-test("[FEATURE] passes when it references an existing flag key in a UI file", async () => {
-  const { dir, git } = makeRepo();
-  writeFile(dir, "src/lib/flags/keys.ts", 'export const WIDGET_FLAG = "htpr-5-widget";\n');
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
-  const base = commit(git, "base");
-  writeFile(
-    dir,
-    "src/components/Widget.tsx",
-    'import { WIDGET_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div/> : null;\n',
-  );
-  const head = commit(git, "feature");
-  const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
-  assert.equal(result.pass, true);
-  assert.match(result.reason, /references an existing flag/);
-});
-
-test("[SPEED] (a non-exempt tag) touching UI files also requires a flag", async () => {
-  const { dir, git } = makeRepo();
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
-  const base = commit(git, "base");
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div>fast</div>;\n");
-  const head = commit(git, "speed");
-  const result = await evaluate("HTPR-6 [SPEED] speed up widget", base, head, dir);
   assert.equal(result.pass, false);
+  assert.match(result.reason, /without a feature flag/);
+  assert.doesNotMatch(result.reason, /could not be parsed/);
+});
+
+test("a ticket-specific definition passes with the Owner and QA default", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-5-widget"']));
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "feature");
+  const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.match(result.reason, /Owner \+ QA default/);
+});
+
+test("a definition for another ticket or a changed default fails", async (t) => {
+  const wrongTicket = makeRepo(t);
+  const wrongTicketBase = commit(wrongTicket.git, "base");
+  writeFile(wrongTicket.dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-9-widget"']));
+  writeFile(wrongTicket.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const wrongTicketHead = commit(wrongTicket.git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", wrongTicketBase, wrongTicketHead, wrongTicket.dir)).pass, false);
+
+  const wrongDefault = makeRepo(t);
+  const wrongDefaultBase = commit(wrongDefault.git, "base");
+  writeFile(wrongDefault.dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-5-widget"'], "EVERYONE"));
+  writeFile(wrongDefault.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const wrongDefaultHead = commit(wrongDefault.git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", wrongDefaultBase, wrongDefaultHead, wrongDefault.dir)).pass, false);
+});
+
+test("an imported registered key used by useFlag passes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
+test("comments, strings, and identifier substrings do not count as gate calls", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\n// useFlag(OTHER_FLAG)\nconst note = "useFlag(OTHER_FLAG)";\nconst OTHER_FLAG_SUFFIX = true;\nexport const Widget = () => <div />;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
+});
+
+test("a registered literal passed to isFeatureEnabled counts", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/page.tsx", 'import { isFeatureEnabled } from "@/lib/flags";\nexport async function Page() { return await isFeatureEnabled("htpr-1-other", 6) ? <div /> : null; }\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
+test("missing tags produce a useful failure instead of [null]", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "feature");
+  const result = await evaluate("add widget", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /no valid HTPR ticket and tag/);
+  assert.doesNotMatch(result.reason, /\[null\]/);
+});
+
+test("workflow covers metadata changes, uses trusted code, and reconciles old PRs", () => {
+  const workflow = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
+  assert.match(workflow, /pull_request_target:/);
+  assert.doesNotMatch(workflow, /^  pull_request:$/m);
+  assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review\]/);
+  assert.match(workflow, /push:\s+branches: \[production\]/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /timeout-minutes: 5/);
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
+  assert.match(workflow, /git fetch --no-tags origin production "refs\/pull\/\$PR_NUMBER\/head"/);
+  assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /statuses: write/);
+  assert.match(workflow, /statuses\/\$head_sha/);
+  assert.match(workflow, /gh api --paginate --slurp/);
+  assert.match(workflow, /jq -c 'flatten\[\]' \"\$pages\"/);
+  assert.doesNotMatch(workflow, /jq -ce 'flatten\[\]'/);
+  assert.match(workflow, /changed during evaluation/);
+  assert.doesNotMatch(workflow, /pull-requests: write/);
 });

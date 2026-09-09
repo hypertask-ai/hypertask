@@ -1,25 +1,8 @@
 import { execFileSync } from "node:child_process";
 
-// Every UI change ships behind a feature flag, enabled for Owner + QA first
-// (Valentin, 2026-09-08). This check is mechanical, driven off the PR title
-// tag the pr-title check already enforces:
-//   - [BUGFIX], [INFRA] and an auto-revert title ('Revert "..."') pass without
-//     a flag, because bug fixes and infra/rollback work ship freely.
-//   - Every other tag ([FEATURE] and anything else, e.g. [IMPROVE], [SPEED],
-//     [QA], [DASH], [FEEDBACK], [CLI/MCP/AI]) that touches UI files must add
-//     or reference a flag from src/lib/flags.ts.
-//   - A [BUGFIX]/[INFRA] PR that adds more than 150 lines to UI files fails
-//     anyway, so a feature cannot be smuggled in under a bug-fix title.
-//
-// Same script drives the CI job (feature-flag-gate.yml) and the local
-// dry-run against merged PRs, so the calibration never drifts from what
-// actually ships.
-
-const NON_FEATURE_TAGS = new Set(["BUGFIX", "INFRA", "CI", "DOCS", "REVERT"]);
+const EXEMPT_TAGS = new Set(["BUGFIX", "INFRA"]);
 const CROSS_CHECK_LINE_BUDGET = 150;
-
-// UI paths: components, non-api pages, the app router tree, and loose
-// .tsx/.css outside tests/stories/docs.
+const FLAG_KEY_MODULES = new Set(["@/lib/flags", "@/lib/flags/keys"]);
 const UI_INCLUDE = [
   /^src\/components\//,
   /^src\/pages\/(?!api\/)/,
@@ -28,7 +11,8 @@ const UI_INCLUDE = [
 ];
 const UI_EXCLUDE = [
   /^src\/pages\/api\//,
-  /^src\/lib\//, // flags.ts and flags/keys.ts live here; excluded except as a flag reference
+  /^src\/app\/api\//,
+  /^src\/lib\//,
   /(^|\/)tests?\//,
   /\.test\.[jt]sx?$/,
   /\.stories\.[jt]sx?$/,
@@ -45,124 +29,339 @@ function git(args) {
 }
 
 function isUiFile(path) {
-  if (UI_EXCLUDE.some((re) => re.test(path))) return false;
-  return UI_INCLUDE.some((re) => re.test(path));
+  return !UI_EXCLUDE.some((pattern) => pattern.test(path)) &&
+    UI_INCLUDE.some((pattern) => pattern.test(path));
 }
 
-// Parses `export const NAME = "value";` pairs out of src/lib/flags/keys.ts at
-// a given ref, so a reference check accepts either the exported identifier
-// (how UI files actually import flags) or the raw kebab id.
-function flagRegistry(ref) {
-  let text;
-  try {
-    text = git(["show", `${ref}:src/lib/flags/keys.ts`]);
-  } catch {
-    return [];
+function tokenize(source) {
+  const tokens = [];
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index];
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+    if (char === "/" && source[index + 1] === "/") {
+      index = source.indexOf("\n", index + 2);
+      if (index === -1) break;
+      continue;
+    }
+    if (char === "/" && source[index + 1] === "*") {
+      const end = source.indexOf("*/", index + 2);
+      if (end === -1) throw new Error("unterminated block comment");
+      index = end + 2;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      const quote = char;
+      let value = "";
+      index += 1;
+      let closed = false;
+      while (index < source.length) {
+        const next = source[index];
+        if (next === "\\") {
+          if (index + 1 >= source.length) throw new Error("unterminated string escape");
+          const escaped = source[index + 1];
+          value += ({ n: "\n", r: "\r", t: "\t" })[escaped] ?? escaped;
+          index += 2;
+          continue;
+        }
+        if (next === quote) {
+          index += 1;
+          closed = true;
+          break;
+        }
+        value += next;
+        index += 1;
+      }
+      if (!closed) throw new Error("unterminated string literal");
+      tokens.push({ type: quote === "`" ? "template" : "string", value });
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(char)) {
+      const start = index;
+      index += 1;
+      while (index < source.length && /[A-Za-z0-9_$]/.test(source[index])) index += 1;
+      tokens.push({ type: "identifier", value: source.slice(start, index) });
+      continue;
+    }
+    tokens.push({ type: "punctuation", value: char });
+    index += 1;
   }
-  const pairs = [];
-  const re = /export const (\w+)\s*=\s*"([^"]+)"/g;
-  let m;
-  while ((m = re.exec(text))) pairs.push({ identifier: m[1], value: m[2] });
-  return pairs;
+  return tokens;
+}
+
+function parseFlagRegistry(ref) {
+  const tokens = tokenize(git(["show", `${ref}:src/lib/flags/keys.ts`]));
+  const byIdentifier = new Map();
+  const byValue = new Map();
+  for (let index = 0; index + 4 < tokens.length; index += 1) {
+    const slice = tokens.slice(index, index + 5);
+    if (
+      slice[0].value !== "export" || slice[1].value !== "const" ||
+      slice[2].type !== "identifier" || slice[3].value !== "=" ||
+      slice[4].type !== "string"
+    ) continue;
+    const identifier = slice[2].value;
+    const value = slice[4].value;
+    if (byIdentifier.has(identifier) || byValue.has(value)) {
+      throw new Error(`duplicate feature flag key ${identifier}`);
+    }
+    byIdentifier.set(identifier, value);
+    byValue.set(value, identifier);
+  }
+  if (byIdentifier.size === 0) throw new Error("feature flag key registry is empty");
+  return { byIdentifier, byValue };
+}
+
+function resolveImportedStringConstant(ref, imports, localName) {
+  const specifier = imports.flatMap((declaration) =>
+    declaration.specifiers.map((entry) => ({ ...entry, module: declaration.module })),
+  ).find((entry) => entry.local === localName);
+  if (!specifier || !specifier.module.startsWith("@/") || specifier.module.includes("..")) {
+    throw new Error(`unknown feature flag key constant ${localName}`);
+  }
+
+  const modulePath = `src/${specifier.module.slice(2)}.ts`;
+  const tokens = tokenize(git(["show", `${ref}:${modulePath}`]));
+  for (let index = 0; index + 4 < tokens.length; index += 1) {
+    if (
+      tokens[index].value === "export" && tokens[index + 1].value === "const" &&
+      tokens[index + 2].value === specifier.imported && tokens[index + 3].value === "=" &&
+      tokens[index + 4].type === "string"
+    ) return tokens[index + 4].value;
+  }
+  throw new Error(`feature flag key ${localName} is not an exported string constant`);
+}
+
+function parseDefinitions(ref, registry) {
+  const source = git(["show", `${ref}:src/lib/flags.ts`]);
+  const tokens = tokenize(source);
+  const imports = parseImports(source);
+  const declaration = tokens.findIndex((token, index) =>
+    token.value === "FEATURE_FLAG_DEFINITIONS" &&
+    tokens[index + 1]?.value === "=" && tokens[index + 2]?.value === "[",
+  );
+  if (declaration === -1) throw new Error("FEATURE_FLAG_DEFINITIONS array was not found");
+
+  const keys = [];
+  let arrayDepth = 1;
+  let objectDepth = 0;
+  let objectKey = null;
+  for (let index = declaration + 3; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (token.value === "[") arrayDepth += 1;
+    if (token.value === "]") {
+      arrayDepth -= 1;
+      if (arrayDepth === 0) break;
+    }
+    if (arrayDepth !== 1) continue;
+    if (token.value === "{") {
+      objectDepth += 1;
+      if (objectDepth === 1) objectKey = null;
+      continue;
+    }
+    if (token.value === "}") {
+      if (objectDepth === 1) {
+        if (!objectKey) throw new Error("feature flag definition has no key");
+        keys.push(objectKey);
+      }
+      objectDepth -= 1;
+      continue;
+    }
+    if (
+      objectDepth === 1 && token.value === "key" &&
+      tokens[index + 1]?.value === ":"
+    ) {
+      if (objectKey) throw new Error("feature flag definition has duplicate key fields");
+      const valueToken = tokens[index + 2];
+      if (valueToken?.type === "string") objectKey = valueToken.value;
+      else if (valueToken?.type === "identifier") {
+        objectKey = registry.byIdentifier.get(valueToken.value) ??
+          resolveImportedStringConstant(ref, imports, valueToken.value);
+      } else throw new Error("feature flag definition key must be a string or key constant");
+    }
+  }
+  if (arrayDepth !== 0 || objectDepth !== 0) throw new Error("malformed FEATURE_FLAG_DEFINITIONS array");
+  if (new Set(keys).size !== keys.length) throw new Error("duplicate FEATURE_FLAG_DEFINITIONS key");
+
+  const defaultMode = tokens.findIndex((token, index) =>
+    token.value === "DEFAULT_FEATURE_FLAG_MODE" &&
+    tokens.slice(index + 1, index + 8).some((next) => next.value === "="),
+  );
+  if (defaultMode === -1) throw new Error("DEFAULT_FEATURE_FLAG_MODE was not found");
+  const equals = tokens.findIndex((token, index) => index > defaultMode && index < defaultMode + 8 && token.value === "=");
+  const mode = tokens[equals + 1];
+  if (mode?.type !== "string") throw new Error("DEFAULT_FEATURE_FLAG_MODE must be a string literal");
+  return { keys, defaultMode: mode.value };
+}
+
+function parseImports(source) {
+  const tokens = tokenize(source);
+  const imports = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (tokens[index].value !== "import" || tokens[index + 1]?.value !== "{") continue;
+    const specifiers = [];
+    index += 2;
+    while (index < tokens.length && tokens[index].value !== "}") {
+      if (tokens[index].value === "type" || tokens[index].value === ",") {
+        index += 1;
+        continue;
+      }
+      if (tokens[index].type !== "identifier") throw new Error("unsupported named import syntax");
+      const imported = tokens[index].value;
+      let local = imported;
+      if (tokens[index + 1]?.value === "as") {
+        if (tokens[index + 2]?.type !== "identifier") throw new Error("unsupported import alias");
+        local = tokens[index + 2].value;
+        index += 2;
+      }
+      specifiers.push({ imported, local });
+      index += 1;
+    }
+    if (tokens[index]?.value !== "}" || tokens[index + 1]?.value !== "from" || tokens[index + 2]?.type !== "string") {
+      throw new Error("unsupported named import declaration");
+    }
+    imports.push({ module: tokens[index + 2].value, specifiers });
+  }
+  return imports;
 }
 
 function addedLines(diff) {
-  const lines = [];
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("+++") || line.startsWith("---")) continue;
-    if (line.startsWith("+")) lines.push(line.slice(1));
+  return diff.split("\n")
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+    .map((line) => line.slice(1))
+    .join("\n");
+}
+
+function referencesFlagAtRuntime(ref, path, diff, registry) {
+  const source = git(["show", `${ref}:${path}`]);
+  const imports = parseImports(source);
+  const helpers = new Set();
+  const flagLocals = new Map();
+  for (const declaration of imports) {
+    for (const specifier of declaration.specifiers) {
+      if (declaration.module === "@/hooks/useFlag" && specifier.imported === "useFlag") {
+        helpers.add(specifier.local);
+      }
+      if (declaration.module === "@/lib/flags" && specifier.imported === "isFeatureEnabled") {
+        helpers.add(specifier.local);
+      }
+      if (FLAG_KEY_MODULES.has(declaration.module) && registry.byIdentifier.has(specifier.imported)) {
+        flagLocals.set(specifier.local, registry.byIdentifier.get(specifier.imported));
+      }
+    }
   }
-  return lines;
+
+  const tokens = tokenize(addedLines(diff));
+  for (let index = 0; index + 2 < tokens.length; index += 1) {
+    if (!helpers.has(tokens[index].value) || tokens[index + 1].value !== "(") continue;
+    const argument = tokens[index + 2];
+    if (argument.type === "string" && registry.byValue.has(argument.value)) return argument.value;
+    if (argument.type === "identifier" && flagLocals.has(argument.value)) return flagLocals.get(argument.value);
+  }
+  return null;
+}
+
+function isVerifiedAutoRevert(title, baseSha, headSha) {
+  if (!/^Revert "HTPR-\d+ \[[^\]]+\] .+"$/.test(title)) return false;
+  const mergeBase = git(["merge-base", baseSha, headSha]).trim();
+  if (git(["rev-list", "--count", `${mergeBase}..${headSha}`]).trim() !== "1") return false;
+  const message = git(["show", "-s", "--format=%s%n%b", headSha]);
+  if (message.split("\n", 1)[0] !== title) return false;
+  const reverted = message.match(/This reverts commit ([0-9a-f]{40})\./)?.[1];
+  if (!reverted) return false;
+  try {
+    git(["merge-base", "--is-ancestor", reverted, baseSha]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function failure(reason) {
+  return { pass: false, reason };
 }
 
 export function evaluate({ title, baseSha, headSha }) {
   const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
-    .split("\n")
-    .filter(Boolean);
+    .split("\n").filter(Boolean);
   const uiFiles = changedFiles.filter(isUiFile);
-
   if (uiFiles.length === 0) {
     return { pass: true, reason: "No changed file matches the UI-change path filter." };
   }
 
-  const isAutoRevert = /^Revert "/.test(title);
-  const tagMatch = title.match(/\[([^\]]+)\]/);
-  const tag = tagMatch ? tagMatch[1] : null;
-  const exempt = isAutoRevert || (tag && NON_FEATURE_TAGS.has(tag));
-
+  const titleMatch = title.match(/^HTPR-(\d+) \[([^\]]+)\] \S/);
+  const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
+  const tag = titleMatch?.[2] ?? null;
+  const exempt = autoRevert || (tag && EXEMPT_TAGS.has(tag));
   if (exempt) {
-    const numstat = git(["diff", "--numstat", `${baseSha}...${headSha}`])
-      .split("\n")
-      .filter(Boolean)
+    const uiAdded = git(["diff", "--numstat", `${baseSha}...${headSha}`])
+      .split("\n").filter(Boolean)
       .map((line) => {
         const [added, , ...pathParts] = line.split("\t");
         return { added: added === "-" ? 0 : Number(added), path: pathParts.join("\t") };
-      });
-    const uiAdded = numstat
+      })
       .filter((row) => isUiFile(row.path))
       .reduce((sum, row) => sum + row.added, 0);
-
     if (uiAdded > CROSS_CHECK_LINE_BUDGET) {
-      return {
-        pass: false,
-        reason:
-          `This PR is tagged ${isAutoRevert ? "as an auto-revert" : `[${tag}]`} but adds ` +
-          `${uiAdded} lines to UI files (over the ${CROSS_CHECK_LINE_BUDGET}-line budget). ` +
-          `This looks like a feature, retitle as [FEATURE] and add a flag.`,
-      };
-    }
-    return {
-      pass: true,
-      reason: `Tag ${isAutoRevert ? "auto-revert" : `[${tag}]`} is exempt (${uiAdded} UI lines added, within budget).`,
-    };
-  }
-
-  // Not exempt: a flag must be added to, or referenced from, src/lib/flags.ts.
-  let flagsDiff = "";
-  try {
-    flagsDiff = git(["diff", `${baseSha}...${headSha}`, "--", "src/lib/flags.ts"]);
-  } catch {
-    // file may not exist on one side; treat as no diff
-  }
-  const addedDefinition = addedLines(flagsDiff).some((line) => /key:\s*(\w+|"[^"]+")/.test(line));
-  if (addedDefinition) {
-    return { pass: true, reason: `[${tag}] adds a FEATURE_FLAG_DEFINITIONS entry in src/lib/flags.ts.` };
-  }
-
-  const registry = flagRegistry(headSha);
-  if (registry.length > 0) {
-    for (const file of uiFiles) {
-      let fileDiff = "";
-      try {
-        fileDiff = git(["diff", `${baseSha}...${headSha}`, "--", file]);
-      } catch {
-        continue;
-      }
-      const added = addedLines(fileDiff);
-      const referenced = registry.some(({ identifier, value }) =>
-        added.some((line) => line.includes(identifier) || line.includes(value)),
+      return failure(
+        `This pull request is tagged ${autoRevert ? "as an auto-revert" : `[${tag}]`} but adds ${uiAdded} lines to UI files ` +
+        `(over the ${CROSS_CHECK_LINE_BUDGET}-line budget). Retitle it as [FEATURE] and add a feature flag.`,
       );
-      if (referenced) {
-        return { pass: true, reason: `[${tag}] references an existing flag from src/lib/flags/keys.ts in ${file}.` };
-      }
     }
+    return { pass: true, reason: `${autoRevert ? "Verified auto-revert" : `[${tag}]`} is exempt (${uiAdded} UI lines added).` };
+  }
+  if (!titleMatch) {
+    return failure("The pull request title has no valid HTPR ticket and tag, so the feature flag requirement cannot be checked.");
   }
 
-  return {
-    pass: false,
-    reason:
-      `[${tag}] touches UI files (${uiFiles.slice(0, 5).join(", ")}${uiFiles.length > 5 ? ", ..." : ""}) ` +
-      `without adding or referencing a feature flag. Either:\n` +
-      `  (a) add an entry to FEATURE_FLAG_DEFINITIONS in src/lib/flags.ts, or\n` +
-      `  (b) import and use an existing flag key from src/lib/flags/keys.ts in a changed UI file, or\n` +
-      `  (c) if this is not really a feature, retitle the PR [BUGFIX] or [INFRA].`,
-  };
+  try {
+    const baseRegistry = parseFlagRegistry(baseSha);
+    const headRegistry = parseFlagRegistry(headSha);
+    const baseDefinitions = parseDefinitions(baseSha, baseRegistry);
+    const headDefinitions = parseDefinitions(headSha, headRegistry);
+    const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
+    if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
+
+    const added = headDefinitions.keys.filter((key) => !baseDefinitions.keys.includes(key));
+    if (added.length > 0) {
+      const ticketPrefix = `htpr-${titleMatch[1]}-`;
+      if (added.some((key) => !key.startsWith(ticketPrefix))) {
+        return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
+      }
+      if (headDefinitions.defaultMode !== "OWNER_AND_QA") {
+        return failure("New feature flags must default to Owner + QA.");
+      }
+      return { pass: true, reason: `[${tag}] adds ticket-specific feature flag ${added.join(", ")} with the Owner + QA default.` };
+    }
+
+    for (const path of uiFiles) {
+      const diff = git(["diff", `${baseSha}...${headSha}`, "--", path]);
+      const key = referencesFlagAtRuntime(headSha, path, diff, headRegistry);
+      if (key) return { pass: true, reason: `[${tag}] calls a feature gate with registered key ${key} in ${path}.` };
+    }
+  } catch (error) {
+    return failure(`Feature flag files or imports could not be parsed safely: ${error.message}`);
+  }
+
+  const shownFiles = `${uiFiles.slice(0, 5).join(", ")}${uiFiles.length > 5 ? ", ..." : ""}`;
+  return failure(
+    `[${tag}] touches UI files (${shownFiles}) without a feature flag. Add a ticket-specific entry to ` +
+    "FEATURE_FLAG_DEFINITIONS, or call useFlag/isFeatureEnabled with a registered key in a changed UI file.",
+  );
 }
 
-// CLI entry point: node feature-flag-gate.mjs <title> <baseSha> <headSha>
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [title, baseSha, headSha] = process.argv.slice(2);
-  const result = evaluate({ title, baseSha, headSha });
-  console.log(result.reason);
-  process.exitCode = result.pass ? 0 : 1;
+  try {
+    if (!title || !baseSha || !headSha) throw new Error("title, base SHA, and head SHA are required");
+    const result = evaluate({ title, baseSha, headSha });
+    console.log(result.reason);
+    process.exitCode = result.pass ? 0 : 1;
+  } catch (error) {
+    console.error(`Feature flag gate could not run: ${error.message}`);
+    process.exitCode = 2;
+  }
 }

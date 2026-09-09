@@ -323,6 +323,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "app-smoke",
     "ci-tests",
     "claude-review",
+    "feature-flag-gate",
     "pr-title",
     "revert-guard",
     "next-public-secrets",
@@ -334,6 +335,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   assert.deepEqual(policy.required_checks.automerge_also_requires, [
     "app-smoke",
     "ci-tests",
+    "feature-flag-gate",
   ]);
   assert.deepEqual(
     policy.policies.production_ruleset.required_status_checks,
