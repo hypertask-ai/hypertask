@@ -3,6 +3,7 @@ export type OwnedAgentRow = {
   displayName: string
   revokedAt: Date | null
   createdAt: Date
+  visibility: 'PRIVATE' | 'TEAM'
   members: Array<{
     project: {
       id: number
@@ -146,6 +147,7 @@ export type AgentManagementDatabase = AgentManagementTransaction & {
         displayName: true
         revokedAt: true
         createdAt: true
+        visibility: true
         members: {
           orderBy: { id: 'asc' }
           select: {
@@ -168,6 +170,7 @@ export type OwnedAgent = {
   display_name: string
   revoked: boolean
   created_at: string
+  visibility: 'PRIVATE' | 'TEAM'
   boards: Array<{ id: number; name: string }>
 }
 
@@ -190,6 +193,7 @@ export async function listOwnedAgents(
       displayName: true,
       revokedAt: true,
       createdAt: true,
+      visibility: true,
       members: {
         orderBy: { id: 'asc' },
         select: {
@@ -206,6 +210,7 @@ export async function listOwnedAgents(
     display_name: agent.displayName,
     revoked: agent.revokedAt !== null,
     created_at: agent.createdAt.toISOString(),
+    visibility: agent.visibility,
     boards: Array.from(
       new Map(
         agent.members.map(({ project }) => [

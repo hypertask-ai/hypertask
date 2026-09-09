@@ -6,7 +6,7 @@ async function main() {
     "postgresql://unused:unused@localhost:5432/unused";
 
   const {
-    TEAM_VISIBILITY_KEY_REQUIRED_ERROR,
+    TEAM_VISIBILITY_OWNER_PLAN_WARNING,
     accessibleAgentMembershipWhere,
     accessibleAgentWhere,
     boardAgentVisibilityWhere,
@@ -170,9 +170,9 @@ async function main() {
   );
 
   let updateCount = 0;
-  const noKeyTx = {
+  const nativeNoKeyTx = {
     agent: {
-      findFirst: async () => ({ id: "owned-agent" }),
+      findFirst: async () => ({ id: "owned-agent", runtimeType: "NATIVE" }),
       update: async () => {
         updateCount += 1;
         return { visibility: "TEAM" };
@@ -180,18 +180,56 @@ async function main() {
     },
     agentByokApiKey: { count: async () => 0 },
   } as any;
-  const blocked = await setOwnedAgentVisibilityInTransaction(
-    noKeyTx,
-    "owned-agent",
-    42,
-    "TEAM",
+  assert.deepEqual(
+    await setOwnedAgentVisibilityInTransaction(
+      nativeNoKeyTx,
+      "owned-agent",
+      42,
+      "TEAM",
+    ),
+    {
+      ok: true,
+      visibility: "TEAM",
+      warning: TEAM_VISIBILITY_OWNER_PLAN_WARNING,
+    },
   );
-  assert.deepEqual(blocked, {
-    ok: false,
-    status: 409,
-    error: TEAM_VISIBILITY_KEY_REQUIRED_ERROR,
-  });
-  assert.equal(updateCount, 0, "TEAM must not be saved without an enabled key");
+  assert.equal(updateCount, 1, "the owner may share a native agent without a key");
+
+  const nativeWithKeyTx = {
+    ...nativeNoKeyTx,
+    agentByokApiKey: { count: async () => 1 },
+  } as any;
+  assert.deepEqual(
+    await setOwnedAgentVisibilityInTransaction(
+      nativeWithKeyTx,
+      "owned-agent",
+      42,
+      "TEAM",
+    ),
+    { ok: true, visibility: "TEAM" },
+  );
+
+  const externalNoKeyTx = {
+    ...nativeNoKeyTx,
+    agent: {
+      ...nativeNoKeyTx.agent,
+      findFirst: async () => ({ id: "owned-agent", runtimeType: "EXTERNAL" }),
+    },
+    agentByokApiKey: {
+      count: async () => {
+        throw new Error("external agents must not be checked for a provider key");
+      },
+    },
+  } as any;
+  assert.deepEqual(
+    await setOwnedAgentVisibilityInTransaction(
+      externalNoKeyTx,
+      "owned-agent",
+      42,
+      "TEAM",
+    ),
+    { ok: true, visibility: "TEAM" },
+  );
 
   let guessedUpdateCount = 0;
   const guessedIdTx = {
@@ -318,7 +356,14 @@ async function main() {
   assert.match(detail, /<InfoRow label="Visibility">/);
   assert.match(detail, /<AgentOption value="PRIVATE">Private<\/AgentOption>/);
   assert.match(detail, /<AgentOption value="TEAM">Team<\/AgentOption>/);
-  assert.match(detail, /disabled=\{savingVisibility \|\| savingProviderKey\}/);
+  assert.match(
+    detail,
+    /agent\.runtimeType === "NATIVE" && !providerKeyLoaded/,
+  );
+  assert.match(
+    detail,
+    /Team members will use your plan for this agent\. Continue\?/,
+  );
   assert.equal(
     detail.match(/savingProviderKey \|\| savingVisibility/g)?.length,
     4,
@@ -330,6 +375,7 @@ async function main() {
   assert.match(providerRoute, /deleteOwnedAgentProviderKey\(/);
   assert.match(providerRoute, /upsertOwnedAgentProviderKey\(/);
   assert.match(agentRoute, /setOwnedAgentVisibility\(/);
+  assert.match(agentRoute, /warning: result\.warning/);
   assert.match(
     taskDetailLoad,
     /agentId: visibleAgent \? task\.agentId : null,[\s\S]*agent: visibleAgent/,
