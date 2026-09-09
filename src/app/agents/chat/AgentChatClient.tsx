@@ -1362,6 +1362,7 @@ const AgentChatClient = (props: IProp) => {
   // still be safely dropped by the same staleness check a direct send uses.
   const sendMessageText = useCallback(async (text: string, queuedId?: string) => {
     const targetSessionId = sessionIdRef.current;
+    const targetAgentId = selectedIdRef.current;
     if (!targetSessionId) return;
     const optimistic: TChatMessage = {
       // react-hooks/purity false-flags this pre-existing, unrelated line
@@ -1404,18 +1405,16 @@ const AgentChatClient = (props: IProp) => {
       );
       // Sender never waits on the realtime nudge for their own POST, so the
       // roster must re-rank here or the open chat stays mid-list until reload
-      // (Cursor QA fail on HTPR-6283).
-      if (liveSortEnabled) {
-        const agentId = selectedIdRef.current;
-        if (agentId) {
-          setAgents((prev) =>
-            bumpRosterChatRecency(
-              prev,
-              agentId,
-              sentMessage.createdAt ?? new Date().toISOString(),
-            ),
-          );
-        }
+      // (Cursor QA fail on HTPR-6283). Use the agent captured at send start so
+      // a chat switch mid-flight cannot bump the wrong row.
+      if (liveSortEnabled && targetAgentId) {
+        setAgents((prev) =>
+          bumpRosterChatRecency(
+            prev,
+            targetAgentId,
+            sentMessage.createdAt ?? new Date().toISOString(),
+          ),
+        );
       }
       // The webhook outbox had no subscriber for chat.message: the agent will
       // never see this message unless its runtime is set up later.
