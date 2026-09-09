@@ -67,7 +67,7 @@ import {
 import { userChannel } from "@/lib/realtime/shared";
 import AgentDetail from "../[agentId]/AgentDetail";
 import type { TAgent } from "../AgentsRegister";
-import { sortRosterByActivity } from "./rosterSort";
+import { bumpRosterChatRecency, sortRosterByActivity } from "./rosterSort";
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import axios from "axios";
@@ -593,6 +593,8 @@ const AgentChatClient = (props: IProp) => {
     return () => clearInterval(tick);
   }, [rosterStatusEnabled]);
   const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
+  const liveSortEnabledRef = useRef(liveSortEnabled);
+  liveSortEnabledRef.current = liveSortEnabled;
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const mobileAgentChatViewport = useMobileVisualViewport(
     isMbl && mobileAgentChatViewportEnabled,
@@ -1257,15 +1259,7 @@ const AgentChatClient = (props: IProp) => {
             const agentId = selectedIdRef.current;
             if (agentId) {
               const now = new Date().toISOString();
-              setAgents((prev) =>
-                prev
-                  ? prev.map((agent) =>
-                      agent.id === agentId
-                        ? { ...agent, lastChatMessageAt: now }
-                        : agent,
-                    )
-                  : prev,
-              );
+              setAgents((prev) => bumpRosterChatRecency(prev, agentId, now));
             }
           }
           return;
@@ -1410,6 +1404,21 @@ const AgentChatClient = (props: IProp) => {
       setMessages((prev) =>
         (prev ?? []).map((m) => (m.id === optimistic.id ? sentMessage : m)),
       );
+      // Sender never waits on the realtime nudge for their own POST, so the
+      // roster must re-rank here or the open chat stays mid-list until reload
+      // (Cursor QA fail on HTPR-6283).
+      if (liveSortEnabledRef.current) {
+        const agentId = selectedIdRef.current;
+        if (agentId) {
+          setAgents((prev) =>
+            bumpRosterChatRecency(
+              prev,
+              agentId,
+              sentMessage.createdAt ?? new Date().toISOString(),
+            ),
+          );
+        }
+      }
       // The webhook outbox had no subscriber for chat.message: the agent will
       // never see this message unless its runtime is set up later.
       if (data.delivered === false && !data.notice) setDeliveryNotice(true);

@@ -1,4 +1,5 @@
 export type TRosterSortable = {
+  id?: string;
   displayName: string;
   lastPostedAt?: string | null;
   lastChatMessageAt?: string | null;
@@ -22,4 +23,20 @@ export function sortRosterByActivity<T extends TRosterSortable>(
     if (at !== bt) return at < bt ? 1 : -1;
     return a.displayName.localeCompare(b.displayName);
   });
+}
+
+/**
+ * Point one roster row at a new chat timestamp so the live-sort comparator
+ * can re-rank without waiting for /api/agents/owned (HTPR-6283 QA fail:
+ * send updated messages but left the left-hand list stale until reload).
+ */
+export function bumpRosterChatRecency<T extends TRosterSortable>(
+  agents: readonly T[] | null | undefined,
+  agentId: string,
+  lastChatMessageAt: string,
+): T[] | null {
+  if (!agents) return null;
+  return agents.map((agent) =>
+    agent.id === agentId ? { ...agent, lastChatMessageAt } : agent,
+  );
 }
