@@ -16,14 +16,7 @@ export type AppWebVitalMetric = {
   entries?: Array<{ startTime: number }>;
 };
 
-const SUPPORTED_WEB_VITALS = new Set([
-  "CLS",
-  "FCP",
-  "FID",
-  "INP",
-  "LCP",
-  "TTFB",
-]);
+const SUPPORTED_WEB_VITALS = new Set(["CLS", "FCP", "INP", "LCP", "TTFB"]);
 
 export const metricBelongsToIdentityWindow = (
   metric: AppWebVitalMetric,
@@ -37,8 +30,7 @@ export const metricBelongsToIdentityWindow = (
   // Navigation metrics belong to the document that began before an in-place
   // login. Only post-transition interaction entries can safely represent the
   // newly signed-in session without forcing a slower hard navigation.
-  const metricName = metric.name.toUpperCase();
-  if (metricName !== "INP" && metricName !== "FID") return false;
+  if (metric.name.toUpperCase() !== "INP") return false;
   const entries = metric.entries ?? [];
   return (
     entries.length > 0 &&
