@@ -35,6 +35,7 @@ import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
+  HTPR_6320_AI_OBSERVABILITY_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
 } from "@/lib/flags/keys";
 
@@ -55,6 +56,12 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6320_AI_OBSERVABILITY_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Records every AI Chat turn in PostHog AI observability (user, model, tokens, time taken, and failures). No chat text is stored.",
+  },
   {
     key: HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
     shippedOn: "2026-09-09",
