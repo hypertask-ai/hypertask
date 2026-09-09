@@ -10603,7 +10603,6 @@ export async function POST(request: NextRequest) {
         }
         // $ai_latency measures the generation itself, not the turn setup.
         generationStartedAt = Date.now();
-        let generationFinishedWithError = false;
         const result = streamText({
           model: selected.model,
           instructions,
@@ -10612,14 +10611,11 @@ export async function POST(request: NextRequest) {
           stopWhen: stepCountIs(MAX_TOOL_STEPS),
           maxRetries: 2,
           abortSignal: providerAbort.signal,
-          onFinish: async ({ usage, finishReason }) => {
+          onFinish: async ({ usage }) => {
             turnUsage = {
               inputTokens: usage.inputTokens ?? undefined,
               outputTokens: usage.outputTokens ?? undefined,
             };
-            // Preserve providers that only report an error finish reason, but
-            // wait until the empty-completion retry has had a chance to recover.
-            generationFinishedWithError = finishReason === "error";
             await logAiUsage({
               userId: dbUser.id,
               teamId: gatewayTags.teamId ?? null,
@@ -10747,7 +10743,6 @@ export async function POST(request: NextRequest) {
               });
               const retryText = retry.text?.trim() ?? "";
               if (retryText) {
-                generationFinishedWithError = false;
                 chunks.push(retryText);
                 send("content", { content: retryText });
               }
@@ -10783,10 +10778,7 @@ export async function POST(request: NextRequest) {
             emptyCompletionError ?? "AI generation returned no visible reply",
           );
         } else {
-          recordTurnOutcome(
-            generationFinishedWithError ? "failed" : "ok",
-            generationFinishedWithError ? "Provider finished with an error" : undefined,
-          );
+          recordTurnOutcome("ok");
         }
 
         // The provider/tool phase is over: a deadline from here on must not

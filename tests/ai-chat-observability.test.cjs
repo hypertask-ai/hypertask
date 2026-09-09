@@ -43,7 +43,6 @@ test("the stream records routed and terminal turn outcomes", () => {
     /emptyCompletionError \?\? "AI generation returned no visible reply"/,
   );
   assert.match(stream, /waitUntil\(observation\)/);
-  assert.match(stream, /if \(retryText\) \{\s*generationFinishedWithError = false;/);
 });
 
 test("the generation event contains tracking fields but no chat bodies", () => {
