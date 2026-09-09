@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
-import { AGENT_CHAT_STOPPED_MESSAGE, AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, AGENT_CHAT_TIMEOUT_MESSAGE, NONTERMINAL_AGENT_RUN_STATUSES, isAgentChatSystemMessage } from '@/lib/agentRuns/model'
+import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, AGENT_CHAT_SYSTEM_MESSAGES, NONTERMINAL_AGENT_RUN_STATUSES, isAgentChatSystemMessage } from '@/lib/agentRuns/model'
 import { broadcastChatSession } from '@/lib/agents/chatBroadcast'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
@@ -74,7 +74,7 @@ export async function GET(
       await prisma.chatMessage.findMany({
         where: {
           sessionId: session.id,
-          NOT: { role: 'assistant', isDelivered: false, content: { in: [AGENT_CHAT_TIMEOUT_MESSAGE, AGENT_CHAT_STOPPED_MESSAGE] } },
+          NOT: { role: 'assistant', isDelivered: false, content: { in: [...AGENT_CHAT_SYSTEM_MESSAGES] } },
         },
         orderBy: { createdAt: 'desc' },
         take: TRANSCRIPT_LIMIT,

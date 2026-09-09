@@ -72,7 +72,10 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useFlag } from "@/hooks/useFlag";
-import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
+import {
+  AGENT_CHAT_PARKED_MESSAGE,
+  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+} from "@/lib/agentRuns/model";
 import { CONFIRMED_PROPOSAL_HEADING_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -832,7 +835,13 @@ const AgentChatClient = (props: IProp) => {
       setMessagesError(null);
       // Same signal a failed send sets: no live webhook subscribed to
       // chat.message, so the human side of the notice must survive a reload.
-      if (data.chatEnabled === false) setDeliveryNotice(true);
+      // The parked line already says it in the thread; two copies of the same
+      // sentence is noise.
+      if (
+        data.chatEnabled === false &&
+        data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE
+      )
+        setDeliveryNotice(true);
       // First load of this thread: reconcile the two draft copies. Whatever is
       // on this device wins, because it is what was typed most recently here,
       // and it gets pushed up so the next device sees it. An empty device slot
@@ -1377,6 +1386,7 @@ const AgentChatClient = (props: IProp) => {
         success?: boolean;
         message?: TChatMessage;
         delivered?: boolean;
+        notice?: TChatMessage;
         error?: string;
       };
       if (!res.ok || !data.success || !data.message) {
@@ -1389,7 +1399,19 @@ const AgentChatClient = (props: IProp) => {
       );
       // The webhook outbox had no subscriber for chat.message: the agent will
       // never see this message unless its runtime is set up later.
-      if (data.delivered === false) setDeliveryNotice(true);
+      if (data.delivered === false && !data.notice) setDeliveryNotice(true);
+      // The parked notice is the answer: it lands in the thread right away,
+      // without waiting for a broadcast that this send can still outrun.
+      // Upsert, not append: that broadcast can also win, and the same row
+      // would then appear twice.
+      const notice = data.notice;
+      if (notice) {
+        setMessages((prev) => [
+          ...(prev ?? []).filter((m) => m.id !== notice.id),
+          notice,
+        ]);
+        setAwaiting(false);
+      }
     } catch (e) {
       if (sessionIdRef.current !== targetSessionId) return;
       // Roll the optimistic bubble back and reopen the composer.

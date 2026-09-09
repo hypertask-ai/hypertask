@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
@@ -12,10 +13,23 @@ import {
   chatTicketProposalSelect,
   serializeChatTicketProposal,
 } from "@/lib/agents/chatTicketProposal";
-import { isAgentChatSystemMessage } from "@/lib/agentRuns/model";
+import {
+  AGENT_CHAT_PARKED_MESSAGE,
+  AGENT_CHAT_PARKED_REPLY_FLAG,
+  isAgentChatSystemMessage,
+} from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
 
 export const runtime = "nodejs";
+
+// The parked notice is an undelivered assistant row, like the timeout marker.
+// Matching on role and delivery as well as text keeps a human message that
+// happens to quote the notice out of this filter.
+const PARKED_NOTICE_WHERE: Prisma.ChatMessageWhereInput = {
+  role: "assistant",
+  isDelivered: false,
+  content: AGENT_CHAT_PARKED_MESSAGE,
+};
 
 // History page size, and the cap on ?limit=. Unchanged default so a client
 // that does not page keeps getting exactly what it got before.
@@ -31,11 +45,18 @@ const MAX_HISTORY_PAGE = 200;
  * count. `/api/agents/owned` counts the same thing in raw SQL, and the two must
  * not drift into different definitions of unread.
  */
-function unreadSince(sessionId: string, userId: number, since: Date) {
+function unreadSince(
+  sessionId: string,
+  userId: number,
+  since: Date,
+  exclude?: Prisma.ChatMessageWhereInput,
+) {
   return prisma.chatMessage.count({
     where: {
       sessionId,
       createdAt: { gt: since },
+      // A row this reader cannot see must not count towards their unread.
+      ...(exclude ? { NOT: exclude } : {}),
       OR: [{ authorUserId: null }, { authorUserId: { not: userId } }],
     },
   });
@@ -101,6 +122,13 @@ export async function GET(
       AGENT_CHAT_TICKET_CONFIRM_FLAG,
       userId,
     );
+    // The parked notice is stored in a shared thread, so a reader outside the
+    // rollout must not see it: for them the thread still ends at the human
+    // message, exactly as it does today.
+    const parkedReplyEnabled = await isFeatureEnabled(
+      AGENT_CHAT_PARKED_REPLY_FLAG,
+      userId,
+    );
     // Reconciling the turn is a side effect of reading it; if it fails the
     // transcript still has to load.
     await readAgentChatTurn(
@@ -131,7 +159,16 @@ export async function GET(
     // One row over the page size is the has-more probe; it is not returned.
     const hasMore = pageRows.length > limit;
     const messageRows = hasMore ? pageRows.slice(0, limit) : pageRows;
-    const messages = messageRows.reverse();
+    const messages = messageRows
+      .reverse()
+      // Filtered after the read, so paging still walks the stored rows: a
+      // reader outside the rollout sees a shorter page, never a shifted one.
+      .filter(
+        (message) =>
+          parkedReplyEnabled ||
+          !(isAgentChatSystemMessage(message) &&
+            message.content === AGENT_CHAT_PARKED_MESSAGE),
+      );
 
     // Opening the thread is taking part in it, which is what gives this person
     // an unread marker and a draft slot. Skipped on a paged read: scrolling
@@ -147,6 +184,7 @@ export async function GET(
             session.id,
             userId,
             participant.lastReadAt ?? participant.joinedAt,
+            parkedReplyEnabled ? undefined : PARKED_NOTICE_WHERE,
           )
         : null,
       before

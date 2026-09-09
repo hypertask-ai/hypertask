@@ -13,6 +13,10 @@ import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
 import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
+import {
+  AGENT_CHAT_PARKED_MESSAGE,
+  AGENT_CHAT_PARKED_REPLY_FLAG,
+} from "@/lib/agentRuns/model";
 
 export const runtime = "nodejs";
 
@@ -91,7 +95,16 @@ export async function POST(
       console.error("Failed to enrich Agent Chat with work context", error);
     }
 
-    const { message, deliveryIds } = await prisma.$transaction(async (tx) => {
+    // Read before the transaction: this can reach Redis, and the write below
+    // holds the session row lock. The sender, not the thread's owner: a rollout
+    // must not switch on for someone outside its audience just because they
+    // are writing in a thread the owner can see.
+    const parkedReplyEnabled = await isFeatureEnabled(
+      AGENT_CHAT_PARKED_REPLY_FLAG,
+      userId,
+    );
+
+    const { message, deliveryIds, notice } = await prisma.$transaction(async (tx) => {
       await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
       const message = await tx.chatMessage.create({
         data: {
@@ -134,7 +147,26 @@ export async function POST(
         ...(agentBrief ? { agentBrief } : {}),
       });
 
-      return { message, deliveryIds };
+      // An empty list means no runtime is subscribed to this agent's chat, so
+      // nothing will ever answer this message. Say so in the thread rather
+      // than leaving the sender watching a typing row that never resolves.
+      // Replying to the turn makes it terminal, like the timeout marker: a
+      // runtime that reconnects later cannot append an answer below a notice
+      // that already told the reader it was parked.
+      const notice =
+        deliveryIds.length === 0 && parkedReplyEnabled
+          ? await tx.chatMessage.create({
+              data: {
+                sessionId: session.id,
+                content: AGENT_CHAT_PARKED_MESSAGE,
+                role: "assistant",
+                isDelivered: false,
+                replyToMessageId: message.id,
+              },
+            })
+          : null;
+
+      return { message, deliveryIds, notice };
     });
 
     // Queue only after commit; a failure stays sweepable.
@@ -153,6 +185,16 @@ export async function POST(
         createdAt: message.createdAt,
       },
       delivered: deliveryIds.length > 0,
+      // The sender's own tab can miss the broadcast while its POST is still in
+      // flight, so the notice rides back on the response instead.
+      notice: notice
+        ? {
+            id: notice.id,
+            role: "system" as const,
+            content: notice.content,
+            createdAt: notice.createdAt,
+          }
+        : null,
     });
   } catch (error: any) {
     console.error("🚀 ~ POST ~ Error adding agent chat message", error);
