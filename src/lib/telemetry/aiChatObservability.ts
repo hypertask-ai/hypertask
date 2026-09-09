@@ -3,9 +3,14 @@
  *
  * Two halves, deliberately separate:
  *
- * 1. every generation is sent to PostHog AI observability as an `$ai_generation`
- *    event, with the user, model, token counts, latency and any error. No
- *    prompt or reply text is ever sent.
+ * 1. Every generation is sent to PostHog AI observability as an
+ *    `$ai_generation` event, with the user, model, token counts, latency and
+ *    any error. No prompt or reply text is ever sent.
+ * 2. `recordAiChatTurn` writes one tiny tally per turn to Redis and, when the
+ *    last 15 minutes breach the ticket's thresholds, posts a single comment on
+ *    the Manager's report thread. The thresholds are evaluated from what the
+ *    server itself recorded, never from PostHog, so a forged client-side event
+ *    can never raise an alert.
  *
  * The event is emitted directly with the installed posthog-node client rather
  * than through `@posthog/ai`: that package's Vercel model wrapper only supports
@@ -13,11 +18,6 @@
  * postinstall that downloads a binary, which fails the repo's network-isolated
  * app-smoke job. The `$ai_*` property names below are the ones PostHog's LLM
  * observability reads.
- * 2. `recordAiChatTurn` writes one tiny tally per turn to Redis and, when the
- *    last 15 minutes breach the ticket's thresholds, posts a single comment on
- *    the Manager's report thread. The thresholds are evaluated from what the
- *    server itself recorded, never from PostHog, so a forged client-side event
- *    can never raise an alert.
  */
 import { randomUUID } from "node:crypto";
 import type { Redis } from "ioredis";
@@ -237,7 +237,7 @@ export function aiChatTurnWindowBreached(metrics: AiChatTurnWindowMetrics) {
  */
 const RECOVER_CLAIM_SCRIPT = `
 local claimed = redis.call('GET', KEYS[1])
-if claimed and claimed <= ARGV[1] then
+if claimed and tonumber(claimed) < tonumber(ARGV[1]) then
   return redis.call('DEL', KEYS[1])
 end
 return 0
@@ -253,11 +253,18 @@ function llmObservabilityUrl() {
 function alertCommentText(metrics: AiChatTurnWindowMetrics) {
   const failedPercent = Math.round(metrics.errorRate * 100);
   const p95Seconds = (metrics.p95LatencyMs / 1000).toFixed(1);
+  const problems: string[] = [];
+  if (metrics.errorRate > AI_CHAT_TURN_ERROR_RATE_THRESHOLD) {
+    problems.push(
+      `${metrics.failed} of ${metrics.total} turns failed in the last 15 minutes (${failedPercent}%).`,
+    );
+  }
+  if (metrics.p95LatencyMs > AI_CHAT_TURN_P95_LATENCY_THRESHOLD_MS) {
+    problems.push(`The slowest 5% took ${p95Seconds}s.`);
+  }
   const detailUrl = llmObservabilityUrl();
   return (
-    `<p><strong>AI Chat is unhealthy: ${metrics.failed} of ${metrics.total} turns ` +
-    `failed in the last 15 minutes (${failedPercent}%).</strong> The slowest 5% took ` +
-    `${p95Seconds}s.</p>` +
+    `<p><strong>AI Chat is unhealthy: ${problems.join(" ")}</strong></p>` +
     (detailUrl
       ? `<p>Per-user and per-model detail: <a href="${detailUrl}">${detailUrl}</a></p>`
       : "") +
@@ -267,6 +274,18 @@ function alertCommentText(metrics: AiChatTurnWindowMetrics) {
 }
 
 /**
+ * Atomically refresh every ongoing breach while identifying the first caller,
+ * which alone posts the incident comment. A healthy snapshot cannot clear a
+ * claim after a concurrent breach has advanced its timestamp.
+ */
+const CLAIM_ALERT_SCRIPT = `
+local existing = redis.call('GET', KEYS[1])
+redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+if existing then return 0 end
+return 1
+`;
+
+/**
  * Posts at most one comment per ongoing problem: the claim key is held (and
  * refreshed) for as long as the window keeps breaching, and deleted the moment
  * it recovers.
@@ -274,18 +293,16 @@ function alertCommentText(metrics: AiChatTurnWindowMetrics) {
 async function raiseAiChatTurnAlert(
   redis: Redis,
   metrics: AiChatTurnWindowMetrics,
+  now: number,
 ) {
-  const claimed = await redis.set(
+  const claimed = await redis.eval(
+    CLAIM_ALERT_SCRIPT,
+    1,
     alertKey(),
-    String(Date.now()),
-    "EX",
+    String(now),
     AI_CHAT_TURN_ALERT_TTL_SECONDS,
-    "NX",
   );
-  if (claimed !== "OK") {
-    await redis.expire(alertKey(), AI_CHAT_TURN_ALERT_TTL_SECONDS);
-    return false;
-  }
+  if (Number(claimed) !== 1) return false;
   try {
     const task = await prisma.task.findFirst({
       where: {
@@ -294,7 +311,12 @@ async function raiseAiChatTurnAlert(
       },
       select: { id: true, userId: true },
     });
-    if (!task) throw new Error("AI Chat alert ticket not found");
+    // A missing destination is configuration, not a transient delivery failure.
+    // Keep the claim until its TTL instead of querying the database on every turn.
+    if (!task) {
+      console.error("[ai/chat/observability] alert ticket not found");
+      return false;
+    }
     const author = await prisma.user.findUnique({
       where: { id: FEATURE_FLAG_OWNER_USER_ID },
       select: { displayName: true },
@@ -319,7 +341,7 @@ async function raiseAiChatTurnAlert(
     // Let the next breach retry: without this the claim would silence the
     // rest of the incident.
     await redis.del(alertKey()).catch(() => undefined);
-    console.error("[ai/chat/observability] alert comment failed", error);
+    console.error("[ai/chat/observability] alert delivery failed", error);
     return false;
   }
 }
@@ -358,7 +380,7 @@ export async function recordAiChatTurn(
       await redis.eval(RECOVER_CLAIM_SCRIPT, 1, alertKey(), String(now));
       return metrics;
     }
-    await raiseAiChatTurnAlert(redis, metrics);
+    await raiseAiChatTurnAlert(redis, metrics, now);
     return metrics;
   } catch (error) {
     console.error("[ai/chat/observability] turn recording failed", error);
