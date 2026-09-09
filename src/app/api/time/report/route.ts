@@ -19,13 +19,18 @@ export async function GET(request: NextRequest) {
   );
   if (!parsed.success) return invalidFilterResponse(parsed.filter);
 
-  const [entries, canViewOthers] = await Promise.all([
-    listReport(auth.userId, parsed.filters),
-    canReportOtherUsers(auth.userId, {
-      teamId: parsed.filters.teamId,
-      boardIds: parsed.filters.boardIds,
-    }),
-  ]);
+  const canViewOthers = await canReportOtherUsers(auth.userId, {
+    teamId: parsed.filters.teamId,
+    boardIds: parsed.filters.boardIds,
+  });
+  // A stale "user" URL parameter must not turn the report empty for a plain
+  // member (no UI to clear it), so the filter only applies with the scope.
+  const entries = await listReport(
+    auth.userId,
+    canViewOthers
+      ? parsed.filters
+      : { ...parsed.filters, filterUserIds: undefined }
+  );
 
   return NextResponse.json({
     success: true,

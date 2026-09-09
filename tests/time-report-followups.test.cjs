@@ -358,6 +358,11 @@ test("the report route and /time screen gate the user filter on the server flag"
 
   assert.match(route, /canReportOtherUsers\(auth\.userId/);
   assert.match(route, /canViewOthers,/);
+  assert.match(
+    route,
+    /filterUserIds: undefined/,
+    "without other-user scope the user filter must be ignored, not left to empty the report"
+  );
 
   const screen = read("src/app/time/TimeComp.tsx");
 
