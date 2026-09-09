@@ -122,6 +122,9 @@ const { MobileViewContext } = jiti(
 stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
   default: () => null,
 });
+const { focusAiChatEditorForRequest } = jiti(
+  path.join(root, "src/utils/aiChat/focusRequestWindow.ts"),
+);
 const { AI_Tiptap_Container } = jiti(
   path.join(root, "src/components/AI_CHAT/AI_Tiptap_Container.tsx"),
 );
@@ -162,9 +165,9 @@ const chatContextValue = {
 
 // Mounts the composer in a fresh JSDOM, lets the 60ms focus loop run, and
 // reports where the cursor ended up.
-const mountComposer = async (primedOpenAt) => {
+const mountComposer = async (primedOpenAt, focusAnotherField = false) => {
   const dom = new JSDOM(
-    "<!doctype html><html><body><div id='root'></div></body></html>",
+    "<!doctype html><html><body><input id='other-field'><div id='root'></div></body></html>",
     { url: "https://app.hypertask.ai/" },
   );
   // React's async act() holds jsdom's own timer queue back, while Node timers
@@ -209,6 +212,8 @@ const mountComposer = async (primedOpenAt) => {
 
   explicitOpenAt = primedOpenAt;
   explicitOpenAtWrites = [];
+  const otherField = dom.window.document.getElementById("other-field");
+  if (focusAnotherField) otherField.focus();
   const reactRoot = createRoot(dom.window.document.getElementById("root"));
   try {
     // Mount effects flush here; the retry loop is scheduled.
@@ -232,6 +237,7 @@ const mountComposer = async (primedOpenAt) => {
     return {
       activeElement: dom.window.document.activeElement,
       composer,
+      otherField,
       writes: explicitOpenAtWrites,
     };
   } finally {
@@ -247,6 +253,18 @@ const mountComposer = async (primedOpenAt) => {
   }
 };
 
+test("the shared focus command rejects stale requests and active fields", () => {
+  const calls = [];
+  const editor = { commands: { focus: (position) => calls.push(position) } };
+  const input = { tagName: "INPUT", isContentEditable: false };
+
+  assert.equal(focusAiChatEditorForRequest(editor, null, null, 10_000), false);
+  assert.equal(focusAiChatEditorForRequest(editor, 4_000, null, 10_000), false);
+  assert.equal(focusAiChatEditorForRequest(editor, 9_000, input, 10_000), false);
+  assert.equal(focusAiChatEditorForRequest(editor, 9_000, null, 10_000), true);
+  assert.deepEqual(calls, ["end"]);
+});
+
 test("an explicit open mounts the composer focused and consumes the request", async () => {
   const { activeElement, composer, writes } = await mountComposer(Date.now());
   assert.equal(activeElement, composer, "composer should take the cursor");
@@ -257,6 +275,12 @@ test("auto-open mounts the composer unfocused", async () => {
   const { activeElement, composer, writes } = await mountComposer(null);
   assert.notEqual(activeElement, composer, "auto-open must not steal the cursor");
   assert.deepEqual(writes, [], "no request to consume");
+});
+
+test("a delayed explicit open does not steal focus from another field", async () => {
+  const { activeElement, otherField, writes } = await mountComposer(Date.now(), true);
+  assert.equal(activeElement, otherField, "the field must keep the cursor");
+  assert.deepEqual(writes, [null], "fresh request must still be consumed");
 });
 
 test("a stale explicit request no longer claims focus", async () => {
