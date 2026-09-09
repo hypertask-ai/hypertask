@@ -44,7 +44,7 @@ test("the stream records routed and terminal turn outcomes", () => {
   );
   assert.match(
     stream,
-    /modelId: resolvedModel\.resolvedModelId,[\s\S]*?let observedModel = selected\.modelId/,
+    /let observedModel = selected\.resolvedModelId/,
   );
   assert.match(
     stream,

@@ -9832,6 +9832,7 @@ export async function POST(request: NextRequest) {
     provider: ProviderId;
     usageProvider: string;
     modelId: string;
+    resolvedModelId: string;
     model: LanguageModel;
     settings: { temperature?: number; maxOutputTokens?: number };
     providerOptions?: AiProviderOptions;
@@ -10256,7 +10257,7 @@ export async function POST(request: NextRequest) {
       // All of it is best effort and never changes what the user receives.
       let generationStartedAt = Date.now();
       let observedAgentId = actingAgent?.id ?? null;
-      let observedModel = selected.modelId;
+      let observedModel = selected.resolvedModelId;
       let observedProvider = selected.usageProvider;
       let turnUsage: { inputTokens?: number; outputTokens?: number } | undefined;
       let generationFinishedWithError = false;
