@@ -56,7 +56,7 @@ export default async function AddToSlackPage() {
         {authorizeUrl ? (
           <a
             href={authorizeUrl.toString()}
-            className="rounded-lg bg-primary px-6 py-3 text-center font-semibold text-primary-foreground transition hover:bg-primary/90"
+            className="rounded-[5px] bg-shadcn-primary px-6 py-3 text-center font-semibold text-primary-foreground transition hover:bg-shadcn-primary/90"
           >
             Add to Slack
           </a>

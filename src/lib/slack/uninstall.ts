@@ -25,7 +25,7 @@ export type SlackInstallDb = {
     deleteMany(args: {
       where: {
         id: string;
-        updatedAt?: { lt: Date };
+        updatedAt?: { lte: Date };
       };
     }): Promise<{ count: number }>;
   };
@@ -64,8 +64,11 @@ function botTokenRevoked(
   try {
     const decrypted = decryptSecret(encryptedBotToken);
     return revokedBotTokens.includes(decrypted);
-  } catch {
-    return true;
+  } catch (error) {
+    // Indeterminate, not a match: an undecryptable token must not widen the
+    // deletion trigger. Surface it so the row can be inspected.
+    console.error("Slack install token could not be decrypted", error);
+    return false;
   }
 }
 
@@ -102,8 +105,9 @@ export async function deleteSlackInstallForRevocation(
   // written after the event happened. The predicate makes check and delete
   // one atomic statement, so a reinstall racing the event is safe. Real Slack
   // deliveries always carry a timestamp; without one we skip and wait for the
-  // retry rather than risk deleting a fresh reinstall. Slack's event_ts has
-  // whole-second precision, so the cutoff compares at second granularity.
+  // retry rather than risk deleting a fresh reinstall. Residual edge: an
+  // uninstall in the same second the row was written leaves the row until
+  // Slack retries; deleting fresh installs would be worse.
   const eventTsSeconds = Number(
     event.event_ts ?? envelope.event_time ?? Number.NaN,
   );
@@ -111,7 +115,7 @@ export async function deleteSlackInstallForRevocation(
   const deleted = await db.slackInstall.deleteMany({
     where: {
       id: install.id,
-      updatedAt: { lt: new Date((eventTsSeconds + 1) * 1000) },
+      updatedAt: { lte: new Date(eventTsSeconds * 1000) },
     },
   });
   return deleted.count > 0 ? "deleted" : "skipped_reinstalled";

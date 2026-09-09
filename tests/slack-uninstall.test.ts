@@ -32,9 +32,9 @@ function fakeDb(install: typeof INSTALL | null) {
       },
       async deleteMany(args) {
         // Mirror the SQL predicate: only rows matching id + updatedAt cutoff die.
-        const cutoff = args.where.updatedAt?.lt;
+        const cutoff = args.where.updatedAt?.lte;
         if (!install || args.where.id !== install.id) return { count: 0 };
-        if (cutoff && install.updatedAt >= cutoff) return { count: 0 };
+        if (cutoff && install.updatedAt > cutoff) return { count: 0 };
         deleted.push(args.where);
         return { count: 1 };
       },
@@ -59,7 +59,7 @@ test("app_uninstalled deletes the install and cascades", async () => {
     envelope({ type: "app_uninstalled", event_ts: "1789100000.000100" }),
   );
   assert.equal(result, "deleted");
-  assert.deepEqual(deleted, [{ id: "install-1", updatedAt: { lt: new Date((1789100000 + 1) * 1000) } }]);
+  assert.deepEqual(deleted, [{ id: "install-1", updatedAt: { lte: new Date(1789100000 * 1000) } }]);
 });
 
 test("tokens_revoked with the bot token deletes the install", async () => {
@@ -72,7 +72,7 @@ test("tokens_revoked with the bot token deletes the install", async () => {
     }),
   );
   assert.equal(result, "deleted");
-  assert.deepEqual(deleted, [{ id: "install-1", updatedAt: { lt: new Date((1789100000 + 1) * 1000) } }]);
+  assert.deepEqual(deleted, [{ id: "install-1", updatedAt: { lte: new Date(1789100000 * 1000) } }]);
 });
 
 test("tokens_revoked listing only member tokens keeps the install", async () => {
@@ -128,7 +128,7 @@ test("a delayed event never deletes a reinstalled row", async () => {
   assert.deepEqual(deleted, []);
 });
 
-test("an install updated in the event's own second is still deleted", async () => {
+test("an install updated later in the event's own second survives", async () => {
   const sameSecond = {
     ...INSTALL,
     updatedAt: new Date(1789100000 * 1000 + 400), // same event second, ms precision
@@ -138,8 +138,8 @@ test("an install updated in the event's own second is still deleted", async () =
     db,
     envelope({ type: "app_uninstalled", event_ts: "1789100000.000100" }),
   );
-  assert.equal(result, "deleted");
-  assert.deepEqual(deleted, [{ id: "install-1", updatedAt: { lt: new Date((1789100000 + 1) * 1000) } }]);
+  assert.equal(result, "skipped_reinstalled");
+  assert.deepEqual(deleted, []);
 });
 
 test("an event without any timestamp skips deletion", async () => {
