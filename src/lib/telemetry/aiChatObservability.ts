@@ -309,6 +309,13 @@ function alertCommentText(
  * after the bounded cooldown so repaired configuration is eventually retried.
  */
 const CLAIM_ALERT_SCRIPT = `
+local function clear_recovered_claim()
+  local claimed = redis.call('GET', KEYS[1])
+  if claimed and tonumber(claimed) < tonumber(ARGV[2]) then
+    redis.call('DEL', KEYS[1], KEYS[2])
+  end
+  return 0
+end
 local members = redis.call('ZRANGEBYSCORE', KEYS[3], ARGV[1], ARGV[2])
 local latencies = {}
 local total = 0
@@ -322,14 +329,14 @@ for _, member in ipairs(members) do
     if latency_number then table.insert(latencies, latency_number) end
   end
 end
-if total == 0 then return 0 end
+if total == 0 then return clear_recovered_claim() end
 table.sort(latencies)
 local p95 = 0
 if #latencies > 0 then
   p95 = latencies[math.ceil(#latencies * 0.95)] or 0
 end
 if failed / total <= tonumber(ARGV[3]) and p95 <= tonumber(ARGV[4]) then
-  return 0
+  return clear_recovered_claim()
 end
 local existing = redis.call('GET', KEYS[1])
 if not existing then

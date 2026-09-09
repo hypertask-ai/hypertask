@@ -60,9 +60,15 @@ function createFakeRedis() {
           .map((entry) => entry.member);
         const metrics = observability.evaluateAiChatTurnWindow(members);
         if (
-          metrics.errorRate <= Number(args[2]) &&
-          metrics.p95LatencyMs <= Number(args[3])
+          metrics.total === 0 ||
+          (metrics.errorRate <= Number(args[2]) &&
+            metrics.p95LatencyMs <= Number(args[3]))
         ) {
+          const claimed = strings.get(key);
+          if (claimed !== undefined && Number(claimed) < Number(args[1])) {
+            strings.delete(key);
+            strings.delete(keys[1]);
+          }
           return 0;
         }
         const existing = strings.get(key);
@@ -396,9 +402,13 @@ test("a recovery snapshot cannot delete a claim refreshed after it", async () =>
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
 });
 
-test("atomic claiming skips an incident healed after the caller's snapshot", async () => {
+test("atomic claiming closes an old incident healed after the caller's snapshot", async () => {
   reset();
   const redis = state.redis;
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed" },
+    1,
+  );
   redis.beforeClaimEval = async () => {
     for (let index = 0; index < 19; index += 1) {
       await redis.zadd(
@@ -412,8 +422,9 @@ test("atomic claiming skips an incident healed after the caller's snapshot", asy
     { ...baseTurn, outcome: "failed" },
     1_000_000,
   );
-  assert.equal(state.comments.length, 0);
+  assert.equal(state.comments.length, 1);
   assert.equal(redis.has("ai:chat-turn-alert:production"), false);
+  assert.equal(redis.has("ai:chat-turn-alert-delivered:production"), false);
 });
 
 test("atomic recovery keeps a claim when a delayed failure enters the window", async () => {
