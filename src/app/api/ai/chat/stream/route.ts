@@ -9717,16 +9717,12 @@ export async function POST(request: NextRequest) {
   // ponytail: phases that ignore the abort signal (a hung tool, a non-stream
   // DB call) can still run into the platform kill; the upgrade path is
   // per-phase timeouts at each trust boundary.
-  const turnDeadlineEnabled = await isFeatureEnabled(
-    HTPR_6278_CHAT_TURN_FAILURE_FLAG,
-    dbUser.id,
-  );
   // HTPR-6320: one flag read per turn decides whether this turn is wrapped for
   // PostHog AI observability and tallied for the health alert.
-  const aiObservabilityEnabled = await isFeatureEnabled(
-    HTPR_6320_AI_OBSERVABILITY_FLAG,
-    dbUser.id,
-  );
+  const [turnDeadlineEnabled, aiObservabilityEnabled] = await Promise.all([
+    isFeatureEnabled(HTPR_6278_CHAT_TURN_FAILURE_FLAG, dbUser.id),
+    isFeatureEnabled(HTPR_6320_AI_OBSERVABILITY_FLAG, dbUser.id),
+  ]);
 
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
