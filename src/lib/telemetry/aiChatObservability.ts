@@ -309,26 +309,48 @@ function alertCommentText(
  * after the bounded cooldown so repaired configuration is eventually retried.
  */
 const CLAIM_ALERT_SCRIPT = `
+local members = redis.call('ZRANGEBYSCORE', KEYS[3], ARGV[1], ARGV[2])
+local latencies = {}
+local total = 0
+local failed = 0
+for _, member in ipairs(members) do
+  local latency, outcome = string.match(member, '^[^|]+|([^|]+)|([^|]+)$')
+  if outcome and outcome ~= 'cancelled' then
+    total = total + 1
+    if outcome == 'failed' then failed = failed + 1 end
+    local latency_number = tonumber(latency)
+    if latency_number then table.insert(latencies, latency_number) end
+  end
+end
+if total == 0 then return 0 end
+table.sort(latencies)
+local p95 = 0
+if #latencies > 0 then
+  p95 = latencies[math.ceil(#latencies * 0.95)] or 0
+end
+if failed / total <= tonumber(ARGV[3]) and p95 <= tonumber(ARGV[4]) then
+  return 0
+end
 local existing = redis.call('GET', KEYS[1])
 if not existing then
   redis.call('DEL', KEYS[2])
-  redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+  redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[5])
   return 1
 end
 if redis.call('EXISTS', KEYS[2]) == 1 then
-  local claimed_at = tonumber(ARGV[1])
+  local claimed_at = tonumber(ARGV[2])
   if tonumber(existing) and tonumber(existing) > claimed_at then
     claimed_at = tonumber(existing)
   end
-  redis.call('SET', KEYS[1], tostring(claimed_at), 'EX', ARGV[2])
-  redis.call('SET', KEYS[2], tostring(claimed_at), 'EX', ARGV[2])
+  redis.call('SET', KEYS[1], tostring(claimed_at), 'EX', ARGV[5])
+  redis.call('SET', KEYS[2], tostring(claimed_at), 'EX', ARGV[5])
 end
 return 0
 `;
 
 const MARK_ALERT_DELIVERED_SCRIPT = `
 local claimed = redis.call('GET', KEYS[1])
-if not claimed or tonumber(claimed) == tonumber(ARGV[1]) then
+if claimed and tonumber(claimed) == tonumber(ARGV[1]) then
   redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
   redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
   return 1
@@ -351,15 +373,20 @@ return 0
  */
 async function raiseAiChatTurnAlert(
   redis: Redis,
+  window: string,
   metrics: AiChatTurnWindowMetrics,
   now: number,
 ) {
   const claimed = await redis.eval(
     CLAIM_ALERT_SCRIPT,
-    2,
+    3,
     alertKey(),
     deliveredAlertKey(),
+    window,
+    String(now - AI_CHAT_TURN_WINDOW_MS),
     String(now),
+    String(AI_CHAT_TURN_ERROR_RATE_THRESHOLD),
+    String(AI_CHAT_TURN_P95_LATENCY_THRESHOLD_MS),
     AI_CHAT_TURN_ALERT_TTL_SECONDS,
   );
   if (Number(claimed) !== 1) return false;
@@ -496,7 +523,7 @@ export async function recordAiChatTurn(
       );
       return metrics;
     }
-    await raiseAiChatTurnAlert(redis, metrics, now);
+    await raiseAiChatTurnAlert(redis, key, metrics, now);
     return metrics;
   } catch (error) {
     console.error("[ai/chat/observability] turn recording failed", error);

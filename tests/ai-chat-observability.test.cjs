@@ -21,6 +21,7 @@ function createFakeRedis() {
   const strings = new Map();
   return {
     calls: [],
+    beforeClaimEval: null,
     beforeRecoveryEval: null,
     async zadd(key, score, member) {
       this.calls.push(["zadd", key, score, member]);
@@ -46,23 +47,44 @@ function createFakeRedis() {
       const key = keys[0];
       this.calls.push(["eval", ...keys, ...args]);
       if (script.includes("local existing")) {
+        if (this.beforeClaimEval) {
+          const hook = this.beforeClaimEval;
+          this.beforeClaimEval = null;
+          await hook();
+        }
+        const members = (sets.get(keys[2]) ?? [])
+          .filter(
+            (entry) =>
+              entry.score >= Number(args[0]) && entry.score <= Number(args[1]),
+          )
+          .map((entry) => entry.member);
+        const metrics = observability.evaluateAiChatTurnWindow(members);
+        if (
+          metrics.errorRate <= Number(args[2]) &&
+          metrics.p95LatencyMs <= Number(args[3])
+        ) {
+          return 0;
+        }
         const existing = strings.get(key);
         if (existing === undefined) {
           strings.delete(keys[1]);
-          strings.set(key, args[0]);
+          strings.set(key, args[1]);
           return 1;
         }
         if (strings.has(keys[1])) {
           const claimedAt =
-            Number(existing) > Number(args[0]) ? existing : args[0];
+            Number(existing) > Number(args[1]) ? existing : args[1];
           strings.set(key, claimedAt);
           strings.set(keys[1], claimedAt);
         }
         return 0;
       }
-      if (script.includes("if not claimed or")) {
+      if (
+        !script.includes("ZRANGEBYSCORE") &&
+        script.includes("redis.call('SET', KEYS[2], ARGV[1]")
+      ) {
         const claimed = strings.get(key);
-        if (claimed === undefined || Number(claimed) === Number(args[0])) {
+        if (claimed !== undefined && Number(claimed) === Number(args[0])) {
           strings.set(key, args[0]);
           strings.set(keys[1], args[0]);
           return 1;
@@ -150,6 +172,7 @@ const state = {
   commentError: null,
   claimReplacement: null,
   commitBeforeCommentError: false,
+  dropClaimAfterComment: false,
   task: { id: 38547, userId: 6 },
   taskError: null,
 };
@@ -197,6 +220,9 @@ stubModule("src/utils/controllers/comments/createCommentService.ts", {
       throw state.commentError;
     }
     state.comments.push(params);
+    if (state.dropClaimAfterComment) {
+      await state.redis.del("ai:chat-turn-alert:production");
+    }
     return { id: 1 };
   },
 });
@@ -215,6 +241,7 @@ function reset(task = { id: 38547, userId: 6 }) {
   state.commentError = null;
   state.claimReplacement = null;
   state.commitBeforeCommentError = false;
+  state.dropClaimAfterComment = false;
   state.task = task;
   state.taskError = null;
 }
@@ -369,6 +396,26 @@ test("a recovery snapshot cannot delete a claim refreshed after it", async () =>
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
 });
 
+test("atomic claiming skips an incident healed after the caller's snapshot", async () => {
+  reset();
+  const redis = state.redis;
+  redis.beforeClaimEval = async () => {
+    for (let index = 0; index < 19; index += 1) {
+      await redis.zadd(
+        "ai:chat-turns:production",
+        1_000_000,
+        `healthy-${index}|1000|ok`,
+      );
+    }
+  };
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed" },
+    1_000_000,
+  );
+  assert.equal(state.comments.length, 0);
+  assert.equal(redis.has("ai:chat-turn-alert:production"), false);
+});
+
 test("atomic recovery keeps a claim when a delayed failure enters the window", async () => {
   reset();
   const redis = state.redis;
@@ -510,6 +557,21 @@ test("a failed alert comment releases the claim so the next turn retries", async
   );
   assert.equal(state.comments.length, 0);
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
+});
+
+test("a stale successful delivery cannot recreate a recovered claim", async () => {
+  reset();
+  state.dropClaimAfterComment = true;
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    1_000_000,
+  );
+  assert.equal(state.comments.length, 1);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
+  assert.equal(
+    state.redis.has("ai:chat-turn-alert-delivered:production"),
+    false,
+  );
 });
 
 test("a failed delivery cannot release a newer caller's claim", async () => {
