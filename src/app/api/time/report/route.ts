@@ -1,4 +1,4 @@
-import { listReport } from "@/lib/timeTracking";
+import { canReportOtherUsers, listReport } from "@/lib/timeTracking";
 import { parseTimeReportFilters } from "@/lib/timeReportFilters";
 import { NextRequest, NextResponse } from "next/server";
 import { getTimeRequestUser } from "../_lib";
@@ -19,10 +19,17 @@ export async function GET(request: NextRequest) {
   );
   if (!parsed.success) return invalidFilterResponse(parsed.filter);
 
-  const entries = await listReport(auth.userId, parsed.filters);
+  const [entries, canViewOthers] = await Promise.all([
+    listReport(auth.userId, parsed.filters),
+    canReportOtherUsers(auth.userId, {
+      teamId: parsed.filters.teamId,
+      boardIds: parsed.filters.boardIds,
+    }),
+  ]);
 
   return NextResponse.json({
     success: true,
+    canViewOthers,
     entries: entries.map((entry) => ({
       ...entry,
       startedAt: entry.startedAt.toISOString(),

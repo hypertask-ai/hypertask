@@ -239,6 +239,136 @@ test("time reports retain history from accessible archived boards", async () => 
   assert.deepEqual(reportWhere.task.project.OR, [{ ownerId: 6 }]);
 });
 
+test("time reports limit plain members to their own entries (HTPR-4228)", async () => {
+  const source = read("src/lib/timeTracking.ts");
+  const start = source.indexOf("export async function listReport(");
+  const end = source.indexOf("\nexport async function updateEntry(", start);
+  const javascript = ts.transpileModule(source.slice(start, end), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText;
+  const loaded = { exports: {} };
+  const day = (offset) => new Date(Date.UTC(2026, 8, 9, 10, offset));
+  const row = (id, userId, projectId) => ({
+    id,
+    userId,
+    note: null,
+    startedAt: day(id),
+    endedAt: day(id + 30),
+    pausedAt: null,
+    createdAt: day(id),
+    task: {
+      projectId,
+      uniqueIndex: id,
+      ticketNumber: `T-${id}`,
+      title: `Task ${id}`,
+      project: { title: `Board ${projectId}` },
+    },
+    user: { displayName: `User ${userId}` },
+  });
+  const rows = [row(1, 6, 15), row(2, 7, 15), row(3, 7, 16)];
+
+  new Function(
+    "module",
+    "exports",
+    "prisma",
+    "getProjectWhere",
+    "isProjectAdmin",
+    "elapsedSeconds",
+    javascript
+  )(
+    loaded,
+    loaded.exports,
+    { timeEntry: { findMany: async () => rows } },
+    () => ({}),
+    async (userId, projectId) => projectId === 16,
+    () => 0
+  );
+
+  // Caller 6 is a plain member of board 15 and admin of board 16; rows come
+  // back newest first.
+  const visible = await loaded.exports.listReport(6);
+
+  assert.deepEqual(visible.map((entry) => entry.id), [3, 1]);
+  assert.equal(visible[0].canManage, true);
+  assert.equal(visible[1].canManage, false);
+});
+
+test("other-user filter permission follows the report scope", async () => {
+  const source = read("src/lib/timeTracking.ts");
+  const start = source.indexOf("export async function canReportOtherUsers(");
+  const end = source.indexOf("\nexport async function updateEntry(", start);
+  const javascript = ts.transpileModule(source.slice(start, end), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText;
+  const loaded = { exports: {} };
+  let capturedWhere;
+
+  new Function(
+    "module",
+    "exports",
+    "prisma",
+    "getProjectWhere",
+    javascript
+  )(
+    loaded,
+    loaded.exports,
+    {
+      project: {
+        findFirst: async ({ where }) => {
+          capturedWhere = where;
+          return { id: 16 };
+        },
+      },
+    },
+    () => ({})
+  );
+
+  assert.equal(
+    await loaded.exports.canReportOtherUsers(6, { teamId: "t1" }),
+    true
+  );
+  assert.equal(capturedWhere.teamId, "t1");
+  assert.deepEqual(capturedWhere.OR, [
+    { ownerId: 6 },
+    {
+      members: {
+        some: { userId: 6, status: "Accepted", agentId: null, role: "Admin" },
+      },
+    },
+  ]);
+
+  const empty = { exports: {} };
+  new Function("module", "exports", "prisma", "getProjectWhere", javascript)(
+    empty,
+    empty.exports,
+    { project: { findFirst: async () => null } },
+    () => ({})
+  );
+  assert.equal(await empty.exports.canReportOtherUsers(6), false);
+});
+
+test("the report route and /time screen gate the user filter on the server flag", () => {
+  const route = read("src/app/api/time/report/route.ts");
+
+  assert.match(route, /canReportOtherUsers\(auth\.userId/);
+  assert.match(route, /canViewOthers,/);
+
+  const screen = read("src/app/time/TimeComp.tsx");
+
+  assert.match(screen, /report\.data\?\.canViewOthers/);
+  assert.match(
+    screen,
+    /\{canViewOthers && \(\s+<ScopeField label="User" containerOnly>/,
+    "the User filter must render only when the server allows other users"
+  );
+});
+
 test("archived task details keep a stop-only timer path", () => {
   const source = read("src/lib/timeTracking.ts");
   const access = read("src/app/api/time/_lib.ts");

@@ -421,7 +421,14 @@ export async function listReport(
       .map(({ projectId }) => projectId)
   );
 
-  return entries.map(({ task, user, ...entry }) => ({
+  // HTPR-4228: reports show all members' entries only to board owners and
+  // admins; plain members are limited to their own history.
+  const visibleEntries = entries.filter(
+    (entry) =>
+      entry.userId === userId || manageableProjectIds.has(entry.task.projectId)
+  );
+
+  return visibleEntries.map(({ task, user, ...entry }) => ({
     id: entry.id,
     taskId: entry.taskId,
     userId: entry.userId,
@@ -441,6 +448,33 @@ export async function listReport(
     seconds: elapsedSeconds(entry.startedAt, entry.endedAt, entry.pausedAt),
     canManage: manageableProjectIds.has(task.projectId),
   }));
+}
+
+// HTPR-4228: filtering by other users is only meaningful for someone who
+// administers at least one board in the report scope, so the /time screen can
+// hide the user filter for plain members.
+export async function canReportOtherUsers(
+  userId: number,
+  scope: { teamId?: string; boardIds?: number[] } = {}
+) {
+  const project = await prisma.project.findFirst({
+    where: {
+      status: { in: ["Normal", "Archive"] },
+      ...getProjectWhere(userId),
+      ...(scope.boardIds?.length ? { id: { in: scope.boardIds } } : {}),
+      ...(scope.teamId ? { teamId: scope.teamId } : {}),
+      OR: [
+        { ownerId: userId },
+        {
+          members: {
+            some: { userId, status: "Accepted", agentId: null, role: "Admin" },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  return Boolean(project);
 }
 
 export async function updateEntry(

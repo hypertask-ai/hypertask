@@ -582,7 +582,11 @@ const TimeComp = () => {
     to,
     running,
   });
-  const entries = report.data ?? [];
+  const entries = report.data?.entries ?? [];
+  // Server-decided: the user filter is only offered when the requester
+  // administers a board in scope; for plain members it can only return
+  // nothing (HTPR-4228).
+  const canViewOthers = report.data?.canViewOthers ?? false;
   const pauseTimer = usePauseTimer();
   const resumeTimer = useResumeTimer();
   const stopTimer = useStopTimer();
@@ -1002,21 +1006,23 @@ const TimeComp = () => {
                   }
                 />
               </ScopeField>
-              <ScopeField label="User" containerOnly>
-                <MultiSelectDropdown
-                  ariaLabel="Filter by user"
-                  options={members.map((member) => ({
-                    value: String(member.id),
-                    label: memberLabel(member),
-                  }))}
-                  selected={selectedUserValues}
-                  onChange={(values) =>
-                    replaceParams({
-                      user: values.length ? values.join(",") : null,
-                    })
-                  }
-                />
-              </ScopeField>
+              {canViewOthers && (
+                <ScopeField label="User" containerOnly>
+                  <MultiSelectDropdown
+                    ariaLabel="Filter by user"
+                    options={members.map((member) => ({
+                      value: String(member.id),
+                      label: memberLabel(member),
+                    }))}
+                    selected={selectedUserValues}
+                    onChange={(values) =>
+                      replaceParams({
+                        user: values.length ? values.join(",") : null,
+                      })
+                    }
+                  />
+                </ScopeField>
+              )}
               <ScopeField label="Date range">
                 <select
                   className={selectClassName}
