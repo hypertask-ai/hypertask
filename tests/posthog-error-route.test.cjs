@@ -21,7 +21,11 @@ stubModule("src/lib/flags.ts", {
   POSTHOG_ERROR_ALERT_FLAG: "htpr-6238-posthog-error-alert",
   isFeatureEnabled: async (key, userId) => {
     checks.push({ key, userId });
-    return false;
+    return flagEnabled;
+  },
+  isFeatureFlagOwner: async (headers) => {
+    checks.push({ ownerSession });
+    return ownerSession;
   },
 });
 stubModule("src/lib/redis.ts", {
@@ -41,6 +45,27 @@ const { POST: alertPost } = jiti(
 const { POST: testPost } = jiti(
   path.join(root, "src/app/api/integrations/posthog/error-test/route.ts"),
 );
+
+let flagEnabled = false;
+let ownerSession = false;
+
+function withEnvironment(value, run) {
+  const previousEnvironment = process.env.VERCEL_ENV;
+  process.env.VERCEL_ENV = value;
+  return Promise.resolve(run()).finally(() => {
+    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
+    else process.env.VERCEL_ENV = previousEnvironment;
+  });
+}
+
+function withTestToken(value, run) {
+  const previousToken = process.env.POSTHOG_ERROR_TEST_TOKEN;
+  process.env.POSTHOG_ERROR_TEST_TOKEN = value;
+  return Promise.resolve(run()).finally(() => {
+    if (previousToken === undefined) delete process.env.POSTHOG_ERROR_TEST_TOKEN;
+    else process.env.POSTHOG_ERROR_TEST_TOKEN = previousToken;
+  });
+}
 
 test("disabled flag rejects the webhook before reading or dispatching it", async () => {
   checks.length = 0;
@@ -65,16 +90,58 @@ test("disabled flag rejects the webhook before reading or dispatching it", async
 
 test("disabled flag hides the preview error trigger before token checks", async () => {
   checks.length = 0;
-  const previousEnvironment = process.env.VERCEL_ENV;
-  process.env.VERCEL_ENV = "preview";
-  try {
+  await withEnvironment("preview", async () => {
     const response = await testPost({ headers: new Headers() });
     assert.equal(response.status, 404);
     assert.deepEqual(checks, [
       { key: "htpr-6238-posthog-error-alert", userId: 6 },
     ]);
+  });
+});
+
+test("production trigger without an owner session is a 404 before token checks", async () => {
+  flagEnabled = true;
+  ownerSession = false;
+  checks.length = 0;
+  try {
+    await withEnvironment("production", async () => {
+      const response = await testPost({ headers: new Headers() });
+      assert.equal(response.status, 404);
+      assert.deepEqual(checks, [
+        { key: "htpr-6238-posthog-error-alert", userId: 6 },
+        { ownerSession: false },
+      ]);
+    });
   } finally {
-    if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
-    else process.env.VERCEL_ENV = previousEnvironment;
+    flagEnabled = false;
+  }
+});
+
+test("production trigger with an owner session still needs the operator token", async () => {
+  flagEnabled = true;
+  ownerSession = true;
+  checks.length = 0;
+  try {
+    await withTestToken("operator-token", () =>
+      withEnvironment("production", async () => {
+        const response = await testPost({ headers: new Headers() });
+        assert.equal(response.status, 401);
+
+        checks.length = 0;
+        await assert.rejects(
+          testPost({
+            headers: new Headers({ "x-error-test-token": "operator-token" }),
+          }),
+          /HTPR-6238 deliberate error tracking verification/,
+        );
+        assert.deepEqual(checks, [
+          { key: "htpr-6238-posthog-error-alert", userId: 6 },
+          { ownerSession: true },
+        ]);
+      }),
+    );
+  } finally {
+    flagEnabled = false;
+    ownerSession = false;
   }
 });
