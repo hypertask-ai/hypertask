@@ -215,10 +215,13 @@ jobs:
             # small updates ride GitHub's native auto-merge, majors wait on a
             # board ticket. This sweeper would only park every one of them on the
             # `package.json` risk path and bury the PR under repeat comments, so
-            # it leaves them alone entirely. GraphQL has reported both login
-            # spellings for bot actors over time, so accept both.
+            # it leaves them alone entirely. GraphQL has reported several login
+            # spellings for bot actors: `dependabot`, `dependabot[bot]` and, on
+            # this repo, `app/dependabot` (HTPR-6299: PR 443 slipped past the
+            # major lane exactly because the third spelling was missed), so
+            # accept all of them.
             author=$(jq -r '.author.login // ""' <<<"$J")
-            if [[ "$author" == "dependabot" || "$author" == "dependabot[bot]" ]]; then
+            if [[ "$author" == "dependabot" || "$author" == "dependabot[bot]" || "$author" == "app/dependabot" ]]; then
               echo "skip: dependabot PR (handled by dependabot-stack.yml)"
               echo "::endgroup::"; continue
             fi
