@@ -1250,15 +1250,12 @@ const AgentChatClient = (props: IProp) => {
               payload.agentId === selectedIdRef.current));
         if (isOpenSessionEvent) {
           void loadMessages(currentSessionId);
-          // Open-chat recency: bump the selected row locally so the list
-          // reorders without a second /api/agents/owned fetch on every
-          // streamed message (OCR advisory on HTPR-6283).
-          if (liveSortEnabled) {
-            const agentId = selectedIdRef.current;
-            if (agentId) {
-              const now = new Date().toISOString();
-              setAgents((prev) => bumpRosterChatRecency(prev, agentId, now));
-            }
+          // Open-chat recency: always bump locally; the flag only controls
+          // sort display. Avoids a second /api/agents/owned fetch per message.
+          const agentId = selectedIdRef.current;
+          if (agentId) {
+            const now = new Date().toISOString();
+            setAgents((prev) => bumpRosterChatRecency(prev, agentId, now));
           }
           return;
         }
@@ -1403,11 +1400,10 @@ const AgentChatClient = (props: IProp) => {
       setMessages((prev) =>
         (prev ?? []).map((m) => (m.id === optimistic.id ? sentMessage : m)),
       );
-      // Sender never waits on the realtime nudge for their own POST, so the
-      // roster must re-rank here or the open chat stays mid-list until reload
-      // (Cursor QA fail on HTPR-6283). Use the agent captured at send start so
-      // a chat switch mid-flight cannot bump the wrong row.
-      if (liveSortEnabled && targetAgentId) {
+      // Always record chat recency on send; liveSortEnabled only controls
+      // whether the roster sorts by it. Use the agent captured at send start
+      // so a chat switch mid-flight cannot bump the wrong row (HTPR-6283).
+      if (targetAgentId) {
         setAgents((prev) =>
           bumpRosterChatRecency(
             prev,
