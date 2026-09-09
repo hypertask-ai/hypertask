@@ -72,7 +72,10 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import axios from "axios";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { useFlag } from "@/hooks/useFlag";
-import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
+import {
+  AGENT_CHAT_PARKED_MESSAGE,
+  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+} from "@/lib/agentRuns/model";
 import { CONFIRMED_PROPOSAL_HEADING_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -832,11 +835,11 @@ const AgentChatClient = (props: IProp) => {
       setMessagesError(null);
       // Same signal a failed send sets: no live webhook subscribed to
       // chat.message, so the human side of the notice must survive a reload.
-      // A system notice already closing the thread says the same thing, and
-      // showing both is the same sentence twice.
+      // The parked line already says it in the thread; two copies of the same
+      // sentence is noise.
       if (
         data.chatEnabled === false &&
-        data.messages.at(-1)?.role !== "system"
+        data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE
       )
         setDeliveryNotice(true);
       // First load of this thread: reconcile the two draft copies. Whatever is

@@ -53,7 +53,6 @@ export async function POST(
       sessionId,
       userId,
       select: {
-        userId: true,
         agent: { select: { runtimeType: true } },
       },
     });
@@ -97,11 +96,12 @@ export async function POST(
     }
 
     // Read before the transaction: this can reach Redis, and the write below
-    // holds the session row lock. Owner, not sender, because the row it gates
-    // is stored in a thread everyone the agent is shared with can read.
+    // holds the session row lock. The sender, not the thread's owner: a rollout
+    // must not switch on for someone outside its audience just because they
+    // are writing in a thread the owner can see.
     const parkedReplyEnabled = await isFeatureEnabled(
       AGENT_CHAT_PARKED_REPLY_FLAG,
-      session.userId,
+      userId,
     );
 
     const { message, deliveryIds, notice } = await prisma.$transaction(async (tx) => {
