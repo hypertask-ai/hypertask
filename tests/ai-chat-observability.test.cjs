@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -38,11 +39,18 @@ function createFakeRedis() {
       sets.set(key, kept);
       return entries.length - kept.length;
     },
-    async eval(script, keyCount, key, arg) {
-      this.calls.push(["eval", key, arg]);
-      if (!script.includes("claimed <=")) throw new Error("unexpected script");
+    async eval(script, keyCount, key, ...args) {
+      this.calls.push(["eval", key, ...args]);
+      if (script.includes("local existing")) {
+        const existing = strings.has(key);
+        strings.set(key, args[0]);
+        return existing ? 0 : 1;
+      }
+      if (!script.includes("tonumber(claimed)")) {
+        throw new Error("unexpected script");
+      }
       const claimed = strings.get(key);
-      if (claimed !== undefined && claimed <= arg) {
+      if (claimed !== undefined && Number(claimed) < Number(args[0])) {
         strings.delete(key);
         return 1;
       }
@@ -80,24 +88,43 @@ function createFakeRedis() {
 const state = {
   redis: createFakeRedis(),
   comments: [],
+  commentError: null,
+  commitBeforeCommentError: false,
   task: { id: 38547, userId: 6 },
-  captured: [],
+  taskError: null,
 };
 
 stubModule("src/lib/redis.ts", { getRedis: async () => state.redis });
 stubModule("src/lib/prisma.ts", {
   default: {
-    task: { findFirst: async () => state.task },
+    task: {
+      findFirst: async () => {
+        if (state.taskError) throw state.taskError;
+        return state.task;
+      },
+    },
+    comment: {
+      findFirst: async () =>
+        state.comments.find((comment) =>
+          comment.text.startsWith("<p><strong>AI Chat is unhealthy:"),
+        ) ?? null,
+    },
     user: { findUnique: async () => ({ displayName: "Valentin Yeo" }) },
   },
 });
 process.env.VERCEL_ENV = "production";
+delete process.env.POSTHOG_SERVER_PROJECT_TOKEN;
+delete process.env.POSTHOG_SERVER_HOST;
+delete process.env.POSTHOG_SERVER_PROJECT_ID;
+delete process.env.POSTHOG_UI_HOST;
 stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_OWNER_USER_ID: 6,
   FEATURE_FLAG_TICKET_PROJECT_ID: 15,
 });
 stubModule("src/utils/controllers/comments/createCommentService.ts", {
   createCommentService: async (params) => {
+    if (state.commitBeforeCommentError) state.comments.push(params);
+    if (state.commentError) throw state.commentError;
     state.comments.push(params);
     return { id: 1 };
   },
@@ -114,8 +141,10 @@ const observability = jiti(
 function reset(task = { id: 38547, userId: 6 }) {
   state.redis = createFakeRedis();
   state.comments = [];
-  state.captured = [];
+  state.commentError = null;
+  state.commitBeforeCommentError = false;
   state.task = task;
+  state.taskError = null;
 }
 
 const baseTurn = {
@@ -126,6 +155,21 @@ const baseTurn = {
   outcome: "ok",
   latencyMs: 1200,
 };
+
+test("the stream records routed and empty-reply terminal outcomes", () => {
+  const stream = fs.readFileSync(
+    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
+    "utf8",
+  );
+  assert.match(
+    stream,
+    /observedAgentId = routedAgent\.id;[\s\S]*?recordTurnOutcome\(\s*fleet\.success \? "ok" : "failed"/,
+  );
+  assert.match(
+    stream,
+    /emptyCompletionError \?\? "AI generation returned no visible reply"/,
+  );
+});
 
 test("window math counts failures and p95 and ignores cancelled turns", () => {
   const metrics = observability.evaluateAiChatTurnWindow([
@@ -226,22 +270,36 @@ test("the captured generation carries no chat text and tags the right user", () 
   assert.equal("$ai_error" in cancelled.properties, false);
 });
 
-test("a recovery snapshot cannot delete a claim made after it", async () => {
+test("a recovery snapshot cannot delete a claim refreshed after it", async () => {
   reset();
-  // A breach claims at 1_000_500; a concurrent healthy snapshot taken at
-  // 1_000_000 must leave that newer claim alone.
   await observability.recordAiChatTurn(
     { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_500,
+    1,
   );
   assert.equal(state.comments.length, 1);
-  await observability.recordAiChatTurn({ ...baseTurn, outcome: "ok" }, 1_000_000);
-  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
+  // A newer breach must advance the claim even though it posts no second comment.
   await observability.recordAiChatTurn(
     { ...baseTurn, outcome: "failed", latencyMs: 1000 },
-    1_000_600,
+    1_000_000,
   );
-  assert.equal(state.comments.length, 1, "one ongoing problem is one comment");
+  assert.equal(state.comments.length, 1);
+  // This snapshot has aged past the first breach but precedes the second one.
+  // It must not clear the claim refreshed by that concurrent newer breach.
+  await observability.recordAiChatTurn({ ...baseTurn, outcome: "ok" }, 950_000);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
+});
+
+test("a healthy snapshot cannot delete a claim from the same millisecond", async () => {
+  reset();
+  await state.redis.set(
+    "ai:chat-turn-alert:production",
+    "1000000",
+    "EX",
+    900,
+    "NX",
+  );
+  await observability.recordAiChatTurn(baseTurn, 1_000_000);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
 });
 
 test("a failed turn redacts secrets out of the captured error line", () => {
@@ -290,14 +348,58 @@ test("one breach posts one comment and later breaches stay quiet until it recove
   assert.equal(state.comments.length, 2);
 });
 
-test("a failed alert comment releases the claim so the next turn retries", async () => {
+test("a missing alert ticket holds the claim instead of retrying every turn", async () => {
   reset(null);
   await observability.recordAiChatTurn(
     { ...baseTurn, outcome: "failed", latencyMs: 1000 },
     1_000_000,
   );
   assert.equal(state.comments.length, 0);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
+});
+
+test("a transient alert-ticket lookup failure releases the claim", async () => {
+  reset();
+  state.taskError = new Error("database unavailable");
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    1_000_000,
+  );
+  assert.equal(state.comments.length, 0);
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
+});
+
+test("a latency-only breach says latency is the problem", async () => {
+  reset();
+  await observability.recordAiChatTurn(
+    { ...baseTurn, latencyMs: 21_000 },
+    1_000_000,
+  );
+  assert.match(state.comments[0].text, /slowest 5% took 21\.0s/);
+  assert.doesNotMatch(state.comments[0].text, /0 of 1 turns failed/);
+});
+
+test("a failed alert comment releases the claim so the next turn retries", async () => {
+  reset();
+  state.commentError = new Error("comment unavailable");
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    1_000_000,
+  );
+  assert.equal(state.comments.length, 0);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), false);
+});
+
+test("a post-commit delivery error keeps the claim and avoids a duplicate", async () => {
+  reset();
+  state.commitBeforeCommentError = true;
+  state.commentError = new Error("realtime unavailable after commit");
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed", latencyMs: 1000 },
+    Date.now(),
+  );
+  assert.equal(state.comments.length, 1);
+  assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
 });
 
 test("recording survives a Redis failure without throwing", async () => {

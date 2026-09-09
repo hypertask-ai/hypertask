@@ -58,15 +58,28 @@ export async function POST(request: NextRequest) {
     error = probeError;
   }
 
-  const metrics = await recordAiChatTurn({
-    userId: requestUser.id,
-    model: PROBE_MODEL,
-    provider: "openai",
-    traceId: randomUUID(),
-    outcome,
-    latencyMs: Date.now() - startedAt,
-    error,
-  });
+  let metrics;
+  try {
+    metrics = await recordAiChatTurn({
+      userId: requestUser.id,
+      model: PROBE_MODEL,
+      provider: "openai",
+      traceId: randomUUID(),
+      outcome,
+      latencyMs: Date.now() - startedAt,
+      error,
+    });
+  } catch (observabilityError) {
+    return NextResponse.json(
+      {
+        outcome,
+        error: error ? redactErrorText(String(error), 500) : null,
+        metrics: null,
+        observability_error: redactErrorText(String(observabilityError), 500),
+      },
+      { status: 503 },
+    );
+  }
 
   return NextResponse.json({
     outcome,

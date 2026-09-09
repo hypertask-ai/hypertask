@@ -10255,6 +10255,9 @@ export async function POST(request: NextRequest) {
       // exit path, including the catch and finally, can name its outcome.
       // All of it is best effort and never changes what the user receives.
       let generationStartedAt = Date.now();
+      let observedAgentId = actingAgent?.id ?? null;
+      let observedModel = selected.modelId;
+      let observedProvider = selected.usageProvider;
       let turnUsage: { inputTokens?: number; outputTokens?: number } | undefined;
       let turnOutcomeRecorded = false;
       const recordTurnOutcome = (
@@ -10263,27 +10266,33 @@ export async function POST(request: NextRequest) {
       ) => {
         if (!aiObservabilityEnabled || turnOutcomeRecorded) return;
         turnOutcomeRecorded = true;
-        waitUntil(
-          recordAiChatTurn({
-            userId: dbUser.id,
-            projectId: usageProjectId,
-            taskId: contextTaskId,
-            agentId: actingAgent?.id ?? null,
-            model: selected.modelId,
-            provider: selected.usageProvider,
-            traceId: streamId,
-            outcome,
-            latencyMs: Date.now() - generationStartedAt,
-            inputTokens: turnUsage?.inputTokens,
-            outputTokens: turnUsage?.outputTokens,
-            error,
-          }).catch((observationError) => {
-            console.warn(
-              "[ai/chat/stream] turn observation failed",
-              observationError,
-            );
-          }),
-        );
+        const observation = recordAiChatTurn({
+          userId: dbUser.id,
+          projectId: usageProjectId,
+          taskId: contextTaskId,
+          agentId: observedAgentId,
+          model: observedModel,
+          provider: observedProvider,
+          traceId: streamId,
+          outcome,
+          latencyMs: Date.now() - generationStartedAt,
+          inputTokens: turnUsage?.inputTokens,
+          outputTokens: turnUsage?.outputTokens,
+          error,
+        }).catch((observationError) => {
+          console.warn(
+            "[ai/chat/stream] turn observation failed",
+            observationError,
+          );
+        });
+        try {
+          waitUntil(observation);
+        } catch (observationError) {
+          console.warn(
+            "[ai/chat/stream] turn observation could not outlive the request",
+            observationError,
+          );
+        }
       };
       try {
         const skillResolution = await resolveSkillsForAiRequest(
@@ -10352,6 +10361,10 @@ export async function POST(request: NextRequest) {
             send("status", {
               content: `Asking ${routedAgent.displayName}...`,
             });
+            generationStartedAt = Date.now();
+            observedAgentId = routedAgent.id;
+            observedModel = "fleet-agent";
+            observedProvider = "hypertask";
             const fleet = await askFleetAgent({
               agentId: routedAgent.id,
               question: resolvedBody.message,
@@ -10364,12 +10377,14 @@ export async function POST(request: NextRequest) {
             });
 
             if (turnDeadlineHit) {
+              recordTurnOutcome("failed", AI_CHAT_TURN_DEADLINE_REASON);
               await endDeadlineTurn();
               return;
             }
             // Deadline wins over the generic cancelled branch: both abort the
             // provider signal, and only the deadline path runs its cleanup.
             if (cancelled || providerAbort.signal.aborted) {
+              recordTurnOutcome("cancelled");
               if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
                 await failHeartbeatExecution(
                   heartbeatExecutionId,
@@ -10475,6 +10490,11 @@ export async function POST(request: NextRequest) {
                 }
               }
             }
+
+            recordTurnOutcome(
+              fleet.success ? "ok" : "failed",
+              fleet.success ? undefined : fleet.error,
+            );
 
             if (heartbeatExecutionId && !heartbeatExecutionTerminal) {
               if (assistantPersisted) {
@@ -10596,9 +10616,9 @@ export async function POST(request: NextRequest) {
               inputTokens: usage.inputTokens ?? undefined,
               outputTokens: usage.outputTokens ?? undefined,
             };
-            // The stream can also finish with an error reason, which must not
-            // be counted as a healthy turn.
-            recordTurnOutcome(finishReason === "error" ? "failed" : "ok");
+            // Error callbacks normally record the failure with detail. Keep a
+            // fallback for providers that only report the finish reason.
+            if (finishReason === "error") recordTurnOutcome("failed");
             await logAiUsage({
               userId: dbUser.id,
               teamId: gatewayTags.teamId ?? null,
@@ -10705,6 +10725,12 @@ export async function POST(request: NextRequest) {
               });
               reachedStepLimit =
                 reachedStepLimit || retry.steps.length >= MAX_TOOL_STEPS;
+              turnUsage = {
+                inputTokens:
+                  (turnUsage?.inputTokens ?? 0) + (retry.usage.inputTokens ?? 0),
+                outputTokens:
+                  (turnUsage?.outputTokens ?? 0) + (retry.usage.outputTokens ?? 0),
+              };
               await logAiUsage({
                 userId: dbUser.id,
                 teamId: gatewayTags.teamId ?? null,
@@ -10750,6 +10776,12 @@ export async function POST(request: NextRequest) {
           });
           send("content", { content: fallback });
           chunks.push(fallback);
+          recordTurnOutcome(
+            "failed",
+            emptyCompletionError ?? "AI generation returned no visible reply",
+          );
+        } else {
+          recordTurnOutcome("ok");
         }
 
         // The provider/tool phase is over: a deadline from here on must not
