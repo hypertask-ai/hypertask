@@ -21,6 +21,7 @@ function createFakeRedis() {
   const strings = new Map();
   return {
     calls: [],
+    beforeRecoveryEval: null,
     async zadd(key, score, member) {
       this.calls.push(["zadd", key, score, member]);
       const entries = sets.get(key) ?? [];
@@ -39,8 +40,11 @@ function createFakeRedis() {
       sets.set(key, kept);
       return entries.length - kept.length;
     },
-    async eval(script, keyCount, key, ...args) {
-      this.calls.push(["eval", key, ...args]);
+    async eval(script, keyCount, ...params) {
+      const keys = params.slice(0, keyCount);
+      const args = params.slice(keyCount);
+      const key = keys[0];
+      this.calls.push(["eval", ...keys, ...args]);
       if (script.includes("local existing")) {
         const existing = strings.get(key);
         strings.set(
@@ -51,11 +55,28 @@ function createFakeRedis() {
         );
         return existing !== undefined ? 0 : 1;
       }
-      if (!script.includes("tonumber(claimed)")) {
+      if (!script.includes("ZRANGEBYSCORE")) {
         throw new Error("unexpected script");
       }
+      if (this.beforeRecoveryEval) {
+        const hook = this.beforeRecoveryEval;
+        this.beforeRecoveryEval = null;
+        await hook();
+      }
+      const members = (sets.get(keys[1]) ?? [])
+        .filter(
+          (entry) => entry.score >= Number(args[0]) && entry.score <= Number(args[1]),
+        )
+        .map((entry) => entry.member);
+      const metrics = observability.evaluateAiChatTurnWindow(members);
+      if (
+        metrics.errorRate > Number(args[2]) ||
+        metrics.p95LatencyMs > Number(args[3])
+      ) {
+        return 0;
+      }
       const claimed = strings.get(key);
-      if (claimed !== undefined && Number(claimed) < Number(args[0])) {
+      if (claimed !== undefined && Number(claimed) < Number(args[1])) {
         strings.delete(key);
         return 1;
       }
@@ -306,6 +327,24 @@ test("a recovery snapshot cannot delete a claim refreshed after it", async () =>
   // It must not clear the claim refreshed by that concurrent newer breach.
   await observability.recordAiChatTurn({ ...baseTurn, outcome: "ok" }, 950_000);
   assert.equal(state.redis.has("ai:chat-turn-alert:production"), true);
+});
+
+test("atomic recovery keeps a claim when a delayed failure enters the window", async () => {
+  reset();
+  const redis = state.redis;
+  await observability.recordAiChatTurn(
+    { ...baseTurn, outcome: "failed" },
+    1,
+  );
+  redis.beforeRecoveryEval = async () => {
+    await redis.zadd(
+      "ai:chat-turns:production",
+      1_000_000,
+      "delayed|1000|failed",
+    );
+  };
+  await observability.recordAiChatTurn(baseTurn, 1_000_000);
+  assert.equal(redis.has("ai:chat-turn-alert:production"), true);
 });
 
 test("an older breach cannot regress a newer claim timestamp", async () => {

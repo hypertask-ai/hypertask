@@ -230,14 +230,36 @@ export function aiChatTurnWindowBreached(metrics: AiChatTurnWindowMetrics) {
 }
 
 /**
- * Recovery deletes the claim only if it was made before this evaluation read
- * the window. A turn that breached a moment later holds a newer claim, which
- * must survive, or the next breach would post a second comment for the same
- * incident.
+ * Recovery rechecks the window inside the same Redis operation that deletes
+ * the claim. A delayed turn can enter the window after the caller's snapshot;
+ * if it breaches, its active incident claim must survive.
  */
 const RECOVER_CLAIM_SCRIPT = `
+local members = redis.call('ZRANGEBYSCORE', KEYS[2], ARGV[1], ARGV[2])
+local latencies = {}
+local total = 0
+local failed = 0
+for _, member in ipairs(members) do
+  local latency, outcome = string.match(member, '^[^|]+|([^|]+)|([^|]+)$')
+  if outcome and outcome ~= 'cancelled' then
+    total = total + 1
+    if outcome == 'failed' then failed = failed + 1 end
+    local latency_number = tonumber(latency)
+    if latency_number then table.insert(latencies, latency_number) end
+  end
+end
+if total > 0 then
+  table.sort(latencies)
+  local p95 = 0
+  if #latencies > 0 then
+    p95 = latencies[math.ceil(#latencies * 0.95)] or 0
+  end
+  if failed / total > tonumber(ARGV[3]) or p95 > tonumber(ARGV[4]) then
+    return 0
+  end
+end
 local claimed = redis.call('GET', KEYS[1])
-if claimed and tonumber(claimed) < tonumber(ARGV[1]) then
+if claimed and tonumber(claimed) < tonumber(ARGV[2]) then
   return redis.call('DEL', KEYS[1])
 end
 return 0
@@ -409,7 +431,16 @@ export async function recordAiChatTurn(
       await redis.zrangebyscore(key, now - AI_CHAT_TURN_WINDOW_MS, now),
     );
     if (!aiChatTurnWindowBreached(metrics)) {
-      await redis.eval(RECOVER_CLAIM_SCRIPT, 1, alertKey(), String(now));
+      await redis.eval(
+        RECOVER_CLAIM_SCRIPT,
+        2,
+        alertKey(),
+        key,
+        String(now - AI_CHAT_TURN_WINDOW_MS),
+        String(now),
+        String(AI_CHAT_TURN_ERROR_RATE_THRESHOLD),
+        String(AI_CHAT_TURN_P95_LATENCY_THRESHOLD_MS),
+      );
       return metrics;
     }
     await raiseAiChatTurnAlert(redis, metrics, now);
