@@ -200,7 +200,6 @@ if [ "$use_trusted_dependencies" = false ]; then
     -v "$candidate_root:/app:ro" \
     -v "$dependencies:/app/node_modules" \
     -e HOME=/tmp \
-    -e NPM_CONFIG_CACHE=/tmp/npm-cache \
     -w /app \
     "$runtime_image" bash -euo pipefail -c '
       timeout --signal=KILL 2m env DATABASE_URL=postgresql://core_smoke:core_smoke@database:5432/hypertask_smoke ./node_modules/.bin/prisma generate
