@@ -24,7 +24,7 @@ stubModule("src/lib/flags.ts", {
     return flagEnabled;
   },
   isFeatureFlagOwner: async (headers) => {
-    checks.push({ ownerSession: Boolean(headers) });
+    checks.push({ ownerSession });
     return ownerSession;
   },
 });
@@ -55,6 +55,15 @@ function withEnvironment(value, run) {
   return Promise.resolve(run()).finally(() => {
     if (previousEnvironment === undefined) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = previousEnvironment;
+  });
+}
+
+function withTestToken(value, run) {
+  const previousToken = process.env.POSTHOG_ERROR_TEST_TOKEN;
+  process.env.POSTHOG_ERROR_TEST_TOKEN = value;
+  return Promise.resolve(run()).finally(() => {
+    if (previousToken === undefined) delete process.env.POSTHOG_ERROR_TEST_TOKEN;
+    else process.env.POSTHOG_ERROR_TEST_TOKEN = previousToken;
   });
 }
 
@@ -111,28 +120,28 @@ test("production trigger without an owner session is a 404 before token checks",
 test("production trigger with an owner session still needs the operator token", async () => {
   flagEnabled = true;
   ownerSession = true;
-  process.env.POSTHOG_ERROR_TEST_TOKEN = "operator-token";
   checks.length = 0;
   try {
-    await withEnvironment("production", async () => {
-      const response = await testPost({ headers: new Headers() });
-      assert.equal(response.status, 401);
+    await withTestToken("operator-token", () =>
+      withEnvironment("production", async () => {
+        const response = await testPost({ headers: new Headers() });
+        assert.equal(response.status, 401);
 
-      checks.length = 0;
-      await assert.rejects(
-        testPost({
-          headers: new Headers({ "x-error-test-token": "operator-token" }),
-        }),
-        /HTPR-6238 deliberate error tracking verification/,
-      );
-      assert.deepEqual(checks, [
-        { key: "htpr-6238-posthog-error-alert", userId: 6 },
-        { ownerSession: true },
-      ]);
-    });
+        checks.length = 0;
+        await assert.rejects(
+          testPost({
+            headers: new Headers({ "x-error-test-token": "operator-token" }),
+          }),
+          /HTPR-6238 deliberate error tracking verification/,
+        );
+        assert.deepEqual(checks, [
+          { key: "htpr-6238-posthog-error-alert", userId: 6 },
+          { ownerSession: true },
+        ]);
+      }),
+    );
   } finally {
     flagEnabled = false;
     ownerSession = false;
-    delete process.env.POSTHOG_ERROR_TEST_TOKEN;
   }
 });
