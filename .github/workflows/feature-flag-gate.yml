@@ -56,6 +56,7 @@ jobs:
           fresh_heads_json="$gate_tmp/fresh-heads.json"
           reason_file="$gate_tmp/reason.txt"
           error_file="$gate_tmp/error.txt"
+          pending_payload="$gate_tmp/pending-status.json"
           payload="$gate_tmp/status.json"
 
           if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$pr_json"; then
@@ -76,6 +77,17 @@ jobs:
           head_sha=$(jq -r '.head.sha' "$pr_json")
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
           result=2
+
+          jq -n --arg target_url "$RUN_URL" '{
+            state: "pending",
+            context: "feature-flag-gate",
+            description: "feature-flag-gate is evaluating this pull request",
+            target_url: $target_url
+          }' >"$pending_payload"
+          if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$pending_payload" >/dev/null; then
+            echo "::error::Cannot mark feature-flag-gate pending for pull request #$PR_NUMBER."
+            exit 2
+          fi
 
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$heads_json"; then
             echo "::error::Cannot check whether the head commit is shared by open production pull requests."
@@ -224,6 +236,18 @@ jobs:
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
             result=2
+
+            jq -n --arg target_url "$RUN_URL" '{
+              state: "pending",
+              context: "feature-flag-gate",
+              description: "feature-flag-gate is reconciling this pull request",
+              target_url: $target_url
+            }' >"$payload"
+            if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null; then
+              echo "::error::Cannot mark feature-flag-gate pending for pull request #$number."
+              failures=$((failures + 1))
+              continue
+            fi
 
             if [ "$head_pr_count" -ne 1 ]; then
               echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"

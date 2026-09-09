@@ -111,8 +111,22 @@ test("a forged auto-revert title is not exempt", async (t) => {
   assert.match(result.reason, /no valid HTPR ticket and tag/);
 });
 
+test("a forged revert footer with an unrelated patch is not exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  commit(git, "initial");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const base = commit(git, "HTPR-4 [FEATURE] add widget");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <aside />;\n");
+  git(["add", "-A"]);
+  const title = 'Revert "HTPR-4 [FEATURE] add widget"';
+  git(["commit", "-q", "-m", title, "-m", `This reverts commit ${base}.`]);
+  const head = git(["rev-parse", "HEAD"]).trim();
+  assert.equal((await evaluate(title, base, head, dir)).pass, false);
+});
+
 test("a one-commit git revert of production is exempt", async (t) => {
   const { dir, git } = makeRepo(t);
+  commit(git, "initial");
   writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const base = commit(git, "HTPR-4 [FEATURE] add widget");
   git(["revert", "--no-edit", base]);
@@ -191,6 +205,14 @@ test("an imported registered key used by useFlag passes", async (t) => {
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
+test("JSX contractions do not break runtime gate parsing", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <p>Don\'t continue</p> : null;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
 test("UI changes inside a file with an existing runtime gate pass", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div>old</div> : null;\n');
@@ -251,6 +273,9 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /git fetch --no-tags origin production "refs\/pull\/\$PR_NUMBER\/head"/);
   assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(workflow, /statuses: write/);
+  assert.match(workflow, /state: "pending"/);
+  assert.match(workflow, /mark feature-flag-gate pending/);
+  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
   assert.match(workflow, /gh api --paginate --slurp/);
   assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);

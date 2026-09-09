@@ -54,6 +54,11 @@ function tokenize(source) {
       index = end + 2;
       continue;
     }
+    if (char === "'" && /[A-Za-z0-9]/.test(source[index - 1] ?? "") &&
+        /[A-Za-z0-9]/.test(source[index + 1] ?? "")) {
+      index += 1;
+      continue;
+    }
     if (char === '"' || char === "'" || char === "`") {
       const quote = char;
       let value = "";
@@ -268,7 +273,11 @@ function isVerifiedAutoRevert(title, baseSha, headSha) {
   if (!reverted) return false;
   try {
     git(["merge-base", "--is-ancestor", reverted, baseSha]);
-    return true;
+    const revertedParent = git(["rev-parse", `${reverted}^`]).trim();
+    const options = ["diff", "--binary", "--full-index", "--no-renames"];
+    const actualReversePatch = git([...options, mergeBase, headSha]);
+    const expectedReversePatch = git([...options, reverted, revertedParent]);
+    return actualReversePatch === expectedReversePatch;
   } catch {
     return false;
   }
