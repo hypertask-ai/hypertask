@@ -34,3 +34,4 @@ export const HTPR_6284_AGENT_MENTION_ROUTING_FLAG =
 export const POSTHOG_ERROR_ALERT_FLAG = "htpr-6238-posthog-error-alert";
 export const MY_TASKS_PRIORITY_FILTER_FLAG =
   "htpr-6312-my-tasks-priority-filter";
+export const AGENT_VISIBILITY_FLAG = "htpr-6268-agent-visibility";
