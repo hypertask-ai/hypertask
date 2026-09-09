@@ -27,6 +27,11 @@ test("Control+Q switches between docked AI chat and the active workspace", () =>
   assert.match(hook, /editor\?\.commands\.focus\("end"\)/);
   assert.match(
     hook,
+    /if \(!showAiChatInterface\) return;[\s\S]*?aiChatExplicitOpenAt === null[\s\S]*?Date\.now\(\) - aiChatExplicitOpenAt > FOCUS_REQUEST_WINDOW_MS[\s\S]*?editor\?\.commands\.focus\("end"\);[\s\S]*?\[showAiChatInterface, editor, aiChatExplicitOpenAt\]/,
+    "the shared hook must focus only for a fresh explicit-open request"
+  );
+  assert.match(
+    hook,
     /function tiptapKeydown[\s\S]*?window\.innerWidth >= MOBILE_VIEWPORT_MAX_PX[\s\S]*?workspace\?\.focus\(\{ preventScroll: true \}\)[\s\S]*?e\.stopPropagation\(\);[\s\S]*?return;/,
     "the composer must stop the handled keydown before the global listener"
   );

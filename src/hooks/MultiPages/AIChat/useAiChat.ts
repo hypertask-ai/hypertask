@@ -1641,8 +1641,6 @@ export function useAiChat() {
   // Gated on an explicit open for the same reason the composer's own retry loop
   // is (HTPR-6317): this is the call that actually claimed the caret at page
   // load, and the board owns c, j, k, Tab and / until someone asks for the chat.
-  // Read outside the deps on purpose — the composer clears the timestamp once
-  // it has the focus, and that must not re-run this.
   useEffect(() => {
     if (!showAiChatInterface) return;
     if (
@@ -1652,8 +1650,7 @@ export function useAiChat() {
       return;
     }
     editor?.commands.focus("end");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAiChatInterface, editor]);
+  }, [showAiChatInterface, editor, aiChatExplicitOpenAt]);
 
   useEffect(() => {
     setChatMounted(showAiChatInterface);
