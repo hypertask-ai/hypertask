@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
   const clientSecret = process.env.SLACK_CLIENT_SECRET?.trim();
   const authorizeUrl = buildSlackAuthorizeUrl(new URL(request.url).origin);
   if (!clientSecret || !authorizeUrl) {
-    console.error("Slack OAuth is missing SLACK_CLIENT_ID or SLACK_CLIENT_SECRET");
+    console.error("Slack OAuth is not configured: SLACK_CLIENT_ID or SLACK_CLIENT_SECRET is missing");
     return NextResponse.redirect(
       settingsRedirect(request, "error", "not_configured"),
     );

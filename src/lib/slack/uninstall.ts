@@ -59,8 +59,6 @@ function botTokenRevoked(
   encryptedBotToken: string,
 ): boolean {
   if (revokedBotTokens.length === 0) return false;
-  // decryptSecret throws on malformed ciphertext; a row we cannot decrypt is
-  // dead weight either way, so treat the bot as revoked.
   try {
     const decrypted = decryptSecret(encryptedBotToken);
     return revokedBotTokens.includes(decrypted);
