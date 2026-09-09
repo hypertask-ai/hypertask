@@ -72,11 +72,6 @@ const state = {
   captured: [],
 };
 
-const posthog = {
-  capture: (event) => state.captured.push({ ...event, immediate: false }),
-  captureImmediate: (event) => state.captured.push({ ...event, immediate: true }),
-};
-
 stubModule("src/lib/redis.ts", { getRedis: async () => state.redis });
 stubModule("src/lib/prisma.ts", {
   default: {
@@ -84,11 +79,7 @@ stubModule("src/lib/prisma.ts", {
     user: { findUnique: async () => ({ displayName: "Valentin Yeo" }) },
   },
 });
-stubModule("src/lib/telemetry/posthogErrorTracking.server.ts", {
-  deploymentEnvironment: () => "production",
-  releaseSha: () => "a".repeat(40),
-  postHogClient: () => posthog,
-});
+process.env.VERCEL_ENV = "production";
 stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_OWNER_USER_ID: 6,
   FEATURE_FLAG_TICKET_PROJECT_ID: 15,
@@ -168,7 +159,7 @@ test("thresholds breach on error rate or slow p95, and an empty window never bre
   );
 });
 
-test("a turn is recorded once, trimmed to the window, and captured with no chat text", async () => {
+test("a turn is recorded once and trimmed to the window", async () => {
   reset();
   const redis = state.redis;
   const metrics = await observability.recordAiChatTurn(
@@ -178,39 +169,58 @@ test("a turn is recorded once, trimmed to the window, and captured with no chat 
   assert.equal(metrics.total, 1);
   const zadd = redis.calls.find((call) => call[0] === "zadd");
   assert.match(zadd[3], /^[0-9a-f-]{36}\|4000\|ok$/);
-  assert.equal(state.captured.length, 1);
-  const [event] = state.captured;
-  assert.equal(event.event, "$ai_generation");
-  assert.equal(event.immediate, true);
-  assert.equal(event.distinctId, "6");
-  assert.equal(event.properties.$ai_model, "gpt-5.5");
-  assert.equal(event.properties.$ai_provider, "openai");
-  assert.equal(event.properties.$ai_input_tokens, 11);
-  assert.equal(event.properties.$ai_output_tokens, 7);
-  assert.equal(event.properties.$ai_http_status, 200);
-  assert.equal(event.properties.$ai_trace_id, baseTurn.traceId);
-  assert.equal(event.properties.$ai_input, null);
-  assert.equal(event.properties.$ai_output_choices, null);
-  assert.equal(event.properties.ht_user_id, 6);
-  assert.equal(event.properties.ht_outcome, "ok");
+  const trimmed = redis.calls.find((call) => call[0] === "zremrangebyscore");
+  assert.equal(trimmed[3], 1_000_000 - observability.AI_CHAT_TURN_WINDOW_MS);
   assert.equal(state.comments.length, 0);
 });
 
-test("a failed turn redacts secrets out of the captured error line", async () => {
-  reset();
-  await observability.recordAiChatTurn(
-    {
-      ...baseTurn,
-      outcome: "failed",
-      error: new Error("Upstream refused: Authorization: Bearer sk-live-abc123"),
-    },
-    1_000_000,
+test("the captured generation carries no chat text and tags the right user", () => {
+  const capture = observability.buildAiChatTurnCapture(
+    { ...baseTurn, inputTokens: 11, outputTokens: 7, latencyMs: 4000 },
+    "production",
   );
-  assert.equal(state.captured.length, 1);
-  const error = state.captured[0].properties.$ai_error;
-  assert.ok(!error.includes("sk-live-abc123"));
-  assert.match(error, /redacted/);
-  assert.equal(state.captured[0].properties.$ai_http_status, 500);
+  assert.equal(capture.distinctId, "6");
+  assert.equal(capture.model, "gpt-5.5");
+  assert.equal(capture.provider, "openai");
+  assert.equal(capture.traceId, baseTurn.traceId);
+  assert.equal(capture.input, null);
+  assert.equal(capture.output, null);
+  assert.equal(capture.privacyMode, true);
+  assert.equal(capture.captureImmediate, true);
+  assert.equal(capture.latency, 4);
+  assert.equal(capture.usage.inputTokens, 11);
+  assert.equal(capture.usage.outputTokens, 7);
+  assert.equal(capture.httpStatus, 200);
+  assert.equal(capture.properties.ht_user_id, 6);
+  assert.equal(capture.properties.ht_outcome, "ok");
+
+  const failed = observability.buildAiChatTurnCapture(
+    { ...baseTurn, outcome: "failed", error: new Error("boom") },
+    "production",
+  );
+  assert.equal(failed.httpStatus, 500);
+  assert.ok(failed.error instanceof Error);
+
+  const cancelled = observability.buildAiChatTurnCapture(
+    { ...baseTurn, outcome: "cancelled" },
+    "production",
+  );
+  assert.equal(cancelled.httpStatus, undefined);
+  assert.equal("error" in cancelled, false);
+});
+
+test("a failed turn redacts secrets out of the captured error line", () => {
+  const redacted = observability.redactAiCaptureProperties({
+    $ai_model: "gpt-5.5",
+    $ai_error: JSON.stringify({
+      message: "Upstream refused: Authorization: Bearer sk-live-abc123",
+      stack: "Error: at fetch (https://api.openai.com/v1?key=sk-live-abc123)",
+    }),
+  });
+  assert.ok(!redacted.$ai_error.includes("sk-live-abc123"));
+  assert.match(redacted.$ai_error, /redacted/);
+  // Non-error properties are left exactly as the SDK produced them.
+  assert.equal(redacted.$ai_model, "gpt-5.5");
 });
 
 test("one breach posts one comment and later breaches stay quiet until it recovers", async () => {

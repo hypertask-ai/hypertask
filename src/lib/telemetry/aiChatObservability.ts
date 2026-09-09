@@ -16,22 +16,24 @@
 import { randomUUID } from "node:crypto";
 import { captureAiGeneration } from "@posthog/ai";
 import type { Redis } from "ioredis";
-import type { PostHog } from "posthog-node";
+import { PostHog } from "posthog-node";
 
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { redactErrorText } from "@/lib/telemetry/errorSanitization";
-import {
-  deploymentEnvironment,
-  postHogClient,
-  releaseSha,
-} from "@/lib/telemetry/posthogErrorTracking.server";
 import {
   FEATURE_FLAG_OWNER_USER_ID,
   FEATURE_FLAG_TICKET_PROJECT_ID,
 } from "@/lib/flags";
 
 export type AiChatTurnOutcome = "ok" | "failed" | "cancelled";
+
+export type AiChatTurnWindowMetrics = {
+  total: number;
+  failed: number;
+  errorRate: number;
+  p95LatencyMs: number;
+};
 
 /** The ticket's alerting window: "error rate over 5% in 15 min". */
 export const AI_CHAT_TURN_WINDOW_MS = 15 * 60 * 1000;
@@ -40,15 +42,34 @@ const AI_CHAT_TURN_P95_LATENCY_THRESHOLD_MS = 20_000;
 /** Held as long as the window keeps breaching, so one incident = one comment. */
 const AI_CHAT_TURN_ALERT_TTL_SECONDS = 15 * 60;
 const AI_CHAT_TURN_ERROR_LIMIT = 1000;
+const CAPTURE_TIMEOUT_MS = 1500;
 /** HTPR-6225, the HT Manager's report thread. */
 const AI_CHAT_ALERT_TICKET_UNIQUE_INDEX = 6225;
 
-export type AiChatTurnWindowMetrics = {
-  total: number;
-  failed: number;
-  errorRate: number;
-  p95LatencyMs: number;
-};
+let client: PostHog | undefined;
+
+function deploymentEnvironment() {
+  return process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown";
+}
+
+// ponytail: this mirrors the error-tracking module's client instead of sharing
+// it, because that file sits under the repo's 14-day no-delete guard and a
+// second flushAt-1 client costs nothing. Fold them together once that guard
+// has expired.
+function postHogClient() {
+  const token = process.env.POSTHOG_SERVER_PROJECT_TOKEN?.trim();
+  if (!token) return undefined;
+  if (!client) {
+    client = new PostHog(token, {
+      host: process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com",
+      flushAt: 1,
+      flushInterval: 0,
+      requestTimeout: CAPTURE_TIMEOUT_MS,
+      disableGeoip: true,
+    });
+  }
+  return client;
+}
 
 type AiCaptureEvent = {
   distinctId?: string;
@@ -60,18 +81,24 @@ type AiCaptureEvent = {
  * The SDK serialises a provider error into `$ai_error` verbatim, and some
  * providers echo request content back in that message. The ticket allows error
  * text only through the app's existing redaction rules, so every capture goes
- * through this shim before it reaches PostHog.
+ * through this before it reaches PostHog.
  */
+export function redactAiCaptureProperties(
+  properties: Record<string, unknown>,
+): Record<string, unknown> {
+  if (typeof properties.$ai_error !== "string") return properties;
+  return {
+    ...properties,
+    $ai_error: redactErrorText(properties.$ai_error, AI_CHAT_TURN_ERROR_LIMIT),
+  };
+}
+
 function redactingClient(client: PostHog): PostHog {
   const forward = (event: AiCaptureEvent, immediate: boolean) => {
-    const properties: Record<string, unknown> = { ...(event.properties ?? {}) };
-    if (typeof properties.$ai_error === "string") {
-      properties.$ai_error = redactErrorText(
-        properties.$ai_error,
-        AI_CHAT_TURN_ERROR_LIMIT,
-      );
-    }
-    const payload = { ...event, properties };
+    const payload = {
+      ...event,
+      properties: redactAiCaptureProperties(event.properties ?? {}),
+    };
     return immediate ? client.captureImmediate(payload) : client.capture(payload);
   };
   return {
@@ -98,9 +125,50 @@ export type AiChatTurnRecord = {
 };
 
 /**
+ * Builds the `$ai_generation` payload for one turn. Privacy mode is always on
+ * and both bodies are null, so no prompt or reply text can reach PostHog even
+ * if the client is later reconfigured.
+ */
+export function buildAiChatTurnCapture(
+  turn: AiChatTurnRecord,
+  environment: string,
+) {
+  return {
+    distinctId: String(turn.userId),
+    traceId: turn.traceId,
+    provider: turn.provider,
+    model: turn.model,
+    input: null,
+    output: null,
+    privacyMode: true,
+    // Serverless: the event has to be flushed before the function ends.
+    captureImmediate: true,
+    // A cancelled turn is not a server failure, so it carries no status.
+    httpStatus:
+      turn.outcome === "ok" ? 200 : turn.outcome === "failed" ? 500 : undefined,
+    latency: turn.latencyMs / 1000,
+    usage: {
+      inputTokens: turn.inputTokens,
+      outputTokens: turn.outputTokens,
+    },
+    ...(turn.outcome === "failed" && turn.error !== undefined
+      ? { error: turn.error }
+      : {}),
+    properties: {
+      ht_feature: "chat",
+      ht_user_id: turn.userId,
+      ht_project_id: turn.projectId ?? null,
+      ht_task_id: turn.taskId ?? null,
+      ht_agent_id: turn.agentId ?? null,
+      ht_outcome: turn.outcome,
+      ht_environment: environment,
+    },
+  };
+}
+
+/**
  * Sends one `$ai_generation` event through the official PostHog AI primitive.
- * Privacy mode is always on, so no prompt or reply text can reach PostHog even
- * if the client is later reconfigured. Never throws.
+ * Never throws.
  */
 async function captureAiChatTurn(
   turn: AiChatTurnRecord,
@@ -109,37 +177,10 @@ async function captureAiChatTurn(
   try {
     const client = postHogClient();
     if (!client) return;
-    await captureAiGeneration(redactingClient(client), {
-      distinctId: String(turn.userId),
-      traceId: turn.traceId,
-      provider: turn.provider,
-      model: turn.model,
-      input: null,
-      output: null,
-      privacyMode: true,
-      captureImmediate: true,
-      // A cancelled turn is not a server failure, so it carries no status.
-      httpStatus:
-        turn.outcome === "ok" ? 200 : turn.outcome === "failed" ? 500 : undefined,
-      latency: turn.latencyMs / 1000,
-      usage: {
-        inputTokens: turn.inputTokens,
-        outputTokens: turn.outputTokens,
-      },
-      ...(turn.outcome === "failed" && turn.error !== undefined
-        ? { error: turn.error }
-        : {}),
-      properties: {
-        ht_feature: "chat",
-        ht_user_id: turn.userId,
-        ht_project_id: turn.projectId ?? null,
-        ht_task_id: turn.taskId ?? null,
-        ht_agent_id: turn.agentId ?? null,
-        ht_outcome: turn.outcome,
-        ht_environment: environment,
-        ht_release: releaseSha() ?? null,
-      },
-    });
+    await captureAiGeneration(
+      redactingClient(client),
+      buildAiChatTurnCapture(turn, environment),
+    );
   } catch (error) {
     console.warn("[ai/chat/observability] generation capture failed", error);
   }
