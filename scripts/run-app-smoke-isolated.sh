@@ -38,6 +38,7 @@ app="ht-smoke-app-$run_key"
 install="ht-smoke-install-$run_key"
 rebuild="ht-smoke-rebuild-$run_key"
 engine_fetch="ht-smoke-engine-fetch-$run_key"
+posthog_fetch="ht-smoke-posthog-fetch-$run_key"
 registry_proxy="ht-smoke-registry-proxy-$run_key"
 dependencies="ht-smoke-dependencies-$run_key"
 prepare="ht-smoke-prepare-$run_key"
@@ -55,7 +56,7 @@ cleanup() {
   result=${1:-$?}
   trap - EXIT INT TERM
   if [ "$result" -ne 0 ]; then docker logs "$app" 2>/dev/null | tail -200 || true; fi
-  docker rm -f "$app" "$database" "$install" "$rebuild" "$engine_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" >/dev/null 2>&1 || true
+  docker rm -f "$app" "$database" "$install" "$rebuild" "$engine_fetch" "$posthog_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" >/dev/null 2>&1 || true
   docker network rm "$network" "$egress_network" >/dev/null 2>&1 || true
   docker volume rm "$build" "$state" "$dependencies" >/dev/null 2>&1 || true
   docker image rm "$runtime_image" >/dev/null 2>&1 || true
@@ -170,6 +171,23 @@ if [ "$use_trusted_dependencies" = false ]; then
     -v "$trusted_root/scripts/fetch-prisma-smoke-engine.mjs:/trusted/fetch-prisma-smoke-engine.mjs:ro" \
     -w /app \
     "$runtime_image" node /trusted/fetch-prisma-smoke-engine.mjs
+
+  # @posthog/cli's postinstall downloads its binary from github.com, which the
+  # isolated network blocks, and candidate install scripts must not run with
+  # egress. Run the trusted fetch script instead so npm rebuild finds the
+  # binary already installed and skips its own download.
+  docker run --rm --name "$posthog_fetch" \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --read-only \
+    --pids-limit 64 \
+    --memory 256m \
+    --tmpfs /tmp:rw,nosuid,nodev,size=128m \
+    -v "$candidate_root:/app:ro" \
+    -v "$dependencies:/app/node_modules" \
+    -v "$trusted_root/scripts/fetch-posthog-smoke-binary.mjs:/trusted/fetch-posthog-smoke-binary.mjs:ro" \
+    -w /app \
+    "$runtime_image" node /trusted/fetch-posthog-smoke-binary.mjs
 
   docker run --rm --name "$rebuild" --network "$network" \
     --cap-drop ALL \
