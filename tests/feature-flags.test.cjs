@@ -223,6 +223,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6268-agent-visibility",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6278-chat-turn-failure-state",
         mode: "OWNER_AND_QA",
         updatedAt: null,

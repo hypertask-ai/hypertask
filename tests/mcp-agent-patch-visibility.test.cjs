@@ -71,6 +71,8 @@ function loadHandler({ user, visibilityResult, agentRow, flagEnabled } = {}) {
         TEAM_VISIBILITY_KEY_REQUIRED_ERROR:
           "Enable a provider key before sharing this agent with the team",
         isAgentVisibility: (value) => value === "PRIVATE" || value === "TEAM",
+        // Mirror the real composition in src/lib/agents/visibility.ts so the
+        // enum rule is not silently duplicated or dropped here.
         isVisibilityOnlyBody: (body) =>
           Object.values(body).filter((value) => value !== undefined).length ===
             1 && (body.visibility === "PRIVATE" || body.visibility === "TEAM"),
@@ -201,16 +203,19 @@ test("visibility cannot hide extra fields, recognized or not", async () => {
   }
 });
 
-test("with the flag off the verb does not exist (fail closed)", async () => {
+test("with the flag off the verb does not exist, whatever the body says (fail closed)", async () => {
   const { handlePatchAgentRequest } = loadHandler({ flagEnabled: false });
-  const response = await handlePatchAgentRequest(
-    request({ visibility: "TEAM" }),
-    "agent-1"
-  );
-  assert.equal(response.status, 404);
-  const body = await response.json();
-  assert.equal(body.success, false);
-  assert.equal(body.error, "Not found.");
+  for (const body of [
+    { visibility: "TEAM" },
+    { visibility: "TEAM", archived: true },
+    { visibility: "TEAM", add_project_ids: ["project-1"] },
+  ]) {
+    const response = await handlePatchAgentRequest(request(body), "agent-1");
+    assert.equal(response.status, 404, JSON.stringify(body));
+    const parsed = await response.json();
+    assert.equal(parsed.success, false);
+    assert.equal(parsed.error, "Agent not found");
+  }
 });
 
 test("an agent credential may not manage agents", async () => {

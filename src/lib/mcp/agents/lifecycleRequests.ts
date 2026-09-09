@@ -205,6 +205,20 @@ export async function handlePatchAgentRequest(
   const wantsVisibility = body.visibility !== undefined
   const wantsBoardUpdate =
     body.add_project_ids !== undefined || body.remove_project_ids !== undefined
+  if (wantsVisibility) {
+    // Gated on the server like every other user-visible behavior: the flag
+    // decides, not the client. Fail closed as 404 before any other check so
+    // the verb simply does not exist while the flag is off.
+    let visibilityEnabled = false
+    try {
+      visibilityEnabled = await isFeatureEnabled(AGENT_VISIBILITY_FLAG, ctx.user.id)
+    } catch (error) {
+      console.error('[MCP Update Agent Visibility] feature flag check failed', error)
+    }
+    if (!visibilityEnabled) {
+      return notFound()
+    }
+  }
   if (wantsBoardUpdate) {
     if (wantsLaunch || wantsArchive || wantsRename || wantsVisibility) {
       return NextResponse.json(
@@ -260,18 +274,6 @@ export async function handlePatchAgentRequest(
         ),
         { status: 400 }
       )
-    }
-    // Gated on the server like every other user-visible behavior: the flag
-    // decides, not the client. Fail closed as 404 so the verb simply does not
-    // exist while the flag is off.
-    let visibilityEnabled = false
-    try {
-      visibilityEnabled = await isFeatureEnabled(AGENT_VISIBILITY_FLAG, ctx.user.id)
-    } catch (error) {
-      console.error('[MCP Update Agent Visibility] feature flag check failed', error)
-    }
-    if (!visibilityEnabled) {
-      return NextResponse.json({ success: false, error: 'Not found.' }, { status: 404 })
     }
     // Same visibility-only rule as the web route: any other supplied field,
     // recognized or not, makes the request ambiguous.
