@@ -91,11 +91,16 @@ jobs:
           # Second probe: the marker is only posted after the ticket exists, so
           # a retry after "ticket created, comment failed" would otherwise
           # create a duplicate. Search board 15 for this PR's dedupe key in the
-          # title instead. A failed search is not "no ticket": fail closed.
+          # title instead. A failed or malformed search is not "no ticket":
+          # fail closed rather than create a duplicate.
           if ! SEARCH=$(curl -sS --fail-with-body \
                "$MCP_BASE_URL/api/mcp/tasks/search?q=$DEDTOKEN&project_id=$PROJECT_ID&limit=10" \
                -H "Authorization: Bearer $MCP_TOKEN"); then
             echo "::error::Cannot search board $PROJECT_ID, so the duplicate check cannot run. Not creating a ticket."
+            exit 1
+          fi
+          if [ "$(jq -r '.tasks | type' <<<"$SEARCH" 2>/dev/null)" != "array" ]; then
+            echo "::error::Board search returned no task list; not creating a ticket. Response: $(head -c 300 <<<"$SEARCH")"
             exit 1
           fi
           TICKET=$(jq -r --arg t "$DEDTOKEN" \
