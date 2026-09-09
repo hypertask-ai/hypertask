@@ -65,6 +65,15 @@ test("App Router API changes do not need a flag", async (t) => {
   assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
 });
 
+test("App Router route handlers and spec files do not need a flag", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/webhooks/route.ts", "export function POST() { return new Response(); }\n");
+  writeFile(dir, "src/components/Widget.spec.tsx", "export const fixture = <div />;\n");
+  const head = commit(git, "non-ui files");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] non-ui files", base, head, dir)).pass, true);
+});
+
 test("small BUGFIX changes are exempt", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
@@ -182,6 +191,26 @@ test("an imported registered key used by useFlag passes", async (t) => {
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
+test("UI changes inside a file with an existing runtime gate pass", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div>old</div> : null;\n');
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div>new</div> : null;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
+});
+
+test("a deleted UI file does not abort scanning another gated file", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/ADeleted.tsx", "export const Deleted = () => null;\n");
+  writeFile(dir, "src/components/ZWidget.tsx", "export const Widget = () => null;\n");
+  const base = commit(git, "base");
+  fs.rmSync(path.join(dir, "src/components/ADeleted.tsx"));
+  writeFile(dir, "src/components/ZWidget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
+});
+
 test("comments, strings, and identifier substrings do not count as gate calls", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -224,6 +253,11 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /statuses: write/);
   assert.match(workflow, /statuses\/\$head_sha/);
   assert.match(workflow, /gh api --paginate --slurp/);
+  assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
+  assert.doesNotMatch(workflow, /^\s+node \.github\/scripts\/feature-flag-gate\.mjs/m);
+  assert.match(workflow, /head_pr_count.*flatten\[\].*\.head\.sha == \$sha/);
+  assert.match(workflow, /fresh_head_pr_count/);
+  assert.match(workflow, /shared by multiple open production pull requests/);
   assert.match(workflow, /jq -c 'flatten\[\]' \"\$pages\"/);
   assert.doesNotMatch(workflow, /jq -ce 'flatten\[\]'/);
   assert.match(workflow, /changed during evaluation/);

@@ -12,9 +12,10 @@ const UI_INCLUDE = [
 const UI_EXCLUDE = [
   /^src\/pages\/api\//,
   /^src\/app\/api\//,
+  /^src\/app\/(?:.*\/)?route\.[jt]sx?$/,
   /^src\/lib\//,
   /(^|\/)tests?\//,
-  /\.test\.[jt]sx?$/,
+  /\.(test|spec)\.[jt]sx?$/,
   /\.stories\.[jt]sx?$/,
   /(^|\/)docs\//,
   /\.md$/,
@@ -228,14 +229,7 @@ function parseImports(source) {
   return imports;
 }
 
-function addedLines(diff) {
-  return diff.split("\n")
-    .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
-    .map((line) => line.slice(1))
-    .join("\n");
-}
-
-function referencesFlagAtRuntime(ref, path, diff, registry) {
+function referencesFlagAtRuntime(ref, path, registry) {
   const source = git(["show", `${ref}:${path}`]);
   const imports = parseImports(source);
   const helpers = new Set();
@@ -254,7 +248,7 @@ function referencesFlagAtRuntime(ref, path, diff, registry) {
     }
   }
 
-  const tokens = tokenize(addedLines(diff));
+  const tokens = tokenize(source);
   for (let index = 0; index + 2 < tokens.length; index += 1) {
     if (!helpers.has(tokens[index].value) || tokens[index + 1].value !== "(") continue;
     const argument = tokens[index + 2];
@@ -338,8 +332,12 @@ export function evaluate({ title, baseSha, headSha }) {
     }
 
     for (const path of uiFiles) {
-      const diff = git(["diff", `${baseSha}...${headSha}`, "--", path]);
-      const key = referencesFlagAtRuntime(headSha, path, diff, headRegistry);
+      try {
+        git(["cat-file", "-e", `${headSha}:${path}`]);
+      } catch {
+        continue;
+      }
+      const key = referencesFlagAtRuntime(headSha, path, headRegistry);
       if (key) return { pass: true, reason: `[${tag}] calls a feature gate with registered key ${key} in ${path}.` };
     }
   } catch (error) {

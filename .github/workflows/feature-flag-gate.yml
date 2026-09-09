@@ -52,6 +52,8 @@ jobs:
           trap 'rm -rf "$gate_tmp"' EXIT
           pr_json="$gate_tmp/pr.json"
           current_json="$gate_tmp/current.json"
+          heads_json="$gate_tmp/heads.json"
+          fresh_heads_json="$gate_tmp/fresh-heads.json"
           reason_file="$gate_tmp/reason.txt"
           error_file="$gate_tmp/error.txt"
           payload="$gate_tmp/status.json"
@@ -75,7 +77,19 @@ jobs:
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
           result=2
 
-          if [ "$head_repo" != "$REPO" ]; then
+          if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$heads_json"; then
+            echo "::error::Cannot check whether the head commit is shared by open production pull requests."
+            exit 2
+          fi
+          if ! head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$heads_json"); then
+            echo "::error::Cannot parse open production pull-request heads."
+            exit 2
+          fi
+
+          if [ "$head_pr_count" -ne 1 ]; then
+            echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
+            result=1
+          elif [ "$head_repo" != "$REPO" ]; then
             echo "Fork pull requests require owner review." >"$reason_file"
             result=1
           elif ! git fetch --no-tags origin production "refs/pull/$PR_NUMBER/head" >"$gate_tmp/fetch.txt" 2>"$error_file"; then
@@ -83,8 +97,9 @@ jobs:
           elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
             echo "The pull request commits are unavailable." >"$error_file"
             result=2
+          elif node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
+            result=0
           else
-            node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"
             result=$?
           fi
 
@@ -92,11 +107,22 @@ jobs:
             echo "::error::Cannot re-read pull request #$PR_NUMBER before publishing its result."
             exit 2
           fi
-          if [ "$(jq -r '.title' "$current_json")" != "$title" ] ||
+          if [ "$(jq -r '.state' "$current_json")" != "open" ] ||
+             [ "$(jq -r '.base.ref' "$current_json")" != "production" ] ||
+             [ "$(jq -r '.title' "$current_json")" != "$title" ] ||
              [ "$(jq -r '.base.sha' "$current_json")" != "$base_sha" ] ||
              [ "$(jq -r '.head.sha' "$current_json")" != "$head_sha" ]; then
             echo "Pull request #$PR_NUMBER changed during evaluation; its new event will evaluate the new state."
             exit 0
+          fi
+          if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
+             ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
+            echo "::error::Cannot re-check whether the head commit is shared before publishing its result."
+            exit 2
+          fi
+          if [ "$fresh_head_pr_count" -ne 1 ]; then
+            echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
+            result=1
           fi
 
           if [ "$result" -eq 0 ]; then
@@ -165,6 +191,7 @@ jobs:
           trap 'rm -rf "$gate_tmp"' EXIT
           pages="$gate_tmp/pulls.json"
           rows="$gate_tmp/pulls.jsonl"
+          fresh_heads_json="$gate_tmp/fresh-heads.json"
           failures=0
 
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$pages"; then
@@ -192,12 +219,16 @@ jobs:
             base_sha=$(jq -r '.base.sha' <<<"$pull")
             head_sha=$(jq -r '.head.sha' <<<"$pull")
             head_repo=$(jq -r '.head.repo.full_name' <<<"$pull")
+            head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$pages")
             reason_file="$gate_tmp/reason-$number.txt"
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
             result=2
 
-            if [ "$head_repo" != "$REPO" ]; then
+            if [ "$head_pr_count" -ne 1 ]; then
+              echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
+              result=1
+            elif [ "$head_repo" != "$REPO" ]; then
               echo "Fork pull requests require owner review." >"$reason_file"
               result=1
             elif ! git fetch --no-tags origin production "refs/pull/$number/head" >"$gate_tmp/fetch-$number.txt" 2>"$error_file"; then
@@ -205,8 +236,9 @@ jobs:
             elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
               echo "The pull request commits are unavailable." >"$error_file"
               result=2
+            elif node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
+              result=0
             else
-              node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"
               result=$?
             fi
 
@@ -215,11 +247,23 @@ jobs:
               failures=$((failures + 1))
               continue
             }
-            if [ "$(jq -r '.title' <<<"$current")" != "$title" ] ||
+            if [ "$(jq -r '.state' <<<"$current")" != "open" ] ||
+               [ "$(jq -r '.base.ref' <<<"$current")" != "production" ] ||
+               [ "$(jq -r '.title' <<<"$current")" != "$title" ] ||
                [ "$(jq -r '.base.sha' <<<"$current")" != "$base_sha" ] ||
                [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ]; then
               echo "Pull request #$number changed during reconciliation; its own event will evaluate the new state."
               continue
+            fi
+            if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
+               ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
+              echo "::error::Cannot re-check whether pull request #$number shares its head commit."
+              failures=$((failures + 1))
+              continue
+            fi
+            if [ "$fresh_head_pr_count" -ne 1 ]; then
+              echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
+              result=1
             fi
 
             if [ "$result" -eq 0 ]; then
