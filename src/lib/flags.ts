@@ -24,6 +24,7 @@ import {
   FLAG_REMOVAL_COUNTDOWN_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
   LAZY_EMOJI_LIST_FLAG,
+  LOCAL_WRITING_ASSISTANCE_FLAG,
   FLAG_SHIP_DATE_CLUSTER_FLAG,
   FLAG_SORT_FILTER_FLAG,
   FLAG_TICKET_TITLE_FLAG,
@@ -59,6 +60,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-09",
     description:
       "In time reports, plain board members see only their own logged time; board owners and admins still see everyone's entries and keep the user filter.",
+  },
+  {
+    key: LOCAL_WRITING_ASSISTANCE_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Capitalizes the first letter typed in a paragraph or after sentence punctuation when the browser does not do it itself.",
   },
   {
     key: HTPR_6284_AGENT_MENTION_ROUTING_FLAG,

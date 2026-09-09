@@ -28,7 +28,10 @@ import Snippets from "./Extensions/Snippets/Snippets";
 import Link from "@tiptap/extension-link";
 import LazyEmoji from "./Extensions/LazyEmoji";
 import { ensureEmojiData } from "./Extensions/lazyEmojiData";
-import { LAZY_EMOJI_LIST_FLAG } from "@/lib/flags/keys";
+import {
+  LAZY_EMOJI_LIST_FLAG,
+  LOCAL_WRITING_ASSISTANCE_FLAG,
+} from "@/lib/flags/keys";
 import suggestion from "./suggestion";
 import { createMentionData } from "./MentionData";
 import { Figma } from "./Extensions/FigmaTiptap";
@@ -47,7 +50,7 @@ import { ReplyBlockquote } from "./Extensions/ReplyBlockquote";
 import { useFlag } from "@/hooks/useFlag";
 import { withMentionBackspaceDeletion } from "./Extensions/DeleteMentionOnBackspace";
 import { LinkableMention } from "./Extensions/LinkableMention";
-import { writingAssistanceEditorProps } from "./writingAssistance";
+import { createWritingAssistanceEditorProps } from "./writingAssistance";
 
 const defaultScrollMargin = 5;
 const descriptionCaretTopGutter = 8;
@@ -97,6 +100,9 @@ const useTiptap = ({
   // eager fetch below restores the old availability, as one async chunk
   // instead of bytes bundled into the editor chunk.
   const lazyEmojiList = useFlag(LAZY_EMOJI_LIST_FLAG);
+  const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
+  const localWritingAssistanceRef = useRef(localWritingAssistance);
+  localWritingAssistanceRef.current = localWritingAssistance;
   // A phone has no CTRL key, so the "CTRL+J for Ai" tip is dead copy there
   // (HTPR-5517). Mobile descriptions get a plain placeholder instead.
   const isMobileView = useContext(MobileViewContext);
@@ -112,6 +118,9 @@ const useTiptap = ({
   // itself after mount, so freezing the initial value is safe.
   const [initialContent] = useState(defaultContent);
   const editorProps = useMemo(() => {
+    const writingAssistanceEditorProps = createWritingAssistanceEditorProps(
+      () => localWritingAssistanceRef.current,
+    );
     if (mode !== "read-edit-description") return writingAssistanceEditorProps;
 
     const stickyHeaderOffset = getTaskDetailStickyHeaderOffset();
