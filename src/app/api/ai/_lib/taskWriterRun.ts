@@ -27,7 +27,12 @@ import { formatTaskWriterRetrievedContext } from "@/app/api/ai/_lib/taskWriterPr
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { AUTO_TASK_DESCRIPTIONS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import {
+  AUTO_TASK_DESCRIPTIONS_FLAG,
+  HTPR_6157_AUTO_DESCRIPTION_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
+import { isNewTaskAutoDescriptionEnabled } from "@/lib/ai/autoDescriptionSuggestion";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
@@ -137,6 +142,12 @@ export async function prepareTaskWriterRun(
   if (!project) throw new ProjectAccessError();
 
   if (body.requestKind === "auto-description") {
+    if (!isNewTaskAutoDescriptionEnabled()) {
+      throw new AutoDescriptionSuggestionsDisabledError();
+    }
+    if (!(await isFeatureEnabled(HTPR_6157_AUTO_DESCRIPTION_FLAG, userId))) {
+      throw new AutoDescriptionSuggestionsDisabledError();
+    }
     // HTPR-6177: automatic drafting shipped before it was ready, so it stays
     // behind an owner-only flag. Only this branch is gated: the manual task
     // writer predates it and must keep working for everyone.
