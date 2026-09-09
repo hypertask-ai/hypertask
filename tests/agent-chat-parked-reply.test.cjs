@@ -304,7 +304,15 @@ function loadHistoryRoute({ flagEnabled }) {
       findFirst: async () => ({ id: "session-1", agentId: "agent-parked" }),
     },
     chatMessage: {
-      findMany: async () => rows,
+      // Honours the exclusion the route passes, like the database would.
+      findMany: async (args) => {
+        const not = args.where?.NOT;
+        return not
+          ? rows.filter(
+              (row) => !Object.entries(not).every(([key, value]) => row[key] === value),
+            )
+          : rows;
+      },
       count: async (args) => {
         counts.push(args);
         return 0;

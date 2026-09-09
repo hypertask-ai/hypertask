@@ -837,10 +837,11 @@ const AgentChatClient = (props: IProp) => {
       // chat.message, so the human side of the notice must survive a reload.
       // The parked line already says it in the thread; two copies of the same
       // sentence is noise.
-      if (
-        data.chatEnabled === false &&
-        data.messages.at(-1)?.content !== AGENT_CHAT_PARKED_MESSAGE
-      )
+      const lastMessage = data.messages.at(-1);
+      const answeredInThread =
+        lastMessage?.role === "system" &&
+        lastMessage.content === AGENT_CHAT_PARKED_MESSAGE;
+      if (data.chatEnabled === false && !answeredInThread)
         setDeliveryNotice(true);
       // First load of this thread: reconcile the two draft copies. Whatever is
       // on this device wins, because it is what was typed most recently here,

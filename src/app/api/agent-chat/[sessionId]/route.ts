@@ -140,7 +140,13 @@ export async function GET(
     // tie and a page boundary lands in the same place on every request.
     const [pageRows, activity] = await Promise.all([
       prisma.chatMessage.findMany({
-        where: { sessionId: session.id },
+        where: {
+          sessionId: session.id,
+          // Hidden in the query, not after it: a reader outside the rollout
+          // must page over a transcript that simply has no such row, or a page
+          // of one hidden notice would come back empty with nowhere to go.
+          ...(parkedReplyEnabled ? {} : { NOT: PARKED_NOTICE_WHERE }),
+        },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: limit + 1,
         ...(before ? { cursor: { id: before }, skip: 1 } : {}),
@@ -159,16 +165,7 @@ export async function GET(
     // One row over the page size is the has-more probe; it is not returned.
     const hasMore = pageRows.length > limit;
     const messageRows = hasMore ? pageRows.slice(0, limit) : pageRows;
-    const messages = messageRows
-      .reverse()
-      // Filtered after the read, so paging still walks the stored rows: a
-      // reader outside the rollout sees a shorter page, never a shifted one.
-      .filter(
-        (message) =>
-          parkedReplyEnabled ||
-          !(isAgentChatSystemMessage(message) &&
-            message.content === AGENT_CHAT_PARKED_MESSAGE),
-      );
+    const messages = messageRows.reverse();
 
     // Opening the thread is taking part in it, which is what gives this person
     // an unread marker and a draft slot. Skipped on a paged read: scrolling
