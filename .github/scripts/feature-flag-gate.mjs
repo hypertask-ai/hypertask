@@ -332,7 +332,7 @@ function isSafeDefinitionsCallback(callback) {
 }
 
 function isAssignmentPatternTarget(node) {
-  // Walk through object/array literal shapes used as the left-hand side of `=`.
+  // Walk assignment targets, including destructuring in for-in/of initializers.
   let current = node;
   while (current.parent) {
     const parent = current.parent;
@@ -340,9 +340,12 @@ function isAssignmentPatternTarget(node) {
         ASSIGNMENT_OPERATORS.has(parent.operatorToken.kind)) {
       return true;
     }
+    if ((typescript.isForOfStatement(parent) || typescript.isForInStatement(parent)) &&
+        parent.initializer === current) return true;
     if ((typescript.isPropertyAssignment(parent) && parent.initializer === current) ||
         (typescript.isShorthandPropertyAssignment(parent) && parent.name === current) ||
         (typescript.isSpreadAssignment(parent) && parent.expression === current) ||
+        (typescript.isSpreadElement(parent) && parent.expression === current) ||
         typescript.isObjectLiteralExpression(parent) ||
         typescript.isArrayLiteralExpression(parent) ||
         (typescript.isParenthesizedExpression(parent) && parent.expression === current) ||
