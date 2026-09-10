@@ -459,6 +459,8 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
     ["map rest alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ key, ...rest }) => rest);\n")],
     ["non-key destructure", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ description }) => description);\n")],
     ["find result method call", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nd.toString();\n")],
+    ["find result chained method call", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG)?.toString();\n")],
+    ["find result nested property write", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG).meta.label = \"evil\";\n")],
   ];
 
   for (const [name, source] of cases) {

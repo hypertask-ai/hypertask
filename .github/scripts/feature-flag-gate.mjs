@@ -457,9 +457,26 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
           const left = unwrapExpr(resultParent.left);
           if (typescript.isIdentifier(left)) elementAliases.add(left.text);
           else mark(result);
-        } else if (resultParent && typescript.isPropertyAccessExpression(resultParent) &&
-                   resultParent.expression === result) {
-          if (isMutatingUse(resultParent)) mark(resultParent);
+        } else if (resultParent &&
+                   ((typescript.isPropertyAccessExpression(resultParent) && resultParent.expression === result) ||
+                    (typescript.isElementAccessExpression(resultParent) && resultParent.expression === result))) {
+          // Climb nested reads so find()?.a.b = ... and find()?.mutate() still fail closed.
+          let access = resultParent;
+          while (access.parent &&
+                 ((typescript.isPropertyAccessExpression(access.parent) && access.parent.expression === access) ||
+                  (typescript.isElementAccessExpression(access.parent) && access.parent.expression === access) ||
+                  (typescript.isNonNullExpression(access.parent) && access.parent.expression === access) ||
+                  (typescript.isParenthesizedExpression(access.parent) && access.parent.expression === access) ||
+                  (typescript.isAsExpression(access.parent) && access.parent.expression === access) ||
+                  (typescript.isTypeAssertionExpression(access.parent) && access.parent.expression === access) ||
+                  (typescript.isSatisfiesExpression(access.parent) && access.parent.expression === access))) {
+            access = access.parent;
+          }
+          if (access.parent && typescript.isCallExpression(access.parent) && access.parent.expression === access) {
+            mark(access);
+          } else if (isMutatingUse(access)) {
+            mark(access);
+          }
         } else {
           // Returning, spreading, or nesting the find result escapes the object.
           mark(result);
