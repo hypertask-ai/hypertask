@@ -325,6 +325,18 @@ test("an unused ticket-specific runtime call does not satisfy the gate", async (
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { WIDGET_FLAG } from "@/lib/flags/keys";\nexport function Widget() { useFlag(WIDGET_FLAG); return <div />; }\n');
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
+
+  const emptyBranch = makeRepo(t);
+  const emptyBranchBase = commit(emptyBranch.git, "base");
+  writeFile(emptyBranch.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { if (useFlag(OTHER_FLAG)) {} return <div />; }\n');
+  const emptyBranchHead = commit(emptyBranch.git, "empty gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", emptyBranchBase, emptyBranchHead, emptyBranch.dir)).pass, false);
+
+  const inertBranch = makeRepo(t);
+  const inertBranchBase = commit(inertBranch.git, "base");
+  writeFile(inertBranch.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { if (useFlag(OTHER_FLAG)) { const ignored = 1; } return <div />; }\n');
+  const inertBranchHead = commit(inertBranch.git, "inert gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", inertBranchBase, inertBranchHead, inertBranch.dir)).pass, false);
 });
 
 test("a definition for another ticket or a changed default fails", async (t) => {
