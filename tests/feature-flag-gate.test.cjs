@@ -687,6 +687,24 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   writeFile(callback.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\ndeclare function launchFeature();\nexport function Widget() { useFlag(OTHER_FLAG) && (() => launchFeature()); return <div />; }\n');
   const callbackHead = commit(callback.git, "uninvoked callback");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", callbackBase, callbackHead, callback.dir)).pass, false);
+
+  const unusedHelper = makeRepo(t);
+  const unusedHelperBase = commit(unusedHelper.git, "base");
+  writeFile(unusedHelper.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nfunction gatedHelper() { if (useFlag(OTHER_FLAG)) return <div />; return null; }\nexport function Widget() { return <div />; }\n');
+  const unusedHelperHead = commit(unusedHelper.git, "unused helper gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", unusedHelperBase, unusedHelperHead, unusedHelper.dir)).pass, false);
+
+  const identicalBranches = makeRepo(t);
+  const identicalBranchesBase = commit(identicalBranches.git, "base");
+  writeFile(identicalBranches.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return useFlag(OTHER_FLAG) ? null : null; }\n');
+  const identicalBranchesHead = commit(identicalBranches.git, "identical branches");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", identicalBranchesBase, identicalBranchesHead, identicalBranches.dir)).pass, false);
+
+  const identicalReturns = makeRepo(t);
+  const identicalReturnsBase = commit(identicalReturns.git, "base");
+  writeFile(identicalReturns.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { if (useFlag(OTHER_FLAG)) return null; else return null; }\n');
+  const identicalReturnsHead = commit(identicalReturns.git, "identical returns");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", identicalReturnsBase, identicalReturnsHead, identicalReturns.dir)).pass, false);
 });
 
 test("comments, strings, JSX text, regexes, and shadowed helpers do not count as gate calls", async (t) => {

@@ -756,6 +756,80 @@ function branchHasBehavior(node) {
   return typescript.isExpression(node) && expressionHasSideEffect(node);
 }
 
+function branchesStaticallyEquivalent(left, right) {
+  if (!left || !right) return left === right;
+  const a = unwrapExpr(left);
+  const b = unwrapExpr(right);
+  if (!a || !b) return a === b;
+  if (a.kind !== b.kind) return false;
+  return a.getText() === b.getText();
+}
+
+function functionBindingName(fn) {
+  if (fn.name && typescript.isIdentifier(fn.name)) return fn.name;
+  if (typescript.isVariableDeclaration(fn.parent) && typescript.isIdentifier(fn.parent.name) &&
+      fn.parent.initializer === fn) {
+    return fn.parent.name;
+  }
+  if (typescript.isPropertyAssignment(fn.parent) && typescript.isIdentifier(fn.parent.name) &&
+      fn.parent.initializer === fn) {
+    return fn.parent.name;
+  }
+  return null;
+}
+
+function isExportedFunctionLike(fn) {
+  if (fn.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.ExportKeyword ||
+      modifier.kind === typescript.SyntaxKind.DefaultKeyword)) {
+    return true;
+  }
+  let node = fn.parent;
+  while (node) {
+    if (typescript.isExportAssignment(node)) return true;
+    if (typescript.isVariableStatement(node) &&
+        node.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.ExportKeyword)) {
+      return true;
+    }
+    if (typescript.isSourceFile(node)) break;
+    node = node.parent;
+  }
+  return false;
+}
+
+function enclosingFunctionIsLive(fn, sourceFile, checker) {
+  if (isExportedFunctionLike(fn)) return true;
+  const name = functionBindingName(fn);
+  if (!name) return false;
+  const symbol = checker.getSymbolAtLocation(name);
+  if (!symbol) return false;
+  let referenced = false;
+  function visit(node) {
+    if (referenced) return;
+    if (node === fn || node === name) {
+      typescript.forEachChild(node, visit);
+      return;
+    }
+    if (typescript.isIdentifier(node) && checker.getSymbolAtLocation(node) === symbol) {
+      referenced = true;
+      return;
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return referenced;
+}
+
+function callEnclosingFunctionIsLive(call, sourceFile, checker) {
+  let current = call.parent;
+  while (current && !typescript.isSourceFile(current)) {
+    if (typescript.isFunctionLike(current)) {
+      return enclosingFunctionIsLive(current, sourceFile, checker);
+    }
+    current = current.parent;
+  }
+  return true;
+}
+
 function expressionResultIsObserved(node) {
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
@@ -791,12 +865,21 @@ function controlsRuntimeBranch(node) {
       continue;
     }
     if (typescript.isConditionalExpression(parent) && child === parent.condition) {
-      controlsOutput = (branchHasBehavior(parent.whenTrue) || branchHasBehavior(parent.whenFalse) ||
-        expressionResultIsObserved(parent));
+      if (branchesStaticallyEquivalent(parent.whenTrue, parent.whenFalse)) {
+        controlsOutput = false;
+      } else {
+        controlsOutput = (branchHasBehavior(parent.whenTrue) || branchHasBehavior(parent.whenFalse) ||
+          expressionResultIsObserved(parent));
+      }
       continue;
     }
     if (typescript.isIfStatement(parent) && child === parent.expression) {
-      controlsOutput = branchHasBehavior(parent.thenStatement) || branchHasBehavior(parent.elseStatement);
+      if (parent.elseStatement &&
+          branchesStaticallyEquivalent(parent.thenStatement, parent.elseStatement)) {
+        controlsOutput = false;
+      } else {
+        controlsOutput = branchHasBehavior(parent.thenStatement) || branchHasBehavior(parent.elseStatement);
+      }
       continue;
     }
     if ((typescript.isWhileStatement(parent) && child === parent.expression) ||
@@ -1010,6 +1093,7 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch) {
+  if (!callEnclosingFunctionIsLive(call, sourceFile, checker)) return false;
   if (controlsRuntimeBranch(call)) return true;
   const assigned = assignedGateSymbol(call, checker);
   if (!assigned?.symbol) return false;
@@ -1018,7 +1102,9 @@ function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = contro
   function visit(node) {
     if (usedAsGate) return;
     if (typescript.isIdentifier(node) && node !== assigned.name &&
-        checker.getSymbolAtLocation(node) === assigned.symbol && referenceGates(node)) {
+        checker.getSymbolAtLocation(node) === assigned.symbol &&
+        callEnclosingFunctionIsLive(node, sourceFile, checker) &&
+        referenceGates(node)) {
       usedAsGate = true;
       return;
     }
