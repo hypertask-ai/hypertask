@@ -530,8 +530,10 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
       else if (argument && typescript.isIdentifier(argument)) {
         key = flagSymbols.get(checker.getSymbolAtLocation(argument)) ?? null;
       }
-      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-      if (key && allowedKeys.has(key) && addedLines.has(line) &&
+      const startLine = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      const endLine = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
+      const callChanged = Array.from(addedLines).some((line) => line >= startLine && line <= endLine);
+      if (key && allowedKeys.has(key) && callChanged &&
           gatesRuntimeBehavior(node, checker, sourceFile)) found = key;
     }
     if (!found) typescript.forEachChild(node, visit);

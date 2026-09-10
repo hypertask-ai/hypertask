@@ -351,6 +351,17 @@ test("an imported registered key used by useFlag passes", async (t) => {
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
+test("a multiline gate with a changed key argument passes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const OLD_FLAG = "htpr-9-old";\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, OLD_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: OLD_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG, OLD_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(\n  OLD_FLAG,\n) ? <div /> : null;\n');
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG, OLD_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(\n  OTHER_FLAG,\n) ? <div /> : null;\n');
+  const head = commit(git, "change gate key");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir)).pass, true);
+});
+
 test("a changed ticket-specific hook assignment used as a condition passes", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");

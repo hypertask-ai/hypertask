@@ -80,6 +80,10 @@ exit 2
 `
   const node = `#!/usr/bin/env bash
 if [ "$1" = ".github/scripts/feature-flag-gate.mjs" ]; then
+  if [ "$#" -ne 4 ] || [ "$2" != "$EXPECTED_PR_TITLE" ] || [ "$3" != "$EXPECTED_BASE_SHA" ] || [ "$4" != "$EXPECTED_HEAD_SHA" ]; then
+    echo "unexpected feature flag gate arguments: $*" >&2
+    exit 2
+  fi
   if [ "\${GH_STUB_FAIL_FEATURE_GATE:-}" = "1" ]; then echo "feature flag required"; exit 1; fi
   echo "feature flag gate passed"
   exit 0
@@ -116,6 +120,9 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_FAIL_MERGEABILITY: failMergeability ? '1' : '',
         GH_STUB_FAIL_FEATURE_GATE: failFeatureGate ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
+        EXPECTED_PR_TITLE: prTitle,
+        EXPECTED_BASE_SHA: 'b'.repeat(40),
+        EXPECTED_HEAD_SHA: head,
       },
     })
     return { result, scratchEntries: await readdir(runnerTemp), head }
