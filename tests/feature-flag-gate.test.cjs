@@ -117,6 +117,20 @@ test("server-side ticket gates cover related UI changes", async (t) => {
   const rootRouteHead = commit(rootRoute.git, "root API gate");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", rootRouteBase, rootRouteHead, rootRoute.dir)).pass, true);
 
+  const dynamicRoute = makeRepo(t);
+  const dynamicRouteBase = commit(dynamicRoute.git, "base");
+  writeFile(dynamicRoute.dir, "src/components/Widget.tsx", 'export async function loadWidget(id) { return fetch(`/api/widget/${id}`); }\nexport const Widget = () => <div />;\n');
+  writeFile(dynamicRoute.dir, "src/app/api/widget/[id]/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
+  const dynamicRouteHead = commit(dynamicRoute.git, "dynamic API gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", dynamicRouteBase, dynamicRouteHead, dynamicRoute.dir)).pass, true);
+
+  const dynamicSibling = makeRepo(t);
+  const dynamicSiblingBase = commit(dynamicSibling.git, "base");
+  writeFile(dynamicSibling.dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget/static"); }\nexport const Widget = () => <div />;\n');
+  writeFile(dynamicSibling.dir, "src/app/api/widget/[id]/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
+  const dynamicSiblingHead = commit(dynamicSibling.git, "static sibling");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", dynamicSiblingBase, dynamicSiblingHead, dynamicSibling.dir)).pass, false);
+
   for (const [name, source] of [
     ["nested endpoint", 'export async function loadWidget() { return fetch("/api/widget/details"); }\nexport const Widget = () => <div />;\n'],
     ["inert text", 'export const Widget = () => <div data-path="/api/widget" />;\n'],
@@ -409,6 +423,13 @@ test("a definition for another ticket or a changed default fails", async (t) => 
   writeFile(wrongDefault.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const wrongDefaultHead = commit(wrongDefault.git, "feature");
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", wrongDefaultBase, wrongDefaultHead, wrongDefault.dir)).pass, false);
+
+  const changedDefault = makeRepo(t);
+  const changedDefaultBase = commit(changedDefault.git, "base");
+  writeFile(changedDefault.dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG"], "EVERYONE"));
+  writeFile(changedDefault.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const changedDefaultHead = commit(changedDefault.git, "change default");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", changedDefaultBase, changedDefaultHead, changedDefault.dir)).pass, false);
 });
 
 test("an imported registered key used by useFlag passes", async (t) => {
@@ -615,9 +636,12 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /group: feature-flag-gate-production/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
-  assert.equal((workflow.match(/cache-dependency-path: package-lock\.json/g) || []).length, 2);
-  assert.equal((workflow.match(/typescript@6\.0\.3/g) || []).length, 2);
+  assert.equal((workflow.match(/cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/g) || []).length, 2);
+  assert.equal((workflow.match(/npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/g) || []).length, 2);
   assert.equal((workflow.match(/FEATURE_FLAG_TYPESCRIPT_PATH/g) || []).length, 2);
+  const parserLock = JSON.parse(fs.readFileSync(path.join(root, ".github/scripts/feature-flag-parser/package-lock.json"), "utf8"));
+  assert.equal(parserLock.packages["node_modules/typescript"].version, "6.0.3");
+  assert.match(parserLock.packages["node_modules/typescript"].integrity, /^sha512-/);
   assert.equal((workflow.match(/ref: production/g) || []).length, 2);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);

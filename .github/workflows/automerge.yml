@@ -89,7 +89,10 @@ jobs:
           ensure_feature_flag_parser() {
             [ "$parser_ready" = "1" ] && return 0
             parser_dir="$AUTOMERGE_TMP/parser"
-            if ! npm install --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund --package-lock=false typescript@6.0.3 \
+            mkdir -p "$parser_dir"
+            cp .github/scripts/feature-flag-parser/package.json \
+              .github/scripts/feature-flag-parser/package-lock.json "$parser_dir/"
+            if ! npm ci --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund \
               >"$AUTOMERGE_TMP/npm-install.txt" 2>"$AUTOMERGE_TMP/npm-install-error.txt"; then
               return 1
             fi

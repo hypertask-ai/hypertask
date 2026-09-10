@@ -813,9 +813,9 @@ function apiRouteForSourcePath(path) {
   let relative = appRoute ? (appRoute[1] ?? "") : pagesRoute[1];
   if (pagesRoute) relative = relative === "index" ? "" : relative.replace(/\/index$/, "");
   const route = relative ? `/api/${relative}` : "/api";
-  const dynamicStart = route.indexOf("/[");
-  return dynamicStart === -1 ? { route, dynamic: false } :
-    { route: route.slice(0, dynamicStart + 1), dynamic: true };
+  const staticParts = route.split(/\[\[\.{3}[^\]]+\]\]|\[\.{3}[^\]]+\]|\[[^\]]+\]/);
+  return staticParts.length === 1 ? { route, dynamic: false } :
+    { route, dynamic: true, staticParts };
 }
 
 function sourceReferencesApiRoute(ref, path, apiRoute) {
@@ -868,14 +868,25 @@ function sourceReferencesApiRoute(ref, path, apiRoute) {
       !checker.getSymbolAtLocation(call.expression);
   }
 
+  function matchesRoute(node) {
+    if (!apiRoute.dynamic) {
+      const value = node.text;
+      return value === apiRoute.route || value.startsWith(`${apiRoute.route}?`);
+    }
+    if (!typescript.isTemplateHead(node) || !typescript.isTemplateExpression(node.parent)) return false;
+    const literals = [node.text, ...node.parent.templateSpans.map((span) => span.literal.text)];
+    return literals.length === apiRoute.staticParts.length && literals.every((literal, index) => {
+      const expected = apiRoute.staticParts[index];
+      if (index !== literals.length - 1) return literal === expected;
+      return literal === expected || literal.startsWith(`${expected}?`);
+    });
+  }
+
   let found = false;
   function visit(node) {
     if (found) return;
-    let value = null;
-    if (typescript.isStringLiteral(node) || typescript.isNoSubstitutionTemplateLiteral(node) ||
-        typescript.isTemplateHead(node)) value = node.text;
-    if (value !== null && isRequestUrl(node) && (apiRoute.dynamic ? value.startsWith(apiRoute.route) :
-        value === apiRoute.route || value.startsWith(`${apiRoute.route}?`))) found = true;
+    if ((typescript.isStringLiteral(node) || typescript.isNoSubstitutionTemplateLiteral(node) ||
+         typescript.isTemplateHead(node)) && isRequestUrl(node) && matchesRoute(node)) found = true;
     if (!found) typescript.forEachChild(node, visit);
   }
   visit(sourceFile);
@@ -1015,13 +1026,11 @@ export function evaluate({ title, baseSha, headSha }) {
 
     const added = headDefinitions.keys.filter((key) => !baseDefinitions.keys.includes(key));
     const ticketPrefix = `htpr-${titleMatch[1]}-`;
-    if (added.length > 0) {
-      if (added.some((key) => !key.startsWith(ticketPrefix))) {
-        return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
-      }
-      if (headDefinitions.defaultMode !== "OWNER_AND_QA") {
-        return failure("New feature flags must default to Owner + QA.");
-      }
+    if (added.length > 0 && added.some((key) => !key.startsWith(ticketPrefix))) {
+      return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
+    }
+    if (headDefinitions.defaultMode !== "OWNER_AND_QA") {
+      return failure("Feature flags must default to Owner + QA.");
     }
     const ticketKeys = new Set(headDefinitions.keys.filter((key) => key.startsWith(ticketPrefix)));
     const requiredUiFiles = uiFiles.filter((path) => {

@@ -38,7 +38,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: .github/scripts/feature-flag-parser/package-lock.json
 
       - name: Evaluate the current pull-request head with trusted code
         env:
@@ -103,7 +103,10 @@ jobs:
           fi
 
           parser_dir="$gate_tmp/parser"
-          if ! npm install --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund --package-lock=false typescript@6.0.3 \
+          mkdir -p "$parser_dir"
+          cp .github/scripts/feature-flag-parser/package.json \
+            .github/scripts/feature-flag-parser/package-lock.json "$parser_dir/"
+          if ! npm ci --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund \
             >"$gate_tmp/npm-install.txt" 2>"$error_file"; then
             echo "::error::Cannot install the trusted TypeScript parser."
             publish_error_status "feature-flag-gate could not install its parser" ||
@@ -223,7 +226,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: .github/scripts/feature-flag-parser/package-lock.json
 
       - name: Reconcile every open production pull request
         env:
@@ -253,7 +256,10 @@ jobs:
           }
 
           parser_dir="$gate_tmp/parser"
-          if ! npm install --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund --package-lock=false typescript@6.0.3 \
+          mkdir -p "$parser_dir"
+          cp .github/scripts/feature-flag-parser/package.json \
+            .github/scripts/feature-flag-parser/package-lock.json "$parser_dir/"
+          if ! npm ci --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund \
             >"$gate_tmp/npm-install.txt" 2>"$gate_tmp/npm-install-error.txt"; then
             echo "::error::Cannot install the trusted TypeScript parser."
             exit 2

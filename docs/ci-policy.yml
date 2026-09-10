@@ -55,6 +55,7 @@ feature_flag_gate:
   decision_script: .github/scripts/feature-flag-gate.mjs
   runs_on: ubuntu-latest
   trusted_script_source: production_base_commit
+  parser_lock: .github/scripts/feature-flag-parser/package-lock.json
   required_for_ui_changes: true
   api_only_changes: outside_ui_gate_scope
   owner_merge_for_flagged_ui: true
