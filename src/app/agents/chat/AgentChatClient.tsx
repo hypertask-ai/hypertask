@@ -695,10 +695,6 @@ const AgentChatClient = (props: IProp) => {
   // is taken from the server once per thread and never again, or every refetch
   // would overwrite what is being typed right now.
   const draftHydratedRef = useRef<string | null>(null);
-  // The server evaluates this against the agent owner so every participant in
-  // one conversation gets the same rollout state. A viewer-local useFlag
-  // check would split the UI for mixed Owner + QA cohorts.
-  const sharedConversationRef = useRef(false);
   // Mobile keyboards only open for a focus() that lands synchronously inside
   // the tap's event handler, so selectAgent needs the composer's DOM node
   // before that handler returns (see the flushSync call there).
@@ -827,7 +823,6 @@ const AgentChatClient = (props: IProp) => {
       if (!res.ok || !data.success || !Array.isArray(data.messages)) {
         throw new Error(data.error ?? "Failed to load messages");
       }
-      const sharedConversation = data.sharedConversationEnabled === true;
       // Ignore answers for a chat the user already left, never clobber an
       // optimistic send that is still in flight, and drop responses a newer
       // request for the same session has already superseded.
@@ -837,7 +832,6 @@ const AgentChatClient = (props: IProp) => {
         generation !== loadGenRef.current
       )
         return;
-      sharedConversationRef.current = sharedConversation;
       setMessages(data.messages);
       setActivity(Array.isArray(data.activity) ? data.activity : []);
       setAwaiting(Boolean(data.awaiting));
@@ -968,7 +962,6 @@ const AgentChatClient = (props: IProp) => {
     selectedIdRef.current = null;
     sessionIdRef.current = null;
     draftHydratedRef.current = null;
-    sharedConversationRef.current = false;
     setSelectedId(null);
     setSession(null);
     setSessionLoading(false);
@@ -993,7 +986,6 @@ const AgentChatClient = (props: IProp) => {
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
       draftHydratedRef.current = null;
-      sharedConversationRef.current = false;
       // draftRef is normally refreshed by a passive effect, which can lag
       // behind two switches in the same task (holding Ctrl+Tab). Setting it
       // here means the next switch always writes the draft it actually left.
