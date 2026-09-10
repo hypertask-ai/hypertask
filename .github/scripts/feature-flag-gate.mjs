@@ -881,8 +881,26 @@ function isExportedThroughCallWrapper(fn) {
   }
 }
 
-function isExportedUiEntry(fn) {
-  return isExportedFunctionLike(fn) || isExportedThroughCallWrapper(fn);
+function identifierDefaultExportFunctions(sourceFile, checker) {
+  const exported = new Set();
+  for (const statement of sourceFile.statements) {
+    if (!typescript.isExportAssignment(statement) || statement.isExportEquals) continue;
+    const expression = unwrapArgumentExpression(statement.expression);
+    if (!typescript.isIdentifier(expression)) continue;
+    const symbol = checker.getSymbolAtLocation(expression);
+    for (const declaration of symbol?.declarations ?? []) {
+      if (typescript.isFunctionDeclaration(declaration)) exported.add(declaration);
+      else if (typescript.isVariableDeclaration(declaration) && declaration.initializer) {
+        const initializer = unwrapArgumentExpression(declaration.initializer);
+        if (typescript.isFunctionLike(initializer)) exported.add(initializer);
+      }
+    }
+  }
+  return exported;
+}
+
+function isExportedUiEntry(fn, identifierExports = new Set()) {
+  return identifierExports.has(fn) || isExportedFunctionLike(fn) || isExportedThroughCallWrapper(fn);
 }
 
 function enclosingFunctionLike(node) {
@@ -935,10 +953,55 @@ function collectLiveFunctions(sourceFile, checker) {
   // Exported functions are live seeds (importers may render them). An unused
   // exported helper with a gate cannot cover a sibling exported JSX entry:
   // see hasUngatedExportedJsxEntry below.
-  const live = new Set(functions.filter(isExportedUiEntry));
+  const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
+  const live = new Set(functions.filter((fn) => isExportedUiEntry(fn, identifierExports)));
+  const functionBySymbol = new Map();
+  for (const fn of functions) {
+    const name = functionBindingName(fn);
+    const symbol = name && checker.getSymbolAtLocation(name);
+    if (symbol) functionBySymbol.set(symbol, fn);
+  }
   let changed = true;
   while (changed) {
     changed = false;
+    // Returning a named callback from a live hook exposes that callback to its
+    // callers. Resolve property values by symbol, never by matching their text.
+    for (const fn of Array.from(live)) {
+      function returned(node) {
+        if (node !== fn && typescript.isFunctionLike(node)) return;
+        if (isStaticallyUnreachable(node)) return;
+        if (typescript.isReturnStatement(node) && node.expression) {
+          const expression = unwrapArgumentExpression(node.expression);
+          if (typescript.isObjectLiteralExpression(expression)) {
+            const names = new Set();
+            const unambiguous = expression.properties.every((property) => {
+              if (!typescript.isShorthandPropertyAssignment(property) &&
+                  !typescript.isPropertyAssignment(property)) return false;
+              const name = property.name;
+              if (!typescript.isIdentifier(name) && !typescript.isStringLiteral(name) &&
+                  !typescript.isNumericLiteral(name)) return false;
+              if (names.has(name.text)) return false;
+              names.add(name.text);
+              return true;
+            });
+            if (!unambiguous) return;
+            for (const property of expression.properties) {
+              let symbol;
+              if (typescript.isShorthandPropertyAssignment(property)) {
+                symbol = checker.getShorthandAssignmentValueSymbol(property);
+              } else if (typescript.isPropertyAssignment(property)) {
+                const value = unwrapArgumentExpression(property.initializer);
+                if (typescript.isIdentifier(value)) symbol = checker.getSymbolAtLocation(value);
+              }
+              const callback = symbol && functionBySymbol.get(symbol);
+              if (callback && !live.has(callback)) { live.add(callback); changed = true; }
+            }
+          }
+        }
+        typescript.forEachChild(node, returned);
+      }
+      returned(fn);
+    }
     for (const fn of functions) {
       if (live.has(fn)) continue;
       const name = functionBindingName(fn);
@@ -1359,8 +1422,9 @@ function hasUngatedExportedJsxEntry(
     typescript.forEachChild(node, collect);
   }
   collect(sourceFile);
+  const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
-    if (!isExportedUiEntry(fn) || !functionContainsJsx(fn)) continue;
+    if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
     if (!exportedJsxEntryHasTicketGate(
       fn,
       checker,
