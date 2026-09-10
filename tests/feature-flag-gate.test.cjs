@@ -449,6 +449,8 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
     ["reassigned default", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", 'DEFAULT_FEATURE_FLAG_MODE = "EVERYONE";\n')],
     ["find result mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nd.key = \"evil\";\n")],
     ["find result re-alias mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nconst e = d;\ne.key = \"evil\";\n")],
+    ["find result return escape", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "export function leak() { return FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG); }\n")],
+    ["function expression callback", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(function ({ key }) { return key; });\n")],
     ["map callback element mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map((row) => { row.key = \"evil\"; return row.key; });\n")],
     ["map rest alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ key, ...rest }) => rest);\n")],
   ];

@@ -317,8 +317,10 @@ function bindingPatternRejectsElementAlias(pattern) {
 }
 
 function isSafeDefinitionsCallback(callback) {
+  // Regular function expressions expose `arguments[0]` even with destructured
+  // parameters, so only arrow callbacks can be treated as safe reads.
   if (!callback ||
-      !(typescript.isArrowFunction(callback) || typescript.isFunctionExpression(callback)) ||
+      !typescript.isArrowFunction(callback) ||
       callback.parameters.length >= 3 ||
       callback.parameters.some((parameter) => parameter.dotDotDotToken)) {
     return false;
@@ -416,9 +418,10 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
           if (typescript.isIdentifier(left)) elementAliases.add(left.text);
           else mark(result);
         } else if (resultParent && typescript.isPropertyAccessExpression(resultParent) &&
-                   resultParent.expression === result && isMutatingUse(resultParent)) {
-          mark(resultParent);
-        } else if (isMutatingUse(result)) {
+                   resultParent.expression === result) {
+          if (isMutatingUse(resultParent)) mark(resultParent);
+        } else {
+          // Returning, spreading, or nesting the find result escapes the object.
           mark(result);
         }
       }
