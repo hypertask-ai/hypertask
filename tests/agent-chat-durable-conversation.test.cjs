@@ -672,6 +672,14 @@ test("the shared-chat flag preserves owner chat and refuses teammate state", asy
       "private-draft",
       "a refused teammate write does not change the owner draft",
     );
+
+    broadcasts = [];
+    await chatBroadcast.broadcastChatSession("session-1");
+    assert.deepEqual(
+      broadcasts.map(({ channel }) => channel),
+      ["user-6"],
+      "flag-off still fans out live updates to the private owner",
+    );
   } finally {
     sessionUserId = 6;
     sharedChatEnabled = true;

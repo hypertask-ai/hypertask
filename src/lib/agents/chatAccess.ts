@@ -104,7 +104,7 @@ export async function ensureChatParticipant(sessionId: string, userId: number) {
   });
 }
 
-/** Every currently authorized participant in a released shared thread. */
+/** Every currently authorized recipient for a live chat refresh. */
 export async function chatParticipantUserIds(
   sessionId: string,
 ): Promise<number[]> {
@@ -112,12 +112,17 @@ export async function chatParticipantUserIds(
     { id: sessionId, agentId: { not: null } },
     { agent: { select: { userId: true } } },
   );
-  if (
-    !identity?.agentId ||
-    !identity.agent ||
-    !(await isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, identity.agent.userId))
-  ) {
+  if (!identity?.agentId || !identity.agent) {
     return [];
+  }
+  const sharedConversationEnabled = await isFeatureEnabled(
+    SHARED_AGENT_CHAT_FLAG,
+    identity.agent.userId,
+  );
+  // Flag-off private chats still need the owner's live reply and unread
+  // refreshes. Teammates stay out; only the agent owner is notified.
+  if (!sharedConversationEnabled) {
+    return [identity.agent.userId];
   }
   const rows = await prisma.chatSessionParticipant.findMany({
     where: { sessionId },
