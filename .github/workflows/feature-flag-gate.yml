@@ -152,7 +152,7 @@ jobs:
           elif [ "$head_repo" != "$REPO" ]; then
             echo "Fork pull requests require owner review." >"$reason_file"
             result=1
-          elif ! git fetch --no-tags origin production "refs/pull/$PR_NUMBER/head" >"$gate_tmp/fetch.txt" 2>"$error_file"; then
+          elif ! git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production "refs/pull/$PR_NUMBER/head" >"$gate_tmp/fetch.txt" 2>"$error_file"; then
             result=2
           elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
             echo "Trusted production checkout drifted; a later event will re-evaluate with current policy." >"$error_file"
@@ -178,7 +178,8 @@ jobs:
              [ "$(jq -r '.base.ref' "$current_json")" != "production" ] ||
              [ "$(jq -r '.title' "$current_json")" != "$title" ] ||
              [ "$(jq -r '.base.sha' "$current_json")" != "$base_sha" ] ||
-             [ "$(jq -r '.head.sha' "$current_json")" != "$head_sha" ]; then
+             [ "$(jq -r '.head.sha' "$current_json")" != "$head_sha" ] ||
+             ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' "$current_json" >/dev/null; then
             echo "Pull request #$PR_NUMBER changed during evaluation; its queued event will evaluate the new state."
             publish_error_status "feature-flag-gate is waiting for the updated pull request" ||
               echo "::error::Cannot replace the pending feature-flag-gate status."
@@ -361,7 +362,7 @@ jobs:
             elif [ "$head_repo" != "$REPO" ]; then
               echo "Fork pull requests require owner review." >"$reason_file"
               result=1
-            elif ! git fetch --no-tags origin production "refs/pull/$number/head" >"$gate_tmp/fetch-$number.txt" 2>"$error_file"; then
+            elif ! git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production "refs/pull/$number/head" >"$gate_tmp/fetch-$number.txt" 2>"$error_file"; then
               result=2
             elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
               echo "Trusted production checkout drifted; a later event will re-evaluate with current policy." >"$error_file"
@@ -386,7 +387,8 @@ jobs:
                [ "$(jq -r '.base.ref' <<<"$current")" != "production" ] ||
                [ "$(jq -r '.title' <<<"$current")" != "$title" ] ||
                [ "$(jq -r '.base.sha' <<<"$current")" != "$base_sha" ] ||
-               [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ]; then
+               [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
+               ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
               echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" ||
                 echo "::error::Cannot replace the pending feature-flag-gate status for #$number."

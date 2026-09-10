@@ -853,7 +853,10 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.equal((workflow.match(/ref: production/g) || []).length, 2);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
-  assert.match(workflow, /git fetch --no-tags origin production "refs\/pull\/\$PR_NUMBER\/head"/);
+  assert.match(workflow, /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR_NUMBER\/head"/);
+  assert.equal((workflow.match(/git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production/g) || []).length, 2);
+  assert.match(workflow, /--argjson labels "\$FEATURE_FLAG_PR_LABELS"/);
+  assert.equal((workflow.match(/--argjson labels "\$FEATURE_FLAG_PR_LABELS"/g) || []).length, 2);
   assert.equal((workflow.match(/git rev-parse HEAD\)" != "\$\(git rev-parse origin\/production\)/g) || []).length, 2);
   assert.match(workflow, /Trusted production checkout drifted/);
   assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);

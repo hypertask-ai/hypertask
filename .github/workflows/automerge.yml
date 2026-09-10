@@ -408,7 +408,7 @@ jobs:
               echo "::endgroup::"
               continue
             fi
-            if ! git fetch --no-tags origin production "refs/pull/$PR/head" >"$AUTOMERGE_TMP/gate-fetch.txt" 2>"$AUTOMERGE_TMP/gate-error.txt" ||
+            if ! git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production "refs/pull/$PR/head" >"$AUTOMERGE_TMP/gate-fetch.txt" 2>"$AUTOMERGE_TMP/gate-error.txt" ||
                ! git cat-file -e "$final_base_sha^{commit}" || ! git cat-file -e "$final_head_sha^{commit}"; then
               echo "::error::Cannot fetch current feature-flag inputs for PR #$PR; refusing to merge."
               infra_failures=$((infra_failures+1))
@@ -475,9 +475,10 @@ jobs:
               echo "::endgroup::"
               continue
             fi
-            if ! jq -e --arg title "$final_title" --arg base "$final_base_sha" --arg head "$final_head_sha" --arg repo "$REPO" '
+            if ! jq -e --arg title "$final_title" --arg base "$final_base_sha" --arg head "$final_head_sha" --arg repo "$REPO" --argjson labels "$FEATURE_FLAG_PR_LABELS" '
                  .state == "open" and .base.ref == "production" and
-                 .title == $title and .base.sha == $base and .head.sha == $head and .head.repo.full_name == $repo
+                 .title == $title and .base.sha == $base and .head.sha == $head and .head.repo.full_name == $repo and
+                 (([.labels[]?.name // empty] | sort) == ($labels | sort))
                ' "$VERIFY_PR_JSON" >/dev/null || [ "$verify_head_pr_count" -ne 1 ]; then
               echo "skip: PR metadata or head ownership changed during feature-flag re-evaluation"
               echo "::endgroup::"
