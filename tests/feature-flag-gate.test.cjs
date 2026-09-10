@@ -1051,3 +1051,46 @@ test('live hooks expose only reachable returned callbacks with matching symbols'
     assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,head,fixture.dir)).pass,expected,name);
   }
 });
+
+test('rebound default exports cannot certify their earlier gated initializer', async (t) => {
+  const cases = [
+    ['direct write', 'Widget=()=> <div/>;', false],
+    ['compound write', 'Widget&&=()=> <div/>;', false],
+    ['object destructuring', '({replacement:Widget}={replacement:()=> <div/>});', false],
+    ['shorthand destructuring', '({Widget}={Widget:()=> <div/>});', false],
+    ['array destructuring', '[Widget]=[()=> <div/>];', false],
+    ['array rest destructuring', '[...Widget]=[()=> <div/>];', false],
+    ['loop write', 'for(Widget of [()=> <div/>]){}', false],
+    ['shadowed write', '{let Widget=()=> <span/>;Widget=()=> <div/>;}', true],
+  ];
+  for(const [name,write,expected] of cases){
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/components/Widget.tsx','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nlet Widget=()=>useFlag(OTHER_FLAG)?<div/>:null;\n'+write+'\nexport default Widget;\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,name),fixture.dir)).pass,expected,name);
+  }
+  for(const exported of ['', 'export ']){
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/components/Widget.tsx','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n'+exported+'function Widget(){return useFlag(OTHER_FLAG)?<div/>:null;}\nWidget=()=> <div/>;\nexport function Helper(){return useFlag(OTHER_FLAG)?<span/>:null;}\nexport default Widget;\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,'rebound function and gated sibling'),fixture.dir)).pass,false);
+  }
+});
+
+test('returned callback liveness rejects rebinding without confusing shadowed symbols', async (t) => {
+  const cases = [
+    ['direct write','onSave=()=>doWork();',false],
+    ['compound write','onSave&&=()=>doWork();',false],
+    ['object destructuring','({handler:onSave}={handler:()=>doWork()});',false],
+    ['shorthand destructuring','({onSave}={onSave:()=>doWork()});',false],
+    ['array destructuring','[onSave]=[()=>doWork()];',false],
+    ['array rest destructuring','[...onSave]=[()=>doWork()];',false],
+    ['shadowed write','{let onSave=()=>doWork();onSave=()=>doWork();}',true],
+  ];
+  for(const [name,write,expected] of cases){
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/hooks/usePreview.ts','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork();\nexport function usePreview(){const enabled=useFlag(OTHER_FLAG);let onSave=()=>{if(enabled)doWork();};'+write+'return {onSave};}\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,name),fixture.dir)).pass,expected,name);
+  }
+  const fixture=makeRepo(t),base=commit(fixture.git,'base');
+  writeFile(fixture.dir,'src/hooks/usePreview.ts','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork();\nexport function usePreview(){const enabled=useFlag(OTHER_FLAG);function onSave(){if(enabled)doWork();}onSave=()=>doWork();return {onSave};}\n');
+  assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,'rebound function callback'),fixture.dir)).pass,false);
+});

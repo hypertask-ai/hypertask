@@ -881,6 +881,33 @@ function isExportedThroughCallWrapper(fn) {
   }
 }
 
+function writtenBindingSymbols(sourceFile, checker) {
+  const written = new Set();
+  function visit(node) {
+    if (typescript.isIdentifier(node)) {
+      let target = node;
+      while (target.parent && (
+        ((typescript.isParenthesizedExpression(target.parent) ||
+          typescript.isAsExpression(target.parent) || typescript.isTypeAssertionExpression(target.parent) ||
+          typescript.isNonNullExpression(target.parent) || typescript.isSatisfiesExpression(target.parent) ||
+          typescript.isSpreadElement(target.parent)) && target.parent.expression === target)
+      )) target = target.parent;
+      const parent = target.parent;
+      const loopWrite = parent && (typescript.isForOfStatement(parent) || typescript.isForInStatement(parent)) &&
+        parent.initializer === target;
+      if (isBindingWrite(target) || loopWrite) {
+        const symbol = typescript.isShorthandPropertyAssignment(node.parent)
+          ? checker.getShorthandAssignmentValueSymbol(node.parent)
+          : checker.getSymbolAtLocation(node);
+        if (symbol) written.add(symbol);
+      }
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return written;
+}
+
 function identifierDefaultExportFunctions(sourceFile, checker) {
   const exported = new Set();
   for (const statement of sourceFile.statements) {
@@ -954,12 +981,19 @@ function collectLiveFunctions(sourceFile, checker) {
   // exported helper with a gate cannot cover a sibling exported JSX entry:
   // see hasUngatedExportedJsxEntry below.
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
-  const live = new Set(functions.filter((fn) => isExportedUiEntry(fn, identifierExports)));
+  const writtenSymbols = writtenBindingSymbols(sourceFile, checker);
+  const reboundFunctions = new Set(functions.filter((fn) => {
+    const name = functionBindingName(fn);
+    return name && writtenSymbols.has(checker.getSymbolAtLocation(name));
+  }));
+  // Export recognition remains intact for the ungated-sibling check, but a
+  // rebound binding cannot prove which implementation runs. No flow analysis.
+  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) && isExportedUiEntry(fn, identifierExports)));
   const functionBySymbol = new Map();
   for (const fn of functions) {
     const name = functionBindingName(fn);
     const symbol = name && checker.getSymbolAtLocation(name);
-    if (symbol) functionBySymbol.set(symbol, fn);
+    if (symbol && !writtenSymbols.has(symbol)) functionBySymbol.set(symbol, fn);
   }
   let changed = true;
   while (changed) {
@@ -1003,7 +1037,7 @@ function collectLiveFunctions(sourceFile, checker) {
       returned(fn);
     }
     for (const fn of functions) {
-      if (live.has(fn)) continue;
+      if (live.has(fn) || reboundFunctions.has(fn)) continue;
       const name = functionBindingName(fn);
       if (!name) continue;
       const symbol = checker.getSymbolAtLocation(name);
