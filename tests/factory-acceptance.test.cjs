@@ -111,6 +111,17 @@ test('enrolled agents cannot edit criteria, relocate, archive/delete or create p
  for(const patch of [{acceptanceCriteria:'smaller'},{verifyCommand:'true'},{projectId:99},{status:'Archive'},{status:'Deleted'},{section:'Done'}])await assert.rejects(db.transaction(tx=>guardFactoryMutation(tx,current,patch,'dev')),e=>e.code.startsWith('factory_'));
  await rejectsCode(db.transaction(tx=>guardFactoryCreate(tx,15,12,'dev')),'factory_create_destination_denied');
 });
+test('Done remains the human final review queue after independent QA consumes its grant',async()=>{
+ const db=await fixture();
+ await grant(db,qa,12);await move(db,'qa',12);
+ const done=db.rows('task')[0];assert.equal(done.sectionId,12);
+ assert.ok(db.rows('factoryGrant')[0].consumedAt);
+ for(const actor of ['dev','qa','recovery','authority'])for(const status of ['Archive','Deleted']){
+  await rejectsCode(db.transaction(tx=>guardFactoryMutation(tx,done,{status},actor)),'factory_lifecycle_denied');
+ }
+ assert.equal(db.rows('task')[0].status,'Normal');assert.equal(db.rows('task')[0].sectionId,12);
+ await db.transaction(tx=>guardFactoryMutation(tx,done,{status:'Archive'},null));
+});
 test('humans and unenrolled agents/projects retain task mutation behavior',async()=>{
  const db=await fixture();await grant(db);
  await db.transaction(tx=>guardFactoryMutation(tx,db.rows('task')[0],{sectionId:12,status:'Archive'},null));
