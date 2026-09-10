@@ -93,6 +93,22 @@ test("large BUGFIX UI additions fail the cross-check", async (t) => {
   assert.match(result.reason, /Retitle it as \[FEATURE\]/);
 });
 
+test("moving a large file into UI paths cannot evade the exemption budget", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/lib/Old.ts", Array.from({ length: 200 }, (_, i) => `export const old${i} = ${i};`).join("\n"));
+  const base = commit(git, "base");
+  fs.mkdirSync(path.join(dir, "src/components"), { recursive: true });
+  git(["mv", "src/lib/Old.ts", "src/components/Widget.tsx"]);
+  fs.appendFileSync(
+    path.join(dir, "src/components/Widget.tsx"),
+    `\n${Array.from({ length: 151 }, (_, i) => `export const added${i} = ${i};`).join("\n")}\n`,
+  );
+  const head = commit(git, "move and expand UI");
+  const result = await evaluate("HTPR-3 [BUGFIX] move widget", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /over the 150-line budget/);
+});
+
 test("undocumented title tags are not exempt", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -179,6 +195,26 @@ test("conditional and spread definitions cannot spoof a ticket flag", async (t) 
   const spreadResult = await evaluate("HTPR-5 [FEATURE] add widget", spreadBase, spreadHead, spread.dir);
   assert.equal(spreadResult.pass, false);
   assert.match(spreadResult.reason, /cannot contain object spreads/);
+});
+
+test("compound exported constants cannot spoof their runtime flag value", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(
+    dir,
+    "src/lib/flags/keys.ts",
+    'export const OTHER_FLAG = "htpr-1-other";\nexport const DECOY_FLAG = "htpr-5-decoy".replace("decoy", "actual");\n',
+  );
+  writeFile(
+    dir,
+    "src/lib/flags.ts",
+    'import { OTHER_FLAG, DECOY_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: DECOY_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n',
+  );
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "compound decoy");
+  const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /not an exported string constant/);
 });
 
 test("definitions resolve string constants imported from local modules", async (t) => {
@@ -330,7 +366,8 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /github\.event\.action != 'closed'/);
   assert.match(workflow, /if: github\.event_name == 'push' \|\| github\.event_name == 'pull_request_target'/);
   assert.match(workflow, /timeout-minutes: 5/);
-  assert.match(workflow, /group: feature-flag-gate-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/);
+  assert.match(workflow, /Every event reconciles all open PRs/);
+  assert.match(workflow, /group: feature-flag-gate-production/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
   assert.equal((workflow.match(/cache-dependency-path: package-lock\.json/g) || []).length, 2);

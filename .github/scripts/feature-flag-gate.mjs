@@ -177,28 +177,44 @@ function tokenize(source) {
   return tokens;
 }
 
-function exportedStringConstants(tokens) {
+function exportedStringConstants(source, path) {
+  const sourceFile = typescript.createSourceFile(
+    path,
+    source,
+    typescript.ScriptTarget.Latest,
+    true,
+    typescript.ScriptKind.TS,
+  );
+  if (sourceFile.parseDiagnostics.length > 0) {
+    throw new Error(`invalid ${path}: ${sourceFile.parseDiagnostics[0].messageText}`);
+  }
+
   const constants = [];
-  for (let index = 0; index + 4 < tokens.length; index += 1) {
-    if (
-      tokens[index].value !== "export" || tokens[index + 1].value !== "const" ||
-      tokens[index + 2].type !== "identifier"
-    ) continue;
-    let equals = index + 3;
-    while (equals < tokens.length && tokens[equals].value !== "=" &&
-           tokens[equals].value !== ";" && tokens[equals].value !== "export") equals += 1;
-    if (tokens[equals]?.value === "=" && tokens[equals + 1]?.type === "string") {
-      constants.push({ identifier: tokens[index + 2].value, value: tokens[equals + 1].value });
+  for (const statement of sourceFile.statements) {
+    if (!typescript.isVariableStatement(statement) ||
+        !statement.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.ExportKeyword) ||
+        !(statement.declarationList.flags & typescript.NodeFlags.Const)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!typescript.isIdentifier(declaration.name) || !declaration.initializer) continue;
+      let initializer = declaration.initializer;
+      while (typescript.isParenthesizedExpression(initializer) || typescript.isAsExpression(initializer) ||
+             typescript.isTypeAssertionExpression(initializer) || typescript.isSatisfiesExpression(initializer)) {
+        initializer = initializer.expression;
+      }
+      if (typescript.isStringLiteral(initializer)) {
+        constants.push({ identifier: declaration.name.text, value: initializer.text });
+      }
     }
   }
   return constants;
 }
 
 function parseFlagRegistry(ref) {
-  const tokens = tokenize(git(["show", `${ref}:src/lib/flags/keys.ts`]));
+  const path = "src/lib/flags/keys.ts";
+  const source = git(["show", `${ref}:${path}`]);
   const byIdentifier = new Map();
   const byValue = new Map();
-  for (const { identifier, value } of exportedStringConstants(tokens)) {
+  for (const { identifier, value } of exportedStringConstants(source, path)) {
     if (byIdentifier.has(identifier) || byValue.has(value)) {
       throw new Error(`duplicate feature flag key ${identifier}`);
     }
@@ -218,8 +234,8 @@ function resolveImportedStringConstant(ref, imports, localName) {
   }
 
   const modulePath = `src/${specifier.module.slice(2)}.ts`;
-  const tokens = tokenize(git(["show", `${ref}:${modulePath}`]));
-  const resolved = exportedStringConstants(tokens)
+  const source = git(["show", `${ref}:${modulePath}`]);
+  const resolved = exportedStringConstants(source, modulePath)
     .find(({ identifier }) => identifier === specifier.imported);
   if (resolved) return resolved.value;
   throw new Error(`feature flag key ${localName} is not an exported string constant`);
@@ -338,9 +354,10 @@ function parseImports(source) {
 
 function referencesFlagAtRuntime(ref, path, registry) {
   const source = git(["show", `${ref}:${path}`]);
-  const scriptKind = /\.tsx?$/.test(path)
-    ? (path.endsWith(".tsx") ? typescript.ScriptKind.TSX : typescript.ScriptKind.TS)
-    : (path.endsWith(".jsx") ? typescript.ScriptKind.JSX : typescript.ScriptKind.JS);
+  let scriptKind = typescript.ScriptKind.JS;
+  if (path.endsWith(".tsx")) scriptKind = typescript.ScriptKind.TSX;
+  else if (path.endsWith(".ts")) scriptKind = typescript.ScriptKind.TS;
+  else if (path.endsWith(".jsx")) scriptKind = typescript.ScriptKind.JSX;
   const sourceFile = typescript.createSourceFile(
     path,
     source,
@@ -445,7 +462,7 @@ export function evaluate({ title, baseSha, headSha }) {
   const tag = titleMatch?.[2] ?? null;
   const exempt = autoRevert || (tag && EXEMPT_TAGS.has(tag));
   if (exempt) {
-    const uiAdded = git(["diff", "--numstat", `${baseSha}...${headSha}`])
+    const uiAdded = git(["diff", "--numstat", "--no-renames", `${baseSha}...${headSha}`])
       .split("\n").filter(Boolean)
       .map((line) => {
         const [added, , ...pathParts] = line.split("\t");

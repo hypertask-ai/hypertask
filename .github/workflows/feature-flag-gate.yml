@@ -13,7 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: feature-flag-gate-${{ github.event.pull_request.number || github.ref }}
+  # Every event reconciles all open PRs, so replacing an older pending run is safe.
+  group: feature-flag-gate-production
   cancel-in-progress: false
 
 jobs:
