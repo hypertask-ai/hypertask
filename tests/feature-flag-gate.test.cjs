@@ -123,6 +123,26 @@ test("memo-wrapped exported JSX entries still require a ticket gate", async (t) 
   );
   const assertedHead = commit(asserted.git, "memo asserted");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", assertedBase, assertedHead, asserted.dir)).pass, false);
+
+  const nested = makeRepo(t);
+  const nestedBase = commit(nested.git, "base");
+  writeFile(
+    nested.dir,
+    "src/components/Widget.tsx",
+    'import { memo, forwardRef } from "react";\nimport { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Gated = () => useFlag(OTHER_FLAG) ? <div /> : null;\nexport const NewView = memo(forwardRef(() => <div />));\n',
+  );
+  const nestedHead = commit(nested.git, "nested hoc");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", nestedBase, nestedHead, nested.dir)).pass, false);
+
+  const nestedGated = makeRepo(t);
+  const nestedGatedBase = commit(nestedGated.git, "base");
+  writeFile(
+    nestedGated.dir,
+    "src/components/Widget.tsx",
+    'import { memo, forwardRef } from "react";\nimport { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const NewView = memo(forwardRef(() => useFlag(OTHER_FLAG) ? <div /> : null));\n',
+  );
+  const nestedGatedHead = commit(nestedGated.git, "nested hoc gated");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", nestedGatedBase, nestedGatedHead, nestedGated.dir)).pass, true);
 });
 
 test("App Router API changes do not need a flag", async (t) => {

@@ -836,17 +836,33 @@ function isExportedThroughCallWrapper(fn) {
     argument = argument.parent;
   }
   if (!typescript.isCallExpression(argument.parent)) return false;
-  const call = argument.parent;
-  if (!call.arguments.some((arg) => unwrapArgumentExpression(arg) === fn)) return false;
+  if (!argument.parent.arguments.some((arg) => unwrapArgumentExpression(arg) === fn)) return false;
 
-  if (typescript.isExportAssignment(call.parent)) return true;
+  let expression = argument.parent;
+  for (;;) {
+    if (typescript.isExportAssignment(expression.parent)) return true;
+    if (typescript.isVariableDeclaration(expression.parent) && expression.parent.initializer === expression &&
+        typescript.isVariableDeclarationList(expression.parent.parent) &&
+        typescript.isVariableStatement(expression.parent.parent.parent)) {
+      return isExportedVariableStatement(expression.parent.parent.parent);
+    }
 
-  if (typescript.isVariableDeclaration(call.parent) && call.parent.initializer === call &&
-      typescript.isVariableDeclarationList(call.parent.parent) &&
-      typescript.isVariableStatement(call.parent.parent.parent)) {
-    return isExportedVariableStatement(call.parent.parent.parent);
+    let nested = expression;
+    while (nested.parent && (
+      (typescript.isParenthesizedExpression(nested.parent) && nested.parent.expression === nested) ||
+      (typescript.isAsExpression(nested.parent) && nested.parent.expression === nested) ||
+      (typescript.isTypeAssertionExpression(nested.parent) && nested.parent.expression === nested) ||
+      (typescript.isNonNullExpression(nested.parent) && nested.parent.expression === nested) ||
+      (typescript.isSatisfiesExpression(nested.parent) && nested.parent.expression === nested)
+    )) {
+      nested = nested.parent;
+    }
+    if (!typescript.isCallExpression(nested.parent)) return false;
+    if (!nested.parent.arguments.some((arg) => unwrapArgumentExpression(arg) === expression || arg === nested)) {
+      return false;
+    }
+    expression = nested.parent;
   }
-  return false;
 }
 
 function isExportedUiEntry(fn) {
