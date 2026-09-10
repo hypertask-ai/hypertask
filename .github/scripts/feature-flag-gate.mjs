@@ -1,4 +1,8 @@
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "typescript");
 
 const EXEMPT_TAGS = new Set(["BUGFIX", "INFRA"]);
 const CROSS_CHECK_LINE_BUDGET = 150;
@@ -321,31 +325,74 @@ function parseImports(source) {
 
 function referencesFlagAtRuntime(ref, path, registry) {
   const source = git(["show", `${ref}:${path}`]);
-  const imports = parseImports(source);
-  const helpers = new Set();
-  const flagLocals = new Map();
-  for (const declaration of imports) {
-    for (const specifier of declaration.specifiers) {
-      if (declaration.module === "@/hooks/useFlag" && specifier.imported === "useFlag") {
-        helpers.add(specifier.local);
-      }
-      if (declaration.module === "@/lib/flags" && specifier.imported === "isFeatureEnabled") {
-        helpers.add(specifier.local);
-      }
-      if (FLAG_KEY_MODULES.has(declaration.module) && registry.byIdentifier.has(specifier.imported)) {
-        flagLocals.set(specifier.local, registry.byIdentifier.get(specifier.imported));
+  const scriptKind = /\.tsx?$/.test(path)
+    ? (path.endsWith(".tsx") ? typescript.ScriptKind.TSX : typescript.ScriptKind.TS)
+    : (path.endsWith(".jsx") ? typescript.ScriptKind.JSX : typescript.ScriptKind.JS);
+  const sourceFile = typescript.createSourceFile(
+    path,
+    source,
+    typescript.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  );
+  const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
+  const host = {
+    getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
+    getDefaultLibFileName: () => "",
+    writeFile: () => {},
+    getCurrentDirectory: () => "",
+    getDirectories: () => [],
+    fileExists: (fileName) => fileName === path,
+    readFile: (fileName) => fileName === path ? source : undefined,
+    getCanonicalFileName: (fileName) => fileName,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => "\n",
+  };
+  const program = typescript.createProgram([path], options, host);
+  const syntaxErrors = program.getSyntacticDiagnostics(sourceFile);
+  if (syntaxErrors.length > 0) throw new Error(`invalid ${path}: ${syntaxErrors[0].messageText}`);
+  const checker = program.getTypeChecker();
+  const helperSymbols = new Set();
+  const flagSymbols = new Map();
+
+  for (const statement of sourceFile.statements) {
+    if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
+    const moduleName = statement.moduleSpecifier.text;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !typescript.isNamedImports(bindings)) continue;
+    for (const specifier of bindings.elements) {
+      const imported = specifier.propertyName?.text ?? specifier.name.text;
+      const symbol = checker.getSymbolAtLocation(specifier.name);
+      if (!symbol) continue;
+      if ((moduleName === "@/hooks/useFlag" && imported === "useFlag") ||
+          (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
+      if (FLAG_KEY_MODULES.has(moduleName) && registry.byIdentifier.has(imported)) {
+        flagSymbols.set(symbol, registry.byIdentifier.get(imported));
       }
     }
   }
 
-  const tokens = tokenize(source);
-  for (let index = 0; index + 2 < tokens.length; index += 1) {
-    if (!helpers.has(tokens[index].value) || tokens[index + 1].value !== "(") continue;
-    const argument = tokens[index + 2];
-    if (argument.type === "string" && registry.byValue.has(argument.value)) return argument.value;
-    if (argument.type === "identifier" && flagLocals.has(argument.value)) return flagLocals.get(argument.value);
+  let found = null;
+  function visit(node) {
+    if (found) return;
+    if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
+        helperSymbols.has(checker.getSymbolAtLocation(node.expression))) {
+      let argument = node.arguments[0];
+      while (argument && (typescript.isParenthesizedExpression(argument) ||
+             typescript.isAsExpression(argument) || typescript.isTypeAssertionExpression(argument) ||
+             typescript.isNonNullExpression(argument) || typescript.isSatisfiesExpression(argument))) {
+        argument = argument.expression;
+      }
+      if (argument && (typescript.isStringLiteral(argument) || typescript.isNoSubstitutionTemplateLiteral(argument)) &&
+          registry.byValue.has(argument.text)) found = argument.text;
+      else if (argument && typescript.isIdentifier(argument)) {
+        found = flagSymbols.get(checker.getSymbolAtLocation(argument)) ?? null;
+      }
+    }
+    if (!found) typescript.forEachChild(node, visit);
   }
-  return null;
+  visit(sourceFile);
+  return found;
 }
 
 function isVerifiedAutoRevert(title, baseSha, headSha) {

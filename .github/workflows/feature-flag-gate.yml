@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: feature-flag-gate-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: feature-flag-gate-production
+  cancel-in-progress: false
 
 jobs:
   feature-flag-gate:
@@ -99,6 +99,16 @@ jobs:
             exit 2
           fi
 
+          parser_dir="$gate_tmp/parser"
+          if ! npm install --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund --package-lock=false typescript@6.0.3 \
+            >"$gate_tmp/npm-install.txt" 2>"$error_file"; then
+            echo "::error::Cannot install the trusted TypeScript parser."
+            publish_error_status "feature-flag-gate could not install its parser" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
+            exit 2
+          fi
+          export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
+
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$heads_json"; then
             echo "::error::Cannot check whether the head commit is shared by open production pull requests."
             publish_error_status "feature-flag-gate could not read open pull requests" ||
@@ -140,7 +150,9 @@ jobs:
              [ "$(jq -r '.title' "$current_json")" != "$title" ] ||
              [ "$(jq -r '.base.sha' "$current_json")" != "$base_sha" ] ||
              [ "$(jq -r '.head.sha' "$current_json")" != "$head_sha" ]; then
-            echo "Pull request #$PR_NUMBER changed during evaluation; its new event will evaluate the new state."
+            echo "Pull request #$PR_NUMBER changed during evaluation; its queued event will evaluate the new state."
+            publish_error_status "feature-flag-gate is waiting for the updated pull request" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
             exit 0
           fi
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
@@ -235,6 +247,14 @@ jobs:
             gh api -X POST "repos/$REPO/statuses/$1" --input "$2" >/dev/null
           }
 
+          parser_dir="$gate_tmp/parser"
+          if ! npm install --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund --package-lock=false typescript@6.0.3 \
+            >"$gate_tmp/npm-install.txt" 2>"$gate_tmp/npm-install-error.txt"; then
+            echo "::error::Cannot install the trusted TypeScript parser."
+            exit 2
+          fi
+          export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
+
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$pages"; then
             echo "::error::Cannot list open production pull requests."
             exit 2
@@ -307,7 +327,9 @@ jobs:
                [ "$(jq -r '.title' <<<"$current")" != "$title" ] ||
                [ "$(jq -r '.base.sha' <<<"$current")" != "$base_sha" ] ||
                [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ]; then
-              echo "Pull request #$number changed during reconciliation; its own event will evaluate the new state."
+              echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
+              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" ||
+                echo "::error::Cannot replace the pending feature-flag-gate status for #$number."
               continue
             fi
             if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||

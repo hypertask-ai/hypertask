@@ -265,10 +265,10 @@ test("a deleted UI file does not abort scanning another gated file", async (t) =
   assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
 });
 
-test("comments, strings, and identifier substrings do not count as gate calls", async (t) => {
+test("comments, strings, JSX text, regexes, and shadowed helpers do not count as gate calls", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\n// useFlag(OTHER_FLAG)\nconst note = "useFlag(OTHER_FLAG)";\nconst OTHER_FLAG_SUFFIX = true;\nexport const Widget = () => <div />;\n');
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\n// useFlag(OTHER_FLAG)\nconst note = "useFlag(OTHER_FLAG)";\nconst pattern = /useFlag(OTHER_FLAG)/;\nconst OTHER_FLAG_SUFFIX = true;\nfunction fake(useFlag) { return useFlag(OTHER_FLAG); }\nexport const Widget = () => <p>useFlag(OTHER_FLAG)</p>;\n');
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
 });
@@ -302,6 +302,10 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /github\.event\.action != 'closed'/);
   assert.match(workflow, /\["opened", "synchronize", "reopened", "closed"\]/);
   assert.match(workflow, /timeout-minutes: 5/);
+  assert.match(workflow, /group: feature-flag-gate-production/);
+  assert.match(workflow, /cancel-in-progress: false/);
+  assert.equal((workflow.match(/typescript@6\.0\.3/g) || []).length, 2);
+  assert.equal((workflow.match(/FEATURE_FLAG_TYPESCRIPT_PATH/g) || []).length, 2);
   assert.equal((workflow.match(/ref: production/g) || []).length, 2);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
