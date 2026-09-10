@@ -319,8 +319,10 @@ function bindingPatternRejectsElementAlias(pattern) {
 function isSafeDefinitionsCallback(callback) {
   // Regular function expressions expose `arguments[0]` even with destructured
   // parameters, so only arrow callbacks can be treated as safe reads.
+  // Block bodies can still mutate via outer aliases; expression bodies cannot.
   if (!callback ||
       !typescript.isArrowFunction(callback) ||
+      typescript.isBlock(callback.body) ||
       callback.parameters.length >= 3 ||
       callback.parameters.some((parameter) => parameter.dotDotDotToken)) {
     return false;
