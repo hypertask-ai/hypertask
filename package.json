@@ -138,7 +138,7 @@
     "reactstrap": "^9.2.0",
     "sass": "^1.76.0",
     "stripe": "^22.3.0",
-    "stripe-cli": "^0.1.0",
+    "stripe-cli": "^0.42.42",
     "sugar": "^2.0.6",
     "svix": "^1.99.1",
     "tailwind-merge": "^2.3.0",
