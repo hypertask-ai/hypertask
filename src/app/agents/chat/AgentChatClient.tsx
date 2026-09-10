@@ -818,6 +818,7 @@ const AgentChatClient = (props: IProp) => {
         chatEnabled?: boolean;
         awaiting?: boolean;
         viewer?: { draft: string | null; unreadCount: number } | null;
+        sharedConversationEnabled?: boolean;
       };
       if (!res.ok || !data.success || !Array.isArray(data.messages)) {
         throw new Error(data.error ?? "Failed to load messages");
@@ -848,7 +849,9 @@ const AgentChatClient = (props: IProp) => {
       // on this device wins, because it is what was typed most recently here,
       // and it gets pushed up so the next device sees it. An empty device slot
       // takes the server's copy, which is what makes a draft cross devices.
-      if (draftHydratedRef.current !== loadSessionId) {
+      // Viewer rows exist for private owner chats too; only the shared roster
+      // stays behind the flag.
+      if (data.viewer && draftHydratedRef.current !== loadSessionId) {
         draftHydratedRef.current = loadSessionId;
         const local = draftRef.current;
         const stored = data.viewer?.draft ?? "";
@@ -862,7 +865,9 @@ const AgentChatClient = (props: IProp) => {
         }
       }
       // Reading the newest page is catching up, so the unread marker moves.
-      if (data.viewer && data.viewer.unreadCount > 0) markChatRead(loadSessionId);
+      if (data.viewer && data.viewer.unreadCount > 0) {
+        markChatRead(loadSessionId);
+      }
       // Draining here would read awaitingRef before the render that follows
       // this setMessages has run, so it'd still see the stale (pre-reply)
       // value. The effect below (keyed on the derived `awaiting`) is the one

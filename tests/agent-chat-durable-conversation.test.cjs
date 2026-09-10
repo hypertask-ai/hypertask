@@ -141,7 +141,15 @@ function orderedDesc(rows) {
 
 const prisma = {
   chatSession: {
-    findFirst: async ({ where }) => SESSIONS.find((s) => sessionMatches(s, where)) ?? null,
+    findFirst: async ({ where }) => {
+      const session = SESSIONS.find((s) => sessionMatches(s, where));
+      if (!session) return null;
+      const agent = session.agentId ? AGENTS[session.agentId] : null;
+      return {
+        ...session,
+        agent: agent ? { userId: agent.ownerId } : null,
+      };
+    },
     upsert: async ({ create }) => {
       createdSessions.push(create);
       return { id: "session-1", teamId: create.teamId ?? null };
@@ -261,6 +269,8 @@ const prisma = {
 };
 
 let sessionUserId = 6;
+let sharedChatEnabled = true;
+let broadcasts = [];
 
 stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", {
@@ -271,7 +281,18 @@ stub("src/lib/agents/visibility.ts", {
 });
 stub("src/lib/flags.ts", {
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-  isFeatureEnabled: async () => false,
+  SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
+  isFeatureEnabled: async (key, userId) =>
+    key === "htpr-6002-shared-agent-chat"
+      ? sharedChatEnabled && userId === 6
+      : false,
+});
+stub("src/lib/realtime/server.ts", {
+  AGENT_CHAT_EVENT: "agent-chat",
+  broadcast: async (channel, event, body) => {
+    broadcasts.push({ channel, event, body });
+  },
+  userChannel: (userId) => `user-${userId}`,
 });
 stub("src/lib/agents/agentChatActivity.ts", {
   listAgentChatActivity: async () => [],
@@ -289,6 +310,7 @@ const createSessionRoute = load("src/app/api/ai-chat/create-session/route.ts");
 const participantRoute = load(
   "src/app/api/agent-chat/[sessionId]/participant/route.ts",
 );
+const chatBroadcast = load("src/lib/agents/chatBroadcast.ts");
 
 function message(index, sessionId = "session-1") {
   return {
@@ -500,6 +522,168 @@ test("everyone the agent is shared with reads the same thread", async () => {
     "a teammate on the same board joins the conversation instead of getting a private copy",
   );
   assert.equal(teammate.session.id, opener.session.id);
+});
+
+test("two people share unread state until either team or board access is revoked", async () => {
+  sharedChatEnabled = true;
+  participants = [];
+  messages = [message(1)];
+  broadcasts = [];
+  TEAMS[7] = ["team-a"];
+  AGENTS["agent-live"].sharedWith = [6, 7];
+
+  try {
+    sessionUserId = 6;
+    const owner = await (
+      await historyRoute.GET(historyRequest(), routeContext())
+    ).json();
+    sessionUserId = 7;
+    const teammate = await (
+      await historyRoute.GET(historyRequest(), routeContext())
+    ).json();
+    assert.equal(owner.session.id, teammate.session.id);
+
+    messages.push({
+      ...message(2),
+      authorUserId: 6,
+      createdAt: new Date(Date.now() + 1_000),
+    });
+    const unread = await (
+      await historyRoute.GET(historyRequest(), routeContext())
+    ).json();
+    assert.equal(unread.viewer.unreadCount, 1);
+
+    await chatBroadcast.broadcastChatSession("session-1");
+    assert.deepEqual(
+      broadcasts.map(({ channel }) => channel).sort(),
+      ["user-6", "user-7"],
+    );
+
+    TEAMS[7] = [];
+    assert.equal(
+      (
+        await historyRoute.GET(historyRequest(), routeContext())
+      ).status,
+      404,
+      "leaving the team stops direct history reads even while board access remains",
+    );
+    broadcasts = [];
+    await chatBroadcast.broadcastChatSession("session-1");
+    assert.deepEqual(broadcasts.map(({ channel }) => channel), ["user-6"]);
+
+    TEAMS[7] = ["team-a"];
+    AGENTS["agent-live"].sharedWith = [6];
+    const refusedDraft = await participantRoute.PATCH(
+      new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
+        method: "PATCH",
+        body: JSON.stringify({ draft: "must not land" }),
+      }),
+      routeContext(),
+    );
+    assert.equal(
+      refusedDraft.status,
+      404,
+      "losing the shared board stops direct participant writes",
+    );
+    assert.equal(
+      participants.find((row) => row.userId === 7).draft,
+      null,
+      "a refused write does not change the saved draft",
+    );
+    broadcasts = [];
+    await chatBroadcast.broadcastChatSession("session-1");
+    assert.deepEqual(broadcasts.map(({ channel }) => channel), ["user-6"]);
+  } finally {
+    sessionUserId = 6;
+    TEAMS[7] = ["team-a"];
+    AGENTS["agent-live"].sharedWith = [6, 7];
+    sharedChatEnabled = true;
+  }
+});
+
+test("the shared-chat flag preserves owner chat and refuses teammate state", async () => {
+  sharedChatEnabled = false;
+  participants = [];
+  messages = [message(1)];
+  createdSessions = [];
+  try {
+    sessionUserId = 6;
+    const ownerCreateResponse = await createSessionRoute.POST(
+      new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
+        method: "POST",
+        body: JSON.stringify({ agentId: OPENABLE_AGENT }),
+      }),
+    );
+    assert.equal(ownerCreateResponse.status, 200);
+    assert.equal(createdSessions[0].userId, 6);
+    assert.equal(createdSessions[0].teamId, "team-a");
+    assert.deepEqual(
+      participants.map((row) => row.userId),
+      [6],
+      "flag-off still records the owner participant for drafts and unread",
+    );
+
+    const ownerResponse = await historyRoute.GET(historyRequest(), routeContext());
+    const owner = await ownerResponse.json();
+    assert.equal(ownerResponse.status, 200);
+    assert.equal(owner.sharedConversationEnabled, false);
+    assert.ok(owner.viewer, "private owner chats keep the viewer draft/unread row");
+    assert.equal(owner.participants, null, "shared roster stays behind the flag");
+
+    const ownerDraftResponse = await participantRoute.PATCH(
+      new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
+        method: "PATCH",
+        body: JSON.stringify({ draft: "private-draft" }),
+      }),
+      routeContext(),
+    );
+    assert.equal(ownerDraftResponse.status, 200);
+    assert.equal(
+      participants.find((row) => row.userId === 6).draft,
+      "private-draft",
+    );
+
+    createdSessions = [];
+    sessionUserId = 7;
+    const createResponse = await createSessionRoute.POST(
+      new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
+        method: "POST",
+        body: JSON.stringify({ agentId: OPENABLE_AGENT }),
+      }),
+    );
+    assert.equal(createResponse.status, 404);
+    assert.deepEqual(createdSessions, []);
+
+    const teammateResponse = await historyRoute.GET(
+      historyRequest(),
+      routeContext(),
+    );
+    assert.equal(teammateResponse.status, 404);
+    const draftResponse = await participantRoute.PATCH(
+      new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
+        method: "PATCH",
+        body: JSON.stringify({ draft: "blocked" }),
+      }),
+      routeContext(),
+    );
+    assert.equal(draftResponse.status, 404);
+    assert.equal(
+      participants.find((row) => row.userId === 6).draft,
+      "private-draft",
+      "a refused teammate write does not change the owner draft",
+    );
+
+    broadcasts = [];
+    await chatBroadcast.broadcastChatSession("session-1");
+    assert.deepEqual(
+      broadcasts.map(({ channel }) => channel),
+      ["user-6"],
+      "flag-off still fans out live updates to the private owner",
+    );
+  } finally {
+    sessionUserId = 6;
+    sharedChatEnabled = true;
+  }
 });
 
 test("opening a thread records who turned up", async () => {
@@ -774,7 +958,7 @@ for (const relativePath of CHAT_BROADCASTERS) {
   });
 }
 
-test("the fan-out list is resolved before the response, not after it", () => {
+test("the authorized fan-out list is resolved before the response, not after it", () => {
   const source = fs.readFileSync(
     path.join(root, "src/lib/agents/chatBroadcast.ts"),
     "utf8",

@@ -32,6 +32,7 @@ import {
   INBOX_ARCHIVE_CLUSTER_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
+  SHARED_AGENT_CHAT_FLAG,
   MANAGER_LOOP_ACTIVITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
@@ -93,6 +94,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Lets the CLI and MCP change an agent's visibility between PRIVATE and TEAM, like the web dashboard already can.",
+  },
+  {
+    key: SHARED_AGENT_CHAT_FLAG,
+    shippedOn: "2026-09-08",
+    description:
+      "Shares one agent conversation across authorized teammates, with private unread position and drafts for each person.",
   },
   {
     key: HEIC_ATTACHMENTS_FLAG,
