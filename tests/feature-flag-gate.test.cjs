@@ -43,7 +43,7 @@ async function evaluate(title, baseSha, headSha, cwd) {
   process.chdir(cwd);
   try {
     const { evaluate: run } = await import(scriptUrl);
-    return run({ title, baseSha, headSha });
+    return await run({ title, baseSha, headSha });
   } finally {
     process.chdir(original);
   }
@@ -694,6 +694,18 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   const unusedHelperHead = commit(unusedHelper.git, "unused helper gate");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", unusedHelperBase, unusedHelperHead, unusedHelper.dir)).pass, false);
 
+  const nestedUnused = makeRepo(t);
+  const nestedUnusedBase = commit(nestedUnused.git, "base");
+  writeFile(nestedUnused.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { function gatedHelper() { if (useFlag(OTHER_FLAG)) return <div />; return null; } return <div />; }\n');
+  const nestedUnusedHead = commit(nestedUnused.git, "nested unused helper");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", nestedUnusedBase, nestedUnusedHead, nestedUnused.dir)).pass, false);
+
+  const deadSelfCall = makeRepo(t);
+  const deadSelfCallBase = commit(deadSelfCall.git, "base");
+  writeFile(deadSelfCall.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nfunction gatedHelper() { if (useFlag(OTHER_FLAG)) return <div />; gatedHelper(); return null; }\nexport function Widget() { return <div />; }\n');
+  const deadSelfCallHead = commit(deadSelfCall.git, "self call helper");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", deadSelfCallBase, deadSelfCallHead, deadSelfCall.dir)).pass, false);
+
   const identicalBranches = makeRepo(t);
   const identicalBranchesBase = commit(identicalBranches.git, "base");
   writeFile(identicalBranches.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return useFlag(OTHER_FLAG) ? null : null; }\n');
@@ -763,12 +775,15 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.equal((workflow.match(/git rev-parse HEAD\)" != "\$\(git rev-parse origin\/production\)/g) || []).length, 2);
   assert.match(workflow, /Trusted production checkout drifted/);
   assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /EVENT_HEAD_SHA/);
   assert.match(workflow, /statuses: write/);
   assert.match(workflow, /state: "pending"/);
   assert.match(workflow, /mark feature-flag-gate pending/);
   assert.match(workflow, /publish_error_status/);
   assert.match(workflow, /publish_reconciliation_error/);
   assert.match(workflow, /could not refresh pull-request heads/);
+  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh api "repos/$REPO/pulls/$PR_NUMBER"'));
+  assert.ok(workflow.indexOf("pending-heads.txt") < workflow.lastIndexOf('npm ci --prefix "$parser_dir"'));
   assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
   assert.match(workflow, /gh api --paginate --slurp/);

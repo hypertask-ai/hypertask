@@ -783,51 +783,93 @@ function isExportedFunctionLike(fn) {
       modifier.kind === typescript.SyntaxKind.DefaultKeyword)) {
     return true;
   }
-  let node = fn.parent;
-  while (node) {
-    if (typescript.isExportAssignment(node)) return true;
-    if (typescript.isVariableStatement(node) &&
-        node.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.ExportKeyword)) {
-      return true;
-    }
-    if (typescript.isSourceFile(node)) break;
-    node = node.parent;
+  if (typescript.isExportAssignment(fn.parent)) return true;
+  if (typescript.isVariableDeclaration(fn.parent) && fn.parent.initializer === fn &&
+      typescript.isVariableDeclarationList(fn.parent.parent) &&
+      typescript.isVariableStatement(fn.parent.parent.parent)) {
+    return Boolean(fn.parent.parent.parent.modifiers?.some((modifier) =>
+      modifier.kind === typescript.SyntaxKind.ExportKeyword ||
+      modifier.kind === typescript.SyntaxKind.DefaultKeyword));
+  }
+  if (typescript.isPropertyAssignment(fn.parent) && fn.parent.initializer === fn &&
+      typescript.isObjectLiteralExpression(fn.parent.parent) &&
+      typescript.isVariableDeclaration(fn.parent.parent.parent) &&
+      typescript.isVariableDeclarationList(fn.parent.parent.parent.parent) &&
+      typescript.isVariableStatement(fn.parent.parent.parent.parent.parent)) {
+    return Boolean(fn.parent.parent.parent.parent.parent.modifiers?.some((modifier) =>
+      modifier.kind === typescript.SyntaxKind.ExportKeyword ||
+      modifier.kind === typescript.SyntaxKind.DefaultKeyword));
   }
   return false;
 }
 
-function enclosingFunctionIsLive(fn, sourceFile, checker) {
-  if (isExportedFunctionLike(fn)) return true;
-  const name = functionBindingName(fn);
-  if (!name) return false;
-  const symbol = checker.getSymbolAtLocation(name);
-  if (!symbol) return false;
-  let referenced = false;
-  function visit(node) {
-    if (referenced) return;
-    if (node === fn || node === name) {
-      typescript.forEachChild(node, visit);
-      return;
-    }
-    if (typescript.isIdentifier(node) && checker.getSymbolAtLocation(node) === symbol) {
-      referenced = true;
-      return;
-    }
-    typescript.forEachChild(node, visit);
-  }
-  visit(sourceFile);
-  return referenced;
-}
-
-function callEnclosingFunctionIsLive(call, sourceFile, checker) {
-  let current = call.parent;
+function enclosingFunctionLike(node) {
+  let current = node.parent;
   while (current && !typescript.isSourceFile(current)) {
-    if (typescript.isFunctionLike(current)) {
-      return enclosingFunctionIsLive(current, sourceFile, checker);
-    }
+    if (typescript.isFunctionLike(current)) return current;
     current = current.parent;
   }
-  return true;
+  return null;
+}
+
+function isLiveCallSite(node, live) {
+  if (isStaticallyUnreachable(node)) return false;
+  const enclosing = enclosingFunctionLike(node);
+  return !enclosing || live.has(enclosing);
+}
+
+function collectLiveFunctions(sourceFile, checker) {
+  const functions = [];
+  function collect(node) {
+    if (typescript.isFunctionLike(node)) functions.push(node);
+    typescript.forEachChild(node, collect);
+  }
+  collect(sourceFile);
+
+  const live = new Set(functions.filter(isExportedFunctionLike));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const fn of functions) {
+      if (live.has(fn)) continue;
+      const name = functionBindingName(fn);
+      if (!name) continue;
+      const symbol = checker.getSymbolAtLocation(name);
+      if (!symbol) continue;
+      let referenced = false;
+      function visit(node) {
+        if (referenced || node === fn) return;
+        if (isStaticallyUnreachable(node)) return;
+        if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
+            checker.getSymbolAtLocation(node.expression) === symbol &&
+            isLiveCallSite(node, live)) {
+          referenced = true;
+          return;
+        }
+        if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) &&
+            typescript.isIdentifier(node.tagName) &&
+            checker.getSymbolAtLocation(node.tagName) === symbol &&
+            isLiveCallSite(node, live)) {
+          referenced = true;
+          return;
+        }
+        typescript.forEachChild(node, visit);
+      }
+      visit(sourceFile);
+      if (referenced) {
+        live.add(fn);
+        changed = true;
+      }
+    }
+  }
+  return live;
+}
+
+function callEnclosingFunctionIsLive(call, sourceFile, checker, liveFunctions = null) {
+  const live = liveFunctions ?? collectLiveFunctions(sourceFile, checker);
+  const enclosing = enclosingFunctionLike(call);
+  if (!enclosing) return true;
+  return live.has(enclosing);
 }
 
 function expressionResultIsObserved(node) {
@@ -1092,8 +1134,9 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
     gatesRuntimeBehavior(call, checker, node.getSourceFile(), () => false));
 }
 
-function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch) {
-  if (!callEnclosingFunctionIsLive(call, sourceFile, checker)) return false;
+function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null) {
+  const live = liveFunctions ?? collectLiveFunctions(sourceFile, checker);
+  if (!callEnclosingFunctionIsLive(call, sourceFile, checker, live)) return false;
   if (controlsRuntimeBranch(call)) return true;
   const assigned = assignedGateSymbol(call, checker);
   if (!assigned?.symbol) return false;
@@ -1103,7 +1146,7 @@ function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = contro
     if (usedAsGate) return;
     if (typescript.isIdentifier(node) && node !== assigned.name &&
         checker.getSymbolAtLocation(node) === assigned.symbol &&
-        callEnclosingFunctionIsLive(node, sourceFile, checker) &&
+        callEnclosingFunctionIsLive(node, sourceFile, checker, live) &&
         referenceGates(node)) {
       usedAsGate = true;
       return;
@@ -1147,6 +1190,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
   const helperSymbols = new Set();
   const flagSymbols = new Map();
   const importedFunctions = new Map();
+  const liveFunctions = collectLiveFunctions(sourceFile, checker);
 
   for (const statement of sourceFile.statements) {
     if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -1194,7 +1238,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
               path,
               checker,
               importedFunctions,
-            ))) found = key;
+            ), liveFunctions)) found = key;
     }
     if (!found) typescript.forEachChild(node, visit);
   }

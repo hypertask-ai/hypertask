@@ -44,6 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -61,6 +62,7 @@ jobs:
           error_file="$gate_tmp/error.txt"
           pending_payload="$gate_tmp/pending-status.json"
           payload="$gate_tmp/status.json"
+          head_sha="$EVENT_HEAD_SHA"
 
           publish_error_status() {
             jq -n --arg description "$1" --arg target_url "$RUN_URL" '{
@@ -72,24 +74,10 @@ jobs:
             gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null
           }
 
-          if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$pr_json"; then
-            echo "::error::Cannot read pull request #$PR_NUMBER."
+          if ! [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Event head SHA for pull request #$PR_NUMBER is missing."
             exit 2
           fi
-          if ! jq -e '
-            .state == "open" and .base.ref == "production" and
-            (.title | type == "string") and (.base.sha | test("^[0-9a-f]{40}$")) and
-            (.head.sha | test("^[0-9a-f]{40}$")) and (.head.repo.full_name | type == "string")
-          ' "$pr_json" >/dev/null; then
-            echo "::error::Pull request #$PR_NUMBER metadata is incomplete."
-            exit 2
-          fi
-
-          title=$(jq -r '.title' "$pr_json")
-          base_sha=$(jq -r '.base.sha' "$pr_json")
-          head_sha=$(jq -r '.head.sha' "$pr_json")
-          head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
-          result=2
 
           jq -n --arg target_url "$RUN_URL" '{
             state: "pending",
@@ -101,6 +89,34 @@ jobs:
             echo "::error::Cannot mark feature-flag-gate pending for pull request #$PR_NUMBER."
             exit 2
           fi
+
+          if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$pr_json"; then
+            echo "::error::Cannot read pull request #$PR_NUMBER."
+            publish_error_status "feature-flag-gate could not read pull request metadata" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
+            exit 2
+          fi
+          if ! jq -e '
+            .state == "open" and .base.ref == "production" and
+            (.title | type == "string") and (.base.sha | test("^[0-9a-f]{40}$")) and
+            (.head.sha | test("^[0-9a-f]{40}$")) and (.head.repo.full_name | type == "string")
+          ' "$pr_json" >/dev/null; then
+            echo "::error::Pull request #$PR_NUMBER metadata is incomplete."
+            publish_error_status "feature-flag-gate found incomplete pull request metadata" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
+            exit 2
+          fi
+
+          title=$(jq -r '.title' "$pr_json")
+          base_sha=$(jq -r '.base.sha' "$pr_json")
+          api_head_sha=$(jq -r '.head.sha' "$pr_json")
+          head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
+          result=2
+
+          if [ "$api_head_sha" != "$head_sha" ]; then
+            echo "Pull request head changed during evaluation." >"$reason_file"
+            result=1
+          else
 
           parser_dir="$gate_tmp/parser"
           mkdir -p "$parser_dir"
@@ -146,6 +162,8 @@ jobs:
             result=0
           else
             result=$?
+          fi
+
           fi
 
           if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
@@ -262,12 +280,6 @@ jobs:
           mkdir -p "$parser_dir"
           cp .github/scripts/feature-flag-parser/package.json \
             .github/scripts/feature-flag-parser/package-lock.json "$parser_dir/"
-          if ! npm ci --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund \
-            >"$gate_tmp/npm-install.txt" 2>"$gate_tmp/npm-install-error.txt"; then
-            echo "::error::Cannot install the trusted TypeScript parser."
-            exit 2
-          fi
-          export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
 
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$pages"; then
             echo "::error::Cannot list open production pull requests."
@@ -277,6 +289,40 @@ jobs:
             echo "::error::Cannot parse the open production pull-request list."
             exit 2
           fi
+
+          pending_heads="$gate_tmp/pending-heads.txt"
+          : >"$pending_heads"
+          while IFS= read -r pull; do
+            if ! jq -e '(.head.sha | test("^[0-9a-f]{40}$"))' <<<"$pull" >/dev/null; then
+              continue
+            fi
+            head_sha=$(jq -r '.head.sha' <<<"$pull")
+            if grep -Fxq "$head_sha" "$pending_heads"; then
+              continue
+            fi
+            echo "$head_sha" >>"$pending_heads"
+            jq -n --arg target_url "$RUN_URL" '{
+              state: "pending",
+              context: "feature-flag-gate",
+              description: "feature-flag-gate is reconciling this pull request",
+              target_url: $target_url
+            }' >"$gate_tmp/pending-$head_sha.json"
+            if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$gate_tmp/pending-$head_sha.json" >/dev/null; then
+              echo "::error::Cannot mark feature-flag-gate pending for head $head_sha."
+              failures=$((failures + 1))
+            fi
+          done <"$rows"
+
+          if ! npm ci --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund \
+            >"$gate_tmp/npm-install.txt" 2>"$gate_tmp/npm-install-error.txt"; then
+            echo "::error::Cannot install the trusted TypeScript parser."
+            while IFS= read -r head_sha; do
+              publish_reconciliation_error "$head_sha" "$gate_tmp/error-$head_sha.json" \
+                "feature-flag-gate could not install its parser" || true
+            done <"$pending_heads"
+            exit 2
+          fi
+          export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
 
           while IFS= read -r pull; do
             if ! jq -e '
@@ -299,18 +345,6 @@ jobs:
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
             result=2
-
-            jq -n --arg target_url "$RUN_URL" '{
-              state: "pending",
-              context: "feature-flag-gate",
-              description: "feature-flag-gate is reconciling this pull request",
-              target_url: $target_url
-            }' >"$payload"
-            if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null; then
-              echo "::error::Cannot mark feature-flag-gate pending for pull request #$number."
-              failures=$((failures + 1))
-              continue
-            fi
 
             if [ "$head_pr_count" -ne 1 ]; then
               echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
