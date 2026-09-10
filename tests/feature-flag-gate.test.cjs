@@ -57,6 +57,14 @@ test("non-UI changes do not need a flag", async (t) => {
   assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
 });
 
+test("loose JSX UI files require a feature flag", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/features/NewView.jsx", "export const NewView = () => <div />;\n");
+  const head = commit(git, "jsx feature");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] add view", base, head, dir)).pass, false);
+});
+
 test("App Router API changes do not need a flag", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -374,6 +382,20 @@ test("a key added only to the registry cannot count as an existing runtime gate"
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { DECOY_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(DECOY_FLAG) ? <div /> : null;\n');
   const head = commit(git, "registry-only decoy");
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
+});
+
+test("statically unreachable helper calls do not count as runtime gates", async (t) => {
+  const shortCircuit = makeRepo(t);
+  const shortCircuitBase = commit(shortCircuit.git, "base");
+  writeFile(shortCircuit.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => false && useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const shortCircuitHead = commit(shortCircuit.git, "dead short circuit");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", shortCircuitBase, shortCircuitHead, shortCircuit.dir)).pass, false);
+
+  const returned = makeRepo(t);
+  const returnedBase = commit(returned.git, "base");
+  writeFile(returned.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return <div />; useFlag(OTHER_FLAG); }\n');
+  const returnedHead = commit(returned.git, "dead return");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", returnedBase, returnedHead, returned.dir)).pass, false);
 });
 
 test("comments, strings, JSX text, regexes, and shadowed helpers do not count as gate calls", async (t) => {

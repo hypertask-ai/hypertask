@@ -127,6 +127,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
 test('auto-merge uses job-private temporary files on shared runners', async () => {
   const workflow = await readFile('.github/workflows/automerge.yml', 'utf8')
 
+  assert.match(workflow, /timeout-minutes: 30/)
   assert.match(workflow, /mktemp -d "\$\{RUNNER_TEMP:-\/tmp\}\/hypertask-automerge\.XXXXXX"/)
   assert.match(workflow, /trap 'rm -rf "\$AUTOMERGE_TMP"' EXIT/)
   assert.match(workflow, /PR_JSON="\$AUTOMERGE_TMP\/pr\.json"/)

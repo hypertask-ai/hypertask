@@ -11,7 +11,7 @@ const UI_INCLUDE = [
   /^src\/components\//,
   /^src\/pages\/(?!api\/)/,
   /^src\/app\//,
-  /\.(tsx|css)$/,
+  /\.(jsx|tsx|css)$/,
 ];
 const UI_EXCLUDE = [
   /^src\/pages\/api\//,
@@ -352,6 +352,50 @@ function parseImports(source) {
   return imports;
 }
 
+function staticBoolean(node) {
+  while (typescript.isParenthesizedExpression(node) || typescript.isAsExpression(node) ||
+         typescript.isTypeAssertionExpression(node) || typescript.isNonNullExpression(node) ||
+         typescript.isSatisfiesExpression(node)) node = node.expression;
+  if (node.kind === typescript.SyntaxKind.TrueKeyword) return true;
+  if (node.kind === typescript.SyntaxKind.FalseKeyword) return false;
+  if (typescript.isPrefixUnaryExpression(node) && node.operator === typescript.SyntaxKind.ExclamationToken) {
+    const operand = staticBoolean(node.operand);
+    return operand === null ? null : !operand;
+  }
+  return null;
+}
+
+function isStaticallyUnreachable(node) {
+  let child = node;
+  for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if (typescript.isBinaryExpression(parent) && child === parent.right) {
+      const left = staticBoolean(parent.left);
+      if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && left === false) ||
+          (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && left === true)) return true;
+    }
+    if (typescript.isConditionalExpression(parent)) {
+      const condition = staticBoolean(parent.condition);
+      if ((child === parent.whenTrue && condition === false) ||
+          (child === parent.whenFalse && condition === true)) return true;
+    }
+    if (typescript.isIfStatement(parent)) {
+      const condition = staticBoolean(parent.expression);
+      if ((child === parent.thenStatement && condition === false) ||
+          (child === parent.elseStatement && condition === true)) return true;
+    }
+    if (typescript.isWhileStatement(parent) && child === parent.statement &&
+        staticBoolean(parent.expression) === false) return true;
+    if (typescript.isForStatement(parent) && child === parent.statement && parent.condition &&
+        staticBoolean(parent.condition) === false) return true;
+    if (typescript.isBlock(parent)) {
+      const statementIndex = parent.statements.findIndex((statement) => statement === child);
+      if (statementIndex > 0 && parent.statements.slice(0, statementIndex)
+        .some((statement) => typescript.isReturnStatement(statement) || typescript.isThrowStatement(statement))) return true;
+    }
+  }
+  return false;
+}
+
 function referencesFlagAtRuntime(ref, path, registry) {
   const source = git(["show", `${ref}:${path}`]);
   let scriptKind = typescript.ScriptKind.JS;
@@ -406,7 +450,7 @@ function referencesFlagAtRuntime(ref, path, registry) {
   function visit(node) {
     if (found) return;
     if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
-        helperSymbols.has(checker.getSymbolAtLocation(node.expression))) {
+        helperSymbols.has(checker.getSymbolAtLocation(node.expression)) && !isStaticallyUnreachable(node)) {
       let argument = node.arguments[0];
       while (argument && (typescript.isParenthesizedExpression(argument) ||
              typescript.isAsExpression(argument) || typescript.isTypeAssertionExpression(argument) ||
