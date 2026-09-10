@@ -331,6 +331,11 @@ jobs:
               (.head.repo.full_name | type == "string")
             ' <<<"$pull" >/dev/null; then
               echo "::error::An open pull request has incomplete metadata."
+              incomplete_head=$(jq -r '.head.sha // empty' <<<"$pull")
+              if [[ "$incomplete_head" =~ ^[0-9a-f]{40}$ ]]; then
+                publish_reconciliation_error "$incomplete_head" "$gate_tmp/error-$incomplete_head.json" \
+                  "feature-flag-gate found incomplete pull request metadata" || true
+              fi
               failures=$((failures + 1))
               continue
             fi
