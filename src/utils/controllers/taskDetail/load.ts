@@ -15,6 +15,7 @@ import {
   isAgentVisibleToUser,
   type AgentVisibility,
 } from "@/lib/agents/visibility";
+import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
 
 type Db = Pick<PrismaClient, "$queryRaw">;
 
@@ -195,20 +196,17 @@ export function taskDetailInclude(userId: number, projectId: number) {
     estimate: true,
     cycle: true,
     drafts: { where: { userId, saved: false } },
+    // Same predicate as the Inbox screen. A looser _count (any Normal row for
+    // this user) made mobile show the blue remove-from-inbox icon on tasks that
+    // are snoozed, agent-owned, or otherwise hidden from Inbox (HTPR-6365).
     notifications: {
-      where: {
-        status: Status.Normal,
-        userId,
-        task: {
-          Reminders: { every: { status: { not: Status.Normal } } },
-        },
-      },
+      where: visibleUserInboxWhere(userId),
       take: 1,
       orderBy: { createdAt: "desc" },
     },
     _count: {
       select: {
-        notifications: { where: { status: Status.Normal, userId } },
+        notifications: { where: visibleUserInboxWhere(userId) },
       },
     },
     assignees: {
