@@ -436,6 +436,11 @@ jobs:
               echo "::endgroup::"
               continue
             fi
+            if grep -Fq "is exempt (" "$GATE_REASON"; then
+              echo "skip: exempt UI requires owner review"
+              echo "::endgroup::"
+              continue
+            fi
             if ! gh api "repos/$REPO/pulls/$PR" >"$VERIFY_PR_JSON" ||
                ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$VERIFY_HEADS_JSON" ||
                ! verify_head_pr_count=$(jq -er --arg sha "$final_head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$VERIFY_HEADS_JSON"); then

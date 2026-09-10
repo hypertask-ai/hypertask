@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -91,6 +91,8 @@ if [ "$1" = ".github/scripts/feature-flag-gate.mjs" ]; then
   if [ "\${GH_STUB_FAIL_FEATURE_GATE:-}" = "1" ]; then echo "feature flag required"; exit 1; fi
   if [ "\${GH_STUB_FEATURE_GATED:-}" = "1" ]; then
     echo "[FEATURE] calls ticket-specific feature gate htpr-1-test in changed code covering every UI entry from src/app/page.tsx."
+  elif [ "\${GH_STUB_EXEMPT_UI:-}" = "1" ]; then
+    echo "[BUGFIX] is exempt (14 UI lines added)."
   else
     echo "feature flag gate passed"
   fi
@@ -128,6 +130,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_FAIL_MERGEABILITY: failMergeability ? '1' : '',
         GH_STUB_FAIL_FEATURE_GATE: failFeatureGate ? '1' : '',
         GH_STUB_FEATURE_GATED: featureGated ? '1' : '',
+        GH_STUB_EXEMPT_UI: exemptUi ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
         EXPECTED_PR_TITLE: prTitle,
         EXPECTED_BASE_SHA: 'b'.repeat(40),
@@ -194,6 +197,15 @@ test('auto-merge keeps feature-gated UI under owner review', async () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /feature-gated UI requires owner review/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge keeps exempt UI under owner review', async () => {
+  const { result, scratchEntries } = await runWorkflow({ exemptUi: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /exempt UI requires owner review/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
