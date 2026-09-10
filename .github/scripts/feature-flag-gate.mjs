@@ -841,7 +841,6 @@ function branchIsNullishOrEmpty(node) {
   }
   if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
   if (typescript.isStringLiteral(expression) && expression.text === "") return true;
-  if (typescript.isNumericLiteral(expression) && Number(expression.text) === 0) return true;
   if (typescript.isJsxFragment(expression)) {
     return expression.children.every((child) =>
       typescript.isJsxText(child) ? child.getText().trim() === "" : false);
