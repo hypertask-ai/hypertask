@@ -410,8 +410,14 @@ function isStaticallyUnreachable(node) {
 }
 
 function controlsRuntimeBranch(node) {
+  if (isStaticallyUnreachable(node)) return false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if (typescript.isBinaryExpression(parent) && child === parent.left) {
+      const right = staticBoolean(parent.right);
+      if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && right === false) ||
+          (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && right === true)) return false;
+    }
     if ((typescript.isConditionalExpression(parent) && child === parent.condition) ||
         (typescript.isIfStatement(parent) && child === parent.expression) ||
         (typescript.isWhileStatement(parent) && child === parent.expression) ||
@@ -557,6 +563,10 @@ export function evaluate({ title, baseSha, headSha }) {
   const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
     .split("\n").filter(Boolean);
   const uiFiles = changedFiles.filter(isUiFile);
+  const runtimeFiles = changedFiles.filter((path) =>
+    /^src\//.test(path) && /\.[jt]sx?$/.test(path) &&
+    !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
+    !/\.stories\.[jt]sx?$/.test(path));
   if (uiFiles.length === 0) {
     return { pass: true, reason: "No changed file matches the UI-change path filter." };
   }
@@ -607,8 +617,7 @@ export function evaluate({ title, baseSha, headSha }) {
     }
     const ticketKeys = new Set(headDefinitions.keys.filter((key) => key.startsWith(ticketPrefix)));
 
-    for (const path of uiFiles) {
-      if (!/\.[jt]sx?$/.test(path)) continue;
+    for (const path of runtimeFiles) {
       try {
         git(["cat-file", "-e", `${headSha}:${path}`]);
       } catch {
@@ -630,7 +639,7 @@ export function evaluate({ title, baseSha, headSha }) {
   const shownFiles = `${uiFiles.slice(0, 5).join(", ")}${uiFiles.length > 5 ? ", ..." : ""}`;
   return failure(
     `[${tag}] touches UI files (${shownFiles}) without a feature flag. Define a ticket-specific key in ` +
-    "FEATURE_FLAG_DEFINITIONS and call useFlag/isFeatureEnabled with that key on an added or modified UI line.",
+    "FEATURE_FLAG_DEFINITIONS and call useFlag/isFeatureEnabled with that key on an added or modified source line.",
   );
 }
 

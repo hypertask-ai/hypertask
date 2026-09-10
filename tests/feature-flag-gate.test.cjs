@@ -73,6 +73,15 @@ test("App Router API changes do not need a flag", async (t) => {
   assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
 });
 
+test("server-side ticket gates cover related UI changes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  writeFile(dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
+  const head = commit(git, "server-gated UI");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
 test("App Router route handlers and spec files do not need a flag", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -426,6 +435,18 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   writeFile(returned.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return <div />; useFlag(OTHER_FLAG); }\n');
   const returnedHead = commit(returned.git, "dead return");
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", returnedBase, returnedHead, returned.dir)).pass, false);
+
+  const deadReference = makeRepo(t);
+  const deadReferenceBase = commit(deadReference.git, "base");
+  writeFile(deadReference.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); if (false) { if (enabled) return <div />; } return <div />; }\n');
+  const deadReferenceHead = commit(deadReference.git, "dead reference");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", deadReferenceBase, deadReferenceHead, deadReference.dir)).pass, false);
+
+  const invariant = makeRepo(t);
+  const invariantBase = commit(invariant.git, "base");
+  writeFile(invariant.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) || true ? <div /> : null;\n');
+  const invariantHead = commit(invariant.git, "invariant condition");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", invariantBase, invariantHead, invariant.dir)).pass, false);
 });
 
 test("comments, strings, JSX text, regexes, and shadowed helpers do not count as gate calls", async (t) => {
