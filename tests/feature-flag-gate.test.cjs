@@ -437,6 +437,28 @@ test("a definition for another ticket or a changed default fails", async (t) => 
   assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", changedDefaultBase, changedDefaultHead, changedDefault.dir)).pass, false);
 });
 
+test("mutable feature flag policy declarations fail closed", async (t) => {
+  const cases = [
+    ["let definitions", flagsSource().replace("const FEATURE_FLAG_DEFINITIONS", "let FEATURE_FLAG_DEFINITIONS")],
+    ["let default", flagsSource().replace("const DEFAULT_FEATURE_FLAG_MODE", "let DEFAULT_FEATURE_FLAG_MODE")],
+    ["reassigned definitions", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS = [];\n")],
+    ["mutated definitions", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.push({ key: OTHER_FLAG });\n")],
+    ["aliased definitions", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const escapedDefinitions = FEATURE_FLAG_DEFINITIONS;\n")],
+    ["reassigned default", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", 'DEFAULT_FEATURE_FLAG_MODE = "EVERYONE";\n')],
+  ];
+
+  for (const [name, source] of cases) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags.ts", source);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, name);
+    const result = await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir);
+    assert.equal(result.pass, false, name);
+    assert.match(result.reason, /declared const|must not be reassigned, aliased, or mutated/, name);
+  }
+});
+
 test("an imported registered key used by useFlag passes", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");

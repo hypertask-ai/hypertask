@@ -256,6 +256,68 @@ function resolveImportedStringConstant(ref, imports, localName) {
   throw new Error(`feature flag key ${localName} is not an exported string constant`);
 }
 
+const ASSIGNMENT_OPERATORS = new Set([
+  typescript.SyntaxKind.EqualsToken,
+  typescript.SyntaxKind.PlusEqualsToken,
+  typescript.SyntaxKind.MinusEqualsToken,
+  typescript.SyntaxKind.AsteriskEqualsToken,
+  typescript.SyntaxKind.AsteriskAsteriskEqualsToken,
+  typescript.SyntaxKind.SlashEqualsToken,
+  typescript.SyntaxKind.PercentEqualsToken,
+  typescript.SyntaxKind.LessThanLessThanEqualsToken,
+  typescript.SyntaxKind.GreaterThanGreaterThanEqualsToken,
+  typescript.SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
+  typescript.SyntaxKind.AmpersandEqualsToken,
+  typescript.SyntaxKind.BarEqualsToken,
+  typescript.SyntaxKind.CaretEqualsToken,
+  typescript.SyntaxKind.BarBarEqualsToken,
+  typescript.SyntaxKind.AmpersandAmpersandEqualsToken,
+  typescript.SyntaxKind.QuestionQuestionEqualsToken,
+]);
+const MUTATING_ARRAY_METHODS = new Set([
+  "copyWithin", "fill", "pop", "push", "reverse", "shift", "sort", "splice", "unshift",
+]);
+
+function assertPolicyBindingImmutable(sourceFile, name, declaration) {
+  let mutation = null;
+  function visit(node) {
+    if (mutation) return;
+    if (typescript.isIdentifier(node) && node.text === name && node !== declaration.name &&
+        !(typescript.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
+        !(typescript.isPropertyAssignment(node.parent) && node.parent.name === node)) {
+      let target = node;
+      while (target.parent &&
+             ((typescript.isParenthesizedExpression(target.parent) && target.parent.expression === target) ||
+              (typescript.isAsExpression(target.parent) && target.parent.expression === target) ||
+              (typescript.isTypeAssertionExpression(target.parent) && target.parent.expression === target) ||
+              (typescript.isSatisfiesExpression(target.parent) && target.parent.expression === target) ||
+              (typescript.isNonNullExpression(target.parent) && target.parent.expression === target) ||
+              (typescript.isPropertyAccessExpression(target.parent) && target.parent.expression === target) ||
+              (typescript.isElementAccessExpression(target.parent) && target.parent.expression === target))) {
+        target = target.parent;
+      }
+      const parent = target.parent;
+      const update = parent &&
+        ((typescript.isPrefixUnaryExpression(parent) || typescript.isPostfixUnaryExpression(parent)) &&
+         parent.operand === target &&
+         (parent.operator === typescript.SyntaxKind.PlusPlusToken ||
+          parent.operator === typescript.SyntaxKind.MinusMinusToken));
+      const assignment = parent && typescript.isBinaryExpression(parent) && parent.left === target &&
+        ASSIGNMENT_OPERATORS.has(parent.operatorToken.kind);
+      const deletion = parent && typescript.isDeleteExpression(parent) && parent.expression === target;
+      const alias = parent && typescript.isVariableDeclaration(parent) && parent.initializer === target;
+      const passedToCall = parent && (typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
+        parent.arguments?.includes(target);
+      const mutatingCall = parent && typescript.isCallExpression(parent) && parent.expression === target &&
+        typescript.isPropertyAccessExpression(target) && MUTATING_ARRAY_METHODS.has(target.name.text);
+      if (update || assignment || deletion || alias || passedToCall || mutatingCall) mutation = target;
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  if (mutation) throw new Error(`${name} must not be reassigned, aliased, or mutated`);
+}
+
 function parseDefinitions(ref) {
   const source = git(["show", `${ref}:src/lib/flags.ts`]);
   const imports = parseImports(source);
@@ -278,11 +340,21 @@ function parseDefinitions(ref) {
       if (declarations.has(declaration.name.text)) {
         throw new Error(`duplicate ${declaration.name.text} declaration`);
       }
-      declarations.set(declaration.name.text, declaration);
+      declarations.set(declaration.name.text, {
+        declaration,
+        isConst: Boolean(statement.declarationList.flags & typescript.NodeFlags.Const),
+      });
     }
   }
 
-  let definitions = declarations.get("FEATURE_FLAG_DEFINITIONS")?.initializer;
+  const definitionsBinding = declarations.get("FEATURE_FLAG_DEFINITIONS");
+  const modeBinding = declarations.get("DEFAULT_FEATURE_FLAG_MODE");
+  if (!definitionsBinding?.isConst) throw new Error("FEATURE_FLAG_DEFINITIONS must be declared const");
+  if (!modeBinding?.isConst) throw new Error("DEFAULT_FEATURE_FLAG_MODE must be declared const");
+  assertPolicyBindingImmutable(sourceFile, "FEATURE_FLAG_DEFINITIONS", definitionsBinding.declaration);
+  assertPolicyBindingImmutable(sourceFile, "DEFAULT_FEATURE_FLAG_MODE", modeBinding.declaration);
+
+  let definitions = definitionsBinding.declaration.initializer;
   while (definitions && (typescript.isParenthesizedExpression(definitions) ||
          typescript.isAsExpression(definitions) || typescript.isTypeAssertionExpression(definitions) ||
          typescript.isSatisfiesExpression(definitions))) definitions = definitions.expression;
@@ -325,7 +397,7 @@ function parseDefinitions(ref) {
   });
   if (new Set(keys).size !== keys.length) throw new Error("duplicate FEATURE_FLAG_DEFINITIONS key");
 
-  let mode = declarations.get("DEFAULT_FEATURE_FLAG_MODE")?.initializer;
+  let mode = modeBinding.declaration.initializer;
   while (mode && (typescript.isParenthesizedExpression(mode) || typescript.isAsExpression(mode) ||
          typescript.isTypeAssertionExpression(mode) || typescript.isSatisfiesExpression(mode))) {
     mode = mode.expression;
