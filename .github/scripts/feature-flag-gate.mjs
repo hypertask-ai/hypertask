@@ -328,6 +328,48 @@ function isSafeDefinitionsCallback(callback) {
   );
 }
 
+function isAssignmentPatternTarget(node) {
+  // Walk through object/array literal shapes used as the left-hand side of `=`.
+  let current = node;
+  while (current.parent) {
+    const parent = current.parent;
+    if (typescript.isBinaryExpression(parent) && parent.left === current &&
+        ASSIGNMENT_OPERATORS.has(parent.operatorToken.kind)) {
+      return true;
+    }
+    if ((typescript.isPropertyAssignment(parent) && parent.initializer === current) ||
+        (typescript.isShorthandPropertyAssignment(parent) && parent.name === current) ||
+        (typescript.isSpreadAssignment(parent) && parent.expression === current) ||
+        typescript.isObjectLiteralExpression(parent) ||
+        typescript.isArrayLiteralExpression(parent) ||
+        (typescript.isParenthesizedExpression(parent) && parent.expression === current) ||
+        (typescript.isAsExpression(parent) && parent.expression === current) ||
+        (typescript.isTypeAssertionExpression(parent) && parent.expression === current) ||
+        (typescript.isSatisfiesExpression(parent) && parent.expression === current) ||
+        (typescript.isNonNullExpression(parent) && parent.expression === current)) {
+      current = parent;
+      continue;
+    }
+    break;
+  }
+  return false;
+}
+
+function isEscapingAliasUse(target) {
+  const parent = target.parent;
+  if (!parent) return false;
+  if (typescript.isReturnStatement(parent) && parent.expression === target) return true;
+  if (typescript.isThrowStatement(parent) && parent.expression === target) return true;
+  if (typescript.isYieldExpression(parent) && parent.expression === target) return true;
+  if (typescript.isSpreadElement(parent) && parent.expression === target) return true;
+  if (typescript.isArrayLiteralExpression(parent)) return true;
+  if (typescript.isShorthandPropertyAssignment(parent) && parent.name === target) return true;
+  if (typescript.isPropertyAssignment(parent) && parent.initializer === target) return true;
+  if (typescript.isSpreadAssignment(parent) && parent.expression === target) return true;
+  if (typescript.isJsxExpression(parent) && parent.expression === target) return true;
+  return isAssignmentPatternTarget(target);
+}
+
 function isMutatingUse(target) {
   const parent = target.parent;
   if (!parent) return false;
@@ -352,6 +394,7 @@ function isMutatingUse(target) {
       MUTATING_ARRAY_METHODS.has(target.name.text)) {
     return true;
   }
+  if (isEscapingAliasUse(target)) return true;
   return false;
 }
 
@@ -579,29 +622,39 @@ function parseImports(source) {
   const tokens = tokenize(source);
   const imports = [];
   for (let index = 0; index < tokens.length; index += 1) {
-    if (tokens[index].value !== "import" || tokens[index + 1]?.value !== "{") continue;
+    if (tokens[index].value !== "import") continue;
+    let cursor = index + 1;
+    // Skip `import type ...` marker when present before the clause.
+    if (tokens[cursor]?.value === "type") cursor += 1;
+    // Skip a default binding so `import Default, { FLAG } from "..."` still works.
+    if (tokens[cursor]?.type === "identifier") {
+      cursor += 1;
+      if (tokens[cursor]?.value === ",") cursor += 1;
+    }
+    if (tokens[cursor]?.value !== "{") continue;
     const specifiers = [];
-    index += 2;
-    while (index < tokens.length && tokens[index].value !== "}") {
-      if (tokens[index].value === "type" || tokens[index].value === ",") {
-        index += 1;
+    cursor += 1;
+    while (cursor < tokens.length && tokens[cursor].value !== "}") {
+      if (tokens[cursor].value === "type" || tokens[cursor].value === ",") {
+        cursor += 1;
         continue;
       }
-      if (tokens[index].type !== "identifier") throw new Error("unsupported named import syntax");
-      const imported = tokens[index].value;
+      if (tokens[cursor].type !== "identifier") throw new Error("unsupported named import syntax");
+      const imported = tokens[cursor].value;
       let local = imported;
-      if (tokens[index + 1]?.value === "as") {
-        if (tokens[index + 2]?.type !== "identifier") throw new Error("unsupported import alias");
-        local = tokens[index + 2].value;
-        index += 2;
+      if (tokens[cursor + 1]?.value === "as") {
+        if (tokens[cursor + 2]?.type !== "identifier") throw new Error("unsupported import alias");
+        local = tokens[cursor + 2].value;
+        cursor += 2;
       }
       specifiers.push({ imported, local });
-      index += 1;
+      cursor += 1;
     }
-    if (tokens[index]?.value !== "}" || tokens[index + 1]?.value !== "from" || tokens[index + 2]?.type !== "string") {
+    if (tokens[cursor]?.value !== "}" || tokens[cursor + 1]?.value !== "from" || tokens[cursor + 2]?.type !== "string") {
       throw new Error("unsupported named import declaration");
     }
-    imports.push({ module: tokens[index + 2].value, specifiers });
+    imports.push({ module: tokens[cursor + 2].value, specifiers });
+    index = cursor + 2;
   }
   return imports;
 }

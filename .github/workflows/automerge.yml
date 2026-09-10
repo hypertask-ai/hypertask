@@ -406,12 +406,6 @@ jobs:
               echo "::endgroup::"
               continue
             fi
-            if ! ensure_feature_flag_parser; then
-              echo "::error::Cannot install the trusted feature-flag parser; refusing to merge."
-              infra_failures=$((infra_failures+1))
-              echo "::endgroup::"
-              continue
-            fi
             if ! git fetch --no-tags origin production "refs/pull/$PR/head" >"$AUTOMERGE_TMP/gate-fetch.txt" 2>"$AUTOMERGE_TMP/gate-error.txt" ||
                ! git cat-file -e "$final_base_sha^{commit}" || ! git cat-file -e "$final_head_sha^{commit}"; then
               echo "::error::Cannot fetch current feature-flag inputs for PR #$PR; refusing to merge."
@@ -422,6 +416,7 @@ jobs:
             # A merge earlier in this run (or an external production push) advances
             # origin/production while HEAD stays on the original checkout. Refresh so
             # the gate script stays current instead of false-failing the rest of the loop.
+            # Reinstall the parser after refresh: the lockfile may have changed.
             if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
               echo "Refreshing trusted production checkout before feature-flag evaluation for PR #$PR."
               if ! git reset --hard origin/production >"$AUTOMERGE_TMP/gate-reset.txt" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
@@ -430,6 +425,13 @@ jobs:
                 echo "::endgroup::"
                 continue
               fi
+              parser_ready=0
+            fi
+            if ! ensure_feature_flag_parser; then
+              echo "::error::Cannot install the trusted feature-flag parser; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
             fi
             if node .github/scripts/feature-flag-gate.mjs "$final_title" "$final_base_sha" "$final_head_sha" "$GATE_DECISION" >"$GATE_REASON" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
               echo "feature-flag-gate re-evaluation = PASS"

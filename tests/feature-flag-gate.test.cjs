@@ -450,6 +450,9 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
     ["find result mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nd.key = \"evil\";\n")],
     ["find result re-alias mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nconst e = d;\ne.key = \"evil\";\n")],
     ["find result return escape", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "export function leak() { return FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG); }\n")],
+    ["find result alias return escape", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nexport function leak() { return d; }\n")],
+    ["find result object literal escape", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nexport const bag = { d };\n")],
+    ["find result destructuring assignment", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\n({ value: d.key } = { value: \"evil\" });\n")],
     ["function expression callback", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(function ({ key }) { return key; });\n")],
     ["block body callback", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ key }) => { return key; });\n")],
     ["map callback element mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map((row) => { row.key = \"evil\"; return row.key; });\n")],
@@ -491,6 +494,20 @@ test("an imported registered key used by useFlag passes", async (t) => {
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
+
+  const defaultImport = makeRepo(t);
+  const defaultBase = commit(defaultImport.git, "base");
+  writeFile(
+    defaultImport.dir,
+    "src/lib/flags.ts",
+    'import flagsKeys, { OTHER_FLAG } from "@/lib/flags/keys";\nvoid flagsKeys;\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n',
+  );
+  writeFile(defaultImport.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const defaultHead = commit(defaultImport.git, "default plus named import");
+  assert.equal(
+    (await evaluate("HTPR-1 [FEATURE] add widget", defaultBase, defaultHead, defaultImport.dir)).pass,
+    true,
+  );
 });
 
 test("a multiline gate with a changed key argument passes", async (t) => {

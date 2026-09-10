@@ -165,6 +165,14 @@ test('auto-merge uses job-private temporary files on shared runners', async () =
   assert.match(workflow, /"\$GATE_DECISION"/)
   assert.match(workflow, /git reset --hard origin\/production/)
   assert.match(workflow, /Refreshing trusted production checkout before feature-flag evaluation/)
+  assert.match(
+    workflow,
+    /git reset --hard origin\/production[\s\S]*?parser_ready=0[\s\S]*?if ! ensure_feature_flag_parser; then/,
+  )
+  assert.ok(
+    workflow.indexOf("git reset --hard origin/production") <
+      workflow.lastIndexOf("if ! ensure_feature_flag_parser; then"),
+  )
   assert.doesNotMatch(workflow, /Trusted production checkout drifted during automerge/)
   assert.doesNotMatch(workflow, /grep .*"\$GATE_REASON"/)
   assert.doesNotMatch(workflow, />\/tmp\/pr\.(?:json|files)/)
