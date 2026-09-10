@@ -840,13 +840,6 @@ function isExportedThroughCallWrapper(fn) {
 
   let expression = argument.parent;
   for (;;) {
-    if (typescript.isExportAssignment(expression.parent)) return true;
-    if (typescript.isVariableDeclaration(expression.parent) && expression.parent.initializer === expression &&
-        typescript.isVariableDeclarationList(expression.parent.parent) &&
-        typescript.isVariableStatement(expression.parent.parent.parent)) {
-      return isExportedVariableStatement(expression.parent.parent.parent);
-    }
-
     let nested = expression;
     while (nested.parent && (
       (typescript.isParenthesizedExpression(nested.parent) && nested.parent.expression === nested) ||
@@ -857,6 +850,14 @@ function isExportedThroughCallWrapper(fn) {
     )) {
       nested = nested.parent;
     }
+
+    if (typescript.isExportAssignment(nested.parent)) return true;
+    if (typescript.isVariableDeclaration(nested.parent) && nested.parent.initializer === nested &&
+        typescript.isVariableDeclarationList(nested.parent.parent) &&
+        typescript.isVariableStatement(nested.parent.parent.parent)) {
+      return isExportedVariableStatement(nested.parent.parent.parent);
+    }
+
     if (!typescript.isCallExpression(nested.parent)) return false;
     if (!nested.parent.arguments.some((arg) => unwrapArgumentExpression(arg) === expression || arg === nested)) {
       return false;
