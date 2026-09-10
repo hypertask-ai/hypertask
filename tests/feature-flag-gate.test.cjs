@@ -54,7 +54,9 @@ test("non-UI changes do not need a flag", async (t) => {
   const base = commit(git, "base");
   writeFile(dir, "src/lib/util.ts", "export const value = 1;\n");
   const head = commit(git, "backend");
-  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
+  const result = await evaluate("HTPR-2 [FEATURE] backend", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, null);
 });
 
 test("loose JSX UI files require a feature flag", async (t) => {
@@ -160,7 +162,9 @@ test("small BUGFIX changes are exempt", async (t) => {
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const head = commit(git, "fix");
-  assert.equal((await evaluate("HTPR-2 [BUGFIX] fix widget", base, head, dir)).pass, true);
+  const result = await evaluate("HTPR-2 [BUGFIX] fix widget", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "exempt-ui");
 });
 
 test("large BUGFIX UI additions fail the cross-check", async (t) => {
@@ -377,6 +381,7 @@ test("a registered ticket-specific definition used in changed UI passes", async 
   const head = commit(git, "feature");
   const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
   assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "feature-gated-ui");
   assert.match(result.reason, /ticket-specific feature gate htpr-5-widget/);
 
   const partial = makeRepo(t);

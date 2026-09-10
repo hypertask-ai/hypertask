@@ -81,6 +81,7 @@ jobs:
           VERIFY_PR_JSON="$AUTOMERGE_TMP/verify-pr.json"
           VERIFY_HEADS_JSON="$AUTOMERGE_TMP/verify-heads.json"
           GATE_REASON="$AUTOMERGE_TMP/feature-flag-gate.txt"
+          GATE_DECISION="$AUTOMERGE_TMP/feature-flag-decision.txt"
           SPEED_STATUS_JSON="$AUTOMERGE_TMP/speed-status.json"
           infra_failures=0
           merge_failures=0
@@ -418,7 +419,7 @@ jobs:
               echo "::endgroup::"
               continue
             fi
-            if node .github/scripts/feature-flag-gate.mjs "$final_title" "$final_base_sha" "$final_head_sha" >"$GATE_REASON" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
+            if node .github/scripts/feature-flag-gate.mjs "$final_title" "$final_base_sha" "$final_head_sha" "$GATE_DECISION" >"$GATE_REASON" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
               echo "feature-flag-gate re-evaluation = PASS"
             else
               gate_result=$?
@@ -432,15 +433,21 @@ jobs:
               continue
             fi
             # GitHub can bind a merge to the head SHA, but not atomically to the
-            # title/base metadata that selects this policy. Keep UI features under
-            # owner review so a metadata edit cannot outrun the final evaluation.
-            if grep -Fq "calls ticket-specific feature gate" "$GATE_REASON"; then
+            # title/base metadata that selects this policy. Keep UI gate decisions
+            # under owner review so a metadata edit cannot outrun the evaluation.
+            if grep -Fxq "feature-gated-ui" "$GATE_DECISION"; then
               echo "skip: feature-gated UI requires owner review"
               echo "::endgroup::"
               continue
             fi
-            if grep -Fq "is exempt (" "$GATE_REASON"; then
+            if grep -Fxq "exempt-ui" "$GATE_DECISION"; then
               echo "skip: exempt UI requires owner review"
+              echo "::endgroup::"
+              continue
+            fi
+            if ! grep -Fxq "automerge" "$GATE_DECISION"; then
+              echo "::error::Feature-flag gate returned an invalid merge decision; refusing to merge."
+              infra_failures=$((infra_failures+1))
               echo "::endgroup::"
               continue
             fi

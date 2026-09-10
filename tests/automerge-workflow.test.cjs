@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -84,16 +84,23 @@ exit 2
 `
   const node = `#!/usr/bin/env bash
 if [ "$1" = ".github/scripts/feature-flag-gate.mjs" ]; then
-  if [ "$#" -ne 4 ] || [ "$2" != "$EXPECTED_PR_TITLE" ] || [ "$3" != "$EXPECTED_BASE_SHA" ] || [ "$4" != "$EXPECTED_HEAD_SHA" ]; then
+  if [ "$#" -ne 5 ] || [ "$2" != "$EXPECTED_PR_TITLE" ] || [ "$3" != "$EXPECTED_BASE_SHA" ] || [ "$4" != "$EXPECTED_HEAD_SHA" ]; then
     echo "unexpected feature flag gate arguments: $*" >&2
     exit 2
   fi
   if [ "\${GH_STUB_FAIL_FEATURE_GATE:-}" = "1" ]; then echo "feature flag required"; exit 1; fi
-  if [ "\${GH_STUB_FEATURE_GATED:-}" = "1" ]; then
+  decision_file="\${5:-}"
+  if [ "\${GH_STUB_INVALID_GATE_DECISION:-}" = "1" ]; then
+    printf 'invalid\n' >"$decision_file"
+    echo "feature flag gate passed"
+  elif [ "\${GH_STUB_FEATURE_GATED:-}" = "1" ]; then
+    printf 'feature-gated-ui\n' >"$decision_file"
     echo "[FEATURE] calls ticket-specific feature gate htpr-1-test in changed code covering every UI entry from src/app/page.tsx."
   elif [ "\${GH_STUB_EXEMPT_UI:-}" = "1" ]; then
+    printf 'exempt-ui\n' >"$decision_file"
     echo "[BUGFIX] is exempt (14 UI lines added)."
   else
+    printf 'automerge\n' >"$decision_file"
     echo "feature flag gate passed"
   fi
   exit 0
@@ -131,6 +138,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_FAIL_FEATURE_GATE: failFeatureGate ? '1' : '',
         GH_STUB_FEATURE_GATED: featureGated ? '1' : '',
         GH_STUB_EXEMPT_UI: exemptUi ? '1' : '',
+        GH_STUB_INVALID_GATE_DECISION: invalidGateDecision ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
         EXPECTED_PR_TITLE: prTitle,
         EXPECTED_BASE_SHA: 'b'.repeat(40),
@@ -153,6 +161,8 @@ test('auto-merge uses job-private temporary files on shared runners', async () =
   assert.match(workflow, /PR_FILES="\$AUTOMERGE_TMP\/pr\.files"/)
   assert.match(workflow, /npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/)
   assert.match(workflow, /feature-flag-parser\/package-lock\.json "\$parser_dir\/"/)
+  assert.match(workflow, /"\$GATE_DECISION"/)
+  assert.doesNotMatch(workflow, /grep .*"\$GATE_REASON"/)
   assert.doesNotMatch(workflow, />\/tmp\/pr\.(?:json|files)/)
 })
 
@@ -208,6 +218,15 @@ test('auto-merge keeps exempt UI under owner review', async () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /exempt UI requires owner review/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge fails closed on an invalid gate decision', async () => {
+  const { result, scratchEntries } = await runWorkflow({ invalidGateDecision: true })
+
+  assert.equal(result.status, 1, result.stderr)
+  assert.match(result.stdout, /invalid merge decision/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })

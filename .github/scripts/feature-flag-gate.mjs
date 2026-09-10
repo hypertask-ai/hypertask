@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { posix as pathPosix } from "node:path";
 
@@ -987,7 +988,7 @@ export function evaluate({ title, baseSha, headSha }) {
     !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
     !/\.stories\.[jt]sx?$/.test(path));
   if (uiFiles.length === 0) {
-    return { pass: true, reason: "No changed file matches the UI-change path filter." };
+    return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
   }
 
   const titleMatch = title.match(/^HTPR-(\d+) \[([^\]]+)\] \S/);
@@ -1009,7 +1010,7 @@ export function evaluate({ title, baseSha, headSha }) {
         `(over the ${CROSS_CHECK_LINE_BUDGET}-line budget). Retitle it as [FEATURE] and add a feature flag.`,
       );
     }
-    return { pass: true, reason: `${autoRevert ? "Verified auto-revert" : `[${tag}]`} is exempt (${uiAdded} UI lines added).` };
+    return { pass: true, ownerReview: "exempt-ui", reason: `${autoRevert ? "Verified auto-revert" : `[${tag}]`} is exempt (${uiAdded} UI lines added).` };
   }
   if (!titleMatch) {
     return failure("The pull request title has no valid HTPR ticket and tag, so the feature flag requirement cannot be checked.");
@@ -1067,6 +1068,7 @@ export function evaluate({ title, baseSha, headSha }) {
         requiredUiFiles.every((path) => coveredUiFiles.has(path)))) {
       return {
         pass: true,
+        ownerReview: "feature-gated-ui",
         reason: `[${tag}] calls ticket-specific feature gate ${matchedGate.key} in changed code covering every UI entry from ${matchedGate.path}.`,
       };
     }
@@ -1082,10 +1084,11 @@ export function evaluate({ title, baseSha, headSha }) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [title, baseSha, headSha] = process.argv.slice(2);
+  const [title, baseSha, headSha, decisionFile] = process.argv.slice(2);
   try {
     if (!title || !baseSha || !headSha) throw new Error("title, base SHA, and head SHA are required");
     const result = evaluate({ title, baseSha, headSha });
+    if (decisionFile) writeFileSync(decisionFile, `${result.ownerReview ?? "automerge"}\n`);
     console.log(result.reason);
     process.exitCode = result.pass ? 0 : 1;
   } catch (error) {
