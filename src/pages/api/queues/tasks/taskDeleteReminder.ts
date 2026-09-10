@@ -15,6 +15,10 @@ import {
   assertAgentAssignmentChangeAllowed,
   cancelAgentMutationLeaseForHumanOverride,
 } from "@/lib/mcp/tasks/agentMutationFence";
+import {
+  AgentDoneLifecycleDeniedError,
+  assertAgentMayLeaveDoneForTasks,
+} from "@/lib/mcp/tasks/agentDoneLifecycle";
 import { Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -95,6 +99,9 @@ export default async function handler(
     if (error instanceof TaskHardDeleteInProgressError) {
       return res.status(409).json({ message: error.message })
     }
+    if (error instanceof AgentDoneLifecycleDeniedError) {
+      return res.status(error.status).json({ message: error.message, code: error.code })
+    }
     console.log("🚀 ~ error:", error)
 
     return res.status(500).json(error)
@@ -124,6 +131,7 @@ type TaskTreeRow = { id: number }
 type LockedTaskTreeRow = {
   id: number
   status: string
+  sectionId: number | null
   hardDeleteProcessingAt: Date | null
 }
 
@@ -160,7 +168,7 @@ async function updateTaskTreeStatus(
     // the claim rechecks status after commit and skips. If deletion claimed
     // first, recovery observes processing state and leaves the task Deleted.
     const lockedRows = await tx.$queryRaw<LockedTaskTreeRow[]>`
-      SELECT id, status, "hardDeleteProcessingAt"
+      SELECT id, status, "sectionId", "hardDeleteProcessingAt"
       FROM "Task"
       WHERE id IN (${Prisma.join(taskIds)})
       ORDER BY id
@@ -195,6 +203,17 @@ async function updateTaskTreeStatus(
       for (const id of taskIds) {
         await cancelAgentMutationLeaseForHumanOverride(tx, id, actingUserId)
       }
+    }
+    // Soft-delete shares the Done→Deleted denial with updateTaskSingle. Check
+    // every locked row (root and descendants) before any status write so a
+    // non-Done parent cannot hide a Done child.
+    if (status === "Deleted") {
+      await assertAgentMayLeaveDoneForTasks(
+        tx,
+        lockedRows,
+        status,
+        actingAgentId,
+      )
     }
     await tx.task.updateMany({
       where: { id: { in: taskIds } },
