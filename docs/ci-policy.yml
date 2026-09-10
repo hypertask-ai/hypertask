@@ -60,7 +60,7 @@ feature_flag_gate:
   api_only_changes: outside_ui_gate_scope
   owner_merge_for_flagged_ui: true
   owner_merge_for_exempt_ui: true
-  exemptions: [BUGFIX, INFRA, verified_auto_revert]
+  exemptions: [BUGFIX, INFRA, AI_CHAT, verified_auto_revert]
   exempt_ui_addition_limit: 150
   default_mode_for_new_flags: OWNER_AND_QA
   open_pull_request_reconciliation: production_push_and_all_pull_request_events

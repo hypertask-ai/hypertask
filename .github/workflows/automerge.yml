@@ -390,6 +390,8 @@ jobs:
             final_base_sha=$(jq -r '.base.sha' "$FINAL_PR_JSON")
             final_head_sha=$(jq -r '.head.sha' "$FINAL_PR_JSON")
             final_head_repo=$(jq -r '.head.repo.full_name' "$FINAL_PR_JSON")
+            export FEATURE_FLAG_PR_LABELS
+            FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' "$FINAL_PR_JSON")
             if ! final_head_pr_count=$(jq -er --arg sha "$final_head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$FINAL_HEADS_JSON"); then
               echo "::error::Cannot verify current production PR heads; refusing to merge."
               infra_failures=$((infra_failures+1))

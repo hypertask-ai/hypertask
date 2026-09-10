@@ -5,7 +5,7 @@ on:
   # from production and treat pull-request files only as data. Events for every
   # base branch keep reconciliation correct when a PR leaves production.
   pull_request_target:
-    types: [opened, synchronize, reopened, edited, ready_for_review, closed]
+    types: [opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed]
   push:
     branches: [production]
 
@@ -111,6 +111,8 @@ jobs:
           base_sha=$(jq -r '.base.sha' "$pr_json")
           api_head_sha=$(jq -r '.head.sha' "$pr_json")
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
+          export FEATURE_FLAG_PR_LABELS
+          FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' "$pr_json")
           result=2
 
           if [ "$api_head_sha" != "$head_sha" ]; then
@@ -345,6 +347,8 @@ jobs:
             base_sha=$(jq -r '.base.sha' <<<"$pull")
             head_sha=$(jq -r '.head.sha' <<<"$pull")
             head_repo=$(jq -r '.head.repo.full_name' <<<"$pull")
+            export FEATURE_FLAG_PR_LABELS
+            FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' <<<"$pull")
             head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$pages")
             reason_file="$gate_tmp/reason-$number.txt"
             error_file="$gate_tmp/error-$number.txt"

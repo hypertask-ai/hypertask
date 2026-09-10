@@ -38,12 +38,12 @@ function commit(git, message) {
   return git(["rev-parse", "HEAD"]).trim();
 }
 
-async function evaluate(title, baseSha, headSha, cwd) {
+async function evaluate(title, baseSha, headSha, cwd, labels = []) {
   const original = process.cwd();
   process.chdir(cwd);
   try {
     const { evaluate: run } = await import(scriptUrl);
-    return await run({ title, baseSha, headSha });
+    return await run({ title, baseSha, headSha, labels });
   } finally {
     process.chdir(original);
   }
@@ -165,6 +165,50 @@ test("small BUGFIX changes are exempt", async (t) => {
   const result = await evaluate("HTPR-2 [BUGFIX] fix widget", base, head, dir);
   assert.equal(result.pass, true);
   assert.equal(result.ownerReview, "exempt-ui");
+});
+
+test("small AI CHAT title tags are exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "chat ui");
+  const result = await evaluate("HTPR-2 [AI CHAT] chat widget", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "exempt-ui");
+  assert.match(result.reason, /AI CHAT/);
+});
+
+test("AI CHAT emoji title tags are exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "chat emoji");
+  const result = await evaluate("HTPR-2 [AI CHAT 💬] chat widget", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "exempt-ui");
+});
+
+test("AI CHAT labels exempt FEATURE UI changes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "labeled chat");
+  const result = await evaluate("HTPR-2 [FEATURE] chat widget", base, head, dir, ["AI CHAT 💬"]);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "exempt-ui");
+  assert.match(result.reason, /AI CHAT label/);
+});
+
+test("ordinary FEATURE UI still requires a flag without AI CHAT", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => null;\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const head = commit(git, "feature ui");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] add widget", base, head, dir, ["enhancement"])).pass, false);
 });
 
 test("large BUGFIX UI additions fail the cross-check", async (t) => {
@@ -788,7 +832,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   const workflow = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
   assert.match(workflow, /pull_request_target:/);
   assert.doesNotMatch(workflow, /^  pull_request\s*:/m);
-  assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, closed\]/);
+  assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed\]/);
   assert.doesNotMatch(workflow, /pull_request_target:\s+branches: \[production\]/);
   assert.match(workflow, /github\.event\.pull_request\.base\.ref == 'production'/);
   assert.match(workflow, /push:\s+branches: \[production\]/);
@@ -813,6 +857,8 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.equal((workflow.match(/git rev-parse HEAD\)" != "\$\(git rev-parse origin\/production\)/g) || []).length, 2);
   assert.match(workflow, /Trusted production checkout drifted/);
   assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
+  assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed\]/);
+  assert.match(workflow, /FEATURE_FLAG_PR_LABELS/);
   assert.match(workflow, /EVENT_HEAD_SHA/);
   assert.match(workflow, /statuses: write/);
   assert.match(workflow, /state: "pending"/);

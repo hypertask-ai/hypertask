@@ -6,7 +6,7 @@ import { posix as pathPosix } from "node:path";
 const require = createRequire(import.meta.url);
 const typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "typescript");
 
-const EXEMPT_TAGS = new Set(["BUGFIX", "INFRA"]);
+const EXEMPT_TAGS = new Set(["BUGFIX", "INFRA", "AI CHAT"]);
 const CROSS_CHECK_LINE_BUDGET = 150;
 const FLAG_KEY_MODULES = new Set(["@/lib/flags", "@/lib/flags/keys"]);
 const UI_INCLUDE = [
@@ -1580,7 +1580,44 @@ function failure(reason) {
   return { pass: false, reason };
 }
 
-export function evaluate({ title, baseSha, headSha }) {
+function normalizePolicyToken(value) {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function labelNames(labels) {
+  if (!Array.isArray(labels)) return [];
+  return labels.map((label) => {
+    if (typeof label === "string") return label;
+    if (label && typeof label.name === "string") return label.name;
+    return "";
+  }).filter(Boolean);
+}
+
+function isExemptTitleTag(tag) {
+  return Boolean(tag) && EXEMPT_TAGS.has(normalizePolicyToken(tag));
+}
+
+function hasAiChatLabel(labels) {
+  return labelNames(labels).some((name) => normalizePolicyToken(name) === "AI CHAT");
+}
+
+function readLabelsFromEnv() {
+  const raw = process.env.FEATURE_FLAG_PR_LABELS;
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return labelNames(parsed);
+  } catch {
+    throw new Error("FEATURE_FLAG_PR_LABELS must be a JSON array of label names");
+  }
+}
+
+export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
     .split("\n").filter(Boolean);
   const uiFiles = changedFiles.filter(isUiFile);
@@ -1595,7 +1632,9 @@ export function evaluate({ title, baseSha, headSha }) {
   const titleMatch = title.match(/^HTPR-(\d+) \[([^\]]+)\] \S/);
   const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
   const tag = titleMatch?.[2] ?? null;
-  const exempt = autoRevert || (tag && EXEMPT_TAGS.has(tag));
+  const titleExempt = isExemptTitleTag(tag);
+  const aiChatLabel = hasAiChatLabel(labels);
+  const exempt = autoRevert || titleExempt || aiChatLabel;
   if (exempt) {
     const uiAdded = git(["diff", "--numstat", "--no-renames", `${baseSha}...${headSha}`])
       .split("\n").filter(Boolean)
@@ -1605,13 +1644,23 @@ export function evaluate({ title, baseSha, headSha }) {
       })
       .filter((row) => isUiFile(row.path))
       .reduce((sum, row) => sum + row.added, 0);
+    const exemptionLabel = autoRevert
+      ? "as an auto-revert"
+      : titleExempt
+        ? `[${tag}]`
+        : "AI CHAT label";
     if (uiAdded > CROSS_CHECK_LINE_BUDGET) {
       return failure(
-        `This pull request is tagged ${autoRevert ? "as an auto-revert" : `[${tag}]`} but adds ${uiAdded} lines to UI files ` +
+        `This pull request is tagged ${exemptionLabel} but adds ${uiAdded} lines to UI files ` +
         `(over the ${CROSS_CHECK_LINE_BUDGET}-line budget). Retitle it as [FEATURE] and add a feature flag.`,
       );
     }
-    return { pass: true, ownerReview: "exempt-ui", reason: `${autoRevert ? "Verified auto-revert" : `[${tag}]`} is exempt (${uiAdded} UI lines added).` };
+    const reasonPrefix = autoRevert
+      ? "Verified auto-revert"
+      : titleExempt
+        ? `[${tag}]`
+        : "AI CHAT label";
+    return { pass: true, ownerReview: "exempt-ui", reason: `${reasonPrefix} is exempt (${uiAdded} UI lines added).` };
   }
   if (!titleMatch) {
     return failure("The pull request title has no valid HTPR ticket and tag, so the feature flag requirement cannot be checked.");
@@ -1688,7 +1737,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const [title, baseSha, headSha, decisionFile] = process.argv.slice(2);
   try {
     if (!title || !baseSha || !headSha) throw new Error("title, base SHA, and head SHA are required");
-    const result = evaluate({ title, baseSha, headSha });
+    const result = evaluate({ title, baseSha, headSha, labels: readLabelsFromEnv() });
     if (decisionFile) writeFileSync(decisionFile, `${result.ownerReview ?? "automerge"}\n`);
     console.log(result.reason);
     process.exitCode = result.pass ? 0 : 1;
