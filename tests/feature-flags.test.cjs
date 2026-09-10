@@ -219,6 +219,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6215-my-tasks-cross-board-priority-sort",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6236-core-actions-smoke",
         mode: "OWNER_AND_QA",
         updatedAt: null,

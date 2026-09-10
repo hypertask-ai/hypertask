@@ -16,3 +16,10 @@ export function shouldFlattenSortedRows(
   if (hasCurrentProject) return true;
   return crossBoardPrioritySortEnabled && isPrioritySort;
 }
+
+export function sortedTaskRowSectionKey(
+  hasCurrentProject: boolean,
+  task: { projectId: number; sectionId?: number | null }
+): string | number {
+  return hasCurrentProject ? task.sectionId ?? "flat" : task.projectId;
+}

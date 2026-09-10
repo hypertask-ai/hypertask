@@ -52,7 +52,7 @@ import {
   parseTableRowDragData,
   type TableRowDragData,
 } from "./tableRowDrag";
-import { shouldFlattenSortedRows } from "./tableSortFlatten";
+import { shouldFlattenSortedRows, sortedTaskRowSectionKey } from "./tableSortFlatten";
 import {
   createTaskFromTableSelection,
   tableSectionKey,
@@ -663,7 +663,11 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       // keeps the board grouping while sorting within it (HTPR-4887).
       if (flattenSort) {
         const allTasks = sections.flatMap((section) => section.items || []);
-        return sortTasks(allTasks).map((task) => ({ type: "task" as const, task, sid: task.sectionId ?? "flat" }));
+        return sortTasks(allTasks).map((task) => ({
+          type: "task" as const,
+          task,
+          sid: sortedTaskRowSectionKey(Boolean(_currentProject), task),
+        }));
       }
 
       const next: Row[] = [];

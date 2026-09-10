@@ -7,7 +7,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { shouldFlattenSortedRows } from "../src/components/PageComponents/Kanban/TableView/tableSortFlatten";
+import {
+  shouldFlattenSortedRows,
+  sortedTaskRowSectionKey,
+} from "../src/components/PageComponents/Kanban/TableView/tableSortFlatten";
 import { sortByPriorityAndRankingOrder } from "../src/utils/helperFunctions/helperFunctions";
 
 test("no active sort never flattens, on a board or on My Tasks", () => {
@@ -30,6 +33,13 @@ test("My Tasks stays grouped when sorted by a non-priority column, even with the
 
 test("My Tasks flattens across boards when sorted by priority with the flag on", () => {
   assert.equal(shouldFlattenSortedRows(false, true, true, true), true);
+});
+
+test("flat rows keep section ids on boards and board ids on My Tasks", () => {
+  const task = { projectId: 200, sectionId: 300 };
+  assert.equal(sortedTaskRowSectionKey(true, task), task.sectionId);
+  assert.equal(sortedTaskRowSectionKey(false, task), task.projectId);
+  assert.equal(sortedTaskRowSectionKey(true, { projectId: 200, sectionId: null }), "flat");
 });
 
 test("priority sort interleaves tasks from different boards by priority level", () => {
