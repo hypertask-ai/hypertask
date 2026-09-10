@@ -398,7 +398,7 @@ export function createPromptForTiptapForwardSlash(
             - This will be pasted into a comment/description editor. Write in the user's voice.
             - Do NOT answer as a chatbot. Output only the draft HTML.
             - **DO NOT** start with \`\`\`html etc.
-            ${HOUSE_OUTPUT_STYLE}
+            ${TASK_AUTHORING_STYLE}
             - Never output the em dash character or other markdown formatting.
             </INSTRUCTIONS>
         </SYSTEM_INSTRUCTION>`;
