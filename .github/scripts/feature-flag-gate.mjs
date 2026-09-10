@@ -13,6 +13,8 @@ const UI_INCLUDE = [
   /^src\/components\//,
   /^src\/pages\/(?!api\/)/,
   /^src\/app\//,
+  /^src\/features\//,
+  /^src\/hooks\//,
   /\.(jsx|tsx|css)$/,
 ];
 const UI_EXCLUDE = [
@@ -20,6 +22,7 @@ const UI_EXCLUDE = [
   /^src\/app\/api\//,
   /^src\/app\/(?:.*\/)?route\.[jt]sx?$/,
   /^src\/lib\//,
+  /^src\/utils\//,
   /(^|\/)tests?\//,
   /\.(test|spec)\.[jt]sx?$/,
   /\.stories\.[jt]sx?$/,
@@ -784,6 +787,12 @@ function functionBindingName(fn) {
   return null;
 }
 
+function isExportedVariableStatement(statement) {
+  return Boolean(statement?.modifiers?.some((modifier) =>
+    modifier.kind === typescript.SyntaxKind.ExportKeyword ||
+    modifier.kind === typescript.SyntaxKind.DefaultKeyword));
+}
+
 function isExportedFunctionLike(fn) {
   if (fn.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.ExportKeyword ||
       modifier.kind === typescript.SyntaxKind.DefaultKeyword)) {
@@ -793,20 +802,50 @@ function isExportedFunctionLike(fn) {
   if (typescript.isVariableDeclaration(fn.parent) && fn.parent.initializer === fn &&
       typescript.isVariableDeclarationList(fn.parent.parent) &&
       typescript.isVariableStatement(fn.parent.parent.parent)) {
-    return Boolean(fn.parent.parent.parent.modifiers?.some((modifier) =>
-      modifier.kind === typescript.SyntaxKind.ExportKeyword ||
-      modifier.kind === typescript.SyntaxKind.DefaultKeyword));
+    return isExportedVariableStatement(fn.parent.parent.parent);
   }
   if (typescript.isPropertyAssignment(fn.parent) && fn.parent.initializer === fn &&
       typescript.isObjectLiteralExpression(fn.parent.parent) &&
       typescript.isVariableDeclaration(fn.parent.parent.parent) &&
       typescript.isVariableDeclarationList(fn.parent.parent.parent.parent) &&
       typescript.isVariableStatement(fn.parent.parent.parent.parent.parent)) {
-    return Boolean(fn.parent.parent.parent.parent.parent.modifiers?.some((modifier) =>
-      modifier.kind === typescript.SyntaxKind.ExportKeyword ||
-      modifier.kind === typescript.SyntaxKind.DefaultKeyword));
+    return isExportedVariableStatement(fn.parent.parent.parent.parent.parent);
   }
   return false;
+}
+
+function unwrapArgumentExpression(node) {
+  let current = node;
+  while (current && (typescript.isParenthesizedExpression(current) ||
+         typescript.isAsExpression(current) || typescript.isTypeAssertionExpression(current) ||
+         typescript.isNonNullExpression(current) || typescript.isSatisfiesExpression(current))) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function isExportedThroughCallWrapper(fn) {
+  let argument = fn;
+  while (typescript.isParenthesizedExpression(argument.parent) &&
+         argument.parent.expression === argument) {
+    argument = argument.parent;
+  }
+  if (!typescript.isCallExpression(argument.parent)) return false;
+  const call = argument.parent;
+  if (!call.arguments.some((arg) => unwrapArgumentExpression(arg) === fn)) return false;
+
+  if (typescript.isExportAssignment(call.parent)) return true;
+
+  if (typescript.isVariableDeclaration(call.parent) && call.parent.initializer === call &&
+      typescript.isVariableDeclarationList(call.parent.parent) &&
+      typescript.isVariableStatement(call.parent.parent.parent)) {
+    return isExportedVariableStatement(call.parent.parent.parent);
+  }
+  return false;
+}
+
+function isExportedUiEntry(fn) {
+  return isExportedFunctionLike(fn) || isExportedThroughCallWrapper(fn);
 }
 
 function enclosingFunctionLike(node) {
@@ -859,7 +898,7 @@ function collectLiveFunctions(sourceFile, checker) {
   // Exported functions are live seeds (importers may render them). An unused
   // exported helper with a gate cannot cover a sibling exported JSX entry:
   // see hasUngatedExportedJsxEntry below.
-  const live = new Set(functions.filter(isExportedFunctionLike));
+  const live = new Set(functions.filter(isExportedUiEntry));
   let changed = true;
   while (changed) {
     changed = false;
@@ -1284,7 +1323,7 @@ function hasUngatedExportedJsxEntry(
   }
   collect(sourceFile);
   for (const fn of functions) {
-    if (!isExportedFunctionLike(fn) || !functionContainsJsx(fn)) continue;
+    if (!isExportedUiEntry(fn) || !functionContainsJsx(fn)) continue;
     if (!exportedJsxEntryHasTicketGate(
       fn,
       checker,

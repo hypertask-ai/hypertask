@@ -67,6 +67,54 @@ test("loose JSX UI files require a feature flag", async (t) => {
   assert.equal((await evaluate("HTPR-2 [FEATURE] add view", base, head, dir)).pass, false);
 });
 
+test("JavaScript UI paths and API helpers keep the UI-only scope", async (t) => {
+  const jsUi = makeRepo(t);
+  const jsUiBase = commit(jsUi.git, "base");
+  writeFile(jsUi.dir, "src/features/NewView.js", "export const NewView = () => <div />;\n");
+  const jsUiHead = commit(jsUi.git, "js feature");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] add view", jsUiBase, jsUiHead, jsUi.dir)).pass, false);
+
+  const componentJs = makeRepo(t);
+  const componentJsBase = commit(componentJs.git, "base");
+  writeFile(componentJs.dir, "src/components/Widget.js", "export const Widget = () => <div />;\n");
+  const componentJsHead = commit(componentJs.git, "component js");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] add widget", componentJsBase, componentJsHead, componentJs.dir)).pass, false);
+
+  const apiHelper = makeRepo(t);
+  const apiHelperBase = commit(apiHelper.git, "base");
+  writeFile(apiHelper.dir, "src/app/api/widget/service.ts", "export function buildWidget() { return { ok: true }; }\n");
+  const apiHelperHead = commit(apiHelper.git, "api helper");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", apiHelperBase, apiHelperHead, apiHelper.dir)).pass, true);
+
+  const utilJs = makeRepo(t);
+  const utilJsBase = commit(utilJs.git, "base");
+  writeFile(utilJs.dir, "src/utils/format.js", "export function formatName(value) { return String(value); }\n");
+  const utilJsHead = commit(utilJs.git, "util js");
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", utilJsBase, utilJsHead, utilJs.dir)).pass, true);
+});
+
+test("memo-wrapped exported JSX entries still require a ticket gate", async (t) => {
+  const ungated = makeRepo(t);
+  const ungatedBase = commit(ungated.git, "base");
+  writeFile(
+    ungated.dir,
+    "src/components/Widget.tsx",
+    'import { memo } from "react";\nimport { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Gated = () => useFlag(OTHER_FLAG) ? <div /> : null;\nexport const NewView = memo(() => <div />);\n',
+  );
+  const ungatedHead = commit(ungated.git, "memo ungated");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", ungatedBase, ungatedHead, ungated.dir)).pass, false);
+
+  const gated = makeRepo(t);
+  const gatedBase = commit(gated.git, "base");
+  writeFile(
+    gated.dir,
+    "src/components/Widget.tsx",
+    'import { memo } from "react";\nimport { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const NewView = memo(() => useFlag(OTHER_FLAG) ? <div /> : null);\n',
+  );
+  const gatedHead = commit(gated.git, "memo gated");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", gatedBase, gatedHead, gated.dir)).pass, true);
+});
+
 test("App Router API changes do not need a flag", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
