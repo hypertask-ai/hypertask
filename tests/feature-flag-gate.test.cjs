@@ -219,6 +219,24 @@ test("an imported registered key used by useFlag passes", async (t) => {
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
+test("typed flag registries and definition arrays are parsed", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG: FeatureFlagKey = "htpr-1-other";\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [\n  { key: OTHER_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";\n');
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
+test("runtime gate calls inside template expressions are parsed", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => `${useFlag(OTHER_FLAG) ? "on" : "off"}`;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
 test("JSX apostrophes do not break runtime gate parsing", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -278,10 +296,13 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   const workflow = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
   assert.match(workflow, /pull_request_target:/);
   assert.doesNotMatch(workflow, /^  pull_request:$/m);
-  assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review\]/);
+  assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, closed\]/);
   assert.match(workflow, /push:\s+branches: \[production\]/);
-  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /github\.event\.action != 'closed'/);
+  assert.match(workflow, /\["opened", "synchronize", "reopened", "closed"\]/);
   assert.match(workflow, /timeout-minutes: 5/);
+  assert.equal((workflow.match(/ref: production/g) || []).length, 2);
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin production "refs\/pull\/\$PR_NUMBER\/head"/);

@@ -50,6 +50,36 @@ function isJsxTextApostrophe(source, index) {
   return nextTag !== -1 && (expressionEnd === -1 || nextTag < expressionEnd);
 }
 
+function findTemplateExpressionEnd(source, start) {
+  let depth = 1;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "/" && source[index + 1] === "/") {
+      index = source.indexOf("\n", index + 2);
+      if (index === -1) return -1;
+      continue;
+    }
+    if (char === "/" && source[index + 1] === "*") {
+      index = source.indexOf("*/", index + 2);
+      if (index === -1) return -1;
+      index += 1;
+      continue;
+    }
+    if (char === '"' || char === "'" || char === "`") {
+      const quote = char;
+      for (index += 1; index < source.length; index += 1) {
+        if (source[index] === "\\") index += 1;
+        else if (source[index] === quote) break;
+      }
+      if (index >= source.length) return -1;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    else if (char === "}" && --depth === 0) return index;
+  }
+  return -1;
+}
+
 function tokenize(source) {
   const tokens = [];
   let index = 0;
@@ -70,19 +100,44 @@ function tokenize(source) {
       index = end + 2;
       continue;
     }
+    if (char === "`") {
+      index += 1;
+      let closed = false;
+      while (index < source.length) {
+        if (source[index] === "\\") {
+          index += 2;
+          continue;
+        }
+        if (source[index] === "`") {
+          index += 1;
+          closed = true;
+          break;
+        }
+        if (source[index] === "$" && source[index + 1] === "{") {
+          const end = findTemplateExpressionEnd(source, index + 2);
+          if (end === -1) throw new Error("unterminated template expression");
+          tokens.push(...tokenize(source.slice(index + 2, end)));
+          index = end + 1;
+          continue;
+        }
+        index += 1;
+      }
+      if (!closed) throw new Error("unterminated template literal");
+      continue;
+    }
     if (char === "'" && (isJsxTextApostrophe(source, index) ||
         (/[A-Za-z0-9]/.test(source[index - 1] ?? "") && /[A-Za-z0-9]/.test(source[index + 1] ?? "")))) {
       index += 1;
       continue;
     }
-    if (char === '"' || char === "'" || char === "`") {
+    if (char === '"' || char === "'") {
       const quote = char;
       let value = "";
       index += 1;
       let closed = false;
       while (index < source.length) {
         const next = source[index];
-        if (quote !== "`" && next === "\n") break;
+        if (next === "\n") break;
         if (next === "\\") {
           if (index + 1 >= source.length) throw new Error("unterminated string escape");
           const escaped = source[index + 1];
@@ -102,7 +157,7 @@ function tokenize(source) {
         if (quote === "'") continue;
         throw new Error("unterminated string literal");
       }
-      tokens.push({ type: quote === "`" ? "template" : "string", value });
+      tokens.push({ type: "string", value });
       continue;
     }
     if (/[A-Za-z_$]/.test(char)) {
@@ -118,19 +173,28 @@ function tokenize(source) {
   return tokens;
 }
 
+function exportedStringConstants(tokens) {
+  const constants = [];
+  for (let index = 0; index + 4 < tokens.length; index += 1) {
+    if (
+      tokens[index].value !== "export" || tokens[index + 1].value !== "const" ||
+      tokens[index + 2].type !== "identifier"
+    ) continue;
+    let equals = index + 3;
+    while (equals < tokens.length && tokens[equals].value !== "=" &&
+           tokens[equals].value !== ";" && tokens[equals].value !== "export") equals += 1;
+    if (tokens[equals]?.value === "=" && tokens[equals + 1]?.type === "string") {
+      constants.push({ identifier: tokens[index + 2].value, value: tokens[equals + 1].value });
+    }
+  }
+  return constants;
+}
+
 function parseFlagRegistry(ref) {
   const tokens = tokenize(git(["show", `${ref}:src/lib/flags/keys.ts`]));
   const byIdentifier = new Map();
   const byValue = new Map();
-  for (let index = 0; index + 4 < tokens.length; index += 1) {
-    const slice = tokens.slice(index, index + 5);
-    if (
-      slice[0].value !== "export" || slice[1].value !== "const" ||
-      slice[2].type !== "identifier" || slice[3].value !== "=" ||
-      slice[4].type !== "string"
-    ) continue;
-    const identifier = slice[2].value;
-    const value = slice[4].value;
+  for (const { identifier, value } of exportedStringConstants(tokens)) {
     if (byIdentifier.has(identifier) || byValue.has(value)) {
       throw new Error(`duplicate feature flag key ${identifier}`);
     }
@@ -151,13 +215,9 @@ function resolveImportedStringConstant(ref, imports, localName) {
 
   const modulePath = `src/${specifier.module.slice(2)}.ts`;
   const tokens = tokenize(git(["show", `${ref}:${modulePath}`]));
-  for (let index = 0; index + 4 < tokens.length; index += 1) {
-    if (
-      tokens[index].value === "export" && tokens[index + 1].value === "const" &&
-      tokens[index + 2].value === specifier.imported && tokens[index + 3].value === "=" &&
-      tokens[index + 4].type === "string"
-    ) return tokens[index + 4].value;
-  }
+  const resolved = exportedStringConstants(tokens)
+    .find(({ identifier }) => identifier === specifier.imported);
+  if (resolved) return resolved.value;
   throw new Error(`feature flag key ${localName} is not an exported string constant`);
 }
 
@@ -166,16 +226,21 @@ function parseDefinitions(ref, registry) {
   const tokens = tokenize(source);
   const imports = parseImports(source);
   const declaration = tokens.findIndex((token, index) =>
-    token.value === "FEATURE_FLAG_DEFINITIONS" &&
-    tokens[index + 1]?.value === "=" && tokens[index + 2]?.value === "[",
+    token.value === "FEATURE_FLAG_DEFINITIONS" && tokens[index - 1]?.value === "const",
   );
-  if (declaration === -1) throw new Error("FEATURE_FLAG_DEFINITIONS array was not found");
+  let arrayStart = declaration + 1;
+  while (arrayStart > 0 && arrayStart < tokens.length &&
+         tokens[arrayStart].value !== "=" && tokens[arrayStart].value !== ";") arrayStart += 1;
+  if (tokens[arrayStart]?.value !== "=" || tokens[arrayStart + 1]?.value !== "[") {
+    throw new Error("FEATURE_FLAG_DEFINITIONS array was not found");
+  }
+  arrayStart += 1;
 
   const keys = [];
   let arrayDepth = 1;
   let objectDepth = 0;
   let objectKey = null;
-  for (let index = declaration + 3; index < tokens.length; index += 1) {
+  for (let index = arrayStart + 1; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (token.value === "[") arrayDepth += 1;
     if (token.value === "]") {

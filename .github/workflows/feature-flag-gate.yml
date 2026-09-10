@@ -5,10 +5,9 @@ on:
   # from production and treat pull-request files only as data.
   pull_request_target:
     branches: [production]
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened, edited, ready_for_review, closed]
   push:
     branches: [production]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,7 +18,7 @@ concurrency:
 
 jobs:
   feature-flag-gate:
-    if: github.event_name == 'pull_request_target'
+    if: github.event_name == 'pull_request_target' && github.event.action != 'closed'
     name: feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -30,6 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: production
           fetch-depth: 0
           persist-credentials: false
 
@@ -189,7 +189,7 @@ jobs:
           exit "$result"
 
   reconcile-open-pull-requests:
-    if: github.event_name != 'pull_request_target'
+    if: github.event_name == 'push' || contains(fromJSON('["opened", "synchronize", "reopened", "closed"]'), github.event.action)
     name: reconcile-feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -200,6 +200,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: production
           fetch-depth: 0
           persist-credentials: false
 

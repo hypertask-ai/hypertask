@@ -59,7 +59,7 @@ feature_flag_gate:
   exemptions: [BUGFIX, INFRA, verified_auto_revert]
   exempt_ui_addition_limit: 150
   default_mode_for_new_flags: OWNER_AND_QA
-  open_pull_request_reconciliation: production_push_and_manual_dispatch
+  open_pull_request_reconciliation: production_push_and_pr_head_membership_changes
 
 policies:
   previews:
