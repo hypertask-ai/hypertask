@@ -7,6 +7,9 @@ const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
 type SessionPayload = {
   id: number
   email?: string
+  // Optional managed-agent claim for internal MCP→legacy hops. Browser
+  // sessions omit it; an agent JWT is not reinvented here.
+  agentId?: string
 }
 
 type SignedSessionPayload = SessionPayload & {
@@ -52,6 +55,7 @@ export function signSession(
   const signedPayload: SignedSessionPayload = {
     id: payload.id,
     ...(payload.email !== undefined ? { email: payload.email } : {}),
+    ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
     iat: now,
     exp: now + ttlSeconds,
   }
@@ -96,6 +100,8 @@ export function verifySession(token: string | undefined): SessionPayload | null 
       typeof payload.id !== 'number' ||
       !Number.isFinite(payload.id) ||
       (payload.email !== undefined && typeof payload.email !== 'string') ||
+      (payload.agentId !== undefined &&
+        (typeof payload.agentId !== 'string' || payload.agentId.length === 0)) ||
       typeof payload.exp !== 'number' ||
       !Number.isFinite(payload.exp) ||
       payload.exp <= Math.floor(Date.now() / 1000)
@@ -106,6 +112,7 @@ export function verifySession(token: string | undefined): SessionPayload | null 
     return {
       id: payload.id,
       ...(payload.email !== undefined ? { email: payload.email } : {}),
+      ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
     }
   } catch {
     return null

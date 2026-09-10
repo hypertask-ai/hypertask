@@ -39,9 +39,25 @@ function loadArchiveHandler() {
       __esModule: true,
       default: {
         agent: {
+          findFirst: async () => null,
           findUnique: async () => null,
         },
       },
+    },
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => ({
+        userId: MEMBER_USER_ID,
+        source: "legacy",
+        needsBridge: true,
+      }),
+    },
+    "@/lib/auth/session": {
+      SESSION_COOKIE: "ht_session",
+      verifySession: () => ({ id: MEMBER_USER_ID }),
+      signSession: () => "signed",
+    },
+    "@/lib/auth/resolveActingAgent": {
+      resolveActingAgent: () => ({ ok: true, agentId: null }),
     },
     "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove":
       {
