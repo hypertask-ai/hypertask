@@ -682,6 +682,12 @@ function staticBoolean(node) {
          typescript.isSatisfiesExpression(node)) node = node.expression;
   if (node.kind === typescript.SyntaxKind.TrueKeyword) return true;
   if (node.kind === typescript.SyntaxKind.FalseKeyword) return false;
+  if (node.kind === typescript.SyntaxKind.NullKeyword) return false;
+  if (typescript.isIdentifier(node) && node.text === "undefined") return false;
+  if (typescript.isStringLiteral(node) || typescript.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text.length > 0;
+  }
+  if (typescript.isNumericLiteral(node)) return Number(node.text) !== 0;
   if (typescript.isPrefixUnaryExpression(node) && node.operator === typescript.SyntaxKind.ExclamationToken) {
     const operand = staticBoolean(node.operand);
     return operand === null ? null : !operand;
@@ -818,13 +824,6 @@ function isLiveCallSite(node, live) {
   return !enclosing || live.has(enclosing);
 }
 
-function isDefaultExportFunction(fn) {
-  if (fn.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.DefaultKeyword)) {
-    return true;
-  }
-  return typescript.isExportAssignment(fn.parent);
-}
-
 function branchIsNullishOrEmpty(node) {
   if (!node) return true;
   if (typescript.isBlock(node)) {
@@ -858,11 +857,10 @@ function collectLiveFunctions(sourceFile, checker) {
   }
   collect(sourceFile);
 
-  // Export alone is not enough: an unused exported helper must not count as live.
-  // Seed default exports and a sole named export (typical component module).
-  const live = new Set(functions.filter(isDefaultExportFunction));
-  const exported = functions.filter(isExportedFunctionLike);
-  if (exported.length === 1) live.add(exported[0]);
+  // Exported functions are live seeds (importers may render them). An unused
+  // exported helper with a gate cannot cover a sibling exported JSX entry:
+  // see hasUngatedExportedJsxEntry below.
+  const live = new Set(functions.filter(isExportedFunctionLike));
   let changed = true;
   while (changed) {
     changed = false;
@@ -1196,6 +1194,52 @@ function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = contro
   return usedAsGate;
 }
 
+function functionContainsJsx(fn) {
+  let found = false;
+  function visit(node) {
+    if (found) return;
+    if (node !== fn && typescript.isFunctionLike(node)) return;
+    if (typescript.isJsxElement(node) || typescript.isJsxSelfClosingElement(node) ||
+        typescript.isJsxFragment(node)) {
+      found = true;
+      return;
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(fn);
+  return found;
+}
+
+function functionContainsHelperCall(fn, checker, helperSymbols) {
+  let found = false;
+  function visit(node) {
+    if (found) return;
+    if (node !== fn && typescript.isFunctionLike(node)) return;
+    if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
+        helperSymbols.has(checker.getSymbolAtLocation(node.expression))) {
+      found = true;
+      return;
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(fn);
+  return found;
+}
+
+function hasUngatedExportedJsxEntry(sourceFile, checker, helperSymbols) {
+  const functions = [];
+  function collect(node) {
+    if (typescript.isFunctionLike(node)) functions.push(node);
+    typescript.forEachChild(node, collect);
+  }
+  collect(sourceFile);
+  for (const fn of functions) {
+    if (!isExportedFunctionLike(fn) || !functionContainsJsx(fn)) continue;
+    if (!functionContainsHelperCall(fn, checker, helperSymbols)) return true;
+  }
+  return false;
+}
+
 function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
   const source = git(["show", `${ref}:${path}`]);
   let scriptKind = typescript.ScriptKind.JS;
@@ -1247,6 +1291,10 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
         flagSymbols.set(symbol, registry.byIdentifier.get(imported));
       }
     }
+  }
+
+  if (isUiFile(path) && hasUngatedExportedJsxEntry(sourceFile, checker, helperSymbols)) {
+    return null;
   }
 
   let found = null;
