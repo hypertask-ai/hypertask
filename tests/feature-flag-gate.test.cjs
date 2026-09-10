@@ -109,6 +109,26 @@ test("server-side ticket gates cover related UI changes", async (t) => {
   writeFile(pagesIndex.dir, "src/pages/api/widget/index.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function handler() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return "on"; return "off"; }\n');
   const pagesIndexHead = commit(pagesIndex.git, "Pages index gate");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", pagesIndexBase, pagesIndexHead, pagesIndex.dir)).pass, true);
+
+  const rootRoute = makeRepo(t);
+  const rootRouteBase = commit(rootRoute.git, "base");
+  writeFile(rootRoute.dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api"); }\nexport const Widget = () => <div />;\n');
+  writeFile(rootRoute.dir, "src/app/api/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
+  const rootRouteHead = commit(rootRoute.git, "root API gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", rootRouteBase, rootRouteHead, rootRoute.dir)).pass, true);
+
+  for (const [name, source] of [
+    ["nested endpoint", 'export async function loadWidget() { return fetch("/api/widget/details"); }\nexport const Widget = () => <div />;\n'],
+    ["inert text", 'export const Widget = () => <div data-path="/api/widget" />;\n'],
+    ["shadowed fetch", 'function fetch() { return null; }\nexport function Widget() { fetch("/api/widget"); return <div />; }\n'],
+  ]) {
+    const spoofed = makeRepo(t);
+    const spoofedBase = commit(spoofed.git, "base");
+    writeFile(spoofed.dir, "src/components/Widget.tsx", source);
+    writeFile(spoofed.dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
+    const spoofedHead = commit(spoofed.git, name);
+    assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", spoofedBase, spoofedHead, spoofed.dir)).pass, false, name);
+  }
 });
 
 test("App Router route handlers and spec files do not need a flag", async (t) => {
@@ -416,6 +436,12 @@ test("a changed ticket-specific hook assignment used as a condition passes", asy
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); return enabled ? <div /> : null; }\n');
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
+
+  const mutable = makeRepo(t);
+  const mutableBase = commit(mutable.git, "base");
+  writeFile(mutable.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { let enabled = useFlag(OTHER_FLAG); enabled = true; return enabled ? <div /> : null; }\n');
+  const mutableHead = commit(mutable.git, "overwritten gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", mutableBase, mutableHead, mutable.dir)).pass, false);
 
   const imported = makeRepo(t);
   const importedBase = commit(imported.git, "base");

@@ -557,7 +557,9 @@ function assignedGateSymbol(call, checker) {
   }
 
   const declaration = value.parent;
-  if (!typescript.isVariableDeclaration(declaration) || declaration.initializer !== value) return null;
+  if (!typescript.isVariableDeclaration(declaration) || declaration.initializer !== value ||
+      !typescript.isVariableDeclarationList(declaration.parent) ||
+      !(declaration.parent.flags & typescript.NodeFlags.Const)) return null;
   let name = declaration.name;
   if (bindingIndex !== null) {
     if (!typescript.isArrayBindingPattern(name)) return null;
@@ -805,10 +807,10 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
 }
 
 function apiRouteForSourcePath(path) {
-  const appRoute = path.match(/^src\/app\/api\/(.+)\/route\.[jt]sx?$/);
+  const appRoute = path.match(/^src\/app\/api\/(?:(.+)\/)?route\.[jt]sx?$/);
   const pagesRoute = path.match(/^src\/pages\/api\/(.+)\.[jt]sx?$/);
-  let relative = appRoute?.[1] ?? pagesRoute?.[1];
-  if (relative === undefined) return null;
+  if (!appRoute && !pagesRoute) return null;
+  let relative = appRoute ? (appRoute[1] ?? "") : pagesRoute[1];
   if (pagesRoute) relative = relative === "index" ? "" : relative.replace(/\/index$/, "");
   const route = relative ? `/api/${relative}` : "/api";
   const dynamicStart = route.indexOf("/[");
@@ -833,8 +835,37 @@ function sourceReferencesApiRoute(ref, path, apiRoute) {
     true,
     scriptKind,
   );
-  if (sourceFile.parseDiagnostics.length > 0) {
-    throw new Error(`invalid ${path}: ${sourceFile.parseDiagnostics[0].messageText}`);
+  const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
+  const host = {
+    getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
+    getDefaultLibFileName: () => "",
+    writeFile: () => {},
+    getCurrentDirectory: () => "",
+    getDirectories: () => [],
+    fileExists: (fileName) => fileName === path,
+    readFile: (fileName) => fileName === path ? source : undefined,
+    getCanonicalFileName: (fileName) => fileName,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => "\n",
+  };
+  const program = typescript.createProgram([path], options, host);
+  const syntaxErrors = program.getSyntacticDiagnostics(sourceFile);
+  if (syntaxErrors.length > 0) throw new Error(`invalid ${path}: ${syntaxErrors[0].messageText}`);
+  const checker = program.getTypeChecker();
+
+  function isRequestUrl(node) {
+    let value = typescript.isTemplateHead(node) && typescript.isTemplateExpression(node.parent) ? node.parent : node;
+    while (value.parent && (typescript.isParenthesizedExpression(value.parent) ||
+           typescript.isAsExpression(value.parent) || typescript.isTypeAssertionExpression(value.parent) ||
+           typescript.isNonNullExpression(value.parent) || typescript.isSatisfiesExpression(value.parent))) {
+      value = value.parent;
+    }
+    while (value.parent && typescript.isBinaryExpression(value.parent) && value.parent.left === value &&
+           value.parent.operatorToken.kind === typescript.SyntaxKind.PlusToken) value = value.parent;
+    const call = value.parent;
+    return typescript.isCallExpression(call) && call.arguments[0] === value &&
+      typescript.isIdentifier(call.expression) && call.expression.text === "fetch" &&
+      !checker.getSymbolAtLocation(call.expression);
   }
 
   let found = false;
@@ -843,9 +874,8 @@ function sourceReferencesApiRoute(ref, path, apiRoute) {
     let value = null;
     if (typescript.isStringLiteral(node) || typescript.isNoSubstitutionTemplateLiteral(node) ||
         typescript.isTemplateHead(node)) value = node.text;
-    if (value !== null && (apiRoute.dynamic ? value.startsWith(apiRoute.route) :
-        value === apiRoute.route || value.startsWith(`${apiRoute.route}?`) ||
-        value.startsWith(`${apiRoute.route}/`))) found = true;
+    if (value !== null && isRequestUrl(node) && (apiRoute.dynamic ? value.startsWith(apiRoute.route) :
+        value === apiRoute.route || value.startsWith(`${apiRoute.route}?`))) found = true;
     if (!found) typescript.forEachChild(node, visit);
   }
   visit(sourceFile);
