@@ -81,6 +81,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     numberOfUploadingComments,
   } = virtualizeIndexes;
 
+  const factoryRequirements = factoryPreviewEnabled && allowPerks && currentTask?.projectId
+    ? <FactoryRequirementsPanel projectId={currentTask.projectId} taskId={currentTask.id}/>
+    : null;
+
   // ------------------------------------------------------------------
 
   return (
@@ -145,7 +149,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <div id="bottom-description">{factoryPreviewEnabled && allowPerks && currentTask?.projectId && <FactoryRequirementsPanel projectId={currentTask.projectId} taskId={currentTask.id}/>}</div>;
+            contentToRender = <div id="bottom-description">{factoryRequirements}</div>;
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments
