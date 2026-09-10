@@ -444,6 +444,8 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
     ["reassigned definitions", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS = [];\n")],
     ["mutated definitions", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.push({ key: OTHER_FLAG });\n")],
     ["aliased definitions", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const escapedDefinitions = FEATURE_FLAG_DEFINITIONS;\n")],
+    ["assignment alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "let escapedDefinitions; escapedDefinitions = FEATURE_FLAG_DEFINITIONS;\n")],
+    ["conditional alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const escapedDefinitions = true ? FEATURE_FLAG_DEFINITIONS : [];\n")],
     ["reassigned default", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", 'DEFAULT_FEATURE_FLAG_MODE = "EVERYONE";\n')],
   ];
 

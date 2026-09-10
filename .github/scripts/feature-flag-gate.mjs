@@ -308,9 +308,18 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
       const alias = parent && typescript.isVariableDeclaration(parent) && parent.initializer === target;
       const passedToCall = parent && (typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
         parent.arguments?.includes(target);
-      const mutatingCall = parent && typescript.isCallExpression(parent) && parent.expression === target &&
-        typescript.isPropertyAccessExpression(target) && MUTATING_ARRAY_METHODS.has(target.name.text);
-      if (update || assignment || deletion || alias || passedToCall || mutatingCall) mutation = target;
+      const methodCall = parent && typescript.isCallExpression(parent) && parent.expression === target &&
+        typescript.isPropertyAccessExpression(target);
+      const mutatingCall = methodCall && MUTATING_ARRAY_METHODS.has(target.name.text);
+      const callback = methodCall ? parent.arguments[0] : null;
+      const safeDefinitionsRead = name === "FEATURE_FLAG_DEFINITIONS" && methodCall &&
+        (target.name.text === "map" || target.name.text === "find") && callback &&
+        (typescript.isArrowFunction(callback) || typescript.isFunctionExpression(callback)) &&
+        callback.parameters.length < 3 && !callback.parameters.some((parameter) => parameter.dotDotDotToken);
+      const escapedDefinitions = name === "FEATURE_FLAG_DEFINITIONS" && !safeDefinitionsRead;
+      if (update || assignment || deletion || alias || passedToCall || mutatingCall || escapedDefinitions) {
+        mutation = target;
+      }
     }
     typescript.forEachChild(node, visit);
   }
