@@ -45,3 +45,5 @@ export const MY_TASKS_PRIORITY_FILTER_FLAG =
 export const AGENT_VISIBILITY_FLAG = "htpr-6268-agent-visibility";
 export const HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG =
   "htpr-4228-admin-only-time-reports";
+export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
+  "htpr-6215-my-tasks-cross-board-priority-sort";

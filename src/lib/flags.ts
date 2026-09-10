@@ -40,6 +40,7 @@ import {
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
+  MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -76,6 +77,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-09",
     description:
       "Capitalizes the first letter typed in a paragraph or after sentence punctuation when the browser does not do it itself.",
+  },
+  {
+    key: MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+    shippedOn: "2026-09-10",
+    description:
+      "Sorting My Tasks by priority interleaves tasks from every board by priority level, instead of only reordering the tasks within each board's group.",
   },
   {
     key: HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
