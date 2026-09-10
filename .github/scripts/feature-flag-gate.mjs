@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { posix as pathPosix } from "node:path";
 
 const require = createRequire(import.meta.url);
 const typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "typescript");
@@ -451,6 +452,8 @@ function expressionResultIsObserved(node) {
         (typescript.isArrowFunction(parent) && child === parent.body) ||
         ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
          parent.arguments.includes(child))) return true;
+    if (typescript.isBinaryExpression(parent) &&
+        parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
         typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
         typescript.isSatisfiesExpression(parent) || typescript.isBinaryExpression(parent) ||
@@ -490,29 +493,218 @@ function controlsRuntimeBranch(node) {
       controlsOutput = branchHasBehavior(parent.statement);
       continue;
     }
+    if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
+        typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
+        typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent) ||
+        (typescript.isPrefixUnaryExpression(parent) &&
+         parent.operator === typescript.SyntaxKind.ExclamationToken)) continue;
+    if (typescript.isBinaryExpression(parent)) {
+      if (parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
+      if (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+          parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
+        if (child === parent.right) controlsOutput ||= expressionResultIsObserved(parent);
+        continue;
+      }
+      const other = child === parent.left ? parent.right : parent.left;
+      if ((parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsToken ||
+           parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsEqualsToken ||
+           parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsToken ||
+           parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsEqualsToken) &&
+          staticBoolean(other) !== null) continue;
+      return false;
+    }
+    if (typescript.isJsxExpression(parent)) return controlsOutput;
+    if (typescript.isConditionalExpression(parent) || typescript.isTemplateSpan(parent) ||
+        typescript.isTemplateExpression(parent)) {
+      if (controlsOutput) continue;
+      return false;
+    }
+    if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
+        parent.arguments.includes(child)) return controlsOutput;
+    if (typescript.isBlock(parent)) continue;
     if (typescript.isStatement(parent) || typescript.isVariableDeclaration(parent) ||
         typescript.isFunctionLike(parent)) return controlsOutput;
+    return false;
   }
   return controlsOutput;
 }
 
-function gatesRuntimeBehavior(call, checker, sourceFile) {
-  if (controlsRuntimeBranch(call)) return true;
-  let declaration = call.parent;
-  while (declaration && !typescript.isVariableDeclaration(declaration) &&
-         !typescript.isStatement(declaration) && !typescript.isFunctionLike(declaration)) {
-    declaration = declaration.parent;
+function assignedGateSymbol(call, checker) {
+  let value = call;
+  let bindingIndex = null;
+  while (value.parent && (typescript.isParenthesizedExpression(value.parent) ||
+         typescript.isAsExpression(value.parent) || typescript.isTypeAssertionExpression(value.parent) ||
+         typescript.isNonNullExpression(value.parent) || typescript.isSatisfiesExpression(value.parent) ||
+         typescript.isAwaitExpression(value.parent))) value = value.parent;
+
+  if (typescript.isArrayLiteralExpression(value.parent)) {
+    const array = value.parent;
+    bindingIndex = array.elements.findIndex((element) => element === value);
+    const promiseCall = array.parent;
+    if (bindingIndex === -1 || !typescript.isCallExpression(promiseCall) ||
+        promiseCall.arguments[0] !== array || promiseCall.arguments.length !== 1 ||
+        !typescript.isPropertyAccessExpression(promiseCall.expression) ||
+        !typescript.isIdentifier(promiseCall.expression.expression) ||
+        promiseCall.expression.expression.text !== "Promise" || promiseCall.expression.name.text !== "all" ||
+        checker.getSymbolAtLocation(promiseCall.expression.expression)) return null;
+    value = promiseCall;
+    while (value.parent && (typescript.isParenthesizedExpression(value.parent) ||
+           typescript.isAsExpression(value.parent) || typescript.isTypeAssertionExpression(value.parent) ||
+           typescript.isNonNullExpression(value.parent) || typescript.isSatisfiesExpression(value.parent) ||
+           typescript.isAwaitExpression(value.parent))) value = value.parent;
   }
-  if (!declaration || !typescript.isVariableDeclaration(declaration) ||
-      !typescript.isIdentifier(declaration.name)) return false;
-  const symbol = checker.getSymbolAtLocation(declaration.name);
+
+  const declaration = value.parent;
+  if (!typescript.isVariableDeclaration(declaration) || declaration.initializer !== value) return null;
+  let name = declaration.name;
+  if (bindingIndex !== null) {
+    if (!typescript.isArrayBindingPattern(name)) return null;
+    const binding = name.elements[bindingIndex];
+    if (!binding || typescript.isOmittedExpression(binding) || binding.dotDotDotToken) return null;
+    name = binding.name;
+  }
+  if (!typescript.isIdentifier(name)) return null;
+  return { name, symbol: checker.getSymbolAtLocation(name) };
+}
+
+function resolveRelativeModule(ref, sourcePath, moduleName) {
+  if (!moduleName.startsWith(".")) return null;
+  const base = pathPosix.normalize(pathPosix.join(pathPosix.dirname(sourcePath), moduleName));
+  if (!base.startsWith("src/")) return null;
+  const candidates = /\.[jt]sx?$/.test(base) ? [base] : [
+    `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`,
+    `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`,
+  ];
+  for (const candidate of candidates) {
+    try {
+      git(["cat-file", "-e", `${ref}:${candidate}`]);
+      return candidate;
+    } catch {}
+  }
+  return null;
+}
+
+function controlsReturnedValue(node) {
+  if (isStaticallyUnreachable(node)) return false;
+  let child = node;
+  for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if (typescript.isReturnStatement(parent) && child === parent.expression) return true;
+    if (typescript.isArrowFunction(parent) && child === parent.body) return true;
+    if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
+        typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
+        typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent) ||
+        (typescript.isPrefixUnaryExpression(parent) &&
+         parent.operator === typescript.SyntaxKind.ExclamationToken)) continue;
+    if (typescript.isBinaryExpression(parent)) {
+      if (parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
+      if (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+          parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
+        const other = child === parent.left ? parent.right : parent.left;
+        const value = staticBoolean(other);
+        if ((child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
+            (child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
+        continue;
+      }
+      const other = child === parent.left ? parent.right : parent.left;
+      if ((parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsToken ||
+           parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsEqualsToken ||
+           parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsToken ||
+           parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsEqualsToken) &&
+          staticBoolean(other) !== null) continue;
+      return false;
+    }
+    if (typescript.isConditionalExpression(parent)) {
+      if (child === parent.condition) {
+        const whenTrue = staticBoolean(parent.whenTrue);
+        const whenFalse = staticBoolean(parent.whenFalse);
+        if (whenTrue !== null && whenTrue === whenFalse) return false;
+      }
+      continue;
+    }
+    return false;
+  }
+  return false;
+}
+
+function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex) {
+  const targetPath = resolveRelativeModule(ref, sourcePath, imported.module);
+  if (!targetPath) return false;
+  const source = git(["show", `${ref}:${targetPath}`]);
+  const scriptKind = targetPath.endsWith(".tsx") ? typescript.ScriptKind.TSX :
+    targetPath.endsWith(".jsx") ? typescript.ScriptKind.JSX :
+    targetPath.endsWith(".ts") ? typescript.ScriptKind.TS : typescript.ScriptKind.JS;
+  const sourceFile = typescript.createSourceFile(
+    targetPath,
+    source,
+    typescript.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  );
+  const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
+  const host = {
+    getSourceFile: (fileName) => fileName === targetPath ? sourceFile : undefined,
+    getDefaultLibFileName: () => "",
+    writeFile: () => {},
+    getCurrentDirectory: () => "",
+    getDirectories: () => [],
+    fileExists: (fileName) => fileName === targetPath,
+    readFile: (fileName) => fileName === targetPath ? source : undefined,
+    getCanonicalFileName: (fileName) => fileName,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => "\n",
+  };
+  const program = typescript.createProgram([targetPath], options, host);
+  const syntaxErrors = program.getSyntacticDiagnostics(sourceFile);
+  if (syntaxErrors.length > 0) throw new Error(`invalid ${targetPath}: ${syntaxErrors[0].messageText}`);
+  const checker = program.getTypeChecker();
+  const declaration = sourceFile.statements.find((statement) =>
+    typescript.isFunctionDeclaration(statement) && statement.name?.text === imported.imported &&
+    statement.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.ExportKeyword));
+  const parameter = declaration?.parameters[argumentIndex];
+  if (!declaration?.body || !parameter || !typescript.isIdentifier(parameter.name)) return false;
+  const symbol = checker.getSymbolAtLocation(parameter.name);
   if (!symbol) return false;
+
+  let controls = false;
+  function visit(node) {
+    if (controls) return;
+    if (typescript.isIdentifier(node) && node !== parameter.name &&
+        checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node)) {
+      controls = true;
+      return;
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(declaration.body);
+  return controls;
+}
+
+function importedArgumentGatesRuntime(node, ref, path, checker, sourceFile, importedFunctions) {
+  let argument = node;
+  while (argument.parent && (typescript.isParenthesizedExpression(argument.parent) ||
+         typescript.isAsExpression(argument.parent) || typescript.isTypeAssertionExpression(argument.parent) ||
+         typescript.isNonNullExpression(argument.parent) || typescript.isSatisfiesExpression(argument.parent))) {
+    argument = argument.parent;
+  }
+  const call = argument.parent;
+  if (!typescript.isCallExpression(call) || !typescript.isIdentifier(call.expression)) return false;
+  const argumentIndex = call.arguments.findIndex((item) => item === argument);
+  const imported = importedFunctions.get(checker.getSymbolAtLocation(call.expression));
+  return Boolean(argumentIndex !== -1 && imported &&
+    importedParameterControlsReturnValue(ref, path, imported, argumentIndex) &&
+    gatesRuntimeBehavior(call, checker, sourceFile, () => false));
+}
+
+function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch) {
+  if (controlsRuntimeBranch(call)) return true;
+  const assigned = assignedGateSymbol(call, checker);
+  if (!assigned?.symbol) return false;
 
   let usedAsGate = false;
   function visit(node) {
     if (usedAsGate) return;
-    if (typescript.isIdentifier(node) && node !== declaration.name &&
-        checker.getSymbolAtLocation(node) === symbol && controlsRuntimeBranch(node)) {
+    if (typescript.isIdentifier(node) && node !== assigned.name &&
+        checker.getSymbolAtLocation(node) === assigned.symbol && referenceGates(node)) {
       usedAsGate = true;
       return;
     }
@@ -554,6 +746,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
   const checker = program.getTypeChecker();
   const helperSymbols = new Set();
   const flagSymbols = new Map();
+  const importedFunctions = new Map();
 
   for (const statement of sourceFile.statements) {
     if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -564,6 +757,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
       const imported = specifier.propertyName?.text ?? specifier.name.text;
       const symbol = checker.getSymbolAtLocation(specifier.name);
       if (!symbol) continue;
+      importedFunctions.set(symbol, { imported, module: moduleName });
       if ((moduleName === "@/hooks/useFlag" && imported === "useFlag") ||
           (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
       if (FLAG_KEY_MODULES.has(moduleName) && registry.byIdentifier.has(imported)) {
@@ -593,12 +787,75 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
       const endLine = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
       const callChanged = Array.from(addedLines).some((line) => line >= startLine && line <= endLine);
       if (key && allowedKeys.has(key) && callChanged &&
-          gatesRuntimeBehavior(node, checker, sourceFile)) found = key;
+          gatesRuntimeBehavior(node, checker, sourceFile, (reference) =>
+            controlsRuntimeBranch(reference) || importedArgumentGatesRuntime(
+              reference,
+              ref,
+              path,
+              checker,
+              sourceFile,
+              importedFunctions,
+            ))) found = key;
     }
     if (!found) typescript.forEachChild(node, visit);
   }
   visit(sourceFile);
   return found;
+}
+
+function apiRouteForSourcePath(path) {
+  const appRoute = path.match(/^src\/app\/api\/(.+)\/route\.[jt]sx?$/);
+  const pagesRoute = path.match(/^src\/pages\/api\/(.+)\.[jt]sx?$/);
+  const relative = appRoute?.[1] ?? pagesRoute?.[1];
+  if (!relative) return null;
+  const route = `/api/${relative}`;
+  const dynamicStart = route.indexOf("/[");
+  return dynamicStart === -1 ? { route, dynamic: false } :
+    { route: route.slice(0, dynamicStart + 1), dynamic: true };
+}
+
+function sourceReferencesApiRoute(ref, path, apiRoute) {
+  let source;
+  try {
+    source = git(["show", `${ref}:${path}`]);
+  } catch {
+    return false;
+  }
+  const scriptKind = path.endsWith(".tsx") ? typescript.ScriptKind.TSX :
+    path.endsWith(".jsx") ? typescript.ScriptKind.JSX :
+    path.endsWith(".ts") ? typescript.ScriptKind.TS : typescript.ScriptKind.JS;
+  const sourceFile = typescript.createSourceFile(
+    path,
+    source,
+    typescript.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  );
+  if (sourceFile.parseDiagnostics.length > 0) {
+    throw new Error(`invalid ${path}: ${sourceFile.parseDiagnostics[0].messageText}`);
+  }
+
+  let found = false;
+  function visit(node) {
+    if (found) return;
+    let value = null;
+    if (typescript.isStringLiteral(node) || typescript.isNoSubstitutionTemplateLiteral(node) ||
+        typescript.isTemplateHead(node)) value = node.text;
+    if (value !== null && (apiRoute.dynamic ? value.startsWith(apiRoute.route) :
+        value === apiRoute.route || value.startsWith(`${apiRoute.route}?`) ||
+        value.startsWith(`${apiRoute.route}/`))) found = true;
+    if (!found) typescript.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return found;
+}
+
+function runtimeGateCoversUi(ref, path, uiFiles) {
+  if (isUiFile(path)) return true;
+  const apiRoute = apiRouteForSourcePath(path);
+  if (!apiRoute) return false;
+  return uiFiles.some((uiPath) => /\.[jt]sx?$/.test(uiPath) &&
+    sourceReferencesApiRoute(ref, uiPath, apiRoute));
 }
 
 function isVerifiedAutoRevert(title, baseSha, headSha) {
@@ -696,7 +953,9 @@ export function evaluate({ title, baseSha, headSha }) {
         ticketKeys,
         addedLinesFor(mergeBase, headSha, path),
       );
-      if (key) return { pass: true, reason: `[${tag}] calls ticket-specific feature gate ${key} in changed code in ${path}.` };
+      if (key && runtimeGateCoversUi(headSha, path, uiFiles)) {
+        return { pass: true, reason: `[${tag}] calls ticket-specific feature gate ${key} in changed code covering the UI from ${path}.` };
+      }
     }
   } catch (error) {
     return failure(`Feature flag files or imports could not be parsed safely: ${error.message}`);

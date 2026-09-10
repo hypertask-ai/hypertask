@@ -2,9 +2,9 @@ name: Feature Flag Gate
 
 on:
   # The required status has write access, so it must always run the workflow
-  # from production and treat pull-request files only as data.
+  # from production and treat pull-request files only as data. Events for every
+  # base branch keep reconciliation correct when a PR leaves production.
   pull_request_target:
-    branches: [production]
     types: [opened, synchronize, reopened, edited, ready_for_review, closed]
   push:
     branches: [production]
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   feature-flag-gate:
-    if: github.event_name == 'pull_request_target' && github.event.action != 'closed'
+    if: github.event_name == 'pull_request_target' && github.event.action != 'closed' && github.event.pull_request.base.ref == 'production'
     name: feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 5

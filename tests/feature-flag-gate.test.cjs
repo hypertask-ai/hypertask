@@ -76,10 +76,31 @@ test("App Router API changes do not need a flag", async (t) => {
 test("server-side ticket gates cover related UI changes", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  writeFile(dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
   writeFile(dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
   const head = commit(git, "server-gated UI");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
+
+  const unrelated = makeRepo(t);
+  const unrelatedBase = commit(unrelated.git, "base");
+  writeFile(unrelated.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  writeFile(unrelated.dir, "src/app/api/unrelated/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
+  const unrelatedHead = commit(unrelated.git, "unrelated server gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", unrelatedBase, unrelatedHead, unrelated.dir)).pass, false);
+
+  const parallel = makeRepo(t);
+  const parallelBase = commit(parallel.git, "base");
+  writeFile(parallel.dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+  writeFile(parallel.dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { const [enabled, data] = await Promise.all([isFeatureEnabled(OTHER_FLAG, 6), Promise.resolve("ok")]); if (enabled) return new Response(data); return new Response("off"); }\n');
+  const parallelHead = commit(parallel.git, "parallel server gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", parallelBase, parallelHead, parallel.dir)).pass, true);
+
+  const shadowedPromise = makeRepo(t);
+  const shadowedPromiseBase = commit(shadowedPromise.git, "base");
+  writeFile(shadowedPromise.dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+  writeFile(shadowedPromise.dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nconst Promise = { all: async () => [true] };\nexport async function GET() { const [enabled] = await Promise.all([isFeatureEnabled(OTHER_FLAG, 6)]); if (enabled) return new Response("on"); return new Response("off"); }\n');
+  const shadowedPromiseHead = commit(shadowedPromise.git, "shadowed Promise wrapper");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", shadowedPromiseBase, shadowedPromiseHead, shadowedPromise.dir)).pass, false);
 });
 
 test("App Router route handlers and spec files do not need a flag", async (t) => {
@@ -380,6 +401,20 @@ test("a changed ticket-specific hook assignment used as a condition passes", asy
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); return enabled ? <div /> : null; }\n');
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
+
+  const imported = makeRepo(t);
+  const importedBase = commit(imported.git, "base");
+  writeFile(imported.dir, "src/components/gateResult.ts", "export function showWidget(ready, enabled) { return ready && enabled; }\n");
+  writeFile(imported.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nimport { showWidget } from "./gateResult";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); return showWidget(window.ready, enabled) ? <div /> : null; }\n');
+  const importedHead = commit(imported.git, "imported gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", importedBase, importedHead, imported.dir)).pass, true);
+
+  const invariant = makeRepo(t);
+  const invariantBase = commit(invariant.git, "base");
+  writeFile(invariant.dir, "src/components/gateResult.ts", 'export function showWidget(enabled) { if (enabled) console.log("on"); return true; }\n');
+  writeFile(invariant.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nimport { showWidget } from "./gateResult";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); return showWidget(enabled) ? <div /> : null; }\n');
+  const invariantHead = commit(invariant.git, "invariant imported wrapper");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", invariantBase, invariantHead, invariant.dir)).pass, false);
 });
 
 test("typed flag registries and definition arrays are parsed", async (t) => {
@@ -451,13 +486,13 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   const shortCircuitBase = commit(shortCircuit.git, "base");
   writeFile(shortCircuit.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => false && useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const shortCircuitHead = commit(shortCircuit.git, "dead short circuit");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", shortCircuitBase, shortCircuitHead, shortCircuit.dir)).pass, false);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", shortCircuitBase, shortCircuitHead, shortCircuit.dir)).pass, false);
 
   const returned = makeRepo(t);
   const returnedBase = commit(returned.git, "base");
   writeFile(returned.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return <div />; useFlag(OTHER_FLAG); }\n');
   const returnedHead = commit(returned.git, "dead return");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", returnedBase, returnedHead, returned.dir)).pass, false);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", returnedBase, returnedHead, returned.dir)).pass, false);
 
   const deadReference = makeRepo(t);
   const deadReferenceBase = commit(deadReference.git, "base");
@@ -476,6 +511,18 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   writeFile(nestedInvariant.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => (useFlag(OTHER_FLAG) && window.ready) || true ? <div /> : null;\n');
   const nestedInvariantHead = commit(nestedInvariant.git, "nested invariant condition");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", nestedInvariantBase, nestedInvariantHead, nestedInvariant.dir)).pass, false);
+
+  const comma = makeRepo(t);
+  const commaBase = commit(comma.git, "base");
+  writeFile(comma.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { if ((useFlag(OTHER_FLAG), true)) return <div />; return null; }\n');
+  const commaHead = commit(comma.git, "comma condition");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", commaBase, commaHead, comma.dir)).pass, false);
+
+  const wrapped = makeRepo(t);
+  const wrappedBase = commit(wrapped.git, "base");
+  writeFile(wrapped.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nconst alwaysTrue = (_value) => true;\nexport function Widget() { if (alwaysTrue(useFlag(OTHER_FLAG))) return <div />; return null; }\n');
+  const wrappedHead = commit(wrapped.git, "opaque condition");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", wrappedBase, wrappedHead, wrapped.dir)).pass, false);
 });
 
 test("comments, strings, JSX text, regexes, and shadowed helpers do not count as gate calls", async (t) => {
@@ -483,7 +530,7 @@ test("comments, strings, JSX text, regexes, and shadowed helpers do not count as
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\n// useFlag(OTHER_FLAG)\nconst note = "useFlag(OTHER_FLAG)";\nconst pattern = /useFlag(OTHER_FLAG)/;\nconst OTHER_FLAG_SUFFIX = true;\nfunction fake(useFlag) { return useFlag(OTHER_FLAG); }\nexport const Widget = () => <p>useFlag(OTHER_FLAG)</p>;\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, false);
 });
 
 test("a registered literal passed to isFeatureEnabled counts", async (t) => {
@@ -510,6 +557,8 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /pull_request_target:/);
   assert.doesNotMatch(workflow, /^  pull_request\s*:/m);
   assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, closed\]/);
+  assert.doesNotMatch(workflow, /pull_request_target:\s+branches: \[production\]/);
+  assert.match(workflow, /github\.event\.pull_request\.base\.ref == 'production'/);
   assert.match(workflow, /push:\s+branches: \[production\]/);
   assert.doesNotMatch(workflow, /workflow_dispatch:/);
   assert.match(workflow, /github\.event\.action != 'closed'/);
