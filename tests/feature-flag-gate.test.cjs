@@ -718,6 +718,12 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   const emptyFragmentsHead = commit(emptyFragments.git, "empty fragment branch");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", emptyFragmentsBase, emptyFragmentsHead, emptyFragments.dir)).pass, false);
 
+  const falseNull = makeRepo(t);
+  const falseNullBase = commit(falseNull.git, "base");
+  writeFile(falseNull.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return useFlag(OTHER_FLAG) ? false : null; }\n');
+  const falseNullHead = commit(falseNull.git, "false null branch");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", falseNullBase, falseNullHead, falseNull.dir)).pass, false);
+
   const deadSelfCall = makeRepo(t);
   const deadSelfCallBase = commit(deadSelfCall.git, "base");
   writeFile(deadSelfCall.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nfunction gatedHelper() { if (useFlag(OTHER_FLAG)) return <div />; gatedHelper(); return null; }\nexport function Widget() { return <div />; }\n');
