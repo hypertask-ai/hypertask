@@ -622,7 +622,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
 
   // HTPR-6215: sorting My Tasks by priority interleaves every board's tasks by
   // priority level, since priority (unlike most sort columns) is already
-  // comparable across boards. Off by default; see tableSortFlatten.ts.
+  // comparable across boards. Limited to Owner + QA by default; see tableSortFlatten.ts.
   const crossBoardPrioritySortEnabled = useFlag(MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG);
   const isPrioritySort = sortState[0]?.column === "priority";
 
