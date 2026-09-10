@@ -104,10 +104,10 @@ jobs:
             }
 
   # Every pull request is authored by the same GitHub account, so the title
-  # prefix is the only way to tell at a glance which agent opened it and what
-  # kind of work it is. The rule lived only in the agent prompt, where an agent
-  # with no tag configured never saw it, and three PRs drifted before anyone
-  # noticed. This fails the merge instead of trusting each agent to remember.
+  # carries the source ticket and kind of work. The rule lived only in the
+  # agent prompt, where an agent with no tag configured never saw it, and three
+  # PRs drifted before anyone noticed. This fails the merge instead of trusting
+  # each agent to remember.
   pr-title:
     name: pr-title
     runs-on: ubuntu-latest
@@ -116,13 +116,13 @@ jobs:
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
           script: |
-            // Keep in sync with HT_PR_TITLE_PREFIX in ~/.config/hypertask-agents/*.conf
+            const PREFIXES = ['HTPR', 'HYFA'];
             const TAGS = [
               'BUGFIX', 'FEATURE', 'IMPROVE', 'CLI/MCP/AI', 'SPEED', 'FEEDBACK',
               'DASH', 'QA', 'BOARD', 'COST', 'PLAN', 'INFRA',
             ];
             const shape = new RegExp(
-              '^HTPR-\\d+ \\[(' +
+              '^(?:' + PREFIXES.join('|') + ')-\\d+ \\[(' +
               TAGS.map(t => t.replace(/[/]/g, '\\/')).join('|') +
               ')\\] \\S'
             );
@@ -162,11 +162,12 @@ jobs:
                 `Pull request title does not match the required shape.`,
                 ``,
                 `  got:      ${pr.title}`,
-                `  expected: HTPR-<n> [TAG] <summary>`,
+                `  expected: (HTPR|HYFA)-<n> [TAG] <summary>`,
                 ``,
                 `Valid tags: ${TAGS.join(', ')}`,
                 ``,
                 `Example: HTPR-5626 [INFRA] Move every job off GitHub-hosted runners`,
+                `         HYFA-43 [INFRA] Add Factory acceptance routes`,
                 ``,
                 `Edit the title and this check re-runs on its own.`,
               ].join('\n')
