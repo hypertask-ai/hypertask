@@ -226,16 +226,6 @@
         "cli": "The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly.",
         "ai_chat": "AI Chat tools are model-facing task tools, not acceptance authorities.",
         "hyperai": "HyperAI tools are model-facing task tools, not acceptance authorities."
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-5156/43",
-          "expires": "2026-10-01",
-          "entries": [
-            "GET /api/mcp/factory/[operation]",
-            "POST /api/mcp/factory/[operation]"
-          ]
-        }
       }
     },
     {
