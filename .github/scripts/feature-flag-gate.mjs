@@ -38,6 +38,19 @@ function isUiFile(path) {
     UI_INCLUDE.some((pattern) => pattern.test(path));
 }
 
+function addedLinesFor(baseSha, headSha, path) {
+  const lines = new Set();
+  const diff = git(["diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`, "--", path]);
+  for (const row of diff.split("\n")) {
+    const hunk = row.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+    if (!hunk) continue;
+    const start = Number(hunk[1]);
+    const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    for (let line = start; line < start + count; line += 1) lines.add(line);
+  }
+  return lines;
+}
+
 function isJsxTextApostrophe(source, index) {
   if (!/[A-Za-z0-9]/.test(source[index - 1] ?? "")) return false;
   const lineStart = source.lastIndexOf("\n", index) + 1;
@@ -396,7 +409,50 @@ function isStaticallyUnreachable(node) {
   return false;
 }
 
-function referencesFlagAtRuntime(ref, path, registry) {
+function controlsRuntimeBranch(node) {
+  let child = node;
+  for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if ((typescript.isConditionalExpression(parent) && child === parent.condition) ||
+        (typescript.isIfStatement(parent) && child === parent.expression) ||
+        (typescript.isWhileStatement(parent) && child === parent.expression) ||
+        (typescript.isDoStatement(parent) && child === parent.expression) ||
+        (typescript.isForStatement(parent) && child === parent.condition)) return true;
+    if (typescript.isBinaryExpression(parent) && child === parent.left &&
+        (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+         parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) return true;
+    if (typescript.isStatement(parent) || typescript.isVariableDeclaration(parent) ||
+        typescript.isFunctionLike(parent)) return false;
+  }
+  return false;
+}
+
+function gatesRuntimeBehavior(call, checker, sourceFile) {
+  if (controlsRuntimeBranch(call)) return true;
+  let declaration = call.parent;
+  while (declaration && !typescript.isVariableDeclaration(declaration) &&
+         !typescript.isStatement(declaration) && !typescript.isFunctionLike(declaration)) {
+    declaration = declaration.parent;
+  }
+  if (!declaration || !typescript.isVariableDeclaration(declaration) ||
+      !typescript.isIdentifier(declaration.name)) return false;
+  const symbol = checker.getSymbolAtLocation(declaration.name);
+  if (!symbol) return false;
+
+  let usedAsGate = false;
+  function visit(node) {
+    if (usedAsGate) return;
+    if (typescript.isIdentifier(node) && node !== declaration.name &&
+        checker.getSymbolAtLocation(node) === symbol && controlsRuntimeBranch(node)) {
+      usedAsGate = true;
+      return;
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return usedAsGate;
+}
+
+function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
   const source = git(["show", `${ref}:${path}`]);
   let scriptKind = typescript.ScriptKind.JS;
   if (path.endsWith(".tsx")) scriptKind = typescript.ScriptKind.TSX;
@@ -457,11 +513,15 @@ function referencesFlagAtRuntime(ref, path, registry) {
              typescript.isNonNullExpression(argument) || typescript.isSatisfiesExpression(argument))) {
         argument = argument.expression;
       }
+      let key = null;
       if (argument && (typescript.isStringLiteral(argument) || typescript.isNoSubstitutionTemplateLiteral(argument)) &&
-          registry.byValue.has(argument.text)) found = argument.text;
+          registry.byValue.has(argument.text)) key = argument.text;
       else if (argument && typescript.isIdentifier(argument)) {
-        found = flagSymbols.get(checker.getSymbolAtLocation(argument)) ?? null;
+        key = flagSymbols.get(checker.getSymbolAtLocation(argument)) ?? null;
       }
+      const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      if (key && allowedKeys.has(key) && addedLines.has(line) &&
+          gatesRuntimeBehavior(node, checker, sourceFile)) found = key;
     }
     if (!found) typescript.forEachChild(node, visit);
   }
@@ -528,24 +588,24 @@ export function evaluate({ title, baseSha, headSha }) {
 
   try {
     const mergeBase = git(["merge-base", baseSha, headSha]).trim();
-    const baseRegistry = parseFlagRegistry(mergeBase);
-    parseFlagRegistry(headSha);
+    parseFlagRegistry(mergeBase);
+    const headRegistry = parseFlagRegistry(headSha);
     const baseDefinitions = parseDefinitions(mergeBase);
     const headDefinitions = parseDefinitions(headSha);
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
 
     const added = headDefinitions.keys.filter((key) => !baseDefinitions.keys.includes(key));
+    const ticketPrefix = `htpr-${titleMatch[1]}-`;
     if (added.length > 0) {
-      const ticketPrefix = `htpr-${titleMatch[1]}-`;
       if (added.some((key) => !key.startsWith(ticketPrefix))) {
         return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
       }
       if (headDefinitions.defaultMode !== "OWNER_AND_QA") {
         return failure("New feature flags must default to Owner + QA.");
       }
-      return { pass: true, reason: `[${tag}] adds ticket-specific feature flag ${added.join(", ")} with the Owner + QA default.` };
     }
+    const ticketKeys = new Set(headDefinitions.keys.filter((key) => key.startsWith(ticketPrefix)));
 
     for (const path of uiFiles) {
       if (!/\.[jt]sx?$/.test(path)) continue;
@@ -554,8 +614,14 @@ export function evaluate({ title, baseSha, headSha }) {
       } catch {
         continue;
       }
-      const key = referencesFlagAtRuntime(headSha, path, baseRegistry);
-      if (key) return { pass: true, reason: `[${tag}] calls a feature gate with registered key ${key} in ${path}.` };
+      const key = referencesFlagAtRuntime(
+        headSha,
+        path,
+        headRegistry,
+        ticketKeys,
+        addedLinesFor(mergeBase, headSha, path),
+      );
+      if (key) return { pass: true, reason: `[${tag}] calls ticket-specific feature gate ${key} in changed code in ${path}.` };
     }
   } catch (error) {
     return failure(`Feature flag files or imports could not be parsed safely: ${error.message}`);
@@ -563,8 +629,8 @@ export function evaluate({ title, baseSha, headSha }) {
 
   const shownFiles = `${uiFiles.slice(0, 5).join(", ")}${uiFiles.length > 5 ? ", ..." : ""}`;
   return failure(
-    `[${tag}] touches UI files (${shownFiles}) without a feature flag. Add a ticket-specific entry to ` +
-    "FEATURE_FLAG_DEFINITIONS, or call useFlag/isFeatureEnabled with a registered key in a changed UI file.",
+    `[${tag}] touches UI files (${shownFiles}) without a feature flag. Define a ticket-specific key in ` +
+    "FEATURE_FLAG_DEFINITIONS and call useFlag/isFeatureEnabled with that key on an added or modified UI line.",
   );
 }
 

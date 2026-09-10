@@ -282,18 +282,40 @@ test("flags added to production after a PR branches are not treated as PR remova
   writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const NEW_PRODUCTION_FLAG = "htpr-9-new";\n');
   writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, NEW_PRODUCTION_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: NEW_PRODUCTION_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
   const base = commit(git, "production advances");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir)).pass, true);
 });
 
-test("a ticket-specific definition passes with the Owner and QA default", async (t) => {
+test("a ticket-specific definition without runtime use fails", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
   writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-5-widget"']));
   writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
   const head = commit(git, "feature");
   const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /call useFlag\/isFeatureEnabled/);
+});
+
+test("a registered ticket-specific definition used in changed UI passes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const WIDGET_FLAG = "htpr-5-widget";\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, WIDGET_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: WIDGET_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { WIDGET_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "feature");
+  const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
   assert.equal(result.pass, true);
-  assert.match(result.reason, /Owner \+ QA default/);
+  assert.match(result.reason, /ticket-specific feature gate htpr-5-widget/);
+});
+
+test("an unused ticket-specific runtime call does not satisfy the gate", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const WIDGET_FLAG = "htpr-5-widget";\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, WIDGET_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: WIDGET_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { WIDGET_FLAG } from "@/lib/flags/keys";\nexport function Widget() { useFlag(WIDGET_FLAG); return <div />; }\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
 });
 
 test("a definition for another ticket or a changed default fails", async (t) => {
@@ -317,7 +339,15 @@ test("an imported registered key used by useFlag passes", async (t) => {
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
+test("a changed ticket-specific hook assignment used as a condition passes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); return enabled ? <div /> : null; }\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
 test("typed flag registries and definition arrays are parsed", async (t) => {
@@ -327,7 +357,7 @@ test("typed flag registries and definition arrays are parsed", async (t) => {
   writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [\n  { key: OTHER_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";\n');
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
 test("runtime gate calls inside template expressions are parsed", async (t) => {
@@ -335,7 +365,7 @@ test("runtime gate calls inside template expressions are parsed", async (t) => {
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => `${useFlag(OTHER_FLAG) ? "on" : "off"}`;\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
 test("JSX apostrophes do not break runtime gate parsing", async (t) => {
@@ -343,16 +373,16 @@ test("JSX apostrophes do not break runtime gate parsing", async (t) => {
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", `import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <p>\nUsers' settings don't load\n</p> : null;\n`);
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
-test("UI changes inside a file with an existing runtime gate pass", async (t) => {
+test("an unrelated existing runtime gate does not cover changed UI", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div>old</div> : null;\n');
   const base = commit(git, "base");
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div>new</div> : null;\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, false);
 });
 
 test("a deleted UI file does not abort scanning another gated file", async (t) => {
@@ -363,7 +393,7 @@ test("a deleted UI file does not abort scanning another gated file", async (t) =
   fs.rmSync(path.join(dir, "src/components/ADeleted.tsx"));
   writeFile(dir, "src/components/ZWidget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", base, head, dir)).pass, true);
 });
 
 test("CSS and other non-code UI files do not abort runtime-call scanning", async (t) => {
@@ -372,7 +402,7 @@ test("CSS and other non-code UI files do not abort runtime-call scanning", async
   writeFile(dir, "src/components/Theme.css", ".widget { color: red; }\n");
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
 test("a key added only to the registry cannot count as an existing runtime gate", async (t) => {
@@ -411,7 +441,7 @@ test("a registered literal passed to isFeatureEnabled counts", async (t) => {
   const base = commit(git, "base");
   writeFile(dir, "src/app/page.tsx", 'import { isFeatureEnabled } from "@/lib/flags";\nexport async function Page() { return await isFeatureEnabled("htpr-1-other", 6) ? <div /> : null; }\n');
   const head = commit(git, "feature");
-  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
 test("missing tags produce a useful failure instead of [null]", async (t) => {
