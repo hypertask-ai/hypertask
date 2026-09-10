@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -58,8 +58,12 @@ JSON
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/pulls/42"* ]]; then
   cat <<'JSON'
-{"state":"open","title":${JSON.stringify(prTitle)},"base":{"ref":"production","sha":"${'b'.repeat(40)}"},"head":{"sha":"${head}"}}
+{"state":"open","title":${JSON.stringify(prTitle)},"base":{"ref":"production","sha":"${'b'.repeat(40)}"},"head":{"sha":"${head}","repo":{"full_name":"${forkHead ? 'external/repository' : 'owner/repository'}"}}}
 JSON
+  exit 0
+fi
+if [ "$1" = "api" ] && [[ " $* " == *"pulls?state=open&base=production"* ]]; then
+  echo '${JSON.stringify([[{ head: { sha: head } }, ...(sharedHead ? [{ head: { sha: head } }] : [])]])}'
   exit 0
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"/issues/42/events"* ]]; then
@@ -178,6 +182,17 @@ test('auto-merge re-evaluates current feature-flag metadata before merging', asy
   assert.match(result.stdout, /current feature-flag gate failed: feature flag required/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge refuses fork and shared heads at the final feature-flag boundary', async () => {
+  for (const options of [{ forkHead: true }, { sharedHead: true }]) {
+    const { result, scratchEntries } = await runWorkflow(options)
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /fork or shared PR head requires owner review/)
+    assert.doesNotMatch(result.stdout, /MERGED #42/)
+    assert.deepEqual(scratchEntries, [])
+  }
 })
 
 test('auto-merge refuses a PR without the app smoke result', async () => {

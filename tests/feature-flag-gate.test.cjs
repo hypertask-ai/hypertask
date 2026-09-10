@@ -101,6 +101,13 @@ test("server-side ticket gates cover related UI changes", async (t) => {
   writeFile(shadowedPromise.dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nconst Promise = { all: async () => [true] };\nexport async function GET() { const [enabled] = await Promise.all([isFeatureEnabled(OTHER_FLAG, 6)]); if (enabled) return new Response("on"); return new Response("off"); }\n');
   const shadowedPromiseHead = commit(shadowedPromise.git, "shadowed Promise wrapper");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", shadowedPromiseBase, shadowedPromiseHead, shadowedPromise.dir)).pass, false);
+
+  const pagesIndex = makeRepo(t);
+  const pagesIndexBase = commit(pagesIndex.git, "base");
+  writeFile(pagesIndex.dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+  writeFile(pagesIndex.dir, "src/pages/api/widget/index.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function handler() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return "on"; return "off"; }\n');
+  const pagesIndexHead = commit(pagesIndex.git, "Pages index gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", pagesIndexBase, pagesIndexHead, pagesIndex.dir)).pass, true);
 });
 
 test("App Router route handlers and spec files do not need a flag", async (t) => {
@@ -523,6 +530,12 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   writeFile(wrapped.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nconst alwaysTrue = (_value) => true;\nexport function Widget() { if (alwaysTrue(useFlag(OTHER_FLAG))) return <div />; return null; }\n');
   const wrappedHead = commit(wrapped.git, "opaque condition");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", wrappedBase, wrappedHead, wrapped.dir)).pass, false);
+
+  const callback = makeRepo(t);
+  const callbackBase = commit(callback.git, "base");
+  writeFile(callback.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\ndeclare function launchFeature();\nexport function Widget() { useFlag(OTHER_FLAG) && (() => launchFeature()); return <div />; }\n');
+  const callbackHead = commit(callback.git, "uninvoked callback");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", callbackBase, callbackHead, callback.dir)).pass, false);
 });
 
 test("comments, strings, JSX text, regexes, and shadowed helpers do not count as gate calls", async (t) => {

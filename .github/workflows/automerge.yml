@@ -77,7 +77,9 @@ jobs:
           PR_JSON="$AUTOMERGE_TMP/pr.json"
           PR_FILES="$AUTOMERGE_TMP/pr.files"
           FINAL_PR_JSON="$AUTOMERGE_TMP/final-pr.json"
+          FINAL_HEADS_JSON="$AUTOMERGE_TMP/final-heads.json"
           VERIFY_PR_JSON="$AUTOMERGE_TMP/verify-pr.json"
+          VERIFY_HEADS_JSON="$AUTOMERGE_TMP/verify-heads.json"
           GATE_REASON="$AUTOMERGE_TMP/feature-flag-gate.txt"
           SPEED_STATUS_JSON="$AUTOMERGE_TMP/speed-status.json"
           infra_failures=0
@@ -369,10 +371,11 @@ jobs:
             # current metadata with the trusted production script immediately before
             # merging so an older green status cannot authorize different PR metadata.
             if ! gh api "repos/$REPO/pulls/$PR" >"$FINAL_PR_JSON" ||
+               ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$FINAL_HEADS_JSON" ||
                ! jq -e '
                  .state == "open" and .base.ref == "production" and
                  (.title | type == "string") and (.base.sha | test("^[0-9a-f]{40}$")) and
-                 (.head.sha | test("^[0-9a-f]{40}$"))
+                 (.head.sha | test("^[0-9a-f]{40}$")) and (.head.repo.full_name | type == "string")
                ' "$FINAL_PR_JSON" >/dev/null; then
               echo "::error::Cannot read current feature-flag metadata for PR #$PR; refusing to merge."
               infra_failures=$((infra_failures+1))
@@ -382,8 +385,20 @@ jobs:
             final_title=$(jq -r '.title' "$FINAL_PR_JSON")
             final_base_sha=$(jq -r '.base.sha' "$FINAL_PR_JSON")
             final_head_sha=$(jq -r '.head.sha' "$FINAL_PR_JSON")
+            final_head_repo=$(jq -r '.head.repo.full_name' "$FINAL_PR_JSON")
+            if ! final_head_pr_count=$(jq -er --arg sha "$final_head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$FINAL_HEADS_JSON"); then
+              echo "::error::Cannot verify current production PR heads; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
             if [ "$final_head_sha" != "$headOid" ]; then
               echo "skip: PR head changed before feature-flag re-evaluation"
+              echo "::endgroup::"
+              continue
+            fi
+            if [ "$final_head_repo" != "$REPO" ] || [ "$final_head_pr_count" -ne 1 ]; then
+              echo "skip: fork or shared PR head requires owner review"
               echo "::endgroup::"
               continue
             fi
@@ -414,11 +429,18 @@ jobs:
               continue
             fi
             if ! gh api "repos/$REPO/pulls/$PR" >"$VERIFY_PR_JSON" ||
-               ! jq -e --arg title "$final_title" --arg base "$final_base_sha" --arg head "$final_head_sha" '
+               ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$VERIFY_HEADS_JSON" ||
+               ! verify_head_pr_count=$(jq -er --arg sha "$final_head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$VERIFY_HEADS_JSON"); then
+              echo "::error::Cannot refresh feature-flag ownership for PR #$PR; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+            if ! jq -e --arg title "$final_title" --arg base "$final_base_sha" --arg head "$final_head_sha" --arg repo "$REPO" '
                  .state == "open" and .base.ref == "production" and
-                 .title == $title and .base.sha == $base and .head.sha == $head
-               ' "$VERIFY_PR_JSON" >/dev/null; then
-              echo "skip: PR metadata changed during feature-flag re-evaluation"
+                 .title == $title and .base.sha == $base and .head.sha == $head and .head.repo.full_name == $repo
+               ' "$VERIFY_PR_JSON" >/dev/null || [ "$verify_head_pr_count" -ne 1 ]; then
+              echo "skip: PR metadata or head ownership changed during feature-flag re-evaluation"
               echo "::endgroup::"
               continue
             fi

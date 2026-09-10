@@ -411,6 +411,7 @@ function isStaticallyUnreachable(node) {
 }
 
 function expressionHasSideEffect(node) {
+  if (typescript.isFunctionLike(node)) return false;
   if (typescript.isCallExpression(node) || typescript.isNewExpression(node) ||
       typescript.isAwaitExpression(node) || typescript.isYieldExpression(node) ||
       typescript.isDeleteExpression(node) || typescript.isPostfixUnaryExpression(node)) return true;
@@ -679,7 +680,7 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   return controls;
 }
 
-function importedArgumentGatesRuntime(node, ref, path, checker, sourceFile, importedFunctions) {
+function importedArgumentGatesRuntime(node, ref, path, checker, importedFunctions) {
   let argument = node;
   while (argument.parent && (typescript.isParenthesizedExpression(argument.parent) ||
          typescript.isAsExpression(argument.parent) || typescript.isTypeAssertionExpression(argument.parent) ||
@@ -692,7 +693,7 @@ function importedArgumentGatesRuntime(node, ref, path, checker, sourceFile, impo
   const imported = importedFunctions.get(checker.getSymbolAtLocation(call.expression));
   return Boolean(argumentIndex !== -1 && imported &&
     importedParameterControlsReturnValue(ref, path, imported, argumentIndex) &&
-    gatesRuntimeBehavior(call, checker, sourceFile, () => false));
+    gatesRuntimeBehavior(call, checker, node.getSourceFile(), () => false));
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch) {
@@ -793,7 +794,6 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
               ref,
               path,
               checker,
-              sourceFile,
               importedFunctions,
             ))) found = key;
     }
@@ -806,9 +806,10 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
 function apiRouteForSourcePath(path) {
   const appRoute = path.match(/^src\/app\/api\/(.+)\/route\.[jt]sx?$/);
   const pagesRoute = path.match(/^src\/pages\/api\/(.+)\.[jt]sx?$/);
-  const relative = appRoute?.[1] ?? pagesRoute?.[1];
-  if (!relative) return null;
-  const route = `/api/${relative}`;
+  let relative = appRoute?.[1] ?? pagesRoute?.[1];
+  if (relative === undefined) return null;
+  if (pagesRoute) relative = relative === "index" ? "" : relative.replace(/\/index$/, "");
+  const route = relative ? `/api/${relative}` : "/api";
   const dynamicStart = route.indexOf("/[");
   return dynamicStart === -1 ? { route, dynamic: false } :
     { route: route.slice(0, dynamicStart + 1), dynamic: true };
