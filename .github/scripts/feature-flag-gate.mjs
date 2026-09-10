@@ -241,7 +241,7 @@ function resolveImportedStringConstant(ref, imports, localName) {
   throw new Error(`feature flag key ${localName} is not an exported string constant`);
 }
 
-function parseDefinitions(ref, registry) {
+function parseDefinitions(ref) {
   const source = git(["show", `${ref}:src/lib/flags.ts`]);
   const imports = parseImports(source);
   const sourceFile = typescript.createSourceFile(
@@ -304,7 +304,7 @@ function parseDefinitions(ref, registry) {
     }
     if (typescript.isStringLiteral(value) || typescript.isNoSubstitutionTemplateLiteral(value)) return value.text;
     if (typescript.isIdentifier(value)) {
-      return registry.byIdentifier.get(value.text) ?? resolveImportedStringConstant(ref, imports, value.text);
+      return resolveImportedStringConstant(ref, imports, value.text);
     }
     throw new Error("feature flag definition key must be a string or key constant");
   });
@@ -485,9 +485,9 @@ export function evaluate({ title, baseSha, headSha }) {
   try {
     const mergeBase = git(["merge-base", baseSha, headSha]).trim();
     const baseRegistry = parseFlagRegistry(mergeBase);
-    const headRegistry = parseFlagRegistry(headSha);
-    const baseDefinitions = parseDefinitions(mergeBase, baseRegistry);
-    const headDefinitions = parseDefinitions(headSha, headRegistry);
+    parseFlagRegistry(headSha);
+    const baseDefinitions = parseDefinitions(mergeBase);
+    const headDefinitions = parseDefinitions(headSha);
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
 
@@ -504,12 +504,13 @@ export function evaluate({ title, baseSha, headSha }) {
     }
 
     for (const path of uiFiles) {
+      if (!/\.[jt]sx?$/.test(path)) continue;
       try {
         git(["cat-file", "-e", `${headSha}:${path}`]);
       } catch {
         continue;
       }
-      const key = referencesFlagAtRuntime(headSha, path, headRegistry);
+      const key = referencesFlagAtRuntime(headSha, path, baseRegistry);
       if (key) return { pass: true, reason: `[${tag}] calls a feature gate with registered key ${key} in ${path}.` };
     }
   } catch (error) {

@@ -37,6 +37,18 @@ jobs:
   automerge:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+
       - name: Evaluate and merge green low-risk PRs
         env:
           # Dedicated PAT (repo secret), NOT the built-in github.token: the
@@ -63,9 +75,24 @@ jobs:
           trap 'rm -rf "$AUTOMERGE_TMP"' EXIT
           PR_JSON="$AUTOMERGE_TMP/pr.json"
           PR_FILES="$AUTOMERGE_TMP/pr.files"
+          FINAL_PR_JSON="$AUTOMERGE_TMP/final-pr.json"
+          VERIFY_PR_JSON="$AUTOMERGE_TMP/verify-pr.json"
+          GATE_REASON="$AUTOMERGE_TMP/feature-flag-gate.txt"
           SPEED_STATUS_JSON="$AUTOMERGE_TMP/speed-status.json"
           infra_failures=0
           merge_failures=0
+
+          parser_ready=0
+          ensure_feature_flag_parser() {
+            [ "$parser_ready" = "1" ] && return 0
+            parser_dir="$AUTOMERGE_TMP/parser"
+            if ! npm install --prefix "$parser_dir" --ignore-scripts --no-audit --no-fund --package-lock=false typescript@6.0.3 \
+              >"$AUTOMERGE_TMP/npm-install.txt" 2>"$AUTOMERGE_TMP/npm-install-error.txt"; then
+              return 1
+            fi
+            export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
+            parser_ready=1
+          }
 
           # gh reads, retried with backoff. The built-in token has a low secondary
           # rate limit, so a burst of check completions can transiently 403 a read;
@@ -334,6 +361,64 @@ jobs:
               echo "PARK: a review flagged a blocker or major-severity finding"
               park "$PR" "an automated review flagged a blocker or major-severity finding; confirm it's resolved, then remove the label and merge manually"
               echo "::endgroup::"; continue
+            fi
+
+            # A commit status cannot encode PR-title or base changes. Re-evaluate the
+            # current metadata with the trusted production script immediately before
+            # merging so an older green status cannot authorize different PR metadata.
+            if ! gh api "repos/$REPO/pulls/$PR" >"$FINAL_PR_JSON" ||
+               ! jq -e '
+                 .state == "open" and .base.ref == "production" and
+                 (.title | type == "string") and (.base.sha | test("^[0-9a-f]{40}$")) and
+                 (.head.sha | test("^[0-9a-f]{40}$"))
+               ' "$FINAL_PR_JSON" >/dev/null; then
+              echo "::error::Cannot read current feature-flag metadata for PR #$PR; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+            final_title=$(jq -r '.title' "$FINAL_PR_JSON")
+            final_base_sha=$(jq -r '.base.sha' "$FINAL_PR_JSON")
+            final_head_sha=$(jq -r '.head.sha' "$FINAL_PR_JSON")
+            if [ "$final_head_sha" != "$headOid" ]; then
+              echo "skip: PR head changed before feature-flag re-evaluation"
+              echo "::endgroup::"
+              continue
+            fi
+            if ! ensure_feature_flag_parser; then
+              echo "::error::Cannot install the trusted feature-flag parser; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+            if ! git fetch --no-tags origin production "refs/pull/$PR/head" >"$AUTOMERGE_TMP/gate-fetch.txt" 2>"$AUTOMERGE_TMP/gate-error.txt" ||
+               ! git cat-file -e "$final_base_sha^{commit}" || ! git cat-file -e "$final_head_sha^{commit}"; then
+              echo "::error::Cannot fetch current feature-flag inputs for PR #$PR; refusing to merge."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
+            if node .github/scripts/feature-flag-gate.mjs "$final_title" "$final_base_sha" "$final_head_sha" >"$GATE_REASON" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
+              echo "feature-flag-gate re-evaluation = PASS"
+            else
+              gate_result=$?
+              if [ "$gate_result" = "1" ]; then
+                echo "skip: current feature-flag gate failed: $(cat "$GATE_REASON")"
+              else
+                echo "::error::Current feature-flag gate could not run for PR #$PR; refusing to merge."
+                infra_failures=$((infra_failures+1))
+              fi
+              echo "::endgroup::"
+              continue
+            fi
+            if ! gh api "repos/$REPO/pulls/$PR" >"$VERIFY_PR_JSON" ||
+               ! jq -e --arg title "$final_title" --arg base "$final_base_sha" --arg head "$final_head_sha" '
+                 .state == "open" and .base.ref == "production" and
+                 .title == $title and .base.sha == $base and .head.sha == $head
+               ' "$VERIFY_PR_JSON" >/dev/null; then
+              echo "skip: PR metadata changed during feature-flag re-evaluation"
+              echo "::endgroup::"
+              continue
             fi
 
             # Re-check labels immediately before merging to shrink the window where

@@ -217,6 +217,35 @@ test("compound exported constants cannot spoof their runtime flag value", async 
   assert.match(result.reason, /not an exported string constant/);
 });
 
+test("definition identifiers resolve their imports instead of matching registry names", async (t) => {
+  const local = makeRepo(t);
+  const localBase = commit(local.git, "base");
+  writeFile(
+    local.dir,
+    "src/lib/flags.ts",
+    'const OTHER_FLAG = "htpr-5-decoy";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n',
+  );
+  writeFile(local.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const localHead = commit(local.git, "local decoy");
+  const localResult = await evaluate("HTPR-5 [FEATURE] add widget", localBase, localHead, local.dir);
+  assert.equal(localResult.pass, false);
+  assert.match(localResult.reason, /unknown feature flag key constant/);
+
+  const aliased = makeRepo(t);
+  writeFile(aliased.dir, "src/lib/external-flags.ts", 'export const WRONG_FLAG = "htpr-9-wrong";\n');
+  const aliasedBase = commit(aliased.git, "base");
+  writeFile(
+    aliased.dir,
+    "src/lib/flags.ts",
+    'import { WRONG_FLAG as OTHER_FLAG } from "@/lib/external-flags";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: "htpr-1-other" },\n  { key: OTHER_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n',
+  );
+  writeFile(aliased.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const aliasedHead = commit(aliased.git, "aliased decoy");
+  const aliasedResult = await evaluate("HTPR-5 [FEATURE] add widget", aliasedBase, aliasedHead, aliased.dir);
+  assert.equal(aliasedResult.pass, false);
+  assert.match(aliasedResult.reason, /match this pull request/);
+});
+
 test("definitions resolve string constants imported from local modules", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/lib/external-flags.ts", 'export const EXTERNAL_FLAG =\n  "htpr-1-external";\n');
@@ -327,6 +356,24 @@ test("a deleted UI file does not abort scanning another gated file", async (t) =
   writeFile(dir, "src/components/ZWidget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
+});
+
+test("CSS and other non-code UI files do not abort runtime-call scanning", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Theme.css", ".widget { color: red; }\n");
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "feature");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
+});
+
+test("a key added only to the registry cannot count as an existing runtime gate", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const DECOY_FLAG = "htpr-5-decoy";\n');
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { DECOY_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(DECOY_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "registry-only decoy");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
 });
 
 test("comments, strings, JSX text, regexes, and shadowed helpers do not count as gate calls", async (t) => {

@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -56,6 +56,12 @@ if [ "$1 $2" = "pr view" ]; then
 JSON
   exit 0
 fi
+if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/pulls/42"* ]]; then
+  cat <<'JSON'
+{"state":"open","title":${JSON.stringify(prTitle)},"base":{"ref":"production","sha":"${'b'.repeat(40)}"},"head":{"sha":"${head}"}}
+JSON
+  exit 0
+fi
 if [ "$1" = "api" ] && [[ " $* " == *"/issues/42/events"* ]]; then
   ${previousSpeedTitle ? "echo 'HTPR-5595 [SPEED] Optimize the app'" : "true"}
   exit 0
@@ -72,11 +78,21 @@ fi
 echo "unexpected gh call: $*" >&2
 exit 2
 `
+  const node = `#!/usr/bin/env bash
+if [ "$1" = ".github/scripts/feature-flag-gate.mjs" ]; then
+  if [ "\${GH_STUB_FAIL_FEATURE_GATE:-}" = "1" ]; then echo "feature flag required"; exit 1; fi
+  echo "feature flag gate passed"
+  exit 0
+fi
+exec ${JSON.stringify(process.execPath)} "$@"
+`
   await writeFile(join(bin, 'gh'), gh)
+  await writeFile(join(bin, 'git'), '#!/usr/bin/env bash\nexit 0\n')
+  await writeFile(join(bin, 'node'), node)
+  await writeFile(join(bin, 'npm'), '#!/usr/bin/env bash\nexit 0\n')
   await writeFile(join(bin, 'sleep'), '#!/usr/bin/env bash\nexit 0\n')
   if (failTemp) await writeFile(join(bin, 'mktemp'), '#!/usr/bin/env bash\nexit 1\n')
-  await chmod(join(bin, 'gh'), 0o755)
-  await chmod(join(bin, 'sleep'), 0o755)
+  for (const command of ['gh', 'git', 'node', 'npm', 'sleep']) await chmod(join(bin, command), 0o755)
   if (failTemp) await chmod(join(bin, 'mktemp'), 0o755)
 
   try {
@@ -98,6 +114,7 @@ exit 2
         GH_STUB_FAIL_LABELS: failLabels ? '1' : '',
         GH_STUB_FAIL_MERGE: failMerge ? '1' : '',
         GH_STUB_FAIL_MERGEABILITY: failMergeability ? '1' : '',
+        GH_STUB_FAIL_FEATURE_GATE: failFeatureGate ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
       },
     })
@@ -142,6 +159,16 @@ test('auto-merge evaluates and merges a ready PR with isolated scratch state', a
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /MERGED #42/)
   assert.match(result.stdout, /check pr-title = SUCCESS/)
+  assert.match(result.stdout, /feature-flag-gate re-evaluation = PASS/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge re-evaluates current feature-flag metadata before merging', async () => {
+  const { result, scratchEntries } = await runWorkflow({ failFeatureGate: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /current feature-flag gate failed: feature flag required/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
 
