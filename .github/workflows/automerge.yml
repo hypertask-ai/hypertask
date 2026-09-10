@@ -48,7 +48,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: .github/scripts/feature-flag-parser/package-lock.json
 
       - name: Evaluate and merge green low-risk PRs
         env:

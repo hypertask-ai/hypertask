@@ -159,6 +159,7 @@ test('auto-merge uses job-private temporary files on shared runners', async () =
   assert.match(workflow, /trap 'rm -rf "\$AUTOMERGE_TMP"' EXIT/)
   assert.match(workflow, /PR_JSON="\$AUTOMERGE_TMP\/pr\.json"/)
   assert.match(workflow, /PR_FILES="\$AUTOMERGE_TMP\/pr\.files"/)
+  assert.match(workflow, /cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/)
   assert.match(workflow, /npm ci --prefix "\$parser_dir" --ignore-scripts --no-audit --no-fund/)
   assert.match(workflow, /feature-flag-parser\/package-lock\.json "\$parser_dir\/"/)
   assert.match(workflow, /"\$GATE_DECISION"/)
