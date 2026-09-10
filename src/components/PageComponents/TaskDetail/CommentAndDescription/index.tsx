@@ -25,6 +25,7 @@ import TaskInfo, { ITaskInfoContainer } from "../TaskInfoColumn/TaskInfo";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionContainer";
 import RichTextPersonHovercards from "@/components/Common/RichTextPersonHovercards";
+import FactoryRequirementsPanel from "../FactoryRequirementsPanel";
 import AgentRunActivityRow from "./AgentRunActivityRow";
 
 const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
@@ -141,7 +142,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <div id="bottom-description" className="h-0" />;
+            contentToRender = <div id="bottom-description">{allowPerks && currentTask?.projectId && <FactoryRequirementsPanel projectId={currentTask.projectId} taskId={currentTask.id}/>}</div>;
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments

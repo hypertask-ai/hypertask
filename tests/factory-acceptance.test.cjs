@@ -311,9 +311,9 @@ test('template and semantic approvals are append-only and preserve independent Q
  await rejectsCode(db.transaction(tx=>templateService.approveRequirements(tx,{project_id:15,task_id:1,expected_version:1,expected_task_revision:now.toISOString(),expected_scope_digest:load('enforcement').semanticContentDigest(db.rows('task')[0]),criteria:[{...scopeCriteria[0],description:'Weaker outcome'}]},ownerSession)),'factory_contract_immutable');
  await rejectsCode(db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:1,criteria:policyCriteria},{userId:6})),'factory_owner_session_required');
 });
-function ownerPolicyEndpoint(db,session){
+function ownerPolicyEndpoint(db,session,previewEnabled=true){
  const filename=path.resolve(__dirname,'../src/app/api/factory/policy/route.ts'),mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
- mod.require=id=>id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/auth/getSessionUser'?{getSessionUser:async()=>session}:id==='@/lib/factoryAcceptance/templates'?templateService:id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):require(id);
+ mod.require=id=>id==='@/lib/flags'?{isFeatureEnabled:async()=>previewEnabled,FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview'}:id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/auth/getSessionUser'?{getSessionUser:async()=>session}:id==='@/lib/factoryAcceptance/templates'?templateService:id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):require(id);
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);return mod.exports;
 }
 test('actual approval route requires the owner session and same origin, never bearer or body identity',async()=>{
@@ -346,4 +346,31 @@ test('semantic receipts bind the canonical description even when the legacy scal
  await approveScope(db);const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
  db.rows('task')[0].description_.content='Later scope edit';
  await rejectsCode(db.transaction(tx=>load('enforcement').requireCurrentContract(tx,1,contract.version)),'factory_semantics_unmet');
+});
+
+test('owner preview returns exact saved canonical scope and rejects concurrent unseen edits',async()=>{
+ const {NextRequest}=require('next/server'),db=await templateFixture();
+ Object.assign(db.rows('task')[0],{title:'Saved title',description:'Stale legacy description',description_:{content:'<p>Current saved outcome</p>'},acceptanceCriteria:'Required outcome',verifyCommand:'npm test'});
+ const route=ownerPolicyEndpoint(db,ownerSession);
+ const read=await route.GET(new NextRequest('https://example.invalid/api/factory/policy?project_id=15&task_id=1'));
+ assert.equal(read.status,200);const preview=await read.json();
+ assert.deepEqual(preview.task.reviewedScope,{title:'Saved title',description:'<p>Current saved outcome</p>',acceptanceCriteria:'Required outcome',verifyCommand:'npm test'});
+ assert.equal(preview.projectId,15);assert.equal(preview.task.projectId,15);assert.equal(preview.approval.state,'missing');
+ db.rows('task')[0].description_.content='<p>Concurrent changed outcome</p>';
+ const response=await route.POST(new NextRequest('https://example.invalid/api/factory/policy',{method:'POST',headers:{origin:'https://example.invalid'},body:JSON.stringify({operation:'requirements',project_id:15,task_id:1,expected_version:0,expected_task_revision:preview.task.updatedAt,expected_scope_digest:preview.task.scopeDigest,criteria:scopeCriteria})}));
+ assert.equal(response.status,409);assert.equal((await response.json()).code,'factory_scope_changed');
+ assert.equal(db.rows('factorySemanticReceipt').length,0);
+ await approveScope(db);
+ assert.equal((await db.transaction(tx=>templateService.readOwnerPolicy(tx,15,1,ownerSession))).approval.state,'current');
+ db.rows('task')[0].description_.content='Another saved scope';
+ assert.equal((await db.transaction(tx=>templateService.readOwnerPolicy(tx,15,1,ownerSession))).approval.state,'stale');
+});
+
+test('factory preview flag denies owner reads and approval while off without registering anything',async()=>{
+ const {NextRequest}=require('next/server'),db=await fixture();
+ const route=ownerPolicyEndpoint(db,ownerSession,false);
+ const get=await route.GET(new NextRequest('https://example.invalid/api/factory/policy?project_id=15&task_id=1'));
+ assert.equal(get.status,403);assert.equal((await get.json()).code,'factory_preview_unavailable');
+ const post=await route.POST(new NextRequest('https://example.invalid/api/factory/policy',{method:'POST',headers:{origin:'https://example.invalid'},body:JSON.stringify({operation:'template',project_id:15,expected_version:0,criteria:policyCriteria})}));
+ assert.equal(post.status,403);assert.equal(db.rows('factoryTemplate').length,0);
 });

@@ -85,10 +85,16 @@ export async function bindTemplate(tx:FactoryTx,body:any,identity:Identity){
 }
 export async function readOwnerPolicy(tx:FactoryTx,projectId:number,taskId:number|undefined,session:OwnerSession){
   positive(projectId);await requireOwner(tx,projectId,session);
+  if(taskId!==undefined){positive(taskId);await lockAgentMutationFence(tx,taskId);}
   const template=await tx.factoryTemplate.findFirst({where:{projectId},orderBy:{version:'desc'}});
-  if(taskId===undefined)return {template,semanticReceipt:null};
-  positive(taskId);const task=await tx.task.findUnique({where:{id:taskId},include:{description_:{select:{content:true}}}});
+  const policy=await enrollment(tx,projectId);
+  const enforcementEnabled=policy?.enabled===true;
+  if(taskId===undefined)return {projectId,template,semanticReceipt:null,enforcementEnabled};
+  const task=await tx.task.findUnique({where:{id:taskId},include:{description_:{select:{content:true}}}});
   if(!task||task.projectId!==projectId)fail('factory_task_scope_mismatch','The task is outside this project.');
   const semanticReceipt=await tx.factorySemanticReceipt.findFirst({where:{taskId,projectId},orderBy:{version:'desc'}});
-  return {template,semanticReceipt,task:{id:task.id,updatedAt:task.updatedAt,title:task.title,scopeDigest:semanticContentDigest(task)}};
+  const project=await tx.project.findUnique({where:{id:projectId},select:{ownerId:true}});
+  const scopeDigest=semanticContentDigest(task);
+  const current=!!semanticReceipt&&semanticReceipt.ownerId===project?.ownerId&&semanticReceipt.taskContentDigest===scopeDigest;
+  return {projectId,template,semanticReceipt,enforcementEnabled,approval:{state:!semanticReceipt?'missing':current?'current':'stale',reason:!semanticReceipt?'Requirements have not been approved.':current?null:'The saved scope or project owner changed after approval.'},task:{id:task.id,projectId,updatedAt:task.updatedAt,title:task.title,scopeDigest,reviewedScope:{title:task.title??null,description:task.description_?.content??task.description??null,acceptanceCriteria:task.acceptanceCriteria??null,verifyCommand:task.verifyCommand??null}}};
 }

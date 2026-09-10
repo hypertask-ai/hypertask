@@ -1,3 +1,4 @@
+import { factoryPolicyKey } from "@/hooks/useFactoryPolicy";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -475,6 +476,9 @@ export default function useSaveContent() {
           taskId: currentTask?.id,
         };
         const response = await updateTask(newTask, payload, "SaveDescription");
+        if (currentTask?.projectId && currentTask?.id) {
+          void queryClient.invalidateQueries({queryKey: factoryPolicyKey(currentTask.projectId, currentTask.id)});
+        }
         // console.log(data);
 
         //remove duplicates

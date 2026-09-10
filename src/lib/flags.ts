@@ -10,6 +10,7 @@ import {
 } from "@/lib/agentRuns/model";
 
 import {
+  FACTORY_OWNER_PREVIEW_FLAG,
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_SKILLS_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
@@ -60,6 +61,11 @@ const FEATURE_FLAG_QA_USER = {
 } as const;
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: FACTORY_OWNER_PREVIEW_FLAG,
+    shippedOn: "2026-09-10",
+    description: "Previews factory policy and saved task requirements for explicit owner approval. Does not enable factory enforcement.",
+  },
   {
     key: HTPR_6320_AI_OBSERVABILITY_FLAG,
     shippedOn: "2026-09-09",

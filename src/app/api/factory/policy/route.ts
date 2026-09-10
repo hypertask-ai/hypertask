@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server';
 import prisma from '@/lib/prisma';
+import {isFeatureEnabled,FACTORY_OWNER_PREVIEW_FLAG} from '@/lib/flags';
 import {getSessionUser} from '@/lib/auth/getSessionUser';
 import {FactoryAcceptanceError} from '@/lib/factoryAcceptance/enforcement';
 import {approveRequirements,readOwnerPolicy,registerTemplate} from '@/lib/factoryAcceptance/templates';
@@ -13,6 +14,7 @@ async function handle(request:NextRequest){
     if(request.method==='POST'&&request.headers.get('origin')!==request.nextUrl.origin)return send({success:false,code:'factory_invalid_origin'},403);
     const session=await getSessionUser(request.headers);
     if(!session)return send({success:false,code:'factory_owner_session_required'},401);
+    if(!await isFeatureEnabled(FACTORY_OWNER_PREVIEW_FLAG,session.userId))return send({success:false,code:'factory_preview_unavailable'},403);
     if(request.method==='GET'){
       const rawTask=request.nextUrl.searchParams.get('task_id');
       const result=await prisma.$transaction(tx=>readOwnerPolicy(tx,Number(request.nextUrl.searchParams.get('project_id')),rawTask===null?undefined:Number(rawTask),session));

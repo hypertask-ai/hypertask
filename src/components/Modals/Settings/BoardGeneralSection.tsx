@@ -23,6 +23,7 @@ import { useSetRecoilState } from "@/lib/state";
 import SettingsSectionShell from "./SettingsSectionShell";
 import SettingsToggle from "./SettingsToggle";
 import { useSettingsTeam } from "./useSettingsTeam";
+import FactoryPolicySection from "./FactoryPolicySection";
 import BoardLifecycleSettings from "./BoardLifecycleSettings";
 
 const NONE_ASSIGNEE = {
@@ -395,6 +396,7 @@ const BoardGeneralSection = () => {
       {project && <BoardNotificationSetting project={project} />}
       {project && <BoardTimeTrackingSetting project={project} />}
       <BoardLifecycleSettings />
+      {project && <FactoryPolicySection projectId={project.id} />}
       {project && <BoardAutoAssignSetting project={project} />}
     </SettingsSectionShell>
   );
