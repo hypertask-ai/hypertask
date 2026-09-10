@@ -316,6 +316,10 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(ciWorkflow, /\.target == "branch"/);
   assert.match(ciWorkflow, /index\("refs\/heads\/production"\)/);
   assert.match(ciWorkflow, /Live required checks do not match docs\/ci-policy\.yml/);
+  assert.match(
+    ciWorkflow,
+    /expected=\$\(printf '%s\\n' app-smoke ci-tests claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
+  );
 });
 
 test("CI policy keeps the protected smoke producer live and required", async () => {
