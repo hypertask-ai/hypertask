@@ -454,6 +454,8 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
     ["block body callback", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ key }) => { return key; });\n")],
     ["map callback element mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map((row) => { row.key = \"evil\"; return row.key; });\n")],
     ["map rest alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ key, ...rest }) => rest);\n")],
+    ["non-key destructure", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ description }) => description);\n")],
+    ["find result method call", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nd.toString();\n")],
   ];
 
   for (const [name, source] of cases) {

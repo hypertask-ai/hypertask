@@ -291,26 +291,21 @@ function unwrapExpr(node) {
   return current;
 }
 
+const SAFE_DEFINITION_FIELDS = new Set(["key"]);
+
+function bindingElementFieldName(element) {
+  if (element.propertyName && typescript.isIdentifier(element.propertyName)) return element.propertyName.text;
+  if (!element.propertyName && typescript.isIdentifier(element.name)) return element.name.text;
+  return null;
+}
+
 function bindingPatternRejectsElementAlias(pattern) {
   if (typescript.isObjectBindingPattern(pattern)) {
     return pattern.elements.every((element) => {
       if (!typescript.isBindingElement(element) || element.dotDotDotToken) return false;
-      if (typescript.isIdentifier(element.name)) return true;
-      if (typescript.isObjectBindingPattern(element.name) || typescript.isArrayBindingPattern(element.name)) {
-        return bindingPatternRejectsElementAlias(element.name);
-      }
-      return false;
-    });
-  }
-  if (typescript.isArrayBindingPattern(pattern)) {
-    return pattern.elements.every((element) => {
-      if (typescript.isOmittedExpression(element)) return true;
-      if (!typescript.isBindingElement(element) || element.dotDotDotToken) return false;
-      if (typescript.isIdentifier(element.name)) return true;
-      if (typescript.isObjectBindingPattern(element.name) || typescript.isArrayBindingPattern(element.name)) {
-        return bindingPatternRejectsElementAlias(element.name);
-      }
-      return false;
+      const field = bindingElementFieldName(element);
+      if (!field || !SAFE_DEFINITION_FIELDS.has(field)) return false;
+      return typescript.isIdentifier(element.name);
     });
   }
   return false;
@@ -470,6 +465,11 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
         elementAliases.add(left.text);
         return;
       }
+      mark(target);
+      return;
+    }
+    // Any method call on a definition object can mutate it; do not limit this to array mutators.
+    if (parent && typescript.isCallExpression(parent) && parent.expression === target) {
       mark(target);
       return;
     }
