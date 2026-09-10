@@ -301,7 +301,12 @@ function loadHistoryRoute({ flagEnabled }) {
   ];
   db = {
     chatSession: {
-      findFirst: async () => ({ id: "session-1", agentId: "agent-parked" }),
+      findFirst: async () => ({
+        id: "session-1",
+        agentId: "agent-parked",
+        // chatAccess evaluates the shared-chat flag against the agent owner.
+        agent: { userId: 6 },
+      }),
     },
     chatMessage: {
       findMany: async () => rows,
@@ -328,8 +333,11 @@ function loadHistoryRoute({ flagEnabled }) {
   });
   stubModule("src/lib/flags.ts", {
     AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-    isFeatureEnabled: async (key) =>
-      key === model.AGENT_CHAT_PARKED_REPLY_FLAG ? flagEnabled : false,
+    SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
+    isFeatureEnabled: async (key) => {
+      if (key === "htpr-6002-shared-agent-chat") return true;
+      return key === model.AGENT_CHAT_PARKED_REPLY_FLAG ? flagEnabled : false;
+    },
   });
   stubModule("src/lib/agents/agentChatActivity.ts", {
     listAgentChatActivity: async () => [],
