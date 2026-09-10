@@ -700,6 +700,24 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   const nestedUnusedHead = commit(nestedUnused.git, "nested unused helper");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", nestedUnusedBase, nestedUnusedHead, nestedUnused.dir)).pass, false);
 
+  const exportedUnused = makeRepo(t);
+  const exportedUnusedBase = commit(exportedUnused.git, "base");
+  writeFile(exportedUnused.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function gatedHelper() { if (useFlag(OTHER_FLAG)) return <div />; return null; }\nexport function Widget() { return <div />; }\n');
+  const exportedUnusedHead = commit(exportedUnused.git, "exported unused helper");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", exportedUnusedBase, exportedUnusedHead, exportedUnused.dir)).pass, false);
+
+  const nullishBranches = makeRepo(t);
+  const nullishBranchesBase = commit(nullishBranches.git, "base");
+  writeFile(nullishBranches.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return useFlag(OTHER_FLAG) ? null : undefined; }\n');
+  const nullishBranchesHead = commit(nullishBranches.git, "nullish branches");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", nullishBranchesBase, nullishBranchesHead, nullishBranches.dir)).pass, false);
+
+  const emptyFragments = makeRepo(t);
+  const emptyFragmentsBase = commit(emptyFragments.git, "base");
+  writeFile(emptyFragments.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return useFlag(OTHER_FLAG) ? null : <></>; }\n');
+  const emptyFragmentsHead = commit(emptyFragments.git, "empty fragment branch");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", emptyFragmentsBase, emptyFragmentsHead, emptyFragments.dir)).pass, false);
+
   const deadSelfCall = makeRepo(t);
   const deadSelfCallBase = commit(deadSelfCall.git, "base");
   writeFile(deadSelfCall.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nfunction gatedHelper() { if (useFlag(OTHER_FLAG)) return <div />; gatedHelper(); return null; }\nexport function Widget() { return <div />; }\n');

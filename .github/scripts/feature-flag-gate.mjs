@@ -818,6 +818,35 @@ function isLiveCallSite(node, live) {
   return !enclosing || live.has(enclosing);
 }
 
+function isDefaultExportFunction(fn) {
+  if (fn.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.DefaultKeyword)) {
+    return true;
+  }
+  return typescript.isExportAssignment(fn.parent);
+}
+
+function branchIsNullishOrEmpty(node) {
+  if (!node) return true;
+  if (typescript.isBlock(node)) {
+    if (node.statements.length === 0) return true;
+    if (node.statements.length === 1) return branchIsNullishOrEmpty(node.statements[0]);
+    return false;
+  }
+  if (typescript.isReturnStatement(node)) return branchIsNullishOrEmpty(node.expression);
+  const expression = unwrapExpr(node);
+  if (!expression) return true;
+  if (expression.kind === typescript.SyntaxKind.NullKeyword ||
+      expression.kind === typescript.SyntaxKind.UndefinedKeyword) {
+    return true;
+  }
+  if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
+  if (typescript.isJsxFragment(expression)) {
+    return expression.children.every((child) =>
+      typescript.isJsxText(child) ? child.getText().trim() === "" : false);
+  }
+  return false;
+}
+
 function collectLiveFunctions(sourceFile, checker) {
   const functions = [];
   function collect(node) {
@@ -826,7 +855,11 @@ function collectLiveFunctions(sourceFile, checker) {
   }
   collect(sourceFile);
 
-  const live = new Set(functions.filter(isExportedFunctionLike));
+  // Export alone is not enough: an unused exported helper must not count as live.
+  // Seed default exports and a sole named export (typical component module).
+  const live = new Set(functions.filter(isDefaultExportFunction));
+  const exported = functions.filter(isExportedFunctionLike);
+  if (exported.length === 1) live.add(exported[0]);
   let changed = true;
   while (changed) {
     changed = false;
@@ -907,7 +940,8 @@ function controlsRuntimeBranch(node) {
       continue;
     }
     if (typescript.isConditionalExpression(parent) && child === parent.condition) {
-      if (branchesStaticallyEquivalent(parent.whenTrue, parent.whenFalse)) {
+      if (branchesStaticallyEquivalent(parent.whenTrue, parent.whenFalse) ||
+          (branchIsNullishOrEmpty(parent.whenTrue) && branchIsNullishOrEmpty(parent.whenFalse))) {
         controlsOutput = false;
       } else {
         controlsOutput = (branchHasBehavior(parent.whenTrue) || branchHasBehavior(parent.whenFalse) ||
@@ -916,8 +950,10 @@ function controlsRuntimeBranch(node) {
       continue;
     }
     if (typescript.isIfStatement(parent) && child === parent.expression) {
-      if (parent.elseStatement &&
-          branchesStaticallyEquivalent(parent.thenStatement, parent.elseStatement)) {
+      if ((parent.elseStatement &&
+           branchesStaticallyEquivalent(parent.thenStatement, parent.elseStatement)) ||
+          (branchIsNullishOrEmpty(parent.thenStatement) &&
+           branchIsNullishOrEmpty(parent.elseStatement))) {
         controlsOutput = false;
       } else {
         controlsOutput = branchHasBehavior(parent.thenStatement) || branchHasBehavior(parent.elseStatement);
