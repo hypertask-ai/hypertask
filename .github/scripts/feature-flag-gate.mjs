@@ -373,7 +373,7 @@ function isEscapingAliasUse(target) {
   return isAssignmentPatternTarget(target);
 }
 
-function isMutatingUse(target) {
+function isBindingWrite(target) {
   const parent = target.parent;
   if (!parent) return false;
   if ((typescript.isPrefixUnaryExpression(parent) || typescript.isPostfixUnaryExpression(parent)) &&
@@ -387,6 +387,13 @@ function isMutatingUse(target) {
     return true;
   }
   if (typescript.isDeleteExpression(parent) && parent.expression === target) return true;
+  return isAssignmentPatternTarget(target);
+}
+
+function isMutatingUse(target) {
+  if (isBindingWrite(target)) return true;
+  const parent = target.parent;
+  if (!parent) return false;
   if (typescript.isVariableDeclaration(parent) && parent.initializer === target) return true;
   if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
       parent.arguments?.includes(target)) {
@@ -427,6 +434,14 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
             (typescript.isPropertyAccessExpression(target.parent) && target.parent.expression === target) ||
             (typescript.isElementAccessExpression(target.parent) && target.parent.expression === target))) {
       target = target.parent;
+    }
+
+    // Copying a literal string cannot expose a mutable alias to its const binding.
+    // Keep assignment detection, including destructuring, but allow normal reads.
+    if (name === "DEFAULT_FEATURE_FLAG_MODE" &&
+        typescript.isStringLiteral(unwrapExpr(declaration.initializer))) {
+      if (isBindingWrite(target)) mark(target);
+      return;
     }
 
     const parent = target.parent;

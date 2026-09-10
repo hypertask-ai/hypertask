@@ -992,3 +992,25 @@ test("Factory ticket flags retain exact prefix and owner-only preview requiremen
   const ungated=commit(git,'ungated addition');
   assert.equal((await evaluate('HYFA-5 [FEATURE] add widget',base,ungated,dir)).pass,false);
 });
+
+test("literal default mode permits production reads but still rejects binding writes", async (t) => {
+  const {dir,git}=makeRepo(t);
+  writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", `
+export function resolve(row) { const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE; return mode; }
+export function create() { return { mode: DEFAULT_FEATURE_FLAG_MODE }; }
+const copy = DEFAULT_FEATURE_FLAG_MODE;
+consume(DEFAULT_FEATURE_FLAG_MODE);
+const bag = { mode: DEFAULT_FEATURE_FLAG_MODE }; bag.mode = "EVERYONE";
+`));
+  const base=commit(git,"production-style reads");
+  writeFile(dir,"src/components/Widget.tsx",'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const head=commit(git,"gated UI");
+  const result=await evaluate("HTPR-1 [FEATURE] widget",base,head,dir);
+  assert.equal(result.pass,true,result.reason);
+  for (const mutation of ['DEFAULT_FEATURE_FLAG_MODE = "EVERYONE";', 'DEFAULT_FEATURE_FLAG_MODE += "EVERYONE";', 'DEFAULT_FEATURE_FLAG_MODE++;', '({mode: DEFAULT_FEATURE_FLAG_MODE} = {mode: "EVERYONE"});']) {
+    writeFile(dir,"src/lib/flags.ts",flagsSource(["OTHER_FLAG"],"OWNER_AND_QA",mutation));
+    const changed=commit(git,"binding mutation");
+    const rejected=await evaluate("HTPR-1 [FEATURE] widget",base,changed,dir);
+    assert.equal(rejected.pass,false,mutation);assert.match(rejected.reason,/must not be reassigned/);
+  }
+});
