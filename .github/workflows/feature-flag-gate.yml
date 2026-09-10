@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: feature-flag-gate-production
+  group: feature-flag-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -36,6 +36,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Evaluate the current pull-request head with trusted code
         env:
@@ -201,7 +203,7 @@ jobs:
           exit "$result"
 
   reconcile-open-pull-requests:
-    if: github.event_name == 'push' || contains(fromJSON('["opened", "synchronize", "reopened", "closed"]'), github.event.action)
+    if: github.event_name == 'push' || github.event_name == 'pull_request_target'
     name: reconcile-feature-flag-gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -219,6 +221,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Reconcile every open production pull request
         env:

@@ -227,69 +227,82 @@ function resolveImportedStringConstant(ref, imports, localName) {
 
 function parseDefinitions(ref, registry) {
   const source = git(["show", `${ref}:src/lib/flags.ts`]);
-  const tokens = tokenize(source);
   const imports = parseImports(source);
-  const declaration = tokens.findIndex((token, index) =>
-    token.value === "FEATURE_FLAG_DEFINITIONS" && tokens[index - 1]?.value === "const",
+  const sourceFile = typescript.createSourceFile(
+    "src/lib/flags.ts",
+    source,
+    typescript.ScriptTarget.Latest,
+    true,
+    typescript.ScriptKind.TS,
   );
-  let arrayStart = declaration + 1;
-  while (arrayStart > 0 && arrayStart < tokens.length &&
-         tokens[arrayStart].value !== "=" && tokens[arrayStart].value !== ";") arrayStart += 1;
-  if (tokens[arrayStart]?.value !== "=" || tokens[arrayStart + 1]?.value !== "[") {
-    throw new Error("FEATURE_FLAG_DEFINITIONS array was not found");
+  if (sourceFile.parseDiagnostics.length > 0) {
+    throw new Error(`invalid src/lib/flags.ts: ${sourceFile.parseDiagnostics[0].messageText}`);
   }
-  arrayStart += 1;
 
-  const keys = [];
-  let arrayDepth = 1;
-  let objectDepth = 0;
-  let objectKey = null;
-  for (let index = arrayStart + 1; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token.value === "[") arrayDepth += 1;
-    if (token.value === "]") {
-      arrayDepth -= 1;
-      if (arrayDepth === 0) break;
-    }
-    if (arrayDepth !== 1) continue;
-    if (token.value === "{") {
-      objectDepth += 1;
-      if (objectDepth === 1) objectKey = null;
-      continue;
-    }
-    if (token.value === "}") {
-      if (objectDepth === 1) {
-        if (!objectKey) throw new Error("feature flag definition has no key");
-        keys.push(objectKey);
+  const declarations = new Map();
+  for (const statement of sourceFile.statements) {
+    if (!typescript.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!typescript.isIdentifier(declaration.name)) continue;
+      if (declarations.has(declaration.name.text)) {
+        throw new Error(`duplicate ${declaration.name.text} declaration`);
       }
-      objectDepth -= 1;
-      continue;
-    }
-    if (
-      objectDepth === 1 && token.value === "key" &&
-      tokens[index + 1]?.value === ":"
-    ) {
-      if (objectKey) throw new Error("feature flag definition has duplicate key fields");
-      const valueToken = tokens[index + 2];
-      if (valueToken?.type === "string") objectKey = valueToken.value;
-      else if (valueToken?.type === "identifier") {
-        objectKey = registry.byIdentifier.get(valueToken.value) ??
-          resolveImportedStringConstant(ref, imports, valueToken.value);
-      } else throw new Error("feature flag definition key must be a string or key constant");
+      declarations.set(declaration.name.text, declaration);
     }
   }
-  if (arrayDepth !== 0 || objectDepth !== 0) throw new Error("malformed FEATURE_FLAG_DEFINITIONS array");
+
+  let definitions = declarations.get("FEATURE_FLAG_DEFINITIONS")?.initializer;
+  while (definitions && (typescript.isParenthesizedExpression(definitions) ||
+         typescript.isAsExpression(definitions) || typescript.isTypeAssertionExpression(definitions) ||
+         typescript.isSatisfiesExpression(definitions))) definitions = definitions.expression;
+  if (!definitions || !typescript.isArrayLiteralExpression(definitions)) {
+    throw new Error("FEATURE_FLAG_DEFINITIONS must be an array literal");
+  }
+
+  const keys = definitions.elements.map((element) => {
+    if (!typescript.isObjectLiteralExpression(element)) {
+      throw new Error("feature flag definitions must be direct object literals");
+    }
+    if (element.properties.some(typescript.isSpreadAssignment)) {
+      throw new Error("feature flag definitions cannot contain object spreads");
+    }
+    if (element.properties.some((property) => property.name && typescript.isComputedPropertyName(property.name))) {
+      throw new Error("feature flag definitions cannot contain computed property names");
+    }
+    const keyProperties = element.properties.filter((property) =>
+      property.name &&
+      ((typescript.isIdentifier(property.name) && property.name.text === "key") ||
+       (typescript.isStringLiteral(property.name) && property.name.text === "key")),
+    );
+    if (keyProperties.length !== 1) {
+      throw new Error(`feature flag definition has ${keyProperties.length === 0 ? "no" : "duplicate"} key fields`);
+    }
+    if (!typescript.isPropertyAssignment(keyProperties[0])) {
+      throw new Error("feature flag definition key must be a property assignment");
+    }
+
+    let value = keyProperties[0].initializer;
+    while (typescript.isParenthesizedExpression(value) || typescript.isAsExpression(value) ||
+           typescript.isTypeAssertionExpression(value) || typescript.isSatisfiesExpression(value)) {
+      value = value.expression;
+    }
+    if (typescript.isStringLiteral(value) || typescript.isNoSubstitutionTemplateLiteral(value)) return value.text;
+    if (typescript.isIdentifier(value)) {
+      return registry.byIdentifier.get(value.text) ?? resolveImportedStringConstant(ref, imports, value.text);
+    }
+    throw new Error("feature flag definition key must be a string or key constant");
+  });
   if (new Set(keys).size !== keys.length) throw new Error("duplicate FEATURE_FLAG_DEFINITIONS key");
 
-  const defaultMode = tokens.findIndex((token, index) =>
-    token.value === "DEFAULT_FEATURE_FLAG_MODE" &&
-    tokens.slice(index + 1, index + 8).some((next) => next.value === "="),
-  );
-  if (defaultMode === -1) throw new Error("DEFAULT_FEATURE_FLAG_MODE was not found");
-  const equals = tokens.findIndex((token, index) => index > defaultMode && index < defaultMode + 8 && token.value === "=");
-  const mode = tokens[equals + 1];
-  if (mode?.type !== "string") throw new Error("DEFAULT_FEATURE_FLAG_MODE must be a string literal");
-  return { keys, defaultMode: mode.value };
+  let mode = declarations.get("DEFAULT_FEATURE_FLAG_MODE")?.initializer;
+  while (mode && (typescript.isParenthesizedExpression(mode) || typescript.isAsExpression(mode) ||
+         typescript.isTypeAssertionExpression(mode) || typescript.isSatisfiesExpression(mode))) {
+    mode = mode.expression;
+  }
+  if (!mode || !typescript.isStringLiteral(mode)) {
+    throw new Error("DEFAULT_FEATURE_FLAG_MODE must be a string literal");
+  }
+  return { keys, defaultMode: mode.text };
 }
 
 function parseImports(source) {

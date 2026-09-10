@@ -153,6 +153,34 @@ test("unrelated key text outside FEATURE_FLAG_DEFINITIONS does not pass", async 
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
 });
 
+test("conditional and spread definitions cannot spoof a ticket flag", async (t) => {
+  const conditional = makeRepo(t);
+  const conditionalBase = commit(conditional.git, "base");
+  writeFile(
+    conditional.dir,
+    "src/lib/flags.ts",
+    'import { OTHER_FLAG } from "@/lib/flags/keys";\nconst enabled = false;\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  enabled ? { key: "htpr-5-decoy" } : { key: OTHER_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n',
+  );
+  writeFile(conditional.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const conditionalHead = commit(conditional.git, "conditional decoy");
+  const conditionalResult = await evaluate("HTPR-5 [FEATURE] add widget", conditionalBase, conditionalHead, conditional.dir);
+  assert.equal(conditionalResult.pass, false);
+  assert.match(conditionalResult.reason, /direct object literals/);
+
+  const spread = makeRepo(t);
+  const spreadBase = commit(spread.git, "base");
+  writeFile(
+    spread.dir,
+    "src/lib/flags.ts",
+    'import { OTHER_FLAG } from "@/lib/flags/keys";\nconst existing = { key: OTHER_FLAG };\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: "htpr-5-decoy", ...existing },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n',
+  );
+  writeFile(spread.dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const spreadHead = commit(spread.git, "spread decoy");
+  const spreadResult = await evaluate("HTPR-5 [FEATURE] add widget", spreadBase, spreadHead, spread.dir);
+  assert.equal(spreadResult.pass, false);
+  assert.match(spreadResult.reason, /cannot contain object spreads/);
+});
+
 test("definitions resolve string constants imported from local modules", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/lib/external-flags.ts", 'export const EXTERNAL_FLAG =\n  "htpr-1-external";\n');
@@ -300,10 +328,12 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /push:\s+branches: \[production\]/);
   assert.doesNotMatch(workflow, /workflow_dispatch:/);
   assert.match(workflow, /github\.event\.action != 'closed'/);
-  assert.match(workflow, /\["opened", "synchronize", "reopened", "closed"\]/);
+  assert.match(workflow, /if: github\.event_name == 'push' \|\| github\.event_name == 'pull_request_target'/);
   assert.match(workflow, /timeout-minutes: 5/);
-  assert.match(workflow, /group: feature-flag-gate-production/);
+  assert.match(workflow, /group: feature-flag-gate-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/);
   assert.match(workflow, /cancel-in-progress: false/);
+  assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
+  assert.equal((workflow.match(/cache-dependency-path: package-lock\.json/g) || []).length, 2);
   assert.equal((workflow.match(/typescript@6\.0\.3/g) || []).length, 2);
   assert.equal((workflow.match(/FEATURE_FLAG_TYPESCRIPT_PATH/g) || []).length, 2);
   assert.equal((workflow.match(/ref: production/g) || []).length, 2);
