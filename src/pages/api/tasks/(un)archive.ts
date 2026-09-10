@@ -76,7 +76,7 @@ const handler: NextApiHandler = async (req, res) => {
       displayName: sessionUser.displayName ?? "",
       photoURL: sessionUser.photoURL ?? undefined,
       email: sessionUser.email ?? undefined,
-    } as IUser;
+    };
 
     const now = new Date();
     const newTask = {
