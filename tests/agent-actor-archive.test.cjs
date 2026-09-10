@@ -120,6 +120,11 @@ test("resolveActingAgent prefers the session claim and rejects forged body ids",
 
 function loadArchiveHandler({
   agentLookup = null,
+  sessionUserRecord = {
+    displayName: "Valentin Yeo",
+    photoURL: "https://example.com/valentin.png",
+    email: "owner@example.com",
+  },
   updateResult = {
     status: 200,
     json: { id: TASK_ID, projectId: MEMBER_PROJECT, status: "Archive" },
@@ -131,12 +136,20 @@ function loadArchiveHandler({
     notifications: [],
     broadcasts: [],
     cancelDueDate: 0,
+    userLookups: [],
   };
 
   const stubs = {
     "@/lib/prisma": {
       __esModule: true,
       default: {
+        user: {
+          findUnique: async (args) => {
+            sideEffects.userLookups.push(args.where.id);
+            if (args.where.id !== MEMBER_USER_ID) return null;
+            return sessionUserRecord;
+          },
+        },
         agent: {
           findFirst: async (args) => {
             if (!agentLookup) return null;
@@ -214,14 +227,18 @@ async function callArchive(handler, {
   sessionAgentId = null,
   sessionUserId = MEMBER_USER_ID,
   cookieUserId = MEMBER_USER_ID,
+  cookieDisplayName = "Member",
+  cookieEmail,
   sessionToken,
   omitSession = false,
 } = {}) {
+  const cookiePayload = {
+    id: cookieUserId,
+    displayName: cookieDisplayName,
+  };
+  if (cookieEmail !== undefined) cookiePayload.email = cookieEmail;
   const cookies = {
-    nookies_user: JSON.stringify({
-      id: cookieUserId,
-      displayName: "Member",
-    }),
+    nookies_user: JSON.stringify(cookiePayload),
   };
   const cookieParts = [
     `nookies_user=${encodeURIComponent(cookies.nookies_user)}`,
@@ -345,8 +362,39 @@ test("human archive with a verified session and no agent claim still succeeds", 
   assert.equal(result.status, 200);
   assert.equal(sideEffects.updateCalls[0].agentId, null);
   assert.equal(sideEffects.updateCalls[0].user.id, MEMBER_USER_ID);
+  assert.equal(sideEffects.updateCalls[0].user.displayName, "Valentin Yeo");
   assert.equal(sideEffects.activities[0].fromAgent, null);
+  assert.equal(sideEffects.activities[0].fromUserDisplayName, "Valentin Yeo");
   assert.equal(sideEffects.notifications[0][4], null);
+  assert.deepEqual(sideEffects.userLookups, [MEMBER_USER_ID]);
+});
+
+test("forged nookies display metadata cannot change archive audit display", async () => {
+  const { handler, sideEffects } = loadArchiveHandler({
+    sessionUserRecord: {
+      displayName: "Valentin Yeo",
+      photoURL: "https://example.com/valentin.png",
+      email: "owner@example.com",
+    },
+  });
+  const result = await callArchive(handler, {
+    sessionAgentId: null,
+    cookieDisplayName: "Totally Not Valentin",
+    cookieEmail: "forged@evil.example",
+    cookieUserId: OTHER_USER_ID,
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(sideEffects.activities[0].fromUserDisplayName, "Valentin Yeo");
+  assert.equal(sideEffects.activities[0].fromUser.displayName, "Valentin Yeo");
+  assert.equal(sideEffects.activities[0].fromUser.email, "owner@example.com");
+  assert.equal(sideEffects.activities[0].fromUser.id, MEMBER_USER_ID);
+  assert.notEqual(
+    sideEffects.activities[0].fromUserDisplayName,
+    "Totally Not Valentin",
+  );
+  assert.equal(sideEffects.updateCalls[0].user.displayName, "Valentin Yeo");
+  assert.deepEqual(sideEffects.userLookups, [MEMBER_USER_ID]);
 });
 
 test("archive rejects an absent signed session and ignores unsigned cookie identity", async () => {
