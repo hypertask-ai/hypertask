@@ -594,6 +594,30 @@ test("a key added only to the registry cannot count as an existing runtime gate"
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, false);
 });
 
+test("parenless new expressions near a gate do not crash the evaluator", async (t) => {
+  const nested = makeRepo(t);
+  const nestedBase = commit(nested.git, "base");
+  writeFile(
+    nested.dir,
+    "src/components/Widget.tsx",
+    'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nclass On {}\nclass Off {}\nexport function Widget() {\n  const enabled = useFlag(OTHER_FLAG);\n  const instance = new (enabled ? On : Off);\n  return instance ? <div /> : null;\n}\n',
+  );
+  const nestedHead = commit(nested.git, "parenless new nested");
+  const nestedResult = await evaluate("HTPR-1 [FEATURE] add widget", nestedBase, nestedHead, nested.dir);
+  assert.equal(typeof nestedResult.pass, "boolean");
+  assert.doesNotMatch(nestedResult.reason || "", /Cannot read properties of undefined|could not be parsed/);
+
+  const sibling = makeRepo(t);
+  const siblingBase = commit(sibling.git, "base");
+  writeFile(
+    sibling.dir,
+    "src/components/Widget.tsx",
+    'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nclass Off {}\nexport function Widget() {\n  const enabled = useFlag(OTHER_FLAG);\n  void new Off;\n  return enabled ? <div /> : null;\n}\n',
+  );
+  const siblingHead = commit(sibling.git, "parenless new sibling");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", siblingBase, siblingHead, sibling.dir)).pass, true);
+});
+
 test("statically unreachable helper calls do not count as runtime gates", async (t) => {
   const shortCircuit = makeRepo(t);
   const shortCircuitBase = commit(shortCircuit.git, "base");

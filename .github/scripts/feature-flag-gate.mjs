@@ -693,7 +693,7 @@ function expressionResultIsObserved(node) {
         typescript.isSpreadAssignment(parent) ||
         (typescript.isArrowFunction(parent) && child === parent.body) ||
         ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
-         parent.arguments.includes(child))) return true;
+         parent.arguments?.includes(child))) return true;
     if (typescript.isBinaryExpression(parent) &&
         parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
@@ -762,7 +762,7 @@ function controlsRuntimeBranch(node) {
       return false;
     }
     if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
-        parent.arguments.includes(child)) return controlsOutput;
+        parent.arguments?.includes(child)) return controlsOutput;
     if (typescript.isBlock(parent)) continue;
     if (typescript.isStatement(parent) || typescript.isVariableDeclaration(parent) ||
         typescript.isFunctionLike(parent)) return controlsOutput;

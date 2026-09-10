@@ -419,11 +419,17 @@ jobs:
               echo "::endgroup::"
               continue
             fi
+            # A merge earlier in this run (or an external production push) advances
+            # origin/production while HEAD stays on the original checkout. Refresh so
+            # the gate script stays current instead of false-failing the rest of the loop.
             if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
-              echo "::error::Trusted production checkout drifted during automerge; refusing stale feature-flag policy for PR #$PR."
-              infra_failures=$((infra_failures+1))
-              echo "::endgroup::"
-              continue
+              echo "Refreshing trusted production checkout before feature-flag evaluation for PR #$PR."
+              if ! git reset --hard origin/production >"$AUTOMERGE_TMP/gate-reset.txt" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
+                echo "::error::Cannot refresh trusted production checkout for PR #$PR; refusing to merge."
+                infra_failures=$((infra_failures+1))
+                echo "::endgroup::"
+                continue
+              fi
             fi
             if node .github/scripts/feature-flag-gate.mjs "$final_title" "$final_base_sha" "$final_head_sha" "$GATE_DECISION" >"$GATE_REASON" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
               echo "feature-flag-gate re-evaluation = PASS"
