@@ -22,7 +22,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -89,7 +89,11 @@ if [ "$1" = ".github/scripts/feature-flag-gate.mjs" ]; then
     exit 2
   fi
   if [ "\${GH_STUB_FAIL_FEATURE_GATE:-}" = "1" ]; then echo "feature flag required"; exit 1; fi
-  echo "feature flag gate passed"
+  if [ "\${GH_STUB_FEATURE_GATED:-}" = "1" ]; then
+    echo "[FEATURE] calls ticket-specific feature gate htpr-1-test in changed code covering every UI entry from src/app/page.tsx."
+  else
+    echo "feature flag gate passed"
+  fi
   exit 0
 fi
 exec ${JSON.stringify(process.execPath)} "$@"
@@ -123,6 +127,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_FAIL_MERGE: failMerge ? '1' : '',
         GH_STUB_FAIL_MERGEABILITY: failMergeability ? '1' : '',
         GH_STUB_FAIL_FEATURE_GATE: failFeatureGate ? '1' : '',
+        GH_STUB_FEATURE_GATED: featureGated ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
         EXPECTED_PR_TITLE: prTitle,
         EXPECTED_BASE_SHA: 'b'.repeat(40),
@@ -180,6 +185,15 @@ test('auto-merge re-evaluates current feature-flag metadata before merging', asy
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /current feature-flag gate failed: feature flag required/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge keeps feature-gated UI under owner review', async () => {
+  const { result, scratchEntries } = await runWorkflow({ featureGated: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /feature-gated UI requires owner review/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })

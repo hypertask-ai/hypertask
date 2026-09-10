@@ -56,6 +56,8 @@ feature_flag_gate:
   runs_on: ubuntu-latest
   trusted_script_source: production_base_commit
   required_for_ui_changes: true
+  api_only_changes: outside_ui_gate_scope
+  owner_merge_for_flagged_ui: true
   exemptions: [BUGFIX, INFRA, verified_auto_revert]
   exempt_ui_addition_limit: 150
   default_mode_for_new_flags: OWNER_AND_QA

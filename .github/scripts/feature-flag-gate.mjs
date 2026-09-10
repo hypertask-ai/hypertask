@@ -450,6 +450,7 @@ function expressionResultIsObserved(node) {
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     if (typescript.isReturnStatement(parent) || typescript.isJsxExpression(parent) ||
+        typescript.isSpreadAssignment(parent) ||
         (typescript.isArrowFunction(parent) && child === parent.body) ||
         ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
          parent.arguments.includes(child))) return true;
@@ -514,7 +515,7 @@ function controlsRuntimeBranch(node) {
           staticBoolean(other) !== null) continue;
       return false;
     }
-    if (typescript.isJsxExpression(parent)) return controlsOutput;
+    if (typescript.isJsxExpression(parent) || typescript.isSpreadAssignment(parent)) return controlsOutput;
     if (typescript.isConditionalExpression(parent) || typescript.isTemplateSpan(parent) ||
         typescript.isTemplateExpression(parent)) {
       if (controlsOutput) continue;
@@ -851,12 +852,65 @@ function sourceReferencesApiRoute(ref, path, apiRoute) {
   return found;
 }
 
-function runtimeGateCoversUi(ref, path, uiFiles) {
-  if (isUiFile(path)) return true;
+function changedUiImports(ref, path, uiFiles) {
+  const source = git(["show", `${ref}:${path}`]);
+  const scriptKind = path.endsWith(".tsx") ? typescript.ScriptKind.TSX :
+    path.endsWith(".jsx") ? typescript.ScriptKind.JSX :
+    path.endsWith(".ts") ? typescript.ScriptKind.TS : typescript.ScriptKind.JS;
+  const sourceFile = typescript.createSourceFile(
+    path,
+    source,
+    typescript.ScriptTarget.Latest,
+    true,
+    scriptKind,
+  );
+  const imported = new Set();
+  const uiSet = new Set(uiFiles);
+  for (const statement of sourceFile.statements) {
+    if (!typescript.isImportDeclaration(statement) ||
+        !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
+    const moduleName = statement.moduleSpecifier.text;
+    let base = null;
+    if (moduleName.startsWith(".")) {
+      base = pathPosix.normalize(pathPosix.join(pathPosix.dirname(path), moduleName));
+    } else if (moduleName.startsWith("@/")) {
+      base = `src/${moduleName.slice(2)}`;
+    }
+    if (!base) continue;
+    const candidates = /\.[a-z]+$/i.test(base) ? [base] : [
+      `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`, `${base}.css`,
+      `${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`,
+    ];
+    const matched = candidates.find((candidate) => uiSet.has(candidate));
+    if (matched) imported.add(matched);
+  }
+  return imported;
+}
+
+function changedUiDependencyTree(ref, path, uiFiles, seen = new Set()) {
+  if (seen.has(path)) return seen;
+  seen.add(path);
+  if (!/\.[jt]sx?$/.test(path)) return seen;
+  for (const imported of changedUiImports(ref, path, uiFiles)) {
+    changedUiDependencyTree(ref, imported, uiFiles, seen);
+  }
+  return seen;
+}
+
+function uiTreeReferencesApiRoute(ref, path, uiFiles, apiRoute, seen = new Set()) {
+  if (seen.has(path)) return false;
+  seen.add(path);
+  if (sourceReferencesApiRoute(ref, path, apiRoute)) return true;
+  return Array.from(changedUiImports(ref, path, uiFiles))
+    .some((imported) => uiTreeReferencesApiRoute(ref, imported, uiFiles, apiRoute, seen));
+}
+
+function runtimeGateCoveredUiFiles(ref, path, uiFiles) {
+  if (isUiFile(path)) return changedUiDependencyTree(ref, path, uiFiles);
   const apiRoute = apiRouteForSourcePath(path);
-  if (!apiRoute) return false;
-  return uiFiles.some((uiPath) => /\.[jt]sx?$/.test(uiPath) &&
-    sourceReferencesApiRoute(ref, uiPath, apiRoute));
+  if (!apiRoute) return new Set();
+  return new Set(uiFiles.filter((uiPath) => /\.[jt]sx?$/.test(uiPath) &&
+    uiTreeReferencesApiRoute(ref, uiPath, uiFiles, apiRoute)));
 }
 
 function isVerifiedAutoRevert(title, baseSha, headSha) {
@@ -940,6 +994,16 @@ export function evaluate({ title, baseSha, headSha }) {
       }
     }
     const ticketKeys = new Set(headDefinitions.keys.filter((key) => key.startsWith(ticketPrefix)));
+    const requiredUiFiles = uiFiles.filter((path) => {
+      try {
+        git(["cat-file", "-e", `${headSha}:${path}`]);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+    const coveredUiFiles = new Set();
+    let matchedGate = null;
 
     for (const path of runtimeFiles) {
       try {
@@ -954,9 +1018,18 @@ export function evaluate({ title, baseSha, headSha }) {
         ticketKeys,
         addedLinesFor(mergeBase, headSha, path),
       );
-      if (key && runtimeGateCoversUi(headSha, path, uiFiles)) {
-        return { pass: true, reason: `[${tag}] calls ticket-specific feature gate ${key} in changed code covering the UI from ${path}.` };
+      if (key) {
+        const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);
+        for (const uiPath of covered) coveredUiFiles.add(uiPath);
+        if (covered.size > 0 && !matchedGate) matchedGate = { key, path };
       }
+    }
+    if (matchedGate && (requiredUiFiles.length === 0 ||
+        requiredUiFiles.every((path) => coveredUiFiles.has(path)))) {
+      return {
+        pass: true,
+        reason: `[${tag}] calls ticket-specific feature gate ${matchedGate.key} in changed code covering every UI entry from ${matchedGate.path}.`,
+      };
     }
   } catch (error) {
     return failure(`Feature flag files or imports could not be parsed safely: ${error.message}`);

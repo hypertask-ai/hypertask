@@ -91,7 +91,7 @@ test("server-side ticket gates cover related UI changes", async (t) => {
   const parallel = makeRepo(t);
   const parallelBase = commit(parallel.git, "base");
   writeFile(parallel.dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
-  writeFile(parallel.dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { const [enabled, data] = await Promise.all([isFeatureEnabled(OTHER_FLAG, 6), Promise.resolve("ok")]); if (enabled) return new Response(data); return new Response("off"); }\n');
+  writeFile(parallel.dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function GET() { const [enabled] = await Promise.all([isFeatureEnabled(OTHER_FLAG, 6)]); return Response.json({ ...(enabled ? { widget: "on" } : {}) }); }\n');
   const parallelHead = commit(parallel.git, "parallel server gate");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", parallelBase, parallelHead, parallel.dir)).pass, true);
 
@@ -104,7 +104,8 @@ test("server-side ticket gates cover related UI changes", async (t) => {
 
   const pagesIndex = makeRepo(t);
   const pagesIndexBase = commit(pagesIndex.git, "base");
-  writeFile(pagesIndex.dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+  writeFile(pagesIndex.dir, "src/components/loadWidget.ts", 'export async function loadWidget() { return fetch("/api/widget"); }\n');
+  writeFile(pagesIndex.dir, "src/components/Widget.tsx", 'import { loadWidget } from "./loadWidget";\nexport const Widget = () => <button onClick={loadWidget} />;\n');
   writeFile(pagesIndex.dir, "src/pages/api/widget/index.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function handler() { if (await isFeatureEnabled(OTHER_FLAG, 6)) return "on"; return "off"; }\n');
   const pagesIndexHead = commit(pagesIndex.git, "Pages index gate");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", pagesIndexBase, pagesIndexHead, pagesIndex.dir)).pass, true);
@@ -343,6 +344,13 @@ test("a registered ticket-specific definition used in changed UI passes", async 
   const result = await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir);
   assert.equal(result.pass, true);
   assert.match(result.reason, /ticket-specific feature gate htpr-5-widget/);
+
+  const partial = makeRepo(t);
+  const partialBase = commit(partial.git, "base");
+  writeFile(partial.dir, "src/components/Gated.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Gated = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  writeFile(partial.dir, "src/components/Ungated.tsx", "export const Ungated = () => <div />;\n");
+  const partialHead = commit(partial.git, "partially gated UI");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widgets", partialBase, partialHead, partial.dir)).pass, false);
 });
 
 test("an unused ticket-specific runtime call does not satisfy the gate", async (t) => {
@@ -474,7 +482,7 @@ test("CSS and other non-code UI files do not abort runtime-call scanning", async
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
   writeFile(dir, "src/components/Theme.css", ".widget { color: red; }\n");
-  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  writeFile(dir, "src/components/Widget.tsx", 'import "./Theme.css";\nimport { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", base, head, dir)).pass, true);
 });
