@@ -1210,15 +1210,54 @@ function functionContainsJsx(fn) {
   return found;
 }
 
-function functionContainsHelperCall(fn, checker, helperSymbols) {
+function exportedJsxEntryHasTicketGate(
+  fn,
+  checker,
+  helperSymbols,
+  flagSymbols,
+  registry,
+  allowedKeys,
+  addedLines,
+  sourceFile,
+  liveFunctions,
+  ref,
+  path,
+  importedFunctions,
+) {
   let found = false;
   function visit(node) {
     if (found) return;
     if (node !== fn && typescript.isFunctionLike(node)) return;
     if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
-        helperSymbols.has(checker.getSymbolAtLocation(node.expression))) {
-      found = true;
-      return;
+        helperSymbols.has(checker.getSymbolAtLocation(node.expression)) &&
+        !isStaticallyUnreachable(node)) {
+      let argument = node.arguments[0];
+      while (argument && (typescript.isParenthesizedExpression(argument) ||
+             typescript.isAsExpression(argument) || typescript.isTypeAssertionExpression(argument) ||
+             typescript.isNonNullExpression(argument) || typescript.isSatisfiesExpression(argument))) {
+        argument = argument.expression;
+      }
+      let key = null;
+      if (argument && (typescript.isStringLiteral(argument) || typescript.isNoSubstitutionTemplateLiteral(argument)) &&
+          registry.byValue.has(argument.text)) key = argument.text;
+      else if (argument && typescript.isIdentifier(argument)) {
+        key = flagSymbols.get(checker.getSymbolAtLocation(argument)) ?? null;
+      }
+      const startLine = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+      const endLine = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
+      const callChanged = Array.from(addedLines).some((line) => line >= startLine && line <= endLine);
+      if (key && allowedKeys.has(key) && callChanged &&
+          gatesRuntimeBehavior(node, checker, sourceFile, (reference) =>
+            controlsRuntimeBranch(reference) || importedArgumentGatesRuntime(
+              reference,
+              ref,
+              path,
+              checker,
+              importedFunctions,
+            ), liveFunctions)) {
+        found = true;
+        return;
+      }
     }
     typescript.forEachChild(node, visit);
   }
@@ -1226,7 +1265,19 @@ function functionContainsHelperCall(fn, checker, helperSymbols) {
   return found;
 }
 
-function hasUngatedExportedJsxEntry(sourceFile, checker, helperSymbols) {
+function hasUngatedExportedJsxEntry(
+  sourceFile,
+  checker,
+  helperSymbols,
+  flagSymbols,
+  registry,
+  allowedKeys,
+  addedLines,
+  liveFunctions,
+  ref,
+  path,
+  importedFunctions,
+) {
   const functions = [];
   function collect(node) {
     if (typescript.isFunctionLike(node)) functions.push(node);
@@ -1235,7 +1286,20 @@ function hasUngatedExportedJsxEntry(sourceFile, checker, helperSymbols) {
   collect(sourceFile);
   for (const fn of functions) {
     if (!isExportedFunctionLike(fn) || !functionContainsJsx(fn)) continue;
-    if (!functionContainsHelperCall(fn, checker, helperSymbols)) return true;
+    if (!exportedJsxEntryHasTicketGate(
+      fn,
+      checker,
+      helperSymbols,
+      flagSymbols,
+      registry,
+      allowedKeys,
+      addedLines,
+      sourceFile,
+      liveFunctions,
+      ref,
+      path,
+      importedFunctions,
+    )) return true;
   }
   return false;
 }
@@ -1293,7 +1357,19 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
     }
   }
 
-  if (isUiFile(path) && hasUngatedExportedJsxEntry(sourceFile, checker, helperSymbols)) {
+  if (isUiFile(path) && hasUngatedExportedJsxEntry(
+    sourceFile,
+    checker,
+    helperSymbols,
+    flagSymbols,
+    registry,
+    allowedKeys,
+    addedLines,
+    liveFunctions,
+    ref,
+    path,
+    importedFunctions,
+  )) {
     return null;
   }
 

@@ -706,6 +706,14 @@ test("statically unreachable helper calls do not count as runtime gates", async 
   const exportedUnusedHead = commit(exportedUnused.git, "exported unused helper");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", exportedUnusedBase, exportedUnusedHead, exportedUnused.dir)).pass, false);
 
+  const otherFlagCover = makeRepo(t);
+  const otherFlagCoverBase = commit(otherFlagCover.git, "base");
+  writeFile(otherFlagCover.dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const OLD_FLAG = "htpr-9-old";\n');
+  writeFile(otherFlagCover.dir, "src/lib/flags.ts", 'import { OTHER_FLAG, OLD_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: OLD_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+  writeFile(otherFlagCover.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG, OLD_FLAG } from "@/lib/flags/keys";\nexport function Gated() { return useFlag(OTHER_FLAG) ? <div /> : null; }\nexport function Ungated() { return useFlag(OLD_FLAG) ? <span /> : null; }\n');
+  const otherFlagCoverHead = commit(otherFlagCover.git, "other flag cover");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", otherFlagCoverBase, otherFlagCoverHead, otherFlagCover.dir)).pass, false);
+
   const nullishBranches = makeRepo(t);
   const nullishBranchesBase = commit(nullishBranches.git, "base");
   writeFile(nullishBranches.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport function Widget() { return useFlag(OTHER_FLAG) ? null : undefined; }\n');
