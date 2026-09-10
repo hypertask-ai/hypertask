@@ -1,4 +1,6 @@
 "use client";
+import { useFlag } from "@/hooks/useFlag";
+import { FACTORY_OWNER_PREVIEW_FLAG } from "@/lib/flags/keys";
 import React from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
@@ -29,6 +31,7 @@ import FactoryRequirementsPanel from "../FactoryRequirementsPanel";
 import AgentRunActivityRow from "./AgentRunActivityRow";
 
 const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
+  const factoryPreviewEnabled = useFlag(FACTORY_OWNER_PREVIEW_FLAG);
   const {
     dynamicTopValue,
     showAssignModal,
@@ -142,7 +145,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <div id="bottom-description">{allowPerks && currentTask?.projectId && <FactoryRequirementsPanel projectId={currentTask.projectId} taskId={currentTask.id}/>}</div>;
+            contentToRender = <div id="bottom-description">{factoryPreviewEnabled && allowPerks && currentTask?.projectId && <FactoryRequirementsPanel projectId={currentTask.projectId} taskId={currentTask.id}/>}</div>;
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments

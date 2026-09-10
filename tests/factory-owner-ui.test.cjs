@@ -66,3 +66,68 @@ test('approval panel requires explicit review, resets on navigation and renders 
   assert.equal(sent[0].snapshot.task.reviewedScope.description,data.task.reviewedScope.description);
  }finally{await act(async()=>root.unmount());dom.window.close();global.window=previous.window;global.document=previous.document;global.IS_REACT_ACT_ENVIRONMENT=previous.act;}
 });
+
+function entryComponent(relative,name,bindings){
+ const source=fs.readFileSync(path.resolve(__dirname,'..',relative),'utf8');
+ const tree=ts.createSourceFile(relative,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ let initializer;
+ for(const statement of tree.statements){
+  if(ts.isVariableStatement(statement))for(const declaration of statement.declarationList.declarations){
+   if(declaration.name.getText(tree)===name)initializer=declaration.initializer.getText(tree);
+  }
+ }
+ assert.ok(initializer,`Missing actual entry ${name}`);
+ const compiled=ts.transpileModule(`const Entry=${initializer};module.exports=Entry;`,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+ const mod={exports:{}};
+ new Function('require','module','exports',...Object.keys(bindings),compiled)(require,mod,mod.exports,...Object.values(bindings));
+ return mod.exports;
+}
+test('actual settings and desktop/mobile task entries do not mount factory queries when preview is off',()=>{
+ const {renderToStaticMarkup}=require('react-dom/server');
+ let enabled=false,mounts=0,flagReads=0,mobile=false;
+ const gatedBindings={FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview',useFlag:key=>{assert.equal(key,'hyfa-43-factory-owner-preview');flagReads++;return enabled;}};
+ const empty=()=>null;
+ const factory=()=>{mounts++;return React.createElement('span',null,'Factory panel');};
+ const shell=({children})=>React.createElement('section',null,children);
+ const Settings=entryComponent('src/components/Modals/Settings/BoardGeneralSection.tsx','BoardGeneralSection',{
+  ...gatedBindings,useSettingsTeam:()=>({project:{id:15}}),SettingsSectionShell:shell,
+  BoardNotificationSetting:()=>React.createElement('span',null,'Ordinary settings'),BoardTimeTrackingSetting:empty,
+  BoardLifecycleSettings:empty,BoardAutoAssignSetting:empty,FactoryPolicySection:factory,
+ });
+ const Task=entryComponent('src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx','CommentAndDescriptionContainer',{
+  ...gatedBindings,useContext:()=>mobile,MobileViewContext:{},
+  useDescriptionAndCommentsContext:()=>({comments:[],stacked:[]}),
+  useTaskContext:()=>({currentTask:{id:1,projectId:15},allowPerks:true,
+   virtualizer:{getTotalSize:()=>100,getVirtualItems:()=>[{index:0,key:'bottom',start:0}],measureElement:()=>{}},
+   virtualizeIndexes:{descriptionBottomVirtualIndex:0},
+  }),taskDetailSpacing:{mobile:{descriptionContainer:''}},BaseCommentAndDescriptionContainer:shell,
+  RichTextPersonHovercards:empty,FactoryRequirementsPanel:factory,NewCommentComponent:()=>React.createElement('span',null,'Ordinary composer'),
+ });
+ for(const value of [false,true]){
+  enabled=value;mounts=0;flagReads=0;
+  const settings=renderToStaticMarkup(React.createElement(Settings));
+  assert.match(settings,/Ordinary settings/);
+  for(mobile of [false,true]){
+   const html=renderToStaticMarkup(React.createElement(Task,{}));
+   if(!mobile)assert.match(html,/Ordinary composer/);
+  }
+  assert.equal(flagReads,3);assert.equal(mounts,value?3:0);
+ }
+});
+test('the actual save hook invalidation is disabled with the preview flag',()=>{
+ const filename='src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts';
+ const source=fs.readFileSync(path.resolve(__dirname,'..',filename),'utf8');
+ const tree=ts.createSourceFile(filename,source,ts.ScriptTarget.Latest,true);
+ let statement;
+ function visit(node){
+  if(ts.isIfStatement(node)&&node.expression.getText(tree).startsWith('factoryPreviewEnabled &&'))statement=node.getText(tree);
+  ts.forEachChild(node,visit);
+ }
+ visit(tree);assert.ok(statement,'Expected a conditional factory approval-query refresh');
+ const compiled=ts.transpileModule(statement,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+ const run=new Function('factoryPreviewEnabled','currentTask','queryClient','factoryPolicyKey',compiled);
+ const calls=[];
+ const client={invalidateQueries:value=>calls.push(value)};
+ run(false,{projectId:15,id:1},client,api.factoryPolicyKey);assert.equal(calls.length,0);
+ run(true,{projectId:15,id:1},client,api.factoryPolicyKey);assert.deepEqual(calls,[{queryKey:api.factoryPolicyKey(15,1)}]);
+});
