@@ -38,6 +38,13 @@ function loadArchiveHandler() {
     "@/lib/prisma": {
       __esModule: true,
       default: {
+        user: {
+          findUnique: async () => ({
+            displayName: "Member",
+            photoURL: null,
+            email: "member@example.com",
+          }),
+        },
         agent: {
           findFirst: async () => null,
           findUnique: async () => null,
