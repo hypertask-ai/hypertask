@@ -323,7 +323,7 @@ test("an imported registered key used by useFlag passes", async (t) => {
 test("typed flag registries and definition arrays are parsed", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG: FeatureFlagKey = "htpr-1-other";\n');
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG: FeatureFlagKey = `htpr-1-other`;\n');
   writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [\n  { key: OTHER_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";\n');
   writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
   const head = commit(git, "feature");
@@ -428,7 +428,7 @@ test("missing tags produce a useful failure instead of [null]", async (t) => {
 test("workflow covers metadata changes, uses trusted code, and reconciles old PRs", () => {
   const workflow = fs.readFileSync(path.join(root, ".github/workflows/feature-flag-gate.yml"), "utf8");
   assert.match(workflow, /pull_request_target:/);
-  assert.doesNotMatch(workflow, /^  pull_request:$/m);
+  assert.doesNotMatch(workflow, /^  pull_request\s*:/m);
   assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, closed\]/);
   assert.match(workflow, /push:\s+branches: \[production\]/);
   assert.doesNotMatch(workflow, /workflow_dispatch:/);

@@ -201,7 +201,7 @@ function exportedStringConstants(source, path) {
              typescript.isTypeAssertionExpression(initializer) || typescript.isSatisfiesExpression(initializer)) {
         initializer = initializer.expression;
       }
-      if (typescript.isStringLiteral(initializer)) {
+      if (typescript.isStringLiteral(initializer) || typescript.isNoSubstitutionTemplateLiteral(initializer)) {
         constants.push({ identifier: declaration.name.text, value: initializer.text });
       }
     }
