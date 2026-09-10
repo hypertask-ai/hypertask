@@ -170,6 +170,20 @@ test("definitions resolve string constants imported from local modules", async (
   assert.doesNotMatch(result.reason, /could not be parsed/);
 });
 
+test("flags added to production after a PR branches are not treated as PR removals", async (t) => {
+  const { dir, git } = makeRepo(t);
+  commit(git, "common base");
+  const productionBranch = git(["branch", "--show-current"]).trim();
+  git(["checkout", "-q", "-b", "pr"]);
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "feature");
+  git(["checkout", "-q", productionBranch]);
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const NEW_PRODUCTION_FLAG = "htpr-9-new";\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, NEW_PRODUCTION_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: NEW_PRODUCTION_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+  const base = commit(git, "production advances");
+  assert.equal((await evaluate("HTPR-5 [FEATURE] update widget", base, head, dir)).pass, true);
+});
+
 test("a ticket-specific definition passes with the Owner and QA default", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
@@ -205,10 +219,10 @@ test("an imported registered key used by useFlag passes", async (t) => {
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
 });
 
-test("JSX contractions do not break runtime gate parsing", async (t) => {
+test("JSX apostrophes do not break runtime gate parsing", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
-  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <p>Don\'t continue</p> : null;\n');
+  writeFile(dir, "src/components/Widget.tsx", `import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <p>\nUsers' settings don't load\n</p> : null;\n`);
   const head = commit(git, "feature");
   assert.equal((await evaluate("HTPR-5 [FEATURE] add widget", base, head, dir)).pass, true);
 });
@@ -275,6 +289,9 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /statuses: write/);
   assert.match(workflow, /state: "pending"/);
   assert.match(workflow, /mark feature-flag-gate pending/);
+  assert.match(workflow, /publish_error_status/);
+  assert.match(workflow, /publish_reconciliation_error/);
+  assert.match(workflow, /could not refresh pull-request heads/);
   assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
   assert.match(workflow, /gh api --paginate --slurp/);

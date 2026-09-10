@@ -59,6 +59,16 @@ jobs:
           pending_payload="$gate_tmp/pending-status.json"
           payload="$gate_tmp/status.json"
 
+          publish_error_status() {
+            jq -n --arg description "$1" --arg target_url "$RUN_URL" '{
+              state: "error",
+              context: "feature-flag-gate",
+              description: $description,
+              target_url: $target_url
+            }' >"$payload"
+            gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null
+          }
+
           if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$pr_json"; then
             echo "::error::Cannot read pull request #$PR_NUMBER."
             exit 2
@@ -91,10 +101,14 @@ jobs:
 
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$heads_json"; then
             echo "::error::Cannot check whether the head commit is shared by open production pull requests."
+            publish_error_status "feature-flag-gate could not read open pull requests" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
             exit 2
           fi
           if ! head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$heads_json"); then
             echo "::error::Cannot parse open production pull-request heads."
+            publish_error_status "feature-flag-gate could not parse pull-request heads" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
             exit 2
           fi
 
@@ -117,6 +131,8 @@ jobs:
 
           if ! gh api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
             echo "::error::Cannot re-read pull request #$PR_NUMBER before publishing its result."
+            publish_error_status "feature-flag-gate could not refresh this pull request" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
             exit 2
           fi
           if [ "$(jq -r '.state' "$current_json")" != "open" ] ||
@@ -130,6 +146,8 @@ jobs:
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
              ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
             echo "::error::Cannot re-check whether the head commit is shared before publishing its result."
+            publish_error_status "feature-flag-gate could not refresh pull-request heads" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
             exit 2
           fi
           if [ "$fresh_head_pr_count" -ne 1 ]; then
@@ -206,6 +224,16 @@ jobs:
           fresh_heads_json="$gate_tmp/fresh-heads.json"
           failures=0
 
+          publish_reconciliation_error() {
+            jq -n --arg description "$3" --arg target_url "$RUN_URL" '{
+              state: "error",
+              context: "feature-flag-gate",
+              description: $description,
+              target_url: $target_url
+            }' >"$2"
+            gh api -X POST "repos/$REPO/statuses/$1" --input "$2" >/dev/null
+          }
+
           if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$pages"; then
             echo "::error::Cannot list open production pull requests."
             exit 2
@@ -268,6 +296,8 @@ jobs:
 
             current=$(gh api "repos/$REPO/pulls/$number") || {
               echo "::error::Cannot re-read pull request #$number before publishing its result."
+              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull request #$number" ||
+                echo "::error::Cannot replace the pending feature-flag-gate status for #$number."
               failures=$((failures + 1))
               continue
             }
@@ -282,6 +312,8 @@ jobs:
             if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
                ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
               echo "::error::Cannot re-check whether pull request #$number shares its head commit."
+              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" ||
+                echo "::error::Cannot replace the pending feature-flag-gate status for #$number."
               failures=$((failures + 1))
               continue
             fi

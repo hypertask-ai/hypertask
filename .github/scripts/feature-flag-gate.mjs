@@ -34,6 +34,22 @@ function isUiFile(path) {
     UI_INCLUDE.some((pattern) => pattern.test(path));
 }
 
+function isJsxTextApostrophe(source, index) {
+  if (!/[A-Za-z0-9]/.test(source[index - 1] ?? "")) return false;
+  const lineStart = source.lastIndexOf("\n", index) + 1;
+  const before = source.slice(lineStart, index);
+  const tagStart = before.lastIndexOf("<");
+  const tagEnd = before.lastIndexOf(">");
+  const expressionStart = before.lastIndexOf("{");
+  if (tagStart === -1 || tagEnd < tagStart || expressionStart > tagEnd) return false;
+
+  const lineEnd = source.indexOf("\n", index);
+  const after = source.slice(index + 1, lineEnd === -1 ? source.length : lineEnd);
+  const nextTag = after.indexOf("<");
+  const expressionEnd = after.indexOf("}");
+  return nextTag !== -1 && (expressionEnd === -1 || nextTag < expressionEnd);
+}
+
 function tokenize(source) {
   const tokens = [];
   let index = 0;
@@ -54,8 +70,8 @@ function tokenize(source) {
       index = end + 2;
       continue;
     }
-    if (char === "'" && /[A-Za-z0-9]/.test(source[index - 1] ?? "") &&
-        /[A-Za-z0-9]/.test(source[index + 1] ?? "")) {
+    if (char === "'" && (isJsxTextApostrophe(source, index) ||
+        (/[A-Za-z0-9]/.test(source[index - 1] ?? "") && /[A-Za-z0-9]/.test(source[index + 1] ?? "")))) {
       index += 1;
       continue;
     }
@@ -66,6 +82,7 @@ function tokenize(source) {
       let closed = false;
       while (index < source.length) {
         const next = source[index];
+        if (quote !== "`" && next === "\n") break;
         if (next === "\\") {
           if (index + 1 >= source.length) throw new Error("unterminated string escape");
           const escaped = source[index + 1];
@@ -81,7 +98,10 @@ function tokenize(source) {
         value += next;
         index += 1;
       }
-      if (!closed) throw new Error("unterminated string literal");
+      if (!closed) {
+        if (quote === "'") continue;
+        throw new Error("unterminated string literal");
+      }
       tokens.push({ type: quote === "`" ? "template" : "string", value });
       continue;
     }
@@ -321,9 +341,10 @@ export function evaluate({ title, baseSha, headSha }) {
   }
 
   try {
-    const baseRegistry = parseFlagRegistry(baseSha);
+    const mergeBase = git(["merge-base", baseSha, headSha]).trim();
+    const baseRegistry = parseFlagRegistry(mergeBase);
     const headRegistry = parseFlagRegistry(headSha);
-    const baseDefinitions = parseDefinitions(baseSha, baseRegistry);
+    const baseDefinitions = parseDefinitions(mergeBase, baseRegistry);
     const headDefinitions = parseDefinitions(headSha, headRegistry);
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
