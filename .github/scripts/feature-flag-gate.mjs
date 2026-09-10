@@ -826,8 +826,13 @@ function unwrapArgumentExpression(node) {
 
 function isExportedThroughCallWrapper(fn) {
   let argument = fn;
-  while (typescript.isParenthesizedExpression(argument.parent) &&
-         argument.parent.expression === argument) {
+  while (argument.parent && (
+    (typescript.isParenthesizedExpression(argument.parent) && argument.parent.expression === argument) ||
+    (typescript.isAsExpression(argument.parent) && argument.parent.expression === argument) ||
+    (typescript.isTypeAssertionExpression(argument.parent) && argument.parent.expression === argument) ||
+    (typescript.isNonNullExpression(argument.parent) && argument.parent.expression === argument) ||
+    (typescript.isSatisfiesExpression(argument.parent) && argument.parent.expression === argument)
+  )) {
     argument = argument.parent;
   }
   if (!typescript.isCallExpression(argument.parent)) return false;

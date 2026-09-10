@@ -113,6 +113,16 @@ test("memo-wrapped exported JSX entries still require a ticket gate", async (t) 
   );
   const gatedHead = commit(gated.git, "memo gated");
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", gatedBase, gatedHead, gated.dir)).pass, true);
+
+  const asserted = makeRepo(t);
+  const assertedBase = commit(asserted.git, "base");
+  writeFile(
+    asserted.dir,
+    "src/components/Widget.tsx",
+    'import { memo } from "react";\nexport const NewView = memo(((() => <div />) as any));\n',
+  );
+  const assertedHead = commit(asserted.git, "memo asserted");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", assertedBase, assertedHead, asserted.dir)).pass, false);
 });
 
 test("App Router API changes do not need a flag", async (t) => {
