@@ -2,7 +2,7 @@ import { columnRoleFor } from '@/lib/mcp/boards/columnRole';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { lockAgentMutationFence } from '@/lib/mcp/tasks/agentMutationFence';
-import { actorCanTransition, requireCurrentContract, requireAssignedQa, destination, enrolled, enrollment, fail, type FactoryTx } from './enforcement';
+import { FactoryAcceptanceError, actorCanTransition, requireCurrentContract, requireAssignedQa, destination, enrolled, enrollment, fail, type FactoryTx } from './enforcement';
 export type Identity = {
     userId: number;
     agentId?: string | null;
@@ -123,6 +123,7 @@ export async function registerRevision(tx: FactoryTx, body: any, identity: Ident
     const contract = await tx.factoryContract.findFirst({ where: { taskId, projectId }, orderBy: { version: 'desc' } });
     if (!contract || contract.version !== int(body.contract_version))
         fail('factory_contract_changed', 'The approved contract is missing or superseded.');
+    await requireCurrentContract(tx,taskId,contract.version);
     const previous = await tx.factoryRevision.findUnique({ where: { taskId } });
     const codeRevision = sha(body.code_revision), writer = actorId(body.active_writer_agent_id);
     if (policy.agentRoles[writer] !== 'dev')
@@ -233,5 +234,9 @@ export async function readStatus(tx: FactoryTx, projectId: number, taskId: numbe
     const section = current.sectionId ? await tx.section.findUnique({ where: { id: current.sectionId } }) : null;
     const assignments = await tx.assignees.findMany({ where: { taskId, agentId: { not: null } }, select: { agentId: true } });
     const assignedAgents = [...new Set(assignments.map(a => a.agentId!))].sort().map(agentId => ({ agentId, role: policy?.agentRoles[agentId] ?? null }));
-    return { enrollment: policy, task: { id: current.id, projectId: current.projectId, updatedAt: current.updatedAt, sectionId: current.sectionId, section: section ? { id: section.id, title: section.section_title, role: columnRoleFor(section) } : null, assignedAgents, status: current.status }, contract, revision, request, grant, requests, grants };
+    const template=await tx.factoryTemplate.findFirst({where:{projectId},orderBy:{version:'desc'}});
+    const semanticReceipt=await tx.factorySemanticReceipt.findFirst({where:{taskId,projectId},orderBy:{version:'desc'}});
+    let binding:{state:'ready'|'unmet';reason:string|null}={state:'unmet',reason:'factory_contract_required'};
+    if(contract){try{await requireCurrentContract(tx,taskId,contract.version);binding={state:'ready',reason:null};}catch(error){if(!(error instanceof FactoryAcceptanceError))throw error;binding={state:'unmet',reason:error.code};}}
+    return { template, semanticReceipt, binding, enrollment: policy, task: { id: current.id, projectId: current.projectId, updatedAt: current.updatedAt, sectionId: current.sectionId, section: section ? { id: section.id, title: section.section_title, role: columnRoleFor(section) } : null, assignedAgents, status: current.status }, contract, revision, request, grant, requests, grants };
 }

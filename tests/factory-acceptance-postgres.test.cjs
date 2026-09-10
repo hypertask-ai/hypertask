@@ -7,7 +7,7 @@ const path=require('node:path');
 const root=path.resolve(__dirname,'..');
 const required=process.env.HT_REQUIRE_PG_TESTS==='1';
 const container=`factory-acceptance-test-${process.pid}-${Date.now()}`;
-let prisma,service,enforcement,fence,unavailable;
+let prisma,service,enforcement,fence,templates,unavailable;
 const run=(program,args,options={})=>spawnSync(program,args,{encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024,...options});
 const check=result=>{if(result.status!==0)throw new Error('Disposable PostgreSQL setup command failed');return result.stdout;};
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -25,6 +25,7 @@ before(async()=>{
   const jiti=require('jiti')(__filename,{interopDefault:true,alias:{'@':path.join(root,'src')}});
   prisma=jiti(path.join(root,'src/lib/prisma.ts')).default;
   service=jiti(path.join(root,'src/lib/factoryAcceptance/service.ts'));
+  templates=jiti(path.join(root,'src/lib/factoryAcceptance/templates.ts'));
   enforcement=jiti(path.join(root,'src/lib/factoryAcceptance/enforcement.ts'));
   fence=jiti(path.join(root,'src/lib/mcp/tasks/agentMutationFence.ts'));
  }catch(error){run('docker',['rm','-f',container]);throw error;}
@@ -32,8 +33,8 @@ before(async()=>{
 after(async()=>{try{if(prisma)await prisma.$disconnect();}finally{run('docker',['rm','-f',container]);}});
 
 async function fixture(){
- const user=await prisma.user.create({data:{uid:'acceptance-test',email:'acceptance@example.invalid'}});
- const project=await prisma.project.create({data:{name:'Acceptance transaction test',ownerId:user.id}});
+ const user=await prisma.user.create({data:{uid:`acceptance-test-${Date.now()}-${Math.random()}`,email:'acceptance@example.invalid'}});
+ const project=await prisma.project.create({data:{name:`Acceptance transaction ${user.id}`,ownerId:user.id}});
  const dev=await prisma.agent.create({data:{displayName:'Test dev',userId:user.id}});
  const authority=await prisma.agent.create({data:{displayName:'Test authority',userId:user.id}});
  const sections={};for(const name of ['work','qa','done','waiting','handoff'])sections[name]=(await prisma.section.create({data:{projectId:project.id,section_title:name}})).id;
@@ -73,4 +74,20 @@ test('PostgreSQL rolls back acceptance and serializes exact retries without reus
  await move(f.sections.work);
  await assert.rejects(move(f.sections.qa),error=>error.code==='factory_acceptance_required');
  assert.equal((await prisma.task.findUnique({where:{id:f.task.id}})).sectionId,f.sections.work);
+});
+
+
+test('PostgreSQL binds approved future scope and rejects stale template or semantic receipts',async t=>{
+ if(unavailable)return t.skip(unavailable);
+ const f=await fixture(),ownerSession={userId:f.task.userId,source:'legacy'};
+ const inventory=[{id:'policy.code',kind:'implementation',phase:'pre_qa',description:'Approved implementation'},{id:'policy.tests',kind:'tests',phase:'pre_qa',description:'Required tests'},{id:'policy.qa',kind:'independent_qa',phase:'final',description:'Independent revision-bound QA'}];
+ await prisma.$transaction(tx=>templates.registerTemplate(tx,{project_id:f.task.projectId,expected_version:0,criteria:inventory},ownerSession));
+ assert.equal(await prisma.factoryGrant.count({where:{taskId:f.task.id,consumedAt:null}}),0);
+ const scope=[{id:'scope.behavior',kind:'acceptance',phase:'pre_qa',description:'Explicitly approved task behavior'}];
+ await prisma.$transaction(tx=>templates.approveRequirements(tx,{project_id:f.task.projectId,task_id:f.task.id,expected_version:0,expected_task_revision:f.task.updatedAt.toISOString(),expected_scope_digest:enforcement.semanticContentDigest(f.task),criteria:scope},ownerSession));
+ const {contract}=await prisma.$transaction(tx=>templates.bindTemplate(tx,{project_id:f.task.projectId,task_id:f.task.id},{userId:f.task.userId,agentId:f.dev.id}));
+ assert.equal(contract.templateVersion,1);assert.equal(contract.semanticVersion,1);
+ await prisma.$transaction(tx=>enforcement.requireCurrentContract(tx,f.task.id,contract.version));
+ await prisma.task.update({where:{id:f.task.id},data:{title:'Owner changed the requested scope'}});
+ await assert.rejects(prisma.$transaction(tx=>enforcement.requireCurrentContract(tx,f.task.id,contract.version)),error=>error.code==='factory_semantics_unmet');
 });

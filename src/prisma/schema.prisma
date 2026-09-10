@@ -2518,6 +2518,8 @@ model FactoryEnrollment {
 
 // Criteria versions are append-only through the owner-authenticated API.
 model FactoryContract {
+  templateVersion Int?
+  semanticVersion Int?
   taskId Int
   version Int
   projectId Int
@@ -2577,4 +2579,29 @@ model FactoryTransitionRequest {
   grantId String?
   createdAt DateTime @default(now())
   @@index([projectId, status, createdAt])
+}
+
+
+model FactoryTemplate {
+  projectId Int
+  version Int
+  criteria Json
+  criteriaDigest String
+  ownerId Int
+  createdAt DateTime @default(now())
+  @@id([projectId, version])
+}
+
+model FactorySemanticReceipt {
+  taskId Int
+  version Int
+  projectId Int
+  criteria Json
+  criteriaDigest String
+  taskContentDigest String
+  sourceTaskRevision DateTime?
+  ownerId Int
+  createdAt DateTime @default(now())
+  @@id([taskId, version])
+  @@index([projectId])
 }

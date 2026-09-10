@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { columnRoleFor } from '@/lib/mcp/boards/columnRole';
 import type { Prisma } from '@prisma/client';
 export class FactoryAcceptanceError extends Error {
@@ -36,11 +37,24 @@ export function actorCanTransition(policy: Enrollment, actor: string, target: st
     const role = policy.agentRoles[actor];
     return target === 'done' ? role === 'qa' : target === 'qa' ? ['dev', 'recovery'].includes(role) : ['dev', 'qa', 'recovery'].includes(role);
 }
+export const semanticContentDigest = (task:any) => createHash('sha256').update(JSON.stringify({title:task.title??null,description:task.description_?.content??task.description??null,acceptanceCriteria:task.acceptanceCriteria??null,verifyCommand:task.verifyCommand??null})).digest('hex');
+
 export async function requireCurrentContract(tx: FactoryTx, taskId: number, contractVersion: number) {
     const contract = await tx.factoryContract.findFirst({ where: { taskId }, orderBy: { version: 'desc' } });
     if (!contract || contract.version !== contractVersion)
         fail('factory_contract_changed', 'The registered revision must match the latest approved contract.');
+    const template=await tx.factoryTemplate.findFirst({where:{projectId:contract.projectId},orderBy:{version:'desc'}});
+    const receipt=await tx.factorySemanticReceipt.findFirst({where:{taskId,projectId:contract.projectId},orderBy:{version:'desc'}});
+    if(template||receipt){
+        if(!template||!receipt||contract.templateVersion!==template.version||contract.semanticVersion!==receipt.version)
+            fail('factory_binding_required','Bind the current owner-approved template and semantic requirements before acceptance.');
+        const project=await tx.project.findUnique({where:{id:contract.projectId},select:{ownerId:true}});
+        const task=await tx.task.findUnique({where:{id:taskId},include:{description_:{select:{content:true}}}});
+        if(project?.ownerId!==template.ownerId||project?.ownerId!==receipt.ownerId||!task||receipt.taskContentDigest!==semanticContentDigest(task))
+            fail('factory_semantics_unmet','Current owner approval of the semantic requirements is missing or stale.');
+    }
 }
+
 export async function requireAssignedQa(tx: FactoryTx, policy: Enrollment, taskId: number, actor: string, implementers: string[]) {
     if (policy.agentRoles[actor] !== 'qa')
         return;
@@ -78,6 +92,10 @@ export async function guardFactoryMutation(tx: FactoryTx, current: any, patch: a
     for (const field of ['acceptanceCriteria', 'verifyCommand']) {
         if (patch[field] !== undefined && patch[field] !== current[field])
             fail('factory_contract_owner_required', 'Only the project owner can change acceptance criteria.', 403);
+    }
+    if (['title','description'].some(field=>requested[field]!==undefined && requested[field] !== (field==='description' ? current.description_?.content??current.description : current[field]))) {
+        const semanticReceipt=await tx.factorySemanticReceipt.findFirst({where:{taskId:current.id,projectId:current.projectId},orderBy:{version:'desc'}});
+        if(semanticReceipt)fail('factory_scope_owner_required','Only the owner can revise approved task scope. Record implementation updates in comments.',403);
     }
     const targetId = patch.sectionId !== undefined ? patch.sectionId : current.sectionId;
     // The controller may retain the current ID while accepting a new name.

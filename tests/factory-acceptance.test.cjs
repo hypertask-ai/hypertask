@@ -23,7 +23,7 @@ function matches(row,where={}){return Object.entries(where).every(([key,value])=
  return eq(row[key],value);
 });}
 function database(){
- let data={project:[{id:15,ownerId:6},{id:99,ownerId:7}],agent:['dev','qa','authority','recovery','other'].map(id=>({id,userId:6,revokedAt:null})),section:[10,11,12,13,14].map(id=>({id,projectId:15,section_title:id===10?'In Progress':'QA',isDone:false})),task:[{id:1,projectId:15,status:'Normal',sectionId:10,section:'In Progress',updatedAt:now,acceptanceCriteria:'approved'}],assignees:[{taskId:1,agentId:'qa'}],factoryEnrollment:[],factoryContract:[],factoryRevision:[],factoryGrant:[],factoryTransitionRequest:[]};
+ let data={project:[{id:15,ownerId:6,status:'Normal'},{id:99,ownerId:7,status:'Normal'}],agent:['dev','qa','authority','recovery','other'].map(id=>({id,userId:6,revokedAt:null})),section:[10,11,12,13,14].map(id=>({id,projectId:15,section_title:id===10?'In Progress':'QA',isDone:false})),task:[{id:1,projectId:15,status:'Normal',sectionId:10,section:'In Progress',updatedAt:now,acceptanceCriteria:'approved'}],assignees:[{taskId:1,agentId:'qa'}],factoryTemplate:[],factorySemanticReceipt:[],factoryEnrollment:[],factoryContract:[],factoryRevision:[],factoryGrant:[],factoryTransitionRequest:[]};
  const tx={$executeRaw:async()=>{}};
  for(const name of Object.keys(data))tx[name]={
   async findUnique({where}){return data[name].find(r=>matches(r,where))??null;},
@@ -199,7 +199,7 @@ test('new approved contract cannot issue requests or grants through the old regi
 
 function endpoint(db,identity){
  const filename=path.resolve(__dirname,'../src/app/api/mcp/factory/[operation]/route.ts'),mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
- mod.require=id=>id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/mcp/auth'?{checkMcpRateLimit:async()=>null,validateMcpAuth:async()=>identity?{user:{id:identity.userId},agentId:identity.agentId}:null}:id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):id==='@/lib/factoryAcceptance/service'?load('service'):require(id);
+ mod.require=id=>id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/mcp/auth'?{checkMcpRateLimit:async()=>null,validateMcpAuth:async()=>identity?{user:{id:identity.userId},agentId:identity.agentId}:null}:id==='@/lib/factoryAcceptance/templates'?load('templates'):id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):id==='@/lib/factoryAcceptance/service'?load('service'):require(id);
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);return mod.exports;
 }
 test('actual factory endpoint binds authority to auth, rejects anonymous/oversize bodies, and returns scoped status',async()=>{
@@ -257,4 +257,93 @@ test('central controller rejects null and unchanged-ID section name escapes for 
  }
  const db=await fixture();const result=await controller(db).updateTaskSingle({id:1,sectionId:10,section:'In Progress'},{id:6},'dev');assert.equal(result.status,200);
  const other=await fixture();const unchanged=await controller(other).updateTaskSingle({id:1,sectionId:10,section:'Legacy display name'},{id:6},'other');assert.equal(unchanged.status,200);
+});
+
+const templateService=load('templates');
+const ownerSession={userId:6,source:'legacy'};
+const policyCriteria=[{id:'policy.code',kind:'implementation',phase:'pre_qa',description:'Implement the approved outcomes'},{id:'policy.tests',kind:'tests',phase:'pre_qa',description:'Verify with required tests'},{id:'policy.qa',kind:'independent_qa',phase:'final',description:'Independent QA on the exact deployed revision and flag configuration'}];
+const scopeCriteria=[{id:'scope.outcome',kind:'acceptance',phase:'pre_qa',description:'The explicitly approved product outcome'}];
+async function templateFixture(){const db=await fixture();await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:0,criteria:policyCriteria},ownerSession));return db;}
+async function approveScope(db,taskId=1,version=0,inventory=scopeCriteria){return db.transaction(tx=>templateService.approveRequirements(tx,{project_id:15,task_id:taskId,expected_version:version,expected_task_revision:db.rows('task').find(t=>t.id===taskId).updatedAt?.toISOString()??null,expected_scope_digest:load('enforcement').semanticContentDigest(db.rows('task').find(t=>t.id===taskId)),criteria:inventory},ownerSession));}
+test('templates never approve mutable acceptance text and bind explicit owner semantics only',async()=>{
+ const db=await templateFixture();
+ await rejectsCode(db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev)),'factory_semantics_unmet');
+ await rejectsCode(db.transaction(tx=>templateService.approveRequirements(tx,{project_id:15,task_id:1,expected_version:0,expected_task_revision:now.toISOString(),expected_scope_digest:load('enforcement').semanticContentDigest(db.rows('task')[0])},ownerSession)),'factory_invalid_request');
+ await approveScope(db);
+ const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ assert.equal(contract.ownerId,6);assert.equal(contract.templateVersion,1);assert.equal(contract.semanticVersion,1);
+ assert.deepEqual(contract.criteria.filter(c=>c.id.startsWith('scope.')),scopeCriteria);
+ assert.equal(contract.criteria.length,6); // Existing approved gates are retained.
+ assert.equal((await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev))).contract.version,contract.version);
+ for(const extra of [{criteria:[]},{template_version:0},{ownerId:6}])await rejectsCode(db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1,...extra},dev)),'factory_binding_input_denied');
+});
+test('the approved template binds future tasks without copying another task semantic receipt',async()=>{
+ const db=await templateFixture();await approveScope(db);
+ await db.tx.task.create({data:{id:2,projectId:15,status:'Normal',sectionId:10,section:'In Progress',updatedAt:null,acceptanceCriteria:'unapproved new task text'}});
+ await rejectsCode(db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:2},dev)),'factory_semantics_unmet');
+ await approveScope(db,2);
+ const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:2},dev));
+ assert.equal(contract.taskId,2);assert.equal(contract.templateVersion,1);assert.equal(contract.criteria.length,4);
+});
+test('template and semantic version changes invalidate grants and require a new binding',async()=>{
+ const db=await templateFixture();await approveScope(db);const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:contract.version,expected_code_revision:code,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
+ const {request}=await db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:11,expected_task_revision:now.toISOString()},dev));
+ await db.transaction(tx=>registerGrant(tx,{project_id:15,task_id:1,request_id:request.id,contract_version:contract.version,code_revision:code,actor_agent_id:'dev',target_section_id:11,expected_task_revision:now.toISOString(),evidence_digest:'b'.repeat(64),authorization_id:'template-test',ttl_seconds:300},authority,now));
+ await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:1,criteria:[...policyCriteria,{id:'policy.extra',kind:'verification',phase:'final',description:'Additional approved verification'}]},ownerSession));
+ assert.equal(db.rows('factoryGrant').length,0);assert.equal(db.rows('factoryTransitionRequest')[0].status,'superseded');
+ await rejectsCode(move(db),'factory_binding_required');
+ await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ await approveScope(db,1,1,[...scopeCriteria,{id:'scope.second',kind:'acceptance',phase:'pre_qa',description:'Another explicit outcome'}]);
+ const latest=db.rows('factoryContract').at(-1);await rejectsCode(db.transaction(tx=>load('enforcement').requireCurrentContract(tx,1,latest.version)),'factory_binding_required');
+});
+test('editable acceptance drift and owner transfer cannot reuse semantic approval',async()=>{
+ const db=await templateFixture();await approveScope(db);const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ db.rows('task')[0].acceptanceCriteria='Changed outside approval';
+ await rejectsCode(db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev)),'factory_semantics_unmet');
+ await rejectsCode(db.transaction(tx=>load('enforcement').requireCurrentContract(tx,1,contract.version)),'factory_semantics_unmet');
+ db.rows('task')[0].acceptanceCriteria='approved';db.rows('project')[0].ownerId=7;
+ await rejectsCode(db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev)),'factory_owner_approval_stale');
+});
+test('template and semantic approvals are append-only and preserve independent QA',async()=>{
+ const db=await templateFixture();await approveScope(db);
+ await rejectsCode(db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:1,criteria:policyCriteria.slice(0,2)},ownerSession)),'factory_invalid_request');
+ await rejectsCode(db.transaction(tx=>templateService.approveRequirements(tx,{project_id:15,task_id:1,expected_version:1,expected_task_revision:now.toISOString(),expected_scope_digest:load('enforcement').semanticContentDigest(db.rows('task')[0]),criteria:[{...scopeCriteria[0],description:'Weaker outcome'}]},ownerSession)),'factory_contract_immutable');
+ await rejectsCode(db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:1,criteria:policyCriteria},{userId:6})),'factory_owner_session_required');
+});
+function ownerPolicyEndpoint(db,session){
+ const filename=path.resolve(__dirname,'../src/app/api/factory/policy/route.ts'),mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
+ mod.require=id=>id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/auth/getSessionUser'?{getSessionUser:async()=>session}:id==='@/lib/factoryAcceptance/templates'?templateService:id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):require(id);
+ mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);return mod.exports;
+}
+test('actual approval route requires the owner session and same origin, never bearer or body identity',async()=>{
+ const {NextRequest}=require('next/server'),db=await fixture();
+ const call=(session,headers={},body={operation:'template',project_id:15,expected_version:0,criteria:policyCriteria})=>ownerPolicyEndpoint(db,session).POST(new NextRequest('https://example.invalid/api/factory/policy',{method:'POST',headers:{origin:'https://example.invalid',...headers},body:JSON.stringify(body)}));
+ assert.equal((await call(null)).status,401);
+ assert.equal((await call({userId:7,source:'legacy'})).status,403);
+ assert.equal((await call(ownerSession,{authorization:'Bearer worker-token'})).status,403);
+ assert.equal((await call(ownerSession,{origin:'https://attacker.invalid'})).status,403);
+ const response=await call(ownerSession,{}, {operation:'template',project_id:15,expected_version:0,criteria:policyCriteria,userId:7,ownerId:7,agentId:'authority'});
+ assert.equal(response.status,200);assert.equal((await response.json()).template.ownerId,6);
+ assert.equal(db.rows('factoryEnrollment')[0].version,1);
+});
+
+test('approved semantic scope is protected at the actual controller and stale owner edits are unmet',async()=>{
+ const db=await templateFixture();Object.assign(db.rows('task')[0],{title:'Approved title',description:'Approved scope'});await approveScope(db);
+ await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ for(const patch of [{title:'Different task'},{description:'Less work'}]){
+  const result=await controller(db).updateTaskSingle({id:1,...patch},{id:6},'dev');assert.equal(result.status,403);assert.equal(result.json.code,'factory_scope_owner_required');
+ }
+ assert.equal((await db.transaction(tx=>readStatus(tx,15,1,authority))).binding.state,'ready');
+ db.rows('task')[0].description='Owner edited scope outside approval';
+ const status=await db.transaction(tx=>readStatus(tx,15,1,authority));assert.equal(status.binding.state,'unmet');assert.equal(status.binding.reason,'factory_semantics_unmet');
+});
+
+test('semantic receipts bind the canonical description even when the legacy scalar and task timestamp do not change',async()=>{
+ const db=await templateFixture();Object.assign(db.rows('task')[0],{description:'',description_:{content:'Original canonical scope'}});
+ const digest=load('enforcement').semanticContentDigest(db.rows('task')[0]);db.rows('task')[0].description_.content='Changed canonical scope';
+ await rejectsCode(db.transaction(tx=>templateService.approveRequirements(tx,{project_id:15,task_id:1,expected_version:0,expected_task_revision:now.toISOString(),expected_scope_digest:digest,criteria:scopeCriteria},ownerSession)),'factory_scope_changed');
+ await approveScope(db);const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ db.rows('task')[0].description_.content='Later scope edit';
+ await rejectsCode(db.transaction(tx=>load('enforcement').requireCurrentContract(tx,1,contract.version)),'factory_semantics_unmet');
 });
