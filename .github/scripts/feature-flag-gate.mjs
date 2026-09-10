@@ -411,25 +411,30 @@ function isStaticallyUnreachable(node) {
 
 function controlsRuntimeBranch(node) {
   if (isStaticallyUnreachable(node)) return false;
+  let controlsOutput = false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
-    if (typescript.isBinaryExpression(parent) && child === parent.left) {
+    if (typescript.isBinaryExpression(parent) && child === parent.left &&
+        (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+         parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) {
       const right = staticBoolean(parent.right);
       if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && right === false) ||
           (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && right === true)) return false;
+      controlsOutput = true;
+      continue;
     }
     if ((typescript.isConditionalExpression(parent) && child === parent.condition) ||
         (typescript.isIfStatement(parent) && child === parent.expression) ||
         (typescript.isWhileStatement(parent) && child === parent.expression) ||
         (typescript.isDoStatement(parent) && child === parent.expression) ||
-        (typescript.isForStatement(parent) && child === parent.condition)) return true;
-    if (typescript.isBinaryExpression(parent) && child === parent.left &&
-        (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
-         parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) return true;
+        (typescript.isForStatement(parent) && child === parent.condition)) {
+      controlsOutput = true;
+      continue;
+    }
     if (typescript.isStatement(parent) || typescript.isVariableDeclaration(parent) ||
-        typescript.isFunctionLike(parent)) return false;
+        typescript.isFunctionLike(parent)) return controlsOutput;
   }
-  return false;
+  return controlsOutput;
 }
 
 function gatesRuntimeBehavior(call, checker, sourceFile) {
