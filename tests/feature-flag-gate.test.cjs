@@ -447,6 +447,10 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
     ["assignment alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "let escapedDefinitions; escapedDefinitions = FEATURE_FLAG_DEFINITIONS;\n")],
     ["conditional alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const escapedDefinitions = true ? FEATURE_FLAG_DEFINITIONS : [];\n")],
     ["reassigned default", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", 'DEFAULT_FEATURE_FLAG_MODE = "EVERYONE";\n')],
+    ["find result mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nd.key = \"evil\";\n")],
+    ["find result re-alias mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "const d = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nconst e = d;\ne.key = \"evil\";\n")],
+    ["map callback element mutation", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map((row) => { row.key = \"evil\"; return row.key; });\n")],
+    ["map rest alias", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", "FEATURE_FLAG_DEFINITIONS.map(({ key, ...rest }) => rest);\n")],
   ];
 
   for (const [name, source] of cases) {
@@ -459,6 +463,21 @@ test("mutable feature flag policy declarations fail closed", async (t) => {
     assert.equal(result.pass, false, name);
     assert.match(result.reason, /declared const|must not be reassigned, aliased, or mutated/, name);
   }
+
+  const allowed = makeRepo(t);
+  const allowedBase = commit(allowed.git, "base");
+  writeFile(
+    allowed.dir,
+    "src/lib/flags.ts",
+    flagsSource(
+      ["OTHER_FLAG"],
+      "OWNER_AND_QA",
+      "export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);\nfunction describe(row) {\n  const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === row.key);\n  return definition?.description ?? \"missing\";\n}\n",
+    ),
+  );
+  writeFile(allowed.dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const allowedHead = commit(allowed.git, "safe map find reads");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] update widget", allowedBase, allowedHead, allowed.dir)).pass, true);
 });
 
 test("an imported registered key used by useFlag passes", async (t) => {
@@ -675,6 +694,8 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /persist-credentials: false/);
   assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin production "refs\/pull\/\$PR_NUMBER\/head"/);
+  assert.equal((workflow.match(/git rev-parse HEAD\)" != "\$\(git rev-parse origin\/production\)/g) || []).length, 2);
+  assert.match(workflow, /Trusted production checkout drifted/);
   assert.doesNotMatch(workflow, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(workflow, /statuses: write/);
   assert.match(workflow, /state: "pending"/);

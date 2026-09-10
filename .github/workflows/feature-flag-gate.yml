@@ -136,6 +136,9 @@ jobs:
             result=1
           elif ! git fetch --no-tags origin production "refs/pull/$PR_NUMBER/head" >"$gate_tmp/fetch.txt" 2>"$error_file"; then
             result=2
+          elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
+            echo "Trusted production checkout drifted; a later event will re-evaluate with current policy." >"$error_file"
+            result=2
           elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
             echo "The pull request commits are unavailable." >"$error_file"
             result=2
@@ -316,6 +319,9 @@ jobs:
               echo "Fork pull requests require owner review." >"$reason_file"
               result=1
             elif ! git fetch --no-tags origin production "refs/pull/$number/head" >"$gate_tmp/fetch-$number.txt" 2>"$error_file"; then
+              result=2
+            elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
+              echo "Trusted production checkout drifted; a later event will re-evaluate with current policy." >"$error_file"
               result=2
             elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
               echo "The pull request commits are unavailable." >"$error_file"

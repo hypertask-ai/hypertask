@@ -278,49 +278,202 @@ const MUTATING_ARRAY_METHODS = new Set([
   "copyWithin", "fill", "pop", "push", "reverse", "shift", "sort", "splice", "unshift",
 ]);
 
+function unwrapExpr(node) {
+  let current = node;
+  while (current &&
+         (typescript.isParenthesizedExpression(current) ||
+          typescript.isAsExpression(current) ||
+          typescript.isTypeAssertionExpression(current) ||
+          typescript.isSatisfiesExpression(current) ||
+          typescript.isNonNullExpression(current))) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function bindingPatternRejectsElementAlias(pattern) {
+  if (typescript.isObjectBindingPattern(pattern)) {
+    return pattern.elements.every((element) => {
+      if (!typescript.isBindingElement(element) || element.dotDotDotToken) return false;
+      if (typescript.isIdentifier(element.name)) return true;
+      if (typescript.isObjectBindingPattern(element.name) || typescript.isArrayBindingPattern(element.name)) {
+        return bindingPatternRejectsElementAlias(element.name);
+      }
+      return false;
+    });
+  }
+  if (typescript.isArrayBindingPattern(pattern)) {
+    return pattern.elements.every((element) => {
+      if (typescript.isOmittedExpression(element)) return true;
+      if (!typescript.isBindingElement(element) || element.dotDotDotToken) return false;
+      if (typescript.isIdentifier(element.name)) return true;
+      if (typescript.isObjectBindingPattern(element.name) || typescript.isArrayBindingPattern(element.name)) {
+        return bindingPatternRejectsElementAlias(element.name);
+      }
+      return false;
+    });
+  }
+  return false;
+}
+
+function isSafeDefinitionsCallback(callback) {
+  if (!callback ||
+      !(typescript.isArrowFunction(callback) || typescript.isFunctionExpression(callback)) ||
+      callback.parameters.length >= 3 ||
+      callback.parameters.some((parameter) => parameter.dotDotDotToken)) {
+    return false;
+  }
+  return callback.parameters.every((parameter) =>
+    (typescript.isObjectBindingPattern(parameter.name) || typescript.isArrayBindingPattern(parameter.name)) &&
+    bindingPatternRejectsElementAlias(parameter.name),
+  );
+}
+
+function isMutatingUse(target) {
+  const parent = target.parent;
+  if (!parent) return false;
+  if ((typescript.isPrefixUnaryExpression(parent) || typescript.isPostfixUnaryExpression(parent)) &&
+      parent.operand === target &&
+      (parent.operator === typescript.SyntaxKind.PlusPlusToken ||
+       parent.operator === typescript.SyntaxKind.MinusMinusToken)) {
+    return true;
+  }
+  if (typescript.isBinaryExpression(parent) && parent.left === target &&
+      ASSIGNMENT_OPERATORS.has(parent.operatorToken.kind)) {
+    return true;
+  }
+  if (typescript.isDeleteExpression(parent) && parent.expression === target) return true;
+  if (typescript.isVariableDeclaration(parent) && parent.initializer === target) return true;
+  if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
+      parent.arguments?.includes(target)) {
+    return true;
+  }
+  if (typescript.isCallExpression(parent) && parent.expression === target &&
+      typescript.isPropertyAccessExpression(target) &&
+      MUTATING_ARRAY_METHODS.has(target.name.text)) {
+    return true;
+  }
+  return false;
+}
+
 function assertPolicyBindingImmutable(sourceFile, name, declaration) {
   let mutation = null;
-  function visit(node) {
+  const elementAliases = new Set();
+
+  function mark(node) {
+    if (!mutation) mutation = node;
+  }
+
+  function visitPolicyName(node) {
     if (mutation) return;
-    if (typescript.isIdentifier(node) && node.text === name && node !== declaration.name &&
-        !(typescript.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
-        !(typescript.isPropertyAssignment(node.parent) && node.parent.name === node)) {
-      let target = node;
-      while (target.parent &&
-             ((typescript.isParenthesizedExpression(target.parent) && target.parent.expression === target) ||
-              (typescript.isAsExpression(target.parent) && target.parent.expression === target) ||
-              (typescript.isTypeAssertionExpression(target.parent) && target.parent.expression === target) ||
-              (typescript.isSatisfiesExpression(target.parent) && target.parent.expression === target) ||
-              (typescript.isNonNullExpression(target.parent) && target.parent.expression === target) ||
-              (typescript.isPropertyAccessExpression(target.parent) && target.parent.expression === target) ||
-              (typescript.isElementAccessExpression(target.parent) && target.parent.expression === target))) {
-        target = target.parent;
-      }
-      const parent = target.parent;
-      const update = parent &&
-        ((typescript.isPrefixUnaryExpression(parent) || typescript.isPostfixUnaryExpression(parent)) &&
-         parent.operand === target &&
-         (parent.operator === typescript.SyntaxKind.PlusPlusToken ||
-          parent.operator === typescript.SyntaxKind.MinusMinusToken));
-      const assignment = parent && typescript.isBinaryExpression(parent) && parent.left === target &&
-        ASSIGNMENT_OPERATORS.has(parent.operatorToken.kind);
-      const deletion = parent && typescript.isDeleteExpression(parent) && parent.expression === target;
-      const alias = parent && typescript.isVariableDeclaration(parent) && parent.initializer === target;
-      const passedToCall = parent && (typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
-        parent.arguments?.includes(target);
-      const methodCall = parent && typescript.isCallExpression(parent) && parent.expression === target &&
-        typescript.isPropertyAccessExpression(target);
-      const mutatingCall = methodCall && MUTATING_ARRAY_METHODS.has(target.name.text);
-      const callback = methodCall ? parent.arguments[0] : null;
-      const safeDefinitionsRead = name === "FEATURE_FLAG_DEFINITIONS" && methodCall &&
-        (target.name.text === "map" || target.name.text === "find") && callback &&
-        (typescript.isArrowFunction(callback) || typescript.isFunctionExpression(callback)) &&
-        callback.parameters.length < 3 && !callback.parameters.some((parameter) => parameter.dotDotDotToken);
-      const escapedDefinitions = name === "FEATURE_FLAG_DEFINITIONS" && !safeDefinitionsRead;
-      if (update || assignment || deletion || alias || passedToCall || mutatingCall || escapedDefinitions) {
-        mutation = target;
-      }
+    if (!(typescript.isIdentifier(node) && node.text === name && node !== declaration.name) ||
+        (typescript.isPropertyAccessExpression(node.parent) && node.parent.name === node) ||
+        (typescript.isPropertyAssignment(node.parent) && node.parent.name === node)) {
+      return;
     }
+
+    let target = node;
+    while (target.parent &&
+           ((typescript.isParenthesizedExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isAsExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isTypeAssertionExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isSatisfiesExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isNonNullExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isPropertyAccessExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isElementAccessExpression(target.parent) && target.parent.expression === target))) {
+      target = target.parent;
+    }
+
+    const parent = target.parent;
+    const methodCall = parent && typescript.isCallExpression(parent) && parent.expression === target &&
+      typescript.isPropertyAccessExpression(target);
+    const methodName = methodCall ? target.name.text : null;
+    const callback = methodCall ? parent.arguments[0] : null;
+    const safeDefinitionsRead = name === "FEATURE_FLAG_DEFINITIONS" && methodCall &&
+      (methodName === "map" || methodName === "find") && isSafeDefinitionsCallback(callback);
+
+    if (safeDefinitionsRead) {
+      // find returns a definition object; map with destructuring returns new values.
+      // Track find results (and any further aliases) so callback/result mutation still fails closed.
+      if (methodName === "find") {
+        let result = parent;
+        while (result.parent &&
+               ((typescript.isParenthesizedExpression(result.parent) && result.parent.expression === result) ||
+                (typescript.isAsExpression(result.parent) && result.parent.expression === result) ||
+                (typescript.isTypeAssertionExpression(result.parent) && result.parent.expression === result) ||
+                (typescript.isSatisfiesExpression(result.parent) && result.parent.expression === result) ||
+                (typescript.isNonNullExpression(result.parent) && result.parent.expression === result))) {
+          result = result.parent;
+        }
+        const resultParent = result.parent;
+        if (resultParent && typescript.isVariableDeclaration(resultParent) &&
+            resultParent.initializer === result && typescript.isIdentifier(resultParent.name)) {
+          elementAliases.add(resultParent.name.text);
+        } else if (resultParent && typescript.isBinaryExpression(resultParent) &&
+                   resultParent.right === result &&
+                   resultParent.operatorToken.kind === typescript.SyntaxKind.EqualsToken) {
+          const left = unwrapExpr(resultParent.left);
+          if (typescript.isIdentifier(left)) elementAliases.add(left.text);
+          else mark(result);
+        } else if (resultParent && typescript.isPropertyAccessExpression(resultParent) &&
+                   resultParent.expression === result && isMutatingUse(resultParent)) {
+          mark(resultParent);
+        } else if (isMutatingUse(result)) {
+          mark(result);
+        }
+      }
+      return;
+    }
+
+    if (isMutatingUse(target) || (name === "FEATURE_FLAG_DEFINITIONS" && !safeDefinitionsRead)) {
+      mark(target);
+    }
+  }
+
+  function visitAlias(node) {
+    if (mutation || !typescript.isIdentifier(node) || !elementAliases.has(node.text)) return;
+    if ((typescript.isPropertyAccessExpression(node.parent) && node.parent.name === node) ||
+        (typescript.isPropertyAssignment(node.parent) && node.parent.name === node) ||
+        (typescript.isVariableDeclaration(node.parent) && node.parent.name === node)) {
+      return;
+    }
+
+    let target = node;
+    while (target.parent &&
+           ((typescript.isParenthesizedExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isAsExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isTypeAssertionExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isSatisfiesExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isNonNullExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isPropertyAccessExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isElementAccessExpression(target.parent) && target.parent.expression === target) ||
+            (typescript.isPropertyAccessExpression(target.parent) &&
+             target.parent.questionDotToken && target.parent.expression === target))) {
+      target = target.parent;
+    }
+
+    const parent = target.parent;
+    if (parent && typescript.isVariableDeclaration(parent) && parent.initializer === target &&
+        typescript.isIdentifier(parent.name)) {
+      elementAliases.add(parent.name.text);
+      return;
+    }
+    if (parent && typescript.isBinaryExpression(parent) && parent.right === target &&
+        parent.operatorToken.kind === typescript.SyntaxKind.EqualsToken) {
+      const left = unwrapExpr(parent.left);
+      if (typescript.isIdentifier(left)) {
+        elementAliases.add(left.text);
+        return;
+      }
+      mark(target);
+      return;
+    }
+    if (isMutatingUse(target)) mark(target);
+  }
+
+  function visit(node) {
+    visitPolicyName(node);
+    visitAlias(node);
     typescript.forEachChild(node, visit);
   }
   visit(sourceFile);

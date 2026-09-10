@@ -419,6 +419,12 @@ jobs:
               echo "::endgroup::"
               continue
             fi
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
+              echo "::error::Trusted production checkout drifted during automerge; refusing stale feature-flag policy for PR #$PR."
+              infra_failures=$((infra_failures+1))
+              echo "::endgroup::"
+              continue
+            fi
             if node .github/scripts/feature-flag-gate.mjs "$final_title" "$final_base_sha" "$final_head_sha" "$GATE_DECISION" >"$GATE_REASON" 2>"$AUTOMERGE_TMP/gate-error.txt"; then
               echo "feature-flag-gate re-evaluation = PASS"
             else
