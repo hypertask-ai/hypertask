@@ -340,7 +340,7 @@ test("a forged auto-revert title is not exempt", async (t) => {
   const head = commit(git, "ordinary commit");
   const result = await evaluate('Revert "HTPR-4 [FEATURE] add widget"', base, head, dir);
   assert.equal(result.pass, false);
-  assert.match(result.reason, /no valid HTPR ticket and tag/);
+  assert.match(result.reason, /no valid HTPR or HYFA ticket and tag/);
 });
 
 test("a forged revert footer with an unrelated patch is not exempt", async (t) => {
@@ -912,7 +912,7 @@ test("missing tags produce a useful failure instead of [null]", async (t) => {
   const head = commit(git, "feature");
   const result = await evaluate("add widget", base, head, dir);
   assert.equal(result.pass, false);
-  assert.match(result.reason, /no valid HTPR ticket and tag/);
+  assert.match(result.reason, /no valid HTPR or HYFA ticket and tag/);
   assert.doesNotMatch(result.reason, /\[null\]/);
 });
 
@@ -971,4 +971,24 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.doesNotMatch(workflow, /jq -ce 'flatten\[\]'/);
   assert.match(workflow, /changed during evaluation/);
   assert.doesNotMatch(workflow, /pull-requests: write/);
+});
+
+test("Factory ticket flags retain exact prefix and owner-only preview requirements", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const WIDGET_FLAG = "hyfa-5-widget";\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { OTHER_FLAG, WIDGET_FLAG } from "@/lib/flags/keys";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: OTHER_FLAG },\n  { key: WIDGET_FLAG },\n];\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+  writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { WIDGET_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div /> : null;\n');
+  const head = commit(git, "feature");
+  const result = await evaluate("HYFA-5 [FEATURE] add widget", base, head, dir);
+  assert.equal(result.pass, true);
+  assert.equal(result.ownerReview, "feature-gated-ui");
+  assert.match(result.reason, /ticket-specific feature gate hyfa-5-widget/);
+
+  for (const title of ['HTPR-5 [FEATURE] wrong board', 'HYFA-6 [FEATURE] wrong ticket', 'OTHER-5 [FEATURE] foreign', 'HYFAA-5 [FEATURE] lookalike']) {
+    assert.equal((await evaluate(title,base,head,dir)).pass,false,title);
+  }
+  writeFile(dir, 'src/components/Ungated.tsx', 'export const Ungated = () => <div />;\n');
+  const ungated=commit(git,'ungated addition');
+  assert.equal((await evaluate('HYFA-5 [FEATURE] add widget',base,ungated,dir)).pass,false);
 });

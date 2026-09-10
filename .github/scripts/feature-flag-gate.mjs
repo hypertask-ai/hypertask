@@ -1618,7 +1618,7 @@ function runtimeGateCoveredUiFiles(ref, path, uiFiles) {
 }
 
 function isVerifiedAutoRevert(title, baseSha, headSha) {
-  if (!/^Revert "HTPR-\d+ \[[^\]]+\] .+"$/.test(title)) return false;
+  if (!/^Revert "(?:HTPR|HYFA)-\d+ \[[^\]]+\] .+"$/.test(title)) return false;
   const mergeBase = git(["merge-base", baseSha, headSha]).trim();
   if (git(["rev-list", "--count", `${mergeBase}..${headSha}`]).trim() !== "1") return false;
   const message = git(["show", "-s", "--format=%s%n%b", headSha]);
@@ -1690,7 +1690,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
   }
 
-  const titleMatch = title.match(/^HTPR-(\d+) \[([^\]]+)\] \S/);
+  const titleMatch = title.match(/^(?:HTPR|HYFA)-(\d+) \[([^\]]+)\] \S/);
   const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
   const tag = titleMatch?.[2] ?? null;
   const titleExempt = isExemptTitleTag(tag);
@@ -1724,7 +1724,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return { pass: true, ownerReview: "exempt-ui", reason: `${reasonPrefix} is exempt (${uiAdded} UI lines added).` };
   }
   if (!titleMatch) {
-    return failure("The pull request title has no valid HTPR ticket and tag, so the feature flag requirement cannot be checked.");
+    return failure("The pull request title has no valid HTPR or HYFA ticket and tag, so the feature flag requirement cannot be checked.");
   }
 
   try {
@@ -1737,7 +1737,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
 
     const added = headDefinitions.keys.filter((key) => !baseDefinitions.keys.includes(key));
-    const ticketPrefix = `htpr-${titleMatch[1]}-`;
+    const ticketPrefix = `${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-`;
     if (added.length > 0 && added.some((key) => !key.startsWith(ticketPrefix))) {
       return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
     }
