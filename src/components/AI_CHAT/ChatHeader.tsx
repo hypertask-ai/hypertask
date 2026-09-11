@@ -143,6 +143,24 @@ export const ChatHeader = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // HTPR-6360: Escape must close the open header menu before TaskDetail's
+  // Escape handler navigates back to the board (same capture pattern as
+  // ModelSelectorDropdown).
+  useEffect(() => {
+    if (!isDropdownOpen && !isOverflowOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setIsDropdownOpen(false);
+      setIsOverflowOpen(false);
+    };
+
+    document.addEventListener("keydown", closeOnEscape, true);
+    return () => document.removeEventListener("keydown", closeOnEscape, true);
+  }, [isDropdownOpen, isOverflowOpen]);
+
   const handleStartNewSession = async () => {
     if (isStartingNewSessionRef.current) return;
     isStartingNewSessionRef.current = true;
