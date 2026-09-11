@@ -1,5 +1,5 @@
 import globalAPIHandlers from "@/utils/api/global";
-import { selectFavorites } from "@/utils/api/global/apiHelpers/favoritesResponse.js";
+import { selectFavorites } from "@/utils/api/global/apiHelpers/favoritesResponse";
 import { useQuery } from "@tanstack/react-query";
 
 export const favoritesQueryKey = (userSettingId: string | null) =>
