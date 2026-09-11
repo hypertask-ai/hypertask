@@ -4,7 +4,7 @@ import {isFeatureEnabled,FACTORY_OWNER_PREVIEW_FLAG} from '@/lib/flags';
 import { bindTemplate } from '@/lib/factoryAcceptance/templates';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { FactoryAcceptanceError } from '@/lib/factoryAcceptance/enforcement';
-import { configureEnrollment, registerRevision, registerRequest, registerGrant, listRequests, readStatus } from '@/lib/factoryAcceptance/service';
+import { disableEnrollment, configureEnrollment, registerRevision, registerRequest, registerGrant, listRequests, readStatus } from '@/lib/factoryAcceptance/service';
 export const runtime = 'nodejs';
 const send = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 async function boundedBody(request: Request) {
@@ -49,10 +49,10 @@ async function handle(request: NextRequest, context: {
         const ctx = await validateMcpAuth(request);
         if (!ctx)
             return send({ success: false, code: 'unauthorized', error: 'Authentication required.' }, 401);
-        if (!await isFeatureEnabled(FACTORY_OWNER_PREVIEW_FLAG,ctx.user.id))
+        const { operation } = await context.params;
+        if (operation !== 'disable' && !await isFeatureEnabled(FACTORY_OWNER_PREVIEW_FLAG,ctx.user.id))
             return send({success:false,code:'factory_preview_unavailable',error:'Factory acceptance is unavailable.'},403);
         const identity = { userId: ctx.user.id, agentId: ctx.agentId };
-        const { operation } = await context.params;
         if (request.method === 'GET') {
             const projectId = Number(request.nextUrl.searchParams.get('project_id'));
             const result = await prisma.$transaction(async (tx) => {
@@ -64,7 +64,7 @@ async function handle(request: NextRequest, context: {
             });
             return send({ success: true, ...result });
         }
-        const operations = { bind:bindTemplate, enrollment: configureEnrollment, revisions: registerRevision, requests: registerRequest, grants: registerGrant };
+        const operations = { disable:disableEnrollment, bind:bindTemplate, enrollment: configureEnrollment, revisions: registerRevision, requests: registerRequest, grants: registerGrant };
         if (!Object.hasOwn(operations, operation))
             return send({ success: false, code: 'factory_unknown_operation', error: 'Unknown factory operation.' }, 404);
         const body = await boundedBody(request);

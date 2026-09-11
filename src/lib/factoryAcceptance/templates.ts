@@ -58,8 +58,16 @@ export async function approveRequirements(tx:FactoryTx,body:any,session:OwnerSes
   const inventory=criteria(body.criteria,'scope.');
   if(inventory.every(item=>['implementation','tests','independent_qa'].includes(item.kind)))fail('factory_semantics_required','Explicit product outcomes are required; process checks are not semantic acceptance.',400);
   appendOnly(previous?.criteria,inventory);
+  // Legacy tasks need an exact revision for subsequent request/grant matching.
+  // Establish it only after validating the owner's reviewed scope and criteria.
+  const needsRevision=task.updatedAt==null;
+  if(needsRevision){
+    const updatedAt=new Date();
+    await tx.task.update({where:{id:taskId},data:{updatedAt}});
+    task.updatedAt=updatedAt;
+  }
   // Unique IDs and appendOnly above prove equal-sized inventories contain the same unchanged criteria.
-  if(previous?.ownerId===session.userId&&previous.taskContentDigest===semanticContentDigest(task)&&(previous.criteria as Criterion[]).length===inventory.length)return {semanticReceipt:previous};
+  if(!needsRevision&&previous?.ownerId===session.userId&&previous.taskContentDigest===semanticContentDigest(task)&&(previous.criteria as Criterion[]).length===inventory.length)return {semanticReceipt:previous};
   const semanticReceipt=await tx.factorySemanticReceipt.create({data:{taskId,projectId,version:(previous?.version??0)+1,criteria:json(inventory),criteriaDigest:hash(inventory),taskContentDigest:semanticContentDigest(task),sourceTaskRevision:task.updatedAt,ownerId:session.userId}});
   await invalidate(tx,{taskId});return {semanticReceipt};
 }

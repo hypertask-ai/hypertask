@@ -2,7 +2,7 @@ import { columnRoleFor } from '@/lib/mcp/boards/columnRole';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { lockAgentMutationFence } from '@/lib/mcp/tasks/agentMutationFence';
-import { FactoryAcceptanceError, actorCanTransition, requireCurrentContract, requireAssignedQa, destination, enrolled, enrollment, fail, type FactoryTx } from './enforcement';
+import { FactoryAcceptanceError, actorCanTransition, requireCurrentContract, requireTransitionQa, destination, enrolled, enrollment, fail, type FactoryTx } from './enforcement';
 export type Identity = {
     userId: number;
     agentId?: string | null;
@@ -43,6 +43,17 @@ async function task(tx: FactoryTx, projectId: number, taskId: number) {
     if (!value || value.projectId !== projectId || value.status !== 'Normal')
         fail('factory_task_scope_mismatch', 'The task is not active in this project.', 409);
     return value;
+}
+// Owner-only stop remains available when preview entry points are disabled.
+export async function disableEnrollment(tx:FactoryTx,body:any,identity:Identity){
+    const projectId=int(body.project_id);
+    await owner(tx,projectId,identity);
+    const previous=await enrollment(tx,projectId);
+    if(!previous?.enabled)return {enrollment:previous};
+    const stopped=await tx.factoryEnrollment.update({where:{projectId},data:{enabled:false,version:previous.version+1}});
+    await tx.factoryGrant.deleteMany({where:{projectId,consumedAt:null}});
+    await tx.factoryTransitionRequest.updateMany({where:{projectId,status:{in:['pending','granted']}},data:{status:'superseded'}});
+    return {enrollment:stopped};
 }
 export async function configureEnrollment(tx: FactoryTx, body: any, identity: Identity) {
     const projectId = int(body.project_id);
@@ -126,7 +137,7 @@ export async function registerRequest(tx: FactoryTx, body: any, identity: Identi
     if (!revision || revision.projectId !== projectId)
         fail('factory_contract_required', 'Register an approved contract and revision first.');
     await requireCurrentContract(tx, taskId, revision.contractVersion);
-    await requireAssignedQa(tx, policy!, taskId, identity.agentId!, revision.implementerAgentIds as string[]);
+    await requireTransitionQa(tx, policy!, taskId, identity.agentId!, revision.implementerAgentIds as string[], target);
     if (target === 'done' && (revision.implementerAgentIds as string[]).includes(identity.agentId!))
         fail('factory_independent_qa_required', 'An implementer cannot request independent QA completion.', 403);
     const requestKey = createHash('sha256').update(JSON.stringify([projectId, taskId, identity.agentId, targetSectionId, expected.toISOString(), policy!.version, revision.contractVersion, revision.epoch])).digest('hex');
@@ -149,7 +160,7 @@ export async function registerGrant(tx: FactoryTx, body: any, identity: Identity
     if (!revision || revision.projectId !== projectId || revision.contractVersion !== int(body.contract_version) || revision.codeRevision !== sha(body.code_revision))
         fail('factory_revision_changed', 'Grant must match the current registered contract and code revision.');
     await requireCurrentContract(tx, taskId, revision.contractVersion);
-    await requireAssignedQa(tx, policy, taskId, actor, revision.implementerAgentIds as string[]);
+    await requireTransitionQa(tx, policy, taskId, actor, revision.implementerAgentIds as string[], target);
     if (target === 'done' && (revision.implementerAgentIds as string[]).includes(actor))
         fail('factory_independent_qa_required', 'QA must be independent of every implementer.', 403);
     if (target !== 'done' && policy.agentRoles[actor] === 'dev' && revision.activeWriterAgentId !== actor)

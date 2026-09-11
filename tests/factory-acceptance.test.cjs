@@ -213,7 +213,7 @@ test('new approved contract cannot issue requests or grants through the old regi
 
 function endpoint(db,identity,previewEnabled=true){
  const filename=path.resolve(__dirname,'../src/app/api/mcp/factory/[operation]/route.ts'),mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
- mod.require=id=>id==='@/lib/flags'?{isFeatureEnabled:async()=>previewEnabled,FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview'}:id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/mcp/auth'?{checkMcpRateLimit:async()=>null,validateMcpAuth:async()=>identity?{user:{id:identity.userId},agentId:identity.agentId}:null}:id==='@/lib/factoryAcceptance/templates'?load('templates'):id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):id==='@/lib/factoryAcceptance/service'?load('service'):require(id);
+ mod.require=id=>id==='@/lib/flags'?{isFeatureEnabled:async()=>{if(previewEnabled instanceof Error)throw previewEnabled;return previewEnabled;},FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview'}:id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/mcp/auth'?{checkMcpRateLimit:async()=>null,validateMcpAuth:async()=>identity?{user:{id:identity.userId},agentId:identity.agentId}:null}:id==='@/lib/factoryAcceptance/templates'?load('templates'):id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):id==='@/lib/factoryAcceptance/service'?load('service'):require(id);
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);return mod.exports;
 }
 test('actual factory endpoint binds authority to auth, rejects anonymous/oversize bodies, and returns scoped status',async()=>{
@@ -237,6 +237,16 @@ test('factory API rejects reads and writes outside the preview cohort',async()=>
   assert.equal(response.status,403);assert.equal((await response.json()).code,'factory_preview_unavailable');
  }
  assert.deepEqual(db.rows('factoryGrant'),before);
+});
+test('only the actual owner can stop enrollment when the preview is off',async()=>{
+ const {NextRequest}=require('next/server'),db=await fixture();await grant(db);
+ const stop=(identity,preview=false)=>endpoint(db,identity,preview).POST(new NextRequest('https://example.invalid/api/mcp/factory/disable',{method:'POST',body:JSON.stringify({project_id:15,userId:6,agentId:null})}),{params:Promise.resolve({operation:'disable'})});
+ for(const identity of [dev,authority,{userId:7}])assert.equal((await stop(identity)).status,403);
+ assert.equal(db.rows('factoryEnrollment')[0].enabled,true);assert.equal(db.rows('factoryGrant').length,1);
+ assert.equal((await stop(owner,new Error('Flag lookup unavailable'))).status,200);assert.equal(db.rows('factoryEnrollment')[0].enabled,false);
+ assert.equal(db.rows('factoryGrant').length,0);assert.equal(db.rows('factoryTransitionRequest')[0].status,'superseded');
+ const version=db.rows('factoryEnrollment')[0].version;
+ assert.equal((await stop(owner)).status,200);assert.equal(db.rows('factoryEnrollment')[0].version,version);
 });
 test('developer can submit for QA before assignment, but only assigned independent QA can finish',async()=>{
  const db=await fixture();db.rows('assignees').length=0;
@@ -309,6 +319,24 @@ test('acceptance rejects a contract when either owner approval artifact is absen
  const db=await fixture();db.rows('factoryTemplate').length=0;db.rows('factorySemanticReceipt').length=0;
  await rejectsCode(db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:1,expected_code_revision:code,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority)),'factory_binding_required');
  await rejectsCode(move(db),'factory_binding_required');
+});
+test('owner approval initializes a missing task revision before acceptance',async()=>{
+ const db=await templateFixture();db.rows('task')[0].updatedAt=null;
+ await rejectsCode(approveScope(db,1,0,[]),'factory_invalid_request');
+ assert.equal(db.rows('task')[0].updatedAt,null,'Invalid approval must not initialize the task revision');
+ const {semanticReceipt}=await approveScope(db);
+ assert.ok(db.rows('task')[0].updatedAt instanceof Date);
+ assert.equal(semanticReceipt.sourceTaskRevision.getTime(),db.rows('task')[0].updatedAt.getTime());
+ const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:contract.version,expected_code_revision:null,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
+ const {request}=await db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:11,expected_task_revision:db.rows('task')[0].updatedAt.toISOString()},dev));
+ assert.equal(request.expectedTaskRevision.getTime(),semanticReceipt.sourceTaskRevision.getTime());
+ const at=db.rows('task')[0].updatedAt;
+ const {grant}=await db.transaction(tx=>registerGrant(tx,{project_id:15,task_id:1,request_id:request.id,contract_version:contract.version,code_revision:code,actor_agent_id:'dev',target_section_id:11,expected_task_revision:at.toISOString(),evidence_digest:'b'.repeat(64),authorization_id:'initialized-revision',ttl_seconds:60},authority,at));
+ const next=new Date(at.getTime()+1);
+ const consumed=await db.transaction(tx=>guardFactoryMutation(tx,db.rows('task')[0],{sectionId:11,section:'QA',updatedAt:next},'dev',next));
+ assert.equal(consumed.grantId,grant.id);
+
 });
 test('templates never approve mutable acceptance text and bind explicit owner semantics only',async()=>{
  const db=await templateFixture();

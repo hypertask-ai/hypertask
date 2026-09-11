@@ -55,16 +55,18 @@ export async function requireCurrentContract(tx: FactoryTx, taskId: number, cont
         fail('factory_semantics_unmet','Current owner approval of the semantic requirements is missing or stale.');
 }
 
-export async function requireAssignedQa(tx: FactoryTx, policy: Enrollment, taskId: number, actor: string, implementers: string[]) {
-    // QA claims work after submission. Requiring its assignment for developer
-    // handoffs would prevent submitting work or escalating an unavailable QA.
-    // actorCanTransition restricts Done to QA; every QA action checks assignment.
-    if (policy.agentRoles[actor] !== 'qa')
-        return;
-    if (implementers.includes(actor))
-        fail('factory_independent_qa_required', 'QA must be independent of every implementer.', 403);
-    if (!await tx.assignees.findFirst({ where: { taskId, agentId: actor } }))
-        fail('factory_qa_assignment_required', 'QA must be assigned to this task.', 403);
+export async function requireTransitionQa(tx:FactoryTx,policy:Enrollment,taskId:number,actor:string,implementers:string[],target:string){
+    const qaActor=policy.agentRoles[actor]==='qa';
+    if(target==='done'&&!qaActor)
+        fail('factory_actor_denied','Only independent QA can complete factory work.',403);
+    // Submission queues and blocked-work handoffs precede QA ownership.
+    // Every action taken as QA, and every Done transition, needs its assignment.
+    if(qaActor){
+        if(implementers.includes(actor))
+            fail('factory_independent_qa_required','QA must be independent of every implementer.',403);
+        if(!await tx.assignees.findFirst({where:{taskId,agentId:actor}}))
+            fail('factory_qa_assignment_required','QA must be assigned to this task.',403);
+    }
 }
 // Caller holds the task mutation fence. The project lock serializes opt-in changes.
 export async function guardFactoryMutation(tx: FactoryTx, current: any, patch: any, actor?: string | null, now = new Date(), requested = patch): Promise<{
@@ -143,7 +145,7 @@ export async function guardFactoryMutation(tx: FactoryTx, current: any, patch: a
         fail('factory_contract_required', 'Register acceptance criteria and a code revision first.');
     await requireCurrentContract(tx, current.id, revision.contractVersion);
     const implementers = revision.implementerAgentIds as string[];
-    await requireAssignedQa(tx, policy, current.id, actor, implementers);
+    await requireTransitionQa(tx, policy, current.id, actor, implementers, target);
     if (target === 'done' && implementers.includes(actor))
         fail('factory_independent_qa_required', 'An implementer cannot authorize independent QA.');
     if (target !== 'done' && policy.agentRoles[actor] === 'dev' && revision.activeWriterAgentId !== actor)
