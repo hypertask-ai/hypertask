@@ -96,10 +96,10 @@ const membersShare = async (userId: number, shareId: string) => {
 
 const addToTeam = async (projectId: number, userId: number) => {
   try {
-    // Best-effort board join. Anyone share links still grant view access when
-    // membership cannot be created (legacy addToTeam returned true for those
-    // no-op cases; HTPR-6408).
-    await addExistingUserToProject(projectId, userId);
+    const result = await addExistingUserToProject(projectId, userId);
+    // Anyone share links still grant view access when membership/billing cannot
+    // complete (legacy no-op success). Missing project/user must still deny.
+    if (!result.ok && result.status === 404) return false;
     return true;
   } catch (error: any) {
     console.log("🚀 ~ addToTeam ~ error:", error);
