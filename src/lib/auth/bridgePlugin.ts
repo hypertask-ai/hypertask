@@ -1,3 +1,4 @@
+import type { GenericEndpointContext } from '@better-auth/core'
 import type { BetterAuthPlugin } from 'better-auth'
 import { APIError, createAuthEndpoint, getSessionFromCtx } from 'better-auth/api'
 import { setSessionCookie } from 'better-auth/cookies'
@@ -16,7 +17,7 @@ export function bridgeSessionPlugin() {
           requireHeaders: true,
           disableBody: true,
         },
-        async (ctx) => {
+        async (ctx: GenericEndpointContext) => {
           const legacySession = verifySession(ctx.getCookie(SESSION_COOKIE) ?? undefined)
           if (!legacySession) {
             throw APIError.fromStatus('UNAUTHORIZED', {
