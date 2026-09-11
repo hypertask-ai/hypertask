@@ -21,10 +21,10 @@ export function getFixedOverlayPosition(
 ): FixedOverlayPosition {
   const gap = opts.gap ?? 4;
   const padding = opts.padding ?? 8;
+  const needed = opts.height + gap + padding;
   const spaceBelow = opts.viewportHeight - rect.bottom;
   const spaceAbove = rect.top;
-  const showAbove =
-    spaceBelow < opts.height && spaceAbove > opts.height;
+  const showAbove = spaceBelow < needed && spaceAbove >= needed;
 
   const top = showAbove
     ? Math.max(padding, rect.top - opts.height - gap)
