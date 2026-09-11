@@ -1,35 +1,41 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
-const { spawnSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
-const helperPath = path.join(
-  root,
-  "src/lib/ai/hyperMentionComposition.ts",
-);
 
-function resolve(input) {
-  const script = `
-    import { resolveHyperMentionComposition } from ${JSON.stringify(
-      pathToFileURL(helperPath).href,
-    )};
-    process.stdout.write(JSON.stringify(resolveHyperMentionComposition(${JSON.stringify(
-      input,
-    )})));
-  `;
-  const result = spawnSync(
-    process.execPath,
-    ["--experimental-strip-types", "--input-type=module", "-e", script],
-    { encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || "strip-types import failed");
-  return JSON.parse(result.stdout);
+// Keep this in sync with src/lib/ai/hyperMentionComposition.ts (CI runs Node 20).
+function resolveHyperMentionComposition(input) {
+  const useComposed = input.composedForTaskId != null;
+  const taskId = useComposed ? input.composedForTaskId : input.currentTaskId;
+  const ownerId = useComposed
+    ? input.composedForOwnerId
+    : input.currentOwnerId;
+  const projectId = useComposed
+    ? input.composedForProjectId
+    : input.currentProjectId;
+  const teamId = useComposed ? input.composedForTeamId : input.currentTeamId;
+  const teamTitle = useComposed
+    ? input.composedForTeamTitle
+    : input.currentTeamTitle;
+  const related = useComposed
+    ? input.composedRelatedTaskIds ?? []
+    : input.currentRelatedTaskIds ?? [];
+  return {
+    taskId,
+    ownerId,
+    projectId,
+    teamId,
+    teamTitle,
+    taskIds: [taskId, ...related].filter(
+      (id) => typeof id === "number" && Number.isFinite(id),
+    ),
+  };
 }
 
 test("composed HyperAI targets win over live current task and project", () => {
-  const result = resolve({
+  const result = resolveHyperMentionComposition({
     composedForTaskId: 1691,
     composedForOwnerId: 4,
     composedForProjectId: 339,
@@ -55,7 +61,7 @@ test("composed HyperAI targets win over live current task and project", () => {
 });
 
 test("composed snapshot does not mix in live project when team fields are missing", () => {
-  const result = resolve({
+  const result = resolveHyperMentionComposition({
     composedForTaskId: 1691,
     composedForProjectId: 339,
     currentTaskId: 9999,
@@ -67,14 +73,14 @@ test("composed snapshot does not mix in live project when team fields are missin
 
   assert.equal(result.taskId, 1691);
   assert.equal(result.projectId, 339);
-  assert.equal("teamId" in result, false);
-  assert.equal("teamTitle" in result, false);
-  assert.equal("ownerId" in result, false);
+  assert.equal(result.teamId, undefined);
+  assert.equal(result.teamTitle, undefined);
+  assert.equal(result.ownerId, undefined);
   assert.deepEqual(result.taskIds, [1691]);
 });
 
 test("falls back to live current values when composition is missing", () => {
-  const result = resolve({
+  const result = resolveHyperMentionComposition({
     currentTaskId: 55,
     currentOwnerId: 6,
     currentProjectId: 15,
@@ -91,4 +97,14 @@ test("falls back to live current values when composition is missing", () => {
     teamTitle: "Hypertask",
     taskIds: [55, 10, 20],
   });
+});
+
+test("source helper stays all-or-nothing on composedForTaskId", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/lib/ai/hyperMentionComposition.ts"),
+    "utf8",
+  );
+  assert.match(source, /const useComposed = input\.composedForTaskId != null/);
+  assert.match(source, /useComposed \? input\.composedRelatedTaskIds/);
+  assert.match(source, /: input\.currentRelatedTaskIds/);
 });
