@@ -86,55 +86,53 @@ const DescriptionEmojiButton = ({
     };
   }, []);
 
+  const desktopPicker =
+    showEmojiPickerDescription && !isMbl && portalRoot
+      ? createPortal(
+          <div
+            className="emoji-picker-portal-container"
+            // Picker lives on #portal-root (HTPR-6404). Still stop clicks so a
+            // stray bubble cannot count as a description double-tap edit
+            // (HTPR-4663).
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "fixed",
+              top: pickerPosition.top,
+              left: pickerPosition.left,
+              zIndex: 9999,
+            }}
+          >
+            <div className="absolute left-0 z-50" ref={pickerRef}>
+              <LazyEmojiPicker
+                perLine={6}
+                onClickOutside={handleClickOutside}
+                showPreview={false}
+                previewPosition={"none"}
+                skinTonePosition="none"
+                emojiSize={14}
+                enableFrequentEmojiSort={true}
+                showCloseButton={false}
+                autoFocus={true}
+                onEmojiSelect={debounce(emojiClickHandler, 10)}
+              />
+            </div>
+          </div>,
+          portalRoot,
+        )
+      : null;
+
   return (
     <>
-      {showEmojiPickerDescription &&
-        (isMbl ? (
-          // Keyboard-docked, search-first bottom sheet on mobile (HTPR-4589);
-          // the floating popup could not raise the keyboard. emojiClickHandler
-          // applies the reaction and closes the picker.
-          <MobileEmojiReactionSheet
-            onEmojiSelect={debounce(emojiClickHandler, 10)}
-            onClose={() => handleClickOutside(undefined)}
-          />
-        ) : portalRoot ? (
-          createPortal(
-            <div // This is your .emoji-picker-wrapper equivalent
-              className="emoji-picker-portal-container" // Use a more descriptive class name
-              // Picker lives on #portal-root (HTPR-6404). Still stop clicks so a
-              // stray bubble cannot count as a description double-tap edit
-              // (HTPR-4663).
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: "fixed",
-                top: pickerPosition.top,
-                left: pickerPosition.left,
-                zIndex: 9999,
-              }}
-            >
-              {/* The absolute positioned div that holds the picker */}
-              <div
-                className={`absolute left-0 z-50`} // z-50 from Tailwind should be high enough if zIndex on parent is 9999
-                ref={pickerRef} // If you need a ref on this internal div
-              >
-                <LazyEmojiPicker
-                  perLine={6}
-                  onClickOutside={handleClickOutside}
-                  showPreview={false}
-                  previewPosition={"none"}
-                  skinTonePosition="none"
-                  emojiSize={14}
-                  enableFrequentEmojiSort={true}
-                  // categories={["frequent","activity","people","objects"]}
-                  showCloseButton={false}
-                  autoFocus={true}
-                  onEmojiSelect={debounce(emojiClickHandler, 10)}
-                />
-              </div>
-            </div>,
-            portalRoot
-          )
-        ) : null)}
+      {showEmojiPickerDescription && isMbl && (
+        // Keyboard-docked, search-first bottom sheet on mobile (HTPR-4589);
+        // the floating popup could not raise the keyboard. emojiClickHandler
+        // applies the reaction and closes the picker.
+        <MobileEmojiReactionSheet
+          onEmojiSelect={debounce(emojiClickHandler, 10)}
+          onClose={() => handleClickOutside(undefined)}
+        />
+      )}
+      {desktopPicker}
       <div className="relative group" ref={buttonTrigger}>
         <SmilePlus size={14}
           id="add-reaction-button"
