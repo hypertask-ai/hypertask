@@ -14,7 +14,7 @@ import { IUser } from "@/models/model";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
 import { ACTIVE_TASK_MUTATION_STATUS } from "@/lib/mcp/tasks/activeTaskMutation";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
-import { withAgentMutationLeaseAdoption } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
+import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
 export interface McpAssigneeResponseItem {
   userId: number;
@@ -269,9 +269,11 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      // Same request-boundary adoption as tasks/update and tasks/move: a caller
-      // that never claimed a lease gets one for this request's first fenced write.
-      const response = await withAgentMutationLeaseAdoption(
+      // Same request-boundary adoption as AI Chat: take a lease for this
+      // request's first fenced write, then release it so the assigned worker
+      // can claim immediately instead of waiting for TTL expiry (HTPR-6388).
+      const response = await withAdoptedAgentMutationLease(
+        prisma,
         { agentId: ctx.agentId, userId: currentUser.id },
         () =>
           assigneesAssign(
@@ -307,7 +309,8 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
-      const response = await withAgentMutationLeaseAdoption(
+      const response = await withAdoptedAgentMutationLease(
+        prisma,
         { agentId: ctx.agentId, userId: currentUser.id },
         () =>
           assigneesAssign(
@@ -376,7 +379,8 @@ export async function POST(request: NextRequest) {
 
       for (const uid of userIdsToProcess) {
         //Right now we are only assigning users from agents
-        const response = await withAgentMutationLeaseAdoption(
+        const response = await withAdoptedAgentMutationLease(
+          prisma,
           { agentId: ctx.agentId, userId: currentUser.id },
           () =>
             assigneesAssign(currentUser, uid, task.id, undefined, ctx.agentId ?? undefined, {
