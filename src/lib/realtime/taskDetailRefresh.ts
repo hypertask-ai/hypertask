@@ -83,18 +83,58 @@ export function mergeRealtimeTaskDetail<T extends RealtimeTaskStaleness>(
   };
 }
 
-type TaskDetailQueryClient<T> = {
-  cancelQueries: (opts: { queryKey: unknown[] }) => Promise<unknown>;
-  setQueryData: (key: unknown[], data: T) => void;
+type TaskDetailSatelliteFields = {
+  id?: number | null;
+  priority?: unknown;
+  estimate?: unknown;
 };
 
+type TaskDetailQueryClient = {
+  cancelQueries: (opts: { queryKey: unknown[] }) => Promise<unknown>;
+  setQueryData: (key: unknown[], data: unknown) => void;
+  invalidateQueries: (opts: { queryKey: unknown[] }) => Promise<unknown>;
+};
+
+/**
+ * Side-panel priority / estimate / labels each keep their own react-query key
+ * (HTPR-3708). A task:changed refetch used to update only ["task-", id], so the
+ * open detail panel kept showing the mount-time snapshot (HTPR-6281 QA).
+ */
+export async function seedTaskDetailSatelliteCaches<
+  T extends TaskDetailSatelliteFields,
+>(
+  queryClient: Pick<
+    TaskDetailQueryClient,
+    "cancelQueries" | "setQueryData" | "invalidateQueries"
+  >,
+  task: T
+): Promise<void> {
+  const taskId = task.id;
+  if (taskId == null) return;
+
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: ["priority", taskId] }),
+    queryClient.cancelQueries({ queryKey: ["estimate", taskId] }),
+    queryClient.cancelQueries({ queryKey: ["taskLabels", taskId] }),
+  ]);
+
+  if ("priority" in task) {
+    queryClient.setQueryData(["priority", taskId], task.priority ?? null);
+  }
+  if ("estimate" in task) {
+    queryClient.setQueryData(["estimate", taskId], task.estimate ?? null);
+  }
+  // getTask does not include taskLabels; force the labels query to refetch.
+  await queryClient.invalidateQueries({ queryKey: ["taskLabels", taskId] });
+}
+
 /** Cancel stale react-query fetches before writing a realtime task payload. */
-export async function refreshTaskDetailQueryCache<T>({
+export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteFields>({
   queryClient,
   taskId,
   fetchTask,
 }: {
-  queryClient: TaskDetailQueryClient<T>;
+  queryClient: TaskDetailQueryClient;
   taskId: number;
   fetchTask: () => Promise<T | null>;
 }): Promise<T | null> {
@@ -102,6 +142,7 @@ export async function refreshTaskDetailQueryCache<T>({
   const task = await fetchTask();
   if (task) {
     queryClient.setQueryData(["task-", taskId], task);
+    await seedTaskDetailSatelliteCaches(queryClient, task);
   }
   return task;
 }
