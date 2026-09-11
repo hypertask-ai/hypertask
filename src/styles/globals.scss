@@ -694,6 +694,11 @@ body {
     min-height: 0;
     height: calc(100svh - var(--mobile-chrome-h));
   }
+  // Agent Chat owns its chrome insets on the same node as the scroll shell
+  // (AI_Chat_Layout bails out for /agents/chat). Stop bounce on the page body.
+  .mobile-tab-bar-content.mobile-agent-chat {
+    overscroll-behavior-y: none;
+  }
   // The bounded inner inbox owns the viewport height; forcing it again here double-counts the chrome inset and creates a page scrollbar.
   .mobile-tab-bar-content .inbox-page-shell {
     min-height: 0;

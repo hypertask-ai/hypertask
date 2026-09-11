@@ -14,6 +14,10 @@ import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
 import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
+  AGENT_CHAT_ADHD_REPLY_GUIDANCE,
+  HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+} from "@/lib/flags/keys";
+import {
   AGENT_CHAT_PARKED_MESSAGE,
   AGENT_CHAT_PARKED_REPLY_FLAG,
 } from "@/lib/agentRuns/model";
@@ -95,6 +99,11 @@ export async function POST(
       console.error("Failed to enrich Agent Chat with work context", error);
     }
 
+    const adhdReplyEnabled = await isFeatureEnabled(
+      HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+      userId,
+    );
+
     // Read before the transaction: this can reach Redis, and the write below
     // holds the session row lock. The sender, not the thread's owner: a rollout
     // must not switch on for someone outside its audience just because they
@@ -143,6 +152,9 @@ export async function POST(
           messageId: message.id,
           text,
           userName: sender?.displayName ?? null,
+          ...(adhdReplyEnabled
+            ? { replyGuidance: AGENT_CHAT_ADHD_REPLY_GUIDANCE }
+            : {}),
         },
         ...(agentBrief ? { agentBrief } : {}),
       });

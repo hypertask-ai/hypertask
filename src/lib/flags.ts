@@ -39,6 +39,7 @@ import {
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
+  HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
 } from "@/lib/flags/keys";
@@ -202,6 +203,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: "htpr-6129-mobile-agent-chat-viewport",
     shippedOn: "2026-09-04",
     description: "Keeps the full Agent Chat visible on mobile when the keyboard is open.",
+  },
+  {
+    key: HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+    shippedOn: "2026-09-11",
+    description:
+      "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",
   },
   {
     key: "htpr-6287-agent-chat-roster-status",

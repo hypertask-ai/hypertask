@@ -47,3 +47,8 @@ export const HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG =
   "htpr-4228-admin-only-time-reports";
 export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
   "htpr-6215-my-tasks-cross-board-priority-sort";
+export const HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG =
+  "htpr-6407-mobile-agent-chat-layout";
+/** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
+export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
+  "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

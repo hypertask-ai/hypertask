@@ -21,13 +21,13 @@ test("mobile Agent Chat follows the keyboard-visible viewport behind its ticket 
   );
   assert.match(
     chat,
-    /useMobileVisualViewport\(\s*isMbl\s*&&\s*mobileAgentChatViewportEnabled,?\s*\)/,
+    /useMobileVisualViewport\(\s*isMbl\s*&&\s*\(mobileAgentChatViewportEnabled \|\| mobileLayoutEnabled\),?\s*\)/,
   );
-  assert.match(narrowLayout, /h-screen/);
+  assert.match(narrowLayout, /!mobileLayoutEnabled && "h-screen"/);
   assert.match(narrowLayout, /style=\{\{ height: mobileAgentChatHeight \}\}/);
   assert.match(
     chat,
-    /if \(isMbl && mobileAgentChatViewportEnabled\) \{[\s\S]*?`\$\{mobileAgentChatViewport\.visibleHeight\}px`[\s\S]*?: "100dvh"/,
+    /(?:else )?if \(isMbl && mobileAgentChatViewportEnabled\) \{[\s\S]*?`\$\{mobileAgentChatViewport\.visibleHeight\}px`[\s\S]*?: "100dvh"/,
   );
 });
 
