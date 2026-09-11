@@ -1,4 +1,5 @@
 import type { Client, ConnectionMethod } from "./types"
+import { isUsableMcpBearerToken } from "@/lib/mcp/bearerAuth"
 
 export const MCP_SERVER_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "https://mcp.hypertask.ai/mcp"
 export const MCP_DOCS_URL = "https://docs.hypertask.ai/mcp"

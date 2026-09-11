@@ -799,7 +799,7 @@ export default function useSaveContent() {
         ...(currentTask?.relatedToTasks || []).flatMap(
           (item) => item.sourceTask?.id
         ),
-      ].filter(Boolean),
+      ],
     });
     if (
       comments &&
@@ -838,7 +838,8 @@ export default function useSaveContent() {
 
       if (result.hyperMention)
         postHyperMention("Comment", "Create", {
-          ownerId: mentionOwnerId,
+          ownerId:
+            mentionOwnerId === undefined ? undefined : String(mentionOwnerId),
           projectId: mentionProjectId ?? -1,
           teamId: mentionTeamId ?? "-1",
           text: result.html,

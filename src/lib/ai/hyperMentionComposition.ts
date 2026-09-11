@@ -6,20 +6,20 @@
  */
 export function resolveHyperMentionComposition(input: {
   composedForTaskId?: number;
-  composedForOwnerId?: number;
+  composedForOwnerId?: number | string;
   composedForProjectId?: number;
   composedForTeamId?: string;
   composedForTeamTitle?: string;
   composedRelatedTaskIds?: number[];
   currentTaskId?: number;
-  currentOwnerId?: number;
+  currentOwnerId?: number | string;
   currentProjectId?: number;
   currentTeamId?: string;
   currentTeamTitle?: string;
-  currentRelatedTaskIds?: number[];
+  currentRelatedTaskIds?: Array<number | undefined | null>;
 }): {
   taskId: number | undefined;
-  ownerId: number | undefined;
+  ownerId: number | string | undefined;
   projectId: number | undefined;
   teamId: string | undefined;
   teamTitle: string | undefined;
