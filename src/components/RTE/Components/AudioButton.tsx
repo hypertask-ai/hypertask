@@ -53,6 +53,11 @@ interface IProp {
   /** Serializes recorder instances that write into the same draft. */
   dictationCoordinator?: DictationCoordinator;
   disabled?: boolean;
+  /**
+   * Board for the transcript request. `undefined` keeps the Recoil current
+   * board (existing callers). `null` means no board: do not fall back.
+   */
+  projectId?: number | null;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -78,6 +83,7 @@ export const AudioButton = ({
   onProcessingChange,
   className,
   wrapperClassName,
+  projectId: projectIdProp,
   idleLabel,
   ariaLabel,
   mobilePresentation,
@@ -140,6 +146,8 @@ export const AudioButton = ({
       "inline-draft-ai-audio-button",
     ].includes(id);
   const currentProject = useRecoilValue(currentProjectAtom);
+  const resolvedProjectId =
+    projectIdProp === undefined ? currentProject?.id : projectIdProp ?? undefined;
 
   // Audio graph + capture, all kept out of render so the rAF loop reads live values.
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -454,7 +462,7 @@ export const AudioButton = ({
         body: JSON.stringify({
           audioFile: base64Audio,
           improve: shouldImprove.current,
-          projectId: currentProject?.id,
+          projectId: resolvedProjectId,
         }),
       });
 

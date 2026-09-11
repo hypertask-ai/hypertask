@@ -18,8 +18,8 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRecoilValue } from "@/lib/state";
-import { appShellRailAtom, agentChatTeamCycleAtom } from "@/store";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { appShellRailAtom, agentChatTeamCycleAtom, mobileTopBarTitleAtom } from "@/store";
 import { IUser, IProject, ITask } from "@/models/model";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
@@ -77,7 +77,7 @@ import {
   AGENT_CHAT_PARKED_MESSAGE,
   AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
 } from "@/lib/agentRuns/model";
-import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
+import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
@@ -139,6 +139,20 @@ function chatStatusText(agent: TAgent): string {
     return `Working on ${agent.working.ticket}`;
   }
   return "Idle";
+}
+
+/** Prefer the active team board, else the agent's first board (HTPR-6407 mic). */
+function agentDictationProjectId(
+  agent: TAgent | null | undefined,
+  teamId: string | null,
+): number | null {
+  const boards = agent?.boards ?? [];
+  if (boards.length === 0) return null;
+  if (teamId) {
+    const match = boards.find((board) => board.teamId === teamId);
+    if (match) return match.id;
+  }
+  return boards[0]?.id ?? null;
 }
 
 /** Roster status dot: green on any proof of life within the last 24h. */
@@ -386,7 +400,13 @@ function emptyFeedText(filter: AgentChatFilter, agentName: string): string {
   return `Send ${agentName} a message to start the conversation.`;
 }
 
-function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
+function ActivityGroup({
+  group,
+  constrainRows,
+}: {
+  group: AgentChatActivityGroup;
+  constrainRows?: boolean;
+}) {
   const label = group.task
     ? `${group.task.ticketNumber}: ${group.task.title}`
     : "Agent activity";
@@ -418,13 +438,25 @@ function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
               href={event.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-w-0 items-center gap-1 text-white-black hover:text-hypertasks-purple"
+              className={cn(
+                "min-w-0 items-center gap-1 text-white-black hover:text-hypertasks-purple",
+                constrainRows
+                  ? "flex w-full max-w-full"
+                  : "inline-flex",
+              )}
             >
               <span className="truncate">{event.text}</span>
               <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
             </a>
           ) : (
-            <span className="min-w-0 truncate">{event.text}</span>
+            <span
+              className={cn(
+                "min-w-0 truncate",
+                constrainRows && "block w-full",
+              )}
+            >
+              {event.text}
+            </span>
           );
           return (
             <div key={event.id} className="flex min-w-0 items-center gap-1.5">
@@ -436,7 +468,11 @@ function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
                 strokeWidth={1.75}
                 aria-hidden
               />
-              {eventContent}
+              {constrainRows ? (
+                <div className="min-w-0 flex-1">{eventContent}</div>
+              ) : (
+                eventContent
+              )}
               <time
                 dateTime={event.createdAt}
                 className="ml-auto shrink-0 text-micro"
@@ -493,13 +529,22 @@ function FeedFilter({
   );
 }
 
-function ScrollToBottomButton({ onClick }: { onClick: () => void }) {
+function ScrollToBottomButton({
+  onClick,
+  className,
+}: {
+  onClick: () => void;
+  className?: string;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label="Scroll to latest messages"
-      className="absolute left-1/2 top-2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-active-elementBg shadow-md"
+      className={cn(
+        "absolute left-1/2 z-10 flex h-8 w-8 -translate-x-1/2 items-center justify-center rounded-full bg-active-elementBg shadow-md",
+        className ?? "top-2",
+      )}
     >
       <ChevronDown size={18} strokeWidth={1.75} />
     </button>
@@ -582,6 +627,7 @@ const AgentChatClient = (props: IProp) => {
   const mobileAgentChatViewportEnabled = useFlag(
     "htpr-6129-mobile-agent-chat-viewport",
   );
+  const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   // Idle durations and the idle-to-inactive flip have to move while the chat
@@ -595,9 +641,10 @@ const AgentChatClient = (props: IProp) => {
   const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const mobileAgentChatViewport = useMobileVisualViewport(
-    isMbl && mobileAgentChatViewportEnabled,
+    isMbl && (mobileAgentChatViewportEnabled || mobileLayoutEnabled),
   );
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
+  const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
 
   const [agents, setAgents] = useState<TAgent[] | null>(null);
   const [rosterError, setRosterError] = useState<string | null>(null);
@@ -1295,6 +1342,24 @@ const AgentChatClient = (props: IProp) => {
     [agents, selectedId],
   );
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
+  const dictationProjectId = useMemo(
+    () =>
+      isMbl && mobileLayoutEnabled
+        ? agentDictationProjectId(selectedAgent, teamId)
+        : null,
+    [isMbl, mobileLayoutEnabled, selectedAgent, teamId],
+  );
+
+  useEffect(() => {
+    if (!mobileLayoutEnabled || !isMbl) return;
+    setMobileTopBarTitle(selectedAgent?.displayName ?? "Agents");
+    return () => setMobileTopBarTitle(null);
+  }, [
+    mobileLayoutEnabled,
+    isMbl,
+    selectedAgent?.displayName,
+    setMobileTopBarTitle,
+  ]);
 
   const teams = useMemo(() => listTeams(agents ?? []), [agents]);
 
@@ -2059,8 +2124,8 @@ const AgentChatClient = (props: IProp) => {
               <FeedFilter value={feedFilter} onChange={setFeedFilter} />
             </div>
           )}
-          <div className="relative flex flex-1 flex-col overflow-hidden">
-            {showScrollToBottom && (
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            {showScrollToBottom && !(isMbl && mobileLayoutEnabled) && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
               />
@@ -2068,7 +2133,10 @@ const AgentChatClient = (props: IProp) => {
           <div
             ref={messageListRef}
             onScroll={handleMessageListScroll}
-            className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
+            className={cn(
+              "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain px-4 py-4",
+              isMbl && mobileLayoutEnabled && showScrollToBottom && "pb-12",
+            )}
           >
             {messagesError && (
               <p className="text-meta text-red-500">{messagesError}</p>
@@ -2091,7 +2159,11 @@ const AgentChatClient = (props: IProp) => {
                   pending={sending && item.id.startsWith("optimistic-")}
                 />
               ) : (
-                <ActivityGroup key={item.id} group={item} />
+                <ActivityGroup
+                  key={item.id}
+                  group={item}
+                  constrainRows={isMbl && mobileLayoutEnabled}
+                />
               ),
             )}
             {/* Not a copy of QueuedMessagesStrip: behind the flag a queued message
@@ -2130,8 +2202,13 @@ const AgentChatClient = (props: IProp) => {
             )}
           </div>
           </div>
-          {/* Card surface under the well: the two tokens differ in every theme, so the box stays visible on AMOLED (well = page) and porcelain (card = page). */}
-          <div className="shrink-0 bg-cardBackground px-4 pb-4 pt-1">
+          <div className="relative shrink-0 bg-cardBackground px-4 pb-4 pt-1">
+            {showScrollToBottom && isMbl && mobileLayoutEnabled && (
+              <ScrollToBottomButton
+                onClick={() => scrollMessagesToBottom("smooth")}
+                className="-top-12 z-50"
+              />
+            )}
             {deliveryNotice && (
               <p className="mb-2 text-meta text-text-light-gray">
                 This agent&apos;s runtime has not enabled chat yet.
@@ -2201,7 +2278,13 @@ const AgentChatClient = (props: IProp) => {
                 globalRecording={isRecording}
                 hasText={draft.trim().length > 0}
                 onProcessingChange={setIsDictationProcessing}
-                disabled={sending}
+                disabled={
+                  sending ||
+                  (isMbl && mobileLayoutEnabled && dictationProjectId === null)
+                }
+                projectId={
+                  isMbl && mobileLayoutEnabled ? dictationProjectId : undefined
+                }
                 ariaLabel="Dictate message"
                 className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"
               />
@@ -2385,7 +2468,12 @@ const AgentChatClient = (props: IProp) => {
   ) : null;
 
   let mobileAgentChatHeight: string | undefined;
-  if (isMbl && mobileAgentChatViewportEnabled) {
+  if (
+    isMbl &&
+    (mobileLayoutEnabled || mobileAgentChatViewportEnabled)
+  ) {
+    // Full visible viewport with top/dock padding inside the same border-box
+    // (AI chat pattern). Avoids h-screen oversizing and mid-screen composer gap.
     mobileAgentChatHeight = mobileAgentChatViewport
       ? `${mobileAgentChatViewport.visibleHeight}px`
       : "100dvh";
@@ -2395,7 +2483,8 @@ const AgentChatClient = (props: IProp) => {
     return (
       <div
         className={cn(
-          "flex h-screen flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
+          "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
+          !(isMbl && mobileLayoutEnabled) && "h-screen",
           // The app shell reserves a fixed top bar and bottom tab bar (see
           // globals.scss .mobile-tab-bar-content); AI_Chat_Layout normally adds
           // this inset but bails out early for /agents/chat, so we add it
@@ -2403,6 +2492,9 @@ const AgentChatClient = (props: IProp) => {
           // isMbl-gated: a merely-narrow desktop window has neither bar.
           isMbl &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[var(--mobile-dock-h,64px)]",
+          isMbl &&
+            mobileLayoutEnabled &&
+            "mobile-agent-chat min-h-0 overscroll-y-none",
         )}
         style={{ height: mobileAgentChatHeight }}
       >

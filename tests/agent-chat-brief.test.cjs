@@ -25,7 +25,12 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
+function loadMessageRoute({
+  flagEnabled,
+  brief,
+  briefError = null,
+  adhdReplyEnabled = false,
+}) {
   const deliveries = [];
   let briefCalls = 0;
   const participantUpdates = [];
@@ -82,7 +87,11 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
   stubModule("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
   stubModule("src/lib/flags.ts", {
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
-    isFeatureEnabled: async () => flagEnabled,
+    isFeatureEnabled: async (key) => {
+      if (key === "htpr-6155-chat-agent-brief") return flagEnabled;
+      if (key === "htpr-6407-mobile-agent-chat-layout") return adhdReplyEnabled;
+      return false;
+    },
   });
   stubModule("src/lib/agents/chatBrief.ts", {
     buildAgentChatBrief: async (input) => {
@@ -431,4 +440,15 @@ test("message send keeps the exact legacy payload when enrichment fails", async 
     text: "What are you working on?",
     userName: "Valentin",
   });
+});
+
+test("message send adds ADHD reply guidance when the layout flag is on", async () => {
+  const route = loadMessageRoute({
+    flagEnabled: false,
+    brief: null,
+    adhdReplyEnabled: true,
+  });
+  assert.equal((await sendMessage(route)).status, 200);
+  assert.match(route.deliveries[0].chat.replyGuidance, /Lead with the next action/);
+  assert.equal(route.deliveries[0].chat.sessionId, "session-1");
 });

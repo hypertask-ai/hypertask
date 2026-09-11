@@ -92,7 +92,7 @@ test("mobile secondary header controls wait for usable Board paint", () => {
     /currentProjectAtom|currentProject\?\.title|currentProject\?\.name/,
     "the pre-authorization title must not expose stale project data",
   );
-  assert.match(topBar, /:\s*"Board";/);
+  assert.match(topBar, /fallbackTitle = "Board"/);
   assert.match(topBar, /deferredControlsReady \? \(/);
   assert.doesNotMatch(topBar, /useHypertasksRecoilStates|useSettingsNavigation/);
   assert.match(topBar, /lazy\(\(\) => import\("\.\/MobileTopBarActions"\)\)/);
