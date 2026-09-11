@@ -13,6 +13,7 @@ function loadUtilsViaStripTypes() {
     import {
       MCP_TOKEN_MASK,
       isUsableMcpBearerToken,
+      mcpAuthorizationHeaders,
       readMcpTokenCookieValue,
     } from ${JSON.stringify(pathToFileURL(utilsPath).href)};
     const cases = {
@@ -20,7 +21,9 @@ function loadUtilsViaStripTypes() {
       empty: isUsableMcpBearerToken(""),
       mask: isUsableMcpBearerToken(MCP_TOKEN_MASK),
       stars: isUsableMcpBearerToken("***"),
-      jwt: isUsableMcpBearerToken("eyJhbGciOiJIUzI1NiJ9.e30.signature"),
+      jwt: isUsableMcpBearerToken("header.payload.signature"),
+      maskHeaders: mcpAuthorizationHeaders("***"),
+      jwtHeaders: mcpAuthorizationHeaders("header.payload.signature"),
       pad: readMcpTokenCookieValue("mcp_token=aaa.bbb.ccc=; path=/"),
       mid: readMcpTokenCookieValue("foo=1; mcp_token=aaa.bbb.ccc=; bar=2"),
       miss: readMcpTokenCookieValue("session=abc"),
@@ -45,6 +48,16 @@ test("masked MCP token is not a usable Authorization bearer", () => {
   assert.equal(cases.stars, false);
   assert.equal(cases.jwt, true);
   assert.equal(cases.maskConst, "***");
+  assert.deepEqual(cases.maskHeaders, {});
+  assert.equal(Object.keys(cases.jwtHeaders).join(","), "Authorization");
+  assert.equal(
+    cases.jwtHeaders.Authorization.startsWith("Bearer "),
+    true,
+  );
+  assert.equal(
+    cases.jwtHeaders.Authorization.slice("Bearer ".length),
+    "header.payload.signature",
+  );
 });
 
 test("mcp_token cookie parse keeps JWT padding after equals signs", () => {

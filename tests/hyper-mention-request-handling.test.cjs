@@ -55,32 +55,16 @@ test("HyperAI mention clients report every failed response and network error", (
 
 test("HyperAI mention clients never send the masked MCP token as Bearer", () => {
   const hook = read("src/hooks/MultiPages/Tasks/useHyperMention.ts");
+  const utils = read("src/components/Modals/McpToken/utils.ts");
 
-  assert.match(hook, /isUsableMcpBearerToken\(token\)/);
-  assert.equal(
-    (hook.match(/isUsableMcpBearerToken\(token\)/g) || []).length,
-    2,
-  );
-  // Each Authorization assignment must be gated by the usable-token check.
-  const authAssignments = [
-    ...hook.matchAll(
-      /Authorization:\s*`Bearer \$\{token\}`/g,
-    ),
-  ];
-  assert.equal(authAssignments.length, 2);
-  for (const match of authAssignments) {
-    const windowStart = Math.max(0, match.index - 120);
-    const preceding = hook.slice(windowStart, match.index);
-    assert.match(
-      preceding,
-      /isUsableMcpBearerToken\(token\)/,
-      "Authorization Bearer must sit behind isUsableMcpBearerToken(token)",
-    );
-  }
+  assert.match(utils, /export function mcpAuthorizationHeaders/);
+  assert.match(hook, /mcpAuthorizationHeaders\(token\)/);
+  assert.equal((hook.match(/mcpAuthorizationHeaders\(token\)/g) || []).length, 2);
   assert.doesNotMatch(
     hook,
     /\.\.\.\(token \? \{ Authorization: `Bearer \$\{token\}` \} : \{\}\)/,
   );
+  assert.doesNotMatch(hook, /isUsableMcpBearerToken\(token\)\s*\?/);
 });
 
 test("comment create routes HyperAI through the composed task and project", () => {
@@ -96,17 +80,24 @@ test("comment create routes HyperAI through the composed task and project", () =
 
   assert.match(save, /composedForProjectId\?: number/);
   assert.match(save, /composedForTeamId\?: string/);
+  assert.match(save, /composedRelatedTaskIds\?: number\[\]/);
   assert.match(save, /projectId: currentProject\?\.id,/);
   assert.match(save, /teamId: currentProject\?\.teamId,/);
+  assert.match(save, /relatedTaskIds: \[/);
   assert.match(save, /const mentionTaskId = composedForTaskId \?\? currentTask\?\.id/);
   assert.match(save, /const mentionProjectId = composedForProjectId \?\? currentProject\?\.id/);
   assert.match(save, /const mentionTeamId = composedForTeamId \?\? currentProject\?\.teamId/);
   assert.match(save, /projectId: mentionProjectId \?\? -1/);
   assert.match(save, /teamId: mentionTeamId \?\? "-1"/);
-  assert.match(save, /taskIds: \[mentionTaskId\]\.filter\(Boolean\)/);
+  assert.match(
+    save,
+    /taskIds: \[\s*mentionTaskId,\s*\.\.\.\(composedRelatedTaskIds \?\? \[\]\),\s*\]\.filter\(Boolean\)/,
+  );
   assert.match(uploading, /projectId\?: number/);
   assert.match(uploading, /teamId\?: string/);
-  assert.match(uploading, /projectId,\n\s*teamId,\n\s*teamTitle\n/);
+  assert.match(uploading, /relatedTaskIds\?: number\[\]/);
+  assert.match(uploading, /relatedTaskIds\n/);
   assert.match(queue, /projectId=\{comment\.projectId\}/);
   assert.match(queue, /teamId=\{comment\.teamId\}/);
+  assert.match(queue, /relatedTaskIds=\{comment\.relatedTaskIds\}/);
 });

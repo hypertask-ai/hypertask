@@ -18,6 +18,15 @@ export function isUsableMcpBearerToken(
   return Boolean(token) && token !== MCP_TOKEN_MASK
 }
 
+/** Browser fetch headers for optional MCP bearer auth. Omits Authorization for the "***" mask. */
+export function mcpAuthorizationHeaders(
+  token: string | null | undefined,
+): Record<string, string> {
+  return isUsableMcpBearerToken(token)
+    ? { Authorization: `Bearer ${token}` }
+    : {}
+}
+
 /** Read mcp_token from a document.cookie string without truncating JWT "=" padding. */
 export function readMcpTokenCookieValue(cookieHeader: string): string | null {
   for (const part of cookieHeader.split(";")) {

@@ -767,7 +767,8 @@ export default function useSaveContent() {
     // so a live currentProject after navigation 404s the mention (HTPR-6405).
     composedForProjectId?: number,
     composedForTeamId?: string,
-    composedForTeamTitle?: string
+    composedForTeamTitle?: string,
+    composedRelatedTaskIds?: number[]
   ) => {
     const mentionTaskId = composedForTaskId ?? currentTask?.id;
     const mentionOwnerId = composedForOwnerId ?? currentTask?.userId;
@@ -818,9 +819,12 @@ export default function useSaveContent() {
           text: result.html,
           currentUser: currentUser ?? undefined,
           teamTitle: mentionTeamTitle ?? "",
-          // Only the composed ticket. Related IDs from a live currentTask after
-          // navigation would mix boards (OCR HTPR-6405).
-          taskIds: [mentionTaskId].filter(Boolean),
+          // Prefer the related-ID snapshot captured at send time. Falling back
+          // to live currentTask relatives would mix boards after navigation.
+          taskIds: [
+            mentionTaskId,
+            ...(composedRelatedTaskIds ?? []),
+          ].filter(Boolean),
           sourceSelected:
             result.hyperMention.modelSource ?? improveWritingSource,
           modelSelected:
@@ -1109,6 +1113,16 @@ export default function useSaveContent() {
           projectId: currentProject?.id,
           teamId: currentProject?.teamId,
           teamTitle: currentProject?.team?.title,
+          relatedTaskIds: [
+            currentTask?.parentTask?.id,
+            ...(currentTask?.subTasks || []).flatMap((item) => item.id),
+            ...(currentTask?.relatedFromTasks || []).flatMap(
+              (item) => item.targetTask?.id
+            ),
+            ...(currentTask?.relatedToTasks || []).flatMap(
+              (item) => item.sourceTask?.id
+            ),
+          ].filter(Boolean),
         },
       ]);
       return true;
