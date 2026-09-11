@@ -717,7 +717,14 @@ export async function executeTaskUpdate({
         displayName: userObj.displayName,
         photoURL: userObj.photoURL ?? undefined
     }));
-    const sessionToken = signSession({ id: userObj.id, email: userObj.email });
+    // HTPR-6376: stamp the authenticated MCP agent on the internal session so
+    // legacy routes like (un)archive can attribute the actor without trusting
+    // a forgeable JSON body field alone.
+    const sessionToken = signSession({
+        id: userObj.id,
+        email: userObj.email,
+        ...(ctx.agentId ? { agentId: ctx.agentId } : {}),
+    });
     const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`;
 
     // Handle priority/estimate constants

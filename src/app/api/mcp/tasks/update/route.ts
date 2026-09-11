@@ -7,7 +7,8 @@ import {
   normalizeIdempotencyKey,
   withIdempotency,
 } from '@/lib/mcp/idempotency/idempotencyStore'
-import { withAgentMutationLeaseAdoption } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
+import prisma from '@/lib/prisma'
+import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
 import {
   executeTaskUpdate,
   type UpdateTaskBody,
@@ -73,10 +74,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Agent callers should not have to claim a mutation lease by hand. This
-    // request may adopt one on its first fenced transaction; every later
-    // transaction in the same request stays strict.
-    const result = await withAgentMutationLeaseAdoption(
+    // Same request-boundary adoption as assignees/assign and tasks/move
+    // (HTPR-6388 / HTPR-6391): take a lease for this request's first fenced
+    // write, then release it so the next worker can claim immediately instead
+    // of waiting for TTL expiry. Native CLI column moves POST here, not
+    // /mcp/tasks/move (HTPR-6394).
+    const result = await withAdoptedAgentMutationLease(
+      prisma,
       { agentId: ctx.agentId, userId: ctx.user.id },
       () =>
         executeTaskUpdate({

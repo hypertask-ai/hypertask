@@ -47,6 +47,10 @@ import {
   taskLifecycleTimestampChanges,
 } from "@/lib/mcp/tasks/humanMutationOverride";
 import {
+  AgentDoneLifecycleDeniedError,
+  assertAgentMayLeaveDone,
+} from "@/lib/mcp/tasks/agentDoneLifecycle";
+import {
   assertCycleAssignable,
   CycleAssignmentError,
 } from "@/lib/cycleService";
@@ -238,6 +242,12 @@ export async function updateTaskSingle(
           throw new TaskDescriptionChangedError();
         }
         taskBeforeWrite = currentState;
+        await assertAgentMayLeaveDone(
+          tx,
+          currentState,
+          requestedMutation.status,
+          agentId,
+        );
 
         if (isHumanOverride) {
           const currentComparableState = {
@@ -688,6 +698,12 @@ export async function updateTaskSingle(
       return {
         status: error.status,
         json: { message: error.message },
+      };
+    }
+    if (error instanceof AgentDoneLifecycleDeniedError) {
+      return {
+        status: error.status,
+        json: { message: error.message, code: error.code },
       };
     }
     if (isTaskIdentityConflict(error)) {

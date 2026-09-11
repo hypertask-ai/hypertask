@@ -16,6 +16,8 @@ import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import { persistAgentTaskCreatedPending } from "@/lib/agentWebhooks/outbox";
 import { assignmentActivityUserSelect } from "@/utils/controllers/activities/createAssignedActivity";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 /** First argument to `pg_advisory_xact_lock`; pairs with `projectId` for uniqueIndex allocation. */
@@ -190,13 +192,19 @@ const handler: NextApiHandler = async (
       return res.status(401).json({ message: "Unauthorized" });
     }
     const currentUser = currentUserRecord as IUser;
-    const agentId =
-      typeof requestedAgentId === "string" && requestedAgentId.length > 0
-        ? requestedAgentId
-        : null;
-    if (requestedAgentId != null && !agentId) {
-      return res.status(400).json({ message: "Invalid agent id" });
+    // HTPR-6362: acting agent comes from the signed session claim. Body agentId
+    // may confirm that claim but cannot forge one (same rule as archive).
+    const signedSession = verifySession(req.cookies?.[SESSION_COOKIE]);
+    const actingAgent = resolveActingAgent({
+      sessionAgentId: signedSession?.agentId ?? null,
+      bodyAgentId: requestedAgentId,
+    });
+    if (!actingAgent.ok) {
+      return res
+        .status(actingAgent.status)
+        .json({ message: actingAgent.message });
     }
+    const agentId = actingAgent.agentId;
     if (agentId) {
       const agentOwnerId = await getActiveAgentOwnerId(agentId);
       if (agentOwnerId !== session.userId) {

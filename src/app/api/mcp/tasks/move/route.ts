@@ -10,7 +10,7 @@ import {
   getSectionForTask,
 } from "@/lib/mcp/tasks/services";
 import { broadcastBoardChange } from "@/lib/realtime/server";
-import { withAgentMutationLeaseAdoption } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
+import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
 interface MoveTaskBody {
   task_id?: number;
@@ -248,9 +248,11 @@ export async function POST(request: NextRequest) {
       UserSetting: {} as any,
     };
 
-    // Same request-boundary adoption as the update route: the first fenced
-    // transaction may take the lease, later ones stay strict.
-    const result = await withAgentMutationLeaseAdoption(
+    // Same request-boundary adoption as assignees/assign (HTPR-6388): take a
+    // lease for this request's first fenced write, then release it so the next
+    // worker can claim immediately instead of waiting for TTL expiry (HTPR-6391).
+    const result = await withAdoptedAgentMutationLease(
+      prisma,
       { agentId: ctx.agentId, userId: currentUser.id },
       () =>
         moveTaskToDifferentBoard({

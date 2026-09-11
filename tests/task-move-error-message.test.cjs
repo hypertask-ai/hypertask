@@ -101,6 +101,15 @@ function loadDeleteController(deleteOutcome) {
   const stubs = {
     "@/lib/factoryAcceptance/enforcement": {},
     "@/lib/factoryAcceptance/service": {},
+    "@/lib/mcp/tasks/agentDoneLifecycle": execute(
+      compile("src/lib/mcp/tasks/agentDoneLifecycle.ts"),
+      {
+        "@/lib/mcp/boards/columnRole": execute(
+          compile("src/lib/mcp/boards/columnRole.ts"),
+          {},
+        ),
+      },
+    ),
     "@/lib/prisma": { __esModule: true, default: {} },
     "@/models/ActivityModels.ts": {},
     "@/models/model": {},

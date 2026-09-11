@@ -169,6 +169,22 @@ function loadCreateRoute() {
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => ({ userId: 6 }),
     },
+    "@/lib/auth/session": {
+      SESSION_COOKIE: "ht_session",
+      verifySession: () => null,
+    },
+    "@/lib/auth/resolveActingAgent": {
+      resolveActingAgent: ({ bodyAgentId }) => {
+        if (bodyAgentId === undefined || bodyAgentId === null) {
+          return { ok: true, agentId: null };
+        }
+        return {
+          ok: false,
+          status: 403,
+          message: "Agent id must match an authenticated agent session claim",
+        };
+      },
+    },
     "@/utils/controllers/projects/getAllIncludes": {
       taskWriteAccessWhere: () => ({}),
     },
@@ -238,6 +254,7 @@ async function createTask(handler, body, response) {
     {
       method: "POST",
       headers: {},
+      cookies: {},
       body,
     },
     response.response,

@@ -261,6 +261,16 @@ function loadUpdateController(
       requestedTaskStateChanges: (_task, mutation) => mutation,
       taskLifecycleTimestampChanges: () => ({}),
     },
+    "@/lib/mcp/tasks/agentDoneLifecycle": {
+      assertAgentMayLeaveDone: async () => undefined,
+      AgentDoneLifecycleDeniedError: class extends Error {
+        constructor(message) {
+          super(message);
+          this.status = 403;
+          this.code = "agent_done_lifecycle_denied";
+        }
+      },
+    },
     "@/lib/cycleService": {
       assertCycleAssignable: async (_transaction, cycleProjectId, cycleId) => {
         calls.cycleValidation = { cycleId, projectId: cycleProjectId };

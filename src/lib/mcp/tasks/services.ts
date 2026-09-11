@@ -553,7 +553,13 @@ export async function createTask(data: {
         displayName: user.displayName,
         photoURL: user.photoURL ?? undefined
     }));
-    const sessionToken = signSession({ id: user.id, email: user.email });
+    // Bind the managed-agent claim into the signed hop so createGlobally can
+    // resolve authorship from authentication, not a forgeable body field.
+    const sessionToken = signSession({
+        id: user.id,
+        email: user.email,
+        ...(agentId ? { agentId } : {}),
+    });
     const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`;
 
     let assigneesMinimal: any[] | undefined = undefined
