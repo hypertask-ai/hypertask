@@ -222,6 +222,9 @@ test("refreshTaskDetailQueryCache cancels stale fetches before writing archived 
   assert.deepEqual(calls, [
     ["cancel", ["task-", TASK_ID]],
     ["set", ["task-", TASK_ID], archivedTask],
+    ["cancel", ["priority", TASK_ID]],
+    ["cancel", ["estimate", TASK_ID]],
+    ["cancel", ["taskLabels", TASK_ID]],
     ["invalidate", ["taskLabels", TASK_ID]],
   ]);
 });

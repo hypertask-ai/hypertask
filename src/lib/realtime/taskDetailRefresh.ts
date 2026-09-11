@@ -100,12 +100,23 @@ type TaskDetailQueryClient<T> = {
  * (HTPR-3708). A task:changed refetch used to update only ["task-", id], so the
  * open detail panel kept showing the mount-time snapshot (HTPR-6281 QA).
  */
-export function seedTaskDetailSatelliteCaches<T extends TaskDetailSatelliteFields>(
-  queryClient: Pick<TaskDetailQueryClient<T>, "setQueryData" | "invalidateQueries">,
+export async function seedTaskDetailSatelliteCaches<
+  T extends TaskDetailSatelliteFields,
+>(
+  queryClient: Pick<
+    TaskDetailQueryClient<T>,
+    "cancelQueries" | "setQueryData" | "invalidateQueries"
+  >,
   task: T
-): void {
+): Promise<void> {
   const taskId = task.id;
   if (taskId == null) return;
+
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: ["priority", taskId] }),
+    queryClient.cancelQueries({ queryKey: ["estimate", taskId] }),
+    queryClient.cancelQueries({ queryKey: ["taskLabels", taskId] }),
+  ]);
 
   if ("priority" in task) {
     queryClient.setQueryData(["priority", taskId], task.priority ?? null);
@@ -114,7 +125,7 @@ export function seedTaskDetailSatelliteCaches<T extends TaskDetailSatelliteField
     queryClient.setQueryData(["estimate", taskId], task.estimate ?? null);
   }
   // getTask does not include taskLabels; force the labels query to refetch.
-  void queryClient.invalidateQueries({ queryKey: ["taskLabels", taskId] });
+  await queryClient.invalidateQueries({ queryKey: ["taskLabels", taskId] });
 }
 
 /** Cancel stale react-query fetches before writing a realtime task payload. */
@@ -131,7 +142,7 @@ export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteF
   const task = await fetchTask();
   if (task) {
     queryClient.setQueryData(["task-", taskId], task);
-    seedTaskDetailSatelliteCaches(queryClient, task);
+    await seedTaskDetailSatelliteCaches(queryClient, task);
   }
   return task;
 }

@@ -16,22 +16,31 @@ const {
   seedTaskDetailSatelliteCaches,
 } = jiti(path.join(root, "src/lib/realtime/taskDetailRefresh.ts"));
 
-test("seedTaskDetailSatelliteCaches writes priority and estimate keys and invalidates labels", async () => {
+test("seedTaskDetailSatelliteCaches cancels, writes priority/estimate, and awaits labels", async () => {
+  const cancelled = [];
   const writes = [];
   const invalidated = [];
   const queryClient = {
+    cancelQueries: async ({ queryKey }) => {
+      cancelled.push(queryKey);
+    },
     setQueryData: (key, data) => writes.push({ key, data }),
     invalidateQueries: async ({ queryKey }) => {
       invalidated.push(queryKey);
     },
   };
 
-  seedTaskDetailSatelliteCaches(queryClient, {
+  await seedTaskDetailSatelliteCaches(queryClient, {
     id: 6281,
     priority: { id: "p-high", Priority_Value: "High" },
     estimate: { estimate_index: 2 },
   });
 
+  assert.deepEqual(cancelled, [
+    ["priority", 6281],
+    ["estimate", 6281],
+    ["taskLabels", 6281],
+  ]);
   assert.deepEqual(writes, [
     {
       key: ["priority", 6281],
@@ -43,10 +52,13 @@ test("seedTaskDetailSatelliteCaches writes priority and estimate keys and invali
 });
 
 test("refreshTaskDetailQueryCache seeds side-panel caches from the fetched task", async () => {
+  const cancelled = [];
   const writes = [];
   const invalidated = [];
   const queryClient = {
-    cancelQueries: async () => undefined,
+    cancelQueries: async ({ queryKey }) => {
+      cancelled.push(queryKey);
+    },
     setQueryData: (key, data) => writes.push({ key, data }),
     invalidateQueries: async ({ queryKey }) => {
       invalidated.push(queryKey);
@@ -69,6 +81,8 @@ test("refreshTaskDetailQueryCache seeds side-panel caches from the fetched task"
   });
 
   assert.equal(task, fetched);
+  assert.ok(cancelled.some((key) => key[0] === "task-" && key[1] === 6281));
+  assert.ok(cancelled.some((key) => key[0] === "priority"));
   assert.ok(
     writes.some(
       (entry) =>
@@ -92,11 +106,17 @@ test("refreshTaskDetailQueryCache seeds side-panel caches from the fetched task"
   assert.deepEqual(invalidated, [["taskLabels", 6281]]);
 });
 
-test("realtime task detail fetch uses cache no-store", () => {
+test("realtime task detail fetch uses the shared no-store cache constant", () => {
   const source = fs.readFileSync(
     path.join(root, "src/hooks/realtime/useTaskCommentsRealtime.ts"),
     "utf8"
   );
-  assert.match(source, /cache:\s*["']no-store["']/);
-  assert.match(source, /TASK_DETAIL_REALTIME_FETCH_CACHE\s*=\s*["']no-store["']/);
+  assert.match(
+    source,
+    /export const TASK_DETAIL_REALTIME_FETCH_CACHE = "no-store"/
+  );
+  assert.match(
+    source,
+    /cache:\s*TASK_DETAIL_REALTIME_FETCH_CACHE/
+  );
 });
