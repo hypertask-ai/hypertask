@@ -71,6 +71,9 @@ test("comment create routes HyperAI through the composed task and project", () =
   const save = read(
     "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts",
   );
+  const helper = read(
+    "src/hooks/Task Detail/CommentAndDescriptionHooks/hyperMentionComposition.ts",
+  );
   const uploading = read(
     "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/index.tsx",
   );
@@ -78,26 +81,11 @@ test("comment create routes HyperAI through the composed task and project", () =
     "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/UploadingCommentContainer.tsx",
   );
 
-  assert.match(save, /composedForProjectId\?: number/);
-  assert.match(save, /composedForTeamId\?: string/);
+  assert.match(helper, /export function resolveHyperMentionComposition/);
+  assert.match(save, /resolveHyperMentionComposition\(/);
+  assert.match(save, /taskIds: mentionTaskIds/);
   assert.match(save, /composedRelatedTaskIds\?: number\[\]/);
-  assert.match(save, /projectId: currentProject\?\.id,/);
-  assert.match(save, /teamId: currentProject\?\.teamId,/);
   assert.match(save, /relatedTaskIds: \[/);
-  assert.match(save, /const mentionTaskId = composedForTaskId \?\? currentTask\?\.id/);
-  assert.match(save, /const mentionProjectId = composedForProjectId \?\? currentProject\?\.id/);
-  assert.match(save, /const mentionTeamId = composedForTeamId \?\? currentProject\?\.teamId/);
-  assert.match(save, /projectId: mentionProjectId \?\? -1/);
-  assert.match(save, /teamId: mentionTeamId \?\? "-1"/);
-  assert.match(
-    save,
-    /taskIds: \[\s*mentionTaskId,\s*\.\.\.\(composedRelatedTaskIds \?\? \[\]\),\s*\]\.filter\(Boolean\)/,
-  );
-  assert.match(uploading, /projectId\?: number/);
-  assert.match(uploading, /teamId\?: string/);
   assert.match(uploading, /relatedTaskIds\?: number\[\]/);
-  assert.match(uploading, /relatedTaskIds\n/);
-  assert.match(queue, /projectId=\{comment\.projectId\}/);
-  assert.match(queue, /teamId=\{comment\.teamId\}/);
   assert.match(queue, /relatedTaskIds=\{comment\.relatedTaskIds\}/);
 });

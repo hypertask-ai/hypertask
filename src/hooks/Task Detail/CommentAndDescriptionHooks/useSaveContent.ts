@@ -32,6 +32,7 @@ import globalConstants from "@/lib/constants";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useTaskRelations } from "../useTaskRelations";
 import { useHyperMention } from "@/hooks/MultiPages/Tasks/useHyperMention";
+import { resolveHyperMentionComposition } from "@/hooks/Task Detail/CommentAndDescriptionHooks/hyperMentionComposition";
 import { USER_DRAFTS_QUERY_KEY } from "@/hooks/General/useGetUserDrafts";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import {
@@ -770,12 +771,26 @@ export default function useSaveContent() {
     composedForTeamTitle?: string,
     composedRelatedTaskIds?: number[]
   ) => {
-    const mentionTaskId = composedForTaskId ?? currentTask?.id;
-    const mentionOwnerId = composedForOwnerId ?? currentTask?.userId;
-    const mentionProjectId = composedForProjectId ?? currentProject?.id;
-    const mentionTeamId = composedForTeamId ?? currentProject?.teamId;
-    const mentionTeamTitle =
-      composedForTeamTitle ?? currentProject?.team?.title;
+    const {
+      taskId: mentionTaskId,
+      ownerId: mentionOwnerId,
+      projectId: mentionProjectId,
+      teamId: mentionTeamId,
+      teamTitle: mentionTeamTitle,
+      taskIds: mentionTaskIds,
+    } = resolveHyperMentionComposition({
+      composedForTaskId,
+      composedForOwnerId,
+      composedForProjectId,
+      composedForTeamId,
+      composedForTeamTitle,
+      composedRelatedTaskIds,
+      currentTaskId: currentTask?.id,
+      currentOwnerId: currentTask?.userId,
+      currentProjectId: currentProject?.id,
+      currentTeamId: currentProject?.teamId,
+      currentTeamTitle: currentProject?.team?.title,
+    });
     if (
       comments &&
       setComments &&
@@ -819,12 +834,7 @@ export default function useSaveContent() {
           text: result.html,
           currentUser: currentUser ?? undefined,
           teamTitle: mentionTeamTitle ?? "",
-          // Prefer the related-ID snapshot captured at send time. Falling back
-          // to live currentTask relatives would mix boards after navigation.
-          taskIds: [
-            mentionTaskId,
-            ...(composedRelatedTaskIds ?? []),
-          ].filter(Boolean),
+          taskIds: mentionTaskIds,
           sourceSelected:
             result.hyperMention.modelSource ?? improveWritingSource,
           modelSelected:
