@@ -675,11 +675,14 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             keyCombination={["P"]}
           />
           <Suspense fallback={<></>}>
-            {priority_ ? (
+            {(currentTask.priority ?? priority_) ? (
               <PriorityLabelComponent
                 stopPropogation={false}
                 fontSize={_mbl ? 12 : 13}
-                priority={priority_}
+                // Prefer the live task object: priority_ is a separate query
+                // key that used to stay on the mount snapshot after remote
+                // changes (HTPR-6281 QA).
+                priority={currentTask.priority ?? priority_}
               />
             ) : (
               <ClickableSpan title="No Priority" />
@@ -714,9 +717,11 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           <Suspense fallback={<></>}>
             <ClickableSpan
               title={
-                (estimate_
+                ((currentTask.estimate ?? estimate_)
                   ? EstimateConstants.find(
-                    (x) => x.estimate_index === estimate_?.estimate_index
+                    (x) =>
+                      x.estimate_index ===
+                      (currentTask.estimate ?? estimate_)?.estimate_index
                   )?.estimate_full_value
                   : "-") ?? "-"
               }

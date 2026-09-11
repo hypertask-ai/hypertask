@@ -36,12 +36,19 @@ async function fetchTaskDetailForRealtime(
   projectId: number,
   uniqueIndex: number | string
 ): Promise<ITask | null> {
+  // cache: "no-store" is required: a default GET can reuse a pre-change
+  // response, so the side panel stays on the mount-time section/title/due
+  // date while comments (a different URL) still update (HTPR-6281 QA).
   const response = await fetch(
-    `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}`
+    `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}`,
+    { cache: "no-store", credentials: "same-origin" }
   );
   if (!response.ok) return null;
   return response.json();
 }
+
+/** Exported for the HTPR-6281 regression that asserts no-store on this path. */
+export const TASK_DETAIL_REALTIME_FETCH_CACHE = "no-store" as const;
 
 // Subscribes the open task view to its realtime channel. On any comment event
 // it refetches the comments query immediately (no timer; speed rules ban
