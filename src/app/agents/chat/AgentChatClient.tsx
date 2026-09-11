@@ -2486,9 +2486,10 @@ const AgentChatClient = (props: IProp) => {
           "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
           !(isMbl && mobileLayoutEnabled) && "h-screen",
           // The app shell reserves a fixed top bar and bottom tab bar (see
-          // globals.scss .mobile-tab-bar-content); AI_Chat_Layout normally adds
-          // this inset but bails out early for /agents/chat, so we add it
-          // ourselves or the composer lands under the tab bar (HTPR-6041).
+          // globals.scss .mobile-tab-bar-content). AI_Chat_Layout and
+          // AI_Chat_Closed_Layout bail out for /agents/chat, so we add the
+          // inset ourselves or the composer lands under the tab bar
+          // (HTPR-6041 / HTPR-6407).
           // isMbl-gated: a merely-narrow desktop window has neither bar.
           isMbl &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[var(--mobile-dock-h,64px)]",
