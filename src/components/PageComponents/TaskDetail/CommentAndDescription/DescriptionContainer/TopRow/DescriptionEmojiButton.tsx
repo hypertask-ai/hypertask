@@ -32,6 +32,11 @@ const DescriptionEmojiButton = ({
 
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
   const buttonTrigger = useRef<HTMLDivElement | null>(null);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalRoot(document.getElementById("portal-root"));
+  }, []);
 
   const calculatePickerPosition = () => {
     if (buttonTrigger.current) {
@@ -92,7 +97,7 @@ const DescriptionEmojiButton = ({
             onEmojiSelect={debounce(emojiClickHandler, 10)}
             onClose={() => handleClickOutside(undefined)}
           />
-        ) : (
+        ) : portalRoot ? (
           createPortal(
             <div // This is your .emoji-picker-wrapper equivalent
               className="emoji-picker-portal-container" // Use a more descriptive class name
@@ -127,9 +132,9 @@ const DescriptionEmojiButton = ({
                 />
               </div>
             </div>,
-            document.getElementById("portal-root")!
+            portalRoot
           )
-        ))}
+        ) : null)}
       <div className="relative group" ref={buttonTrigger}>
         <SmilePlus size={14}
           id="add-reaction-button"

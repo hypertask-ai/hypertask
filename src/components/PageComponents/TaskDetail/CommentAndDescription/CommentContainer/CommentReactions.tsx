@@ -217,6 +217,7 @@ const CommentReactions = () => {
               onMouseLeave={() => setIsHovered(false)}
              strokeWidth={1.75}/>
             {showHere &&
+              portalRoot &&
               createPortal(
                 <div
                   className="emoji-picker-portal-container"
@@ -241,7 +242,7 @@ const CommentReactions = () => {
                     />
                   </div>
                 </div>,
-                document.getElementById("portal-root")!
+                portalRoot
               )}
             {isHovered && <CommentEmojiTooltip anchorElement={emojiTrigger2.current} />}
           </div>

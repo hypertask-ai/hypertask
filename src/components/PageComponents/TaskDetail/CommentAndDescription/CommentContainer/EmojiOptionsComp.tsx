@@ -26,6 +26,11 @@ const EmojiOptionsComp = ({
   const [isHovered, setIsHovered] = useState(false); // State to track hover
 
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setPortalRoot(document.getElementById("portal-root"));
+  }, []);
 
   const calculatePickerPosition = () => {
     if (emojiTrigger.current) {
@@ -88,6 +93,7 @@ const EmojiOptionsComp = ({
   return (
     <>
       {showEmojiPickerAtComment &&
+        portalRoot &&
         createPortal(
           <div // This is your .emoji-picker-wrapper equivalent
             className="emoji-picker-portal-container" // Use a more descriptive class name
@@ -118,7 +124,7 @@ const EmojiOptionsComp = ({
               />
             </div>
           </div>,
-          document.getElementById("portal-root")!
+          portalRoot
         )}
       <div className="relative group" ref={emojiTrigger}>
         <SmilePlus size={14}

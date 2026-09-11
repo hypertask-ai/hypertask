@@ -93,9 +93,9 @@ const EmojiComponent = memo(
         });
         setPickerPosition({
           top: position.top,
-          left: Math.min(
-            rect.left + 22.5,
-            window.innerWidth - 220 - 8,
+          left: Math.max(
+            8,
+            Math.min(rect.left + 22.5, window.innerWidth - 220 - 8),
           ),
         });
       }
@@ -158,7 +158,7 @@ const EmojiComponent = memo(
           />
         )}
 
-        {!_mbl && isHovered &&
+        {!_mbl && isHovered && portalRoot &&
           createPortal(
             <div // This is your .emoji-picker-wrapper equivalent
               className="emoji-component-tooltip" // Use a more descriptive class name
@@ -179,7 +179,7 @@ const EmojiComponent = memo(
                 />
               </div>
             </div>,
-            document.getElementById("portal-root")!
+            portalRoot
           )}
       </>
     );
