@@ -992,3 +992,127 @@ test("Factory ticket flags retain exact prefix and owner-only preview requiremen
   const ungated=commit(git,'ungated addition');
   assert.equal((await evaluate('HYFA-5 [FEATURE] add widget',base,ungated,dir)).pass,false);
 });
+
+test("literal default mode permits production reads but still rejects binding writes", async (t) => {
+  const {dir,git}=makeRepo(t);
+  writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA", `
+export function resolve(row) { const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE; return mode; }
+export function create() { return { mode: DEFAULT_FEATURE_FLAG_MODE }; }
+const copy = DEFAULT_FEATURE_FLAG_MODE;
+consume(DEFAULT_FEATURE_FLAG_MODE);
+const bag = { mode: DEFAULT_FEATURE_FLAG_MODE }; bag.mode = "EVERYONE";
+`));
+  const base=commit(git,"production-style reads");
+  writeFile(dir,"src/components/Widget.tsx",'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const head=commit(git,"gated UI");
+  const result=await evaluate("HTPR-1 [FEATURE] widget",base,head,dir);
+  assert.equal(result.pass,true,result.reason);
+  for (const mutation of ['DEFAULT_FEATURE_FLAG_MODE = "EVERYONE";', 'DEFAULT_FEATURE_FLAG_MODE += "EVERYONE";', 'DEFAULT_FEATURE_FLAG_MODE++;', '({mode: DEFAULT_FEATURE_FLAG_MODE} = {mode: "EVERYONE"});']) {
+    writeFile(dir,"src/lib/flags.ts",flagsSource(["OTHER_FLAG"],"OWNER_AND_QA",mutation));
+    const changed=commit(git,"binding mutation");
+    const rejected=await evaluate("HTPR-1 [FEATURE] widget",base,changed,dir);
+    assert.equal(rejected.pass,false,mutation);assert.match(rejected.reason,/must not be reassigned/);
+  }
+});
+
+test('identifier default exports are live and retain ungated sibling protection', async (t) => {
+  const cases = [
+    ['arrow default', 'const Widget=()=>{const enabled=useFlag(OTHER_FLAG);return enabled?<div/>:null;};export default Widget;', true],
+    ['function default', 'function Widget(){const enabled=useFlag(OTHER_FLAG);return enabled?<div/>:null;}export default Widget;', true],
+    ['unused gated sibling', 'export function Gated(){return useFlag(OTHER_FLAG)?<span/>:null;}const Widget=()=> <div/>;export default Widget;', false],
+    ['shadowed gate value', 'const Widget=()=>{const enabled=useFlag(OTHER_FLAG);{const enabled=true;return enabled?<div/>:null;}};export default Widget;', false],
+    ['dead gate', 'const Widget=()=>{if(false){return useFlag(OTHER_FLAG)?<div/>:null;}return <div/>;};export default Widget;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/components/Widget.tsx','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n'+body+'\n');
+    const head=commit(fixture.git,name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,head,fixture.dir)).pass,expected,name);
+  }
+});
+
+test('live hooks expose only reachable returned callbacks with matching symbols', async (t) => {
+  const cases = [
+    ['shorthand callback', 'const onSave=()=>{if(enabled)doWork();};return {onSave};', true],
+    ['named callback property', 'const onSave=()=>{if(enabled)doWork();};return {save:onSave};', true],
+    ['omitted callback', 'const onSave=()=>{if(enabled)doWork();};return {};', false],
+    ['dead callback return', 'const onSave=()=>{if(enabled)doWork();};if(false)return {onSave};return {};', false],
+    ['shadowed returned callback', 'const onSave=()=>{if(enabled)doWork();};{const onSave=()=>doWork();return {onSave};}', false],
+    ['unused nested return', 'const onSave=()=>{if(enabled)doWork();};const unused=()=>({onSave});return {};', false],
+    ['overwritten callback', 'const onSave=()=>{if(enabled)doWork();};const ungated=()=>doWork();return {handler:onSave,handler:ungated};', false],
+    ['spread override', 'const onSave=()=>{if(enabled)doWork();};const override={handler:()=>doWork()};return {handler:onSave,...override};', false],
+    ['computed key override', 'const onSave=()=>{if(enabled)doWork();};const key="handler";return {handler:onSave,[key]:()=>doWork()};', false],
+    ['quoted duplicate key', 'const onSave=()=>{if(enabled)doWork();};return {handler:onSave,"handler":()=>doWork()};', false],
+  ];
+  for (const [name,body,expected] of cases) {
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/hooks/usePreview.ts','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork();\nexport function usePreview(){const enabled=useFlag(OTHER_FLAG);'+body+'}\n');
+    const head=commit(fixture.git,name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,head,fixture.dir)).pass,expected,name);
+  }
+});
+
+test('rebound default exports cannot certify their earlier gated initializer', async (t) => {
+  const cases = [
+    ['direct write', 'Widget=()=> <div/>;', false],
+    ['compound write', 'Widget&&=()=> <div/>;', false],
+    ['object destructuring', '({replacement:Widget}={replacement:()=> <div/>});', false],
+    ['shorthand destructuring', '({Widget}={Widget:()=> <div/>});', false],
+    ['array destructuring', '[Widget]=[()=> <div/>];', false],
+    ['array rest destructuring', '[...Widget]=[()=> <div/>];', false],
+    ['loop write', 'for(Widget of [()=> <div/>]){}', false],
+    ['of object target','for({replacement:Widget} of values){}',false],
+    ['of shorthand target','for({Widget} of values){}',false],
+    ['of array target','for([Widget] of values){}',false],
+    ['of nested target','for({items:[{handler:Widget}]} of values){}',false],
+    ['of rest target','for([...Widget] of values){}',false],
+    ['in object target','for({replacement:Widget} in values){}',false],
+    ['in shorthand target','for({Widget} in values){}',false],
+    ['in array target','for([Widget] in values){}',false],
+    ['in nested target','for({items:[{handler:Widget}]} in values){}',false],
+    ['in rest target','for([...Widget] in values){}',false],
+    ['shadowed loop target','{let Widget;for({Widget} of values){}}',true],
+    ['shadowed write', '{let Widget=()=> <span/>;Widget=()=> <div/>;}', true],
+  ];
+  for(const [name,write,expected] of cases){
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/components/Widget.tsx','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nlet Widget=()=>useFlag(OTHER_FLAG)?<div/>:null;\n'+write+'\nexport default Widget;\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,name),fixture.dir)).pass,expected,name);
+  }
+  for(const exported of ['', 'export ']){
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/components/Widget.tsx','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n'+exported+'function Widget(){return useFlag(OTHER_FLAG)?<div/>:null;}\nWidget=()=> <div/>;\nexport function Helper(){return useFlag(OTHER_FLAG)?<span/>:null;}\nexport default Widget;\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,'rebound function and gated sibling'),fixture.dir)).pass,false);
+  }
+});
+
+test('returned callback liveness rejects rebinding without confusing shadowed symbols', async (t) => {
+  const cases = [
+    ['direct write','onSave=()=>doWork();',false],
+    ['compound write','onSave&&=()=>doWork();',false],
+    ['object destructuring','({handler:onSave}={handler:()=>doWork()});',false],
+    ['shorthand destructuring','({onSave}={onSave:()=>doWork()});',false],
+    ['array destructuring','[onSave]=[()=>doWork()];',false],
+    ['array rest destructuring','[...onSave]=[()=>doWork()];',false],
+    ['of object target','for({replacement:onSave} of values){}',false],
+    ['of shorthand target','for({onSave} of values){}',false],
+    ['of array target','for([onSave] of values){}',false],
+    ['of nested target','for({items:[{handler:onSave}]} of values){}',false],
+    ['of rest target','for([...onSave] of values){}',false],
+    ['in object target','for({replacement:onSave} in values){}',false],
+    ['in shorthand target','for({onSave} in values){}',false],
+    ['in array target','for([onSave] in values){}',false],
+    ['in nested target','for({items:[{handler:onSave}]} in values){}',false],
+    ['in rest target','for([...onSave] in values){}',false],
+    ['shadowed loop target','{let onSave;for({onSave} of values){}}',true],
+    ['shadowed write','{let onSave=()=>doWork();onSave=()=>doWork();}',true],
+  ];
+  for(const [name,write,expected] of cases){
+    const fixture=makeRepo(t),base=commit(fixture.git,'base');
+    writeFile(fixture.dir,'src/hooks/usePreview.ts','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork();\nexport function usePreview(){const enabled=useFlag(OTHER_FLAG);let onSave=()=>{if(enabled)doWork();};'+write+'return {onSave};}\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,name),fixture.dir)).pass,expected,name);
+  }
+  const fixture=makeRepo(t),base=commit(fixture.git,'base');
+  writeFile(fixture.dir,'src/hooks/usePreview.ts','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork();\nexport function usePreview(){const enabled=useFlag(OTHER_FLAG);function onSave(){if(enabled)doWork();}onSave=()=>doWork();return {onSave};}\n');
+  assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,'rebound function callback'),fixture.dir)).pass,false);
+});
