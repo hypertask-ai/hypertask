@@ -1,4 +1,3 @@
-import { FactoryAcceptanceError, guardFactoryProjectAdministration } from '@/lib/factoryAcceptance/enforcement';
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
@@ -64,18 +63,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const updated = await prisma.$transaction(async tx=>{
-      await guardFactoryProjectAdministration(tx,project.id,ctx.agentId);
-      return tx.project.update({
+    const updated = await prisma.project.update({
       where: { id: project.id },
       data: { status },
       select: { id: true, name: true, title: true, status: true },
     })
 
-    });
     return NextResponse.json({ success: true, project: updated })
   } catch (error) {
-    if(error instanceof FactoryAcceptanceError)return NextResponse.json({success:false,code:error.code,error:error.message},{status:error.status});
     console.error('[MCP Archive Board] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

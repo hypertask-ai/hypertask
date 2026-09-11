@@ -128,10 +128,6 @@ function loadCreateRoute() {
     drafts: { createMany: async () => undefined },
   };
   const stubs = {
-    // These fixtures model unenrolled projects. Acceptance behavior is covered
-    // with the actual module in factory-acceptance.test.cjs.
-    "@/lib/factoryAcceptance/enforcement": {FactoryAcceptanceError:class extends Error {},guardFactoryMutation:async()=>({}),guardFactoryCreate:async()=>{}},
-    "@/lib/factoryAcceptance/service": {},
     "@prisma/client": {
       Prisma: { PrismaClientKnownRequestError: class extends Error {} },
     },
