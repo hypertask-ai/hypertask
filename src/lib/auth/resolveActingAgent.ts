@@ -1,5 +1,5 @@
 /**
- * Bind archive/delete actor identity to a signed session agent claim.
+ * Bind actor identity (create, archive, delete) to a signed session agent claim.
  *
  * Body `agentId` is only a confirmation of that claim. It cannot introduce an
  * agent when the session has none, and it cannot disagree with the session.

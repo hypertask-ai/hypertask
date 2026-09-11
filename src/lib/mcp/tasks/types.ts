@@ -77,6 +77,8 @@ export interface TaskDetail {
         id: number;
         email: string;
         displayName?: string;
+        /** Creating managed agent when Task.agentId is set and visible */
+        agent?: McpAgentSummary;
     };
 }
 
