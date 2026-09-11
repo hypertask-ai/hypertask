@@ -1322,10 +1322,10 @@ const AgentChatClient = (props: IProp) => {
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
   const dictationProjectId = useMemo(
     () =>
-      mobileLayoutEnabled
+      isMbl && mobileLayoutEnabled
         ? agentDictationProjectId(selectedAgent, teamId)
         : null,
-    [mobileLayoutEnabled, selectedAgent, teamId],
+    [isMbl, mobileLayoutEnabled, selectedAgent, teamId],
   );
 
   useEffect(() => {
@@ -2103,7 +2103,7 @@ const AgentChatClient = (props: IProp) => {
             </div>
           )}
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            {showScrollToBottom && !mobileLayoutEnabled && (
+            {showScrollToBottom && !(isMbl && mobileLayoutEnabled) && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
               />
@@ -2113,7 +2113,7 @@ const AgentChatClient = (props: IProp) => {
             onScroll={handleMessageListScroll}
             className={cn(
               "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain px-4 py-4",
-              mobileLayoutEnabled && showScrollToBottom && "pb-12",
+              isMbl && mobileLayoutEnabled && showScrollToBottom && "pb-12",
             )}
           >
             {messagesError && (
@@ -2177,7 +2177,7 @@ const AgentChatClient = (props: IProp) => {
           </div>
           </div>
           <div className="relative shrink-0 bg-cardBackground px-4 pb-4 pt-1">
-            {showScrollToBottom && mobileLayoutEnabled && (
+            {showScrollToBottom && isMbl && mobileLayoutEnabled && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
                 className="-top-12 z-50"
@@ -2254,12 +2254,10 @@ const AgentChatClient = (props: IProp) => {
                 onProcessingChange={setIsDictationProcessing}
                 disabled={
                   sending ||
-                  (mobileLayoutEnabled &&
-                    (dictationProjectId === null ||
-                      dictationProjectId === undefined))
+                  (isMbl && mobileLayoutEnabled && dictationProjectId === null)
                 }
                 projectId={
-                  mobileLayoutEnabled ? dictationProjectId : undefined
+                  isMbl && mobileLayoutEnabled ? dictationProjectId : undefined
                 }
                 ariaLabel="Dictate message"
                 className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"

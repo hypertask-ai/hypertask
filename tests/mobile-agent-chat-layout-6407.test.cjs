@@ -63,7 +63,7 @@ test("desktop Agent Chat height stays h-screen", () => {
 
 test("scroll button can sit above the composer when flagged", () => {
   assert.match(chat, /className="-top-12 z-50"/);
-  assert.match(chat, /showScrollToBottom && mobileLayoutEnabled/);
+  assert.match(chat, /showScrollToBottom && isMbl && mobileLayoutEnabled/);
   assert.match(chat, /pb-12/);
 });
 
@@ -73,10 +73,13 @@ test("activity rows keep a truncating text column", () => {
 
 test("dictation uses an explicit agent board id behind the flag", () => {
   assert.match(chat, /function agentDictationProjectId/);
-  assert.match(chat, /projectId=\{\s*mobileLayoutEnabled \? dictationProjectId : undefined\s*\}/);
   assert.match(
     chat,
-    /mobileLayoutEnabled &&\s*\(\s*dictationProjectId === null \|\|\s*dictationProjectId === undefined\s*\)/,
+    /projectId=\{\s*isMbl && mobileLayoutEnabled \? dictationProjectId : undefined\s*\}/,
+  );
+  assert.match(
+    chat,
+    /isMbl && mobileLayoutEnabled && dictationProjectId === null/,
   );
   assert.match(audio, /projectId\?: number \| null/);
   assert.match(audio, /projectIdProp === undefined \? currentProject\?\.id/);
