@@ -14,6 +14,7 @@ import { LazyEmojiPicker, preloadEmojiResources } from "@/utils/emojiLoader";
 import CommentEmojiTooltip from "./CommentEmojiTooltip";
 import MobileEmojiReactionSheet from "../Common/MobileEmojiReactionSheet";
 import { createPortal } from "react-dom";
+import { getFixedOverlayPosition } from "@/lib/emojiPickerPosition";
 
 const CommentReactions = () => {
   const {
@@ -62,39 +63,17 @@ const CommentReactions = () => {
   const calculatePickerPosition = () => {
     if (emojiTrigger2.current) {
       const rect = emojiTrigger2.current.getBoundingClientRect();
-      const pickerHeight = 370;
-
-      if (_mbl) {
-        // Viewport-clamped coords for a position:fixed portal. Document-based
-        // (absolute + scrollY) placement below the last comment grows the page
-        // on every scroll recalc, making it endlessly scrollable (HTPR-4584).
-        // 250: the mobile max-height emojipicker.scss puts on em-emoji-picker.
-        const mblPickerHeight = 250;
-        const pickerWidth = 300;
-        setPickerPosition({
-          top: Math.max(
-            8,
-            Math.min(rect.bottom + 4, window.innerHeight - mblPickerHeight - 8)
-          ),
-          left: Math.max(
-            8,
-            Math.min(rect.left, window.innerWidth - pickerWidth - 8)
-          ),
-        });
-        return;
-      }
-
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-
-      const showAbove = spaceBelow < pickerHeight && spaceAbove > pickerHeight;
-
-      setPickerPosition({
-        top: showAbove
-          ? rect.top + window.scrollY - pickerHeight
-          : rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      });
+      // Viewport-fixed coords (HTPR-6404): document-absolute placement loses to
+      // the new comment composer stacking context. Mobile still clamps height
+      // to the emojipicker.scss max (HTPR-4584).
+      setPickerPosition(
+        getFixedOverlayPosition(rect, {
+          height: _mbl ? 250 : 370,
+          width: 300,
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
+        }),
+      );
     }
   };
 
@@ -242,7 +221,7 @@ const CommentReactions = () => {
                 <div
                   className="emoji-picker-portal-container"
                   style={{
-                    position: "absolute",
+                    position: "fixed",
                     top: pickerPosition.top,
                     left: pickerPosition.left,
                     zIndex: 9999,

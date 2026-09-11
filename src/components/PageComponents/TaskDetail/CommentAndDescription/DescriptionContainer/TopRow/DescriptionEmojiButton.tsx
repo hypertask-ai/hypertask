@@ -10,6 +10,7 @@ import Tooltip from "@/components/Common/Tooltip";
 import CommentEmojiTooltip from "../../CommentContainer/CommentEmojiTooltip";
 import MobileEmojiReactionSheet from "../../Common/MobileEmojiReactionSheet";
 import { createPortal } from "react-dom";
+import { getFixedOverlayPosition } from "@/lib/emojiPickerPosition";
 // ===================================== COMMENT OPTIONS COMPONENTS =======================
 const DescriptionEmojiButton = ({
   handleClickOutside,
@@ -32,22 +33,19 @@ const DescriptionEmojiButton = ({
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
   const buttonTrigger = useRef<HTMLDivElement | null>(null);
 
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const element = document.getElementById("portal-root");
-    setPortalRoot(element);
-  }, []);
-
   const calculatePickerPosition = () => {
     if (buttonTrigger.current) {
       const rect = buttonTrigger.current.getBoundingClientRect();
-      setPickerPosition({
-        // Position below the trigger element
-        top: rect.bottom + window.scrollY,
-        // Align with the trigger element's left edge
-        left: rect.left + window.scrollX,
-      });
+      // Escape the comment column stacking context via #portal-root + fixed
+      // coords so the picker clears the new comment field (HTPR-6404).
+      setPickerPosition(
+        getFixedOverlayPosition(rect, {
+          height: 370,
+          width: 300,
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
+        }),
+      );
     }
   };
 
@@ -98,16 +96,15 @@ const DescriptionEmojiButton = ({
           createPortal(
             <div // This is your .emoji-picker-wrapper equivalent
               className="emoji-picker-portal-container" // Use a more descriptive class name
-              // Picking an emoji fires a click that, via the portal, bubbles to
-              // the description container's double-tap handler and opens edit
-              // mode (HTPR-4663). Stop it here so only the reaction is applied.
+              // Picker lives on #portal-root (HTPR-6404). Still stop clicks so a
+              // stray bubble cannot count as a description double-tap edit
+              // (HTPR-4663).
               onClick={(e) => e.stopPropagation()}
               style={{
-                position: "absolute", // Position relative to the document body
+                position: "fixed",
                 top: pickerPosition.top,
                 left: pickerPosition.left,
-                zIndex: 9999, // Ensure it's on top of everything
-                // Add any other base styling for your picker container
+                zIndex: 9999,
               }}
             >
               {/* The absolute positioned div that holds the picker */}
@@ -130,7 +127,7 @@ const DescriptionEmojiButton = ({
                 />
               </div>
             </div>,
-            document.getElementById("taskInfo_comments_description_container")!
+            document.getElementById("portal-root")!
           )
         ))}
       <div className="relative group" ref={buttonTrigger}>
@@ -148,10 +145,8 @@ const DescriptionEmojiButton = ({
               sm:group-hover/descriptionContainer:scale-100  
               rounded-lg `}
           onClick={(e) => {
-            // The picker portals INTO the description container, so this click
-            // (and clicks on emojis) bubble to the container's double-tap
-            // handler and get counted as an edit gesture (HTPR-4663). Keep the
-            // emoji interaction out of that gesture entirely.
+            // Keep the emoji open gesture out of the description double-tap
+            // edit counter (HTPR-4663).
             e.stopPropagation();
             toggleEmojiPicker();
             calculatePickerPosition();

@@ -81,6 +81,8 @@ export const createMentionData = (mentionProjectId) => ({
           interactive: true,
           trigger: "manual",
           placement: "auto-start",
+          // Above #portal-root (z-index 5000) and the comment composer (HTPR-6404).
+          zIndex: 10001,
           popperOptions: {
             strategy: "fixed",
             modifiers: [
