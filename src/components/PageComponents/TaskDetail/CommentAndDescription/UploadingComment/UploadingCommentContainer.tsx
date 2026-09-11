@@ -21,6 +21,7 @@ const UploadingCommentsContainer = ({ index }: { index?: number }) => {
             navigateToNextParams={comment.navigateToNextParams}
             taskId={comment.taskId}
             ownerId={comment.ownerId}
+            projectId={comment.projectId}
             />
     )}
     </>

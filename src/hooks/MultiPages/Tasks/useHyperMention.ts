@@ -1,4 +1,5 @@
 import { useMcpToken } from "@/components/Modals/McpToken";
+import { isUsableMcpBearerToken } from "@/components/Modals/McpToken/utils";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { defaultAiModelOption } from "@/lib/aiModelOptions";
 import { IUser } from "@/models/model";
@@ -91,7 +92,11 @@ export function useHyperMention() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          // Never send the "***" mask: a present Authorization header disables
+          // cookie session auth on hyper-mentioned and yields 401 (HTPR-6405).
+          ...(isUsableMcpBearerToken(token)
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
         },
         body: JSON.stringify({
           projectId,
@@ -145,7 +150,9 @@ export function useHyperMention() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(isUsableMcpBearerToken(token)
+            ? { Authorization: `Bearer ${token}` }
+            : {}),
         },
         body: JSON.stringify({ projectId, taskId, text, modelKey }),
       });

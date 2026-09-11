@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react"
 import toast from "react-hot-toast"
 import { usePathname } from "next/navigation"
+import {
+  MCP_TOKEN_MASK,
+  readMcpTokenCookieValue,
+} from "@/components/Modals/McpToken/utils"
 
 export function useMcpToken() {
   const [token, setToken] = useState<string | null>(null)
@@ -14,30 +18,28 @@ export function useMcpToken() {
 
   const checkExistingToken = async () => {
     try {
-      const cookies = document.cookie.split(";")
-      const tokenCookie = cookies.find((c) => c.trim().startsWith("mcp_token="))
-      if (tokenCookie) {
-        const tokenValue = tokenCookie.split("=")[1]
-        if (tokenValue) {
-          try {
-            const payload = JSON.parse(atob(tokenValue.split(".")[1]))
-            const exp = payload.exp ? new Date(payload.exp * 1000) : null
-            if (exp && exp > new Date()) {
-              setToken(tokenValue)
-              setExpiresAt(exp.toISOString())
-              setIsLoading(false)
-              return
-            }
-            document.cookie = "mcp_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
-          } catch {
-            document.cookie = "mcp_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      const tokenValue = readMcpTokenCookieValue(document.cookie)
+      if (tokenValue) {
+        try {
+          const payload = JSON.parse(atob(tokenValue.split(".")[1]))
+          const exp = payload.exp ? new Date(payload.exp * 1000) : null
+          if (exp && exp > new Date()) {
+            setToken(tokenValue)
+            setExpiresAt(exp.toISOString())
+            setIsLoading(false)
+            return
           }
+          document.cookie = "mcp_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+        } catch {
+          document.cookie = "mcp_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
         }
       }
       const response = await fetch("/api/mcp/token")
       const data = await response.json()
       if (data.success && data.hasToken) {
-        setToken("***")
+        // Mask only for UI. Callers must use isUsableMcpBearerToken before
+        // sending Authorization, or session auth is skipped and HyperAI 401s.
+        setToken(MCP_TOKEN_MASK)
         if (data.expiresAt) setExpiresAt(data.expiresAt)
       }
     } catch (error) {
@@ -57,9 +59,8 @@ export function useMcpToken() {
       const response = await fetch("/api/mcp/token", { method: "POST" })
       const data = await response.json()
       if (data.success && data.token) {
-        const cookies = document.cookie.split(";")
-        const tokenCookie = cookies.find((c) => c.trim().startsWith("mcp_token="))
-        const tokenValue = tokenCookie ? tokenCookie.split("=")[1] : data.token
+        const tokenValue =
+          readMcpTokenCookieValue(document.cookie) ?? data.token
         setToken(tokenValue)
         setExpiresAt(data.expiresAt)
         if (!silent) toast.success("MCP token generated successfully!")

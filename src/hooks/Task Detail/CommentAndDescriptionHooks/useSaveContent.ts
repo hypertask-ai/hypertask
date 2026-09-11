@@ -762,8 +762,14 @@ export default function useSaveContent() {
     // send. currentTask is only a fallback: by the time this runs the user may
     // already be looking at a different task (HTPR-3175).
     composedForTaskId?: number,
-    composedForOwnerId?: number
+    composedForOwnerId?: number,
+    // Same capture for the board: HyperAI validates taskId+projectId together,
+    // so a live currentProject after navigation 404s the mention (HTPR-6405).
+    composedForProjectId?: number
   ) => {
+    const mentionTaskId = composedForTaskId ?? currentTask?.id;
+    const mentionOwnerId = composedForOwnerId ?? currentTask?.userId;
+    const mentionProjectId = composedForProjectId ?? currentProject?.id;
     if (
       comments &&
       setComments &&
@@ -780,8 +786,8 @@ export default function useSaveContent() {
         ({ data } = await axios.post("/api/comments/create", {
           text: result.html,
           creatorId: currentUser?.id,
-          taskId: composedForTaskId ?? currentTask.id,
-          ownerId: composedForOwnerId ?? currentTask.userId,
+          taskId: mentionTaskId,
+          ownerId: mentionOwnerId,
         }));
       } catch (err: any) {
         // HTPR-3803: a logged-off user gets a 401 here. Send them to login
@@ -801,14 +807,14 @@ export default function useSaveContent() {
 
       if (result.hyperMention)
         postHyperMention("Comment", "Create", {
-          ownerId: currentTask.userId,
-          projectId: currentProject?.id ?? -1,
+          ownerId: mentionOwnerId,
+          projectId: mentionProjectId ?? -1,
           teamId: currentProject?.teamId ?? "-1",
           text: result.html,
           currentUser: currentUser ?? undefined,
           teamTitle: currentProject?.team?.title ?? "",
           taskIds: [
-            currentTask.id,
+            mentionTaskId,
             currentTask.parentTask?.id,
             ...(currentTask.subTasks || []).flatMap((item) => item.id),
             ...(currentTask.relatedFromTasks || []).flatMap(
@@ -832,8 +838,8 @@ export default function useSaveContent() {
       else if (result.imageMention)
         postImageGeneration("Create", {
           text: result.html,
-          projectId: currentProject?.id ?? -1,
-          taskId: currentTask.id,
+          projectId: mentionProjectId ?? -1,
+          taskId: mentionTaskId ?? currentTask.id,
           modelKey: result.imageMention.modelKey,
         });
 
@@ -1103,6 +1109,7 @@ export default function useSaveContent() {
           // had navigated to by then (HTPR-3175).
           taskId: currentTask?.id,
           ownerId: currentTask?.userId,
+          projectId: currentProject?.id,
         },
       ]);
       return true;

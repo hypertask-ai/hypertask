@@ -3,6 +3,32 @@ import type { Client, ConnectionMethod } from "./types"
 export const MCP_SERVER_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "https://mcp.hypertask.ai/mcp"
 export const MCP_DOCS_URL = "https://docs.hypertask.ai/mcp"
 
+/** Display placeholder from GET /api/mcp/token when the real JWT is cookie-only. */
+export const MCP_TOKEN_MASK = "***"
+
+/**
+ * True when `token` is a real bearer JWT we can send. The masked "***"
+ * placeholder is truthy but invalid; sending it as Authorization makes
+ * /api/ai/hyper-mentioned (and similar routes) skip cookie session auth and
+ * return 401, so @HyperAI stays silent.
+ */
+export function isUsableMcpBearerToken(
+  token: string | null | undefined,
+): token is string {
+  return Boolean(token) && token !== MCP_TOKEN_MASK
+}
+
+/** Read mcp_token from a document.cookie string without truncating JWT "=" padding. */
+export function readMcpTokenCookieValue(cookieHeader: string): string | null {
+  for (const part of cookieHeader.split(";")) {
+    const trimmed = part.trim()
+    if (!trimmed.startsWith("mcp_token=")) continue
+    const value = trimmed.slice("mcp_token=".length)
+    return value || null
+  }
+  return null
+}
+
 export type IntegrationId =
   | "claude"
   | "claude-code"
@@ -133,7 +159,7 @@ export function getConfigForClient(
   }
 }`
   }
-  if (!token || token === "***") {
+  if (!isUsableMcpBearerToken(token)) {
     return "Please generate a token first"
   }
   return `{
@@ -156,7 +182,7 @@ export function getConfigForIntegration(
   const integration = MCP_INTEGRATIONS.find((i) => i.id === integrationId)
   if (!integration) return "Please generate a token first"
   if (useBearer) {
-    if (!token || token === "***") return "Please generate a token first"
+    if (!isUsableMcpBearerToken(token)) return "Please generate a token first"
     if (integrationId === "vscode") {
       return `{
   "servers": {

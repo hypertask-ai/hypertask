@@ -52,3 +52,40 @@ test("HyperAI mention clients report every failed response and network error", (
   assert.equal((hook.match(/toast\.error\(DEFAULT_HYPERAI_ERROR\)/g) || []).length, 2);
   assert.doesNotMatch(hook, /if \(response\.status === 403\)/);
 });
+
+test("HyperAI mention clients never send the masked MCP token as Bearer", () => {
+  const hook = read("src/hooks/MultiPages/Tasks/useHyperMention.ts");
+
+  assert.match(hook, /isUsableMcpBearerToken\(token\)/);
+  assert.equal(
+    (hook.match(/isUsableMcpBearerToken\(token\)/g) || []).length,
+    2,
+  );
+  assert.doesNotMatch(
+    hook,
+    /\.\.\.\(token \? \{ Authorization: `Bearer \$\{token\}` \} : \{\}\)/,
+  );
+});
+
+test("comment create routes HyperAI through the composed task and project", () => {
+  const save = read(
+    "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts",
+  );
+  const uploading = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/index.tsx",
+  );
+  const queue = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/UploadingCommentContainer.tsx",
+  );
+
+  assert.match(save, /composedForProjectId\?: number/);
+  assert.match(save, /projectId: currentProject\?\.id,/);
+  assert.match(save, /const mentionTaskId = composedForTaskId \?\? currentTask\?\.id/);
+  assert.match(save, /const mentionProjectId = composedForProjectId \?\? currentProject\?\.id/);
+  assert.match(save, /projectId: mentionProjectId \?\? -1/);
+  assert.match(save, /taskIds: \[\s*mentionTaskId,/);
+  assert.match(uploading, /projectId\?: number/);
+  assert.match(uploading, /ownerId, projectId\}/);
+  assert.match(uploading, /ownerId,\n\s*projectId\n/);
+  assert.match(queue, /projectId=\{comment\.projectId\}/);
+});
