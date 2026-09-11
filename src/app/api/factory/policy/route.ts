@@ -1,7 +1,9 @@
 import {NextRequest,NextResponse} from 'next/server';
+import {parseCookies} from 'better-auth/cookies';
 import prisma from '@/lib/prisma';
 import {isFeatureEnabled,FACTORY_OWNER_PREVIEW_FLAG} from '@/lib/flags';
 import {getSessionUser} from '@/lib/auth/getSessionUser';
+import {SESSION_COOKIE,verifySession} from '@/lib/auth/session';
 import {FactoryAcceptanceError} from '@/lib/factoryAcceptance/enforcement';
 import {approveRequirements,readOwnerPolicy,registerTemplate} from '@/lib/factoryAcceptance/templates';
 
@@ -11,6 +13,10 @@ async function handle(request:NextRequest){
   try{
     // This approval route never treats a managed agent bearer as an owner.
     if(request.headers.has('authorization'))return send({success:false,code:'factory_owner_session_required'},403);
+    // Internal MCP cookies retain the agent claim, but getSessionUser returns
+    // only the owning user. Reject that signed claim before resolving an owner.
+    const ownerCookie=parseCookies(request.headers.get('cookie')??'').get(SESSION_COOKIE);
+    if(verifySession(ownerCookie)?.agentId)return send({success:false,code:'factory_owner_session_required'},403);
     if(request.method==='POST'&&request.headers.get('origin')!==request.nextUrl.origin)return send({success:false,code:'factory_invalid_origin'},403);
     const session=await getSessionUser(request.headers);
     if(!session)return send({success:false,code:'factory_owner_session_required'},401);

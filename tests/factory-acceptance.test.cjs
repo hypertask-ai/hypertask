@@ -324,7 +324,7 @@ test('template and semantic approvals are append-only and preserve independent Q
 });
 function ownerPolicyEndpoint(db,session,previewEnabled=true){
  const filename=path.resolve(__dirname,'../src/app/api/factory/policy/route.ts'),mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
- mod.require=id=>id==='@/lib/flags'?{isFeatureEnabled:async()=>previewEnabled,FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview'}:id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/auth/getSessionUser'?{getSessionUser:async()=>session}:id==='@/lib/factoryAcceptance/templates'?templateService:id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):require(id);
+ mod.require=id=>id==='@/lib/auth/session'?load('../auth/session'):id==='@/lib/flags'?{isFeatureEnabled:async()=>previewEnabled,FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview'}:id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/auth/getSessionUser'?{getSessionUser:async()=>session}:id==='@/lib/factoryAcceptance/templates'?templateService:id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):require(id);
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);return mod.exports;
 }
 test('actual approval route requires the owner session and same origin, never bearer or body identity',async()=>{
@@ -337,6 +337,33 @@ test('actual approval route requires the owner session and same origin, never be
  const response=await call(ownerSession,{}, {operation:'template',project_id:15,expected_version:0,criteria:policyCriteria,userId:7,ownerId:7,agentId:'authority'});
  assert.equal(response.status,200);assert.equal((await response.json()).template.ownerId,6);
  assert.equal(db.rows('factoryEnrollment')[0].version,1);
+});
+
+test('owner approval rejects signed internal agent cookies without bearer headers',async()=>{
+ const {NextRequest}=require('next/server'),db=await fixture();
+ const previous=process.env.SESSION_SECRET;
+ process.env.SESSION_SECRET='factory-approval-regression-test-only';
+ try{
+  const {signSession,SESSION_COOKIE}=load('../auth/session');
+  const agentToken=signSession({id:6,agentId:'dev'});
+  const agentCookies=[`${SESSION_COOKIE}=${agentToken}`,`${SESSION_COOKIE}="${agentToken}"`,`${SESSION_COOKIE} =${agentToken}`];
+  const route=ownerPolicyEndpoint(db,ownerSession);
+  const body={operation:'template',project_id:15,expected_version:0,criteria:policyCriteria};
+  for(const agentCookie of agentCookies){
+  assert.equal(require('better-auth/cookies').parseCookies(agentCookie).get(SESSION_COOKIE),agentToken);
+  const get=await route.GET(new NextRequest('https://example.invalid/api/factory/policy?project_id=15',{headers:{cookie:agentCookie}}));
+  assert.equal(get.status,403);
+  const post=await route.POST(new NextRequest('https://example.invalid/api/factory/policy',{method:'POST',headers:{origin:'https://example.invalid',cookie:agentCookie},body:JSON.stringify(body)}));
+  assert.equal(post.status,403);
+  assert.equal(db.rows('factoryTemplate').length,0);
+  }
+  const humanCookie=`${SESSION_COOKIE}=${signSession({id:6})}`;
+  const human=await route.POST(new NextRequest('https://example.invalid/api/factory/policy',{method:'POST',headers:{origin:'https://example.invalid',cookie:humanCookie},body:JSON.stringify(body)}));
+  assert.equal(human.status,200);
+  assert.equal(db.rows('factoryTemplate').length,1);
+ }finally{
+  if(previous===undefined)delete process.env.SESSION_SECRET;else process.env.SESSION_SECRET=previous;
+ }
 });
 
 test('approved semantic scope is protected at the actual controller and stale owner edits are unmet',async()=>{
