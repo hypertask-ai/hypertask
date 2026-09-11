@@ -210,7 +210,9 @@ export async function addExistingUserToProject(
             };
           });
 
-          assertHeld();
+          // Membership already committed inside the transaction. Do not call
+          // assertHeld() here: a lease assertion failure would be caught below
+          // and falsely report that no member was created.
           return {
             value: {
               memberId: joined.memberId,
