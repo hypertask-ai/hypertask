@@ -35,8 +35,6 @@ const handler: NextApiHandler = async (req, res) => {
 
     const actingUserId = session.userId;
     const signedSession = verifySession(req.cookies[SESSION_COOKIE]);
-    const cookieUser =
-      req.cookies.nookies_user && JSON.parse(req.cookies.nookies_user);
 
     // HTPR-6376: agent actor comes from the signed session claim. Body agentId
     // may confirm that claim but cannot forge one.
@@ -48,28 +46,36 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(actingAgent.status).json({ message: actingAgent.message });
     }
 
-    const agent = actingAgent.agentId
-      ? await prisma.agent.findFirst({
-          where: {
-            id: actingAgent.agentId,
-            userId: actingUserId,
-            revokedAt: null,
-          },
-          select: { id: true, userId: true, displayName: true, photoURL: true },
-        })
-      : null;
+    // Audit display comes from the verified session's user row, never from
+    // unsigned nookies_user metadata (same pattern as /api/tasks/single).
+    const [sessionUser, agent] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: actingUserId },
+        select: { displayName: true, photoURL: true, email: true },
+      }),
+      actingAgent.agentId
+        ? prisma.agent.findFirst({
+            where: {
+              id: actingAgent.agentId,
+              userId: actingUserId,
+              revokedAt: null,
+            },
+            select: { id: true, userId: true, displayName: true, photoURL: true },
+          })
+        : Promise.resolve(null),
+    ]);
     if (actingAgent.agentId && !agent) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    if (!sessionUser) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
-    // Display fields may come from the unsigned cookie; identity never does.
     const user = {
-      ...(cookieUser && typeof cookieUser === "object" ? cookieUser : {}),
       id: actingUserId,
-      displayName:
-        (cookieUser && cookieUser.displayName) ||
-        (typeof cookieUser?.email === "string" ? cookieUser.email : "") ||
-        "",
+      displayName: sessionUser.displayName ?? "",
+      photoURL: sessionUser.photoURL ?? undefined,
+      email: sessionUser.email ?? undefined,
     };
 
     const now = new Date();
@@ -85,7 +91,7 @@ const handler: NextApiHandler = async (req, res) => {
     // body value through after the resolution above.
     const { status: writeStatus, json: updatedTask }: any = await updateTaskSingle(
       newTask,
-      user,
+      user as IUser,
       agent?.id ?? null
     );
 
