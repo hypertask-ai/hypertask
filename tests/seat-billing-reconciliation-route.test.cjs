@@ -148,7 +148,7 @@ test("the membership migration preserves links, deduplicates, then enforces uniq
 test("every live team-join path uses conflict-safe membership and serialized billing", () => {
   for (const file of [
     "src/utils/controllers/members/invite.ts",
-    "src/utils/controllers/members/share.ts",
+    "src/utils/controllers/members/addExistingUserToProject.ts",
     "src/utils/controllers/users/autoJoinByEmailDomain.ts",
   ]) {
     const source = read(file);
@@ -159,6 +159,8 @@ test("every live team-join path uses conflict-safe membership and serialized bil
     assert.match(source, /assertHeld\(\)/);
     assert.match(source, /acceptedTeamMember\?\.status !== "Accepted"/);
   }
+  const share = read("src/utils/controllers/members/share.ts");
+  assert.match(share, /addExistingUserToProject/);
   const leave = read("src/utils/controllers/teams/leave.ts");
   assert.match(leave, /mutateAndSyncSeatBilling/);
   assert.ok(
