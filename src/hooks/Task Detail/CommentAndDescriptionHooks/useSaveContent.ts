@@ -790,6 +790,16 @@ export default function useSaveContent() {
       currentProjectId: currentProject?.id,
       currentTeamId: currentProject?.teamId,
       currentTeamTitle: currentProject?.team?.title,
+      currentRelatedTaskIds: [
+        currentTask?.parentTask?.id,
+        ...(currentTask?.subTasks || []).flatMap((item) => item.id),
+        ...(currentTask?.relatedFromTasks || []).flatMap(
+          (item) => item.targetTask?.id
+        ),
+        ...(currentTask?.relatedToTasks || []).flatMap(
+          (item) => item.sourceTask?.id
+        ),
+      ].filter(Boolean),
     });
     if (
       comments &&

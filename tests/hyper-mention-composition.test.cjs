@@ -41,6 +41,7 @@ test("composed HyperAI targets win over live current task and project", () => {
     currentProjectId: 15,
     currentTeamId: "team-other",
     currentTeamTitle: "other",
+    currentRelatedTaskIds: [888],
   });
 
   assert.deepEqual(result, {
@@ -53,6 +54,27 @@ test("composed HyperAI targets win over live current task and project", () => {
   });
 });
 
+test("composed snapshot does not mix in live project when team fields are missing", () => {
+  const result = resolve({
+    composedForTaskId: 1691,
+    composedForProjectId: 339,
+    currentTaskId: 9999,
+    currentProjectId: 15,
+    currentTeamId: "team-other",
+    currentTeamTitle: "other",
+    currentRelatedTaskIds: [888],
+  });
+
+  assert.deepEqual(result, {
+    taskId: 1691,
+    ownerId: undefined,
+    projectId: 339,
+    teamId: undefined,
+    teamTitle: undefined,
+    taskIds: [1691],
+  });
+});
+
 test("falls back to live current values when composition is missing", () => {
   const result = resolve({
     currentTaskId: 55,
@@ -60,6 +82,7 @@ test("falls back to live current values when composition is missing", () => {
     currentProjectId: 15,
     currentTeamId: "team-ht",
     currentTeamTitle: "Hypertask",
+    currentRelatedTaskIds: [10, 20],
   });
 
   assert.deepEqual(result, {
@@ -68,6 +91,6 @@ test("falls back to live current values when composition is missing", () => {
     projectId: 15,
     teamId: "team-ht",
     teamTitle: "Hypertask",
-    taskIds: [55],
+    taskIds: [55, 10, 20],
   });
 });

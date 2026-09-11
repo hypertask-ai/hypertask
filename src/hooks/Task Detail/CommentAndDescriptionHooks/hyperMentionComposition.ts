@@ -1,6 +1,8 @@
 /**
  * Resolve HyperAI mention targeting from values captured at send time.
  * Live currentTask/currentProject must not win after mid-upload navigation.
+ * When a composed task id is present, the whole composed snapshot is used;
+ * otherwise the whole current snapshot is used. Fields are never mixed.
  */
 export function resolveHyperMentionComposition(input: {
   composedForTaskId?: number;
@@ -14,6 +16,7 @@ export function resolveHyperMentionComposition(input: {
   currentProjectId?: number;
   currentTeamId?: string;
   currentTeamTitle?: string;
+  currentRelatedTaskIds?: number[];
 }): {
   taskId: number | undefined;
   ownerId: number | undefined;
@@ -22,12 +25,21 @@ export function resolveHyperMentionComposition(input: {
   teamTitle: string | undefined;
   taskIds: number[];
 } {
-  const taskId = input.composedForTaskId ?? input.currentTaskId;
-  const ownerId = input.composedForOwnerId ?? input.currentOwnerId;
-  const projectId = input.composedForProjectId ?? input.currentProjectId;
-  const teamId = input.composedForTeamId ?? input.currentTeamId;
-  const teamTitle = input.composedForTeamTitle ?? input.currentTeamTitle;
-  const related = input.composedRelatedTaskIds ?? [];
+  const useComposed = input.composedForTaskId != null;
+  const taskId = useComposed ? input.composedForTaskId : input.currentTaskId;
+  const ownerId = useComposed
+    ? input.composedForOwnerId
+    : input.currentOwnerId;
+  const projectId = useComposed
+    ? input.composedForProjectId
+    : input.currentProjectId;
+  const teamId = useComposed ? input.composedForTeamId : input.currentTeamId;
+  const teamTitle = useComposed
+    ? input.composedForTeamTitle
+    : input.currentTeamTitle;
+  const related = useComposed
+    ? input.composedRelatedTaskIds ?? []
+    : input.currentRelatedTaskIds ?? [];
   return {
     taskId,
     ownerId,
