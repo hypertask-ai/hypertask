@@ -1,4 +1,5 @@
 // HTPR-4146: reverse of bridgePlugin.ts — mints legacy ht_session/nookies_user cookies after a native Better Auth login, so the 140+ files that still read those cookies directly keep working.
+import type { GenericEndpointContext } from '@better-auth/core'
 import type { BetterAuthPlugin } from 'better-auth'
 import {
   APIError,
@@ -125,7 +126,7 @@ export function legacyCookiePlugin() {
           requireHeaders: true,
           disableBody: true,
         },
-        async (ctx) => {
+        async (ctx: GenericEndpointContext) => {
           const session = await getSessionFromCtx(ctx)
           if (!session) {
             throw APIError.fromStatus('UNAUTHORIZED', {
