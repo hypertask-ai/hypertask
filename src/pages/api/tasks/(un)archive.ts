@@ -91,7 +91,7 @@ const handler: NextApiHandler = async (req, res) => {
     // body value through after the resolution above.
     const { status: writeStatus, json: updatedTask }: any = await updateTaskSingle(
       newTask,
-      user,
+      user as IUser,
       agent?.id ?? null
     );
 
