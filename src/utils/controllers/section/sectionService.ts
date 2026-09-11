@@ -1,4 +1,3 @@
-import { FactoryAcceptanceError, guardFactoryProjectAdministration } from '@/lib/factoryAcceptance/enforcement';
 /**
  * Centralized Section CRUD service.
  * Both Pages API and MCP endpoints should use this service.
@@ -14,7 +13,6 @@ import {
 } from './viewHelpers'
 
 export interface CreateSectionInput {
-  agentId?: string | null
   projectId: number
   title: string
   ranking?: string
@@ -25,13 +23,13 @@ export interface CreateSectionInput {
 
 export type CreateSectionResult =
   | { status: 200; json: { id: number; section_title: string; projectId: number; visibility: boolean; deleted: boolean; ranking: string; isDone: boolean | null } }
-  | { status: 400 | 403 | 404 | 409 | 500; json: { message: string } | unknown }
+  | { status: 400 | 404 | 500; json: { message: string } | unknown }
 
 /**
  * Create a new section. Updates all project views.
  */
 export async function createSection(input: CreateSectionInput): Promise<CreateSectionResult> {
-  const { projectId, title, ranking: explicitRanking, afterSectionId, userId, agentId } = input
+  const { projectId, title, ranking: explicitRanking, afterSectionId, userId } = input
 
   const project = await prisma.project.findUnique({ where: { id: projectId } })
   if (!project) {
@@ -64,9 +62,7 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
   }
 
   try {
-    const section = await prisma.$transaction(async tx=>{
-      await guardFactoryProjectAdministration(tx,projectId,agentId);
-      return tx.section.create({
+    const section = await prisma.section.create({
       data: {
         project: { connect: { id: projectId } },
         section_title: title,
@@ -76,7 +72,6 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
       }
     })
 
-    });
     await appendSectionToAllViews(projectId, section, userId)
 
     return {
@@ -92,7 +87,6 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
       }
     }
   } catch (error) {
-    if(error instanceof FactoryAcceptanceError)return {status:403,json:{code:error.code,message:error.message}};
     console.error('Error creating section:', error)
     return { status: 500, json: error }
   }
@@ -180,7 +174,6 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
 
     const finalRanking = resolvedRanking ?? ranking
     const toUpdate = await prisma.$transaction(async (tx) => {
-      await guardFactoryProjectAdministration(tx,existing.projectId,agentId);
       const updated = await tx.section.update({
         where: { id: sectionId },
         data: {
@@ -244,7 +237,6 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
       }
     }
   } catch (error) {
-    if(error instanceof FactoryAcceptanceError)return {status:403,json:{code:error.code,message:error.message}};
     console.error('Error updating section:', error)
     return { status: 500, json: { message: 'Section not found' } }
   }
@@ -300,7 +292,6 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
   let movedTaskCount = 0
   if (firstSection) {
     const moved = await prisma.$transaction(async (tx) => {
-      await guardFactoryProjectAdministration(tx,projectId,agentId);
       const timestamp = new Date()
       const tasks = await tx.task.updateManyAndReturn({
         where: {

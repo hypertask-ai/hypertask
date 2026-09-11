@@ -324,8 +324,6 @@ export interface MoveTaskToDifferentBoardResult {
   task?: any;
   error?: string;
   statusCode?: number;
-  code?: string;
-  request_id?: string;
 }
 
 /**
@@ -410,8 +408,6 @@ export async function moveTaskToDifferentBoard(
         success: false,
         error: toErrorMessage(result.json, "Failed to update task"),
         statusCode: result.status ?? 500,
-      code: result.json?.code,
-      request_id: result.json?.request_id,
       };
     }
     return { success: true, task: result.json };
@@ -460,8 +456,6 @@ export async function moveTaskToDifferentBoard(
       success: false,
       error: toErrorMessage(result.json, "Failed to update task"),
       statusCode: result.status ?? 500,
-      code: result.json?.code,
-      request_id: result.json?.request_id,
     };
   }
 

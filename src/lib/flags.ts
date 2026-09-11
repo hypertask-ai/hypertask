@@ -10,7 +10,6 @@ import {
 } from "@/lib/agentRuns/model";
 
 import {
-  FACTORY_OWNER_PREVIEW_FLAG,
   AGENT_CHAT_BRIEF_FLAG,
   AGENT_CHAT_SKILLS_FLAG,
   AGENT_CHAT_TICKET_CONFIRM_FLAG,
@@ -60,12 +59,11 @@ const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
+// Keep the OFF database row so older deployments also fail closed, while the current app hides
+// and rejects the retired flag until those deployments are outside the rollback window.
+const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
+
 const FEATURE_FLAG_DEFINITIONS = [
-  {
-    key: FACTORY_OWNER_PREVIEW_FLAG,
-    shippedOn: "2026-09-10",
-    description: "Previews factory policy and saved task requirements for explicit owner approval. Does not enable factory enforcement.",
-  },
   {
     key: HTPR_6320_AI_OBSERVABILITY_FLAG,
     shippedOn: "2026-09-09",
@@ -490,6 +488,7 @@ export async function featureFlagCandidateUserIds(
   key: string,
   db: FeatureFlagDatabase = prisma,
 ): Promise<number[] | null> {
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) return [];
   const row = await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
   const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE;
   if (mode === "EVERYONE") return null;
@@ -504,6 +503,7 @@ export async function isFeatureEnabled(
   userId: number,
   db: FeatureFlagDatabase = prisma,
 ): Promise<boolean> {
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) return false;
   const row = await db.featureFlag.findUnique({
     where: { key },
     select: { mode: true },
@@ -522,10 +522,12 @@ export async function isFeatureEnabled(
 export async function listFeatureFlagModes(
   options: { includeTicketTitles?: boolean } = {},
 ): Promise<FeatureFlagRow[]> {
-  const stored = await prisma.featureFlag.findMany({
-    select: FEATURE_FLAG_ROW_SELECT,
-    orderBy: { key: "asc" },
-  });
+  const stored = (
+    await prisma.featureFlag.findMany({
+      select: FEATURE_FLAG_ROW_SELECT,
+      orderBy: { key: "asc" },
+    })
+  ).filter(({ key }) => !RETIRED_FEATURE_FLAG_KEYS.has(key));
   const ticketTitleByNumber = options.includeTicketTitles
     ? await loadFeatureFlagTicketTitles([
         ...new Set([...FEATURE_FLAG_KEYS, ...stored.map(({ key }) => key)]),
@@ -575,6 +577,9 @@ export async function setFeatureFlagMode(
   if (!validFeatureFlagKey(key) || !FEATURE_FLAG_MODES.includes(mode)) {
     throw new FeatureFlagInputError("Invalid feature flag");
   }
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) {
+    throw new FeatureFlagInputError("Unknown feature flag");
+  }
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
 
   const row = await prisma.$transaction(async (tx) => {
@@ -613,6 +618,7 @@ export async function setFeatureFlagMode(
  */
 export async function setFeatureFlagKeep(key: string, keep: boolean): Promise<FeatureFlagRow> {
   if (!validFeatureFlagKey(key)) throw new FeatureFlagInputError("Invalid feature flag");
+  if (RETIRED_FEATURE_FLAG_KEYS.has(key)) throw new FeatureFlagInputError("Unknown feature flag");
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   const stored = await prisma.featureFlag.findUnique({ where: { key }, select: { key: true } });
   if (!declared && !stored) throw new FeatureFlagInputError("Unknown feature flag");
