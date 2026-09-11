@@ -1,5 +1,5 @@
 import { consumeEarlyAppShellBootstrapSlice } from "@/lib/appShellBootstrap/client";
-import { selectFavorites } from "@/utils/api/global/apiHelpers/favoritesResponse";
+import { selectFavorites } from "@/utils/api/global/apiHelpers/favoritesResponse.js";
 import axios from "axios"
 
 
