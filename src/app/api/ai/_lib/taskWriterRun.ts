@@ -90,7 +90,7 @@ export const taskWriterRequestSchema = z.object({
   taskDescription: z.string().optional().default(""),
   taskTitle: z.string().optional().default(""),
   /** User-authored briefs only; used for board search when research is on. */
-  userRetrievalTexts: z.array(z.string()).optional().default([]),
+  userRetrievalTexts: z.array(z.string()).max(20).optional().default([]),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   requestKind: z.enum(["manual", "auto-description"]).optional().default("manual"),
 });
@@ -258,21 +258,37 @@ export async function prepareTaskWriterRun(
           searchQuery: retrievalQuery,
           projectIds: [body.projectId],
           // Over-fetch so excluding the open ticket still leaves up to 8 peers.
-          topK: TASK_WRITER_RELATED_CANDIDATE_LIMIT + body.taskIds.length + 5,
-        }).then((rows) => {
-          const loaded = new Set(body.taskIds.map(String));
-          return formatRelatedTicketCandidates(
-            rows
-              .filter((row) => !loaded.has(row.id))
-              .slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT)
-          );
+          topK: Math.min(
+            TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
+            TASK_WRITER_RELATED_CANDIDATE_LIMIT +
+              Math.min(body.taskIds.length, 8) +
+              5
+          ),
+        })
+          .then((rows) => {
+            const loaded = new Set(body.taskIds.map(String));
+            return formatRelatedTicketCandidates(
+              rows
+                .filter((row) => !loaded.has(row.id))
+                .slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT)
+            );
+          })
+          .catch((error) => {
+            console.error("[ai/task-writer] related candidates failed", error);
+            return "";
+          })
+      : Promise.resolve(""),
+    boardResearchEnabled
+      ? loadTaskWriterStyleExamples(body.projectId).catch((error) => {
+          console.error("[ai/task-writer] style examples failed", error);
+          return "";
         })
       : Promise.resolve(""),
     boardResearchEnabled
-      ? loadTaskWriterStyleExamples(body.projectId)
-      : Promise.resolve(""),
-    boardResearchEnabled
-      ? loadTaskWriterBoardVocabulary(body.projectId)
+      ? loadTaskWriterBoardVocabulary(body.projectId).catch((error) => {
+          console.error("[ai/task-writer] board vocabulary failed", error);
+          return "";
+        })
       : Promise.resolve(""),
     Promise.resolve(
       createDocumentAttachmentSummary([...body.pdfs64, ...body.docx64])

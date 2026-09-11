@@ -39,6 +39,8 @@ export const TASK_WRITER_BOARD_RESEARCH_RULES = `<h3>BOARD RESEARCH (flagged; ou
 
 function escapePlain(value: string) {
   return value
+    .replaceAll("\r", " ")
+    .replaceAll("\n", " ")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");

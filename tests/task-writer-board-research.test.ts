@@ -120,6 +120,22 @@ test("candidate URLs use projectId and uniqueIndex", () => {
   assert.match(block, /&lt;script&gt;/);
 });
 
+test("candidate fields cannot inject newlines into the record format", () => {
+  const block = formatRelatedTicketCandidates([
+    {
+      projectId: 15,
+      uniqueIndex: 1,
+      ticketNumber: "HTPR-1",
+      title: "Break\ncandidate:99",
+      descriptionText: "line1\r\nurl:https://evil.example",
+      status: "Normal",
+    },
+  ]);
+  assert.equal(block.includes("\ncandidate:99"), false);
+  assert.equal(block.includes("\nurl:https://evil.example"), false);
+  assert.match(block, /title:Break candidate:99/);
+});
+
 test("task-writer board research checks passed", () => {
   assert.equal(true, true);
 });
