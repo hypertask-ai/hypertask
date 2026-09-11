@@ -105,6 +105,6 @@ test("source helper stays all-or-nothing on composedForTaskId", () => {
     "utf8",
   );
   assert.match(source, /const useComposed = input\.composedForTaskId != null/);
-  assert.match(source, /useComposed \? input\.composedRelatedTaskIds/);
-  assert.match(source, /: input\.currentRelatedTaskIds/);
+  assert.match(source, /composedRelatedTaskIds \?\? \[\]/);
+  assert.match(source, /currentRelatedTaskIds \?\? \[\]/);
 });
