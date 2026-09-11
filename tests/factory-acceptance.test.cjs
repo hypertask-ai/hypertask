@@ -211,9 +211,9 @@ test('new approved contract cannot issue requests or grants through the old regi
  await rejectsCode(move(db),'factory_contract_changed');
 });
 
-function endpoint(db,identity){
+function endpoint(db,identity,previewEnabled=true){
  const filename=path.resolve(__dirname,'../src/app/api/mcp/factory/[operation]/route.ts'),mod=new Module(filename,module);mod.filename=filename;mod.paths=module.paths;
- mod.require=id=>id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/mcp/auth'?{checkMcpRateLimit:async()=>null,validateMcpAuth:async()=>identity?{user:{id:identity.userId},agentId:identity.agentId}:null}:id==='@/lib/factoryAcceptance/templates'?load('templates'):id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):id==='@/lib/factoryAcceptance/service'?load('service'):require(id);
+ mod.require=id=>id==='@/lib/flags'?{isFeatureEnabled:async()=>previewEnabled,FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview'}:id==='@/lib/prisma'?{__esModule:true,default:{$transaction:fn=>db.transaction(fn)}}:id==='@/lib/mcp/auth'?{checkMcpRateLimit:async()=>null,validateMcpAuth:async()=>identity?{user:{id:identity.userId},agentId:identity.agentId}:null}:id==='@/lib/factoryAcceptance/templates'?load('templates'):id==='@/lib/factoryAcceptance/enforcement'?load('enforcement'):id==='@/lib/factoryAcceptance/service'?load('service'):require(id);
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);return mod.exports;
 }
 test('actual factory endpoint binds authority to auth, rejects anonymous/oversize bodies, and returns scoped status',async()=>{
@@ -229,6 +229,21 @@ test('actual factory endpoint binds authority to auth, rejects anonymous/oversiz
  assert.equal(large.headers.get('cache-control'),'no-store');
 });
 
+test('factory API rejects reads and writes outside the preview cohort',async()=>{
+ const {NextRequest}=require('next/server'),db=await fixture();const {body}=await grant(db);
+ const route=endpoint(db,authority,false),before=structuredClone(db.rows('factoryGrant'));
+ for(const [method,operation,value] of [['GET','status',null],['POST','grants',body]]){
+  const response=await route[method](new NextRequest('https://example.invalid/api/mcp/factory/'+operation+'?project_id=15&task_id=1',value?{method,body:JSON.stringify(value)}:undefined),{params:Promise.resolve({operation})});
+  assert.equal(response.status,403);assert.equal((await response.json()).code,'factory_preview_unavailable');
+ }
+ assert.deepEqual(db.rows('factoryGrant'),before);
+});
+test('developer can submit for QA before assignment, but only assigned independent QA can finish',async()=>{
+ const db=await fixture();db.rows('assignees').length=0;
+ await grant(db);await move(db);
+ for(const actor of [dev,authority])await rejectsCode(db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:12,expected_task_revision:db.rows('task')[0].updatedAt.toISOString()},actor)),'factory_actor_denied');
+ await rejectsCode(db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:12,expected_task_revision:db.rows('task')[0].updatedAt.toISOString()},qa)),'factory_qa_assignment_required');
+});
 test('grant wire responses bind requestId and status retains consumed proof after revision changes',async()=>{
  const {NextRequest}=require('next/server'),db=await fixture();const {body,grant:original}=await grant(db);
  const api=endpoint(db,authority);

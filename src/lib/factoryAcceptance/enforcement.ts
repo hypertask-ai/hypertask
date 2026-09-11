@@ -25,6 +25,8 @@ export type Enrollment = {
     sections: Record<string, number[]>;
 };
 const PROJECT_LOCK = 1213482326;
+// The preview flag gates setup and authority APIs. Once an owner enables a
+// policy, its safety checks persist until that owner explicitly disables it.
 export async function enrollment(tx: FactoryTx, projectId: number): Promise<Enrollment | null> {
     await tx.$executeRaw `SELECT pg_advisory_xact_lock(${PROJECT_LOCK}::int, ${projectId}::int)`;
     return await tx.factoryEnrollment.findUnique({ where: { projectId } }) as Enrollment | null;
@@ -54,6 +56,9 @@ export async function requireCurrentContract(tx: FactoryTx, taskId: number, cont
 }
 
 export async function requireAssignedQa(tx: FactoryTx, policy: Enrollment, taskId: number, actor: string, implementers: string[]) {
+    // QA claims work after submission. Requiring its assignment for developer
+    // handoffs would prevent submitting work or escalating an unavailable QA.
+    // actorCanTransition restricts Done to QA; every QA action checks assignment.
     if (policy.agentRoles[actor] !== 'qa')
         return;
     if (implementers.includes(actor))

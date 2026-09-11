@@ -27,7 +27,7 @@ function Editor({snapshot,onApprove,busy}:{snapshot:FactoryPolicySnapshot;onAppr
   return <div className="flex min-w-0 flex-col gap-3">
     {task&&<>
       <p>{snapshot.approval?.state==='current'?'Requirements approved.':snapshot.approval?.reason??'Requirements need approval.'}</p>
-      <div className="flex min-w-0 flex-col gap-2 rounded border p-3">
+      <div className="flex min-w-0 flex-col gap-2 rounded-[5px] border border-border-light-gray-thin p-3">
         <p className="font-semibold">Saved scope to approve</p>
         {Object.entries(snapshot.task!.reviewedScope).map(([field,value])=><div key={field}>
           <p>{({title:'Title',description:'Description',acceptanceCriteria:'Acceptance criteria',verifyCommand:'Verification command'} as Record<string,string>)[field]}</p>
@@ -37,18 +37,18 @@ function Editor({snapshot,onApprove,busy}:{snapshot:FactoryPolicySnapshot;onAppr
         </div>)}
       </div>
     </>}
-    {saved.map(row=><div key={row.id} className="break-words rounded border p-2 [overflow-wrap:anywhere]">
+    {saved.map(row=><div key={row.id} className="break-words rounded-[5px] border border-border-light-gray-thin p-2 [overflow-wrap:anywhere]">
       <p>{row.description}</p><small>{row.phase==='pre_qa'?'Before QA':'Final verification'} · Approved, cannot be edited</small>
     </div>)}
-    {additions.map((row,index)=><div key={row.id} className="flex min-w-0 flex-col gap-2 rounded border p-2">
-      <label>Requirement<textarea className="w-full rounded border p-2" value={row.description} maxLength={4000} onChange={e=>update(index,{description:e.target.value})}/></label>
-      <label>Verify<select className="ml-2 rounded border p-1" value={row.phase} onChange={e=>update(index,{phase:e.target.value as FactoryCriterion['phase']})}>
+    {additions.map((row,index)=><div key={row.id} className="flex min-w-0 flex-col gap-2 rounded-[5px] border border-border-light-gray-thin p-2">
+      <label>Requirement<textarea className="w-full rounded-[4px] bg-active-modal-element p-2" value={row.description} maxLength={4000} onChange={e=>update(index,{description:e.target.value})}/></label>
+      <label>Verify<select className="ml-2 rounded-[4px] bg-active-modal-element p-1" value={row.phase} onChange={e=>update(index,{phase:e.target.value as FactoryCriterion['phase']})}>
         <option value="pre_qa">Before QA</option><option value="final">During final QA</option>
       </select></label>
     </div>)}
     <button type="button" className="self-start underline" onClick={()=>{setReviewed(false);setAdditions(rows=>[...rows,{id:`${task?'scope':'policy'}.${crypto.randomUUID()}`,kind:task?'product_outcome':'verification',phase:task?'final':'pre_qa',description:''}]);}}>Add requirement</button>
     <label className="flex items-start gap-2"><input type="checkbox" checked={reviewed} onChange={e=>setReviewed(e.target.checked)}/><span>I reviewed these requirements{task?' and the saved scope':''}.</span></label>
-    <button type="button" className="self-start rounded border px-3 py-2 disabled:opacity-50" disabled={busy||!reviewed||saved.length+additions.length===0||additions.some(row=>!row.description.trim())} onClick={()=>onApprove([...saved,...additions])}>
+    <button type="button" className="self-start rounded-[4px] bg-shadcn-primary text-primary-foreground px-3 py-2 disabled:opacity-50" disabled={busy||!reviewed||saved.length+additions.length===0||additions.some(row=>!row.description.trim())} onClick={()=>onApprove([...saved,...additions])}>
       {busy?'Saving approval…':task?'Approve requirements':'Approve factory policy'}
     </button>
   </div>;
@@ -61,7 +61,7 @@ function FactoryApprovalContents({projectId,taskId}:{projectId:number;taskId?:nu
   const {query,mutation}=useFactoryPolicy(projectId,taskId);
   if(query.error?.status===403||query.error?.status===401)return null;
   const snapshot=query.data;
-  return <details className="my-3 min-w-0 rounded border p-3">
+  return <details className="my-3 min-w-0 rounded-[5px] border border-border-light-gray-thin p-3">
     <summary className="cursor-pointer font-semibold">{taskId?'Factory requirements':'Factory policy'}</summary>
     <div className="mt-3 flex min-w-0 flex-col gap-3">
       <p>{snapshot?.enforcementEnabled?'Factory enforcement is enabled.':'Factory enforcement is not enabled by this approval.'} Approval does not mean QA passed.</p>

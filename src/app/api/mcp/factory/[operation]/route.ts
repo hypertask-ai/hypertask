@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import {isFeatureEnabled,FACTORY_OWNER_PREVIEW_FLAG} from '@/lib/flags';
 import { bindTemplate } from '@/lib/factoryAcceptance/templates';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { FactoryAcceptanceError } from '@/lib/factoryAcceptance/enforcement';
@@ -48,6 +49,8 @@ async function handle(request: NextRequest, context: {
         const ctx = await validateMcpAuth(request);
         if (!ctx)
             return send({ success: false, code: 'unauthorized', error: 'Authentication required.' }, 401);
+        if (!await isFeatureEnabled(FACTORY_OWNER_PREVIEW_FLAG,ctx.user.id))
+            return send({success:false,code:'factory_preview_unavailable',error:'Factory acceptance is unavailable.'},403);
         const identity = { userId: ctx.user.id, agentId: ctx.agentId };
         const { operation } = await context.params;
         if (request.method === 'GET') {
