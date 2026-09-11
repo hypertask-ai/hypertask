@@ -765,11 +765,16 @@ export default function useSaveContent() {
     composedForOwnerId?: number,
     // Same capture for the board: HyperAI validates taskId+projectId together,
     // so a live currentProject after navigation 404s the mention (HTPR-6405).
-    composedForProjectId?: number
+    composedForProjectId?: number,
+    composedForTeamId?: string,
+    composedForTeamTitle?: string
   ) => {
     const mentionTaskId = composedForTaskId ?? currentTask?.id;
     const mentionOwnerId = composedForOwnerId ?? currentTask?.userId;
     const mentionProjectId = composedForProjectId ?? currentProject?.id;
+    const mentionTeamId = composedForTeamId ?? currentProject?.teamId;
+    const mentionTeamTitle =
+      composedForTeamTitle ?? currentProject?.team?.title;
     if (
       comments &&
       setComments &&
@@ -809,21 +814,13 @@ export default function useSaveContent() {
         postHyperMention("Comment", "Create", {
           ownerId: mentionOwnerId,
           projectId: mentionProjectId ?? -1,
-          teamId: currentProject?.teamId ?? "-1",
+          teamId: mentionTeamId ?? "-1",
           text: result.html,
           currentUser: currentUser ?? undefined,
-          teamTitle: currentProject?.team?.title ?? "",
-          taskIds: [
-            mentionTaskId,
-            currentTask.parentTask?.id,
-            ...(currentTask.subTasks || []).flatMap((item) => item.id),
-            ...(currentTask.relatedFromTasks || []).flatMap(
-              (item) => item.targetTask?.id
-            ),
-            ...(currentTask.relatedToTasks || []).flatMap(
-              (item) => item.sourceTask?.id
-            ),
-          ].filter(Boolean),
+          teamTitle: mentionTeamTitle ?? "",
+          // Only the composed ticket. Related IDs from a live currentTask after
+          // navigation would mix boards (OCR HTPR-6405).
+          taskIds: [mentionTaskId].filter(Boolean),
           sourceSelected:
             result.hyperMention.modelSource ?? improveWritingSource,
           modelSelected:
@@ -1110,6 +1107,8 @@ export default function useSaveContent() {
           taskId: currentTask?.id,
           ownerId: currentTask?.userId,
           projectId: currentProject?.id,
+          teamId: currentProject?.teamId,
+          teamTitle: currentProject?.team?.title,
         },
       ]);
       return true;

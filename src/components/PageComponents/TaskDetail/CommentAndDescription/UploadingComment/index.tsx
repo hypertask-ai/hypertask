@@ -17,6 +17,8 @@ interface IProps{
     taskId?: number
     ownerId?: number
     projectId?: number
+    teamId?: string
+    teamTitle?: string
 }
 // 1: process html
 // 2: setInlineImagesUploadedTotal pass this callback. 
@@ -26,7 +28,7 @@ interface IProps{
 const startedUploads = new Set<number>();
 const createdUploads = new Set<number>();
 
-const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,totalAttachments, navigateToNextParams, taskId, ownerId, projectId}) => {
+const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,totalAttachments, navigateToNextParams, taskId, ownerId, projectId, teamId, teamTitle}) => {
     const hasRun = useRef(false);
     const hasCreated = useRef(false);
 
@@ -81,7 +83,9 @@ const callbackAttachments = async(attachmentsReturned:any[]) => {
           attachments,
           taskId,
           ownerId,
-          projectId
+          projectId,
+          teamId,
+          teamTitle
         )
       setTimeout(() => {
         if(navigateToNextParams.markAsDone) markAsDone(navigateToNextParams.taskStatus === "Archive"? true:undefined)

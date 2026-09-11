@@ -22,6 +22,8 @@ const UploadingCommentsContainer = ({ index }: { index?: number }) => {
             taskId={comment.taskId}
             ownerId={comment.ownerId}
             projectId={comment.projectId}
+            teamId={comment.teamId}
+            teamTitle={comment.teamTitle}
             />
     )}
     </>
