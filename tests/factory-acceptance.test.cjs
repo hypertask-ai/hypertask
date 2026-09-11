@@ -308,6 +308,31 @@ test('template and semantic version changes invalidate grants and require a new 
  await approveScope(db,1,1,[...scopeCriteria,{id:'scope.second',kind:'acceptance',phase:'pre_qa',description:'Another explicit outcome'}]);
  const latest=db.rows('factoryContract').at(-1);await rejectsCode(db.transaction(tx=>load('enforcement').requireCurrentContract(tx,1,latest.version)),'factory_binding_required');
 });
+test('unchanged owner approvals retain versions and pending work, while changed scope invalidates it',async()=>{
+ const db=await templateFixture();await approveScope(db);
+ const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+ await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:contract.version,expected_code_revision:code,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
+ const {request}=await db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:11,expected_task_revision:now.toISOString()},dev));
+ await db.transaction(tx=>registerGrant(tx,{project_id:15,task_id:1,request_id:request.id,contract_version:contract.version,code_revision:code,actor_agent_id:'dev',target_section_id:11,expected_task_revision:now.toISOString(),evidence_digest:'b'.repeat(64),authorization_id:'repeat-approval',ttl_seconds:300},authority,now));
+ const before=structuredClone(db.rows('factoryGrant'));
+ const {template}=await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:1,criteria:[...policyCriteria].reverse()},ownerSession));
+ const {semanticReceipt}=await approveScope(db,1,1);
+ assert.equal(template.version,1);assert.equal(semanticReceipt.version,1);
+ assert.equal(db.rows('factoryTemplate').length,1);assert.equal(db.rows('factorySemanticReceipt').length,1);
+ assert.deepEqual(db.rows('factoryGrant'),before);assert.equal(db.rows('factoryTransitionRequest')[0].status,'granted');
+ db.rows('task')[0].acceptanceCriteria='A changed outcome needs fresh approval';
+ const changed=await approveScope(db,1,1);
+ assert.equal(changed.semanticReceipt.version,2);
+ assert.equal(db.rows('factoryGrant').length,0);assert.equal(db.rows('factoryTransitionRequest')[0].status,'superseded');
+});
+test('identical criteria still require fresh approval from a new owner',async()=>{
+ const db=await templateFixture();await approveScope(db);db.rows('project')[0].ownerId=7;
+ const nextOwner={userId:7,source:'legacy'};
+ const {template}=await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:1,criteria:policyCriteria},nextOwner));
+ const {semanticReceipt}=await db.transaction(tx=>templateService.approveRequirements(tx,{project_id:15,task_id:1,expected_version:1,expected_task_revision:now.toISOString(),expected_scope_digest:load('enforcement').semanticContentDigest(db.rows('task')[0]),criteria:scopeCriteria},nextOwner));
+ assert.equal(template.version,2);assert.equal(template.ownerId,7);
+ assert.equal(semanticReceipt.version,2);assert.equal(semanticReceipt.ownerId,7);
+});
 test('editable acceptance drift and owner transfer cannot reuse semantic approval',async()=>{
  const db=await templateFixture();await approveScope(db);const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
  db.rows('task')[0].acceptanceCriteria='Changed outside approval';

@@ -41,6 +41,8 @@ export async function registerTemplate(tx:FactoryTx,body:any,session:OwnerSessio
   const inventory=criteria(body.criteria,'policy.');
   if(!['implementation','tests'].every(kind=>inventory.some(item=>item.kind===kind&&item.phase==='pre_qa'))||!inventory.some(item=>item.kind==='independent_qa'&&item.phase==='final'))fail('factory_invalid_request','The template requires implementation, tests and independent final QA.',400);
   appendOnly(previous?.criteria,inventory);
+  // Unique IDs and appendOnly above prove equal-sized inventories contain the same unchanged criteria.
+  if(previous?.ownerId===session.userId&&(previous.criteria as Criterion[]).length===inventory.length)return {template:previous};
   const template=await tx.factoryTemplate.create({data:{projectId,version:(previous?.version??0)+1,criteria:json(inventory),criteriaDigest:hash(inventory),ownerId:session.userId}});
   await invalidate(tx,{projectId});return {template};
 }
@@ -56,6 +58,8 @@ export async function approveRequirements(tx:FactoryTx,body:any,session:OwnerSes
   const inventory=criteria(body.criteria,'scope.');
   if(inventory.every(item=>['implementation','tests','independent_qa'].includes(item.kind)))fail('factory_semantics_required','Explicit product outcomes are required; process checks are not semantic acceptance.',400);
   appendOnly(previous?.criteria,inventory);
+  // Unique IDs and appendOnly above prove equal-sized inventories contain the same unchanged criteria.
+  if(previous?.ownerId===session.userId&&previous.taskContentDigest===semanticContentDigest(task)&&(previous.criteria as Criterion[]).length===inventory.length)return {semanticReceipt:previous};
   const semanticReceipt=await tx.factorySemanticReceipt.create({data:{taskId,projectId,version:(previous?.version??0)+1,criteria:json(inventory),criteriaDigest:hash(inventory),taskContentDigest:semanticContentDigest(task),sourceTaskRevision:task.updatedAt,ownerId:session.userId}});
   await invalidate(tx,{taskId});return {semanticReceipt};
 }

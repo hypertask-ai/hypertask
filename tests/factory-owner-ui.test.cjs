@@ -22,8 +22,8 @@ test('approval panel requires explicit review, resets on navigation and renders 
  global.window=dom.window;global.document=dom.window.document;global.IS_REACT_ACT_ENVIRONMENT=true;
  const {createRoot}=require('react-dom/client'),{act}=React;
  let data=snapshot(),sent=[];
- let flagEnabled=true,policyReads=0;
- const hook={useFactoryPolicy:()=>{policyReads++;return ({query:{data,error:null,isPending:false,isFetching:false,refetch:async()=>{}},mutation:{error:null,isPending:false,reset:()=>{},mutate:value=>sent.push(value)}});}};
+ let flagEnabled=true,policyReads=0,queryError=null;
+ const hook={useFactoryPolicy:()=>{policyReads++;return ({query:{data,error:queryError,isPending:false,isFetching:false,refetch:async()=>{}},mutation:{error:null,isPending:false,reset:()=>{},mutate:value=>sent.push(value)}});}};
  const Panel=load('src/components/Factory/FactoryApprovalPanel.tsx',{'@/hooks/useFactoryPolicy':hook,'@/hooks/useFlag':{useFlag:()=>flagEnabled},'@/lib/flags/keys':{FACTORY_OWNER_PREVIEW_FLAG:'hyfa-43-factory-owner-preview'},'@/utils/helperFunctions/sanitizeHtml':load('src/utils/helperFunctions/sanitizeHtml.ts')}).default;
  const root=createRoot(document.getElementById('root'));
  try{
@@ -47,6 +47,21 @@ test('approval panel requires explicit review, resets on navigation and renders 
    const setter=Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype,'value').set;
    setter.call(textarea,'The requested product outcome works');textarea.dispatchEvent(new dom.window.Event('input',{bubbles:true}));
   });
+  const phase=document.querySelector('select');
+  await act(async()=>{phase.value='pre_qa';phase.dispatchEvent(new dom.window.Event('change',{bubbles:true}));});
+  await act(async()=>document.querySelector('input[type=checkbox]').click());
+  data={...data,task:{...data.task,scopeDigest:'b'.repeat(64),reviewedScope:{...data.task.reviewedScope,title:'Changed saved title'}}};
+  await act(async()=>root.render(React.createElement(Panel,{projectId:15,taskId:1})));
+  assert.equal(document.querySelectorAll('textarea').length,1,'Refreshing scope must retain the draft');
+  assert.equal(document.querySelector('select').value,'pre_qa','Draft edits must survive refresh');
+  assert.equal(document.querySelector('input[type=checkbox]').checked,false,'Changed scope needs another review');
+  queryError={status:503,message:'Temporary read failure'};
+  await act(async()=>root.render(React.createElement(Panel,{projectId:15,taskId:1})));
+  assert.equal(document.querySelectorAll('textarea').length,1,'Transient failures must retain the draft');
+  await act(async()=>document.querySelector('input[type=checkbox]').click());
+  assert.equal([...document.querySelectorAll('button')].find(x=>x.textContent.includes('Saving approval')).disabled,true);
+  queryError=null;
+  await act(async()=>root.render(React.createElement(Panel,{projectId:15,taskId:1})));
   // A new task must never inherit the previous task's approval checkbox.
   await act(async()=>document.querySelector('input[type=checkbox]').click());
   data=snapshot(2);
@@ -64,6 +79,23 @@ test('approval panel requires explicit review, resets on navigation and renders 
   assert.equal(sent.length,1);assert.equal(sent[0].snapshot.task.id,2);assert.equal(sent[0].criteria[0].description,'Approved outcome');
   assert.equal(sent[0].snapshot.task.scopeDigest,data.task.scopeDigest);
   assert.equal(sent[0].snapshot.task.reviewedScope.description,data.task.reviewedScope.description);
+  data={...data,task:{...data.task,updatedAt:'2026-09-10T00:01:00.000Z'}};
+  await act(async()=>root.render(React.createElement(Panel,{projectId:15,taskId:2})));
+  assert.equal(document.querySelector('input[type=checkbox]').checked,false,'A new task revision also needs review');
+  data={projectId:15,enforcementEnabled:false,template:null,semanticReceipt:null};
+  await act(async()=>root.render(React.createElement(Panel,{projectId:15})));
+  const approvedDefaults=[...document.querySelectorAll('textarea')].map((input,index)=>({
+   id:['policy.implementation','policy.tests','policy.independent_qa'][index],
+   kind:['implementation','tests','independent_qa'][index],
+   phase:index===2?'final':'pre_qa',description:input.value,
+  }));
+  assert.equal(approvedDefaults.length,3);
+  await act(async()=>add().click());
+  data={...data,template:{version:1,criteria:approvedDefaults}};
+  await act(async()=>root.render(React.createElement(Panel,{projectId:15})));
+  assert.equal(document.querySelectorAll('textarea').length,1,'Confirmed drafts disappear while unrelated additions remain');
+  assert.equal(document.querySelector('textarea').value,'');
+
  }finally{await act(async()=>root.unmount());dom.window.close();global.window=previous.window;global.document=previous.document;global.IS_REACT_ACT_ENVIRONMENT=previous.act;}
 });
 

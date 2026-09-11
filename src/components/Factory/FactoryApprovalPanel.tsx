@@ -1,5 +1,5 @@
 "use client";
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import {useFlag} from '@/hooks/useFlag';
 import {FACTORY_OWNER_PREVIEW_FLAG} from '@/lib/flags/keys';
 import {sanitizeAiHtml} from '@/utils/helperFunctions/sanitizeHtml';
@@ -14,7 +14,15 @@ function Editor({snapshot,onApprove,busy}:{snapshot:FactoryPolicySnapshot;onAppr
   const task=!!snapshot.task;
   const saved=(task?snapshot.semanticReceipt:snapshot.template)?.criteria??[];
   const [additions,setAdditions]=useState<FactoryCriterion[]>(task||saved.length?[]:defaults);
-  const [reviewed,setReviewed]=useState(false);
+  const reviewVersion=JSON.stringify([snapshot.template?.version,snapshot.semanticReceipt?.version,snapshot.task?.scopeDigest,snapshot.task?.updatedAt]);
+  const [reviewedVersion,setReviewedVersion]=useState<string|null>(null);
+  const reviewed=reviewedVersion===reviewVersion;
+  const setReviewed=(value:boolean)=>setReviewedVersion(value?reviewVersion:null);
+  useEffect(()=>{
+    // Remove only drafts confirmed saved by the server; preserve unrelated local edits.
+    const confirmed=(task?snapshot.semanticReceipt:snapshot.template)?.criteria??[];
+    setAdditions(rows=>rows.filter(row=>!confirmed.some(item=>item.id===row.id&&item.kind===row.kind&&item.phase===row.phase&&item.description===row.description)));
+  },[snapshot.template,snapshot.semanticReceipt,task]);
   const update=(index:number,patch:Partial<FactoryCriterion>)=>{setReviewed(false);setAdditions(rows=>rows.map((row,i)=>i===index?{...row,...patch}:row));};
   return <div className="flex min-w-0 flex-col gap-3">
     {task&&<>
@@ -61,7 +69,7 @@ function FactoryApprovalContents({projectId,taskId}:{projectId:number;taskId?:nu
       {query.error&&<p role="alert">{query.error.message}</p>}
       {mutation.error&&<p role="alert">{mutation.error.message}</p>}
       <button type="button" className="self-start underline" disabled={query.isFetching||mutation.isPending} onClick={()=>{mutation.reset();void query.refetch();}}>Reload saved scope</button>
-      {snapshot&&!query.error&&<Editor key={`${projectId}:${taskId}:${snapshot.template?.version}:${snapshot.semanticReceipt?.version}:${snapshot.task?.scopeDigest}`} snapshot={snapshot} busy={mutation.isPending||query.isFetching} onApprove={criteria=>mutation.mutate({snapshot,criteria})}/>}
+      {snapshot&&<Editor snapshot={snapshot} busy={mutation.isPending||query.isFetching||!!query.error} onApprove={criteria=>mutation.mutate({snapshot,criteria})}/>}
     </div>
   </details>;
 }
