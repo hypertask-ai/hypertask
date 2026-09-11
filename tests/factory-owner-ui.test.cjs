@@ -18,8 +18,9 @@ test('approval request rejects cross-task and cross-project snapshots before sen
 });
 test('approval panel requires explicit review, resets on navigation and renders scope without executing HTML',async()=>{
  const {JSDOM}=require('jsdom');const dom=new JSDOM('<div id="root"></div>',{url:'https://example.invalid'});
- const previous={window:global.window,document:global.document,act:global.IS_REACT_ACT_ENVIRONMENT};
+ const previous={window:global.window,document:global.document,navigator:Object.getOwnPropertyDescriptor(global,'navigator'),act:global.IS_REACT_ACT_ENVIRONMENT};
  global.window=dom.window;global.document=dom.window.document;global.IS_REACT_ACT_ENVIRONMENT=true;
+ Object.defineProperty(global,'navigator',{configurable:true,value:dom.window.navigator});
  const {createRoot}=require('react-dom/client'),{act}=React;
  let data=snapshot(),sent=[];
  let flagEnabled=true,policyReads=0,queryError=null;
@@ -96,7 +97,7 @@ test('approval panel requires explicit review, resets on navigation and renders 
   assert.equal(document.querySelectorAll('textarea').length,1,'Confirmed drafts disappear while unrelated additions remain');
   assert.equal(document.querySelector('textarea').value,'');
 
- }finally{await act(async()=>root.unmount());dom.window.close();global.window=previous.window;global.document=previous.document;global.IS_REACT_ACT_ENVIRONMENT=previous.act;}
+ }finally{await act(async()=>root.unmount());dom.window.close();global.window=previous.window;global.document=previous.document;global.IS_REACT_ACT_ENVIRONMENT=previous.act;if(previous.navigator)Object.defineProperty(global,'navigator',previous.navigator);else delete global.navigator;}
 });
 
 function entryComponent(relative,name,bindings){
