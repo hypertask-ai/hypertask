@@ -63,11 +63,6 @@ export async function addExistingUserToProject(
       team: {
         include: {
           googleAccount: true,
-          subscriptionPlan: {
-            where: {
-              subscriptionStatus: { not: "Expired" },
-            },
-          },
         },
       },
     },
@@ -155,27 +150,48 @@ export async function addExistingUserToProject(
         });
 
         assertHeld();
-        const board = await ensureProjectMemberRow({
-          assertHeld,
-          projectId,
-          userId,
-          ownsTheTeam: false,
-          teamId,
-        });
+        let board: JoinMutationResult;
+        try {
+          board = await ensureProjectMemberRow({
+            assertHeld,
+            projectId,
+            userId,
+            ownsTheTeam: false,
+            teamId,
+          });
+        } catch (error) {
+          console.error(
+            "[addExistingUserToProject] board membership failed after team join:",
+            error,
+          );
+          board = {
+            memberId: null,
+            outcome: "added",
+            error:
+              "Team membership could not be completed for this project. No board member was created.",
+          };
+        }
         if (board.error || board.memberId == null) {
           // Undo the team-seat mutation so billing never syncs a seat without
           // board access. Fresh rows are removed; promoted Invited rows revert.
           if (created) {
             assertHeld();
-            if (!priorTeamMembership) {
-              await prisma.member_Team
-                .delete({ where: { userId_teamId: { userId, teamId } } })
-                .catch(() => undefined);
-            } else if (priorTeamMembership.status === "Invited") {
-              await prisma.member_Team.update({
-                where: { userId_teamId: { userId, teamId } },
-                data: { status: "Invited", acceptedAt: null },
-              });
+            try {
+              if (!priorTeamMembership) {
+                await prisma.member_Team.delete({
+                  where: { userId_teamId: { userId, teamId } },
+                });
+              } else if (priorTeamMembership.status === "Invited") {
+                await prisma.member_Team.update({
+                  where: { userId_teamId: { userId, teamId } },
+                  data: { status: "Invited", acceptedAt: null },
+                });
+              }
+            } catch (rollbackError) {
+              console.error(
+                "[addExistingUserToProject] failed to roll back team seat after board join failure:",
+                rollbackError,
+              );
             }
           }
           return {

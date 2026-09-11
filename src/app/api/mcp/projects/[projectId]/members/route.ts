@@ -283,8 +283,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     return NextResponse.json(
-      mcpPendingInviteResponse(projectId, null),
-      { status: 200 }
+      {
+        success: false,
+        error:
+          "Invite did not create a pending invite or add the user as a member",
+      },
+      { status: 500 }
     );
   } catch (err) {
     console.error("[MCP Add Project Member] Error:", err);
