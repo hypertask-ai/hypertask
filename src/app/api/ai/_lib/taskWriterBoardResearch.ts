@@ -152,18 +152,21 @@ export function formatBoardVocabulary(args: {
   sectionTitles?: string[];
   labelNames?: string[];
 }) {
+  const sectionTitles = (args.sectionTitles ?? []).slice(0, 40);
+  const labelNames = (args.labelNames ?? []).slice(0, 40);
   const parts = [
     args.projectTitle ? `projectTitle:${escapePlain(args.projectTitle)}` : "",
     args.projectDescription
       ? `projectDescription:${escapePlain(args.projectDescription.slice(0, 1000))}`
       : "",
-    args.sectionTitles?.length
-      ? `columns:${escapePlain(args.sectionTitles.join(" | "))}`
+    sectionTitles.length
+      ? `columns:${escapePlain(sectionTitles.join(" | "))}`
       : "",
-    args.labelNames?.length
-      ? `labels:${escapePlain(args.labelNames.join(" | "))}`
+    labelNames.length
+      ? `labels:${escapePlain(labelNames.join(" | "))}`
       : "",
   ].filter(Boolean);
   if (parts.length === 0) return "";
-  return `<BOARD_VOCABULARY>\n${parts.join("\n")}\n</BOARD_VOCABULARY>`;
+  const body = parts.join("\n").slice(0, 4000);
+  return `<BOARD_VOCABULARY>\n${body}\n</BOARD_VOCABULARY>`;
 }

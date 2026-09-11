@@ -212,10 +212,9 @@ export async function prepareTaskWriterRun(
   // "/foo" alone strips to empty; fall back to the raw prompt so retrieval and
   // the model query are never blank (the skill body still carries the intent).
   const effectivePrompt = skillResolution.cleanedText || body.PROMPT;
-  const boardResearchEnabled = await isFeatureEnabled(
-    HTPR_6363_TASK_WRITER_RESEARCH_FLAG,
-    userId
-  );
+  const boardResearchEnabled =
+    body.aiMode === "AiTaskWriter" &&
+    (await isFeatureEnabled(HTPR_6363_TASK_WRITER_RESEARCH_FLAG, userId));
   // Search uses user-authored text only when research is on. The model still
   // receives the full conversation prompt via body.PROMPT / effectivePrompt.
   const retrievalQuery = boardResearchEnabled
@@ -327,8 +326,7 @@ export async function prepareTaskWriterRun(
     uploadedDocumentContext,
     input: effectivePrompt,
   });
-  const researchInstructions =
-    boardResearchEnabled && body.aiMode === "AiTaskWriter"
+  const researchInstructions = boardResearchEnabled
       ? createTaskWriterSystemPromptTemplate(
           `${TASK_AUTHORING_STYLE}\n\n${TASK_WRITER_BOARD_RESEARCH_RULES}`
         )
