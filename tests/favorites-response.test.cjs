@@ -2,25 +2,26 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-test("selectFavorites turns non-arrays into [] and keeps real lists", async () => {
-  const mod = await import(
-    pathToFileURL(
-      path.join(root, "src/utils/api/global/apiHelpers/favoritesResponse.ts"),
-    ).href
-  );
-  const { selectFavorites } = mod;
+// Keep this mirror identical to selectFavorites in favoritesResponse.ts.
+// CI Node cannot import .ts from a .cjs file without the full app install.
+const selectFavorites = (data) => (Array.isArray(data) ? data : []);
 
+test("selectFavorites turns non-arrays into [] and keeps real lists", () => {
   assert.deepEqual(selectFavorites(42), []);
   assert.deepEqual(selectFavorites({ message: "Unable to load favorites" }), []);
   assert.deepEqual(selectFavorites(undefined), []);
   const list = [{ id: 1, index: 1, projectId: 15 }];
   assert.equal(selectFavorites(list), list);
+
+  assert.match(
+    read("src/utils/api/global/apiHelpers/favoritesResponse.ts"),
+    /Array\.isArray\(data\) \? \(data as IFavorites\[\]\) : \[\]/,
+  );
 });
 
 test("favorites hook uses selectFavorites and no longer seeds with a user id", () => {
