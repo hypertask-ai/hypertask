@@ -219,7 +219,10 @@ test('actual factory endpoint binds authority to auth, rejects anonymous/oversiz
  assert.equal((await call(null,'grants',body)).status,401);
  const forged=await call(dev,'grants',{...body,agentId:'authority',userId:6});assert.equal(forged.status,403);assert.equal((await forged.json()).code,'factory_authority_required');
  const status=await call(authority,'status',null,'?project_id=15&task_id=1&request_id='+body.request_id);assert.equal(status.status,200);assert.equal((await status.json()).request.id,body.request_id);
- const large=await call(owner,'contracts',{description:'x'.repeat(256*1024)});assert.equal(large.status,413);
+ const legacy=await call(owner,'contracts',{project_id:15,task_id:1,expected_version:1,criteria:db.rows('factoryContract')[0].criteria});
+ assert.equal(legacy.status,404,'Raw contract writes must not bypass owner semantic approval');
+ assert.equal(db.rows('factoryContract').length,1);assert.equal(db.rows('factoryGrant').length,1);
+ const large=await call(owner,'enrollment',{description:'x'.repeat(256*1024)});assert.equal(large.status,413);
  assert.equal(large.headers.get('cache-control'),'no-store');
 });
 

@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 import { bindTemplate } from '@/lib/factoryAcceptance/templates';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { FactoryAcceptanceError } from '@/lib/factoryAcceptance/enforcement';
-import { configureEnrollment, registerContract, registerRevision, registerRequest, registerGrant, listRequests, readStatus } from '@/lib/factoryAcceptance/service';
+import { configureEnrollment, registerRevision, registerRequest, registerGrant, listRequests, readStatus } from '@/lib/factoryAcceptance/service';
 export const runtime = 'nodejs';
 const send = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 async function boundedBody(request: Request) {
@@ -61,7 +61,7 @@ async function handle(request: NextRequest, context: {
             });
             return send({ success: true, ...result });
         }
-        const operations = { bind:bindTemplate, enrollment: configureEnrollment, contracts: registerContract, revisions: registerRevision, requests: registerRequest, grants: registerGrant };
+        const operations = { bind:bindTemplate, enrollment: configureEnrollment, revisions: registerRevision, requests: registerRequest, grants: registerGrant };
         if (!Object.hasOwn(operations, operation))
             return send({ success: false, code: 'factory_unknown_operation', error: 'Unknown factory operation.' }, 404);
         const body = await boundedBody(request);
