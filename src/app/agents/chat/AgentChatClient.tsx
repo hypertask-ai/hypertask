@@ -2254,7 +2254,9 @@ const AgentChatClient = (props: IProp) => {
                 onProcessingChange={setIsDictationProcessing}
                 disabled={
                   sending ||
-                  (mobileLayoutEnabled && dictationProjectId == null)
+                  (mobileLayoutEnabled &&
+                    (dictationProjectId === null ||
+                      dictationProjectId === undefined))
                 }
                 projectId={
                   mobileLayoutEnabled ? dictationProjectId : undefined
@@ -2442,13 +2444,12 @@ const AgentChatClient = (props: IProp) => {
   ) : null;
 
   let mobileAgentChatHeight: string | undefined;
-  if (isMbl && mobileLayoutEnabled) {
+  if (
+    isMbl &&
+    (mobileLayoutEnabled || mobileAgentChatViewportEnabled)
+  ) {
     // Full visible viewport with top/dock padding inside the same border-box
     // (AI chat pattern). Avoids h-screen oversizing and mid-screen composer gap.
-    mobileAgentChatHeight = mobileAgentChatViewport
-      ? `${mobileAgentChatViewport.visibleHeight}px`
-      : "100dvh";
-  } else if (isMbl && mobileAgentChatViewportEnabled) {
     mobileAgentChatHeight = mobileAgentChatViewport
       ? `${mobileAgentChatViewport.visibleHeight}px`
       : "100dvh";
@@ -2459,7 +2460,7 @@ const AgentChatClient = (props: IProp) => {
       <div
         className={cn(
           "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
-          !mobileLayoutEnabled && "h-screen",
+          !(isMbl && mobileLayoutEnabled) && "h-screen",
           // The app shell reserves a fixed top bar and bottom tab bar (see
           // globals.scss .mobile-tab-bar-content); AI_Chat_Layout normally adds
           // this inset but bails out early for /agents/chat, so we add it
