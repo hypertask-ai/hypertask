@@ -193,7 +193,7 @@ const handler: NextApiHandler = async (
     const currentUser = currentUserRecord as IUser;
     // HTPR-6362: acting agent comes from the signed session claim. Body agentId
     // may confirm that claim but cannot forge one (same rule as archive).
-    const signedSession = verifySession(req.cookies[SESSION_COOKIE]);
+    const signedSession = verifySession(req.cookies?.[SESSION_COOKIE]);
     const actingAgent = resolveActingAgent({
       sessionAgentId: signedSession?.agentId ?? null,
       bodyAgentId: requestedAgentId,
