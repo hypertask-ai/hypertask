@@ -2,14 +2,39 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const Module = require("node:module");
+const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-// Behavior mirror of selectFavorites. CI Node cannot import the .ts module
-// from this .cjs file; the source assert below keeps them synchronized.
-const selectFavorites = (data) => (Array.isArray(data) ? data : []);
+// Same CI-safe TypeScript loader used by tests/factory-owner-ui.test.cjs.
+function load(relative, overrides = {}) {
+  const filename = path.resolve(root, relative);
+  const mod = new Module(filename, module);
+  mod.filename = filename;
+  mod.paths = Module._nodeModulePaths(path.dirname(filename));
+  mod.require = (id) =>
+    Object.prototype.hasOwnProperty.call(overrides, id)
+      ? overrides[id]
+      : require(id);
+  const source = fs.readFileSync(filename, "utf8");
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      esModuleInterop: true,
+    },
+    fileName: filename,
+  });
+  mod._compile(outputText, filename);
+  return mod.exports;
+}
+
+const { selectFavorites } = load(
+  "src/utils/api/global/apiHelpers/favoritesResponse.ts",
+);
 
 test("selectFavorites turns non-arrays into [] and keeps real lists", () => {
   assert.deepEqual(selectFavorites(42), []);
@@ -17,11 +42,6 @@ test("selectFavorites turns non-arrays into [] and keeps real lists", () => {
   assert.deepEqual(selectFavorites(undefined), []);
   const list = [{ id: 1, index: 1, projectId: 15 }];
   assert.equal(selectFavorites(list), list);
-
-  assert.match(
-    read("src/utils/api/global/apiHelpers/favoritesResponse.ts"),
-    /Array\.isArray\(data\) \? \(data as IFavorites\[\]\) : \[\]/,
-  );
 });
 
 test("favorites hook uses selectFavorites and no longer seeds with a user id", () => {
