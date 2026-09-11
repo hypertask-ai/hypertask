@@ -5,10 +5,8 @@
  */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const Module = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const MEMBER_USER_ID = 6;
@@ -19,48 +17,20 @@ const PROJECT_ID = 5156;
 process.env.SESSION_SECRET =
   process.env.SESSION_SECRET || "htpr-6362-agent-create-test-secret";
 
-function compile(relativePath) {
-  return ts.transpileModule(fs.readFileSync(path.join(root, relativePath), "utf8"), {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
-}
-
-function execute(javascript, stubs) {
-  const originalLoad = Module._load;
-  Module._load = (request, parent, isMain) =>
-    stubs[request] ?? originalLoad(request, parent, isMain);
-  try {
-    const mod = { exports: {} };
-    new Function("module", "exports", "require", javascript)(
-      mod,
-      mod.exports,
-      (request) => stubs[request] ?? require(request),
-    );
-    return mod.exports;
-  } finally {
-    Module._load = originalLoad;
-  }
-}
-
-function loadTs(relativePath, stubs = {}) {
-  return execute(compile(relativePath), stubs);
-}
-
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
-
-const { signSession, verifySession } = loadTs("src/lib/auth/session.ts");
-const { resolveActingAgent } = loadTs("src/lib/auth/resolveActingAgent.ts");
 
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
+const { signSession, verifySession } = jiti(
+  path.join(root, "src/lib/auth/session.ts"),
+);
+const { resolveActingAgent } = jiti(
+  path.join(root, "src/lib/auth/resolveActingAgent.ts"),
+);
 const { mapTaskToDetail, mapTaskToMcpGetResponse, mapTaskCreatedBy } = jiti(
   path.join(root, "src/lib/mcp/tasks/mappers.ts"),
 );
@@ -70,7 +40,7 @@ const visibleAgent = {
   displayName: "Last30Days",
   photoURL: null,
   userId: MEMBER_USER_ID,
-  visibility: "BOARD",
+  visibility: "TEAM",
   members: [{ projectId: PROJECT_ID }],
 };
 
