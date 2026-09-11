@@ -37,7 +37,15 @@ export default function AIChatClosedLayout({
     mobilePullCommandEnabled && "mobile-pull-command-enabled"
   );
 
-  if (pathname?.startsWith("/settings")) return <>{children}</>;
+  // Match AI_Chat_Layout: /agents/chat owns its own top-bar and dock insets
+  // (AgentChatClient). Padding here doubles the chrome and pushes the composer
+  // under the tab bar (HTPR-6407 phone FAIL).
+  if (
+    pathname?.startsWith("/settings") ||
+    pathname?.startsWith("/agents/chat")
+  ) {
+    return <>{children}</>;
+  }
 
   if (isDetailPage && isMobile) {
     return (
