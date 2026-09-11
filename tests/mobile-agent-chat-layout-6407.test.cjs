@@ -1,3 +1,4 @@
+// HTPR-6407 redeploy marker: keep prod health from rolling back a no-diff empty commit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
