@@ -34,6 +34,7 @@ describe("resolveMcpAddMemberTarget", () => {
   it("rejects empty or malformed targets", () => {
     assert.equal(resolveMcpAddMemberTarget("").kind, "invalid");
     assert.equal(resolveMcpAddMemberTarget(0).kind, "invalid");
+    assert.equal(resolveMcpAddMemberTarget(2147483648).kind, "invalid");
     assert.equal(resolveMcpAddMemberTarget("not-an-email").kind, "invalid");
   });
 });

@@ -8,16 +8,19 @@ import { CreateLogInput } from "@/models/model";
 import createLog from "@/utils/controllers/logs/createLog";
 import { updateTrial } from "@/utils/controllers/members/updateTrial";
 
+export type AddedProjectMember = {
+  /** Project Member row id, or null when the user is the board owner (no Member row). */
+  id: number | null;
+  userId: number;
+  displayName: string | null;
+  email: string | null;
+};
+
 export type AddExistingUserToProjectResult =
   | {
       ok: true;
       outcome: "added" | "already_member";
-      member: {
-        id: number;
-        userId: number;
-        displayName: string | null;
-        email: string | null;
-      };
+      member: AddedProjectMember;
     }
   | {
       ok: false;
@@ -25,10 +28,19 @@ export type AddExistingUserToProjectResult =
       message: string;
     };
 
+type JoinMutationResult = {
+  memberId: number | null;
+  outcome: "added" | "already_member";
+  error?: string;
+};
+
 /**
  * Add an existing Hypertask user to a project board, creating team membership
  * and syncing seat billing the same way task-share join and invite accept do.
  * Does not send email invites. Idempotent when the user is already a member.
+ *
+ * Team seat creation and board Member creation run in one billing lock so a
+ * failed board add cannot leave a billed seat without project access.
  */
 export async function addExistingUserToProject(
   projectId: number,
@@ -70,7 +82,7 @@ export async function addExistingUserToProject(
       ok: true,
       outcome: "already_member",
       member: {
-        id: userId,
+        id: null,
         userId,
         displayName: targetUser.displayName,
         email: targetUser.email,
@@ -99,38 +111,52 @@ export async function addExistingUserToProject(
     };
   }
 
-  const memberTeamCheck =
-    project.teamId && project.team
-      ? await prisma.member_Team.findFirst({
-          where: {
-            userId,
-            teamId: project.team.id,
-            status: "Accepted",
-          },
-        })
-      : null;
+  if (!project.teamId || !project.team) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Project has no team and cannot accept members",
+    };
+  }
 
-  const ownsTheTeam =
-    project.team != null && project.team.googleAccount.userId === userId;
+  const team = project.team;
+  const teamId = project.teamId;
+  const ownsTheTeam = team.googleAccount.userId === userId;
 
-  let paymentResponse: "Awaiting" | "FREE" | "OK" = "Awaiting";
+  const memberTeamCheck = await prisma.member_Team.findFirst({
+    where: {
+      userId,
+      teamId,
+      status: "Accepted",
+    },
+  });
 
-  if (
-    project.teamId &&
-    project.team?.stripe_customer_id &&
-    !memberTeamCheck &&
-    !ownsTheTeam
-  ) {
-    const teamId = project.teamId;
-    const team = project.team;
-    // Seat billing runs once, after the member is added, so it can price against
-    // the team's real seat count. Charging here as well is what double-billed a
-    // seat (HTPR-4216).
-    paymentResponse =
-      project.team.subscriptionPlan.length === 0 ? "FREE" : "OK";
+  const needsNewTeamSeat =
+    Boolean(team.stripe_customer_id) && !memberTeamCheck && !ownsTheTeam;
 
-    if (paymentResponse === "OK" || paymentResponse === "FREE") {
-      await mutateAndSyncSeatBilling(teamId, async (assertHeld) => {
+  if (needsNewTeamSeat) {
+    // Seat billing runs once after both team and board membership exist
+    // (HTPR-4216). Keep both writes inside this lock so sync cannot charge a
+    // seat when board membership fails.
+    const paymentResponse =
+      team.subscriptionPlan.length === 0 ? "FREE" : "OK";
+    if (paymentResponse !== "OK" && paymentResponse !== "FREE") {
+      return {
+        ok: false,
+        status: 400,
+        message:
+          "Could not add user to project. Team seat billing blocked the join or the team cannot accept members.",
+      };
+    }
+
+    const { value } = await mutateAndSyncSeatBilling<JoinMutationResult>(
+      teamId,
+      async (assertHeld) => {
+        assertHeld();
+        const priorTeamMembership = await prisma.member_Team.findUnique({
+          where: { userId_teamId: { userId, teamId } },
+          select: { status: true },
+        });
         assertHeld();
         const { member: memberTeam, created } = await ensureTeamMembership({
           teamId,
@@ -138,7 +164,51 @@ export async function addExistingUserToProject(
           googleAccountId: team.googleAccountId,
         });
 
-        if (!created) return { value: undefined, sync: false };
+        assertHeld();
+        const board = await ensureProjectMemberRow({
+          assertHeld,
+          projectId,
+          userId,
+          ownsTheTeam: false,
+          teamId,
+        });
+        if (board.error || board.memberId == null) {
+          // Undo the team-seat mutation so billing never syncs a seat without
+          // board access. Fresh rows are removed; promoted Invited rows revert.
+          if (created) {
+            assertHeld();
+            if (!priorTeamMembership) {
+              await prisma.member_Team
+                .delete({ where: { userId_teamId: { userId, teamId } } })
+                .catch(() => undefined);
+            } else if (priorTeamMembership.status === "Invited") {
+              await prisma.member_Team.update({
+                where: { userId_teamId: { userId, teamId } },
+                data: { status: "Invited", acceptedAt: null },
+              });
+            }
+          }
+          return {
+            value: {
+              memberId: null,
+              outcome: "added",
+              error:
+                board.error ??
+                "Team membership could not be completed for this project. No board member was created.",
+            } satisfies JoinMutationResult,
+            sync: false,
+          };
+        }
+
+        if (!created) {
+          return {
+            value: {
+              memberId: board.memberId,
+              outcome: board.outcome,
+            } satisfies JoinMutationResult,
+            sync: false,
+          };
+        }
 
         const createLogBody: CreateLogInput = {
           log: `${memberTeam?.user.displayName} joined Team "${team.title}"`,
@@ -161,21 +231,40 @@ export async function addExistingUserToProject(
         };
         createLog(createLogBody2);
 
-        return { value: undefined, sync: true };
-      });
-    }
-  }
-
-  const mayJoinProject =
-    Boolean(project.teamId) &&
-    Boolean(
-      memberTeamCheck ||
-        paymentResponse === "OK" ||
-        paymentResponse === "FREE" ||
-        ownsTheTeam,
+        return {
+          value: {
+            memberId: board.memberId,
+            outcome: board.outcome,
+          } satisfies JoinMutationResult,
+          sync: true,
+        };
+      },
     );
 
-  if (!mayJoinProject) {
+    if (value.error || value.memberId == null) {
+      return {
+        ok: false,
+        status: 400,
+        message:
+          value.error ??
+          "Team membership could not be completed for this project. No board member was created.",
+      };
+    }
+
+    await expirePendingInvites(projectId, targetUser.email);
+    return {
+      ok: true,
+      outcome: value.outcome,
+      member: {
+        id: value.memberId,
+        userId,
+        displayName: targetUser.displayName,
+        email: targetUser.email,
+      },
+    };
+  }
+
+  if (!memberTeamCheck && !ownsTheTeam) {
     return {
       ok: false,
       status: 400,
@@ -184,74 +273,102 @@ export async function addExistingUserToProject(
     };
   }
 
-  let createdMemberId: number | null = null;
-  let outcome: "added" | "already_member" = "added";
+  let join: JoinMutationResult = {
+    memberId: null,
+    outcome: "added",
+    error: "Team membership could not be completed for this project. No board member was created.",
+  };
 
-  await withTeamSeatBillingLock(project.teamId!, async (assertHeld) => {
-    assertHeld();
-    const acceptedTeamMember = await prisma.member_Team.findUnique({
-      where: { userId_teamId: { userId, teamId: project.teamId! } },
-      select: { status: true },
+  await withTeamSeatBillingLock(teamId, async (assertHeld) => {
+    join = await ensureProjectMemberRow({
+      assertHeld,
+      projectId,
+      userId,
+      ownsTheTeam,
+      teamId,
     });
-    assertHeld();
-    if (acceptedTeamMember?.status !== "Accepted" && !ownsTheTeam) return;
-
-    const alreadyMember = await prisma.member.findFirst({
-      where: {
-        projectId,
-        userId,
-        agentId: null,
-      },
-    });
-    if (alreadyMember) {
-      createdMemberId = alreadyMember.id;
-      outcome = "already_member";
-      return;
-    }
-
-    assertHeld();
-    const member = await prisma.member.create({
-      data: {
-        userId,
-        projectId,
-      },
-      select: { id: true },
-    });
-    createdMemberId = member.id;
-    await updateTrial(userId);
   });
 
-  if (createdMemberId == null && !ownsTheTeam) {
-    // Team membership may have been created without project membership if the
-    // accepted-status check failed after billing. Report failure rather than
-    // success so callers do not assume board access exists.
+  if (join.memberId == null) {
     return {
       ok: false,
       status: 400,
       message:
+        join.error ??
         "Team membership could not be completed for this project. No board member was created.",
     };
   }
 
-  if (targetUser.email) {
-    await prisma.invite.updateMany({
-      where: {
-        projectId,
-        expired: false,
-        emails: { has: targetUser.email },
-      },
-      data: { expired: true },
-    });
-  }
-
+  await expirePendingInvites(projectId, targetUser.email);
   return {
     ok: true,
-    outcome,
+    outcome: join.outcome,
     member: {
-      id: createdMemberId ?? userId,
+      id: join.memberId,
       userId,
       displayName: targetUser.displayName,
       email: targetUser.email,
     },
   };
+}
+
+async function ensureProjectMemberRow(input: {
+  assertHeld: () => void;
+  projectId: number;
+  userId: number;
+  ownsTheTeam: boolean;
+  teamId: string;
+}): Promise<JoinMutationResult> {
+  const { assertHeld, projectId, userId, ownsTheTeam, teamId } = input;
+  assertHeld();
+  const acceptedTeamMember = await prisma.member_Team.findUnique({
+    where: { userId_teamId: { userId, teamId } },
+    select: { status: true },
+  });
+  assertHeld();
+  if (acceptedTeamMember?.status !== "Accepted" && !ownsTheTeam) {
+    return {
+      memberId: null,
+      outcome: "added",
+      error:
+        "Team membership could not be completed for this project. No board member was created.",
+    };
+  }
+
+  const alreadyMember = await prisma.member.findFirst({
+    where: {
+      projectId,
+      userId,
+      agentId: null,
+    },
+  });
+  if (alreadyMember) {
+    return { memberId: alreadyMember.id, outcome: "already_member" };
+  }
+
+  assertHeld();
+  const member = await prisma.member.create({
+    data: {
+      userId,
+      projectId,
+    },
+    select: { id: true },
+  });
+  await updateTrial(userId);
+  return { memberId: member.id, outcome: "added" };
+}
+
+async function expirePendingInvites(
+  projectId: number,
+  email: string | null,
+): Promise<void> {
+  if (!email) return;
+  await prisma.invite.updateMany({
+    where: {
+      projectId,
+      expired: false,
+      emails: { has: email },
+    },
+    data: { expired: true },
+  });
 }

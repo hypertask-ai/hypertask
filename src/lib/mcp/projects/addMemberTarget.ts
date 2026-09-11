@@ -17,7 +17,10 @@ export function resolveMcpAddMemberTarget(userToAdd: unknown): McpAddMemberTarge
     typeof val === "string" && val.trim().length > 0;
 
   const isPositiveInteger = (val: unknown): val is number =>
-    typeof val === "number" && Number.isInteger(val) && val > 0;
+    typeof val === "number" &&
+    Number.isInteger(val) &&
+    val > 0 &&
+    val <= 2147483647;
 
   if (
     isNonEmptyString(userToAdd) &&
@@ -54,7 +57,7 @@ export function mcpAddedMemberResponse(
   projectId: number,
   outcome: "added" | "already_member",
   member: {
-    id: number;
+    id: number | null;
     userId: number;
     displayName: string | null;
     email: string | null;
