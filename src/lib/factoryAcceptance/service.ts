@@ -84,38 +84,6 @@ export async function configureEnrollment(tx: FactoryTx, body: any, identity: Id
     await tx.factoryTransitionRequest.updateMany({ where: { projectId, status: { in: ['pending', 'granted'] } }, data: { status: 'superseded' } });
     return { enrollment: result };
 }
-export async function registerContract(tx: FactoryTx, body: any, identity: Identity) {
-    const projectId = int(body.project_id), taskId = int(body.task_id);
-    await task(tx, projectId, taskId);
-    await owner(tx, projectId, identity);
-    await enrollment(tx, projectId);
-    const previous = await tx.factoryContract.findFirst({ where: { taskId }, orderBy: { version: 'desc' } });
-    if (body.expected_version !== (previous?.version ?? 0))
-        fail('factory_contract_changed', 'Contract changed; reload before approving criteria.');
-    if (!Array.isArray(body.criteria) || !body.criteria.length || body.criteria.length > 200)
-        fail('factory_invalid_request', 'A bounded, explicit criterion inventory is required.', 400);
-    const ids = new Set<string>();
-    const criteria = body.criteria.map((c: any) => {
-        const id = text(c?.id, /^[A-Za-z0-9_.:-]{1,128}$/);
-        if (ids.has(id) || !['pre_qa', 'final'].includes(c.phase) || typeof c.kind !== 'string' || !/^[A-Za-z0-9_.:-]{1,128}$/.test(c.kind) || typeof c.description !== 'string' || !c.description.trim() || c.description.length > 4000)
-            fail('factory_invalid_request', 'Invalid or duplicate acceptance criterion.', 400);
-        ids.add(id);
-        return { id, kind: c.kind, phase: c.phase, description: c.description };
-    });
-    if (!['implementation', 'tests'].every(kind => criteria.some((c: any) => c.kind === kind && c.phase === 'pre_qa')))
-        fail('factory_invalid_request', 'Pre-QA implementation and test criteria are required.', 400);
-    if (previous) {
-        const prior=previous.criteria as Array<{id:string;kind:string;phase:string;description:string}>;
-        const byId=new Map<string,any>(criteria.map((criterion:any)=>[criterion.id,criterion]));
-        if (!Array.isArray(prior) || prior.some(criterion=>!byId.has(criterion.id) || ['id','kind','phase','description'].some(field=>byId.get(criterion.id)[field] !== criterion[field as keyof typeof criterion])))
-            fail('factory_contract_immutable', 'Existing criteria cannot be removed or changed. Add new criteria with new IDs.');
-    }
-    const criteriaDigest = createHash('sha256').update(JSON.stringify(criteria)).digest('hex');
-    const contract = await tx.factoryContract.create({ data: { taskId, projectId, version: (previous?.version ?? 0) + 1, criteria: json(criteria), criteriaDigest, ownerId: identity.userId } });
-    await tx.factoryGrant.deleteMany({ where: { taskId, consumedAt: null } });
-    await tx.factoryTransitionRequest.updateMany({ where: { taskId, status: { in: ['pending', 'granted'] } }, data: { status: 'superseded' } });
-    return { contract };
-}
 export async function registerRevision(tx: FactoryTx, body: any, identity: Identity) {
     const projectId = int(body.project_id), taskId = int(body.task_id);
     await task(tx, projectId, taskId);

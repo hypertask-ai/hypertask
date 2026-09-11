@@ -14,7 +14,7 @@ function load(name){
  return mod.exports;
 }
 const {guardFactoryMutation,guardFactoryCreate}=load('enforcement');
-const {configureEnrollment,registerContract,registerRevision,registerRequest,registerGrant,readStatus}=load('service');
+const {configureEnrollment,registerRevision,registerRequest,registerGrant,readStatus}=load('service');
 const now=new Date('2026-09-10T18:00:00.000Z'),code='a'.repeat(40),owner={userId:6},dev={userId:6,agentId:'dev'},qa={userId:6,agentId:'qa'},authority={userId:6,agentId:'authority'};
 const eq=(a,b)=>a instanceof Date&&b instanceof Date?a.getTime()===b.getTime():a===b;
 function matches(row,where={}){return Object.entries(where).every(([key,value])=>{
@@ -39,11 +39,15 @@ function database(){
  let tail=Promise.resolve();
  return {tx,rows:name=>data[name],transaction(fn){const operation=tail.then(async()=>{const before=structuredClone(data);try{return await fn(tx);}catch(e){data=before;throw e;}});tail=operation.catch(()=>{});return operation;}};
 }
-async function fixture(){
+async function fixture(bound=true){
  const db=database();
  await db.transaction(tx=>configureEnrollment(tx,{project_id:15,expected_version:0,enabled:true,agent_roles:{dev:'dev',qa:'qa',authority:'authority',recovery:'recovery'},sections:{qa:[11],done:[12],waiting:[13],handoff:[14]}},owner));
- await db.transaction(tx=>registerContract(tx,{project_id:15,task_id:1,expected_version:0,criteria:[{id:'code',kind:'implementation',phase:'pre_qa',description:'Approved implementation'},{id:'test',kind:'tests',phase:'pre_qa',description:'Required test suite'}]},owner));
- await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:1,expected_code_revision:null,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
+ if(bound){
+  await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:0,criteria:policyCriteria},ownerSession));
+  await approveScope(db);
+  await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+  await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:1,expected_code_revision:null,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
+ }
  return db;
 }
 async function grant(db,actor=dev,target=11){
@@ -61,7 +65,7 @@ const rejectsCode=(work,code)=>assert.rejects(work,e=>e.code===code);
 
 test('only human project owner enrolls or approves criteria; authority cannot shrink criteria',async()=>{
  const db=await fixture();
- for(const identity of [dev,authority,{userId:7}])await rejectsCode(db.transaction(tx=>registerContract(tx,{project_id:15,task_id:1,expected_version:1,criteria:[]},identity)),'factory_owner_required');
+ for(const identity of [dev,authority,{userId:7}])await rejectsCode(db.transaction(tx=>configureEnrollment(tx,{project_id:15},identity)),'factory_owner_required');
  await rejectsCode(db.transaction(tx=>configureEnrollment(tx,{project_id:15},dev)),'factory_owner_required');
  assert.equal(db.rows('factoryContract').length,1);
 });
@@ -132,8 +136,7 @@ test('humans and unenrolled agents/projects retain task mutation behavior',async
 });
 test('approved criterion changes preserve implementer history and invalidate previous grants',async()=>{
  const db=await fixture();await grant(db);
- const criteria=db.rows('factoryContract')[0].criteria;
- await db.transaction(tx=>registerContract(tx,{project_id:15,task_id:1,expected_version:1,criteria},owner));
+ await extendScope(db);
  await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:2,expected_code_revision:code,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:[]},authority));
  assert.equal(db.rows('factoryContract').length,2);assert.deepEqual(db.rows('factoryRevision')[0].implementerAgentIds,['dev']);assert.equal(db.rows('factoryGrant').length,0);
  const status=await db.transaction(tx=>readStatus(tx,15,1,authority));assert.equal(status.contract.version,2);assert.equal(status.task.updatedAt.toISOString(),now.toISOString());
@@ -202,7 +205,7 @@ test('QA waiting requires current assignment at request, grant and consumption w
 
 test('new approved contract cannot issue requests or grants through the old registered revision',async()=>{
  const db=await fixture();const {body}=await grant(db);
- await db.transaction(tx=>registerContract(tx,{project_id:15,task_id:1,expected_version:1,criteria:[...db.rows('factoryContract')[0].criteria,{id:'new-code',kind:'implementation',phase:'pre_qa',description:'Changed implementation'},{id:'new-tests',kind:'tests',phase:'pre_qa',description:'Changed tests'}]},owner));
+ await extendScope(db);
  await rejectsCode(db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:13,expected_task_revision:now.toISOString()},dev)),'factory_contract_changed');
  await rejectsCode(db.transaction(tx=>registerGrant(tx,body,authority,now)),'factory_contract_changed');
  await rejectsCode(move(db),'factory_contract_changed');
@@ -252,15 +255,15 @@ test('actual task controller consumes linked request and status retains it after
  assert.equal(status.status,200);const value=await status.json();assert.equal(value.request.status,'consumed');assert.ok(value.grant.consumedAt);assert.equal(value.revision.activeWriterAgentId,'other');
 });
 
-test('owner contract extensions preserve all prior IDs, kinds, phases and descriptions',async()=>{
- const db=await fixture();await grant(db);const original=structuredClone(db.rows('factoryContract')[0].criteria);
- const candidates=[original.slice(0,1),...['id','kind','phase','description'].map(field=>original.map((criterion,index)=>index?criterion:{...criterion,[field]:field==='phase'?'final':'changed'}))];
+test('owner requirement extensions preserve all prior IDs, kinds, phases and descriptions',async()=>{
+ const db=await fixture();await grant(db);const original=structuredClone(scopeCriteria);
+ const candidates=[[],...['id','kind','phase','description'].map(field=>original.map(criterion=>({...criterion,[field]:field==='phase'?'final':'changed'})))];
  for(const criteria of candidates){
-  await assert.rejects(db.transaction(tx=>registerContract(tx,{project_id:15,task_id:1,expected_version:1,criteria},owner)),e=>['factory_contract_immutable','factory_invalid_request'].includes(e.code));
+  await assert.rejects(approveScope(db,1,1,criteria),e=>['factory_contract_immutable','factory_invalid_request'].includes(e.code));
   assert.equal(db.rows('factoryContract').length,1);assert.equal(db.rows('factoryGrant').length,1);assert.equal(db.rows('factoryTransitionRequest')[0].status,'granted');
  }
- const result=await db.transaction(tx=>registerContract(tx,{project_id:15,task_id:1,expected_version:1,criteria:[...original,{id:'new-check',kind:'release',phase:'final',description:'Additional owner-approved check'}]},owner));
- assert.equal(result.contract.version,2);assert.deepEqual(result.contract.criteria.slice(0,2),original);
+ const result=await extendScope(db);
+ assert.equal(result.contract.version,2);assert.deepEqual(result.contract.criteria.filter(c=>c.id===original[0].id),original);
 });
 
 test('central controller rejects null and unchanged-ID section name escapes for enrolled workers',async()=>{
@@ -277,8 +280,21 @@ const templateService=load('templates');
 const ownerSession={userId:6,source:'legacy'};
 const policyCriteria=[{id:'policy.code',kind:'implementation',phase:'pre_qa',description:'Implement the approved outcomes'},{id:'policy.tests',kind:'tests',phase:'pre_qa',description:'Verify with required tests'},{id:'policy.qa',kind:'independent_qa',phase:'final',description:'Independent QA on the exact deployed revision and flag configuration'}];
 const scopeCriteria=[{id:'scope.outcome',kind:'acceptance',phase:'pre_qa',description:'The explicitly approved product outcome'}];
-async function templateFixture(){const db=await fixture();await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:0,criteria:policyCriteria},ownerSession));return db;}
+async function templateFixture(){const db=await fixture(false);await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:0,criteria:policyCriteria},ownerSession));return db;}
 async function approveScope(db,taskId=1,version=0,inventory=scopeCriteria){return db.transaction(tx=>templateService.approveRequirements(tx,{project_id:15,task_id:taskId,expected_version:version,expected_task_revision:db.rows('task').find(t=>t.id===taskId).updatedAt?.toISOString()??null,expected_scope_digest:load('enforcement').semanticContentDigest(db.rows('task').find(t=>t.id===taskId)),criteria:inventory},ownerSession));}
+async function extendScope(db){
+ await approveScope(db,1,1,[...scopeCriteria,{id:'scope.extra',kind:'acceptance',phase:'final',description:'Additional approved outcome'}]);
+ return db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
+}
+test('acceptance rejects a contract when either owner approval artifact is absent',async()=>{
+ for(const missing of ['factoryTemplate','factorySemanticReceipt']){
+  const db=await fixture();db.rows(missing).length=0;
+  await rejectsCode(db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:11,expected_task_revision:now.toISOString()},dev)),'factory_binding_required');
+ }
+ const db=await fixture();db.rows('factoryTemplate').length=0;db.rows('factorySemanticReceipt').length=0;
+ await rejectsCode(db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:1,expected_code_revision:code,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority)),'factory_binding_required');
+ await rejectsCode(move(db),'factory_binding_required');
+});
 test('templates never approve mutable acceptance text and bind explicit owner semantics only',async()=>{
  const db=await templateFixture();
  await rejectsCode(db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev)),'factory_semantics_unmet');
@@ -287,7 +303,7 @@ test('templates never approve mutable acceptance text and bind explicit owner se
  const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
  assert.equal(contract.ownerId,6);assert.equal(contract.templateVersion,1);assert.equal(contract.semanticVersion,1);
  assert.deepEqual(contract.criteria.filter(c=>c.id.startsWith('scope.')),scopeCriteria);
- assert.equal(contract.criteria.length,6); // Existing approved gates are retained.
+ assert.equal(contract.criteria.length,4); // Policy and explicit product requirements are both bound.
  assert.equal((await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev))).contract.version,contract.version);
  for(const extra of [{criteria:[]},{template_version:0},{ownerId:6}])await rejectsCode(db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1,...extra},dev)),'factory_binding_input_denied');
 });
@@ -301,7 +317,7 @@ test('the approved template binds future tasks without copying another task sema
 });
 test('template and semantic version changes invalidate grants and require a new binding',async()=>{
  const db=await templateFixture();await approveScope(db);const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
- await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:contract.version,expected_code_revision:code,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
+ await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:contract.version,expected_code_revision:null,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
  const {request}=await db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:11,expected_task_revision:now.toISOString()},dev));
  await db.transaction(tx=>registerGrant(tx,{project_id:15,task_id:1,request_id:request.id,contract_version:contract.version,code_revision:code,actor_agent_id:'dev',target_section_id:11,expected_task_revision:now.toISOString(),evidence_digest:'b'.repeat(64),authorization_id:'template-test',ttl_seconds:300},authority,now));
  await db.transaction(tx=>templateService.registerTemplate(tx,{project_id:15,expected_version:1,criteria:[...policyCriteria,{id:'policy.extra',kind:'verification',phase:'final',description:'Additional approved verification'}]},ownerSession));
@@ -314,7 +330,7 @@ test('template and semantic version changes invalidate grants and require a new 
 test('unchanged owner approvals retain versions and pending work, while changed scope invalidates it',async()=>{
  const db=await templateFixture();await approveScope(db);
  const {contract}=await db.transaction(tx=>templateService.bindTemplate(tx,{project_id:15,task_id:1},dev));
- await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:contract.version,expected_code_revision:code,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
+ await db.transaction(tx=>registerRevision(tx,{project_id:15,task_id:1,contract_version:contract.version,expected_code_revision:null,code_revision:code,active_writer_agent_id:'dev',implementer_agent_ids:['dev']},authority));
  const {request}=await db.transaction(tx=>registerRequest(tx,{project_id:15,task_id:1,target_section_id:11,expected_task_revision:now.toISOString()},dev));
  await db.transaction(tx=>registerGrant(tx,{project_id:15,task_id:1,request_id:request.id,contract_version:contract.version,code_revision:code,actor_agent_id:'dev',target_section_id:11,expected_task_revision:now.toISOString(),evidence_digest:'b'.repeat(64),authorization_id:'repeat-approval',ttl_seconds:300},authority,now));
  const before=structuredClone(db.rows('factoryGrant'));
@@ -356,7 +372,7 @@ function ownerPolicyEndpoint(db,session,previewEnabled=true){
  mod._compile(ts.transpileModule(fs.readFileSync(filename,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText,filename);return mod.exports;
 }
 test('actual approval route requires the owner session and same origin, never bearer or body identity',async()=>{
- const {NextRequest}=require('next/server'),db=await fixture();
+ const {NextRequest}=require('next/server'),db=await fixture(false);
  const call=(session,headers={},body={operation:'template',project_id:15,expected_version:0,criteria:policyCriteria})=>ownerPolicyEndpoint(db,session).POST(new NextRequest('https://example.invalid/api/factory/policy',{method:'POST',headers:{origin:'https://example.invalid',...headers},body:JSON.stringify(body)}));
  assert.equal((await call(null)).status,401);
  assert.equal((await call({userId:7,source:'legacy'})).status,403);
@@ -368,7 +384,7 @@ test('actual approval route requires the owner session and same origin, never be
 });
 
 test('owner approval rejects signed internal agent cookies without bearer headers',async()=>{
- const {NextRequest}=require('next/server'),db=await fixture();
+ const {NextRequest}=require('next/server'),db=await fixture(false);
  const previous=process.env.SESSION_SECRET;
  process.env.SESSION_SECRET='factory-approval-regression-test-only';
  try{
@@ -433,7 +449,7 @@ test('owner preview returns exact saved canonical scope and rejects concurrent u
 });
 
 test('factory preview flag denies owner reads and approval while off without registering anything',async()=>{
- const {NextRequest}=require('next/server'),db=await fixture();
+ const {NextRequest}=require('next/server'),db=await fixture(false);
  const route=ownerPolicyEndpoint(db,ownerSession,false);
  const get=await route.GET(new NextRequest('https://example.invalid/api/factory/policy?project_id=15&task_id=1'));
  assert.equal(get.status,403);assert.equal((await get.json()).code,'factory_preview_unavailable');

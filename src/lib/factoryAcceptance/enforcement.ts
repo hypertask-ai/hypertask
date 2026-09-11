@@ -45,14 +45,12 @@ export async function requireCurrentContract(tx: FactoryTx, taskId: number, cont
         fail('factory_contract_changed', 'The registered revision must match the latest approved contract.');
     const template=await tx.factoryTemplate.findFirst({where:{projectId:contract.projectId},orderBy:{version:'desc'}});
     const receipt=await tx.factorySemanticReceipt.findFirst({where:{taskId,projectId:contract.projectId},orderBy:{version:'desc'}});
-    if(template||receipt){
-        if(!template||!receipt||contract.templateVersion!==template.version||contract.semanticVersion!==receipt.version)
-            fail('factory_binding_required','Bind the current owner-approved template and semantic requirements before acceptance.');
-        const project=await tx.project.findUnique({where:{id:contract.projectId},select:{ownerId:true}});
-        const task=await tx.task.findUnique({where:{id:taskId},include:{description_:{select:{content:true}}}});
-        if(project?.ownerId!==template.ownerId||project?.ownerId!==receipt.ownerId||!task||receipt.taskContentDigest!==semanticContentDigest(task))
-            fail('factory_semantics_unmet','Current owner approval of the semantic requirements is missing or stale.');
-    }
+    if(!template||!receipt||contract.templateVersion!==template.version||contract.semanticVersion!==receipt.version)
+        fail('factory_binding_required','Bind the current owner-approved template and semantic requirements before acceptance.');
+    const project=await tx.project.findUnique({where:{id:contract.projectId},select:{ownerId:true}});
+    const task=await tx.task.findUnique({where:{id:taskId},include:{description_:{select:{content:true}}}});
+    if(project?.ownerId!==template.ownerId||project?.ownerId!==receipt.ownerId||!task||receipt.taskContentDigest!==semanticContentDigest(task))
+        fail('factory_semantics_unmet','Current owner approval of the semantic requirements is missing or stale.');
 }
 
 export async function requireAssignedQa(tx: FactoryTx, policy: Enrollment, taskId: number, actor: string, implementers: string[]) {
