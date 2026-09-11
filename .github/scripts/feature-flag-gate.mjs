@@ -332,7 +332,7 @@ function isSafeDefinitionsCallback(callback) {
 }
 
 function isAssignmentPatternTarget(node) {
-  // Walk through object/array literal shapes used as the left-hand side of `=`.
+  // Walk assignment targets, including destructuring in for-in/of initializers.
   let current = node;
   while (current.parent) {
     const parent = current.parent;
@@ -340,9 +340,12 @@ function isAssignmentPatternTarget(node) {
         ASSIGNMENT_OPERATORS.has(parent.operatorToken.kind)) {
       return true;
     }
+    if ((typescript.isForOfStatement(parent) || typescript.isForInStatement(parent)) &&
+        parent.initializer === current) return true;
     if ((typescript.isPropertyAssignment(parent) && parent.initializer === current) ||
         (typescript.isShorthandPropertyAssignment(parent) && parent.name === current) ||
         (typescript.isSpreadAssignment(parent) && parent.expression === current) ||
+        (typescript.isSpreadElement(parent) && parent.expression === current) ||
         typescript.isObjectLiteralExpression(parent) ||
         typescript.isArrayLiteralExpression(parent) ||
         (typescript.isParenthesizedExpression(parent) && parent.expression === current) ||
@@ -373,7 +376,7 @@ function isEscapingAliasUse(target) {
   return isAssignmentPatternTarget(target);
 }
 
-function isMutatingUse(target) {
+function isBindingWrite(target) {
   const parent = target.parent;
   if (!parent) return false;
   if ((typescript.isPrefixUnaryExpression(parent) || typescript.isPostfixUnaryExpression(parent)) &&
@@ -387,6 +390,13 @@ function isMutatingUse(target) {
     return true;
   }
   if (typescript.isDeleteExpression(parent) && parent.expression === target) return true;
+  return isAssignmentPatternTarget(target);
+}
+
+function isMutatingUse(target) {
+  if (isBindingWrite(target)) return true;
+  const parent = target.parent;
+  if (!parent) return false;
   if (typescript.isVariableDeclaration(parent) && parent.initializer === target) return true;
   if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
       parent.arguments?.includes(target)) {
@@ -427,6 +437,14 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
             (typescript.isPropertyAccessExpression(target.parent) && target.parent.expression === target) ||
             (typescript.isElementAccessExpression(target.parent) && target.parent.expression === target))) {
       target = target.parent;
+    }
+
+    // Copying a literal string cannot expose a mutable alias to its const binding.
+    // Keep assignment detection, including destructuring, but allow normal reads.
+    if (name === "DEFAULT_FEATURE_FLAG_MODE" &&
+        typescript.isStringLiteral(unwrapExpr(declaration.initializer))) {
+      if (isBindingWrite(target)) mark(target);
+      return;
     }
 
     const parent = target.parent;
@@ -866,8 +884,53 @@ function isExportedThroughCallWrapper(fn) {
   }
 }
 
-function isExportedUiEntry(fn) {
-  return isExportedFunctionLike(fn) || isExportedThroughCallWrapper(fn);
+function writtenBindingSymbols(sourceFile, checker) {
+  const written = new Set();
+  function visit(node) {
+    if (typescript.isIdentifier(node)) {
+      let target = node;
+      while (target.parent && (
+        ((typescript.isParenthesizedExpression(target.parent) ||
+          typescript.isAsExpression(target.parent) || typescript.isTypeAssertionExpression(target.parent) ||
+          typescript.isNonNullExpression(target.parent) || typescript.isSatisfiesExpression(target.parent) ||
+          typescript.isSpreadElement(target.parent)) && target.parent.expression === target)
+      )) target = target.parent;
+      const parent = target.parent;
+      const loopWrite = parent && (typescript.isForOfStatement(parent) || typescript.isForInStatement(parent)) &&
+        parent.initializer === target;
+      if (isBindingWrite(target) || loopWrite) {
+        const symbol = typescript.isShorthandPropertyAssignment(node.parent)
+          ? checker.getShorthandAssignmentValueSymbol(node.parent)
+          : checker.getSymbolAtLocation(node);
+        if (symbol) written.add(symbol);
+      }
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return written;
+}
+
+function identifierDefaultExportFunctions(sourceFile, checker) {
+  const exported = new Set();
+  for (const statement of sourceFile.statements) {
+    if (!typescript.isExportAssignment(statement) || statement.isExportEquals) continue;
+    const expression = unwrapArgumentExpression(statement.expression);
+    if (!typescript.isIdentifier(expression)) continue;
+    const symbol = checker.getSymbolAtLocation(expression);
+    for (const declaration of symbol?.declarations ?? []) {
+      if (typescript.isFunctionDeclaration(declaration)) exported.add(declaration);
+      else if (typescript.isVariableDeclaration(declaration) && declaration.initializer) {
+        const initializer = unwrapArgumentExpression(declaration.initializer);
+        if (typescript.isFunctionLike(initializer)) exported.add(initializer);
+      }
+    }
+  }
+  return exported;
+}
+
+function isExportedUiEntry(fn, identifierExports = new Set()) {
+  return identifierExports.has(fn) || isExportedFunctionLike(fn) || isExportedThroughCallWrapper(fn);
 }
 
 function enclosingFunctionLike(node) {
@@ -920,12 +983,64 @@ function collectLiveFunctions(sourceFile, checker) {
   // Exported functions are live seeds (importers may render them). An unused
   // exported helper with a gate cannot cover a sibling exported JSX entry:
   // see hasUngatedExportedJsxEntry below.
-  const live = new Set(functions.filter(isExportedUiEntry));
+  const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
+  const writtenSymbols = writtenBindingSymbols(sourceFile, checker);
+  const reboundFunctions = new Set(functions.filter((fn) => {
+    const name = functionBindingName(fn);
+    return name && writtenSymbols.has(checker.getSymbolAtLocation(name));
+  }));
+  // Export recognition remains intact for the ungated-sibling check, but a
+  // rebound binding cannot prove which implementation runs. No flow analysis.
+  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) && isExportedUiEntry(fn, identifierExports)));
+  const functionBySymbol = new Map();
+  for (const fn of functions) {
+    const name = functionBindingName(fn);
+    const symbol = name && checker.getSymbolAtLocation(name);
+    if (symbol && !writtenSymbols.has(symbol)) functionBySymbol.set(symbol, fn);
+  }
   let changed = true;
   while (changed) {
     changed = false;
+    // Returning a named callback from a live hook exposes that callback to its
+    // callers. Resolve property values by symbol, never by matching their text.
+    for (const fn of Array.from(live)) {
+      function returned(node) {
+        if (node !== fn && typescript.isFunctionLike(node)) return;
+        if (isStaticallyUnreachable(node)) return;
+        if (typescript.isReturnStatement(node) && node.expression) {
+          const expression = unwrapArgumentExpression(node.expression);
+          if (typescript.isObjectLiteralExpression(expression)) {
+            const names = new Set();
+            const unambiguous = expression.properties.every((property) => {
+              if (!typescript.isShorthandPropertyAssignment(property) &&
+                  !typescript.isPropertyAssignment(property)) return false;
+              const name = property.name;
+              if (!typescript.isIdentifier(name) && !typescript.isStringLiteral(name) &&
+                  !typescript.isNumericLiteral(name)) return false;
+              if (names.has(name.text)) return false;
+              names.add(name.text);
+              return true;
+            });
+            if (!unambiguous) return;
+            for (const property of expression.properties) {
+              let symbol;
+              if (typescript.isShorthandPropertyAssignment(property)) {
+                symbol = checker.getShorthandAssignmentValueSymbol(property);
+              } else if (typescript.isPropertyAssignment(property)) {
+                const value = unwrapArgumentExpression(property.initializer);
+                if (typescript.isIdentifier(value)) symbol = checker.getSymbolAtLocation(value);
+              }
+              const callback = symbol && functionBySymbol.get(symbol);
+              if (callback && !live.has(callback)) { live.add(callback); changed = true; }
+            }
+          }
+        }
+        typescript.forEachChild(node, returned);
+      }
+      returned(fn);
+    }
     for (const fn of functions) {
-      if (live.has(fn)) continue;
+      if (live.has(fn) || reboundFunctions.has(fn)) continue;
       const name = functionBindingName(fn);
       if (!name) continue;
       const symbol = checker.getSymbolAtLocation(name);
@@ -1344,8 +1459,9 @@ function hasUngatedExportedJsxEntry(
     typescript.forEachChild(node, collect);
   }
   collect(sourceFile);
+  const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
-    if (!isExportedUiEntry(fn) || !functionContainsJsx(fn)) continue;
+    if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
     if (!exportedJsxEntryHasTicketGate(
       fn,
       checker,
