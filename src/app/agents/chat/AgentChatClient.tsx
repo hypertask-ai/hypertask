@@ -400,7 +400,13 @@ function emptyFeedText(filter: AgentChatFilter, agentName: string): string {
   return `Send ${agentName} a message to start the conversation.`;
 }
 
-function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
+function ActivityGroup({
+  group,
+  constrainRows,
+}: {
+  group: AgentChatActivityGroup;
+  constrainRows?: boolean;
+}) {
   const label = group.task
     ? `${group.task.ticketNumber}: ${group.task.title}`
     : "Agent activity";
@@ -432,13 +438,25 @@ function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
               href={event.link}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-w-0 items-center gap-1 text-white-black hover:text-hypertasks-purple"
+              className={cn(
+                "min-w-0 items-center gap-1 text-white-black hover:text-hypertasks-purple",
+                constrainRows
+                  ? "flex w-full max-w-full"
+                  : "inline-flex",
+              )}
             >
               <span className="truncate">{event.text}</span>
               <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
             </a>
           ) : (
-            <span className="min-w-0 truncate">{event.text}</span>
+            <span
+              className={cn(
+                "min-w-0 truncate",
+                constrainRows && "block w-full",
+              )}
+            >
+              {event.text}
+            </span>
           );
           return (
             <div key={event.id} className="flex min-w-0 items-center gap-1.5">
@@ -450,7 +468,11 @@ function ActivityGroup({ group }: { group: AgentChatActivityGroup }) {
                 strokeWidth={1.75}
                 aria-hidden
               />
-              <div className="min-w-0 flex-1">{eventContent}</div>
+              {constrainRows ? (
+                <div className="min-w-0 flex-1">{eventContent}</div>
+              ) : (
+                eventContent
+              )}
               <time
                 dateTime={event.createdAt}
                 className="ml-auto shrink-0 text-micro"
@@ -2137,7 +2159,11 @@ const AgentChatClient = (props: IProp) => {
                   pending={sending && item.id.startsWith("optimistic-")}
                 />
               ) : (
-                <ActivityGroup key={item.id} group={item} />
+                <ActivityGroup
+                  key={item.id}
+                  group={item}
+                  constrainRows={isMbl && mobileLayoutEnabled}
+                />
               ),
             )}
             {/* Not a copy of QueuedMessagesStrip: behind the flag a queued message

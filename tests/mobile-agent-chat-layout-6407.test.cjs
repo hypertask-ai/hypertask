@@ -68,6 +68,9 @@ test("scroll button can sit above the composer when flagged", () => {
 });
 
 test("activity rows keep a truncating text column", () => {
+  assert.match(chat, /constrainRows/);
+  assert.match(chat, /constrainRows=\{isMbl && mobileLayoutEnabled\}/);
+  assert.match(chat, /block w-full/);
   assert.match(chat, /min-w-0 flex-1">\{eventContent\}/);
 });
 
