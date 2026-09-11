@@ -99,6 +99,7 @@ export async function addExistingUserToProject(
     select: { id: true },
   });
   if (existingMember) {
+    await expirePendingInvites(projectId, targetUser.email);
     return {
       ok: true,
       outcome: "already_member",
@@ -138,17 +139,6 @@ export async function addExistingUserToProject(
     // Seat billing runs once after both team and board membership exist
     // (HTPR-4216). Keep both writes inside this lock so sync cannot charge a
     // seat when board membership fails.
-    const paymentResponse =
-      team.subscriptionPlan.length === 0 ? "FREE" : "OK";
-    if (paymentResponse !== "OK" && paymentResponse !== "FREE") {
-      return {
-        ok: false,
-        status: 400,
-        message:
-          "Could not add user to project. Team seat billing blocked the join or the team cannot accept members.",
-      };
-    }
-
     const { value } = await mutateAndSyncSeatBilling<JoinMutationResult>(
       teamId,
       async (assertHeld) => {
@@ -252,6 +242,7 @@ export async function addExistingUserToProject(
     }
 
     await expirePendingInvites(projectId, targetUser.email);
+    if (value.outcome === "added") await updateTrial(userId);
     return {
       ok: true,
       outcome: value.outcome,
@@ -300,6 +291,7 @@ export async function addExistingUserToProject(
   }
 
   await expirePendingInvites(projectId, targetUser.email);
+  if (join.outcome === "added") await updateTrial(userId);
   return {
     ok: true,
     outcome: join.outcome,
@@ -354,7 +346,6 @@ async function ensureProjectMemberRow(input: {
     },
     select: { id: true },
   });
-  await updateTrial(userId);
   return { memberId: member.id, outcome: "added" };
 }
 
