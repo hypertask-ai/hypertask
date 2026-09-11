@@ -42,6 +42,7 @@ import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
+import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import {
   FileItem,
   useFileUpload,
@@ -904,7 +905,7 @@ export function useAiChat() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...mcpAuthorizationHeaders(token),
           },
           body: JSON.stringify({
             session_id: sessionId,
@@ -1258,7 +1259,7 @@ export function useAiChat() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...mcpAuthorizationHeaders(token),
         },
         body: JSON.stringify(payload),
       });

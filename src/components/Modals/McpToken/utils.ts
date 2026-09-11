@@ -1,7 +1,15 @@
 import type { Client, ConnectionMethod } from "./types"
+import { isUsableMcpBearerToken } from "@/lib/mcp/bearerAuth"
 
 export const MCP_SERVER_URL = process.env.NEXT_PUBLIC_MCP_SERVER_URL || "https://mcp.hypertask.ai/mcp"
 export const MCP_DOCS_URL = "https://docs.hypertask.ai/mcp"
+
+export {
+  MCP_TOKEN_MASK,
+  isUsableMcpBearerToken,
+  mcpAuthorizationHeaders,
+  readMcpTokenCookieValue,
+} from "@/lib/mcp/bearerAuth";
 
 export type IntegrationId =
   | "claude"
@@ -133,7 +141,7 @@ export function getConfigForClient(
   }
 }`
   }
-  if (!token || token === "***") {
+  if (!isUsableMcpBearerToken(token)) {
     return "Please generate a token first"
   }
   return `{
@@ -156,7 +164,7 @@ export function getConfigForIntegration(
   const integration = MCP_INTEGRATIONS.find((i) => i.id === integrationId)
   if (!integration) return "Please generate a token first"
   if (useBearer) {
-    if (!token || token === "***") return "Please generate a token first"
+    if (!isUsableMcpBearerToken(token)) return "Please generate a token first"
     if (integrationId === "vscode") {
       return `{
   "servers": {

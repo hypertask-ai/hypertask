@@ -2,6 +2,7 @@
 
 import { useMcpConnections } from "@/components/Modals/McpToken/hooks/useMcpConnections";
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
+import { isUsableMcpBearerToken } from "@/lib/mcp/bearerAuth";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import toast from "react-hot-toast";
 
@@ -33,7 +34,7 @@ const McpTokenControls = ({
 }) => {
   const isActive = Boolean(token) && !isLoading;
   const copyToken = async () => {
-    if (!token || token === "***") {
+    if (!isUsableMcpBearerToken(token)) {
       toast.error("Renew the token before copying it");
       return;
     }

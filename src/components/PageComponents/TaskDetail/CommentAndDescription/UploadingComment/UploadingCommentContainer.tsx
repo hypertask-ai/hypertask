@@ -21,6 +21,12 @@ const UploadingCommentsContainer = ({ index }: { index?: number }) => {
             navigateToNextParams={comment.navigateToNextParams}
             taskId={comment.taskId}
             ownerId={comment.ownerId}
+            projectId={comment.projectId}
+            modelSource={comment.modelSource}
+            modelOptionId={comment.modelOptionId}
+            byokProviderFlags={comment.byokProviderFlags}
+            taskTitle={comment.taskTitle}
+            taskDescription={comment.taskDescription}
             />
     )}
     </>

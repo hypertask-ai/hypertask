@@ -4,6 +4,7 @@ import {
   IAttachment,
   IComment,
   IEditorAttachmentFile,
+  ITeamByokApiKey,
   IUrl,
   modifiedHtml,
   NavigateToNextTaskParams,
@@ -32,6 +33,8 @@ import globalConstants from "@/lib/constants";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useTaskRelations } from "../useTaskRelations";
 import { useHyperMention } from "@/hooks/MultiPages/Tasks/useHyperMention";
+import { resolveHyperMentionComposition } from "@/lib/ai/hyperMentionComposition";
+import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { USER_DRAFTS_QUERY_KEY } from "@/hooks/General/useGetUserDrafts";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import {
@@ -75,6 +78,7 @@ export default function useSaveContent() {
   const { resetDescriptionQuery } = useProjectQuery();
   const { addRelations } = useTaskRelations();
   const { postHyperMention, postImageGeneration } = useHyperMention();
+  const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -762,8 +766,31 @@ export default function useSaveContent() {
     // send. currentTask is only a fallback: by the time this runs the user may
     // already be looking at a different task (HTPR-3175).
     composedForTaskId?: number,
-    composedForOwnerId?: number
+    composedForOwnerId?: number,
+    // Same capture for the board: HyperAI validates taskId+projectId together,
+    // so a live currentProject after navigation 404s the mention (HTPR-6405).
+    composedForProjectId?: number,
+    // Model/provider/BYOK from send time so mid-upload navigation cannot mix
+    // board A target with board B AI settings (HTPR-6405 OCR).
+    composedModelSource?: string,
+    composedModelOptionId?: string,
+    composedByokProviderFlags?: ITeamByokApiKey[],
+    composedTaskTitle?: string,
+    composedTaskDescription?: string,
   ) => {
+    const {
+      taskId: mentionTaskId,
+      ownerId: mentionOwnerId,
+      projectId: mentionProjectId,
+      taskIds: mentionTaskIds,
+    } = resolveHyperMentionComposition({
+      composedForTaskId,
+      composedForOwnerId,
+      composedForProjectId,
+      currentTaskId: currentTask?.id,
+      currentOwnerId: currentTask?.userId,
+      currentProjectId: currentProject?.id,
+    });
     if (
       comments &&
       setComments &&
@@ -780,8 +807,8 @@ export default function useSaveContent() {
         ({ data } = await axios.post("/api/comments/create", {
           text: result.html,
           creatorId: currentUser?.id,
-          taskId: composedForTaskId ?? currentTask.id,
-          ownerId: composedForOwnerId ?? currentTask.userId,
+          taskId: mentionTaskId,
+          ownerId: mentionOwnerId,
         }));
       } catch (err: any) {
         // HTPR-3803: a logged-off user gets a 401 here. Send them to login
@@ -801,39 +828,39 @@ export default function useSaveContent() {
 
       if (result.hyperMention)
         postHyperMention("Comment", "Create", {
-          ownerId: currentTask.userId,
-          projectId: currentProject?.id ?? -1,
-          teamId: currentProject?.teamId ?? "-1",
+          ownerId:
+            mentionOwnerId === undefined ? undefined : String(mentionOwnerId),
+          projectId: mentionProjectId ?? -1,
+          teamId: undefined,
           text: result.html,
           currentUser: currentUser ?? undefined,
-          teamTitle: currentProject?.team?.title ?? "",
-          taskIds: [
-            currentTask.id,
-            currentTask.parentTask?.id,
-            ...(currentTask.subTasks || []).flatMap((item) => item.id),
-            ...(currentTask.relatedFromTasks || []).flatMap(
-              (item) => item.targetTask?.id
-            ),
-            ...(currentTask.relatedToTasks || []).flatMap(
-              (item) => item.sourceTask?.id
-            ),
-          ].filter(Boolean),
+          teamTitle: "",
+          taskIds: mentionTaskIds,
           sourceSelected:
-            result.hyperMention.modelSource ?? improveWritingSource,
+            result.hyperMention.modelSource ??
+            composedModelSource ??
+            improveWritingSource,
           modelSelected:
-            result.hyperMention.modelOptionId ?? improveWritingModel,
-          modelOptionId: result.hyperMention.modelOptionId,
+            result.hyperMention.modelOptionId ??
+            composedModelOptionId ??
+            improveWritingModel,
+          modelOptionId:
+            result.hyperMention.modelOptionId ?? composedModelOptionId,
           modelMentionLabel: result.hyperMention.modelLabel,
           attachments: hyperAiAttachmentPayload,
-          taskDescription: description,
-          taskTitle: currentTask.title,
+          taskDescription: composedTaskDescription ?? description,
+          taskTitle: composedTaskTitle ?? currentTask.title,
           sourceCommentId: Number(data.id),
+          byokProviderFlags:
+            composedByokProviderFlags ??
+            currentBoardBilling?.byokProviderFlags ??
+            [],
         });
       else if (result.imageMention)
         postImageGeneration("Create", {
           text: result.html,
-          projectId: currentProject?.id ?? -1,
-          taskId: currentTask.id,
+          projectId: mentionProjectId ?? -1,
+          taskId: mentionTaskId ?? currentTask.id,
           modelKey: result.imageMention.modelKey,
         });
 
@@ -1103,6 +1130,12 @@ export default function useSaveContent() {
           // had navigated to by then (HTPR-3175).
           taskId: currentTask?.id,
           ownerId: currentTask?.userId,
+          projectId: currentProject?.id,
+          modelSource: improveWritingSource,
+          modelOptionId: improveWritingModel,
+          byokProviderFlags: currentBoardBilling?.byokProviderFlags ?? [],
+          taskTitle: currentTask?.title,
+          taskDescription: description,
         },
       ]);
       return true;
