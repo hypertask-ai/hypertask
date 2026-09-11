@@ -33,7 +33,7 @@ function Editor({snapshot,onApprove,busy}:{snapshot:FactoryPolicySnapshot;onAppr
           <p>{({title:'Title',description:'Description',acceptanceCriteria:'Acceptance criteria',verifyCommand:'Verification command'} as Record<string,string>)[field]}</p>
           {field==='description'
             ?<div className="prose min-w-0 max-w-none break-words text-content [overflow-wrap:anywhere]" dangerouslySetInnerHTML={{__html:sanitizeAiHtml(value??'Not set')}}/>
-            :<pre className="whitespace-pre-wrap break-words text-content [overflow-wrap:anywhere]">{value??'Not set'}</pre>}
+            :<div className={`whitespace-pre-wrap break-words text-content [overflow-wrap:anywhere]${field==='verifyCommand'?' font-mono':''}`}>{value??'Not set'}</div>}
         </div>)}
       </div>
     </>}
