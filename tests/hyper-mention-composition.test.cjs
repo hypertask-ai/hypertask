@@ -67,9 +67,9 @@ test("composed snapshot does not mix in live project when team fields are missin
 
   assert.equal(result.taskId, 1691);
   assert.equal(result.projectId, 339);
-  assert.equal(result.teamId == null, true);
-  assert.equal(result.teamTitle == null, true);
-  assert.equal(result.ownerId == null, true);
+  assert.equal("teamId" in result, false);
+  assert.equal("teamTitle" in result, false);
+  assert.equal("ownerId" in result, false);
   assert.deepEqual(result.taskIds, [1691]);
 });
 
