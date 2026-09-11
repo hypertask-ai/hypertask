@@ -8,6 +8,14 @@
 @import "./tailwindThemes/porcelain.css";
 @import "./tailwind-entry.css";
 
+/* HTPR-6404: floated pickers/tooltips in #portal-root must clear the new
+   comment composer (relative z-10 / mobile fixed z-101). Keep this below tippy
+   (10001+) so @/slash menus still win when both are open. */
+#portal-root {
+  position: relative;
+  z-index: 5000;
+}
+
 :root {
   // Mobile keeps its existing 20px inset. Desktop uses a 4px focus rail plus
   // a 48px control gutter, so tabs, date labels, and sender text share x=52px.

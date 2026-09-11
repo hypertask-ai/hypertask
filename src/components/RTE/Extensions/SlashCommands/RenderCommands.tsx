@@ -35,6 +35,8 @@ const renderItems = () => {
         // near the bottom. Let Popper choose the side with more usable space,
         // then keep the menu inside the visual viewport. HTPR-4568/5392.
         placement: "auto-start",
+        // Above #portal-root (z-index 5000) and the comment composer (HTPR-6404).
+        zIndex: 10001,
         popperOptions: {
           strategy: "fixed",
           modifiers: [

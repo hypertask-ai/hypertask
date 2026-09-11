@@ -4,6 +4,7 @@ import { debounce } from "@/utils/helperFunctions/helperFunctions";
 import { createPortal } from "react-dom";
 import { LazyEmojiPicker, preloadEmojiResources } from "@/utils/emojiLoader";
 import CommentEmojiTooltip from "./CommentEmojiTooltip";
+import { getFixedOverlayPosition } from "@/lib/emojiPickerPosition";
 
 // ===================================== COMMENT OPTIONS COMPONENTS =======================
 const EmojiOptionsComp = ({
@@ -28,26 +29,20 @@ const EmojiOptionsComp = ({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    const element = document.getElementById("portal-root");
-    setPortalRoot(element);
+    setPortalRoot(document.getElementById("portal-root"));
   }, []);
 
   const calculatePickerPosition = () => {
     if (emojiTrigger.current) {
       const rect = emojiTrigger.current.getBoundingClientRect();
-      const pickerHeight = 370; // Approximate height of your emoji picker
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-
-      // Decide whether to show above or below
-      const showAbove = spaceBelow < pickerHeight && spaceAbove > pickerHeight;
-
-      setPickerPosition({
-        top: showAbove
-          ? rect.top + window.scrollY - pickerHeight
-          : rect.bottom + window.scrollY,
-        left: rect.left + window.scrollX,
-      });
+      setPickerPosition(
+        getFixedOverlayPosition(rect, {
+          height: 370,
+          width: 300,
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
+        }),
+      );
     }
   };
 
@@ -98,11 +93,12 @@ const EmojiOptionsComp = ({
   return (
     <>
       {showEmojiPickerAtComment &&
+        portalRoot &&
         createPortal(
           <div // This is your .emoji-picker-wrapper equivalent
             className="emoji-picker-portal-container" // Use a more descriptive class name
             style={{
-              position: "absolute", // Position relative to the document body
+              position: "fixed",
               top: pickerPosition.top,
               left: pickerPosition.left,
               zIndex: 9999, // Ensure it's on top of everything
@@ -128,7 +124,7 @@ const EmojiOptionsComp = ({
               />
             </div>
           </div>,
-          document.getElementById("portal-root")!
+          portalRoot
         )}
       <div className="relative group" ref={emojiTrigger}>
         <SmilePlus size={14}
