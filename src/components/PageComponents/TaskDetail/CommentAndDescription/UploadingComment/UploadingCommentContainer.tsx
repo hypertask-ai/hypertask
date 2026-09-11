@@ -25,6 +25,8 @@ const UploadingCommentsContainer = ({ index }: { index?: number }) => {
             modelSource={comment.modelSource}
             modelOptionId={comment.modelOptionId}
             byokProviderFlags={comment.byokProviderFlags}
+            taskTitle={comment.taskTitle}
+            taskDescription={comment.taskDescription}
             />
     )}
     </>

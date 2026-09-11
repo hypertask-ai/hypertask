@@ -775,6 +775,8 @@ export default function useSaveContent() {
     composedModelSource?: string,
     composedModelOptionId?: string,
     composedByokProviderFlags?: ITeamByokApiKey[],
+    composedTaskTitle?: string,
+    composedTaskDescription?: string,
   ) => {
     const {
       taskId: mentionTaskId,
@@ -846,8 +848,8 @@ export default function useSaveContent() {
             result.hyperMention.modelOptionId ?? composedModelOptionId,
           modelMentionLabel: result.hyperMention.modelLabel,
           attachments: hyperAiAttachmentPayload,
-          taskDescription: description,
-          taskTitle: currentTask.title,
+          taskDescription: composedTaskDescription ?? description,
+          taskTitle: composedTaskTitle ?? currentTask.title,
           sourceCommentId: Number(data.id),
           byokProviderFlags:
             composedByokProviderFlags ??
@@ -1132,6 +1134,8 @@ export default function useSaveContent() {
           modelSource: improveWritingSource,
           modelOptionId: improveWritingModel,
           byokProviderFlags: currentBoardBilling?.byokProviderFlags ?? [],
+          taskTitle: currentTask?.title,
+          taskDescription: description,
         },
       ]);
       return true;

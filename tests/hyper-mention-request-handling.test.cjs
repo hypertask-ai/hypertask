@@ -89,10 +89,13 @@ test("comment create routes HyperAI through the composed task and project", () =
   assert.match(save, /modelSource: improveWritingSource/);
   assert.match(save, /byokProviderFlags: currentBoardBilling/);
   assert.match(save, /composedModelSource \?\?/);
+  assert.match(save, /taskTitle: currentTask\?\.title/);
+  assert.match(save, /composedTaskTitle \?\? currentTask\.title/);
   assert.match(uploading, /modelSource\?: string/);
   assert.match(uploading, /byokProviderFlags\?: ITeamByokApiKey\[\]/);
   assert.match(queue, /modelSource=\{comment\.modelSource\}/);
   assert.match(queue, /byokProviderFlags=\{comment\.byokProviderFlags\}/);
+  assert.match(queue, /taskTitle=\{comment\.taskTitle\}/);
   assert.match(
     hook,
     /byokProviderFlags:\s*\n\s*byokProviderFlags \?\?/,
