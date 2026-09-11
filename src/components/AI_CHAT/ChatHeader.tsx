@@ -152,7 +152,10 @@ export const ChatHeader = () => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      event.stopPropagation();
+      // stopImmediatePropagation: other document keydown listeners (TaskDetail
+      // Escape -> back) share this same node, so stopPropagation alone is not
+      // enough to keep navigation from firing.
+      event.stopImmediatePropagation();
       setIsDropdownOpen(false);
       setIsOverflowOpen(false);
     };

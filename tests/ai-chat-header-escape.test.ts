@@ -23,8 +23,8 @@ test("ChatHeader consumes Escape while header menus are open", () => {
   );
   assert.match(
     source,
-    /event\.preventDefault\(\);\s*event\.stopPropagation\(\);/,
-    "Escape must stop before TaskDetail navigates back",
+    /event\.preventDefault\(\);[\s\S]*?event\.stopImmediatePropagation\(\);/,
+    "Escape must stop other document listeners before TaskDetail navigates back",
   );
   assert.match(
     source,
