@@ -4,7 +4,6 @@ import prisma from "@/lib/prisma";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import { mutateAndSyncSeatBilling } from "@/lib/syncSeatBilling";
 import { ensureTeamMembership } from "@/lib/teamMembership";
-import { CreateLogInput } from "@/models/model";
 import createLog from "@/utils/controllers/logs/createLog";
 import { updateTrial } from "@/utils/controllers/members/updateTrial";
 
@@ -132,118 +131,103 @@ export async function addExistingUserToProject(
 
   if (needsNewTeamSeat) {
     // Seat billing runs once after both team and board membership exist
-    // (HTPR-4216). Keep both writes inside this lock so sync cannot charge a
-    // seat when board membership fails.
+    // (HTPR-4216). All local membership writes share one Prisma transaction so
+    // a failed board row cannot leave an accepted team seat or stale seat count.
     const { value } = await mutateAndSyncSeatBilling<JoinMutationResult>(
       teamId,
       async (assertHeld) => {
         assertHeld();
-        const priorTeamMembership = await prisma.member_Team.findUnique({
-          where: { userId_teamId: { userId, teamId } },
-          select: { status: true },
-        });
-        assertHeld();
-        const { member: memberTeam, created } = await ensureTeamMembership({
-          teamId,
-          userId,
-          googleAccountId: team.googleAccountId,
-        });
-
-        assertHeld();
-        let board: JoinMutationResult;
         try {
-          board = await ensureProjectMemberRow({
-            assertHeld,
-            projectId,
-            userId,
-            ownsTheTeam: false,
-            teamId,
+          const joined = await prisma.$transaction(async (tx) => {
+            assertHeld();
+            const { member: memberTeam, created } = await ensureTeamMembership(
+              {
+                teamId,
+                userId,
+                googleAccountId: team.googleAccountId,
+              },
+              tx.member_Team as unknown as Parameters<
+                typeof ensureTeamMembership
+              >[1],
+            );
+
+            assertHeld();
+            const acceptedTeamMember = await tx.member_Team.findUnique({
+              where: { userId_teamId: { userId, teamId } },
+              select: { status: true },
+            });
+            if (acceptedTeamMember?.status !== "Accepted") {
+              throw new Error("team_membership_not_accepted");
+            }
+
+            const alreadyMember = await tx.member.findFirst({
+              where: { projectId, userId, agentId: null },
+              select: { id: true },
+            });
+            if (alreadyMember) {
+              return {
+                memberId: alreadyMember.id,
+                outcome: "already_member" as const,
+                created: false,
+              };
+            }
+
+            assertHeld();
+            const member = await tx.member.create({
+              data: { userId, projectId },
+              select: { id: true },
+            });
+
+            if (created) {
+              assertHeld();
+              const updatedTeam = await tx.team.update({
+                where: { id: teamId },
+                data: { totalSeats: { increment: 1 } },
+              });
+              createLog({
+                log: `${memberTeam?.user.displayName} joined Team "${team.title}"`,
+                type: LogType.Team,
+                status: Status.Normal,
+                LoggedById: userId,
+              });
+              createLog({
+                log: `Team "${updatedTeam.title}" has now ${updatedTeam.totalSeats} active team members `,
+                type: LogType.Team,
+                status: Status.Normal,
+                LoggedById: userId,
+              });
+            }
+
+            return {
+              memberId: member.id,
+              outcome: "added" as const,
+              created,
+            };
           });
+
+          assertHeld();
+          return {
+            value: {
+              memberId: joined.memberId,
+              outcome: joined.outcome,
+            } satisfies JoinMutationResult,
+            sync: joined.created,
+          };
         } catch (error) {
           console.error(
-            "[addExistingUserToProject] board membership failed after team join:",
+            "[addExistingUserToProject] transactional join failed:",
             error,
           );
-          board = {
-            memberId: null,
-            outcome: "added",
-            error:
-              "Team membership could not be completed for this project. No board member was created.",
-          };
-        }
-        if (board.error || board.memberId == null) {
-          // Undo the team-seat mutation so billing never syncs a seat without
-          // board access. Fresh rows are removed; promoted Invited rows revert.
-          if (created) {
-            assertHeld();
-            try {
-              if (!priorTeamMembership) {
-                await prisma.member_Team.delete({
-                  where: { userId_teamId: { userId, teamId } },
-                });
-              } else if (priorTeamMembership.status === "Invited") {
-                await prisma.member_Team.update({
-                  where: { userId_teamId: { userId, teamId } },
-                  data: { status: "Invited", acceptedAt: null },
-                });
-              }
-            } catch (rollbackError) {
-              console.error(
-                "[addExistingUserToProject] failed to roll back team seat after board join failure:",
-                rollbackError,
-              );
-            }
-          }
           return {
             value: {
               memberId: null,
               outcome: "added",
               error:
-                board.error ??
                 "Team membership could not be completed for this project. No board member was created.",
             } satisfies JoinMutationResult,
             sync: false,
           };
         }
-
-        if (!created) {
-          return {
-            value: {
-              memberId: board.memberId,
-              outcome: board.outcome,
-            } satisfies JoinMutationResult,
-            sync: false,
-          };
-        }
-
-        const createLogBody: CreateLogInput = {
-          log: `${memberTeam?.user.displayName} joined Team "${team.title}"`,
-          type: LogType.Team,
-          status: Status.Normal,
-          LoggedById: userId,
-        };
-        createLog(createLogBody);
-
-        assertHeld();
-        const updatedTeam = await prisma.team.update({
-          where: { id: teamId },
-          data: { totalSeats: { increment: 1 } },
-        });
-        const createLogBody2: CreateLogInput = {
-          log: `Team "${updatedTeam.title}" has now ${updatedTeam.totalSeats} active team members `,
-          type: LogType.Team,
-          status: Status.Normal,
-          LoggedById: userId,
-        };
-        createLog(createLogBody2);
-
-        return {
-          value: {
-            memberId: board.memberId,
-            outcome: board.outcome,
-          } satisfies JoinMutationResult,
-          sync: true,
-        };
       },
     );
 
@@ -257,8 +241,20 @@ export async function addExistingUserToProject(
       };
     }
 
-    await expirePendingInvites(projectId, targetUser.email);
-    if (value.outcome === "added") await updateTrial(userId);
+    await expirePendingInvites(projectId, targetUser.email).catch((error) => {
+      console.error(
+        "[addExistingUserToProject] failed to expire pending invites:",
+        error,
+      );
+    });
+    if (value.outcome === "added") {
+      await updateTrial(userId).catch((error) => {
+        console.error(
+          "[addExistingUserToProject] failed to update trial after join:",
+          error,
+        );
+      });
+    }
     return {
       ok: true,
       outcome: value.outcome,
@@ -306,8 +302,20 @@ export async function addExistingUserToProject(
     };
   }
 
-  await expirePendingInvites(projectId, targetUser.email);
-  if (join.outcome === "added") await updateTrial(userId);
+  await expirePendingInvites(projectId, targetUser.email).catch((error) => {
+    console.error(
+      "[addExistingUserToProject] failed to expire pending invites:",
+      error,
+    );
+  });
+  if (join.outcome === "added") {
+    await updateTrial(userId).catch((error) => {
+      console.error(
+        "[addExistingUserToProject] failed to update trial after join:",
+        error,
+      );
+    });
+  }
   return {
     ok: true,
     outcome: join.outcome,
