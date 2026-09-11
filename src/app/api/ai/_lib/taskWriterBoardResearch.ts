@@ -8,6 +8,7 @@ import type {
   TurbopufferCommentRow,
   TurbopufferTaskRow,
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+import { buildTaskLink } from "@/lib/mcp-server/utils/task-link";
 
 export const HTPR_6363_TASK_WRITER_RESEARCH_FLAG =
   "htpr-6363-task-writer-research";
@@ -82,7 +83,7 @@ export function taskWriterCandidateUrl(args: {
   projectId: number;
   uniqueIndex: number;
 }) {
-  return `https://app.hypertask.ai/detail/project-${args.projectId}/${args.uniqueIndex}`;
+  return buildTaskLink(args.projectId, args.uniqueIndex);
 }
 
 export function formatRelatedTicketCandidates(

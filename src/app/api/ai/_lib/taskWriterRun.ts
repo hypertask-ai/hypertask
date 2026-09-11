@@ -257,12 +257,16 @@ export async function prepareTaskWriterRun(
       ? searchTasks({
           searchQuery: retrievalQuery,
           projectIds: [body.projectId],
-          topK: TASK_WRITER_RELATED_CANDIDATE_LIMIT,
-        }).then((rows) =>
-          formatRelatedTicketCandidates(
-            rows.filter((row) => !body.taskIds.map(String).includes(row.id))
-          )
-        )
+          // Over-fetch so excluding the open ticket still leaves up to 8 peers.
+          topK: TASK_WRITER_RELATED_CANDIDATE_LIMIT + body.taskIds.length + 5,
+        }).then((rows) => {
+          const loaded = new Set(body.taskIds.map(String));
+          return formatRelatedTicketCandidates(
+            rows
+              .filter((row) => !loaded.has(row.id))
+              .slice(0, TASK_WRITER_RELATED_CANDIDATE_LIMIT)
+          );
+        })
       : Promise.resolve(""),
     boardResearchEnabled
       ? loadTaskWriterStyleExamples(body.projectId)
