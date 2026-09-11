@@ -1,3 +1,4 @@
+import { FactoryAcceptanceError, guardFactoryCreate } from '@/lib/factoryAcceptance/enforcement';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import generateRank from "@/utils/generateRank";
@@ -412,6 +413,7 @@ const handler: NextApiHandler = async (
         });
         if (!sectionRow) throw new TaskSectionValidationError(sectionErrorMessage);
 
+        await guardFactoryCreate(tx, Number(projectId), sectionRow.id, agentId);
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
         const body = {
@@ -533,6 +535,7 @@ const handler: NextApiHandler = async (
       tagsCreated = created.result.taskLabels;
       assignmentsCreated = created.result.assignments;
     } catch (e) {
+      if(e instanceof FactoryAcceptanceError)return res.status(e.status).json({code:e.code,message:e.message});
       if (e instanceof TaskSectionValidationError) {
         return res.status(400).json({ message: e.message });
       }

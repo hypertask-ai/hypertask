@@ -1,3 +1,5 @@
+import { FactoryAcceptanceError, guardFactoryMutation } from '@/lib/factoryAcceptance/enforcement';
+import { registerRequest } from '@/lib/factoryAcceptance/service';
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
@@ -357,6 +359,11 @@ export async function updateTaskSingle(
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();
 
+        const acceptance = await guardFactoryMutation(tx, currentState, updateData, agentId, new Date(), requestedMutation);
+        if (acceptance.replay) {
+          const task = await tx.task.findUniqueOrThrow({where: {id:newTask.id}, include:taskInclude});
+          return {task, newComment:null, moveActivity:null, boardWebhookDeliveryIds:[], agentWebhookDeliveryIds:[]};
+        }
         let updatedTask = await tx.task.update({
           where: { id: newTask.id },
           data: updateData,
@@ -663,6 +670,18 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
+    if (error instanceof FactoryAcceptanceError) {
+      let requestId: string | undefined;
+      if (error.request && agentId) {
+        try {
+          const result=await prisma.$transaction(tx=>registerRequest(tx,error.request,{userId:currentUser.id,agentId}));
+          requestId=result.request.id;
+        } catch {
+          return {status:503,json:{code:'factory_request_unavailable',message:'Transition was not applied. Acceptance request registration must be retried.'}};
+        }
+      }
+      return {status:error.status,json:{code:error.code,message:error.message,...(requestId?{request_id:requestId}:{})}};
+    }
     if (error instanceof TaskDescriptionChangedError) {
       return {
         status: 409,

@@ -47,3 +47,5 @@ export const HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG =
   "htpr-4228-admin-only-time-reports";
 export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
   "htpr-6215-my-tasks-cross-board-priority-sort";
+
+export const FACTORY_OWNER_PREVIEW_FLAG = "hyfa-43-factory-owner-preview";

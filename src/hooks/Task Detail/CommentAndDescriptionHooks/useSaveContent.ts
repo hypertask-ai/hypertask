@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { FACTORY_OWNER_PREVIEW_FLAG } from "@/lib/flags/keys";
+import { factoryPolicyKey } from "@/hooks/useFactoryPolicy";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -45,6 +48,7 @@ import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorial
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
 
 export default function useSaveContent() {
+  const factoryPreviewEnabled = useFlag(FACTORY_OWNER_PREVIEW_FLAG);
   const {
     focusOn,
     currentTask,
@@ -475,6 +479,9 @@ export default function useSaveContent() {
           taskId: currentTask?.id,
         };
         const response = await updateTask(newTask, payload, "SaveDescription");
+        if (factoryPreviewEnabled && currentTask?.projectId && currentTask?.id) {
+          void queryClient.invalidateQueries({queryKey: factoryPolicyKey(currentTask.projectId, currentTask.id)});
+        }
         // console.log(data);
 
         //remove duplicates

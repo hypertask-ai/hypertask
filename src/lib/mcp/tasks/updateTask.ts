@@ -1,3 +1,4 @@
+import { FactoryAcceptanceError, guardFactoryMutation } from '@/lib/factoryAcceptance/enforcement';
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import type { McpAuthContext } from "@/lib/mcp/auth";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -50,6 +51,7 @@ export interface UpdateTaskResponse {
     /** MCP session agent that performed this action */
     agent?: McpAgentSummary;
     message?: string;
+    failed_tasks?: Array<{taskId:number;error:string;status?:number;code?:string;request_id?:string}>;
 }
 
 interface UpdateTaskErrorResponse {
@@ -57,6 +59,7 @@ interface UpdateTaskErrorResponse {
     tasks: TaskDetail[];
     error: string;
     code?: string;
+    request_id?: string;
 }
 
 class UpdateTaskPersistenceError extends Error {
@@ -77,6 +80,7 @@ type TaskUpdateResult =
           error: string
           status?: number
           code?: string
+          request_id?: string
       }
 
 const VALID_STATUSES = ['Normal', 'Archive', 'Deleted'] as const;
@@ -771,6 +775,13 @@ export async function executeTaskUpdate({
             // spend the adoption here, in-process, and let the internal requests
             // find the live lease it creates.
             const actingAgentId = ctx.agentId
+            if (actingAgentId && hasContractFieldUpdate) {
+                await prisma.$transaction(async tx => {
+                    await assertAgentAssignmentChangeAllowed(tx,task.id,actingAgentId,user.id);
+                    const live=await tx.task.findUniqueOrThrow({where:{id:task.id}});
+                    await guardFactoryMutation(tx,live,contractFieldUpdates,actingAgentId);
+                });
+            }
             if (actingAgentId) {
                 await prisma.$transaction((tx) =>
                     assertAgentAssignmentChangeAllowed(
@@ -810,6 +821,7 @@ export async function executeTaskUpdate({
                     // fallback and reached the CLI as a bare "Failed to move
                     // task" (HTPR-6224).
                     const errorData = await moveResponse.json().catch(() => null)
+                    if(typeof errorData?.code==='string'&&errorData.code.startsWith('factory_'))throw new FactoryAcceptanceError(errorData.code,errorData.message||errorData.error||'Factory acceptance required.',moveResponse.status,errorData.request_id);
                     throw new Error(
                         toErrorMessage(
                             errorData,
@@ -836,6 +848,7 @@ export async function executeTaskUpdate({
                 })
                 if (!archiveResponse.ok) {
                     const errorData = await archiveResponse.json().catch(() => null)
+                    if(typeof errorData?.code==='string'&&errorData.code.startsWith('factory_'))throw new FactoryAcceptanceError(errorData.code,errorData.message||errorData.error||'Factory acceptance required.',archiveResponse.status,errorData.request_id);
                     throw new Error(
                         toErrorMessage(
                             errorData,
@@ -871,6 +884,7 @@ export async function executeTaskUpdate({
                 })
                 if (!singleResponse.ok) {
                     const errorData = await singleResponse.json().catch(() => null)
+                    if(typeof errorData?.code==='string'&&errorData.code.startsWith('factory_'))throw new FactoryAcceptanceError(errorData.code,errorData.message||errorData.error||'Factory acceptance required.',singleResponse.status,errorData.request_id);
                     throw new Error(
                         toErrorMessage(
                             errorData,
@@ -997,9 +1011,12 @@ export async function executeTaskUpdate({
 
             if (hasContractFieldUpdate) {
                 try {
-                    await prisma.task.update({
-                        where: { id: task.id },
-                        data: { ...contractFieldUpdates },
+                    await prisma.$transaction(async tx => {
+                        await assertAgentAssignmentChangeAllowed(tx,task.id,ctx.agentId,user.id,{allowHumanOverride:!ctx.agentId});
+                        const live=await tx.task.findUniqueOrThrow({where:{id:task.id}});
+                        const data={...contractFieldUpdates,updatedAt:new Date()};
+                        await guardFactoryMutation(tx,live,data,ctx.agentId);
+                        await tx.task.update({where:{id:task.id},data});
                     });
                 } catch (contractFieldError) {
                     console.warn(`[MCP Update Task] Failed to update contract fields for task ${task.id}:`, contractFieldError);
@@ -1137,13 +1154,13 @@ export async function executeTaskUpdate({
             return { success: true, taskId: task.id }
         } catch (error) {
             console.error(`[MCP Update Task] Error updating task ${task.id}:`, error)
-            const linkError = error instanceof PullRequestLinkError ? error : null
+            const linkError = error instanceof PullRequestLinkError || error instanceof FactoryAcceptanceError ? error : null
             return {
                 success: false,
                 taskId: task.id,
                 error: toErrorMessage(error, 'Unknown error'),
                 ...(linkError
-                    ? { status: linkError.status, code: linkError.code }
+                    ? { status: linkError.status, code: linkError.code, ...(linkError instanceof FactoryAcceptanceError && linkError.requestId ? {request_id:linkError.requestId}: {}) }
                     : {}),
             }
         }
@@ -1172,6 +1189,7 @@ export async function executeTaskUpdate({
                 tasks: [],
                 error: `Failed to update ${failedTasks.length} task(s). ${errorMessages.length > 0 ? errorMessages[0] : 'Unknown error'}`,
                 ...(linkFailure?.code ? { code: linkFailure.code } : {}),
+                ...(linkFailure?.request_id ? {request_id:linkFailure.request_id}:{}),
             },
             linkFailure?.status ?? 500,
         )
@@ -1212,6 +1230,7 @@ export async function executeTaskUpdate({
         // Backward compatibility: include single task field when only one task is updated
         ...(mappedTasks.length === 1 ? { task: mappedTasks[0] } : {}),
         message,
+        ...(failedTasks.length?{failed_tasks:failedTasks.map(({taskId,error,status,code,request_id})=>({taskId,error,status,code,request_id}))}:{}),
         ...(sessionAgent ? { agent: sessionAgent } : {}),
     }
 

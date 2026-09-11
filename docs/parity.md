@@ -4,7 +4,7 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head `claude-review` required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 158, mcp: 73, cli: 132, ai_chat: 83, hyperai: 73. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@1.13.29`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 160, mcp: 73, cli: 132, ai_chat: 83, hyperai: 73. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@1.13.29`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
@@ -21,7 +21,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, update, move, batch, or escalate tasks** | ✅ 6 | ✅ 3 | ✅ 4 | ✅ 3 | ✅ 3 |
 | **Assign people and attach files** | ✅ 3 | ✅ 2 | ✅ 2 | ✅ 3 | ✅ 2 |
 | **Link, unlink, and inspect task relations** | ✅ 3 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
-| **Review and authorize factory acceptance transitions** | 🛠 https://app.hypertask.ai/detail/project-5156/43 by 2026-10-01 | ↪ MCP tools do not approve acceptance contracts or issue factory authority grants; enrolled workers request ordinary task moves through existing tools. | ↪ The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly. | ↪ AI Chat tools are model-facing task tools, not acceptance authorities. | ↪ HyperAI tools are model-facing task tools, not acceptance authorities. |
+| **Review and authorize factory acceptance transitions** | ✅ 2 | ↪ MCP tools do not approve acceptance contracts or issue factory authority grants; enrolled workers request ordinary task moves through existing tools. | ↪ The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly. | ↪ AI Chat tools are model-facing task tools, not acceptance authorities. | ↪ HyperAI tools are model-facing task tools, not acceptance authorities. |
 | **List boards, teams, members, manifests, and playbooks** | ✅ 4 | ✅ 4 | ✅ 8 | ✅ 4 | ✅ 4 |
 | **Create, archive, invite to, and configure boards** | ✅ 6 | ✅ 3 | ✅ 4 | ✅ 3 | ✅ 3 |
 | **Manage labels, columns, and custom fields** | ✅ 10 | ✅ 5 (transition) | ✅ 15 (transition) | ✅ 5 (transition) | ✅ 5 (transition) |

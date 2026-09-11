@@ -203,6 +203,10 @@ function loadUpdateController(
     return { newComment: { id: 1 }, shouldNotify: moveShouldNotify };
   };
   const stubs = {
+    // These fixtures model unenrolled projects. Acceptance behavior is covered
+    // with the actual module in factory-acceptance.test.cjs.
+    "@/lib/factoryAcceptance/enforcement": {FactoryAcceptanceError:class extends Error {},guardFactoryMutation:async()=>({}),guardFactoryCreate:async()=>{}},
+    "@/lib/factoryAcceptance/service": {},
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/models/ActivityModels.ts": {},
@@ -649,6 +653,10 @@ function loadMoveController({
   };
   let taskCount = 0;
   const stubs = {
+    // These fixtures model unenrolled projects. Acceptance behavior is covered
+    // with the actual module in factory-acceptance.test.cjs.
+    "@/lib/factoryAcceptance/enforcement": {FactoryAcceptanceError:class extends Error {},guardFactoryMutation:async()=>({}),guardFactoryCreate:async()=>{}},
+    "@/lib/factoryAcceptance/service": {},
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/utils/controllers/getMemberAndOwnerForBoard": async () => [],

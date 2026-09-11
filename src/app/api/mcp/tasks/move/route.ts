@@ -270,6 +270,8 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: result.error,
+          ...(result.code ? {code:result.code} : {}),
+          ...(result.request_id ? {request_id:result.request_id} : {}),
         },
         { status: result.statusCode ?? 500 }
       );

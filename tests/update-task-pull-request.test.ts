@@ -80,6 +80,8 @@ async function main() {
   const prismaMock = prisma as any
   const originalTaskFindMany = prismaMock.task.findMany
   const originalUserFindUnique = prismaMock.user.findUnique
+  const originalTransaction = prismaMock.$transaction
+  const originalAgentFindUnique = prismaMock.agent.findUnique
   const request = new NextRequest(
     'http://localhost/api/mcp/tasks/update',
     { method: 'POST' }
@@ -144,6 +146,29 @@ async function main() {
       photoURL: null,
     })
 
+    // Enrollment can become active after the early contract-field check.
+    // Exercise the real final guard and error response, with no task write.
+    prismaMock.agent.findUnique = async () => ({ permissions: { role: 'write' } })
+    let policyReads = 0
+    let taskWrites = 0
+    prismaMock.$transaction = async (callback: any) => callback({
+      $executeRaw: async () => 1,
+      $queryRaw: async () => [{ agentId: 'factory-dev', token: 'lease', adoptionCount: 0 }],
+      agent: { findFirst: async () => ({ id: 'factory-dev' }) },
+      task: { findUniqueOrThrow: async () => makeTask(1), update: async () => { taskWrites++; return makeTask(1) } },
+      factoryEnrollment: { findUnique: async () => ({ projectId: 20, enabled: ++policyReads > 1, version: 1, agentRoles: { 'factory-dev': 'dev' }, sections: {} }) },
+    })
+    const raced = await executeTaskUpdate({
+      request, ctx: { ...ctx, agentId: 'factory-dev' },
+      requestBody: { task_id: 1, acceptance_criteria: 'Changed after enrollment' },
+      linkPullRequest,
+    })
+    assert.equal(raced.response.status, 403)
+    assert.equal((await raced.response.json()).code, 'factory_contract_owner_required')
+    assert.equal(policyReads, 2)
+    assert.equal(taskWrites, 0)
+    prismaMock.$transaction = originalTransaction
+
     const dryRun = await executeTaskUpdate({
       request,
       ctx,
@@ -196,6 +221,8 @@ async function main() {
   } finally {
     prismaMock.task.findMany = originalTaskFindMany
     prismaMock.user.findUnique = originalUserFindUnique
+    prismaMock.$transaction = originalTransaction
+    prismaMock.agent.findUnique = originalAgentFindUnique
   }
 }
 

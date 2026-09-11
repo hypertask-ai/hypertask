@@ -288,6 +288,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      { key: "hyfa-43-factory-owner-preview", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
@@ -297,7 +298,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
     assert.match(shippedOn, /^\d{4}-\d{2}-\d{2}$/, `${key} needs a shippedOn day`);
     assert.equal(
       ticketUrl,
-      `https://app.hypertask.ai/detail/project-15/${key.match(/^htpr-(\d+)-/)[1]}`,
+      key.startsWith("htpr-") ? `https://app.hypertask.ai/detail/project-15/${key.match(/^htpr-(\d+)-/)[1]}` : null,
     );
   });
 
@@ -383,4 +384,13 @@ test("unknown flags fail closed and cannot create rows", async () => {
   assert.equal(await flags.isFeatureEnabled("unknown-flag", 6), false);
   await assert.rejects(flags.setFeatureFlagMode("unknown-flag", "OFF"), /Unknown feature flag/);
   await assert.rejects(flags.setFeatureFlagMode("Bad Flag", "OFF"), /Invalid feature flag/);
+});
+
+
+test("factory preview defaults to the existing owner and QA cohort and respects off", async () => {
+  const key = flags.FACTORY_OWNER_PREVIEW_FLAG;
+  assert.equal(key, "hyfa-43-factory-owner-preview");
+  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(key, id))), [true, true, false]);
+  row = {mode: "OFF"};
+  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(key, id))), [false, false, false]);
 });

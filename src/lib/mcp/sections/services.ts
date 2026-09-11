@@ -82,7 +82,8 @@ export async function createSection(
     projectId,
     title,
     afterSectionId,
-    userId
+    userId,
+    agentId
   })
 
   if (result.status !== 200) {

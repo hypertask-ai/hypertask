@@ -1,5 +1,7 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { FACTORY_OWNER_PREVIEW_FLAG } from "@/lib/flags/keys";
 import axios from "axios";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +25,7 @@ import { useSetRecoilState } from "@/lib/state";
 import SettingsSectionShell from "./SettingsSectionShell";
 import SettingsToggle from "./SettingsToggle";
 import { useSettingsTeam } from "./useSettingsTeam";
+import FactoryPolicySection from "./FactoryPolicySection";
 import BoardLifecycleSettings from "./BoardLifecycleSettings";
 
 const NONE_ASSIGNEE = {
@@ -388,6 +391,7 @@ const BoardAutoAssignSetting = ({ project }: { project: IProject }) => {
 };
 
 const BoardGeneralSection = () => {
+  const factoryPreviewEnabled = useFlag(FACTORY_OWNER_PREVIEW_FLAG);
   const { project } = useSettingsTeam();
 
   return (
@@ -395,6 +399,7 @@ const BoardGeneralSection = () => {
       {project && <BoardNotificationSetting project={project} />}
       {project && <BoardTimeTrackingSetting project={project} />}
       <BoardLifecycleSettings />
+      {factoryPreviewEnabled && project && <FactoryPolicySection projectId={project.id} />}
       {project && <BoardAutoAssignSetting project={project} />}
     </SettingsSectionShell>
   );
