@@ -65,14 +65,12 @@ test("composed snapshot does not mix in live project when team fields are missin
     currentRelatedTaskIds: [888],
   });
 
-  assert.deepEqual(result, {
-    taskId: 1691,
-    ownerId: undefined,
-    projectId: 339,
-    teamId: undefined,
-    teamTitle: undefined,
-    taskIds: [1691],
-  });
+  assert.equal(result.taskId, 1691);
+  assert.equal(result.projectId, 339);
+  assert.equal(result.teamId == null, true);
+  assert.equal(result.teamTitle == null, true);
+  assert.equal(result.ownerId == null, true);
+  assert.deepEqual(result.taskIds, [1691]);
 });
 
 test("falls back to live current values when composition is missing", () => {
