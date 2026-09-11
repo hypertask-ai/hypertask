@@ -89,7 +89,7 @@ type TaskDetailSatelliteFields = {
   estimate?: unknown;
 };
 
-type TaskDetailQueryClient<T> = {
+type TaskDetailQueryClient = {
   cancelQueries: (opts: { queryKey: unknown[] }) => Promise<unknown>;
   setQueryData: (key: unknown[], data: unknown) => void;
   invalidateQueries: (opts: { queryKey: unknown[] }) => Promise<unknown>;
@@ -104,7 +104,7 @@ export async function seedTaskDetailSatelliteCaches<
   T extends TaskDetailSatelliteFields,
 >(
   queryClient: Pick<
-    TaskDetailQueryClient<T>,
+    TaskDetailQueryClient,
     "cancelQueries" | "setQueryData" | "invalidateQueries"
   >,
   task: T
@@ -134,7 +134,7 @@ export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteF
   taskId,
   fetchTask,
 }: {
-  queryClient: TaskDetailQueryClient<T>;
+  queryClient: TaskDetailQueryClient;
   taskId: number;
   fetchTask: () => Promise<T | null>;
 }): Promise<T | null> {
