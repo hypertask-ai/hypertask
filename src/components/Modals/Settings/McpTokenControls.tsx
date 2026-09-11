@@ -2,7 +2,7 @@
 
 import { useMcpConnections } from "@/components/Modals/McpToken/hooks/useMcpConnections";
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
-import { isUsableMcpBearerToken } from "@/components/Modals/McpToken/utils";
+import { isUsableMcpBearerToken } from "@/lib/mcp/bearerAuth";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import toast from "react-hot-toast";
 

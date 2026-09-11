@@ -32,7 +32,7 @@ import globalConstants from "@/lib/constants";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useTaskRelations } from "../useTaskRelations";
 import { useHyperMention } from "@/hooks/MultiPages/Tasks/useHyperMention";
-import { resolveHyperMentionComposition } from "@/hooks/Task Detail/CommentAndDescriptionHooks/hyperMentionComposition";
+import { resolveHyperMentionComposition } from "@/lib/ai/hyperMentionComposition";
 import { USER_DRAFTS_QUERY_KEY } from "@/hooks/General/useGetUserDrafts";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import {

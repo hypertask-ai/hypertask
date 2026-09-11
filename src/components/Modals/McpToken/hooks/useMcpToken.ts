@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import {
   MCP_TOKEN_MASK,
   readMcpTokenCookieValue,
-} from "@/components/Modals/McpToken/utils"
+} from "@/lib/mcp/bearerAuth"
 
 export function useMcpToken() {
   const [token, setToken] = useState<string | null>(null)

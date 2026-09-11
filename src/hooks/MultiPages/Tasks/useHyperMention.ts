@@ -1,5 +1,5 @@
 import { useMcpToken } from "@/components/Modals/McpToken";
-import { mcpAuthorizationHeaders } from "@/components/Modals/McpToken/utils";
+import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { defaultAiModelOption } from "@/lib/aiModelOptions";
 import { IUser } from "@/models/model";

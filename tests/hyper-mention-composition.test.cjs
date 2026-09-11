@@ -7,7 +7,7 @@ const { spawnSync } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
 const helperPath = path.join(
   root,
-  "src/hooks/Task Detail/CommentAndDescriptionHooks/hyperMentionComposition.ts",
+  "src/lib/ai/hyperMentionComposition.ts",
 );
 
 function resolve(input) {

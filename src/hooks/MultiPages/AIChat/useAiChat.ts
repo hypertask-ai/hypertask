@@ -42,7 +42,7 @@ import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
-import { mcpAuthorizationHeaders } from "@/components/Modals/McpToken/utils";
+import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import {
   FileItem,
   useFileUpload,

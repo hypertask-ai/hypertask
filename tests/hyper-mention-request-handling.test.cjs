@@ -55,7 +55,7 @@ test("HyperAI mention clients report every failed response and network error", (
 
 test("HyperAI mention clients never send the masked MCP token as Bearer", () => {
   const hook = read("src/hooks/MultiPages/Tasks/useHyperMention.ts");
-  const utils = read("src/components/Modals/McpToken/utils.ts");
+  const utils = read("src/lib/mcp/bearerAuth.ts");
 
   assert.match(utils, /export function mcpAuthorizationHeaders/);
   assert.match(hook, /mcpAuthorizationHeaders\(token\)/);
@@ -72,7 +72,7 @@ test("comment create routes HyperAI through the composed task and project", () =
     "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts",
   );
   const helper = read(
-    "src/hooks/Task Detail/CommentAndDescriptionHooks/hyperMentionComposition.ts",
+    "src/lib/ai/hyperMentionComposition.ts",
   );
   const uploading = read(
     "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/index.tsx",

@@ -6,7 +6,7 @@ const { pathToFileURL } = require("node:url");
 const { spawnSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
-const utilsPath = path.join(root, "src/components/Modals/McpToken/utils.ts");
+const utilsPath = path.join(root, "src/lib/mcp/bearerAuth.ts");
 
 function loadUtilsViaStripTypes() {
   const script = `
