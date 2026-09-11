@@ -225,6 +225,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
   },
   {
+    key: "htpr-6363-task-writer-research",
+    shippedOn: "2026-09-11",
+    description:
+      "Restores board research in the AI task writer: related tickets, Done-style examples, open questions, and refine search from user text.",
+  },
+  {
     key: HTPR_6157_AUTO_DESCRIPTION_FLAG,
     shippedOn: "2026-09-09",
     description:

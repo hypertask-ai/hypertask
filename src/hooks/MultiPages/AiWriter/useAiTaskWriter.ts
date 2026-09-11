@@ -142,6 +142,7 @@ const useAITaskWriter = (
       prompt: string,
       requestLoadingText = "Thinking...",
       requestKindOverride = requestKind,
+      options?: { userRetrievalTexts?: string[] },
     ) => {
       const requestGeneration = requestGenerationRef.current + 1;
       requestGenerationRef.current = requestGeneration;
@@ -237,6 +238,7 @@ const useAITaskWriter = (
           taskTitle: currentTask?.title ?? "",
           taskDescription: mediaExtraction.html,
           requestKind: requestKindOverride,
+          userRetrievalTexts: options?.userRetrievalTexts ?? [],
         }
         console.log("🚀 ~ sendAIRequest ~ payload:", payload)
         const response = await fetch(taskWriterRoute, {

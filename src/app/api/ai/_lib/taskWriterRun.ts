@@ -18,12 +18,26 @@ import {
   extractImgSrcs,
   retrieveTaskWriterContext,
   selectTaskWriterModel,
+  TASK_AUTHORING_STYLE,
 } from "@/app/api/ai/_lib/editorAi";
 import {
   loadCurrentTaskContext,
   resolveAiUsageTaskId,
 } from "@/app/api/ai/_lib/currentTaskContext";
-import { formatTaskWriterRetrievedContext } from "@/app/api/ai/_lib/taskWriterPrompt";
+import {
+  createTaskWriterSystemPromptTemplate,
+  formatTaskWriterRetrievedContext,
+} from "@/app/api/ai/_lib/taskWriterPrompt";
+import {
+  buildTaskWriterRetrievalQuery,
+  formatBoardVocabulary,
+  formatRelatedTicketCandidates,
+  formatStyleExamples,
+  HTPR_6363_TASK_WRITER_RESEARCH_FLAG,
+  TASK_WRITER_BOARD_RESEARCH_RULES,
+  TASK_WRITER_RELATED_CANDIDATE_LIMIT,
+  TASK_WRITER_STYLE_EXAMPLE_LIMIT,
+} from "@/app/api/ai/_lib/taskWriterBoardResearch";
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
@@ -33,9 +47,11 @@ import {
   isFeatureEnabled,
 } from "@/lib/flags";
 import { isNewTaskAutoDescriptionEnabled } from "@/lib/ai/autoDescriptionSuggestion";
+import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
+import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 
 const byokProviderFlagSchema = z
   .object({
@@ -73,6 +89,8 @@ export const taskWriterRequestSchema = z.object({
   taskIds: z.array(z.coerce.number().int()).optional().default([]),
   taskDescription: z.string().optional().default(""),
   taskTitle: z.string().optional().default(""),
+  /** User-authored briefs only; used for board search when research is on. */
+  userRetrievalTexts: z.array(z.string()).optional().default([]),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   requestKind: z.enum(["manual", "auto-description"]).optional().default("manual"),
 });
@@ -194,12 +212,27 @@ export async function prepareTaskWriterRun(
   // "/foo" alone strips to empty; fall back to the raw prompt so retrieval and
   // the model query are never blank (the skill body still carries the intent).
   const effectivePrompt = skillResolution.cleanedText || body.PROMPT;
+  const boardResearchEnabled = await isFeatureEnabled(
+    HTPR_6363_TASK_WRITER_RESEARCH_FLAG,
+    userId
+  );
+  // Search uses user-authored text only when research is on. The model still
+  // receives the full conversation prompt via body.PROMPT / effectivePrompt.
+  const retrievalQuery = boardResearchEnabled
+    ? buildTaskWriterRetrievalQuery({
+        prompt: effectivePrompt,
+        userRetrievalTexts: body.userRetrievalTexts,
+      })
+    : effectivePrompt;
   const primaryTaskIds = body.taskIds.slice(0, 1);
   const relatedTaskIds = body.taskIds.slice(1);
   const [
     currentTaskContext,
     relatedTaskContext,
     semanticContext,
+    relatedCandidates,
+    styleExamples,
+    boardVocabulary,
     uploadedDocumentContext,
     boardTemplates,
     usageTaskId,
@@ -215,10 +248,28 @@ export async function prepareTaskWriterRun(
     }),
     retrieveTaskWriterContext({
       projectId: body.projectId,
-      prompt: effectivePrompt,
+      prompt: retrievalQuery,
       aiMode: body.aiMode,
       taskIds: body.taskIds,
+      reserveCommentBudget: boardResearchEnabled,
     }),
+    boardResearchEnabled
+      ? searchTasks({
+          searchQuery: retrievalQuery,
+          projectIds: [body.projectId],
+          topK: TASK_WRITER_RELATED_CANDIDATE_LIMIT,
+        }).then((rows) =>
+          formatRelatedTicketCandidates(
+            rows.filter((row) => !body.taskIds.map(String).includes(row.id))
+          )
+        )
+      : Promise.resolve(""),
+    boardResearchEnabled
+      ? loadTaskWriterStyleExamples(body.projectId)
+      : Promise.resolve(""),
+    boardResearchEnabled
+      ? loadTaskWriterBoardVocabulary(body.projectId)
+      : Promise.resolve(""),
     Promise.resolve(
       createDocumentAttachmentSummary([...body.pdfs64, ...body.docx64])
     ),
@@ -240,6 +291,9 @@ export async function prepareTaskWriterRun(
     relatedContext: [relatedTaskContext, semanticContext]
       .filter(Boolean)
       .join("\n\n"),
+    relatedCandidates,
+    styleExamples,
+    boardVocabulary,
   });
   const { instructions: baseInstructions, input } = createTaskWriterPromptParts({
     aiMode: body.aiMode,
@@ -253,9 +307,15 @@ export async function prepareTaskWriterRun(
     uploadedDocumentContext,
     input: effectivePrompt,
   });
+  const researchInstructions =
+    boardResearchEnabled && body.aiMode === "AiTaskWriter"
+      ? createTaskWriterSystemPromptTemplate(
+          `${TASK_AUTHORING_STYLE}\n\n${TASK_WRITER_BOARD_RESEARCH_RULES}`
+        )
+      : null;
   const instructions = skillResolution.systemPromptAddition
-    ? `${baseInstructions}\n\n${skillResolution.systemPromptAddition}`
-    : baseInstructions;
+    ? `${researchInstructions ?? baseInstructions}\n\n${skillResolution.systemPromptAddition}`
+    : researchInstructions ?? baseInstructions;
   const files = [...body.images64, ...body.pdfs64, ...body.docx64];
   const messages = [
     {
@@ -277,4 +337,70 @@ export async function prepareTaskWriterRun(
     skills: skillResolution.skills,
     usageTaskId,
   };
+}
+
+async function loadTaskWriterBoardVocabulary(projectId: number) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId },
+    select: {
+      title: true,
+      description: true,
+      labels: { select: { value: true } },
+      section: {
+        where: { deleted: false },
+        select: { section_title: true },
+        orderBy: { ranking: "asc" },
+      },
+    },
+  });
+  if (!project) return "";
+  return formatBoardVocabulary({
+    projectTitle: project.title,
+    projectDescription: project.description,
+    sectionTitles: project.section.map((row) => row.section_title),
+    labelNames: project.labels
+      .map((row) => row.value)
+      .filter((value): value is string => Boolean(value)),
+  });
+}
+
+async function loadTaskWriterStyleExamples(projectId: number) {
+  const sections = await prisma.section.findMany({
+    where: { projectId, deleted: false },
+    select: { section_title: true, isDone: true },
+  });
+  const doneTitleSet = doneColumnTitles(sections);
+  const doneSectionTitles = sections
+    .filter((section) => doneTitleSet.has(section.section_title.trim().toLowerCase()))
+    .map((section) => section.section_title);
+  if (doneSectionTitles.length === 0) return "";
+
+  const tasks = await prisma.task.findMany({
+    where: {
+      projectId,
+      status: "Normal",
+      section: { in: doneSectionTitles },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: TASK_WRITER_STYLE_EXAMPLE_LIMIT,
+    select: {
+      projectId: true,
+      uniqueIndex: true,
+      ticketNumber: true,
+      title: true,
+      description: true,
+      section: true,
+    },
+  });
+
+  return formatStyleExamples(
+    tasks.map((task) => ({
+      projectId: task.projectId,
+      uniqueIndex: task.uniqueIndex,
+      ticketNumber: task.ticketNumber,
+      title: task.title,
+      descriptionText: task.description,
+      section: task.section,
+    }))
+  );
 }
