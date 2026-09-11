@@ -2,7 +2,7 @@ import { useMcpToken } from "@/components/Modals/McpToken";
 import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { defaultAiModelOption } from "@/lib/aiModelOptions";
-import { IUser } from "@/models/model";
+import { ITeamByokApiKey, IUser } from "@/models/model";
 import { processImagesForHyperMention } from "@/utils/helperFunctions/helperFunctions";
 import toast from "react-hot-toast";
 
@@ -30,6 +30,8 @@ interface IPostHyperMention {
   taskTitle: string;
   previousText?: string;
   sourceCommentId?: number | string;
+  /** Captured at send time so mid-upload navigation cannot swap board BYOK. */
+  byokProviderFlags?: ITeamByokApiKey[];
 }
 
 interface IPostImageGeneration {
@@ -62,6 +64,7 @@ export function useHyperMention() {
       previousText,
       ownerId,
       sourceCommentId,
+      byokProviderFlags,
     } = mentionProps;
     const triggerHyper = triggerHyperMention(mode, text, previousText);
     if (!triggerHyper) return;
@@ -117,7 +120,10 @@ export function useHyperMention() {
           images64,
           pdfs64,
           docx64,
-          byokProviderFlags: currentBoardBilling?.byokProviderFlags ?? [],
+          byokProviderFlags:
+            byokProviderFlags ??
+            currentBoardBilling?.byokProviderFlags ??
+            [],
         }),
       });
       if (!response.ok) {

@@ -4,6 +4,7 @@ import {
   IAttachment,
   IComment,
   IEditorAttachmentFile,
+  ITeamByokApiKey,
   IUrl,
   modifiedHtml,
   NavigateToNextTaskParams,
@@ -33,6 +34,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useTaskRelations } from "../useTaskRelations";
 import { useHyperMention } from "@/hooks/MultiPages/Tasks/useHyperMention";
 import { resolveHyperMentionComposition } from "@/lib/ai/hyperMentionComposition";
+import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { USER_DRAFTS_QUERY_KEY } from "@/hooks/General/useGetUserDrafts";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import {
@@ -76,6 +78,7 @@ export default function useSaveContent() {
   const { resetDescriptionQuery } = useProjectQuery();
   const { addRelations } = useTaskRelations();
   const { postHyperMention, postImageGeneration } = useHyperMention();
+  const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -767,39 +770,24 @@ export default function useSaveContent() {
     // Same capture for the board: HyperAI validates taskId+projectId together,
     // so a live currentProject after navigation 404s the mention (HTPR-6405).
     composedForProjectId?: number,
-    composedForTeamId?: string,
-    composedForTeamTitle?: string,
-    composedRelatedTaskIds?: number[]
+    // Model/provider/BYOK from send time so mid-upload navigation cannot mix
+    // board A target with board B AI settings (HTPR-6405 OCR).
+    composedModelSource?: string,
+    composedModelOptionId?: string,
+    composedByokProviderFlags?: ITeamByokApiKey[],
   ) => {
     const {
       taskId: mentionTaskId,
       ownerId: mentionOwnerId,
       projectId: mentionProjectId,
-      teamId: mentionTeamId,
-      teamTitle: mentionTeamTitle,
       taskIds: mentionTaskIds,
     } = resolveHyperMentionComposition({
       composedForTaskId,
       composedForOwnerId,
       composedForProjectId,
-      composedForTeamId,
-      composedForTeamTitle,
-      composedRelatedTaskIds,
       currentTaskId: currentTask?.id,
       currentOwnerId: currentTask?.userId,
       currentProjectId: currentProject?.id,
-      currentTeamId: currentProject?.teamId,
-      currentTeamTitle: currentProject?.team?.title,
-      currentRelatedTaskIds: [
-        currentTask?.parentTask?.id,
-        ...(currentTask?.subTasks || []).flatMap((item) => item.id),
-        ...(currentTask?.relatedFromTasks || []).flatMap(
-          (item) => item.targetTask?.id
-        ),
-        ...(currentTask?.relatedToTasks || []).flatMap(
-          (item) => item.sourceTask?.id
-        ),
-      ],
     });
     if (
       comments &&
@@ -841,21 +829,30 @@ export default function useSaveContent() {
           ownerId:
             mentionOwnerId === undefined ? undefined : String(mentionOwnerId),
           projectId: mentionProjectId ?? -1,
-          teamId: mentionTeamId ?? "-1",
+          teamId: undefined,
           text: result.html,
           currentUser: currentUser ?? undefined,
-          teamTitle: mentionTeamTitle ?? "",
+          teamTitle: "",
           taskIds: mentionTaskIds,
           sourceSelected:
-            result.hyperMention.modelSource ?? improveWritingSource,
+            result.hyperMention.modelSource ??
+            composedModelSource ??
+            improveWritingSource,
           modelSelected:
-            result.hyperMention.modelOptionId ?? improveWritingModel,
-          modelOptionId: result.hyperMention.modelOptionId,
+            result.hyperMention.modelOptionId ??
+            composedModelOptionId ??
+            improveWritingModel,
+          modelOptionId:
+            result.hyperMention.modelOptionId ?? composedModelOptionId,
           modelMentionLabel: result.hyperMention.modelLabel,
           attachments: hyperAiAttachmentPayload,
           taskDescription: description,
           taskTitle: currentTask.title,
           sourceCommentId: Number(data.id),
+          byokProviderFlags:
+            composedByokProviderFlags ??
+            currentBoardBilling?.byokProviderFlags ??
+            [],
         });
       else if (result.imageMention)
         postImageGeneration("Create", {
@@ -1132,18 +1129,9 @@ export default function useSaveContent() {
           taskId: currentTask?.id,
           ownerId: currentTask?.userId,
           projectId: currentProject?.id,
-          teamId: currentProject?.teamId,
-          teamTitle: currentProject?.team?.title,
-          relatedTaskIds: [
-            currentTask?.parentTask?.id,
-            ...(currentTask?.subTasks || []).flatMap((item) => item.id),
-            ...(currentTask?.relatedFromTasks || []).flatMap(
-              (item) => item.targetTask?.id
-            ),
-            ...(currentTask?.relatedToTasks || []).flatMap(
-              (item) => item.sourceTask?.id
-            ),
-          ].filter(Boolean),
+          modelSource: improveWritingSource,
+          modelOptionId: improveWritingModel,
+          byokProviderFlags: currentBoardBilling?.byokProviderFlags ?? [],
         },
       ]);
       return true;

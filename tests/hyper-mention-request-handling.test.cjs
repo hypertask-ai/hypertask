@@ -80,12 +80,21 @@ test("comment create routes HyperAI through the composed task and project", () =
   const queue = read(
     "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/UploadingCommentContainer.tsx",
   );
+  const hook = read("src/hooks/MultiPages/Tasks/useHyperMention.ts");
 
   assert.match(helper, /export function resolveHyperMentionComposition/);
   assert.match(save, /resolveHyperMentionComposition\(/);
   assert.match(save, /taskIds: mentionTaskIds/);
-  assert.match(save, /composedRelatedTaskIds\?: number\[\]/);
-  assert.match(save, /relatedTaskIds: \[/);
-  assert.match(uploading, /relatedTaskIds\?: number\[\]/);
-  assert.match(queue, /relatedTaskIds=\{comment\.relatedTaskIds\}/);
+  assert.match(save, /composedModelSource\?: string/);
+  assert.match(save, /modelSource: improveWritingSource/);
+  assert.match(save, /byokProviderFlags: currentBoardBilling/);
+  assert.match(save, /composedModelSource \?\?/);
+  assert.match(uploading, /modelSource\?: string/);
+  assert.match(uploading, /byokProviderFlags\?: ITeamByokApiKey\[\]/);
+  assert.match(queue, /modelSource=\{comment\.modelSource\}/);
+  assert.match(queue, /byokProviderFlags=\{comment\.byokProviderFlags\}/);
+  assert.match(
+    hook,
+    /byokProviderFlags:\s*\n\s*byokProviderFlags \?\?/,
+  );
 });

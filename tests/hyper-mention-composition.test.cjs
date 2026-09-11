@@ -15,20 +15,11 @@ function resolveHyperMentionComposition(input) {
   const projectId = useComposed
     ? input.composedForProjectId
     : input.currentProjectId;
-  const teamId = useComposed ? input.composedForTeamId : input.currentTeamId;
-  const teamTitle = useComposed
-    ? input.composedForTeamTitle
-    : input.currentTeamTitle;
-  const related = useComposed
-    ? input.composedRelatedTaskIds ?? []
-    : input.currentRelatedTaskIds ?? [];
   return {
     taskId,
     ownerId,
     projectId,
-    teamId,
-    teamTitle,
-    taskIds: [taskId, ...related].filter(
+    taskIds: [taskId].filter(
       (id) => typeof id === "number" && Number.isFinite(id),
     ),
   };
@@ -39,42 +30,30 @@ test("composed HyperAI targets win over live current task and project", () => {
     composedForTaskId: 1691,
     composedForOwnerId: 4,
     composedForProjectId: 339,
-    composedForTeamId: "team-inne",
-    composedForTeamTitle: "inne",
-    composedRelatedTaskIds: [100, 200],
     currentTaskId: 9999,
     currentOwnerId: 1,
     currentProjectId: 15,
-    currentTeamId: "team-other",
-    currentTeamTitle: "other",
-    currentRelatedTaskIds: [888],
   });
 
   assert.deepEqual(result, {
     taskId: 1691,
     ownerId: 4,
     projectId: 339,
-    teamId: "team-inne",
-    teamTitle: "inne",
-    taskIds: [1691, 100, 200],
+    taskIds: [1691],
   });
 });
 
-test("composed snapshot does not mix in live project when team fields are missing", () => {
+test("composed snapshot does not mix in live project when owner is missing", () => {
   const result = resolveHyperMentionComposition({
     composedForTaskId: 1691,
     composedForProjectId: 339,
     currentTaskId: 9999,
     currentProjectId: 15,
-    currentTeamId: "team-other",
-    currentTeamTitle: "other",
-    currentRelatedTaskIds: [888],
+    currentOwnerId: 1,
   });
 
   assert.equal(result.taskId, 1691);
   assert.equal(result.projectId, 339);
-  assert.equal(result.teamId, undefined);
-  assert.equal(result.teamTitle, undefined);
   assert.equal(result.ownerId, undefined);
   assert.deepEqual(result.taskIds, [1691]);
 });
@@ -84,18 +63,13 @@ test("falls back to live current values when composition is missing", () => {
     currentTaskId: 55,
     currentOwnerId: 6,
     currentProjectId: 15,
-    currentTeamId: "team-ht",
-    currentTeamTitle: "Hypertask",
-    currentRelatedTaskIds: [10, 20],
   });
 
   assert.deepEqual(result, {
     taskId: 55,
     ownerId: 6,
     projectId: 15,
-    teamId: "team-ht",
-    teamTitle: "Hypertask",
-    taskIds: [55, 10, 20],
+    taskIds: [55],
   });
 });
 
@@ -105,6 +79,6 @@ test("source helper stays all-or-nothing on composedForTaskId", () => {
     "utf8",
   );
   assert.match(source, /const useComposed = input\.composedForTaskId != null/);
-  assert.match(source, /composedRelatedTaskIds \?\? \[\]/);
-  assert.match(source, /currentRelatedTaskIds \?\? \[\]/);
+  assert.match(source, /composedForProjectId/);
+  assert.doesNotMatch(source, /composedRelatedTaskIds/);
 });
