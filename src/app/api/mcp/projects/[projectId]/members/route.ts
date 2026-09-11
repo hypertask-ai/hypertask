@@ -230,6 +230,21 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     const emailToAdd = target.email;
+    const existingEmailUser = await prisma.user.findFirst({
+      where: { email: emailToAdd },
+      select: { id: true, displayName: true, email: true },
+    });
+    const existingEmailMember = existingEmailUser
+      ? await prisma.member.findFirst({
+          where: {
+            projectId,
+            userId: existingEmailUser.id,
+            agentId: null,
+          },
+          select: { id: true },
+        })
+      : null;
+
     const result = await addMemberController(ctx.user.id, projectId, [emailToAdd]);
 
     if (result.status !== 200) {
@@ -260,23 +275,25 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     // Email belonged to an existing team member; addMemberController added them.
-    const addedUser = await prisma.user.findFirst({
-      where: { email: emailToAdd },
-      select: { id: true, displayName: true, email: true },
-    });
-    if (addedUser) {
-      const member = await prisma.member.findFirst({
-        where: { projectId, userId: addedUser.id, agentId: null },
-        select: { id: true },
-      });
+    if (existingEmailUser) {
+      const member =
+        existingEmailMember ??
+        (await prisma.member.findFirst({
+          where: { projectId, userId: existingEmailUser.id, agentId: null },
+          select: { id: true },
+        }));
       if (member) {
         return NextResponse.json(
-          mcpAddedMemberResponse(projectId, "added", {
-            id: member.id,
-            userId: addedUser.id,
-            displayName: addedUser.displayName,
-            email: addedUser.email,
-          }),
+          mcpAddedMemberResponse(
+            projectId,
+            existingEmailMember ? "already_member" : "added",
+            {
+              id: member.id,
+              userId: existingEmailUser.id,
+              displayName: existingEmailUser.displayName,
+              email: existingEmailUser.email,
+            },
+          ),
           { status: 200 }
         );
       }
