@@ -19,6 +19,11 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Cookie-authenticated side-panel fields. Match comments getByTask so a
+  // realtime refetch cannot reuse a shared CDN snapshot (HTPR-6281 QA #2).
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Vary", "Cookie");
+
   if (req.method !== "GET") {
     return res.status(405).json({ message: "Method not allowed" });
   }
