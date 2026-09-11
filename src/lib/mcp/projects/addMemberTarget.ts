@@ -33,7 +33,7 @@ export function resolveMcpAddMemberTarget(userToAdd: unknown): McpAddMemberTarge
     return { kind: "user_id", userId: userToAdd };
   }
 
-  if (isNonEmptyString(userToAdd) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userToAdd)) {
+  if (isNonEmptyString(userToAdd) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userToAdd.trim())) {
     return { kind: "email", email: userToAdd.trim() };
   }
 

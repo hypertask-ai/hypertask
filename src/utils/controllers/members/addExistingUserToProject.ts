@@ -93,7 +93,12 @@ export async function addExistingUserToProject(
     select: { id: true },
   });
   if (existingMember) {
-    await expirePendingInvites(projectId, targetUser.email);
+    await expirePendingInvites(projectId, targetUser.email).catch((error) => {
+      console.error(
+        "[addExistingUserToProject] failed to expire pending invites:",
+        error,
+      );
+    });
     return {
       ok: true,
       outcome: "already_member",
