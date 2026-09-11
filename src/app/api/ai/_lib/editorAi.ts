@@ -69,6 +69,7 @@ import {
   excludeLoadedTaskRows,
   wrapTaskWriterContext,
 } from "@/app/api/ai/_lib/taskWriterPrompt";
+import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 import {
   createBoardTemplatesBlock,
   type BoardTemplateContext,
@@ -1361,6 +1362,8 @@ export async function retrieveTaskWriterContext(args: {
   prompt: string;
   aiMode?: string | null;
   taskIds?: number[];
+  /** HTPR-6363: keep comment rows when a busy board fills the task budget. */
+  reserveCommentBudget?: boolean;
 }) {
   const taskIds = (args.taskIds ?? []).filter((id) => Number.isInteger(id));
   const projectIds = args.projectIds?.length
@@ -1389,18 +1392,26 @@ export async function retrieveTaskWriterContext(args: {
   // Full content for every supplied ticket is loaded separately. Exclude those
   // tickets from semantic results so a prompt-similar comment is not repeated
   // and accidentally weighted more heavily than the rest of its thread.
-  const { taskRows, commentRows } = excludeLoadedTaskRows({
+  const excluded = excludeLoadedTaskRows({
     taskRows: taskRowsRaw,
     commentRows: commentRowsRaw,
     loadedTaskIds: taskIds,
   });
+  const { taskRows, commentRows } = args.reserveCommentBudget
+    ? mergeTaskWriterContextBudget(excluded)
+    : {
+        taskRows: excluded.taskRows,
+        commentRows: excluded.commentRows,
+      };
 
-  const projectContext = [
-    ...taskRows.map(taskRowToContext),
-    ...commentRows.map(commentRowToContext),
-  ]
-    .slice(0, 50)
-    .join("\n\n");
+  const rankedRows = args.reserveCommentBudget
+    ? [...taskRows.map(taskRowToContext), ...commentRows.map(commentRowToContext)]
+    : [...taskRows.map(taskRowToContext), ...commentRows.map(commentRowToContext)].slice(
+        0,
+        50
+      );
+
+  const projectContext = rankedRows.join("\n\n");
 
   return [projectContext, customInstructionFileContext]
     .filter(Boolean)

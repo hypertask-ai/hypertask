@@ -26,11 +26,17 @@ function escapeContextValue(value: string) {
 export function formatTaskWriterRetrievedContext(args: {
   currentTaskContext: string;
   relatedContext: string;
+  relatedCandidates?: string;
+  styleExamples?: string;
+  boardVocabulary?: string;
 }) {
   return [
     args.currentTaskContext
       ? `<CURRENT_TICKET_CONTEXT>\n${escapeContextValue(args.currentTaskContext)}\n</CURRENT_TICKET_CONTEXT>`
       : "",
+    args.relatedCandidates || "",
+    args.styleExamples || "",
+    args.boardVocabulary || "",
     args.relatedContext
       ? `<RELATED_CONTEXT>\n${escapeContextValue(args.relatedContext)}\n</RELATED_CONTEXT>`
       : "",

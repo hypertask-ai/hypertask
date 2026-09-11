@@ -107,6 +107,7 @@ interface AITaskWriterContextType {
     prompt: string,
     loadingText?: string,
     requestKind?: "manual" | "auto-description",
+    options?: { userRetrievalTexts?: string[] },
   ) => Promise<void>;
   retryLastRequest: () => Promise<void>;
   navigateResponse: (index: number) => void;
@@ -844,10 +845,17 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
         ${prompt}${currentAttachmentInfo}`;
     }
 
+    // HTPR-6363: board search uses user-authored briefs only, not AI prose.
+    const userRetrievalTexts = [
+      ...responseHistory.map((item) => item.userPrompt),
+      prompt,
+    ].filter((text) => Boolean(text?.trim()));
+
     await originalSendAIRequest(
       finalPrompt,
       loadingTextParam,
       requestKindOverride,
+      { userRetrievalTexts },
     );
   }, [originalSendAIRequest, responseHistory, currentResponseIndex, aiResponse, setLoadingText, currentAttachments, isByokBlocked]);
 
