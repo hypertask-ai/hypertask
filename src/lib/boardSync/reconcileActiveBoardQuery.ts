@@ -7,6 +7,7 @@ import {
 
 type BoardQueryClient = Pick<
   QueryClient,
+  | "cancelQueries"
   | "fetchQuery"
   | "getQueryData"
   | "invalidateQueries"
@@ -46,8 +47,12 @@ export async function reconcileActiveBoardTasks(
 ): Promise<void> {
   let payload;
   try {
+    const queryKey = BOARD_TASKS_KEY(projectId, userId);
+    // A live change must not join a prefetch that started before the event.
+    // fetchQuery shares that in-flight promise, so cancel it first (HTPR-5690).
+    await queryClient.cancelQueries({ queryKey, exact: true }, { revert: false });
     payload = await queryClient.fetchQuery({
-      queryKey: BOARD_TASKS_KEY(projectId, userId),
+      queryKey,
       queryFn: () => fetchBoardTasks(projectId, userId),
       staleTime: 0,
     });

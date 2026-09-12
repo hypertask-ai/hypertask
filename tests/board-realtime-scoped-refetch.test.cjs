@@ -57,6 +57,9 @@ const buildQueryClient = (
         if (fetchShouldThrow) throw new Error("forbidden");
         return changedPayload;
       },
+      cancelQueries: async (filters) => {
+        operations.push(["cancel", filters.queryKey]);
+      },
       getQueryData: (queryKey) =>
         queryKey[0] === PROJECTS_ALL_KEY[0] ? cached : undefined,
       setQueryData: (queryKey, value) => {
@@ -78,7 +81,19 @@ test("a board change event fetches only that board, never the whole project list
 
   await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
 
-  assert.deepEqual(operations, [["fetch", ["boardTasks", USER_ID, PROJECT_ID]]]);
+  assert.deepEqual(operations, [
+    ["cancel", ["boardTasks", USER_ID, PROJECT_ID]],
+    ["fetch", ["boardTasks", USER_ID, PROJECT_ID]],
+  ]);
+});
+
+test("a board change cancels the in-flight board query before fetching", async () => {
+  const { queryClient, operations } = buildQueryClient(buildProjects());
+
+  await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
+
+  assert.deepEqual(operations[0], ["cancel", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[1], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
 });
 
 test("a board change event patches only the changed project into the account list", async () => {
@@ -100,14 +115,15 @@ test("a board change with no account list falls back to the full reconcile", asy
 
   await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
 
-  assert.deepEqual(operations[0], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[0], ["cancel", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[1], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
   assert.equal(
-    operations[1][1].predicate({
+    operations[2][1].predicate({
       queryKey: ["boardTasks", USER_ID, PROJECT_ID],
     }),
     true,
   );
-  assert.deepEqual(operations[2], ["refetch", PROJECTS_ALL_KEY]);
+  assert.deepEqual(operations[3], ["refetch", PROJECTS_ALL_KEY]);
 });
 
 test("a board missing from the account list falls back to the full reconcile", async () => {
@@ -117,8 +133,9 @@ test("a board missing from the account list falls back to the full reconcile", a
 
   await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
 
-  assert.deepEqual(operations[0], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
-  assert.deepEqual(operations[2], ["refetch", PROJECTS_ALL_KEY]);
+  assert.deepEqual(operations[0], ["cancel", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[1], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[3], ["refetch", PROJECTS_ALL_KEY]);
 });
 
 test("a response fetched under another account never patches the current list", async () => {
@@ -126,8 +143,9 @@ test("a response fetched under another account never patches the current list", 
 
   await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
 
-  assert.deepEqual(operations[0], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
-  assert.deepEqual(operations[2], ["refetch", PROJECTS_ALL_KEY]);
+  assert.deepEqual(operations[0], ["cancel", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[1], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[3], ["refetch", PROJECTS_ALL_KEY]);
 });
 
 test("a rejected board fetch falls back to the full reconcile", async () => {
@@ -137,8 +155,9 @@ test("a rejected board fetch falls back to the full reconcile", async () => {
 
   await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
 
-  assert.deepEqual(operations[0], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
-  assert.deepEqual(operations[2], ["refetch", PROJECTS_ALL_KEY]);
+  assert.deepEqual(operations[0], ["cancel", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[1], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[3], ["refetch", PROJECTS_ALL_KEY]);
 });
 
 test("the full reconcile still expires the board snapshot and refetches the list", async () => {
