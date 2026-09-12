@@ -123,14 +123,14 @@ test("handled chat errors unwrap non-Error provider payloads", () => {
 
   assert.equal(
     errorMessage({
-      error: { message: "AI Gateway rejected xai/grok-4.1-fast-non-reasoning" },
+      error: { message: "AI Gateway rejected spacexai/grok-4.1-fast-non-reasoning" },
       statusCode: 404,
     }),
-    "AI Gateway rejected xai/grok-4.1-fast-non-reasoning",
+    "AI Gateway rejected spacexai/grok-4.1-fast-non-reasoning",
   );
   assert.match(
     routeSource,
-    /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.modelId,\s*provider: selected\.usageProvider,\s*\}\)/,
+    /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.resolvedModelId,\s*provider: selected\.usageProvider,\s*\}\)/,
   );
   assert.match(
     routeSource,
