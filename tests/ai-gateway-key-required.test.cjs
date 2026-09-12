@@ -15,6 +15,47 @@ function loadModelProvider() {
   return jiti(path.join(root, "src/app/api/ai/_lib/modelProvider.ts"));
 }
 
+test("Vertex-only Grok Fast falls back to grok-4.20 on the Gateway", () => {
+  delete process.env.AI_GATEWAY_API_KEY;
+  delete process.env.AI_GATEWAY_ENABLED;
+  const {
+    grokFastGatewayFallbackModels,
+    gatewayProviderOptionsForModel,
+    resolveGatewayModel,
+  } = loadModelProvider();
+
+  assert.deepEqual(
+    grokFastGatewayFallbackModels("xai/grok-4.1-fast-non-reasoning"),
+    [
+      "spacexai/grok-4.1-fast-non-reasoning",
+      "spacexai/grok-4.20-non-reasoning",
+    ],
+  );
+  assert.deepEqual(
+    grokFastGatewayFallbackModels("xai/grok-4.1-fast-reasoning"),
+    ["spacexai/grok-4.1-fast-reasoning", "spacexai/grok-4.20-reasoning"],
+  );
+  assert.equal(
+    grokFastGatewayFallbackModels("xai/grok-4.20-non-reasoning"),
+    undefined,
+  );
+
+  const model = resolveGatewayModel(
+    "xai/grok-4.1-fast-non-reasoning",
+    "vck_team_inference",
+  );
+  const options = gatewayProviderOptionsForModel(model, "chat", {
+    teamId: "team-1",
+  });
+  assert.deepEqual(options.gateway.models, [
+    "spacexai/grok-4.1-fast-non-reasoning",
+    "spacexai/grok-4.20-non-reasoning",
+  ]);
+  assert.ok(options.gateway.tags.includes("chat"));
+  assert.ok(options.gateway.tags.includes("team:team-1"));
+  console.log("grok fast gateway fallback verification passed");
+});
+
 test("gateway inference uses the spacexai Grok catalog slug", () => {
   delete process.env.AI_GATEWAY_API_KEY;
   delete process.env.AI_GATEWAY_ENABLED;

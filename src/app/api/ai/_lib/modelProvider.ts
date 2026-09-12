@@ -69,8 +69,36 @@ export type AiGatewayTags = {
 export type GatewayTaggedProviderOptions = AiProviderOptions & {
   gateway: {
     tags: string[];
+    models?: string[];
   };
 };
+
+// ponytail: grok-4.1-fast is Vertex-only on the live Gateway. Team keys
+// that cannot use Vertex then have no provider and chat dies. grok-4.20
+// still has native xAI. Drop this when 4.1 has an xAI endpoint again.
+const GROK_FAST_GATEWAY_FALLBACKS: Record<string, string> = {
+  "grok-4.1-fast-non-reasoning": "grok-4.20-non-reasoning",
+  "grok-4.1-fast-reasoning": "grok-4.20-reasoning",
+};
+
+export function grokFastGatewayFallbackModels(
+  modelSlug: string | undefined,
+): string[] | undefined {
+  if (!modelSlug) return undefined;
+  const catalogSlug = gatewayCatalogModelSlug(modelSlug);
+  const separator = catalogSlug.lastIndexOf("/");
+  const name = separator >= 0 ? catalogSlug.slice(separator + 1) : catalogSlug;
+  const fallbackName = GROK_FAST_GATEWAY_FALLBACKS[name];
+  if (!fallbackName) return undefined;
+  const prefix = separator >= 0 ? catalogSlug.slice(0, separator + 1) : "";
+  return [catalogSlug, `${prefix}${fallbackName}`];
+}
+
+function languageModelId(model: LanguageModel | ImageModel | string): string | undefined {
+  if (typeof model === "string") return model;
+  const modelId = (model as { modelId?: unknown }).modelId;
+  return typeof modelId === "string" ? modelId : undefined;
+}
 
 function aiGatewayEnabledValue() {
   return process.env.AI_GATEWAY_ENABLED?.trim().toLowerCase();
@@ -334,7 +362,13 @@ export function gatewayProviderOptionsForModel(
     gatewayTags.push(`user:${tags.userId}`);
   }
 
-  return { gateway: { tags: gatewayTags } };
+  const models = grokFastGatewayFallbackModels(languageModelId(model));
+  return {
+    gateway: {
+      tags: gatewayTags,
+      ...(models ? { models } : {}),
+    },
+  };
 }
 
 export function mergeAiProviderOptions(
@@ -361,8 +395,10 @@ export function providerOptionsForAiModel(
   tags?: AiGatewayTags,
   modelOption?: TAiModelOption | null,
 ): AiProviderOptions | undefined {
+  const optionFallbacks = grokFastGatewayFallbackModels(modelOption?.model);
   return mergeAiProviderOptions(
     gatewayProviderOptionsForModel(model, feature, tags),
+    optionFallbacks ? { gateway: { models: optionFallbacks } } : undefined,
     modelOption?.providerOptions,
   );
 }
