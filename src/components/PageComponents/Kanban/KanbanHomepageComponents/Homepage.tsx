@@ -6,6 +6,7 @@ import Section, { LARGE_BOARD_PROGRESSIVE_RENDER_THRESHOLD } from "../KanbanSect
 // const Section = dynamic(() => {return import("../components/section")})
 const HypertasksCommands = React.lazy(() => import("../../../commands"));
 import {
+  activeBuiltinViewsAtom,
   activeItemAtom,
   showCommandsAtom,
   appShellRailAtom,
@@ -47,6 +48,8 @@ import { useBoardRealtime } from "@/hooks/realtime/useBoardRealtime";
 import { nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
 import axios from "axios";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
+import useRevealFocusOnViewSwitch from "@/hooks/Homepage/Views/useRevealFocusOnViewSwitch";
+import { getActiveBoardViewId } from "@/lib/constants/builtinViews";
 import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   applyVisibleSectionOrder,
@@ -96,6 +99,16 @@ const HomePage = ({
 ) => {
   const { secondaryStartupEnabled } = useBoardStartup();
   const store = useStore();
+  const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
+  const getFocusedTaskId = useCallback(
+    () => store.get(activeItemAtom),
+    [store],
+  );
+  useRevealFocusOnViewSwitch({
+    projectId: _currentProject.id,
+    viewId: getActiveBoardViewId(_currentProject, activeBuiltinViews),
+    getFocusedTaskId,
+  });
   const { sections, setSections, sectionsToDisplay, setSectionsToDisplay, lastgClick, onDragEndHandler, spaceship } = useHandleKeyDownOperations({ initialSections: _sections, handleBoardChange, filteredSections })
   // Ctrl+F search filters at render off the Recoil keyword, so it survives
   // navigating into a task and back (the board unmounts, the atom does not).
