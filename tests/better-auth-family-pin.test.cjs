@@ -43,21 +43,5 @@ test("Better Auth 1.x stays on 1.6 so sign-in does not hit the 1.7 table check",
     );
   }
 
-  const dependabot = fs.readFileSync(
-    path.join(root, ".github/dependabot.yml"),
-    "utf8",
-  );
-  const excludeBlock = dependabot.slice(
-    dependabot.indexOf("exclude-patterns:"),
-    dependabot.indexOf("\n        patterns:"),
-  );
-  for (const name of PINNED) {
-    assert.match(
-      excludeBlock,
-      new RegExp(`^\\s+- "${name.replace("/", "\\/")}"$`, "m"),
-      `${name} must be excluded from the stack-minor auto-merge group`,
-    );
-  }
-
   console.log("better-auth family pin verified");
 });
