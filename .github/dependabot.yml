@@ -38,12 +38,16 @@ updates:
         applies-to: version-updates
         # Pre-1.0 packages are excluded on purpose: their "minor" bumps are
         # semver majors (0.3.7 -> 0.4.5 breaks), and one of them in the group
-        # would push the WHOLE grouped PR into the major lane. Excluded, they
-        # arrive as individual PRs that dependabot-stack.yml classifies by
-        # version and tickets when needed. Add new pre-1.0 dependencies here;
-        # the workflow's body-table check backstops anything missed.
+        # would push the WHOLE grouped PR into the major lane. Better Auth 1.x
+        # is also excluded: 1.6 -> 1.7 is a semver minor that broke sign-in
+        # (HTPR-6390 / HTPR-6395). Excluded packages arrive as individual PRs
+        # that dependabot-stack.yml classifies by version and tickets when
+        # needed. The workflow's body-table check backstops anything missed.
         exclude-patterns:
           - "stripe-cli"
+          - "better-auth"
+          - "@better-auth/api-key"
+          - "@better-auth/passkey"
           - "@better-auth/infra"
           - "@floating-ui/react"
         patterns:
