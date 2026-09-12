@@ -49,12 +49,12 @@ test("default settings resolve to Gemini", () => {
   });
 });
 
-test("disabling Google resolves to Grok 4.1 Fast", () => {
+test("disabling Google resolves to GPT-5.4 Mini", () => {
   assert.deepEqual(
     resolveSystemModel("summaries", { providers: { google: false } }),
     {
-      provider: "xai",
-      model: "xai/grok-4.1-fast-non-reasoning",
+      provider: "openai",
+      model: "openai/gpt-5.4-mini",
     },
   );
 });

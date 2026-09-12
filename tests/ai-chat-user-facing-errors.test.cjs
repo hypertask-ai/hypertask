@@ -123,18 +123,14 @@ test("handled chat errors unwrap non-Error provider payloads", () => {
 
   assert.equal(
     errorMessage({
-      error: { message: "AI Gateway rejected spacexai/grok-4.1-fast-non-reasoning" },
+      error: { message: "AI Gateway rejected google/gemini-3.5-flash-lite" },
       statusCode: 404,
     }),
-    "AI Gateway rejected spacexai/grok-4.1-fast-non-reasoning",
+    "AI Gateway rejected google/gemini-3.5-flash-lite",
   );
   assert.match(
     routeSource,
     /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.resolvedModelId,\s*provider: selected\.usageProvider,\s*\}\)/,
-  );
-  assert.match(
-    routeSource,
-    /model\.startsWith\("xai\/"\) \|\| model\.startsWith\("spacexai\/"\)/,
   );
   console.log("chat error unwrap verification passed");
 });

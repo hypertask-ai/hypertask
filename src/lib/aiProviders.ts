@@ -80,18 +80,6 @@ export const AI_PROVIDERS: TAiProviderInfo[] = [
       "https://generativelanguage.googleapis.com/v1beta/openai",
   },
   {
-    key: "xai",
-    label: "xAI",
-    defaultEnabled: true,
-    chinaHosted: false,
-    requestDestination: "xAI",
-    byokKey: "xai",
-    keyUrl: "https://console.x.ai",
-    keyUrlLabel: "console.x.ai",
-    keyPlaceholder: "Enter your xAI API key",
-    openAiCompatibleBaseUrl: "https://api.x.ai/v1",
-  },
-  {
     key: "deepseek",
     label: "DeepSeek",
     defaultEnabled: false,
@@ -291,6 +279,7 @@ export function resolveTeamProviderEnabled(
   settings: unknown,
   provider: TAiProviderKey,
 ): boolean {
+  if (!PROVIDER_BY_KEY.has(provider)) return false;
   if (
     isGdprSafeModeEnabled(settings) &&
     PROVIDER_BY_KEY.get(provider)?.chinaHosted

@@ -807,20 +807,20 @@ test("task writer option ids map to provider options and legacy model strings fa
     /paid plan or your own API key/,
   );
 
-  const paidTeamGrok = await selectTaskWriterModel({
+  const paidTeamGemini = await selectTaskWriterModel({
     sourceSelected: "gateway",
-    modelSelected: "grok-4.5",
-    modelOptionId: "grok-4.5",
+    modelSelected: "gemini-3.6-flash",
+    modelOptionId: "gemini-3.6-flash",
     byokProviderFlags: [],
     teamContext: { teamId: "team_pro", settings: {} },
   });
-  assert.equal(paidTeamGrok.modelId, "xai/grok-4.5");
+  assert.equal(paidTeamGemini.modelId, "google/gemini-3.6-flash");
 
   await assert.rejects(
     selectTaskWriterModel({
       sourceSelected: "gateway",
-      modelSelected: "grok-4.5",
-      modelOptionId: "grok-4.5",
+      modelSelected: "gemini-3.6-flash",
+      modelOptionId: "gemini-3.6-flash",
       byokProviderFlags: [],
     }),
     /paid plan or your own API key/,
@@ -904,8 +904,6 @@ test("model and effort dimensions resolve every supported provider configuration
   assert.equal(getAiEffortLabel("gpt-5.5", "high"), "Thinking");
   assert.equal(getAiEffortLabel("claude-sonnet-5", "light"), "Instant");
   assert.equal(getAiEffortLabel("claude-opus-5", "high"), "Thinking");
-  assert.equal(getAiEffortLabel("grok-4.1-fast", "light"), "Instant");
-  assert.equal(getAiEffortLabel("grok-4.20", "high"), "Thinking");
 
   const openAiReasoning = (reasoningEffort) => ({
     openai: { reasoningEffort },
@@ -939,11 +937,6 @@ test("model and effort dimensions resolve every supported provider configuration
     ["glm-5.2", undefined, undefined],
     ["gemini-3.5-flash-lite", undefined, undefined],
     ["gemini-3.6-flash", undefined, undefined],
-    ["grok-4.1-fast", "light", undefined],
-    ["grok-4.1-fast", "high", undefined],
-    ["grok-4.20", "light", undefined],
-    ["grok-4.20", "high", undefined],
-    ["grok-4.5", "standard", undefined],
     ["claude-haiku-4.5", undefined, undefined],
     ["custom", undefined, undefined],
   ];
@@ -974,11 +967,11 @@ test("model and effort dimensions resolve every supported provider configuration
     "glm-5.2": ["glm-5.2", undefined],
     "gemini-3.1-flash-lite": ["gemini-3.5-flash-lite", undefined],
     "gemini-3.5-flash": ["gemini-3.6-flash", undefined],
-    "grok-4.1-fast-instant": ["grok-4.1-fast", "light"],
-    "grok-4.1-fast-thinking": ["grok-4.1-fast", "high"],
-    "grok-4.20-instant": ["grok-4.20", "light"],
-    "grok-4.20-thinking": ["grok-4.20", "high"],
-    "grok-4.5": ["grok-4.5", "standard"],
+    "grok-4.1-fast-instant": ["gpt-5.4-mini", undefined],
+    "grok-4.1-fast-thinking": ["gpt-5.4-mini", undefined],
+    "grok-4.20-instant": ["gpt-5.4-mini", undefined],
+    "grok-4.20-thinking": ["gpt-5.4-mini", undefined],
+    "grok-4.5": ["gpt-5.4-mini", undefined],
     "claude-haiku-4.5": ["claude-haiku-4.5", undefined],
     custom: ["custom", undefined],
   };
@@ -998,7 +991,6 @@ test("openai and claude require gateway or direct byok keys", () => {
   delete process.env.AI_GATEWAY_ENABLED;
 
   const { resolveAiModel } = loadTs("src/app/api/ai/_lib/modelProvider.ts");
-  const { getAiModelOptionById } = loadTs("src/lib/aiModelOptions.ts");
 
   assert.throws(
     () => resolveAiModel("openai", "gpt-5.4-mini"),
@@ -1026,20 +1018,6 @@ test("openai and claude require gateway or direct byok keys", () => {
   assert.equal(
     googleDirect.config.url({ path: "/chat/completions" }),
     "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-  );
-
-  const xaiDirect = resolveAiModel(
-    "gateway",
-    "xai/grok-4.1-fast-non-reasoning",
-    "xai-customer-key",
-    getAiModelOptionById("grok-4.1-fast-instant"),
-    "xai",
-  );
-  assert.equal(xaiDirect.config.provider, "openai.chat");
-  assert.equal(xaiDirect.modelId, "grok-4-1-fast-non-reasoning");
-  assert.equal(
-    xaiDirect.config.url({ path: "/chat/completions" }),
-    "https://api.x.ai/v1/chat/completions",
   );
 
   const customDirect = resolveAiModel("custom", "custom", {
@@ -1118,7 +1096,6 @@ test("provider defaults and explicit team settings resolve consistently", () => 
     "openai",
     "anthropic",
     "google",
-    "xai",
   ]);
   assert.equal(resolveTeamProviderEnabled(undefined, "deepseek"), false);
   assert.equal(
@@ -1155,7 +1132,7 @@ test("provider defaults and explicit team settings resolve consistently", () => 
       gdprSafeMode: true,
       providers: { openai: true, deepseek: true, moonshot: true },
     }),
-    ["openai", "anthropic", "google", "xai"],
+    ["openai", "anthropic", "google"],
   );
 
   const { shouldBlockAiDueToByokProvider } = loadTs(
@@ -1267,17 +1244,6 @@ test("disabled provider selections fall back and gateway-only models keep full s
   assert.equal(gatewayOnly.modelId, "deepseek/deepseek-v4-flash");
   assert.equal(gatewayOnly.model.config.provider, "gateway");
 
-  settings = { providers: { xai: true } };
-  const grok = await selectTaskWriterModel({
-    sourceSelected: "gateway",
-    modelOptionId: "grok-4.20-thinking",
-    projectId: 4338,
-    userId: 1000,
-  });
-  assert.equal(grok.provider, "gateway");
-  assert.equal(grok.modelId, "xai/grok-4.20-reasoning");
-  assert.equal(grok.model.config.provider, "gateway");
-  assert.equal(grok.providerOptions?.openai, undefined);
 });
 
 test("provider key routes a gateway catalog model direct before team and platform gateway keys", async () => {
