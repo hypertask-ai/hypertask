@@ -13,12 +13,9 @@ import {
 import { runRealtimeReconciliation } from "@/lib/realtime/latencyCanary";
 import { useFlag } from "@/hooks/useFlag";
 import { SCOPED_BOARD_REFETCH_FLAG } from "@/lib/flags/keys";
-import {
-  createBoardRealtimeEventHandler,
-  shouldUseScopedBoardReconcile,
-} from "@/hooks/realtime/boardRealtimeEventHandler";
+import { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEventHandler";
 
-export { createBoardRealtimeEventHandler } from "@/hooks/realtime/boardRealtimeEventHandler";
+export { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEventHandler";
 
 // Subscribes the open board to its realtime channel. On any change event
 // (from another user, another tab, or the CLI/MCP acting as you) it immediately
@@ -73,12 +70,8 @@ export function useBoardRealtime(
       const userId = options?.accountId;
       const reconcile = () =>
         Promise.all([
-          shouldUseScopedBoardReconcile({
-            scopedRefetch,
-            trigger,
-            userId,
-          })
-            ? runScopedReconcile(userId as number)
+          scopedRefetch && trigger === "event" && userId !== undefined
+            ? runScopedReconcile(userId)
             : reconcileActiveBoardQuery(queryClient, projectId),
           queryClient.refetchQueries({
             exact: true,

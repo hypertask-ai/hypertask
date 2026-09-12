@@ -19,7 +19,7 @@ const {
 const {
   shouldUseScopedBoardReconcile,
 } = jiti(
-  path.join(root, "src/hooks/realtime/boardRealtimeEventHandler.ts"),
+  path.join(root, "src/lib/realtime/boardRealtimeEventHandler.ts"),
 );
 
 const USER_ID = 6;
@@ -196,7 +196,7 @@ test("useBoardRealtime still wires the extracted handler and scoped route", () =
     "utf8",
   );
   assert.match(source, /createBoardRealtimeEventHandler/);
-  assert.match(source, /shouldUseScopedBoardReconcile/);
-  assert.match(source, /SCOPED_BOARD_REFETCH_FLAG/);
+  assert.match(source, /useFlag\(SCOPED_BOARD_REFETCH_FLAG\)/);
+  assert.match(source, /scopedRefetch && trigger === "event"/);
   assert.match(source, /reconcileActiveBoardTasks/);
 });
