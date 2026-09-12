@@ -10,27 +10,13 @@ const routeSource = fs.readFileSync(
   "utf8"
 );
 
-function compile(relativePath) {
-  return ts.transpileModule(
-    fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8"),
-    {
-      compilerOptions: {
-        esModuleInterop: true,
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2020,
-      },
-    },
-  ).outputText;
-}
-
 function loadToErrorMessage() {
-  const mod = { exports: {} };
-  new Function("module", "exports", "require", compile("src/lib/api/errorMessage.ts"))(
-    mod,
-    mod.exports,
-    require,
-  );
-  return mod.exports.toErrorMessage;
+  const jiti = require("jiti")(__filename, {
+    interopDefault: true,
+    alias: { "@": path.join(__dirname, "..", "src") },
+  });
+  return jiti(path.join(__dirname, "../src/lib/api/errorMessage.ts"))
+    .toErrorMessage;
 }
 
 function loadErrorFormatters(logs = []) {
