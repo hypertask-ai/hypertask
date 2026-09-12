@@ -190,9 +190,9 @@ export function gatewayCatalogModelSlug(modelSlug: string): string {
 }
 
 function gatewayPricingLookupSlugs(modelSlug: string): string[] {
-  const slugs = [modelSlug];
   const catalogSlug = gatewayCatalogModelSlug(modelSlug);
-  if (catalogSlug !== modelSlug) slugs.push(catalogSlug);
+  const slugs = [catalogSlug];
+  if (modelSlug !== catalogSlug) slugs.push(modelSlug);
   if (modelSlug.startsWith("spacexai/")) {
     slugs.push(`xai/${modelSlug.slice("spacexai/".length)}`);
   }

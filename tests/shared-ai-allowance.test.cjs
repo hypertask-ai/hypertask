@@ -1111,6 +1111,72 @@ test("shared allowance prices xai Grok from the spacexai catalog", async () => {
   }
 });
 
+test("shared allowance prefers spacexai pricing when both prefixes exist", async () => {
+  const redis = fakeRedis();
+  useRedis(redis);
+
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/models")) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "xai/grok-4.1-fast-non-reasoning",
+              pricing: { input: "0.01", output: "0.01" },
+            },
+            {
+              id: "spacexai/grok-4.1-fast-non-reasoning",
+              pricing: { input: "0", output: "0" },
+            },
+          ],
+        }),
+      );
+    }
+    if (value.includes("/report?")) {
+      return new Response(JSON.stringify({ results: [] }));
+    }
+    throw new Error(`Unexpected fetch ${value}`);
+  };
+
+  try {
+    const {
+      createSharedAllowanceMiddleware,
+      resetGatewayPricingCacheForTests,
+    } = loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
+    resetGatewayPricingCacheForTests();
+    const middleware = createSharedAllowanceMiddleware({
+      allowanceUsd: 1,
+      gatewayApiKey: "vck_shared",
+      modelSlug: "xai/grok-4.1-fast-non-reasoning",
+    });
+    const result = await middleware.wrapGenerate({
+      params: {
+        maxOutputTokens: 16_000,
+        prompt: "x".repeat(2000),
+        providerOptions: { gateway: { tags: ["chat", "team:team-1"] } },
+      },
+      model: {},
+      doStream: async () => {
+        throw new Error("unused");
+      },
+      doGenerate: async () => ({
+        content: [],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1 },
+          outputTokens: { total: 1 },
+        },
+        warnings: [],
+      }),
+    });
+    assert.deepEqual(result.content, []);
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("shared allowance fails closed when Gateway omits Grok pricing", async () => {
   const redis = fakeRedis();
   useRedis(redis);
