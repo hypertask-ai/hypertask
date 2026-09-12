@@ -10,6 +10,29 @@ const routeSource = fs.readFileSync(
   "utf8"
 );
 
+function compile(relativePath) {
+  return ts.transpileModule(
+    fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8"),
+    {
+      compilerOptions: {
+        esModuleInterop: true,
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2020,
+      },
+    },
+  ).outputText;
+}
+
+function loadToErrorMessage() {
+  const mod = { exports: {} };
+  new Function("module", "exports", "require", compile("src/lib/api/errorMessage.ts"))(
+    mod,
+    mod.exports,
+    require,
+  );
+  return mod.exports.toErrorMessage;
+}
+
 function loadErrorFormatters(logs = []) {
   const start = routeSource.indexOf("function errorMessage");
   assert.notEqual(start, -1, "errorMessage must exist in the chat route");
@@ -23,8 +46,9 @@ function loadErrorFormatters(logs = []) {
   return new Function(
     "console",
     "z",
+    "toErrorMessage",
     `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage };`
-  )(logger, z);
+  )(logger, z, loadToErrorMessage());
 }
 
 function loadChatRequestSchema() {
@@ -106,6 +130,23 @@ test("model-facing errorMessage still returns non-Prisma errors verbatim", () =>
   const message = "You do not have access to that board";
 
   assert.equal(errorMessage(new Error(message)), message);
+});
+
+test("handled chat errors unwrap non-Error provider payloads", () => {
+  const { errorMessage } = loadErrorFormatters();
+
+  assert.equal(
+    errorMessage({
+      error: { message: "AI Gateway rejected spacexai/grok-4.1-fast-non-reasoning" },
+      statusCode: 404,
+    }),
+    "AI Gateway rejected spacexai/grok-4.1-fast-non-reasoning",
+  );
+  assert.match(
+    routeSource,
+    /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.modelId,\s*provider: selected\.usageProvider,\s*\}\)/,
+  );
+  console.log("chat error unwrap verification passed");
 });
 
 test("request validation names an empty message without leaking Zod detail", () => {
