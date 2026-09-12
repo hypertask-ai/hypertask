@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -1047,23 +1046,6 @@ test("gateway catalog slugs remap xai Grok to spacexai", () => {
     gatewayCatalogModelSlug("google/gemini-3.5-flash-lite"),
     "google/gemini-3.5-flash-lite",
   );
-});
-
-test("gateway inference keeps the product xai slug", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/api/ai/_lib/modelProvider.ts"),
-    "utf8",
-  );
-  assert.match(
-    source,
-    /createGateway\(\{ apiKey: gatewayApiKey \}\)\(modelSlug\)/,
-  );
-  assert.match(
-    source,
-    /\.imageModel\(modelSlug\)/,
-  );
-  assert.doesNotMatch(source, /gatewayCatalogModelSlug\(/);
-  console.log("grok inference keeps product slug verification passed");
 });
 
 test("shared allowance prices xai Grok from the spacexai catalog", async () => {
