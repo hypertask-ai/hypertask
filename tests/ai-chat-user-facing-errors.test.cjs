@@ -108,6 +108,14 @@ test("model-facing errorMessage still returns non-Prisma errors verbatim", () =>
   assert.equal(errorMessage(new Error(message)), message);
 });
 
+test("model-facing errorMessage keeps a Gateway object message", () => {
+  const { errorMessage } = loadErrorFormatters();
+  assert.equal(
+    errorMessage({ message: "model spacexai/grok-4.1-fast-non-reasoning not found" }),
+    "model spacexai/grok-4.1-fast-non-reasoning not found",
+  );
+});
+
 test("request validation names an empty message without leaking Zod detail", () => {
   const logs = [];
   const { requestErrorMessage } = loadErrorFormatters(logs);

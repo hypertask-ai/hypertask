@@ -825,8 +825,16 @@ function errorMessage(error: unknown) {
   // Prisma/driver errors carry schema and query detail, so those stay internal.
   // Everything else is our own thrown message, which the model needs verbatim
   // to correct itself (validation errors, tool preconditions, ambiguity hints).
-  if (error instanceof Error && !error.name.startsWith("Prisma")) {
+  if (error instanceof Error) {
+    if (error.name.startsWith("Prisma")) {
+      console.error("[ai/chat/stream] internal error", error);
+      return "Sorry, an error occurred while processing your request.";
+    }
     return error.message;
+  }
+  if (error && typeof error === "object") {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
   }
   console.error("[ai/chat/stream] internal error", error);
   return "Sorry, an error occurred while processing your request.";
