@@ -195,6 +195,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       { key: "htpr-6160-inbox-archive-cluster", mode: "OWNER_AND_QA", updatedAt: null },
+      {
+        key: "htpr-6166-scoped-board-refetch",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
       { key: "htpr-6175-quick-entry-cards", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6176-flag-ticket-title", mode: "OWNER_AND_QA", updatedAt: null },
       {

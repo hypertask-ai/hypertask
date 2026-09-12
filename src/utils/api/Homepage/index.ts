@@ -216,6 +216,37 @@ export const prefetchBoard = async (queryClient:any, projectId:number, userId:nu
     }
 }
 
+// Merge a freshly-fetched board payload into just this project's ["projectsAll"]
+// cache entry, leaving every other project object untouched (same identity, so
+// their subtrees cannot re-render). Returns the patched project, or null when
+// the cache holds no such project to patch. Shared by loadBoardIntoCache (below)
+// and the board realtime reconcile (HTPR-6166).
+export const patchProjectIntoCache = (
+    queryClient:any,
+    projectId:number,
+    payload:BoardTasksPayload,
+    expectedAccountId?:number,
+):IProject|null => {
+    let loaded:IProject|null = null
+    queryClient.setQueryData(["projectsAll"], (allData:any) => {
+        if (!allData?.updatedProjects) return allData
+        if (
+            expectedAccountId != null &&
+            allData.accountId != null &&
+            allData.accountId !== expectedAccountId
+        ) {
+            return allData
+        }
+        const idx = allData.updatedProjects.findIndex((p:IProject)=>p.id===projectId)
+        if (idx < 0) return allData
+        loaded = hydrateBoardWithPayload(allData.updatedProjects[idx], payload)
+        const updatedProjects = [...allData.updatedProjects]
+        updatedProjects[idx] = loaded
+        return { ...allData, updatedProjects }
+    })
+    return loaded
+}
+
 // Lazy-load one board's tasks/views into the ["projectsAll"] cache and compute its
 // sections. Uses the prefetched side cache when warm (no network). Returns the
 // hydrated project (or the existing one if already loaded).
@@ -229,11 +260,7 @@ export const loadBoardIntoCache = async (queryClient:any, projectId:number, user
 
     const warm = queryClient.getQueryData(BOARD_TASKS_KEY(projectId, userId))
     const boardPayload = isBoardTasksPayload(warm) ? warm : await fetchBoardTasks(projectId, userId)
-    const loaded = hydrateBoardWithPayload(existing, boardPayload)
-    const updatedProjects = [...allData.updatedProjects]
-    updatedProjects[idx] = loaded
-    queryClient.setQueryData(["projectsAll"], { ...allData, updatedProjects })
-    return loaded
+    return patchProjectIntoCache(queryClient, projectId, boardPayload)
 }
 
 export const getAllProjects = async(

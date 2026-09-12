@@ -16,7 +16,7 @@ const {
   REALTIME_RECEIPT_TO_REQUEST_BUDGET_MS,
 } = jiti(path.join(root, "src/lib/realtime/latencyCanary.ts"));
 const { createBoardRealtimeEventHandler } = jiti(
-  path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
+  path.join(root, "src/hooks/realtime/boardRealtimeEventHandler.ts"),
 );
 const { createInboxRealtimeEventHandler } = jiti(
   path.join(root, "src/hooks/realtime/useInboxRealtime.ts"),

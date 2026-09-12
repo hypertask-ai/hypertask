@@ -6,19 +6,26 @@ import {
 } from "@/lib/realtime/client";
 import { projectPlanningQueryKey } from "@/lib/projectPlanning";
 import { BOARD_EVENT, boardChannel } from "@/lib/realtime/shared";
-import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
+import {
+  reconcileActiveBoardQuery,
+  reconcileActiveBoardTasks,
+} from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { runRealtimeReconciliation } from "@/lib/realtime/latencyCanary";
+import { useFlag } from "@/hooks/useFlag";
+import { SCOPED_BOARD_REFETCH_FLAG } from "@/lib/flags/keys";
+import {
+  createBoardRealtimeEventHandler,
+  shouldUseScopedBoardReconcile,
+} from "@/hooks/realtime/boardRealtimeEventHandler";
 
-export const createBoardRealtimeEventHandler = (
-  refetch: (trigger: "event") => void,
-) => {
-  return () => refetch("event");
-};
+export { createBoardRealtimeEventHandler } from "@/hooks/realtime/boardRealtimeEventHandler";
 
 // Subscribes the open board to its realtime channel. On any change event
 // (from another user, another tab, or the CLI/MCP acting as you) it immediately
-// expires the active board snapshot and refetches the ["projectsAll"] cache
-// that the whole board renders from.
+// reconciles the ["projectsAll"] cache that the whole board renders from: for a
+// change event, only the changed board's tasks are fetched and patched into the
+// list; a reconnect still refetches the whole list, because that is also when
+// account-wide access is re-proved. See HTPR-6166.
 // No echo suppression on purpose: the CLI acts as the same user, so your own
 // CLI edits must still refresh your own open board.
 export function useBoardRealtime(
@@ -26,8 +33,11 @@ export function useBoardRealtime(
   options?: { accountId?: number; enabled?: boolean },
 ): void {
   const queryClient = useQueryClient();
+  const scopedRefetch = useFlag(SCOPED_BOARD_REFETCH_FLAG);
   const wasConnected = useRef(false);
   const needsCatchUp = useRef(options?.enabled === false);
+  const scopedInFlight = useRef(false);
+  const scopedDirty = useRef(false);
 
   useEffect(() => {
     if (projectId == null || options?.enabled === false) {
@@ -38,20 +48,43 @@ export function useBoardRealtime(
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 
+    const runScopedReconcile = async (userId: number) => {
+      if (scopedInFlight.current) {
+        scopedDirty.current = true;
+        return;
+      }
+      scopedInFlight.current = true;
+      try {
+        do {
+          scopedDirty.current = false;
+          await reconcileActiveBoardTasks(queryClient, projectId, userId);
+        } while (scopedDirty.current);
+      } finally {
+        scopedInFlight.current = false;
+      }
+    };
+
     const refetch = (trigger: "event" | "reconnect" = "event") => {
+      const userId = options?.accountId;
       const reconcile = () =>
         Promise.all([
-          reconcileActiveBoardQuery(queryClient, projectId),
+          shouldUseScopedBoardReconcile({
+            scopedRefetch,
+            trigger,
+            userId,
+          })
+            ? runScopedReconcile(userId as number)
+            : reconcileActiveBoardQuery(queryClient, projectId),
           queryClient.refetchQueries({
             exact: true,
             queryKey: projectPlanningQueryKey(projectId),
           }),
         ]).then(() => undefined);
-      if (options?.accountId == null) {
+      if (userId === undefined) {
         void reconcile().catch(() => undefined);
       } else {
         void runRealtimeReconciliation({
-          accountId: options.accountId,
+          accountId: userId,
           surface: "board",
           trigger,
           reconcile,
@@ -116,5 +149,11 @@ export function useBoardRealtime(
       cancelled = true;
       unsubscribe?.();
     };
-  }, [options?.accountId, options?.enabled, projectId, queryClient]);
+  }, [
+    options?.accountId,
+    options?.enabled,
+    projectId,
+    queryClient,
+    scopedRefetch,
+  ]);
 }

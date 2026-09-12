@@ -41,6 +41,7 @@ import {
   HTPR_6320_AI_OBSERVABILITY_FLAG,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
+  SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
 } from "@/lib/flags/keys";
 
@@ -357,6 +358,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Sorts the Agent Chat list by most recent chat message instead of a fixed order, and reorders live as messages arrive.",
+  },
+  {
+    key: SCOPED_BOARD_REFETCH_FLAG,
+    shippedOn: "2026-09-12",
+    description:
+      "On a live board change, reloads only the board that changed instead of every board in the account, so updates appear with one request. Other boards' names still refresh when the tab reconnects or you move between boards.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
