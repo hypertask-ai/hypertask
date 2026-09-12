@@ -45,23 +45,28 @@ export function useBoardRealtime(
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
-    let scopedInFlight = false;
     let scopedDirty = false;
+    let scopedDrain: Promise<void> | null = null;
 
-    const runScopedReconcile = async (userId: number) => {
-      if (scopedInFlight) {
-        scopedDirty = true;
+    const runScopedReconcile = async (userId: number): Promise<void> => {
+      scopedDirty = true;
+      if (scopedDrain) {
+        await scopedDrain;
+        if (scopedDirty) await runScopedReconcile(userId);
         return;
       }
-      scopedInFlight = true;
-      try {
-        do {
-          scopedDirty = false;
-          await reconcileActiveBoardTasks(queryClient, projectId, userId);
-        } while (scopedDirty);
-      } finally {
-        scopedInFlight = false;
-      }
+      scopedDrain = (async () => {
+        try {
+          do {
+            scopedDirty = false;
+            await reconcileActiveBoardTasks(queryClient, projectId, userId);
+          } while (scopedDirty);
+        } finally {
+          scopedDrain = null;
+        }
+      })();
+      await scopedDrain;
+      if (scopedDirty) await runScopedReconcile(userId);
     };
 
     const refetch = (trigger: "event" | "reconnect" = "event") => {
