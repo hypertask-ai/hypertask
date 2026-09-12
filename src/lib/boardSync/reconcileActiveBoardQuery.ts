@@ -44,20 +44,22 @@ export async function reconcileActiveBoardTasks(
   projectId: number,
   userId: number,
 ): Promise<void> {
+  let payload;
   try {
-    const payload = await queryClient.fetchQuery({
+    payload = await queryClient.fetchQuery({
       queryKey: BOARD_TASKS_KEY(projectId, userId),
       queryFn: () => fetchBoardTasks(projectId, userId),
       staleTime: 0,
     });
-    // Re-read the live cache at commit time. An account switch or a missing
-    // project during the request must not write a foreign payload.
-    if (!patchProjectIntoCache(queryClient, projectId, payload, userId)) {
-      await reconcileActiveBoardQuery(queryClient, projectId);
-    }
   } catch {
     // Access loss and fetch failures fall back to the account-wide path so a
     // revoked board cannot stay painted from the old cache.
+    await reconcileActiveBoardQuery(queryClient, projectId);
+    return;
+  }
+  // Re-read the live cache at commit time. An account switch or a missing
+  // project during the request must not write a foreign payload.
+  if (!patchProjectIntoCache(queryClient, projectId, payload, userId)) {
     await reconcileActiveBoardQuery(queryClient, projectId);
   }
 }

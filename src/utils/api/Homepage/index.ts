@@ -231,8 +231,9 @@ export const patchProjectIntoCache = (
     queryClient.setQueryData(["projectsAll"], (allData:any) => {
         if (!allData?.updatedProjects) return allData
         if (
-            expectedAccountId != null &&
-            allData.accountId != null &&
+            expectedAccountId !== undefined &&
+            allData.accountId !== undefined &&
+            allData.accountId !== null &&
             allData.accountId !== expectedAccountId
         ) {
             return allData
@@ -260,7 +261,7 @@ export const loadBoardIntoCache = async (queryClient:any, projectId:number, user
 
     const warm = queryClient.getQueryData(BOARD_TASKS_KEY(projectId, userId))
     const boardPayload = isBoardTasksPayload(warm) ? warm : await fetchBoardTasks(projectId, userId)
-    return patchProjectIntoCache(queryClient, projectId, boardPayload)
+    return patchProjectIntoCache(queryClient, projectId, boardPayload, userId)
 }
 
 export const getAllProjects = async(

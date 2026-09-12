@@ -36,8 +36,6 @@ export function useBoardRealtime(
   const scopedRefetch = useFlag(SCOPED_BOARD_REFETCH_FLAG);
   const wasConnected = useRef(false);
   const needsCatchUp = useRef(options?.enabled === false);
-  const scopedInFlight = useRef(false);
-  const scopedDirty = useRef(false);
 
   useEffect(() => {
     if (projectId == null || options?.enabled === false) {
@@ -47,20 +45,22 @@ export function useBoardRealtime(
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
+    let scopedInFlight = false;
+    let scopedDirty = false;
 
     const runScopedReconcile = async (userId: number) => {
-      if (scopedInFlight.current) {
-        scopedDirty.current = true;
+      if (scopedInFlight) {
+        scopedDirty = true;
         return;
       }
-      scopedInFlight.current = true;
+      scopedInFlight = true;
       try {
         do {
-          scopedDirty.current = false;
+          scopedDirty = false;
           await reconcileActiveBoardTasks(queryClient, projectId, userId);
-        } while (scopedDirty.current);
+        } while (scopedDirty);
       } finally {
-        scopedInFlight.current = false;
+        scopedInFlight = false;
       }
     };
 
