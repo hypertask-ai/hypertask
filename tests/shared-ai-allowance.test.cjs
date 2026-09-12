@@ -1034,6 +1034,141 @@ test("platform-funded image calls reserve from the same team allowance", async (
   }
 });
 
+test("gateway catalog slugs remap xai Grok to spacexai", () => {
+  const { gatewayCatalogModelSlug } = loadTs(
+    "src/app/api/ai/_lib/sharedAllowance.ts",
+  );
+  assert.equal(
+    gatewayCatalogModelSlug("xai/grok-4.1-fast-non-reasoning"),
+    "spacexai/grok-4.1-fast-non-reasoning",
+  );
+  assert.equal(
+    gatewayCatalogModelSlug("google/gemini-3.5-flash-lite"),
+    "google/gemini-3.5-flash-lite",
+  );
+});
+
+test("shared allowance prices xai Grok from the spacexai catalog", async () => {
+  const redis = fakeRedis();
+  useRedis(redis);
+
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/models")) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "spacexai/grok-4.1-fast-non-reasoning",
+              pricing: { input: "0.0000002", output: "0.0000005" },
+            },
+          ],
+        }),
+      );
+    }
+    if (value.includes("/report?")) {
+      return new Response(JSON.stringify({ results: [] }));
+    }
+    throw new Error(`Unexpected fetch ${value}`);
+  };
+
+  try {
+    const {
+      createSharedAllowanceMiddleware,
+      resetGatewayPricingCacheForTests,
+    } = loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
+    resetGatewayPricingCacheForTests();
+    const middleware = createSharedAllowanceMiddleware({
+      allowanceUsd: 1,
+      gatewayApiKey: "vck_shared",
+      modelSlug: "xai/grok-4.1-fast-non-reasoning",
+    });
+    const result = await middleware.wrapGenerate({
+      params: {
+        maxOutputTokens: 16,
+        prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+        providerOptions: { gateway: { tags: ["chat", "team:team-1"] } },
+      },
+      model: {},
+      doStream: async () => {
+        throw new Error("unused");
+      },
+      doGenerate: async () => ({
+        content: [],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: {
+          inputTokens: { total: 1 },
+          outputTokens: { total: 1 },
+        },
+        warnings: [],
+      }),
+    });
+    assert.deepEqual(result.content, []);
+    console.log("grok pricing alias verification passed");
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
+test("shared allowance fails closed when Gateway omits Grok pricing", async () => {
+  const redis = fakeRedis();
+  useRedis(redis);
+
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/models")) {
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "openai/gpt-5.4-mini",
+              pricing: { input: "0.0000004", output: "0.0000016" },
+            },
+          ],
+        }),
+      );
+    }
+    if (value.includes("/report?")) {
+      return new Response(JSON.stringify({ results: [] }));
+    }
+    throw new Error(`Unexpected fetch ${value}`);
+  };
+
+  try {
+    const {
+      createSharedAllowanceMiddleware,
+      resetGatewayPricingCacheForTests,
+    } = loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
+    resetGatewayPricingCacheForTests();
+    const middleware = createSharedAllowanceMiddleware({
+      allowanceUsd: 1,
+      gatewayApiKey: "vck_shared",
+      modelSlug: "xai/grok-missing-htpr-6414",
+    });
+    await assert.rejects(
+      middleware.wrapGenerate({
+        params: {
+          prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+          providerOptions: { gateway: { tags: ["chat", "team:team-1"] } },
+        },
+        model: {},
+        doStream: async () => {
+          throw new Error("unused");
+        },
+        doGenerate: async () => {
+          throw new Error("must not start inference");
+        },
+      }),
+      /AI Gateway pricing is unavailable for xai\/grok-missing-htpr-6414/,
+    );
+    console.log("grok pricing fail-closed verification passed");
+  } finally {
+    global.fetch = previousFetch;
+  }
+});
+
 test("price tiers two and three are premium while tier one stays included", () => {
   const { isPremiumAiModelKey } = loadTs("src/lib/aiModelOptions.ts");
   assert.equal(isPremiumAiModelKey("gpt-5.4-mini"), false);

@@ -93,6 +93,11 @@ let pricingCache:
   { expiresAt: number; models: Map<string, ModelPricing> } | undefined;
 let pricingPromise: Promise<Map<string, ModelPricing>> | undefined;
 
+export function resetGatewayPricingCacheForTests() {
+  pricingCache = undefined;
+  pricingPromise = undefined;
+}
+
 const finiteNonNegative = (value: unknown): number | null => {
   const parsed = typeof value === "string" ? Number(value) : value;
   return typeof parsed === "number" && Number.isFinite(parsed) && parsed >= 0
@@ -178,12 +183,29 @@ async function loadGatewayPricing(): Promise<Map<string, ModelPricing>> {
   }
 }
 
-async function modelPricing(modelSlug: string): Promise<ModelPricing> {
-  const pricing = (await loadGatewayPricing()).get(modelSlug);
-  if (!pricing) {
-    throw new Error(`AI Gateway pricing is unavailable for ${modelSlug}`);
+export function gatewayCatalogModelSlug(modelSlug: string): string {
+  return modelSlug.startsWith("xai/")
+    ? `spacexai/${modelSlug.slice("xai/".length)}`
+    : modelSlug;
+}
+
+function gatewayPricingLookupSlugs(modelSlug: string): string[] {
+  const slugs = [modelSlug];
+  const catalogSlug = gatewayCatalogModelSlug(modelSlug);
+  if (catalogSlug !== modelSlug) slugs.push(catalogSlug);
+  if (modelSlug.startsWith("spacexai/")) {
+    slugs.push(`xai/${modelSlug.slice("spacexai/".length)}`);
   }
-  return pricing;
+  return slugs;
+}
+
+async function modelPricing(modelSlug: string): Promise<ModelPricing> {
+  const models = await loadGatewayPricing();
+  for (const slug of gatewayPricingLookupSlugs(modelSlug)) {
+    const pricing = models.get(slug);
+    if (pricing) return pricing;
+  }
+  throw new Error(`AI Gateway pricing is unavailable for ${modelSlug}`);
 }
 
 function estimatePromptTokenUpperBound(prompt: unknown): number {
