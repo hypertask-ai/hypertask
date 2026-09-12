@@ -32,6 +32,13 @@ import {
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
 
+export class AiGatewayKeyRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiGatewayKeyRequiredError";
+  }
+}
+
 export { isCustomEndpointConfig };
 
 export type ModelProviderId =
@@ -214,7 +221,7 @@ export function resolveAiModel(
   }
 
   if (!directApiKey && gatewaySlug) {
-    throw new Error(
+    throw new AiGatewayKeyRequiredError(
       `A dedicated team AI Gateway key or direct BYOK key is required for ${provider} text inference.`,
     );
   }
@@ -277,7 +284,7 @@ export function resolveGatewayModel(
     return gatewayLanguageModel(modelSlug, teamKey);
   }
 
-  throw new Error(
+  throw new AiGatewayKeyRequiredError(
     `A dedicated team AI Gateway key is required to run "${modelSlug}".`,
   );
 }
@@ -293,7 +300,7 @@ export function resolveGatewayImageModel(
     return gatewayImageModel(modelSlug, teamKey);
   }
 
-  throw new Error(
+  throw new AiGatewayKeyRequiredError(
     `A dedicated team AI Gateway key is required to run "${modelSlug}".`,
   );
 }

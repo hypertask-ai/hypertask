@@ -169,7 +169,11 @@ test("model-selection errors remain user-actionable and pass through unchanged",
 test("expected plan-access guidance is not reported as a product bug", () => {
   assert.match(
     routeSource,
-    /if \(error instanceof Error && error\.name === "AiPlanAccessError"\) return;/
+    /error\.name === "AiPlanAccessError"/
+  );
+  assert.match(
+    routeSource,
+    /error\.name === "AiGatewayKeyRequiredError"/
   );
 
   const planGateSource = fs.readFileSync(

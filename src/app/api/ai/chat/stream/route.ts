@@ -924,7 +924,13 @@ function requestErrorMessage(
 
 async function reportHandledChatError(error: unknown, stage: string) {
   if (includedAllowanceError(error)) return;
-  if (error instanceof Error && error.name === "AiPlanAccessError") return;
+  if (
+    error instanceof Error &&
+    (error.name === "AiPlanAccessError" ||
+      error.name === "AiGatewayKeyRequiredError")
+  ) {
+    return;
+  }
   const normalized =
     error instanceof Error ? error : new Error(errorMessage(error));
   await reportError({
