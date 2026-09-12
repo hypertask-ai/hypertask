@@ -79,6 +79,7 @@ import {
 } from "@/lib/agentRuns/model";
 import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
+import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
@@ -836,8 +837,9 @@ const AgentChatClient = (props: IProp) => {
   };
 
   // Below 900px the three panes stack: roster list, then chat, and the details
-  // move behind an info button.
-  useEffect(() => {
+  // move behind an info button. useLayoutEffect so a reload on a phone does
+  // not paint the desktop three-pane shell for a frame.
+  useLayoutEffect(() => {
     const query = window.matchMedia("(max-width: 899px)");
     const onChange = () => {
       setIsNarrow(query.matches);
@@ -2478,6 +2480,12 @@ const AgentChatClient = (props: IProp) => {
       ? `${mobileAgentChatViewport.visibleHeight}px`
       : "100dvh";
   }
+  const mobileComposerBottomInset = isMbl
+    ? getAgentChatMobileBottomInset({
+        dockHeight: mobileAgentChatViewport?.dockHeight ?? 0,
+        keyboardInset: mobileAgentChatViewport?.bottomInset ?? 0,
+      })
+    : 0;
 
   if (isNarrow) {
     return (
@@ -2491,13 +2499,19 @@ const AgentChatClient = (props: IProp) => {
           // inset ourselves or the composer lands under the tab bar
           // (HTPR-6041 / HTPR-6407).
           // isMbl-gated: a merely-narrow desktop window has neither bar.
+          // max() keeps a 0px --mobile-dock-h from collapsing the fallback
+          // (reload / direct-open QA fail). Inline paddingBottom wins when
+          // the keyboard is open so the composer sits on the keyboard.
           isMbl &&
-            "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[var(--mobile-dock-h,64px)]",
+            "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[max(var(--mobile-dock-h,64px),64px)]",
           isMbl &&
             mobileLayoutEnabled &&
             "mobile-agent-chat min-h-0 overscroll-y-none",
         )}
-        style={{ height: mobileAgentChatHeight }}
+        style={{
+          height: mobileAgentChatHeight,
+          ...(isMbl ? { paddingBottom: mobileComposerBottomInset } : {}),
+        }}
       >
         {selectedAgent ? chatPane : rosterPane}
         {detailsSheet}

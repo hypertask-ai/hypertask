@@ -33,6 +33,34 @@ export interface MobileCommentViewportGeometry {
 const finiteNonNegative = (value: number) =>
   Number.isFinite(value) ? Math.max(0, value) : 0;
 
+/** Tab bar is h-16 plus the 1px top border. Used when --mobile-dock-h is 0px or short. */
+export const MOBILE_PRIMARY_DOCK_MIN_PX = 65;
+
+export const parseCssPixelLength = (value: string): number => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+};
+
+/**
+ * Agent Chat keeps the tab bar visible, unlike AI Chat which hides it while
+ * typing. A published 0px or short dock var must not drop the composer into
+ * the tab bar after a reload. When the keyboard is open, visibleHeight already
+ * ends at the keyboard, so extra dock padding would leave a dead gap.
+ */
+export const getAgentChatMobileBottomInset = ({
+  dockHeight,
+  keyboardInset,
+}: {
+  dockHeight: number;
+  keyboardInset: number;
+}): number => {
+  if (finiteNonNegative(keyboardInset) > 0) return 0;
+  return Math.max(
+    finiteNonNegative(dockHeight),
+    MOBILE_PRIMARY_DOCK_MIN_PX,
+  );
+};
+
 export const getMobileVisualViewportGeometry = ({
   layoutViewportHeight,
   visualViewportHeight,

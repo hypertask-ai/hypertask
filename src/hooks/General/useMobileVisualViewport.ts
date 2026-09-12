@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import {
   getMobileVisualViewportGeometry,
+  parseCssPixelLength,
   type MobileVisualViewportGeometry,
 } from "@/lib/mobileCommentViewport";
 
 export interface MobileVisualViewportState
   extends MobileVisualViewportGeometry {
   layoutHeight: number;
+  dockHeight: number;
 }
 
 export const useMobileVisualViewport = (enabled = true) => {
@@ -35,8 +37,13 @@ export const useMobileVisualViewport = (enabled = true) => {
           visualViewportHeight: visualViewport?.height ?? window.innerHeight,
           visualViewportOffsetTop: visualViewport?.offsetTop ?? 0,
         });
+        const dockHeight = parseCssPixelLength(
+          getComputedStyle(document.documentElement).getPropertyValue(
+            "--mobile-dock-h",
+          ),
+        );
 
-        setViewport({ layoutHeight, ...geometry });
+        setViewport({ layoutHeight, dockHeight, ...geometry });
       });
     };
 

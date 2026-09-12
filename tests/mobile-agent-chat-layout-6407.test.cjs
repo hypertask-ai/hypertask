@@ -123,6 +123,6 @@ test("closed AI layout does not double-pad /agents/chat", () => {
   // Agent Chat keeps its own chrome insets when the parent bails.
   assert.match(
     narrowLayout,
-    /mobile-tab-bar-content pt-\[var\(--mobile-top-bar-h\)\] pb-\[var\(--mobile-dock-h,64px\)\]/,
+    /mobile-tab-bar-content pt-\[var\(--mobile-top-bar-h\)\] pb-\[max\(var\(--mobile-dock-h,64px\),64px\)\]/,
   );
 });
