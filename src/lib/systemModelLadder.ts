@@ -21,7 +21,6 @@ export type SystemModel = {
 export const SYSTEM_MODEL_LADDERS = {
   fast: [
     { provider: "google", model: "google/gemini-3.5-flash-lite" },
-    { provider: "xai", model: "xai/grok-4.1-fast-non-reasoning" },
     { provider: "openai", model: "openai/gpt-5.4-mini" },
     { provider: "anthropic", model: "anthropic/claude-haiku-4.5" },
     { provider: "deepseek", model: "deepseek/deepseek-v4-flash" },

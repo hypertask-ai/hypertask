@@ -27,9 +27,6 @@ export type TAiModelKey =
   | "glm-5.2"
   | "gemini-3.5-flash-lite"
   | "gemini-3.6-flash"
-  | "grok-4.1-fast"
-  | "grok-4.20"
-  | "grok-4.5"
   | "claude-haiku-4.5"
   | "custom";
 
@@ -61,11 +58,6 @@ export type TAiModelOptionId =
   | "glm-5.2"
   | "gemini-3.5-flash-lite"
   | "gemini-3.6-flash"
-  | "grok-4.1-fast-instant"
-  | "grok-4.1-fast-thinking"
-  | "grok-4.20-instant"
-  | "grok-4.20-thinking"
-  | "grok-4.5"
   | "claude-haiku-4.5"
   | "custom";
 
@@ -179,25 +171,6 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
     priceTier: 2,
   },
   {
-    key: "grok-4.1-fast",
-    label: "Grok 4.1 Fast",
-    provider: "xai",
-    priceTier: 1,
-  },
-  {
-    key: "grok-4.20",
-    label: "Grok 4.20",
-    provider: "xai",
-    priceTier: 2,
-  },
-  {
-    key: "grok-4.5",
-    label: "Grok 4.5",
-    provider: "xai",
-    priceTier: 3,
-    premium: true,
-  },
-  {
     key: "custom",
     label: "Custom endpoint",
     provider: "custom",
@@ -235,8 +208,7 @@ export function getAiEffortLabel(
 ): string {
   if (
     modelKey === "gpt-5.5" ||
-    modelKey.startsWith("claude-") ||
-    modelKey.startsWith("grok-")
+    modelKey.startsWith("claude-")
   ) {
     return effort === "light" ? "Instant" : "Thinking";
   }
@@ -545,58 +517,6 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "gemini-3.6-flash",
   },
   {
-    id: "grok-4.1-fast-instant",
-    source: "gateway",
-    title: "Grok 4.1 Fast Instant",
-    model: "xai/grok-4.1-fast-non-reasoning",
-    directModel: "grok-4-1-fast-non-reasoning",
-    desc: "Fastest model we offer",
-    reasoning: "instant",
-    modelKey: "grok-4.1-fast",
-    effort: "light",
-  },
-  {
-    id: "grok-4.1-fast-thinking",
-    source: "gateway",
-    title: "Grok 4.1 Fast Thinking",
-    model: "xai/grok-4.1-fast-reasoning",
-    directModel: "grok-4-1-fast-reasoning",
-    desc: "Fast reasoning",
-    reasoning: "thinking",
-    modelKey: "grok-4.1-fast",
-    effort: "high",
-  },
-  {
-    id: "grok-4.20-instant",
-    source: "gateway",
-    title: "Grok 4.20 Instant",
-    model: "xai/grok-4.20-non-reasoning",
-    desc: "Fast general model",
-    reasoning: "instant",
-    modelKey: "grok-4.20",
-    effort: "light",
-  },
-  {
-    id: "grok-4.20-thinking",
-    source: "gateway",
-    title: "Grok 4.20 Thinking",
-    model: "xai/grok-4.20-reasoning",
-    desc: "Deep reasoning",
-    reasoning: "thinking",
-    modelKey: "grok-4.20",
-    effort: "high",
-  },
-  {
-    id: "grok-4.5",
-    source: "gateway",
-    title: "Grok 4.5",
-    model: "xai/grok-4.5",
-    desc: "xAI flagship",
-    reasoning: "thinking",
-    modelKey: "grok-4.5",
-    effort: "standard",
-  },
-  {
     id: "custom",
     source: "custom",
     title: "Custom endpoint",
@@ -643,6 +563,11 @@ const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
   "gemini-3.5-flash": "gemini-3.6-flash",
   "claude-opus-4-8-instant": "claude-opus-5-instant",
   "claude-opus-4-8-thinking": "claude-opus-5-thinking",
+  "grok-4.1-fast-instant": "gpt-5.4-mini",
+  "grok-4.1-fast-thinking": "gpt-5.4-mini",
+  "grok-4.20-instant": "gpt-5.4-mini",
+  "grok-4.20-thinking": "gpt-5.4-mini",
+  "grok-4.5": "gpt-5.4-mini",
 };
 
 export function getAiModelOptionById(
