@@ -138,6 +138,21 @@ test("a board missing from the account list falls back to the full reconcile", a
   assert.deepEqual(operations[3], ["refetch", PROJECTS_ALL_KEY]);
 });
 
+test("a cache with no account id never accepts a scoped patch", async () => {
+  const { queryClient, operations, cachedProjects } = buildQueryClient(
+    buildProjects(),
+    null,
+  );
+  const before = cachedProjects();
+
+  await reconcileActiveBoardTasks(queryClient, PROJECT_ID, USER_ID);
+
+  assert.equal(cachedProjects()[1], before[1]);
+  assert.deepEqual(operations[0], ["cancel", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[1], ["fetch", ["boardTasks", USER_ID, PROJECT_ID]]);
+  assert.deepEqual(operations[3], ["refetch", PROJECTS_ALL_KEY]);
+});
+
 test("a response fetched under another account never patches the current list", async () => {
   const { queryClient, operations } = buildQueryClient(buildProjects(), 99);
 

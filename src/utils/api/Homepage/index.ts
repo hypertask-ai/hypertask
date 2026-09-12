@@ -232,8 +232,6 @@ export const patchProjectIntoCache = (
         if (!allData?.updatedProjects) return allData
         if (
             expectedAccountId !== undefined &&
-            allData.accountId !== undefined &&
-            allData.accountId !== null &&
             allData.accountId !== expectedAccountId
         ) {
             return allData
