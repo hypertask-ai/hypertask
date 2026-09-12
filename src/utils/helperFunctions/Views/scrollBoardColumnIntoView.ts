@@ -99,6 +99,87 @@ type RevealBoardColumnOptions = {
  * screen even though the create request succeeded. Retry for up to five seconds
  * with one pending timer at a time, and stop as soon as the column is present.
  */
+export type ViewSwitchScrollState = {
+  projectId?: number;
+  viewId?: string;
+};
+
+/**
+ * HTPR-6333: keep the focused card, but do not keep the previous view's
+ * horizontal offset. First paint and board changes still leave the remembered
+ * card-navigation scroll alone.
+ */
+export const shouldRevealFocusOnViewSwitch = (
+  previous: ViewSwitchScrollState | null,
+  next: ViewSwitchScrollState,
+): boolean => {
+  if (!next.projectId || !next.viewId) return false;
+  if (!previous?.projectId || !previous.viewId) return false;
+  if (previous.projectId !== next.projectId) return false;
+  return previous.viewId !== next.viewId;
+};
+
+/**
+ * Smallest scrollLeft that keeps the focused card fully visible, preferring 0.
+ */
+export const preferredScrollLeftToShowFocus = ({
+  scrollLeft,
+  viewportWidth,
+  cardLeftInViewport,
+  cardRightInViewport,
+}: {
+  scrollLeft: number;
+  viewportWidth: number;
+  cardLeftInViewport: number | null;
+  cardRightInViewport: number | null;
+}): number => {
+  if (!(viewportWidth > 0)) return 0;
+  if (cardLeftInViewport == null || cardRightInViewport == null) return 0;
+
+  const cardLeftInContent = cardLeftInViewport + scrollLeft;
+  const cardRightInContent = cardRightInViewport + scrollLeft;
+  const cardWidth = cardRightInContent - cardLeftInContent;
+  if (cardWidth >= viewportWidth) return Math.max(0, cardLeftInContent);
+  if (cardRightInContent <= viewportWidth) return 0;
+  return Math.max(0, cardRightInContent - viewportWidth);
+};
+
+/**
+ * After a view switch, snap the board as far left as it can go without hiding
+ * the focused card. A missing card still resets to the left edge.
+ */
+export const scrollBoardToShowFocusFromLeft = (
+  taskId: number | null | undefined,
+  documentLike?: BoardDocumentLike,
+): boolean => {
+  const doc =
+    documentLike ??
+    (typeof document === "undefined" ? undefined : document);
+  if (!doc) return false;
+
+  const board = doc.getElementById("kanban-sections-container");
+  const scroller = findBoardScroller(doc, board);
+  if (!scroller) return true;
+
+  const card = taskId == null ? null : doc.getElementById(`task-${taskId}`);
+  const scrollerRect =
+    scroller === doc.scrollingElement
+      ? { left: 0, right: scroller.clientWidth }
+      : scroller.getBoundingClientRect();
+  const cardRect = card?.getBoundingClientRect() ?? null;
+  const nextScrollLeft = preferredScrollLeftToShowFocus({
+    scrollLeft: scroller.scrollLeft,
+    viewportWidth: scroller.clientWidth,
+    cardLeftInViewport: cardRect ? cardRect.left - scrollerRect.left : null,
+    cardRightInViewport: cardRect ? cardRect.right - scrollerRect.left : null,
+  });
+
+  if (scroller.scrollLeft !== nextScrollLeft) {
+    scroller.scrollLeft = nextScrollLeft;
+  }
+  return true;
+};
+
 export const revealBoardColumnAfterRender = (
   sectionId: number,
   options: RevealBoardColumnOptions = {},
