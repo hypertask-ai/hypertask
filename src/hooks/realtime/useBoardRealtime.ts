@@ -31,6 +31,11 @@ export function useBoardRealtime(
 ): void {
   const queryClient = useQueryClient();
   const scopedRefetch = useFlag(SCOPED_BOARD_REFETCH_FLAG);
+  const pickEventReconcile = () => {
+    if (scopedRefetch) return reconcileActiveBoardTasks;
+    return reconcileActiveBoardQuery;
+  };
+  const eventReconcile = pickEventReconcile();
   const wasConnected = useRef(false);
   const needsCatchUp = useRef(options?.enabled === false);
 
@@ -70,7 +75,9 @@ export function useBoardRealtime(
       const userId = options?.accountId;
       const reconcile = () =>
         Promise.all([
-          scopedRefetch && trigger === "event" && userId !== undefined
+          eventReconcile === reconcileActiveBoardTasks &&
+          trigger === "event" &&
+          userId !== undefined
             ? runScopedReconcile(userId)
             : reconcileActiveBoardQuery(queryClient, projectId),
           queryClient.refetchQueries({
@@ -153,5 +160,6 @@ export function useBoardRealtime(
     projectId,
     queryClient,
     scopedRefetch,
+    eventReconcile,
   ]);
 }

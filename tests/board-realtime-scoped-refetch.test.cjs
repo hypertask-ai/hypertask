@@ -197,6 +197,6 @@ test("useBoardRealtime still wires the extracted handler and scoped route", () =
   );
   assert.match(source, /createBoardRealtimeEventHandler/);
   assert.match(source, /useFlag\(SCOPED_BOARD_REFETCH_FLAG\)/);
-  assert.match(source, /scopedRefetch && trigger === "event"/);
+  assert.match(source, /if \(scopedRefetch\) return reconcileActiveBoardTasks/);
   assert.match(source, /reconcileActiveBoardTasks/);
 });
