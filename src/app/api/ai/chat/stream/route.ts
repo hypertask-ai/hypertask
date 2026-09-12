@@ -57,7 +57,6 @@ import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_6284_AGENT_MENTION_ROUTING_FLAG } from "@/lib/flags/keys";
 import { HTPR_6320_AI_OBSERVABILITY_FLAG } from "@/lib/flags/keys";
 import { reportError } from "@/lib/errors/reportError";
-import { toErrorMessage } from "@/lib/api/errorMessage";
 import {
   recordAiChatTurn,
   type AiChatTurnOutcome,
@@ -822,31 +821,15 @@ function createSseErrorResponse(message: string, status?: number) {
 }
 
 function errorMessage(error: unknown) {
+  if (typeof error === "string") return error;
   // Prisma/driver errors carry schema and query detail, so those stay internal.
-  if (error instanceof Error && error.name.startsWith("Prisma")) {
-    console.error("[ai/chat/stream] internal error", error);
-    return "Sorry, an error occurred while processing your request.";
+  // Everything else is our own thrown message, which the model needs verbatim
+  // to correct itself (validation errors, tool preconditions, ambiguity hints).
+  if (error instanceof Error && !error.name.startsWith("Prisma")) {
+    return error.message;
   }
-  // Tool loops and the error ticket need the provider's real text. The SDK
-  // sometimes hands us a plain object, not an Error, and the generic fallback
-  // then files a ticket with no cause.
-  return toErrorMessage(
-    error,
-    "Sorry, an error occurred while processing your request.",
-  );
-}
-
-function handledErrorExtra(error: unknown) {
-  if (!error || typeof error !== "object") return {};
-  const record = error as Record<string, unknown>;
-  const extra: Record<string, string | number | boolean | null> = {};
-  for (const key of ["statusCode", "status"] as const) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      extra[key] = value;
-    }
-  }
-  return extra;
+  console.error("[ai/chat/stream] internal error", error);
+  return "Sorry, an error occurred while processing your request.";
 }
 
 /** The allowance stop unwrapped from the SDK's retry chain, or null. */
@@ -939,11 +922,7 @@ function requestErrorMessage(
   }.`;
 }
 
-async function reportHandledChatError(
-  error: unknown,
-  stage: string,
-  extra?: Record<string, string | number | boolean | null>,
-) {
+async function reportHandledChatError(error: unknown, stage: string) {
   if (includedAllowanceError(error)) return;
   if (
     error instanceof Error &&
@@ -959,7 +938,7 @@ async function reportHandledChatError(
     stack: normalized.stack,
     url: "/api/ai/chat/stream",
     source: "handled",
-    extra: { stage, ...handledErrorExtra(error), ...extra },
+    extra: { stage },
   });
 }
 
@@ -10701,10 +10680,7 @@ export async function POST(request: NextRequest) {
               );
               heartbeatExecutionTerminal = true;
             }
-            await reportHandledChatError(error, "model-stream", {
-              model: selected.resolvedModelId,
-              provider: selected.usageProvider,
-            });
+            await reportHandledChatError(error, "model-stream");
           },
           providerOptions: selected.providerOptions,
           ...selected.settings,
@@ -10964,10 +10940,7 @@ export async function POST(request: NextRequest) {
           return;
         }
         console.error("[ai/chat/stream] stream error", error);
-        await reportHandledChatError(error, "stream-handler", {
-          model: selected.resolvedModelId,
-          provider: selected.usageProvider,
-        });
+        await reportHandledChatError(error, "stream-handler");
         if (!errorSent) {
           errorSent = true;
           send("error", {
