@@ -85,20 +85,6 @@ export const scrollBoardColumnIntoView = (
   return true;
 };
 
-type RevealBoardColumnOptions = {
-  documentLike?: BoardDocumentLike;
-  schedule?: (callback: () => void) => void;
-  maxAttempts?: number;
-};
-
-/**
- * Wait for React to mount a just-created column, then reveal it.
- *
- * A busy board can commit the cache update after several animation frames. The
- * old 10-frame loop stopped after roughly 170 ms, leaving the new column off
- * screen even though the create request succeeded. Retry for up to five seconds
- * with one pending timer at a time, and stop as soon as the column is present.
- */
 export type ViewSwitchScrollState = {
   projectId?: number;
   viewId?: string;
@@ -180,6 +166,20 @@ export const scrollBoardToShowFocusFromLeft = (
   return true;
 };
 
+type RevealBoardColumnOptions = {
+  documentLike?: BoardDocumentLike;
+  schedule?: (callback: () => void) => void;
+  maxAttempts?: number;
+};
+
+/**
+ * Wait for React to mount a just-created column, then reveal it.
+ *
+ * A busy board can commit the cache update after several animation frames. The
+ * old 10-frame loop stopped after roughly 170 ms, leaving the new column off
+ * screen even though the create request succeeded. Retry for up to five seconds
+ * with one pending timer at a time, and stop as soon as the column is present.
+ */
 export const revealBoardColumnAfterRender = (
   sectionId: number,
   options: RevealBoardColumnOptions = {},
