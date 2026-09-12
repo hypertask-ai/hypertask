@@ -130,7 +130,7 @@ test("handled chat errors unwrap non-Error provider payloads", () => {
   );
   assert.match(
     routeSource,
-    /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.modelId,\s*provider: selected\.usageProvider,\s*\}\)/,
+    /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.resolvedModelId,\s*provider: selected\.usageProvider,\s*\}\)/,
   );
   console.log("chat error unwrap verification passed");
 });

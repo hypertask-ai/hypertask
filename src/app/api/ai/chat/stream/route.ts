@@ -10702,7 +10702,7 @@ export async function POST(request: NextRequest) {
               heartbeatExecutionTerminal = true;
             }
             await reportHandledChatError(error, "model-stream", {
-              model: selected.modelId,
+              model: selected.resolvedModelId,
               provider: selected.usageProvider,
             });
           },
@@ -10965,7 +10965,7 @@ export async function POST(request: NextRequest) {
         }
         console.error("[ai/chat/stream] stream error", error);
         await reportHandledChatError(error, "stream-handler", {
-          model: selected.modelId,
+          model: selected.resolvedModelId,
           provider: selected.usageProvider,
         });
         if (!errorSent) {
