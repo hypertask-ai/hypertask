@@ -1333,7 +1333,15 @@ function selectModel(
         model: aiModel,
         resolvedModelId: model,
         usageProvider,
-        settings: { temperature: 0.2, maxOutputTokens: 16000 },
+        // ponytail: Grok on this Gateway has no published temperature field.
+        // Gemini on the same route keeps 0.2. Send temperature again if the
+        // catalog lists it for spacexai Grok.
+        settings: {
+          maxOutputTokens: 16000,
+          ...(model.startsWith("xai/") || model.startsWith("spacexai/")
+            ? {}
+            : { temperature: 0.2 }),
+        },
         providerOptions: providerOptionsForAiModel(
           aiModel,
           "chat",

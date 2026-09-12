@@ -132,6 +132,10 @@ test("handled chat errors unwrap non-Error provider payloads", () => {
     routeSource,
     /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.resolvedModelId,\s*provider: selected\.usageProvider,\s*\}\)/,
   );
+  assert.match(
+    routeSource,
+    /model\.startsWith\("xai\/"\) \|\| model\.startsWith\("spacexai\/"\)/,
+  );
   console.log("chat error unwrap verification passed");
 });
 

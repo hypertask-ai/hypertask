@@ -15,7 +15,7 @@ function loadModelProvider() {
   return jiti(path.join(root, "src/app/api/ai/_lib/modelProvider.ts"));
 }
 
-test("gateway inference keeps the xai Grok slug", () => {
+test("gateway inference uses the spacexai Grok catalog slug", () => {
   delete process.env.AI_GATEWAY_API_KEY;
   delete process.env.AI_GATEWAY_ENABLED;
   const { resolveGatewayModel } = loadModelProvider();
@@ -23,7 +23,7 @@ test("gateway inference keeps the xai Grok slug", () => {
     "xai/grok-4.1-fast-non-reasoning",
     "vck_team_inference",
   );
-  assert.equal(model.modelId, "xai/grok-4.1-fast-non-reasoning");
+  assert.equal(model.modelId, "spacexai/grok-4.1-fast-non-reasoning");
 });
 
 test("missing team gateway key is an expected access error", () => {

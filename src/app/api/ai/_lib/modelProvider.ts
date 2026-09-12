@@ -11,6 +11,7 @@ import {
 import {
   createImageAllowanceMiddleware,
   createSharedAllowanceMiddleware,
+  gatewayCatalogModelSlug,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
@@ -103,7 +104,9 @@ export function gatewayFundingSourceForApiKey(
 }
 
 function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
-  const model = createGateway({ apiKey: gatewayApiKey })(modelSlug);
+  const model = createGateway({ apiKey: gatewayApiKey })(
+    gatewayCatalogModelSlug(modelSlug),
+  );
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   return fundingSource !== "customer"
     ? wrapLanguageModel({
@@ -122,7 +125,9 @@ function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
 }
 
 function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
-  const model = createGateway({ apiKey: gatewayApiKey }).imageModel(modelSlug);
+  const model = createGateway({ apiKey: gatewayApiKey }).imageModel(
+    gatewayCatalogModelSlug(modelSlug),
+  );
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   return fundingSource !== "customer"
     ? wrapImageModel({

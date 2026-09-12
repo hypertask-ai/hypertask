@@ -1049,21 +1049,20 @@ test("gateway catalog slugs remap xai Grok to spacexai", () => {
   );
 });
 
-test("gateway inference keeps the product xai slug", () => {
+test("gateway inference uses the spacexai Grok catalog slug", () => {
   const source = fs.readFileSync(
     path.join(root, "src/app/api/ai/_lib/modelProvider.ts"),
     "utf8",
   );
   assert.match(
     source,
-    /createGateway\(\{ apiKey: gatewayApiKey \}\)\(modelSlug\)/,
+    /createGateway\(\{ apiKey: gatewayApiKey \}\)\(\s*gatewayCatalogModelSlug\(modelSlug\)/,
   );
   assert.match(
     source,
-    /\.imageModel\(modelSlug\)/,
+    /\.imageModel\(\s*gatewayCatalogModelSlug\(modelSlug\)/,
   );
-  assert.doesNotMatch(source, /gatewayCatalogModelSlug\(/);
-  console.log("grok inference keeps product slug verification passed");
+  console.log("grok inference uses catalog slug verification passed");
 });
 
 test("shared allowance prices xai Grok from the spacexai catalog", async () => {
