@@ -75,7 +75,7 @@ export const useUpdatedByFilter = ({
             return myTasksFilters?.activeFilters.addedFilters.find((x) => x.type === "UpdatedBy")?.searchPayload.flatMap((x: { id: number | string }) => x.id) ?? [];
         }
         return activeFilters?.searchPayload.flatMap((x: { id: number | string }) => x.id) ?? [];
-    }, [view, calendarTaskFilters.updatedBy, calendarTaskFilters.updatedByAgents, activeFilters]);
+    }, [view, calendarTaskFilters.updatedBy, calendarTaskFilters.updatedByAgents, activeFilters, myTasksFilters?.activeFilters]);
 
     useEffect(() => {
         setAllUsers(userSource);

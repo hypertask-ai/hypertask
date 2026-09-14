@@ -56,7 +56,7 @@ export const useCreatedByFilter = ({
             return myTasksFilters?.activeFilters.addedFilters.find((x) => x.type === "CreatedBy")?.searchPayload.flatMap((x: { id: number }) => x.id) ?? [];
         }
         return activeFilters?.searchPayload.flatMap((x: { id: number }) => x.id) ?? [];
-    }, [view, calendarTaskFilters.createdBy, activeFilters]);
+    }, [view, calendarTaskFilters.createdBy, activeFilters, myTasksFilters?.activeFilters]);
 
     const onSelectHandler = (
         selectedUsers?: UserSelectionEntry | UserSelectionEntry[],

@@ -108,14 +108,15 @@ export const useTagsModal = (
   );
 
   const reSort = useCallback(() => {
-    const active =
-      view === "Calendar"
-        ? activeForSort
-        : view === "MyTasks"
-          ? activeForSort
-          : (getActiveFiltersFromProject(currentProject).addedFilters.find(
-              (f) => f.type === "Labels",
-            ) ?? []);
+    let active: IFilter | ILabel[] = [];
+    if (view === "Calendar" || view === "MyTasks") {
+      active = activeForSort;
+    } else {
+      active =
+        getActiveFiltersFromProject(currentProject).addedFilters.find(
+          (f) => f.type === "Labels",
+        ) ?? [];
+    }
     const newSorted = sortedLabelsFn(deepCopy(labelSource), active, false);
     setFilteredCommands(newSorted);
   }, [view, labelSource, activeForSort, currentProject, sortedLabelsFn]);

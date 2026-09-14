@@ -161,10 +161,6 @@ export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [selectedIndex, filteredCommands, filterCommandsLen]);
 
-  useEffect(() => {
-    if (!keyword) setFilteredCommands(reOrder(addedFiltersFlat));
-  }, [addedFiltersFlat, keyword, reOrder]);
-
   return {
     onKeyChange,
     keyword,
