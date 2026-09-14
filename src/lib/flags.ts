@@ -46,7 +46,6 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
-  MY_TASKS_TIME_GROUP_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
 } from "@/lib/flags/keys";
 
@@ -393,12 +392,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
-  },
-  {
-    key: MY_TASKS_TIME_GROUP_FLAG,
-    shippedOn: "2026-09-14",
-    description:
-      "Groups My Tasks by due time (Overdue, Today, This week, Later, No due date) by default, with board grouping still available per saved view.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
