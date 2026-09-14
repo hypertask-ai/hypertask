@@ -43,7 +43,7 @@ export function parseTicketSearchQuery(query: string): TicketSearchQuery | null 
 
 export function tokenize(value: string): string[] {
   return Array.from(
-    new Set(value.toLowerCase().match(/[a-zA-Z0-9_-]+/g) ?? [])
+    new Set(value.toLowerCase().match(/[\p{L}\p{N}_-]+/gu) ?? [])
   );
 }
 
@@ -75,21 +75,27 @@ export function isStrongLexicalHit(hit: SearchRankHit, query: string): boolean {
   const queryTokens = tokenize(query);
   if (queryTokens.length === 0) return false;
 
-  const haystack = new Set(
-    tokenize(
-      [
-        hit.ticketNumber,
-        hit.title,
-        hit.taskTitle,
-        hit.descriptionText,
-        hit.commentText,
-      ]
-        .filter((value): value is string => Boolean(value))
-        .join(" ")
-    )
-  );
+  const haystackText = [
+    hit.ticketNumber,
+    hit.title,
+    hit.taskTitle,
+    hit.descriptionText,
+    hit.commentText,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase();
+  const haystackTokens = new Set(tokenize(haystackText));
 
-  return queryTokens.every((token) => haystack.has(token));
+  return queryTokens.every(
+    (token) =>
+      haystackTokens.has(token) ||
+      (hasNonAsciiLetter(token) && haystackText.includes(token))
+  );
+}
+
+function hasNonAsciiLetter(value: string): boolean {
+  return /[^\u0000-\u007f]/.test(value);
 }
 
 export function rankAndGroupHits<T extends SearchRankHit>(

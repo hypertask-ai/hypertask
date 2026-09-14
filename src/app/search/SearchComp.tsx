@@ -177,9 +177,11 @@ const SearchComp = ({
                             rankingEnabled &&
                             item.searchGroup === "other" &&
                             typedTasks[index - 1]?.searchGroup !== "other" &&
-                            typedTasks.some(
-                              (task) => task.searchGroup === "current-board"
-                            );
+                            typedTasks
+                              .slice(0, index)
+                              .some(
+                                (task) => task.searchGroup === "current-board"
+                              );
                           return (
                             <Fragment
                               key={`${searchConfig.elementIds.results.childKeys}-${index}`}
@@ -289,7 +291,7 @@ const SearchComp = ({
 const SearchGroupLabel = ({ label }: { label: string }) => (
   <li
     aria-hidden="true"
-    className="px-4 py-2 text-micro font-medium text-[#8E9093] list-none"
+    className="px-4 py-2 text-micro font-medium text-text-light-gray list-none"
   >
     {label}
   </li>

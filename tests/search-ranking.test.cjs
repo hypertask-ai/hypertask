@@ -115,6 +115,32 @@ test("bar does not match embargo and missing text fields do not throw", () => {
   assert.deepEqual(tokenize("Inbox icon!"), ["inbox", "icon"]);
 });
 
+test("words split across title and comment still count as a strong hit", () => {
+  assert.equal(
+    isStrongLexicalHit(
+      {
+        ticketNumber: "HTPR-2",
+        title: "Fix the inbox row",
+        commentText: "The icon stays blue",
+        projectId: 15,
+      },
+      "inbox icon"
+    ),
+    true
+  );
+});
+
+test("non-ASCII words tokenize and match", () => {
+  assert.deepEqual(tokenize("收件箱 图标"), ["收件箱", "图标"]);
+  assert.equal(
+    isStrongLexicalHit(
+      { ticketNumber: "HTPR-3", title: "收件箱图标颜色", projectId: 15 },
+      "收件箱 图标"
+    ),
+    true
+  );
+});
+
 test("a context board outside the searched set is ignored", () => {
   assert.equal(resolveContextProjectId(339, [15]), null);
   assert.equal(resolveContextProjectId(15, [15, 339]), 15);
