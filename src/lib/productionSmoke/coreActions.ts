@@ -375,6 +375,57 @@ export async function runCoreActionsSmoke(options: {
     });
   };
 
+  const claimReturnedActivityIds = async (
+    response: JsonResponse,
+    persist: boolean,
+  ) => {
+    const ids = response.data?.activityCommentIds;
+    if (!Array.isArray(ids) || ids.length === 0) return false;
+    let claimed = 0;
+    for (const raw of ids) {
+      const id = Number(raw);
+      if (!Number.isSafeInteger(id)) continue;
+      knownCommentIds.add(id);
+      ownedCommentIds.add(id);
+      claimed += 1;
+    }
+    if (claimed === 0) return false;
+    if (persist) await persistOwnedCommentIds();
+    return true;
+  };
+
+  const requireReturnedActivityIds = async (
+    action: string,
+    response: JsonResponse,
+    persist: boolean,
+  ) => {
+    if (await claimReturnedActivityIds(response, persist)) return;
+    throw new SmokeFailure(
+      "application",
+      action,
+      response.status,
+      "mutation did not return its activity ids",
+    );
+  };
+
+  const claimAssignActivities = async (
+    action: string,
+    response: JsonResponse,
+    persist: boolean,
+  ) => {
+    if (response.data?.assignmentOutcome === "already-assigned") return;
+    await requireReturnedActivityIds(action, response, persist);
+  };
+
+  const claimUnassignActivities = async (
+    action: string,
+    response: JsonResponse,
+    persist: boolean,
+  ) => {
+    if (response.data?.assignmentOutcome === "already-unassigned") return;
+    await requireReturnedActivityIds(action, response, persist);
+  };
+
   const rememberCommentIds = (comments: any[]) => {
     for (const comment of comments) {
       const id = Number(comment?.id);
@@ -393,44 +444,6 @@ export async function runCoreActionsSmoke(options: {
         commentId: markerId,
       }),
     });
-  };
-
-  const captureNewFixtureActivity = async (
-    action: string,
-    requireOne: boolean,
-    persist: boolean,
-  ) => {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const comments = await getComments(action);
-      const candidates = [];
-      for (const comment of comments) {
-        const id = Number(comment?.id);
-        if (!Number.isSafeInteger(id) || knownCommentIds.has(id)) continue;
-        knownCommentIds.add(id);
-        if (isFixtureActivity(comment, fixture)) candidates.push(id);
-      }
-      if (candidates.length > 1) {
-        throw new SmokeFailure(
-          "unrunnable",
-          action,
-          200,
-          "activity ownership was ambiguous",
-        );
-      }
-      if (candidates.length === 1) {
-        ownedCommentIds.add(candidates[0]);
-        if (persist) await persistOwnedCommentIds();
-        return;
-      }
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    if (!requireOne) return;
-    throw new SmokeFailure(
-      "application",
-      action,
-      200,
-      "the mutation activity was not visible on re-read",
-    );
   };
 
   const captureReturnedMoveActivity = async (
@@ -550,10 +563,13 @@ export async function runCoreActionsSmoke(options: {
         );
       }
       if (assigneeHasUser(task, fixture.userId)) {
-        await assign("recover interrupted assignment", "unassign");
-        await captureNewFixtureActivity(
+        const recoveryUnassign = await assign(
+          "recover interrupted assignment",
+          "unassign",
+        );
+        await claimUnassignActivities(
           "capture recovery assignment activity",
-          true,
+          recoveryUnassign,
           false,
         );
       }
@@ -701,8 +717,12 @@ export async function runCoreActionsSmoke(options: {
     }
     steps.push("move task");
 
-    await assign("assign user", "assign");
-    await captureNewFixtureActivity("capture assignment activity", true, true);
+    const assignResponse = await assign("assign user", "assign");
+    await claimAssignActivities(
+      "capture assignment activity",
+      assignResponse,
+      true,
+    );
     const assigned = await getBoardTask("verify assignment");
     if (!assigneeHasUser(assigned, fixture.userId)) {
       throw new SmokeFailure(
@@ -712,10 +732,10 @@ export async function runCoreActionsSmoke(options: {
         "test user was not assigned",
       );
     }
-    await assign("unassign user", "unassign");
-    await captureNewFixtureActivity(
+    const unassignResponse = await assign("unassign user", "unassign");
+    await claimUnassignActivities(
       "capture unassignment activity",
-      true,
+      unassignResponse,
       true,
     );
     const unassigned = await getBoardTask("verify unassignment");
@@ -772,11 +792,9 @@ export async function runCoreActionsSmoke(options: {
             ownedCommentIds.add(markerId);
           }
         }
-        await captureNewFixtureActivity(
-          "capture pending mutation activity",
-          false,
-          true,
-        );
+        // Only claim activities returned by mutations or recorded on the marker.
+        // Do not discover Unassigned/Assigned rows by status here: that can delete
+        // another same-user request's audit trail on this fixture.
         const task = await getTask("cleanup task read");
         if (Number(task.sectionId) !== fixture.baseSectionId) {
           const cleanupMove = await move(
@@ -794,10 +812,13 @@ export async function runCoreActionsSmoke(options: {
         }
         const current = await getTask("cleanup assignment read");
         if (assigneeHasUser(current, fixture.userId)) {
-          await assign("cleanup assignment", "unassign");
-          await captureNewFixtureActivity(
+          const cleanupUnassign = await assign(
+            "cleanup assignment",
+            "unassign",
+          );
+          await claimUnassignActivities(
             "capture cleanup assignment activity",
-            true,
+            cleanupUnassign,
             true,
           );
           cleanup.push("removed test-user assignment");
