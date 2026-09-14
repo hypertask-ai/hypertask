@@ -16,7 +16,12 @@ import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
-import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
+import {
+  getInclusiveRange,
+  getTaskIdsByGroup,
+  toggleId,
+  toggleVisibleIds,
+} from "@/lib/kanbanBulkSelection";
 
 type Assignee = IUser | IAgent;
 type AssigneeIntent = "assign" | "unassign" | "toggle";
@@ -33,9 +38,12 @@ interface KanbanBulkSelectionContextValue {
   isSelected: (taskId: number) => boolean;
   toggleTaskSelection: (
     taskId: number,
-    sectionId: number,
+    groupId: string | number,
     withRange?: boolean,
+    orderedGroupIds?: readonly number[],
   ) => void;
+  toggleVisibleSelection: (visibleIds: readonly number[]) => void;
+  isAllVisibleSelected: (visibleIds: readonly number[]) => boolean;
   clearSelection: () => void;
   openBulkCommand: (mode?: CommandMode) => void;
   archiveSelected: () => Promise<void>;
@@ -52,14 +60,17 @@ interface KanbanBulkSelectionContextValue {
 interface KanbanBulkSelectionProviderProps {
   children: ReactNode;
   items: ITask[];
-  onArchiveTask: TaskOperation;
-  onMoveTask: (task: ITask, section: ISection) => Promise<void>;
-  onAssignTask: (
+  onArchiveTask?: TaskOperation;
+  onMoveTask?: (task: ITask, section: ISection) => Promise<void>;
+  onAssignTask?: (
     task: ITask,
     assignee: Assignee,
     intent?: AssigneeIntent,
   ) => Promise<void>;
-  onLabelTask: (task: ITask, label: ILabel) => Promise<void>;
+  onLabelTask?: (task: ITask, label: ILabel) => Promise<void>;
+  getSelectionGroupId?: (
+    task: ITask,
+  ) => string | number | null | undefined;
 }
 
 const KanbanBulkSelectionContext =
@@ -72,23 +83,21 @@ export const KanbanBulkSelectionProvider = ({
   onMoveTask,
   onAssignTask,
   onLabelTask,
+  getSelectionGroupId = (task) => task.sectionId,
 }: KanbanBulkSelectionProviderProps) => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
-  const anchorRef = useRef<{ sectionId: number; taskId: number } | null>(null);
+  const anchorRef = useRef<{
+    groupId: string | number;
+    taskId: number;
+  } | null>(null);
   const setShowCommands = useSetRecoilState(showCommandsAtom);
 
-  const taskIdsBySection = useMemo(() => {
-    const result = new Map<number, number[]>();
-    for (const task of items) {
-      if (task.sectionId == null) continue;
-      const taskIds = result.get(task.sectionId) ?? [];
-      taskIds.push(task.id);
-      result.set(task.sectionId, taskIds);
-    }
-    return result;
-  }, [items]);
+  const taskIdsByGroup = useMemo(
+    () => getTaskIdsByGroup(items, getSelectionGroupId),
+    [getSelectionGroupId, items],
+  );
 
   const selectedTasks = useMemo(
     () => items.filter((task) => selectedIds.has(task.id)),
@@ -122,10 +131,15 @@ export const KanbanBulkSelectionProvider = ({
   }, []);
 
   const toggleTaskSelection = useCallback(
-    (taskId: number, sectionId: number, withRange = false) => {
+    (
+      taskId: number,
+      groupId: string | number,
+      withRange = false,
+      orderedGroupIds?: readonly number[],
+    ) => {
       setSelectedIds((current) => {
-        if (withRange && anchorRef.current?.sectionId === sectionId) {
-          const taskIds = taskIdsBySection.get(sectionId) ?? [];
+        if (withRange && anchorRef.current?.groupId === groupId) {
+          const taskIds = orderedGroupIds ?? taskIdsByGroup.get(groupId) ?? [];
           const range = getInclusiveRange(
             taskIds,
             anchorRef.current.taskId,
@@ -138,8 +152,8 @@ export const KanbanBulkSelectionProvider = ({
 
         return toggleId(current, taskId);
       });
-      if (!withRange || anchorRef.current?.sectionId !== sectionId) {
-        anchorRef.current = { sectionId, taskId };
+      if (!withRange || anchorRef.current?.groupId !== groupId) {
+        anchorRef.current = { groupId, taskId };
       }
       setFailedIds((current) => {
         if (!current.has(taskId)) return current;
@@ -148,7 +162,23 @@ export const KanbanBulkSelectionProvider = ({
         return next;
       });
     },
-    [taskIdsBySection],
+    [taskIdsByGroup],
+  );
+
+  const toggleVisibleSelection = useCallback((visibleIds: readonly number[]) => {
+    setSelectedIds((current) => toggleVisibleIds(current, visibleIds));
+    setFailedIds((current) => {
+      const next = new Set(current);
+      visibleIds.forEach((taskId) => next.delete(taskId));
+      return next.size === current.size ? current : next;
+    });
+    anchorRef.current = null;
+  }, []);
+
+  const isAllVisibleSelected = useCallback(
+    (visibleIds: readonly number[]) =>
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id)),
+    [selectedIds],
   );
 
   const openBulkCommand = useCallback(
@@ -196,35 +226,44 @@ export const KanbanBulkSelectionProvider = ({
     [isProcessing, selectedTasks],
   );
 
-  const archiveSelected = useCallback(
-    () => runTaskOperation(onArchiveTask, `${selectedTasks.length} tasks archived`),
-    [onArchiveTask, runTaskOperation, selectedTasks.length],
-  );
+  const archiveSelected = useCallback(() => {
+    if (!onArchiveTask) return Promise.resolve();
+    return runTaskOperation(
+      onArchiveTask,
+      `${selectedTasks.length} tasks archived`,
+    );
+  }, [onArchiveTask, runTaskOperation, selectedTasks.length]);
 
   const moveSelected = useCallback(
-    (section: ISection) =>
-      runTaskOperation(
+    (section: ISection) => {
+      if (!onMoveTask) return Promise.resolve();
+      return runTaskOperation(
         (task) => onMoveTask(task, section),
         `${selectedTasks.length} tasks moved to ${section.section_title}`,
-      ),
+      );
+    },
     [onMoveTask, runTaskOperation, selectedTasks.length],
   );
 
   const assignSelected = useCallback(
-    (assignee: Assignee, intent: AssigneeIntent = "assign") =>
-      runTaskOperation(
+    (assignee: Assignee, intent: AssigneeIntent = "assign") => {
+      if (!onAssignTask) return Promise.resolve();
+      return runTaskOperation(
         (task) => onAssignTask(task, assignee, intent),
         `${selectedTasks.length} tasks updated`,
-      ),
+      );
+    },
     [onAssignTask, runTaskOperation, selectedTasks.length],
   );
 
   const labelSelected = useCallback(
-    (label: ILabel) =>
-      runTaskOperation(
+    (label: ILabel) => {
+      if (!onLabelTask) return Promise.resolve();
+      return runTaskOperation(
         (task) => onLabelTask(task, label),
         `${selectedTasks.length} tasks updated`,
-      ),
+      );
+    },
     [onLabelTask, runTaskOperation, selectedTasks.length],
   );
 
@@ -248,9 +287,10 @@ export const KanbanBulkSelectionProvider = ({
         !event.repeat
       ) {
         event.preventDefault();
+        const focusedTask = items.find((task) => task.id === focusedTaskId);
         toggleTaskSelection(
           focusedTaskId,
-          items.find((task) => task.id === focusedTaskId)?.sectionId ?? 0,
+          (focusedTask && getSelectionGroupId(focusedTask)) ?? 0,
         );
         return true;
       }
@@ -263,13 +303,14 @@ export const KanbanBulkSelectionProvider = ({
 
       if (selectedTasks.length === 0 || sequencePending) return false;
 
-      if (event.keyCode === KeyCodes.E && cmdControl) {
+      if (onArchiveTask && event.keyCode === KeyCodes.E && cmdControl) {
         event.preventDefault();
         if (!event.repeat) void archiveSelected();
         return true;
       }
 
       if (
+        onAssignTask &&
         event.keyCode === KeyCodes.A &&
         !event.shiftKey &&
         !event.altKey &&
@@ -281,6 +322,7 @@ export const KanbanBulkSelectionProvider = ({
       }
 
       if (
+        onLabelTask &&
         event.keyCode === KeyCodes.T &&
         !event.shiftKey &&
         !event.altKey &&
@@ -292,6 +334,7 @@ export const KanbanBulkSelectionProvider = ({
       }
 
       if (
+        onMoveTask &&
         event.keyCode === KeyCodes.M &&
         !event.shiftKey &&
         !event.altKey &&
@@ -307,7 +350,12 @@ export const KanbanBulkSelectionProvider = ({
     [
       archiveSelected,
       clearSelection,
+      getSelectionGroupId,
       items,
+      onArchiveTask,
+      onAssignTask,
+      onLabelTask,
+      onMoveTask,
       openBulkCommand,
       selectedTasks,
       toggleTaskSelection,
@@ -336,6 +384,8 @@ export const KanbanBulkSelectionProvider = ({
       isProcessing,
       isSelected: (taskId) => selectedIds.has(taskId),
       toggleTaskSelection,
+      toggleVisibleSelection,
+      isAllVisibleSelected,
       clearSelection,
       openBulkCommand,
       archiveSelected,
@@ -350,6 +400,7 @@ export const KanbanBulkSelectionProvider = ({
       clearSelection,
       failedIds,
       handleBulkKeyDown,
+      isAllVisibleSelected,
       isProcessing,
       labelSelected,
       moveSelected,
@@ -357,6 +408,7 @@ export const KanbanBulkSelectionProvider = ({
       selectedIds,
       selectedTasks,
       toggleTaskSelection,
+      toggleVisibleSelection,
     ],
   );
 

@@ -1,6 +1,6 @@
 "use client";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { IAssignees, IProject, ISection, ITask } from "@/models/model";
@@ -20,6 +20,7 @@ import {
   sortByUpdatedAtOrder,
 } from "@/utils/helperFunctions/helperFunctions";
 import { SplitTitle } from "@/components/Common/TaskRowComponents/TaskListRow";
+import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
@@ -74,12 +75,15 @@ import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoard
 import { useFlag } from "@/hooks/useFlag";
 import {
   HTPR_6427_ROW_SHORTCUTS_FLAG,
+  HTPR_6444_TABLE_BULK_SELECT_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
 } from "@/lib/flags/keys";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { splitAssignees } from "@/lib/assignees";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { taskBaseUri } from "@/utils";
+import { getTaskIdsByGroup } from "@/lib/kanbanBulkSelection";
+import { useKanbanBulkSelectionOptional } from "@/lib/contexts/Kanban/BulkSelectionContext";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 const AssignModal = lazy(
@@ -104,6 +108,7 @@ type TableViewProps = {
   _activeSortingMode: TBoardSortingViewMode;
   currentUser: any;
   handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void;
+  bulkSelectionEnabled?: boolean;
   myTasksSort?: MyTasksViewConfig["sort"];
   myTasksSortKey?: number | null;
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
@@ -132,6 +137,7 @@ const customFieldIdFromSortColumn = (column: CustomFieldSortColumn) => column.sl
 const initialDirection = (column: SortColumn, customFieldBySortColumn: Map<SortColumn, CustomField>): SortDirection =>
   DEFAULT_DESC.has(column as StaticSortColumn) || customFieldBySortColumn.get(column)?.type === "Number" ? "desc" : "asc";
 const isTaskRow = (row: Row): row is TaskRow => row.type === "task";
+const getTaskProjectGroup = (task: ITask) => task.projectId;
 const tableColumns: TableColumn[] = [
   { key: "ticket", label: "Ticket", width: "90px" },
   { key: "title", label: "Title", width: "minmax(200px,1fr)" },
@@ -417,12 +423,17 @@ const TableView = ({
   _currentProject,
   currentUser,
   handleBoardChange,
+  bulkSelectionEnabled = false,
   myTasksSort,
   myTasksSortKey,
   onMyTasksSortChange,
 }: TableViewProps) => {
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
+  const tableBulkSelectFlag = useFlag(HTPR_6444_TABLE_BULK_SELECT_FLAG);
+  const tableBulkSelectionEnabled =
+    tableBulkSelectFlag && bulkSelectionEnabled && !_currentProject;
+  const bulkSelection = useKanbanBulkSelectionOptional();
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
@@ -683,13 +694,14 @@ const TableView = ({
   // Ticket column moves Title with it.
   const frozenColumnOffset = useCallback(
     (key: string): number | undefined => {
-      if (key === "ticket") return 0;
+      const selectionOffset = tableBulkSelectionEnabled ? 28 : 0;
+      if (key === "ticket") return selectionOffset;
       if (key !== "title") return undefined;
       const ticket = visibleColumns.find((column) => column.key === "ticket");
-      if (!ticket) return 0;
-      return getColumnWidth(ticket) + 8;
+      if (!ticket) return selectionOffset;
+      return selectionOffset + getColumnWidth(ticket) + 8;
     },
-    [visibleColumns, getColumnWidth]
+    [visibleColumns, getColumnWidth, tableBulkSelectionEnabled]
   );
   const setColumnWidth = useCallback(
     (key: string, width: number) => {
@@ -717,22 +729,23 @@ const TableView = ({
   // columns (horizontal scroll takes over via tableMinWidth below).
   const gridTemplateColumns = useMemo(
     () =>
-      visibleColumns
-        .map((column) =>
+      [
+        ...(tableBulkSelectionEnabled ? ["20px"] : []),
+        ...visibleColumns.map((column) =>
           column.key === "title" && columnWidths.title === undefined
             ? `minmax(${getColumnWidth(column)}px,1fr)`
             : `${getColumnWidth(column)}px`
-        )
-        .join(" "),
-    [visibleColumns, getColumnWidth, columnWidths]
+        ),
+      ].join(" "),
+    [visibleColumns, getColumnWidth, columnWidths, tableBulkSelectionEnabled]
   );
   // The grid tracks are fixed/min px, so the rows only paint as wide as their
   // box. Without a min-width matching the columns, the section cards stop at
   // the viewport edge and everything scrolled past it is blank. gap 8px per
   // gutter + 40px row padding.
   const tableMinWidth = useMemo(
-    () => visibleColumns.reduce((total, column) => total + getColumnWidth(column), 0) + Math.max(visibleColumns.length - 1, 0) * 8 + 40,
-    [visibleColumns, getColumnWidth]
+    () => visibleColumns.reduce((total, column) => total + getColumnWidth(column), 0) + Math.max(visibleColumns.length - 1, 0) * 8 + 40 + (tableBulkSelectionEnabled ? 28 : 0),
+    [visibleColumns, getColumnWidth, tableBulkSelectionEnabled]
   );
   // Reorders storedVisibleColumns in place when a header cell is dropped on
   // another (feature 2) — the SAME atom the "Configure table columns" picker
@@ -846,6 +859,18 @@ const TableView = ({
     crossBoardPrioritySortEnabled,
     savedViewPrioritySort,
   ]);
+  const visibleSelectionTasks = useMemo(
+    () => rows.filter(isTaskRow).map((row) => row.task),
+    [rows],
+  );
+  const visibleSelectionIds = useMemo(
+    () => visibleSelectionTasks.map((task) => task.id),
+    [visibleSelectionTasks],
+  );
+  const selectionIdsByBoard = useMemo(
+    () => getTaskIdsByGroup(visibleSelectionTasks, getTaskProjectGroup),
+    [visibleSelectionTasks],
+  );
 
   // HTPR-4876: table view rendered <HypertasksCommands /> with no context, so
   // the palette fell back to "Others" and every Task- or Kanban-gated command
@@ -1279,6 +1304,14 @@ const TableView = ({
       )
         return;
       const selectedRow = rows[selectedIndex];
+      if (
+        tableBulkSelectionEnabled &&
+        selectedRow &&
+        isTaskRow(selectedRow) &&
+        bulkSelection?.handleBulkKeyDown(e, selectedRow.task.id)
+      ) {
+        return;
+      }
       if (runTaskShortcut(e, selectedRow, selectedIndex)) return;
       // [ctrl/cmd]+[e] archives the selected task. This component also powers
       // My Tasks, so archiveTaskFromTable handles both board cache updates and
@@ -1335,15 +1368,24 @@ const TableView = ({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, expandSection, focusTo, handleBoardChange, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
+  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, bulkSelection, changeBoardLayout, createTaskInCurrentTableContext, expandSection, focusTo, handleBoardChange, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, tableBulkSelectionEnabled, toggleSelectedTaskTimer]);
 
   const renderTaskRow = (task: ITask, flatIndex: number) => {
     const selected = selectedIndex === flatIndex;
-    const stickyBackground = selected
-      ? "md:bg-active-elementBg"
-      : dragOverSectionId === task.sectionId
-        ? "md:bg-hover-active"
-        : "md:bg-containerBackground";
+    const bulkSelected = Boolean(
+      tableBulkSelectionEnabled && bulkSelection?.isSelected(task.id),
+    );
+    const selectionMode =
+      tableBulkSelectionEnabled && (bulkSelection?.selectedCount ?? 0) > 0;
+    const selectionGroupId = task.projectId ?? 0;
+    const orderedSelectionIds = selectionIdsByBoard.get(selectionGroupId) ?? [];
+    const stickyBackground = bulkSelected
+      ? "md:bg-kanban-active-cardbg"
+      : selected
+        ? "md:bg-active-elementBg"
+        : dragOverSectionId === task.sectionId
+          ? "md:bg-hover-active"
+          : "md:bg-containerBackground";
     const dragData = getTableRowDragData(
       task.id,
       task.sectionId,
@@ -1351,6 +1393,24 @@ const TableView = ({
       sortState.length > 0
     );
     const openCurrentTask = () => openTask(task, flatIndex);
+    const handleTaskRowClick = (event: ReactMouseEvent<HTMLLIElement>) => {
+      if (
+        tableBulkSelectionEnabled &&
+        bulkSelection &&
+        (selectionMode || event.shiftKey)
+      ) {
+        setSelectedIndex(flatIndex);
+        updateActiveItemAndItemInView(task);
+        bulkSelection.toggleTaskSelection(
+          task.id,
+          selectionGroupId,
+          event.shiftKey,
+          orderedSelectionIds,
+        );
+        return;
+      }
+      void openCurrentTask();
+    };
     const stalenessTooltip = `${taskInColumnDays(task) ?? 0}d in column · ${taskNoCommentDays(task) ?? 0}d since last comment · ${taskOnBoardDays(task) ?? 0}d on board`;
 
     const renderCell = (column: SortColumn) => {
@@ -1539,14 +1599,47 @@ const TableView = ({
           event.dataTransfer.setData("text/plain", JSON.stringify(dragData));
         }}
         onDragEnd={clearTaskDrag}
-        onClick={openCurrentTask}
+        onClick={handleTaskRowClick}
         onMouseEnter={() => handleMouseEnter(flatIndex)}
         onMouseLeave={handleMouseLeave}
         style={{ gridTemplateColumns }}
-        className={`${TABLE_GRID_CLASS} table-view-row cursor-pointer items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense outline-none ${
-          selected ? "md:bg-active-elementBg md:border-l-selected-item-border" : "md:border-l-transparent bg-transparent"
+        className={`${TABLE_GRID_CLASS} table-view-row group/table-selection cursor-pointer items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense outline-none ${
+          bulkSelected
+            ? "ring-1 ring-inset ring-hypertasks-purple bg-kanban-active-cardbg md:border-l-transparent"
+            : selected
+              ? "md:bg-active-elementBg md:border-l-selected-item-border"
+              : "md:border-l-transparent bg-transparent"
         }`}
       >
+        {tableBulkSelectionEnabled && bulkSelection && (
+          <span
+            className={`md:sticky md:left-0 md:z-[2] flex items-center ${stickyBackground}`}
+          >
+            <SelectionCheckbox
+              id={task.id}
+              isChecked={bulkSelected}
+              alwaysVisible={selectionMode}
+              groupName="table-selection"
+              className={
+                bulkSelected
+                  ? "!border-hypertasks-purple !bg-hypertasks-purple"
+                  : "!border-light-black-border-1 bg-containerBackground hover:!border-text-light-gray"
+              }
+              checkmarkColorClass="text-white"
+              borderColorClass="!border-light-black-border-1"
+              onClick={(_taskId, event) => {
+                setSelectedIndex(flatIndex);
+                updateActiveItemAndItemInView(task);
+                bulkSelection.toggleTaskSelection(
+                  task.id,
+                  selectionGroupId,
+                  Boolean(event?.shiftKey),
+                  orderedSelectionIds,
+                );
+              }}
+            />
+          </span>
+        )}
         {visibleColumns.map((column) => renderCell(column.key))}
       </li>
     );
@@ -1582,6 +1675,21 @@ const TableView = ({
             />
           )}
           <div style={{ gridTemplateColumns }} className={`${TABLE_GRID_CLASS} table-view-header group/header sticky top-0 z-10 items-center gap-2 bg-taskDetailPage px-[20px] md:px-5 py-2 text-micro font-semibold uppercase text-text-light-gray`}>
+            {tableBulkSelectionEnabled && bulkSelection && (
+              <span className="md:sticky md:left-0 md:z-20 flex items-center bg-taskDetailPage">
+                <SelectionCheckbox
+                  isChecked={bulkSelection.isAllVisibleSelected(
+                    visibleSelectionIds,
+                  )}
+                  alwaysVisible
+                  className="!border-light-black-border-1 bg-taskDetailPage hover:!border-text-light-gray"
+                  borderColorClass="!border-light-black-border-1"
+                  onClick={() =>
+                    bulkSelection.toggleVisibleSelection(visibleSelectionIds)
+                  }
+                />
+              </span>
+            )}
             {visibleColumns.map((column) => {
               const sortIndex = sortState.findIndex((level) => level.column === column.key);
               const activeSort = sortState[sortIndex];

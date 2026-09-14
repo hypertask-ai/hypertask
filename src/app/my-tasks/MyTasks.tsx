@@ -8,6 +8,7 @@ import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
+  HTPR_6444_TABLE_BULK_SELECT_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -19,6 +20,7 @@ import {
   myTasksViewsAPIRoute,
 } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { KanbanBulkSelectionProvider } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import { useRecoilValue } from "@/lib/state";
 import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
 import {
@@ -37,7 +39,7 @@ import {
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
-import { ISection, IUser } from "@/models/model";
+import { ISection, ITask, IUser } from "@/models/model";
 import type { TBoardSortingViewMode } from "@/models/Views/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
@@ -59,6 +61,47 @@ interface IProps {
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
+const getTaskProjectGroup = (task: ITask) => task.projectId;
+
+type BulkSelectableMyTasksTableProps = {
+  sections: ISection[];
+  currentUser: IUser;
+  myTasksSort?: MyTasksViewConfig["sort"];
+  myTasksSortKey?: number | null;
+  onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
+};
+
+const BulkSelectableMyTasksTable = ({
+  sections,
+  currentUser,
+  myTasksSort,
+  myTasksSortKey,
+  onMyTasksSortChange,
+}: BulkSelectableMyTasksTableProps) => {
+  const items = useMemo(
+    () => sections.flatMap((section) => section.items ?? []),
+    [sections],
+  );
+
+  return (
+    <KanbanBulkSelectionProvider
+      items={items}
+      getSelectionGroupId={getTaskProjectGroup}
+    >
+      <TableView
+        filteredSections={sections}
+        _sections={sections}
+        _currentProject={null}
+        _activeSortingMode={MY_TASKS_SORTING_MODE}
+        currentUser={currentUser}
+        myTasksSort={myTasksSort}
+        myTasksSortKey={myTasksSortKey}
+        onMyTasksSortChange={onMyTasksSortChange}
+        bulkSelectionEnabled
+      />
+    </KanbanBulkSelectionProvider>
+  );
+};
 
 const readError = async (response: Response, fallback: string): Promise<string> => {
   const body = await response.json().catch(() => null);
@@ -80,6 +123,7 @@ const MyTasks = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
+  const tableBulkSelectionEnabled = useFlag(HTPR_6444_TABLE_BULK_SELECT_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
@@ -293,6 +337,7 @@ const MyTasks = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (tableBulkSelectionEnabled && event.defaultPrevented) return;
       if (
         event.key === "Escape" &&
         !showCommands.show &&
@@ -323,7 +368,15 @@ const MyTasks = ({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeSplit, activeTabs.length, filterOpen, router, showCommands.show, updateSplit]);
+  }, [
+    activeSplit,
+    activeTabs.length,
+    filterOpen,
+    router,
+    showCommands.show,
+    tableBulkSelectionEnabled,
+    updateSplit,
+  ]);
 
   const selectView = (viewId: number | null) => {
     const view = views.find((candidate) => candidate.id === viewId);
@@ -574,16 +627,26 @@ const MyTasks = ({
       </div>
 
       <div className="mt-3 flex-1 min-h-0 w-full">
-        <TableView
-          filteredSections={visibleSections}
-          _sections={visibleSections}
-          _currentProject={null}
-          _activeSortingMode={MY_TASKS_SORTING_MODE}
-          currentUser={currentUser}
-          myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
-          myTasksSortKey={activeViewId}
-          onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
-        />
+        {tableBulkSelectionEnabled ? (
+          <BulkSelectableMyTasksTable
+            sections={visibleSections}
+            currentUser={currentUser}
+            myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
+            myTasksSortKey={activeViewId}
+            onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
+          />
+        ) : (
+          <TableView
+            filteredSections={visibleSections}
+            _sections={visibleSections}
+            _currentProject={null}
+            _activeSortingMode={MY_TASKS_SORTING_MODE}
+            currentUser={currentUser}
+            myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
+            myTasksSortKey={activeViewId}
+            onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
+          />
+        )}
       </div>
 
       <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
