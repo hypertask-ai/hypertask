@@ -68,11 +68,7 @@ import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoard
 import { useFlag } from "@/hooks/useFlag";
 import { MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG } from "@/lib/flags/keys";
 import SelectionCheckbox from "@/components/Common/selection-checkbox";
-import {
-  MyTasksBulkSelectionProvider,
-  useMyTasksBulkSelectionOptional,
-} from "@/lib/contexts/MyTasks/BulkSelectionContext";
-import MyTasksBulkActionBar from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
+import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 

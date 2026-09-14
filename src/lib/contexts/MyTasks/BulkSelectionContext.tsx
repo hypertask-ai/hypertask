@@ -71,6 +71,7 @@ export const MyTasksBulkSelectionProvider = ({
   onAfterMutation,
 }: MyTasksBulkSelectionProviderProps) => {
   const [items, setItems] = useState<ITask[]>([]);
+  const itemsRef = useRef<ITask[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -85,14 +86,25 @@ export const MyTasksBulkSelectionProvider = ({
   const moveTaskToSection = useMoveTaskToSection();
 
   const setVisibleItems = useCallback((tasks: ITask[]) => {
+    itemsRef.current = tasks;
     setItems((previous) => {
-      if (
+      const sameIds =
         previous.length === tasks.length &&
-        previous.every((task, index) => task.id === tasks[index]?.id)
-      ) {
-        return previous;
-      }
-      return tasks;
+        previous.every((task, index) => task.id === tasks[index]?.id);
+      if (!sameIds) return tasks;
+      // IDs matched, but metadata (column, labels, assignees) may have refreshed.
+      const sameMeta = previous.every((task, index) => {
+        const next = tasks[index];
+        if (!next) return false;
+        return (
+          task.projectId === next.projectId &&
+          task.sectionId === next.sectionId &&
+          task.title === next.title &&
+          (task.taskLabels?.length ?? 0) === (next.taskLabels?.length ?? 0) &&
+          (task.assignees?.length ?? 0) === (next.assignees?.length ?? 0)
+        );
+      });
+      return sameMeta ? previous : tasks;
     });
   }, []);
 
@@ -117,6 +129,11 @@ export const MyTasksBulkSelectionProvider = ({
     () => items.filter((task) => selectedIds.has(task.id)),
     [items, selectedIds],
   );
+
+  const selectedTasksSnapshot = useCallback(() => {
+    const visible = itemsRef.current;
+    return visible.filter((task) => selectedIds.has(task.id));
+  }, [selectedIds]);
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -226,9 +243,10 @@ export const MyTasksBulkSelectionProvider = ({
   );
 
   const archiveSelected = useCallback(async () => {
-    if (isProcessing || selectedTasks.length === 0) return;
+    if (isProcessing || selectedIds.size === 0) return;
 
-    const snapshot = selectedTasks;
+    const snapshot = selectedTasksSnapshot();
+    if (snapshot.length === 0) return;
     const snapshotIds = snapshot.map((task) => task.id);
     setIsProcessing(true);
 
@@ -238,21 +256,25 @@ export const MyTasksBulkSelectionProvider = ({
       return next;
     });
 
-    const failures: number[] = [];
     try {
-      for (const task of snapshot) {
-        try {
-          await globalAPIHandlers.archiveTask(task.id, "Archive");
-        } catch (error) {
-          console.error("My Tasks bulk archive failed", task.id, error);
-          failures.push(task.id);
+      const results = await Promise.allSettled(
+        snapshot.map((task) =>
+          globalAPIHandlers.archiveTask(task.id, "Archive"),
+        ),
+      );
+      const failures: number[] = [];
+      results.forEach((result, index) => {
+        const taskId = snapshotIds[index]!;
+        if (result.status === "rejected") {
+          console.error("My Tasks bulk archive failed", taskId, result.reason);
+          failures.push(taskId);
           onExcludedTaskIdsChange((previous) => {
             const next = new Set(previous);
-            next.delete(task.id);
+            next.delete(taskId);
             return next;
           });
         }
-      }
+      });
 
       const archivedIds = snapshotIds.filter((id) => !failures.includes(id));
       if (archivedIds.length > 0) {
@@ -260,15 +282,32 @@ export const MyTasksBulkSelectionProvider = ({
           { taskIds: archivedIds, isMyTasksBulkArchive: true },
           `Undo archive (${archivedIds.length} items)`,
           async (data: { taskIds: number[] }) => {
-            for (const taskId of data.taskIds) {
-              await globalAPIHandlers.archiveTask(taskId, "Normal");
-            }
-            onExcludedTaskIdsChange((previous) => {
-              const next = new Set(previous);
-              for (const taskId of data.taskIds) next.delete(taskId);
-              return next;
+            const undoResults = await Promise.allSettled(
+              data.taskIds.map((taskId) =>
+                globalAPIHandlers.archiveTask(taskId, "Normal"),
+              ),
+            );
+            const restored: number[] = [];
+            const undoFailures: number[] = [];
+            undoResults.forEach((result, index) => {
+              const taskId = data.taskIds[index]!;
+              if (result.status === "fulfilled") restored.push(taskId);
+              else undoFailures.push(taskId);
             });
-            onAfterMutation();
+            if (restored.length > 0) {
+              onExcludedTaskIdsChange((previous) => {
+                const next = new Set(previous);
+                for (const taskId of restored) next.delete(taskId);
+                return next;
+              });
+              onAfterMutation();
+            }
+            if (undoFailures.length > 0) {
+              toast.error(
+                `${undoFailures.length} of ${data.taskIds.length} tasks could not be restored`,
+              );
+              throw new Error("Partial My Tasks bulk undo failure");
+            }
           },
         );
       }
@@ -289,7 +328,8 @@ export const MyTasksBulkSelectionProvider = ({
     onAfterMutation,
     onExcludedTaskIdsChange,
     performActionAndStoreUndoData,
-    selectedTasks,
+    selectedIds.size,
+    selectedTasksSnapshot,
   ]);
 
   const runSameBoardOperation = useCallback(
@@ -297,21 +337,31 @@ export const MyTasksBulkSelectionProvider = ({
       operation: (task: ITask) => Promise<void>,
       successText: string,
     ) => {
-      if (isProcessing || selectedTasks.length === 0) return;
-      if (requireSameBoard() == null) return;
+      if (isProcessing || selectedIds.size === 0) return;
+      const snapshot = selectedTasksSnapshot();
+      if (snapshot.length === 0) return;
+      if (sharedProjectId(snapshot) == null) {
+        toast.error(MIXED_BOARD_TOAST);
+        return;
+      }
 
-      const snapshot = selectedTasks;
       const failures: ITask[] = [];
       setIsProcessing(true);
       try {
-        for (const task of snapshot) {
-          try {
-            await operation(task);
-          } catch (error) {
-            console.error("My Tasks bulk action failed", task.id, error);
+        const results = await Promise.allSettled(
+          snapshot.map((task) => operation(task)),
+        );
+        results.forEach((result, index) => {
+          if (result.status === "rejected") {
+            const task = snapshot[index]!;
+            console.error(
+              "My Tasks bulk action failed",
+              task.id,
+              result.reason,
+            );
             failures.push(task);
           }
-        }
+        });
         const nextFailedIds = new Set(failures.map((task) => task.id));
         setSelectedIds(nextFailedIds);
         setFailedIds(nextFailedIds);
@@ -327,7 +377,7 @@ export const MyTasksBulkSelectionProvider = ({
         setIsProcessing(false);
       }
     },
-    [isProcessing, onAfterMutation, requireSameBoard, selectedTasks],
+    [isProcessing, onAfterMutation, selectedIds.size, selectedTasksSnapshot],
   );
 
   const moveSelected = useCallback(
