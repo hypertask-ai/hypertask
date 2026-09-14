@@ -360,7 +360,7 @@ test("new mention and unassignment events are persisted at their domain transact
 
   assert.equal(
     (assignments.match(/const unassignedEvent: WebhookDelivery = \{\s*event: "task\.unassigned"/g) ?? []).length,
-    2,
+    3,
   );
   assert.match(
     comments,

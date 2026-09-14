@@ -25,7 +25,7 @@ test("every assignment activity snapshot preserves the user profile photo", () =
   assert.equal(
     (assignmentSource.match(/select: assignmentActivityUserSelect/g) || [])
       .length,
-    3
+    4
   );
   assert.equal(
     (globalCreateSource.match(/select: assignmentActivityUserSelect/g) || [])
