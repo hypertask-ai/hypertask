@@ -557,14 +557,21 @@ const MyTasks = ({
     [updateViewConfig],
   );
 
+  const boardTabCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const task of allTasksForBoardTabs) {
+      const boardId = task.project?.id ?? task.projectId;
+      counts.set(boardId, (counts.get(boardId) ?? 0) + 1);
+    }
+    return counts;
+  }, [allTasksForBoardTabs]);
+
   const tabLength = (index: number) => {
     if (viewsFeatureEnabled && groupBy === "time") {
       if (index === 0) return allTasksForBoardTabs.length;
       const boardId = availableBoards[index - 1]?.id;
       if (boardId === undefined) return 0;
-      return allTasksForBoardTabs.filter(
-        (task) => (task.project?.id ?? task.projectId) === boardId,
-      ).length;
+      return boardTabCounts.get(boardId) ?? 0;
     }
     return index === 0 ? totalCount : filteredSections[index - 1]?.items.length ?? 0;
   };
