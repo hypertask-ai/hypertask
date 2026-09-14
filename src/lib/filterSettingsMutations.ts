@@ -186,11 +186,13 @@ export function hasMigratableFlatFilters(
 
 /**
  * One-shot move of overlapping flat My Tasks filters into Kanban filterSettings.
- * Leaves board/column/showDone flat fields alone. No-ops when filterSettings
- * already has entries or there is nothing migratable.
+ * Leaves board/column/showDone flat fields alone. Keeps starred:false in flat
+ * filters because Kanban Starred only means "is starred". No-ops when
+ * filterSettings already has entries or there is nothing migratable.
  */
 export function migrateFlatFiltersToFilterSettings(
   config: MyTasksViewConfig,
+  labelNames?: ReadonlyMap<string, string>,
 ): MyTasksViewConfig {
   if (config.filterSettings?.addedFilters?.length) return config;
   if (!hasMigratableFlatFilters(config.filters)) return config;
@@ -210,7 +212,11 @@ export function migrateFlatFiltersToFilterSettings(
   if (filters.labelIds.length > 0) {
     addedFilters.push({
       type: "Labels",
-      searchPayload: filters.labelIds.map((id) => ({ id: String(id) })),
+      searchPayload: filters.labelIds.map((id) => {
+        const key = String(id);
+        const value = labelNames?.get(key);
+        return value ? { id: key, value } : { id: key };
+      }),
     });
   }
   if (filters.sizeIds.length > 0) {
@@ -258,7 +264,8 @@ export function migrateFlatFiltersToFilterSettings(
       priorityIds: [],
       labelIds: [],
       sizeIds: [],
-      starred: null,
+      // Keep "not starred" in flat filters; Kanban Starred cannot express it.
+      starred: filters.starred === false ? false : null,
       dueDate: null,
       createdRange: null,
       updatedRange: null,
@@ -268,4 +275,15 @@ export function migrateFlatFiltersToFilterSettings(
       addedFilters,
     },
   };
+}
+
+/** Count on the parity Filters button: settings entries plus leftover not-starred. */
+export function myTasksParityFilterCount(config: MyTasksViewConfig): number {
+  const migrated = migrateFlatFiltersToFilterSettings(config);
+  const settingsCount = migrated.filterSettings?.addedFilters?.length ?? 0;
+  const notStarred =
+    migrated.filters.starred === false || config.filters.starred === false
+      ? 1
+      : 0;
+  return settingsCount + notStarred;
 }

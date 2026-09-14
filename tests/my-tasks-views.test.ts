@@ -5,7 +5,11 @@ import {
   applyMyTasksView,
   type MyTasksTask,
 } from "../src/lib/myTasksFiltering";
-import { migrateFlatFiltersToFilterSettings } from "../src/lib/filterSettingsMutations";
+import {
+  migrateFlatFiltersToFilterSettings,
+  myTasksParityFilterCount,
+} from "../src/lib/filterSettingsMutations";
+import { PriorityConstants } from "../src/lib/constants/constants";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   parseMyTasksViewConfig,
@@ -395,5 +399,71 @@ test("apply path migrates flat overlapping filters into filterSettings", () => {
       { applyFilterSettings: true },
     ).map(({ id }) => id),
     [1],
+  );
+});
+
+test("migrate keeps starred:false flat and attaches label names", () => {
+  const migrated = migrateFlatFiltersToFilterSettings(
+    config({
+      filters: {
+        ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+        priorityIds: [2],
+        starred: false,
+        labelIds: ["lab-1"],
+      },
+    }),
+    new Map([["lab-1", "Bug"]]),
+  );
+
+  assert.equal(migrated.filters.starred, false);
+  assert.equal(migrated.filterSettings?.addedFilters.length, 2);
+  const labels = migrated.filterSettings?.addedFilters.find(
+    (filter) => filter.type === "Labels",
+  );
+  assert.deepEqual(labels?.searchPayload[0], { id: "lab-1", value: "Bug" });
+  assert.equal(
+    myTasksParityFilterCount(
+      config({
+        filters: {
+          ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+          starred: false,
+        },
+      }),
+    ),
+    1,
+  );
+});
+
+test("filterSettings path still applies flat starred:false", () => {
+  const high = PriorityConstants.find((p) => p.priority_index === 2)!;
+  const tasks = [
+    task(1, {
+      priority: high as MyTasksTask["priority"],
+      savedContent: [{ id: 1 }] as MyTasksTask["savedContent"],
+    }),
+    task(2, {
+      priority: high as MyTasksTask["priority"],
+      savedContent: [] as MyTasksTask["savedContent"],
+    }),
+  ];
+
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({
+        filters: {
+          ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+          starred: false,
+        },
+        filterSettings: {
+          matchFilters: "ANY",
+          addedFilters: [{ type: "Priority", searchPayload: [high] }],
+        },
+      }),
+      NOW,
+      { applyFilterSettings: true },
+    ).map(({ id }) => id),
+    // Priority keeps both; not-starred drops the starred task.
+    [2],
   );
 });

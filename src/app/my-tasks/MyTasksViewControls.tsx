@@ -9,7 +9,7 @@ import {
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
-import { migrateFlatFiltersToFilterSettings } from "@/lib/filterSettingsMutations";
+import { migrateFlatFiltersToFilterSettings, myTasksParityFilterCount } from "@/lib/filterSettingsMutations";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
@@ -128,9 +128,7 @@ const MyTasksViewControls = ({
     config.filters.showDone ? true : null,
   ].filter((value) => value !== null).length;
 
-  const kanbanFilterCount =
-    migrateFlatFiltersToFilterSettings(config).filterSettings?.addedFilters
-      ?.length ?? 0;
+  const kanbanFilterCount = myTasksParityFilterCount(config);
   const scopeCount = [
     config.boardIds,
     config.filters.sectionIds.length ? config.filters.sectionIds : null,
@@ -462,6 +460,7 @@ const MyTasksViewControls = ({
                       <div className="mt-2 flex gap-2">
                         <input
                           type="date"
+                          aria-label="Due date from"
                           value={config.filters.dueDate.from.slice(0, 10)}
                           onChange={(event) =>
                             updateFilters({
@@ -475,6 +474,7 @@ const MyTasksViewControls = ({
                         />
                         <input
                           type="date"
+                          aria-label="Due date to"
                           value={config.filters.dueDate.to.slice(0, 10)}
                           onChange={(event) =>
                             updateFilters({
@@ -494,6 +494,7 @@ const MyTasksViewControls = ({
                   <div className="flex gap-2">
                     <input
                       type="date"
+                      aria-label="Created from"
                       value={config.filters.createdRange?.from.slice(0, 10) ?? ""}
                       onChange={(event) =>
                         setRange("createdRange", "from", event.target.value)
@@ -502,6 +503,7 @@ const MyTasksViewControls = ({
                     />
                     <input
                       type="date"
+                      aria-label="Created to"
                       value={config.filters.createdRange?.to.slice(0, 10) ?? ""}
                       onChange={(event) =>
                         setRange("createdRange", "to", event.target.value)
@@ -515,6 +517,7 @@ const MyTasksViewControls = ({
                   <div className="flex gap-2">
                     <input
                       type="date"
+                      aria-label="Updated from"
                       value={config.filters.updatedRange?.from.slice(0, 10) ?? ""}
                       onChange={(event) =>
                         setRange("updatedRange", "from", event.target.value)
@@ -523,6 +526,7 @@ const MyTasksViewControls = ({
                     />
                     <input
                       type="date"
+                      aria-label="Updated to"
                       value={config.filters.updatedRange?.to.slice(0, 10) ?? ""}
                       onChange={(event) =>
                         setRange("updatedRange", "to", event.target.value)

@@ -94,15 +94,40 @@ const MyTasksKanbanFilterModalGate = (props: KanbanFilterModalProps) => {
   const [Modal, setModal] = useState<ComponentType<KanbanFilterModalProps> | null>(
     null,
   );
+  const [loadFailed, setLoadFailed] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    void import("./MyTasksKanbanFilterModal").then((mod) => {
-      if (!cancelled) setModal(() => mod.default);
-    });
+    void import("./MyTasksKanbanFilterModal")
+      .then((mod) => {
+        if (!cancelled) setModal(() => mod.default);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadFailed(true);
+      });
     return () => {
       cancelled = true;
     };
   }, []);
+  if (loadFailed) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="rounded-lg bg-white p-4 shadow-lg dark:bg-zinc-900">
+          <p className="mb-3 text-sm">Could not open filters. Try again.</p>
+          <button
+            type="button"
+            className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
+            onClick={() => {
+              setLoadFailed(false);
+              setModal(null);
+              props.onClose();
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!Modal) return null;
   return (
     <Suspense fallback={null}>
@@ -707,7 +732,14 @@ const MyTasks = ({
             timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
             onOpenKanbanFilters={() => {
               updateViewConfig((current) =>
-                migrateFlatFiltersToFilterSettings(current),
+                migrateFlatFiltersToFilterSettings(
+                  current,
+                  new Map(
+                    boards.flatMap((board) =>
+                      board.labels.map((label) => [label.id, label.name] as const),
+                    ),
+                  ),
+                ),
               );
               setKanbanFiltersOpen(true);
             }}
@@ -813,21 +845,32 @@ const MyTasks = ({
 
   const onFilterSettingsChange = useCallback(
     (next: SerializableFilterSettings) => {
-      updateViewConfig((current) => ({
-        ...current,
-        // FilterHTC owns these overlapping fields once parity is in use.
-        filters: {
-          ...current.filters,
-          priorityIds: [],
-          labelIds: [],
-          sizeIds: [],
-          starred: null,
-          dueDate: null,
-          createdRange: null,
-          updatedRange: null,
-        },
-        filterSettings: next,
-      }));
+      updateViewConfig((current) => {
+        const hasStarredFilter = next.addedFilters.some(
+          (filter) => filter.type === "Starred",
+        );
+        // Clear All (empty settings) or explicit Starred drops flat not-starred.
+        // Other edits keep starred:false; Kanban Starred cannot express it.
+        const keepNotStarred =
+          current.filters.starred === false &&
+          !hasStarredFilter &&
+          next.addedFilters.length > 0;
+        return {
+          ...current,
+          // FilterHTC owns these overlapping fields once parity is in use.
+          filters: {
+            ...current.filters,
+            priorityIds: [],
+            labelIds: [],
+            sizeIds: [],
+            starred: keepNotStarred ? false : null,
+            dueDate: null,
+            createdRange: null,
+            updatedRange: null,
+          },
+          filterSettings: next,
+        };
+      });
     },
     [updateViewConfig],
   );

@@ -1,11 +1,13 @@
 "use client";
 
 import AllFilterHTC from "@/components/Modals/FilterModals/SelectFilters/FilterHTC";
+import { useFlag } from "@/hooks/useFlag";
 import type {
   CalendarLabelSummary,
   CalendarUserSummary,
 } from "@/lib/calendarSync/contract";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
+import { MY_TASKS_FILTER_PARITY_FLAG } from "@/lib/flags/keys";
 import { MyTasksFilterProvider } from "@/lib/myTasksFilterContext";
 
 type Props = {
@@ -24,6 +26,9 @@ export default function MyTasksKanbanFilterModal({
   labels,
   onClose,
 }: Props) {
+  const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
+  if (!filterParityEnabled) return null;
+
   return (
     <MyTasksFilterProvider
       settings={settings}

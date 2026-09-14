@@ -250,7 +250,11 @@ export function applyMyTasksView(
 
       // Boards/columns/showDone always apply. Kanban-parity filterSettings replace
       // the overlapping flat fields when present so both UIs do not double-AND.
+      // starred:false stays flat (Kanban Starred cannot express it).
       if (useFilterSettings) {
+        if (filters.starred === false && Boolean(task.savedContent?.length)) {
+          return false;
+        }
         return matchesFilterSettings(task, config, options.runtimeContext);
       }
       return matchesFlatTaskFilters(task, filters, now);
