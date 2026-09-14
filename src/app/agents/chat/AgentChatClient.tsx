@@ -2607,6 +2607,13 @@ const AgentChatClient = (props: IProp) => {
   const keyboardOpen =
     isMbl && (mobileAgentChatViewport?.bottomInset ?? 0) > 0;
 
+  let mobileShellPaddingStyle: { paddingBottom?: number } | undefined;
+  if (isMbl && hideDockInset && keyboardOpen) {
+    mobileShellPaddingStyle = { paddingBottom: 0 };
+  } else if (isMbl && !hideDockInset) {
+    mobileShellPaddingStyle = { paddingBottom: mobileComposerBottomInset };
+  }
+
   if (isNarrow) {
     return (
       <div
@@ -2629,15 +2636,7 @@ const AgentChatClient = (props: IProp) => {
         )}
         style={{
           height: mobileAgentChatHeight,
-          ...(isMbl && !hideDockInset
-            ? { paddingBottom: mobileComposerBottomInset }
-            : isMbl && hideDockInset && keyboardOpen
-              ? { paddingBottom: 0 }
-              : isMbl && hideDockInset
-                ? {}
-                : isMbl
-                  ? { paddingBottom: mobileComposerBottomInset }
-                  : {}),
+          ...mobileShellPaddingStyle,
         }}
       >
         {selectedAgent ? chatPane : rosterPane}

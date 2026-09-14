@@ -57,9 +57,8 @@ test("flagged mobile shell drops h-screen and uses chrome-aware classes", () => 
   assert.match(chat, /mobileLayoutEnabled/);
   assert.match(
     narrowLayout,
-    /!\(isMbl && \(mobileLayoutEnabled \|\| mobileFullscreenFlag\)\) &&/,
+    /!\(isMbl && \(mobileLayoutEnabled \|\| mobileFullscreenFlag\)\) &&\s*\n\s*"h-screen"/,
   );
-  assert.match(narrowLayout, /"h-screen"/);
   assert.match(narrowLayout, /mobile-agent-chat/);
   assert.match(narrowLayout, /overscroll-y-none/);
   assert.match(

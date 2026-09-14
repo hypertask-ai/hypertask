@@ -33,12 +33,20 @@ const viewport = fs.readFileSync(
   "utf8",
 );
 
-test("HTPR-6476 flag is registered Owner+QA by default", () => {
+test("HTPR-6476 flag is registered and defaults with Owner+QA mode", () => {
   assert.match(keys, /HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG/);
   assert.match(keys, /htpr-6476-mobile-agent-chat-fullscreen/);
   assert.match(
     flags,
     /key:\s*HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG[\s\S]*?hide the app top bar and bottom nav/,
+  );
+  assert.match(
+    flags,
+    /const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/,
+  );
+  assert.doesNotMatch(
+    flags,
+    /key:\s*HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG[\s\S]{0,400}mode:\s*"EVERYONE"/,
   );
 });
 
@@ -47,6 +55,10 @@ test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   assert.match(providers, /agentChatMobileFullscreenAtom/);
   assert.match(providers, /!agentChatMobileFullscreen/);
   assert.match(chat, /setAgentChatMobileFullscreen\(mobileFullscreenChrome\)/);
+  assert.match(
+    chat,
+    /return \(\) => setAgentChatMobileFullscreen\(false\)/,
+  );
   assert.match(
     chat,
     /mobileFullscreenFlag && isMbl && selectedAgent/,
@@ -59,17 +71,17 @@ test("mobile fullscreen reuses AI send button and action row, not a new send con
   assert.match(chat, /from "@\/components\/AI_CHAT\/SendMessageButton"/);
   assert.match(chat, /from "@\/components\/AI_CHAT\/AiChatComposerActionRow"/);
   assert.match(chat, /data-agent-chat-ai-composer/);
-  assert.match(chat, /AiChatComposerActionRow/);
-  assert.match(chat, /SendMessageButton/);
-  const flaggedComposer = chat.slice(chat.indexOf("reuseAiComposer ?"));
-  const legacySendLabel = flaggedComposer.indexOf(
-    '{composerLocked ? "Queue" : "Send"}',
-  );
-  const elseBranch = flaggedComposer.indexOf(") : (");
-  assert.ok(elseBranch > 0);
-  assert.ok(
-    legacySendLabel < 0 || legacySendLabel > elseBranch,
-    "flagged composer must not keep the text Send/Queue button",
+
+  const flaggedStart = chat.indexOf("reuseAiComposer ? (");
+  const flaggedEnd = chat.indexOf(") : (", flaggedStart);
+  assert.ok(flaggedStart > 0 && flaggedEnd > flaggedStart);
+  const flaggedComposer = chat.slice(flaggedStart, flaggedEnd);
+  assert.match(flaggedComposer, /AiChatComposerActionRow/);
+  assert.match(flaggedComposer, /SendMessageButton/);
+  assert.match(flaggedComposer, /data-agent-chat-ai-composer/);
+  assert.doesNotMatch(
+    flaggedComposer,
+    /\{composerLocked \? "Queue" : "Send"\}/,
   );
 });
 
