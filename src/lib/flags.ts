@@ -46,6 +46,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  HTPR_6427_ROW_SHORTCUTS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -69,6 +70,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6427_ROW_SHORTCUTS_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Lets the selected table or My Tasks row use the same task property shortcuts as a Kanban card without opening the task.",
+  },
   {
     key: HTPR_6320_AI_OBSERVABILITY_FLAG,
     shippedOn: "2026-09-09",

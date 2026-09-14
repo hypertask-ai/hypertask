@@ -212,6 +212,8 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG } from "@/lib/flags/keys";
+import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
 interface IHTCProps {
@@ -222,6 +224,7 @@ interface IHTCProps {
 const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const queryClient = useQueryClient();
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
+  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -311,6 +314,17 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const [_activeItem, setActiveItem] = useRecoilState(activeItemAtom);
   const [callbackProjectId, setCallbackProjectId] = useState<number | null>(null);
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
+  const taskProjectId =
+    paletteContextOptions?.task?.projectId ?? inViewObject.taskProjectId;
+  const isRowTaskProjectFallback =
+    rowShortcutsEnabled && Boolean(paletteContextOptions?.task) && !_currentProject;
+  const { project: taskProject, isLoading: isTaskProjectLoading, isError: isTaskProjectError } =
+    useTaskProjectFallback(
+      _currentProject,
+      taskProjectId,
+      currentUser.id,
+      isRowTaskProjectFallback,
+    );
   const activeTaskId =
     paletteContextOptions?.task?.taskId ??
     inViewObject.taskId;
@@ -336,6 +350,19 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const [, setCalendarSettings] = useRecoilState(calendarSettingsAtom);
 
   useGetBoardInviteURL(_currentProject?.id!, currentUser?.id);
+  useEffect(() => {
+    if (!isRowTaskProjectFallback || isTaskProjectLoading) return;
+    if (isTaskProjectError || !taskProject?.name) {
+      resetShowCommands();
+      toast.error("Unable to open command for this task's board");
+    }
+  }, [
+    isRowTaskProjectFallback,
+    isTaskProjectError,
+    isTaskProjectLoading,
+    resetShowCommands,
+    taskProject?.name,
+  ]);
   const { data: _activeTask } = useGetSingleTask(inViewObject.taskId);
   const _activeTaskAssignees: (IUser | IAgent)[] = (() => {
     if (!_activeTask?.assignees) return [];
@@ -374,7 +401,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     callbackHandler,
     inViewObject,
     boardCloseHandler,
-    _currentProject,
+    _currentProject: taskProject,
     currentUser,
     _activeItem,
     toggleCreateTaskGlobally,
@@ -385,6 +412,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       setCommandMode(0);
       resetShowCommands();
     }, 1);
+  }
+
+  function refreshRowTaskList() {
+    if (rowShortcutsEnabled && isRowTaskProjectFallback) router.refresh();
   }
 
   useEffect(() => {
@@ -1851,9 +1882,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       inViewObject.taskId,
       inViewObject.taskProjectId,
       inViewObject.sectionId,
-      _currentProject
+      taskProject
     );
     boardCloseHandler();
+    refreshRowTaskList();
   }
 
   // ============ [A] sync assignees into the kanban card after assigning via HTC
@@ -1867,8 +1899,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         inViewObject.taskId,
         inViewObject.taskProjectId,
         inViewObject.sectionId,
-        _currentProject
+        taskProject
       );
+      refreshRowTaskList();
       // The open task detail view holds its own currentTask copy that the board
       // cache update above doesn't touch, so bridge the fresh assignees to it.
       if (pathname?.startsWith("/detail") && callbackHandler)
@@ -1896,9 +1929,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       inViewObject.taskId,
       inViewObject.taskProjectId,
       inViewObject.sectionId,
-      _currentProject
+      taskProject
     );
     boardCloseHandler();
+    if (refresh) refreshRowTaskList();
   }
 
   // ============ [S] toggle priority modal
@@ -1918,10 +1952,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       inViewObject.taskId,
       inViewObject.taskProjectId,
       inViewObject.sectionId,
-      _currentProject
+      taskProject
     );
 
     boardCloseHandler();
+    if (refresh) refreshRowTaskList();
   }
 
   // ============ toggle estimate modal
@@ -1945,8 +1980,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         inViewObject.taskId,
         inViewObject.taskProjectId,
         inViewObject.sectionId,
-        _currentProject
+        taskProject
       );
+      refreshRowTaskList();
       queryClient.refetchQueries({
         queryKey: [globalConstants.CommentsTQPrefixKey, inViewObject.taskId],
       });
@@ -2049,6 +2085,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   }, [commandMode, resetShowCommands, showCommands.show]);
 
   if (!showCommands.show) return null;
+  if (rowShortcutsEnabled && isRowTaskProjectFallback && isTaskProjectLoading)
+    return <span className="hidden" />;
 
   return (
     <>
@@ -2094,7 +2132,12 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             <TrialModal closeCallback={boardCloseHandler} />
           )}
           {commandMode === CommandMode.MoveTaskToBoard && (
-            <MoveTaskGlobal closeHTC={boardCloseHandler} />
+            <MoveTaskGlobal
+              closeHTC={() => {
+                boardCloseHandler();
+                refreshRowTaskList();
+              }}
+            />
           )}
           {relationPicker && activeTaskId && (
             <TaskRelationPicker
@@ -2122,7 +2165,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
           {commandMode === CommandMode.DeleteTask && (
             <ConfirmTaskDelete
-              confirmDelete={confirmDelete}
+              confirmDelete={async (response) => {
+                await confirmDelete(response);
+                if (response) refreshRowTaskList();
+              }}
               content="Clicking confirm will delete this task! Task can be recovered within 30 days."
             />
           )}
@@ -2147,6 +2193,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                 boardCloseHandler();
                 if (callback) setDueDateCallback(callback);
                 else if (reset) setDueDateCallback(undefined);
+                if (callback || reset) refreshRowTaskList();
               }}
             />
           )}
@@ -2214,6 +2261,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             ) : inViewObject.taskId ? (
             <AssignModal
               onClose={toggleAssignModal}
+              project={taskProject ?? undefined}
               task={{
                 id: inViewObject.taskId,
                 title: inViewObject.taskTitle ?? "",
@@ -2296,7 +2344,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
               <MoveToColumn
                 projectId={contextOptions.task.projectId}
                 task={contextOptions.task}
-                moveTaskToColumnHandler={boardCloseHandler}
+                moveTaskToColumnHandler={() => {
+                  boardCloseHandler();
+                  refreshRowTaskList();
+                }}
               />
             )
             )
@@ -2384,6 +2435,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             ) : (
             <CreateLabel
               closeHandler={toggleLabelModal}
+              currentProject={taskProject ?? undefined}
               onManageTags={() => {
                 setShowCommands({
                   show: true,
