@@ -796,6 +796,12 @@ export const agentChatTeamCycleAtom = atom<{ direction: 1 | -1; seq: number } | 
     default: null,
 });
 
+/** Mobile Agent Chat owns the viewport: hide app top bar + bottom nav (HTPR-6476). */
+export const agentChatMobileFullscreenAtom = atom<boolean>({
+    key: "agentChatMobileFullscreen",
+    default: false,
+});
+
 export const calendarCheckedProjectsAtom = atom<Record<number, boolean>>({
     key: "calendarCheckedProjectsAtom",
     default: {},

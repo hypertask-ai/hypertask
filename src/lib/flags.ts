@@ -40,6 +40,7 @@ import {
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+  HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
@@ -221,6 +222,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-11",
     description:
       "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",
+  },
+  {
+    key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "On mobile Agent Chat with an agent open: hide the app top bar and bottom nav, slim the header to back plus name, and reuse the AI chat mic and send controls.",
   },
   {
     key: "htpr-6287-agent-chat-roster-status",

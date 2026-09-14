@@ -37,6 +37,7 @@ import {
   currentProjectAtom,
   lastUsedBoardsAtom,
   agentChatTeamCycleAtom,
+  agentChatMobileFullscreenAtom,
 } from "@/store";
 import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -570,8 +571,15 @@ export default function GlobalProvider({
   // The mobile shell (top bar + pull-to-command) is present on every root view
   // including task detail. The bottom dock is the exception: hidden on detail
   // (shouldShowMobileDock) so the composer owns the bottom edge.
+  // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
+  const agentChatMobileFullscreen = useRecoilValue(
+    agentChatMobileFullscreenAtom,
+  );
   const showMobileTabBar =
-    mbl && Boolean(currentUser?.id) && shouldShowMobileTabBar(pathname);
+    mbl &&
+    Boolean(currentUser?.id) &&
+    shouldShowMobileTabBar(pathname) &&
+    !agentChatMobileFullscreen;
   // Entering the mobile comment composer hides the bottom nav so the sheet
   // sits directly on the keyboard (the top bar stays for the back button).
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
@@ -579,7 +587,8 @@ export default function GlobalProvider({
     mbl &&
     Boolean(currentUser?.id) &&
     shouldShowMobileDock(pathname) &&
-    !commentComposerOpen;
+    !commentComposerOpen &&
+    !agentChatMobileFullscreen;
   const showMobileBottomNav =
     showMobileBottomInset && shouldShowMobilePrimaryDock(pathname);
   // Pull-to-command follows the shell, not the dock, so it stays live on detail

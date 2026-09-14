@@ -42,19 +42,21 @@ export const parseCssPixelLength = (value: string): number => {
 };
 
 /**
- * Agent Chat keeps the tab bar visible, unlike AI Chat which hides it while
- * typing. A published 0px or short dock var must not drop the composer into
- * the tab bar after a reload. When the keyboard is open, visibleHeight already
- * ends at the keyboard, so extra dock padding would leave a dead gap.
+ * Agent Chat used to keep the tab bar visible and pad above it. Full-screen
+ * Agent Chat (HTPR-6476) hides the dock, so only the keyboard inset matters.
+ * Callers add env(safe-area-inset-bottom) via CSS when the keyboard is closed.
  */
 export const getAgentChatMobileBottomInset = ({
   dockHeight,
   keyboardInset,
+  hideDock = false,
 }: {
   dockHeight: number;
   keyboardInset: number;
+  hideDock?: boolean;
 }): number => {
   if (finiteNonNegative(keyboardInset) > 0) return 0;
+  if (hideDock) return 0;
   return Math.max(
     finiteNonNegative(dockHeight),
     MOBILE_PRIMARY_DOCK_MIN_PX,

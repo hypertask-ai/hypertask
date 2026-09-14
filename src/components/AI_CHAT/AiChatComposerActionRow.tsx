@@ -62,6 +62,10 @@ export function AiChatComposerActionRow({
     }
   }, [mobileDictating]);
 
+  const hasMobileOverflow = Boolean(
+    attachmentControl || contextControl || screenshotControl,
+  );
+
   let recorderRowClassName = "flex-none gap-2";
   if (mobileDictating) recorderRowClassName = "min-w-0 flex-1 gap-0";
   else if (mobile) recorderRowClassName = "w-full gap-2";
@@ -87,38 +91,42 @@ export function AiChatComposerActionRow({
       >
         {mobile ? (
           <>
-            <details
-              ref={overflowRef}
-              data-ai-chat-mobile-overflow
-              hidden={mobileDictating}
-              className="order-1 relative shrink-0"
-            >
-              <summary
-                aria-label="More chat actions"
-                className={`${mobileActionClass} list-none cursor-pointer [&::-webkit-details-marker]:hidden`}
+            {hasMobileOverflow ? (
+              <details
+                ref={overflowRef}
+                data-ai-chat-mobile-overflow
+                hidden={mobileDictating}
+                className="order-1 relative shrink-0"
               >
-                <Plus size={20} strokeWidth={1.75} aria-hidden />
-              </summary>
+                <summary
+                  aria-label="More chat actions"
+                  className={`${mobileActionClass} list-none cursor-pointer [&::-webkit-details-marker]:hidden`}
+                >
+                  <Plus size={20} strokeWidth={1.75} aria-hidden />
+                </summary>
+                <div
+                  role="group"
+                  aria-label="More chat actions"
+                  onClick={() => {
+                    if (overflowRef.current) overflowRef.current.open = false;
+                  }}
+                  className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] flex items-center gap-3 rounded-[4px] bg-modalBackground p-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
+                >
+                  {attachmentControl}
+                  {contextControl}
+                  {screenshotControl}
+                </div>
+              </details>
+            ) : null}
+            {mobileModelControl ? (
               <div
-                role="group"
-                aria-label="More chat actions"
-                onClick={() => {
-                  if (overflowRef.current) overflowRef.current.open = false;
-                }}
-                className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] flex items-center gap-3 rounded-[4px] bg-modalBackground p-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
+                data-ai-chat-mobile-model-control
+                hidden={mobileDictating}
+                className="order-2 shrink-0"
               >
-                {attachmentControl}
-                {contextControl}
-                {screenshotControl}
+                {mobileModelControl}
               </div>
-            </details>
-            <div
-              data-ai-chat-mobile-model-control
-              hidden={mobileDictating}
-              className="order-2 shrink-0"
-            >
-              {mobileModelControl}
-            </div>
+            ) : null}
             {recorder}
             <div
               data-ai-chat-stream-control

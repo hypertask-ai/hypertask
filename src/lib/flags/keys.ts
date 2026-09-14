@@ -49,6 +49,8 @@ export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
   "htpr-6215-my-tasks-cross-board-priority-sort";
 export const HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG =
   "htpr-6407-mobile-agent-chat-layout";
+export const HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG =
+  "htpr-6476-mobile-agent-chat-fullscreen";
 export const SCOPED_BOARD_REFETCH_FLAG = "htpr-6166-scoped-board-refetch";
 export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";
