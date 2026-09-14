@@ -85,16 +85,6 @@ const assigneeHasUser = (task: any, userId: number) =>
       Number(row?.userId ?? row?.user?.id) === userId && !row?.agentId,
   );
 
-// HTPR-6428 userId unassign clears human rows plus owned-agent rows that share
-// the same user id. Recovery and baseline must see those agent rows too, or a
-// leftover agent assignee plus a fresh human assign makes unassign emit two
-// Unassigned activities.
-const assigneeHasAnyUserRow = (task: any, userId: number) =>
-  Array.isArray(task?.assignees) &&
-  task.assignees.some(
-    (row: any) => Number(row?.userId ?? row?.user?.id) === userId,
-  );
-
 const isRecord = (value: unknown): value is Record<string, any> =>
   typeof value === "object" && value !== null;
 
@@ -409,6 +399,10 @@ export async function runCoreActionsSmoke(options: {
     action: string,
     requireOne: boolean,
     persist: boolean,
+    options: {
+      updatedStatus?: "Assigned" | "Unassigned";
+      allowMultiple?: boolean;
+    } = {},
   ) => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const comments = await getComments(action);
@@ -417,12 +411,27 @@ export async function runCoreActionsSmoke(options: {
         const id = Number(comment?.id);
         if (!Number.isSafeInteger(id) || knownCommentIds.has(id)) continue;
         knownCommentIds.add(id);
-        if (isFixtureActivity(comment, fixture)) candidates.push(id);
+        if (!isFixtureActivity(comment, fixture)) continue;
+        if (
+          options.updatedStatus &&
+          comment?.activity?.data?.updatedStatus !== options.updatedStatus
+        ) {
+          continue;
+        }
+        candidates.push(id);
+      }
+      if (candidates.length > 1 && !options.allowMultiple) {
+        throw new SmokeFailure(
+          "unrunnable",
+          action,
+          200,
+          "activity ownership was ambiguous",
+        );
       }
       if (candidates.length > 0) {
         // HTPR-6434: one userId unassign can emit several Unassigned activities
-        // (person row plus owned-agent rows). Every fixture match is ours to
-        // clean up; treating that as ambiguous left core-actions unrunnable.
+        // (person row plus owned-agent rows). Claim only when the caller opts
+        // into allowMultiple for that status; Assigned stays exact-one.
         for (const id of candidates) ownedCommentIds.add(id);
         if (persist) await persistOwnedCommentIds();
         return;
@@ -554,12 +563,13 @@ export async function runCoreActionsSmoke(options: {
           false,
         );
       }
-      if (assigneeHasAnyUserRow(task, fixture.userId)) {
+      if (assigneeHasUser(task, fixture.userId)) {
         await assign("recover interrupted assignment", "unassign");
         await captureNewFixtureActivity(
           "capture recovery assignment activity",
           true,
           false,
+          { updatedStatus: "Unassigned", allowMultiple: true },
         );
       }
       await deleteOwnedComments();
@@ -707,7 +717,9 @@ export async function runCoreActionsSmoke(options: {
     steps.push("move task");
 
     await assign("assign user", "assign");
-    await captureNewFixtureActivity("capture assignment activity", true, true);
+    await captureNewFixtureActivity("capture assignment activity", true, true, {
+      updatedStatus: "Assigned",
+    });
     const assigned = await getBoardTask("verify assignment");
     if (!assigneeHasUser(assigned, fixture.userId)) {
       throw new SmokeFailure(
@@ -722,6 +734,7 @@ export async function runCoreActionsSmoke(options: {
       "capture unassignment activity",
       true,
       true,
+      { updatedStatus: "Unassigned", allowMultiple: true },
     );
     const unassigned = await getBoardTask("verify unassignment");
     if (assigneeHasUser(unassigned, fixture.userId)) {
@@ -798,12 +811,13 @@ export async function runCoreActionsSmoke(options: {
           cleanup.push("restored section and rank");
         }
         const current = await getTask("cleanup assignment read");
-        if (assigneeHasAnyUserRow(current, fixture.userId)) {
+        if (assigneeHasUser(current, fixture.userId)) {
           await assign("cleanup assignment", "unassign");
           await captureNewFixtureActivity(
             "capture cleanup assignment activity",
             true,
             true,
+            { updatedStatus: "Unassigned", allowMultiple: true },
           );
           cleanup.push("removed test-user assignment");
         }
@@ -815,7 +829,7 @@ export async function runCoreActionsSmoke(options: {
         if (
           Number(restored.sectionId) !== fixture.baseSectionId ||
           (originalRank !== undefined && restored.ranking !== originalRank) ||
-          assigneeHasAnyUserRow(restored, fixture.userId)
+          assigneeHasUser(restored, fixture.userId)
         ) {
           throw new SmokeFailure(
             "application",
