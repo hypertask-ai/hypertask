@@ -76,6 +76,7 @@ import { useFlag } from "@/hooks/useFlag";
 import {
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+  MY_TASKS_TABLE_COLUMNS_FLAG,
 } from "@/lib/flags/keys";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { splitAssignees } from "@/lib/assignees";
@@ -431,6 +432,7 @@ const TableView = ({
 }: TableViewProps) => {
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
+  const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
@@ -442,7 +444,8 @@ const TableView = ({
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
   const isApple = useDeviceContext();
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
-  const myTasksColumnsControlled = myTasksVisibleColumns !== undefined;
+  const myTasksColumnsControlled =
+    myTasksTableColumnsFlag && myTasksVisibleColumns !== undefined;
   const [atomVisibleColumns, setAtomVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
   const storedVisibleColumns = myTasksColumnsControlled
     ? myTasksVisibleColumns
