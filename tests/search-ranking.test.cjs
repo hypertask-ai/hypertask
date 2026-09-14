@@ -12,6 +12,7 @@ const {
   parseTicketSearchQuery,
   rankAndGroupHits,
   resolveContextProjectId,
+  shouldKeepRankedHit,
   tokenize,
 } = jiti(path.join(root, "src/utils/controllers/search/rankHits.ts"));
 
@@ -143,6 +144,66 @@ test("non-ASCII words tokenize as whole words, not substrings", () => {
     isStrongLexicalHit(
       { ticketNumber: "HTPR-4", title: "caféteria hours", projectId: 15 },
       "café"
+    ),
+    false
+  );
+});
+
+test("an archived title match beats an open comment-only mention", () => {
+  const thisTicket = {
+    ticketNumber: "HTPR-6372",
+    title: "Search ranking returns unrelated tickets for plain queries",
+    commentText:
+      "inbox icon returns HTPR-6365 first; GET /search?searchTerm=inbox+icon",
+    projectId: 15,
+    uniqueIndex: 6372,
+    status: "Normal",
+  };
+  const ranked = rankAndGroupHits(
+    [thisTicket, { ...inboxIcon, status: "Archive" }],
+    "inbox icon",
+    15
+  );
+  assert.equal(ranked[0].ticketNumber, "HTPR-6365");
+  assert.equal(ranked[1].ticketNumber, "HTPR-6372");
+});
+
+test("a ticket-number query pins an archived ticket ahead of an open mention", () => {
+  const mention = {
+    ticketNumber: "HTPR-6372",
+    title: "Search ranking returns unrelated tickets",
+    descriptionText: "Acceptance: HTPR-6365 first",
+    projectId: 15,
+    uniqueIndex: 6372,
+    status: "Normal",
+  };
+  const ranked = rankAndGroupHits(
+    [mention, { ...inboxIcon, status: "Archive" }],
+    "HTPR-6365",
+    15
+  );
+  assert.equal(ranked[0].ticketNumber, "HTPR-6365");
+  assert.equal(ranked[1].ticketNumber, "HTPR-6372");
+});
+
+test("default open search keeps archived exact and title hits, not comment-only", () => {
+  const archivedTitle = { ...inboxIcon, status: "Archive" };
+  const archivedComment = {
+    ticketNumber: "HTPR-9",
+    title: "Unrelated billing",
+    commentText: "mentions the inbox icon in passing",
+    projectId: 15,
+    uniqueIndex: 9,
+    status: "Archive",
+  };
+  assert.equal(shouldKeepRankedHit(archivedTitle, "inbox icon", "Normal"), true);
+  assert.equal(shouldKeepRankedHit(archivedComment, "inbox icon", "Normal"), false);
+  assert.equal(shouldKeepRankedHit(archivedTitle, "HTPR-6365", "Normal"), true);
+  assert.equal(
+    shouldKeepRankedHit(
+      { ...inboxIcon, status: "Normal" },
+      "inbox icon",
+      "Archive"
     ),
     false
   );

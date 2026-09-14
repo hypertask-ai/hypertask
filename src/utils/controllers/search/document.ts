@@ -2,6 +2,7 @@ import { searchConfig } from "@/lib/configs/search.config";
 import {
   rankAndGroupHits,
   resolveContextProjectId,
+  shouldKeepRankedHit,
   tokenize,
 } from "@/utils/controllers/search/rankHits";
 import {
@@ -126,21 +127,32 @@ export async function turbopufferGetDocuments(
   const contextProjectId = applyRelevanceCut
     ? resolveContextProjectId(options?.contextProjectId, projectIds)
     : null;
+  const includeArchivedTitleLane =
+    applyRelevanceCut && archive === "Normal";
+  const primaryStatus = includeArchivedTitleLane ? "Normal" : archive;
 
   try {
-    const [globalTasks, globalComments, contextTasks, contextComments] =
-      await Promise.all([
+    const [
+      globalTasks,
+      globalComments,
+      contextTasks,
+      contextComments,
+      archivedTasks,
+      archivedComments,
+      contextArchivedTasks,
+      contextArchivedComments,
+    ] = await Promise.all([
         searchTasks({
           searchQuery,
           projectIds,
-          status: archive,
+          status: primaryStatus,
           topK: applyRelevanceCut ? RANKED_TASK_TOP_K : DEFAULT_TASK_TOP_K,
           keywordOnly: true,
         }),
         searchComments({
           searchQuery,
           projectIds,
-          status: archive,
+          status: primaryStatus,
           topK: 200,
           limit: applyRelevanceCut
             ? RANKED_COMMENT_LIMIT
@@ -152,7 +164,7 @@ export async function turbopufferGetDocuments(
               searchQuery,
               projectIds,
               projectId: contextProjectId,
-              status: archive,
+              status: primaryStatus,
               topK: CONTEXT_TASK_TOP_K,
               keywordOnly: true,
             })
@@ -161,7 +173,46 @@ export async function turbopufferGetDocuments(
           ? searchComments({
               searchQuery,
               projectIds: [contextProjectId],
-              status: archive,
+              status: primaryStatus,
+              topK: 200,
+              limit: CONTEXT_COMMENT_LIMIT,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferCommentRow[]),
+        includeArchivedTitleLane
+          ? searchTasks({
+              searchQuery,
+              projectIds,
+              status: "Archive",
+              topK: CONTEXT_TASK_TOP_K,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferTaskRow[]),
+        includeArchivedTitleLane
+          ? searchComments({
+              searchQuery,
+              projectIds,
+              status: "Archive",
+              topK: 200,
+              limit: CONTEXT_COMMENT_LIMIT,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferCommentRow[]),
+        includeArchivedTitleLane && contextProjectId !== null
+          ? searchTasks({
+              searchQuery,
+              projectIds,
+              projectId: contextProjectId,
+              status: "Archive",
+              topK: CONTEXT_TASK_TOP_K,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferTaskRow[]),
+        includeArchivedTitleLane && contextProjectId !== null
+          ? searchComments({
+              searchQuery,
+              projectIds: [contextProjectId],
+              status: "Archive",
               topK: 200,
               limit: CONTEXT_COMMENT_LIMIT,
               keywordOnly: true,
@@ -169,8 +220,18 @@ export async function turbopufferGetDocuments(
           : Promise.resolve([] as TurbopufferCommentRow[]),
       ]);
 
-    const taskRows = mergeRowsById(globalTasks, contextTasks);
-    const commentRows = mergeRowsById(globalComments, contextComments);
+    const taskRows = mergeRowsById(
+      globalTasks,
+      contextTasks,
+      archivedTasks,
+      contextArchivedTasks
+    );
+    const commentRows = mergeRowsById(
+      globalComments,
+      contextComments,
+      archivedComments,
+      contextArchivedComments
+    );
 
     if (taskRows.length === 0 && commentRows.length === 0) {
       return emptySearchResponse(204, contextProjectId);
@@ -254,7 +315,9 @@ export async function turbopufferGetDocuments(
     }
 
     const rankedData = applyRelevanceCut
-      ? rankAndGroupHits(processedData, searchQuery, contextProjectId)
+      ? rankAndGroupHits(processedData, searchQuery, contextProjectId).filter(
+          (hit) => shouldKeepRankedHit(hit, searchQuery, archive)
+        )
       : activeBeforeArchived(processedData.slice(0, 50));
     const finalData = rankedData.slice(0, 50);
 
@@ -271,7 +334,9 @@ export async function turbopufferGetDocuments(
     const uniqueStatuses = new Set(
       finalData.map((item: any) => item?.status).filter(Boolean)
     );
-    const hasMultipleStatuses = uniqueStatuses.size > 1;
+    const hasMultipleStatuses =
+      uniqueStatuses.size > 1 &&
+      !(applyRelevanceCut && archive === "Normal");
     if (hasMultipleStatuses) {
       tabs.push("Open", "Archived");
 
@@ -312,17 +377,16 @@ export async function turbopufferGetDocuments(
   }
 }
 
-function mergeRowsById<T extends { id: string }>(
-  primary: T[],
-  extra: T[]
-): T[] {
+function mergeRowsById<T extends { id: string }>(...groups: T[][]): T[] {
   const seen = new Set<string>();
   const merged: T[] = [];
 
-  for (const row of [...primary, ...extra]) {
-    if (seen.has(row.id)) continue;
-    seen.add(row.id);
-    merged.push(row);
+  for (const group of groups) {
+    for (const row of group) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      merged.push(row);
+    }
   }
 
   return merged;
