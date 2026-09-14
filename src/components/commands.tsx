@@ -206,6 +206,7 @@ import { useGlobalUIState } from "./ProviderGlobal/useGlobalUIState";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { useUndoContext } from "@/hooks/General/useUndo";
 import { useKanbanBulkSelectionOptional } from "@/lib/contexts/Kanban/BulkSelectionContext";
+import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
 import {
   openTaskTemplateDraft,
   taskTemplatePickerForProject,
@@ -252,9 +253,12 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const { openAnnouncements } = useGlobalUIState();
   const billing = useCurrentBoardBilling();
   const { undoLatest } = useUndoContext();
-  const bulkSelection = useKanbanBulkSelectionOptional();
+  const kanbanBulkSelection = useKanbanBulkSelectionOptional();
+  const myTasksBulkSelection = useMyTasksBulkSelectionOptional();
+  const bulkSelection = kanbanBulkSelection ?? myTasksBulkSelection;
   const hasBulkSelection = (bulkSelection?.selectedCount ?? 0) > 0;
   const bulkTasks = bulkSelection?.selectedTasks ?? [];
+  const bulkProjectId = bulkTasks[0]?.projectId ?? null;
   const paletteContextOptions = hasBulkSelection
     ? {
         ...contextOptions,
@@ -2200,6 +2204,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             hasBulkSelection && bulkSelection && bulkTasks[0] ? (
               <AssignModal
                 onClose={boardCloseHandler}
+                project={
+                  bulkProjectId
+                    ? ({ id: bulkProjectId } as IProject)
+                    : undefined
+                }
                 task={{
                   id: bulkTasks[0].id,
                   title: bulkTasks[0].title,
@@ -2278,9 +2287,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             hasBulkSelection &&
             bulkSelection &&
             bulkTasks[0] &&
-            _currentProject ? (
+            (_currentProject || bulkProjectId) ? (
               <MoveToColumn
-                projectId={_currentProject.id}
+                projectId={_currentProject?.id ?? bulkProjectId!}
                 task={{
                   taskId: bulkTasks[0].id,
                   projectId: bulkTasks[0].projectId,

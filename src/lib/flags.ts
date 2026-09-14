@@ -46,6 +46,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -385,6 +386,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
+  },
+  {
+    key: MY_TASKS_BULK_SELECTION_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Adds Inbox-style multi-select on My Tasks with bulk archive, assign, label, and move to column.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
