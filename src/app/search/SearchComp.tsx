@@ -7,7 +7,9 @@ import { Check } from "lucide-react";
 import { searchConfig } from "@/lib/configs/search.config";
 import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { KeyboardEvent, RefObject, useContext } from "react";
+import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6372_SEARCH_RANKING_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
@@ -18,6 +20,7 @@ interface IProps {
   _searchTerm: string;
   _initialTabIndex?: number;
   _includeArchived: boolean;
+  _fromProject?: number | null;
   currentUser: IUser;
 }
 
@@ -25,8 +28,10 @@ const SearchComp = ({
   _searchTerm,
   _initialTabIndex,
   _includeArchived,
+  _fromProject = null,
   currentUser,
 }: IProps) => {
+  const rankingEnabled = useFlag(HTPR_6372_SEARCH_RANKING_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -57,7 +62,7 @@ const SearchComp = ({
     suggestedValue,
     includeArchived,
     setIncludeArchivedResults,
-  } = useSearch(_searchTerm, _initialTabIndex, _includeArchived);
+  } = useSearch(_searchTerm, _initialTabIndex, _includeArchived, _fromProject);
   const showAskAiRow =
     inputValue.trim().length >= 2 && typedTasks.length === 0;
   const searchTextClassName =
@@ -160,18 +165,42 @@ const SearchComp = ({
                       )}
                       {typedTasks.length > 0 &&
                         typedTasks.map((item, index) => {
+                          const showThisBoard =
+                            rankingEnabled &&
+                            item.searchGroup === "current-board" &&
+                            typedTasks[index - 1]?.searchGroup !==
+                              "current-board" &&
+                            typedTasks.some(
+                              (task) => task.searchGroup === "other"
+                            );
+                          const showOtherBoards =
+                            rankingEnabled &&
+                            item.searchGroup === "other" &&
+                            typedTasks[index - 1]?.searchGroup !== "other" &&
+                            typedTasks.some(
+                              (task) => task.searchGroup === "current-board"
+                            );
                           return (
-                            <TaskListRow
-                              task={item}
-                              highlight={item.highlight}
-                              index={index}
-                              handleLinkClick={handleLinkClick}
-                              handleMouseEnter={handleMouseEnter}
-                              handleMouseLeave={handleMouseLeave}
-                              isActive={selectedIndex === index}
-                              liRef={liSelectedRef}
+                            <Fragment
                               key={`${searchConfig.elementIds.results.childKeys}-${index}`}
-                            />
+                            >
+                              {showThisBoard && (
+                                <SearchGroupLabel label="This board" />
+                              )}
+                              {showOtherBoards && (
+                                <SearchGroupLabel label="Other boards" />
+                              )}
+                              <TaskListRow
+                                task={item}
+                                highlight={item.highlight}
+                                index={index}
+                                handleLinkClick={handleLinkClick}
+                                handleMouseEnter={handleMouseEnter}
+                                handleMouseLeave={handleMouseLeave}
+                                isActive={selectedIndex === index}
+                                liRef={liSelectedRef}
+                              />
+                            </Fragment>
                           );
                         })}
                     </ul>
@@ -256,6 +285,15 @@ const SearchComp = ({
     </>
   ) : content;
 };
+
+const SearchGroupLabel = ({ label }: { label: string }) => (
+  <li
+    aria-hidden="true"
+    className="px-4 py-2 text-micro font-medium text-[#8E9093] list-none"
+  >
+    {label}
+  </li>
+);
 
 interface IAskAiRow {
   query: string;

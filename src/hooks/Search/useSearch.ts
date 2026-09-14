@@ -28,7 +28,8 @@ import {
 export function useSearch(
   _searchTerm: string,
   _initialTabIndex?: number,
-  _includeArchived = false
+  _includeArchived = false,
+  _fromProject: number | null = null
 ) {
   const { data: searchCache } = useGetSearchCache();
   const { data: allProjects } = useGetAllProjectsMinimal([
@@ -118,6 +119,7 @@ export function useSearch(
     return JSON.stringify([
       searchTerm,
       showArchived,
+      _fromProject,
       projects.map((project) => project.id),
     ]);
   }
@@ -142,6 +144,7 @@ export function useSearch(
               : projects.map((item) => item.id),
           searchQuery: processedSearchTerm,
           archive,
+          contextProjectId: _fromProject,
         });
 
         if (!searchRequestGate.isLatest(requestId)) return;
@@ -240,7 +243,7 @@ export function useSearch(
     tabIndex: number | null | undefined = explicitTabIndex,
     showArchived = includeArchived
   ) {
-    return buildSearchUrl(searchTerm, tabIndex, showArchived);
+    return buildSearchUrl(searchTerm, tabIndex, showArchived, _fromProject);
   }
 
   /**
@@ -342,6 +345,7 @@ export function useSearch(
             : projects.map((item) => item.id),
         searchQuery: processedSearchTerm,
         archive,
+        contextProjectId: _fromProject,
       });
 
       if (!searchRequestGate.isLatest(requestId)) return;
@@ -756,7 +760,7 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [projects, _includeArchived, _searchTerm]);
+  }, [projects, _includeArchived, _searchTerm, _fromProject]);
 
   return {
     setSelectedIndex,

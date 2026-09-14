@@ -1,10 +1,22 @@
 import { searchConfig } from "@/lib/configs/search.config";
 import {
+  rankAndGroupHits,
+  resolveContextProjectId,
+  tokenize,
+} from "@/utils/controllers/search/rankHits";
+import {
   searchComments,
   searchTasks,
   TurbopufferCommentRow,
   TurbopufferTaskRow,
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+
+const DEFAULT_TASK_TOP_K = 50;
+const DEFAULT_COMMENT_LIMIT = 50;
+const RANKED_TASK_TOP_K = 200;
+const RANKED_COMMENT_LIMIT = 100;
+const CONTEXT_TASK_TOP_K = 50;
+const CONTEXT_COMMENT_LIMIT = 50;
 
 type SearchStatus = "Normal" | "Archive";
 
@@ -104,29 +116,64 @@ export async function turbopufferSearchTaskIds(
 export async function turbopufferGetDocuments(
   searchQuery: string,
   projectIds: number[],
-  archive: null | SearchStatus
+  archive: null | SearchStatus,
+  options?: {
+    contextProjectId?: number | null;
+    applyRelevanceCut?: boolean;
+  }
 ) {
+  const applyRelevanceCut = options?.applyRelevanceCut === true;
+  const contextProjectId = applyRelevanceCut
+    ? resolveContextProjectId(options?.contextProjectId, projectIds)
+    : null;
+
   try {
-    const [taskRows, commentRows] = await Promise.all([
-      searchTasks({
-        searchQuery,
-        projectIds,
-        status: archive,
-        topK: 50,
-        keywordOnly: true,
-      }),
-      searchComments({
-        searchQuery,
-        projectIds,
-        status: archive,
-        topK: 200,
-        limit: 50,
-        keywordOnly: true,
-      }),
-    ]);
+    const [globalTasks, globalComments, contextTasks, contextComments] =
+      await Promise.all([
+        searchTasks({
+          searchQuery,
+          projectIds,
+          status: archive,
+          topK: applyRelevanceCut ? RANKED_TASK_TOP_K : DEFAULT_TASK_TOP_K,
+          keywordOnly: true,
+        }),
+        searchComments({
+          searchQuery,
+          projectIds,
+          status: archive,
+          topK: 200,
+          limit: applyRelevanceCut
+            ? RANKED_COMMENT_LIMIT
+            : DEFAULT_COMMENT_LIMIT,
+          keywordOnly: true,
+        }),
+        contextProjectId != null
+          ? searchTasks({
+              searchQuery,
+              projectIds,
+              projectId: contextProjectId,
+              status: archive,
+              topK: CONTEXT_TASK_TOP_K,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferTaskRow[]),
+        contextProjectId != null
+          ? searchComments({
+              searchQuery,
+              projectIds: [contextProjectId],
+              status: archive,
+              topK: 200,
+              limit: CONTEXT_COMMENT_LIMIT,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferCommentRow[]),
+      ]);
+
+    const taskRows = mergeRowsById(globalTasks, contextTasks);
+    const commentRows = mergeRowsById(globalComments, contextComments);
 
     if (taskRows.length === 0 && commentRows.length === 0) {
-      return emptySearchResponse(204);
+      return emptySearchResponse(204, contextProjectId);
     }
 
     const taskHits = taskRows.map((row) => taskRowToHit(row, searchQuery));
@@ -157,11 +204,9 @@ export async function turbopufferGetDocuments(
       }
     }
 
-    const topHits = deduplicatedHits.slice(0, 50);
-
     const processedData: any[] = [];
 
-    for (const hit of topHits) {
+    for (const hit of deduplicatedHits) {
       if (hit.collection === searchConfig.collections.task.name) {
         const data = {
           highlight: hit.highlight,
@@ -196,7 +241,14 @@ export async function turbopufferGetDocuments(
       }
     }
 
-    const finalData = activeBeforeArchived(processedData);
+    const rankedData = applyRelevanceCut
+      ? rankAndGroupHits(processedData, searchQuery, contextProjectId)
+      : processedData.slice(0, 50);
+    const finalData = activeBeforeArchived(rankedData).slice(0, 50);
+
+    if (applyRelevanceCut && finalData.length === 0) {
+      return emptySearchResponse(204, contextProjectId);
+    }
     const resultsByProject: Record<string, any[]> = {
       All: [...finalData],
     };
@@ -239,12 +291,29 @@ export async function turbopufferGetDocuments(
     return {
       tabs,
       processedData: resultsByProject,
+      contextProjectId,
       status: 200,
     };
   } catch (error) {
     console.error("turbopufferGetDocuments error:", error);
-    return emptySearchResponse(500);
+    return emptySearchResponse(500, contextProjectId);
   }
+}
+
+function mergeRowsById<T extends { id: string }>(
+  primary: T[],
+  extra: T[]
+): T[] {
+  const seen = new Set<string>();
+  const merged: T[] = [];
+
+  for (const row of [...primary, ...extra]) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    merged.push(row);
+  }
+
+  return merged;
 }
 
 function taskRowToHit(row: TurbopufferTaskRow, searchQuery: string): SearchHit {
@@ -343,9 +412,7 @@ function highlightedSnippet(value: string, searchQuery: string) {
 }
 
 function getQueryTerms(searchQuery: string) {
-  return Array.from(
-    new Set(searchQuery.match(/[a-zA-Z0-9_-]+/g)?.filter(Boolean) ?? [])
-  );
+  return tokenize(searchQuery);
 }
 
 function escapeHtml(value: string) {
@@ -373,7 +440,10 @@ function activeBeforeArchived<T extends { status?: string | null }>(items: T[]) 
   ];
 }
 
-function emptySearchResponse(status: 204 | 500) {
+function emptySearchResponse(
+  status: 204 | 500,
+  contextProjectId: number | null = null
+) {
   return {
     processedData: {
       All: {
@@ -381,6 +451,7 @@ function emptySearchResponse(status: 204 | 500) {
       },
     },
     tabs: ["All"],
+    contextProjectId,
     status,
   };
 }

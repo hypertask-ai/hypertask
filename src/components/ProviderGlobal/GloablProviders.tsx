@@ -34,6 +34,7 @@ import {
   showAccountSwitcherAtom,
   appShellRailAtom,
   currentUserAtom,
+  currentProjectAtom,
   lastUsedBoardsAtom,
   agentChatTeamCycleAtom,
 } from "@/store";
@@ -188,6 +189,7 @@ import {
   shouldOpenGlobalCreateTask,
 } from "@/lib/keyboard/globalShortcutRoutes";
 import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShortcuts";
+import { boardContextFromPath, buildSearchUrl } from "@/lib/searchArchive";
 
 // React.lazy is intentional here. next/dynamic emits route preload hints for
 // rendered boundaries, which fetched these chunks while the chat was closed.
@@ -308,6 +310,7 @@ export default function GlobalProvider({
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
+  const currentProject = useRecoilValue(currentProjectAtom);
   const projectRoute = pathname?.startsWith("/project") ?? false;
   const startupUserMatchesSession =
     authenticatedUserId !== null && startupUser?.id === authenticatedUserId;
@@ -1147,7 +1150,14 @@ export default function GlobalProvider({
       !window.location.pathname.includes("/search")
     ) {
       e.preventDefault();
-      router.push("/search?searchTerm=");
+      router.push(
+        buildSearchUrl(
+          "",
+          null,
+          false,
+          boardContextFromPath(pathname, currentProject?.id)
+        )
+      );
     }
   };
 

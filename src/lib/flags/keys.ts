@@ -52,6 +52,7 @@ export const HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG =
 export const SCOPED_BOARD_REFETCH_FLAG = "htpr-6166-scoped-board-refetch";
 export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";
+export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

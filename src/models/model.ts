@@ -1178,6 +1178,7 @@ export interface ITypedTask {
   uniqueIndex: number;
   commentText?: string;
   descriptionText?: string;
+  searchGroup?: "current-board" | "other";
 }
 
 export type IgnoreItemType =
