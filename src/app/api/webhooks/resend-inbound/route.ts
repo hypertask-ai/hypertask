@@ -1,5 +1,5 @@
-import { Webhook } from "svix";
 import prisma from "@/lib/prisma";
+import { verifySvixPayload } from "@/lib/svixWebhook";
 import { retrieveResendReceivedEmail } from "@/lib/email/inboundReply";
 import {
   createResendInboundHandler,
@@ -17,7 +17,7 @@ function webhookSecret(): string {
 }
 
 function verifyResendWebhook(rawBody: string, headers: Headers): unknown {
-  return new Webhook(webhookSecret()).verify(rawBody, {
+  return verifySvixPayload(webhookSecret(), rawBody, {
     "svix-id": headers.get("svix-id") ?? "",
     "svix-timestamp": headers.get("svix-timestamp") ?? "",
     "svix-signature": headers.get("svix-signature") ?? "",
