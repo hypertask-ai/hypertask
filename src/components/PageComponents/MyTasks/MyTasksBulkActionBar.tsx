@@ -22,7 +22,7 @@ const MyTasksBulkActionBar = () => {
 
   if (selectedCount === 0) return null;
 
-  const sameBoard = sharedProjectId(selectedTasks) != null;
+  const sameBoard = sharedProjectId(selectedTasks) !== null;
 
   return (
     <div
