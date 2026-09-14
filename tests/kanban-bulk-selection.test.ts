@@ -49,6 +49,35 @@ test("project-scoped bulk actions require one shared board", () => {
   assert.equal(getSharedProjectId([]), null);
 });
 
+test("table range selection follows visible order inside one board", () => {
+  const groups = getTaskIdsByGroup(
+    [
+      { id: 31, projectId: 3 },
+      { id: 41, projectId: 4 },
+      { id: 32, projectId: 3 },
+      { id: 33, projectId: 3 },
+    ],
+    (task) => task.projectId,
+  );
+
+  assert.deepEqual(getInclusiveRange(groups.get(3) ?? [], 31, 33), [
+    31,
+    32,
+    33,
+  ]);
+});
+
+test("select all leaves hidden selections intact when no rows are visible", () => {
+  assert.deepEqual([...toggleVisibleIds(new Set([99]), [])], [99]);
+});
+
+test("project-scoped actions reject tasks with no board", () => {
+  assert.equal(
+    getSharedProjectId([{ projectId: 3 }, { projectId: undefined }]),
+    null,
+  );
+});
+
 test("the command center exposes batch actions only when tasks are selected", () => {
   const selectedGroup = getAllCommands({
     context: "Kanban",
