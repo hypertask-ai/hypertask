@@ -52,6 +52,11 @@ test("uses Command instead of Control for platform-modified task actions on Appl
     "archive",
   );
   assert.equal(
+    getTaskShortcutAction(event(69, { metaKey: true, repeat: true }), true),
+    null,
+    "held Cmd+E must not keep archiving",
+  );
+  assert.equal(
     getTaskShortcutAction(event(83, { metaKey: true }), true),
     "share",
   );

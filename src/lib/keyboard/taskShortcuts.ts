@@ -68,7 +68,9 @@ export function getTaskShortcutAction(
   if (event.shiftKey && event.keyCode === KeyCodes.THREE && !event.repeat) {
     return "delete";
   }
-  if (event.keyCode === KeyCodes.E && cmdControl) return "archive";
+  if (event.keyCode === KeyCodes.E && cmdControl && !event.repeat) {
+    return "archive";
+  }
   if (
     event.keyCode === KeyCodes.S &&
     !event.shiftKey &&

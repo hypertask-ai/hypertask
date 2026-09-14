@@ -471,12 +471,25 @@ const TableView = ({
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [assignTask, setAssignTask] = useState<ITask | null>(null);
-  const { project: assignProject } = useTaskProjectFallback(
+  const {
+    project: assignProject,
+    isLoading: assignProjectLoading,
+    isError: assignProjectError,
+  } = useTaskProjectFallback(
     _currentProject,
     assignTask?.projectId,
     currentUser?.id,
     rowShortcutsEnabled && Boolean(assignTask),
   );
+  // If My Tasks cannot load the row's board, drop the pending assign target
+  // so other shortcuts are not blocked with no modal on screen (OCR).
+  useEffect(() => {
+    if (!assignTask || assignProjectLoading) return;
+    if (assignProjectError || !assignProject?.name) {
+      setAssignTask(null);
+      toast.error("Unable to open assign for this task's board");
+    }
+  }, [assignProject?.name, assignProjectError, assignProjectLoading, assignTask]);
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
   // My Tasks has no board cache to mutate, so Ctrl+E hides the row locally
   // until router.refresh() returns the server list without it (HTPR-6445).
