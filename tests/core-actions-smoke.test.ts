@@ -500,6 +500,7 @@ function fakeApp(
         return json({
           body: state.assignees,
           assignStatus: "Assigned",
+          assignmentOutcome: "created",
           activityCommentIds: [activityId],
         });
       }
@@ -532,6 +533,8 @@ function fakeApp(
       return json({
         body: state.assignees,
         assignStatus: "Unassigned",
+        assignmentOutcome:
+          removed.length > 0 ? "removed" : "already-unassigned",
         activityCommentIds,
       });
     }

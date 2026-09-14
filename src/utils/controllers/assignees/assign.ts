@@ -68,6 +68,8 @@ const assigneesAssign = async (
     let assignmentOutcome:
       | "created"
       | "already-assigned"
+      | "already-unassigned"
+      | "removed"
       | "stale-task" = "already-assigned";
 
     const task = await prisma.task.findUnique({
@@ -263,10 +265,12 @@ const assigneesAssign = async (
             assigneeIntent: "Unassigned",
           });
           activityCommentIds = removalOutcome.activityCommentIds;
+          assignmentOutcome = removalOutcome.outcome;
           if (removalOutcome.outcome === "stale-task") {
-            assignmentOutcome = "stale-task";
             assignStatus = "Conflict";
           }
+        } else {
+          assignmentOutcome = "already-unassigned";
         }
       } else {
         // Always take the fenced bulk path so a concurrent owned-agent assign
@@ -277,8 +281,8 @@ const assigneesAssign = async (
           assigneeIntent: "Unassigned",
         });
         activityCommentIds = removalOutcome.activityCommentIds;
+        assignmentOutcome = removalOutcome.outcome;
         if (removalOutcome.outcome === "stale-task") {
-          assignmentOutcome = "stale-task";
           assignStatus = "Conflict";
         }
       }
@@ -316,8 +320,8 @@ const assigneesAssign = async (
           assigneeIntent: "Unassigned",
         });
         activityCommentIds = removalOutcome.activityCommentIds;
+        assignmentOutcome = removalOutcome.outcome;
         if (removalOutcome.outcome === "stale-task") {
-          assignmentOutcome = "stale-task";
           assignStatus = "Conflict";
         }
       }

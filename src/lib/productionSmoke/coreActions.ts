@@ -408,6 +408,24 @@ export async function runCoreActionsSmoke(options: {
     );
   };
 
+  const claimAssignActivities = async (
+    action: string,
+    response: JsonResponse,
+    persist: boolean,
+  ) => {
+    if (response.data?.assignmentOutcome === "already-assigned") return;
+    await requireReturnedActivityIds(action, response, persist);
+  };
+
+  const claimUnassignActivities = async (
+    action: string,
+    response: JsonResponse,
+    persist: boolean,
+  ) => {
+    if (response.data?.assignmentOutcome === "already-unassigned") return;
+    await requireReturnedActivityIds(action, response, persist);
+  };
+
   const rememberCommentIds = (comments: any[]) => {
     for (const comment of comments) {
       const id = Number(comment?.id);
@@ -549,7 +567,7 @@ export async function runCoreActionsSmoke(options: {
           "recover interrupted assignment",
           "unassign",
         );
-        await requireReturnedActivityIds(
+        await claimUnassignActivities(
           "capture recovery assignment activity",
           recoveryUnassign,
           false,
@@ -700,7 +718,7 @@ export async function runCoreActionsSmoke(options: {
     steps.push("move task");
 
     const assignResponse = await assign("assign user", "assign");
-    await requireReturnedActivityIds(
+    await claimAssignActivities(
       "capture assignment activity",
       assignResponse,
       true,
@@ -715,7 +733,7 @@ export async function runCoreActionsSmoke(options: {
       );
     }
     const unassignResponse = await assign("unassign user", "unassign");
-    await requireReturnedActivityIds(
+    await claimUnassignActivities(
       "capture unassignment activity",
       unassignResponse,
       true,
@@ -798,7 +816,7 @@ export async function runCoreActionsSmoke(options: {
             "cleanup assignment",
             "unassign",
           );
-          await requireReturnedActivityIds(
+          await claimUnassignActivities(
             "capture cleanup assignment activity",
             cleanupUnassign,
             true,
