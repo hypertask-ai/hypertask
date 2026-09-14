@@ -10,6 +10,7 @@ import { useFlag } from "@/hooks/useFlag";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
+  MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
@@ -131,6 +132,7 @@ const MyTasks = ({
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
@@ -180,10 +182,11 @@ const MyTasks = ({
   }, [initialBoards, initialSections, initialTabs]);
 
   const scopesKey = JSON.stringify(
-    effectiveMyTasksScopes(viewConfig.scopes, scopesEnabled),
+    effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
   );
 
   useEffect(() => {
+    if (!myTasksScopesFlag) return;
     if (!scopesEnabled) return;
     if (lastFetchedScopesKey.current === null) {
       lastFetchedScopesKey.current = scopesKey;
@@ -219,7 +222,7 @@ const MyTasks = ({
         }
       }
     })();
-  }, [scopesEnabled, scopesKey, viewConfig.scopes]);
+  }, [myTasksScopesFlag, scopesEnabled, scopesKey, viewConfig.scopes]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled) return;
