@@ -21,7 +21,6 @@ import {
   boardLayoutAtom,
   boardZoomedOutAtom,
   tableVisibleColumnsAtom,
-  myTasksTableColumnsPickerRequestAtom,
   setTableStalenessColumns,
   appShellRailAtom,
   appShellRailExpandedAtom,
@@ -213,7 +212,7 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -226,8 +225,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const queryClient = useQueryClient();
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
-  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -310,14 +307,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const currentUser: IUser = JSON.parse(cookies.nookies_user);
   const router = useRouter();
   const pathname = usePathname();
-  const onMyTasks = !!pathname?.startsWith(globalConstants.myTasksRoute);
   const { startTour, setSelectedTourId, endTour } = useTourContext();
   const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
   const boardLayout = useRecoilValue(boardLayoutAtom);
   const [, setTableVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
-  const [, setMyTasksColumnsPickerRequest] = useRecoilState(
-    myTasksTableColumnsPickerRequestAtom,
-  );
   const [_activeItem, setActiveItem] = useRecoilState(activeItemAtom);
   const [callbackProjectId, setCallbackProjectId] = useState<number | null>(null);
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
@@ -959,10 +952,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         boardCloseHandler();
         break;
       case CommandMode.ConfigureTableColumns:
-        if (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) {
-          setMyTasksColumnsPickerRequest((current) => current + 1);
-          boardCloseHandler();
-        }
         break;
       case CommandMode.ManageCustomFields:
         break;
@@ -2517,8 +2506,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
               onOpenCli={() => handleAction(CommandMode.CliInstall)}
             />
           )}
-          {commandMode === CommandMode.ConfigureTableColumns &&
-            !(onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) && (
+          {commandMode === CommandMode.ConfigureTableColumns && (
             <TableColumnsPicker closeHandler={boardCloseHandler} projectId={_currentProject?.id} />
           )}
           {commandMode === CommandMode.ManageCustomFields && (

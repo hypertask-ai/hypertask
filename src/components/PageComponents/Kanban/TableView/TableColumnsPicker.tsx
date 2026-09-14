@@ -26,20 +26,11 @@ import axios from "axios";
 type TableColumnsPickerProps = {
   closeHandler: () => void;
   projectId?: number;
-  /** Controlled mode (My Tasks). When set with onChange, never touches the board atom. */
-  availableColumns?: readonly string[];
-  columnLabels?: Record<string, string>;
-  value?: string[];
-  onChange?: (columns: string[]) => void;
-  defaultColumns?: readonly string[];
-  normalize?: (value: unknown) => string[];
-  hideCustomFields?: boolean;
-  hideWidthReset?: boolean;
 };
 
 type CustomField = { id: string; name: string; showInTable?: boolean | null };
 
-const boardColumnLabels: Record<TableColumnKey, string> = {
+const columnLabels: Record<TableColumnKey, string> = {
   ticket: "Ticket",
   title: "Title",
   status: "Status",
@@ -57,40 +48,16 @@ const boardColumnLabels: Record<TableColumnKey, string> = {
 
 const lockedColumns = LOCKED_TABLE_COLUMNS;
 
-const TableColumnsPicker = ({
-  closeHandler,
-  projectId,
-  availableColumns,
-  columnLabels,
-  value,
-  onChange,
-  defaultColumns,
-  normalize,
-  hideCustomFields = false,
-  hideWidthReset = false,
-}: TableColumnsPickerProps) => {
-  const controlled = Boolean(onChange);
+const TableColumnsPicker = ({ closeHandler, projectId }: TableColumnsPickerProps) => {
   const currentProject = useRecoilValue(currentProjectAtom);
   const showTimeTotals = Boolean(
-    !controlled &&
-      currentProject?.id === projectId &&
-      currentProject?.showTimeTotals,
+    currentProject?.id === projectId && currentProject?.showTimeTotals,
   );
-  const [atomColumns, setAtomColumns] = useRecoilState(tableVisibleColumnsAtom);
+  const [storedColumns, setStoredColumns] = useRecoilState(tableVisibleColumnsAtom);
   const [columnWidths, setColumnWidths] = useRecoilState(tableColumnWidthsAtom);
-  const normalizeColumns = normalize ?? normalizeTableVisibleColumns;
-  const storedColumns = controlled ? (value ?? []) : atomColumns;
-  const setStoredColumns = (next: string[] | ((current: string[]) => string[])) => {
-    if (controlled && onChange) {
-      const current = normalizeColumns(storedColumns);
-      onChange(typeof next === "function" ? next(current) : next);
-      return;
-    }
-    setAtomColumns(next);
-  };
   const { data: customFields = [] } = useQuery<CustomField[]>({
     queryKey: ["customFields", projectId],
-    enabled: Boolean(projectId) && !hideCustomFields && !controlled,
+    enabled: Boolean(projectId),
     queryFn: async () => (await axios.get(`/api/customFields?projectId=${projectId}`)).data,
   });
   // A field with showInTable=false (set in the manage-custom-fields modal) is
@@ -101,19 +68,15 @@ const TableColumnsPicker = ({
     [customFields]
   );
   const customFieldKeys = useMemo(
-    () =>
-      hideCustomFields || controlled
-        ? []
-        : tableEligibleFields.map((field) => customFieldColumnKey(field.id)),
-    [controlled, hideCustomFields, tableEligibleFields]
+    () => tableEligibleFields.map((field) => customFieldColumnKey(field.id)),
+    [tableEligibleFields]
   );
   const labelFor = (column: string) =>
-    columnLabels?.[column] ??
-    (isCustomFieldColumnKey(column)
+    isCustomFieldColumnKey(column)
       ? customFields.find((field) => customFieldColumnKey(field.id) === column)?.name ?? "Custom field"
-      : boardColumnLabels[column as TableColumnKey]);
+      : columnLabels[column as TableColumnKey];
   const eligibleKeySet = useMemo(() => new Set(customFieldKeys), [customFieldKeys]);
-  const visibleColumns = normalizeColumns(storedColumns).filter(
+  const visibleColumns = normalizeTableVisibleColumns(storedColumns).filter(
     (key) =>
       (key !== "time" || showTimeTotals) &&
       (!isCustomFieldColumnKey(key) || eligibleKeySet.has(key))
@@ -121,11 +84,11 @@ const TableColumnsPicker = ({
   // Visible columns first (stored/dragged order), then the rest in canonical order.
   const displayOrder = useMemo(() => {
     const visibleSet = new Set(visibleColumns);
-    const eligibleBuiltIns = (availableColumns
-      ? [...availableColumns]
-      : TABLE_COLUMN_KEYS.filter((key) => key !== "time" || showTimeTotals)) as string[];
+    const eligibleBuiltIns = TABLE_COLUMN_KEYS.filter(
+      (key) => key !== "time" || showTimeTotals,
+    );
     return [...visibleColumns, ...[...eligibleBuiltIns, ...customFieldKeys].filter((key) => !visibleSet.has(key))];
-  }, [availableColumns, visibleColumns, customFieldKeys, showTimeTotals]);
+  }, [visibleColumns, customFieldKeys, showTimeTotals]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const pickerRef = useRef<HTMLDivElement>(null);
 
@@ -137,7 +100,7 @@ const TableColumnsPicker = ({
     if (lockedColumns.has(column)) return;
 
     setStoredColumns((current) => {
-      const normalized = normalizeColumns(current);
+      const normalized = normalizeTableVisibleColumns(current);
       if (normalized.includes(column)) return normalized.filter((key) => key !== column);
       return [...normalized, column];
     });
@@ -153,16 +116,19 @@ const TableColumnsPicker = ({
     const [moved] = reordered.splice(from, 1);
     reordered.splice(to, 0, moved);
     const visibleSet = new Set(visibleColumns);
-    setStoredColumns(normalizeColumns(reordered.filter((key) => visibleSet.has(key))));
+    setStoredColumns(normalizeTableVisibleColumns(reordered.filter((key) => visibleSet.has(key))));
   };
 
   // Custom fields reset to visible too, appended after the built-ins.
-  const resetToDefault = () => {
-    const base = [...(defaultColumns ?? (showTimeTotals ? [...DEFAULT_TABLE_COLUMNS, "time"] : DEFAULT_TABLE_COLUMNS))];
+  const resetToDefault = () =>
     setStoredColumns(
-      controlled ? base : seedMissingCustomFieldColumns(base, customFieldKeys),
+      seedMissingCustomFieldColumns(
+        showTimeTotals
+          ? [...DEFAULT_TABLE_COLUMNS, "time"]
+          : DEFAULT_TABLE_COLUMNS,
+        customFieldKeys,
+      ),
     );
-  };
   // Drops every drag-resize override (HTPR-4993): title goes back to auto-flex,
   // every other column back to its default width.
   const resetWidths = () => setColumnWidths({});
@@ -281,15 +247,13 @@ const TableColumnsPicker = ({
             >
               Reset to default
             </button>
-            {!hideWidthReset && (
-              <button
-                type="button"
-                onClick={resetWidths}
-                className="text-dense text-text-light-gray hover:text-white-black transition-colors"
-              >
-                Reset column widths
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={resetWidths}
+              className="text-dense text-text-light-gray hover:text-white-black transition-colors"
+            >
+              Reset column widths
+            </button>
           </div>
         </div>
       </ModalBody>

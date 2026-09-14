@@ -29,47 +29,6 @@ export const DEFAULT_TABLE_COLUMNS: TableColumnKey[] = [
     "updated",
 ];
 
-/** My Tasks picker keys. Includes board/labels; omits board-only staleness/time. */
-export const MY_TASKS_TABLE_COLUMN_KEYS = [
-    "ticket",
-    "title",
-    "board",
-    "status",
-    "assignee",
-    "priority",
-    "size",
-    "labels",
-    "due",
-    "created",
-    "updated",
-] as const;
-export type MyTasksTableColumnKey = (typeof MY_TASKS_TABLE_COLUMN_KEYS)[number];
-
-/** Snapshot of today's My Tasks defaults. Board/labels stay opt-in. */
-export const DEFAULT_MY_TASKS_TABLE_COLUMNS: MyTasksTableColumnKey[] = [
-    "ticket",
-    "title",
-    "assignee",
-    "priority",
-    "size",
-    "due",
-    "updated",
-];
-
-export const MY_TASKS_TABLE_COLUMN_LABELS: Record<MyTasksTableColumnKey, string> = {
-    ticket: "Ticket",
-    title: "Title",
-    board: "Board",
-    status: "Column",
-    assignee: "Assignee",
-    priority: "Priority",
-    size: "Size",
-    labels: "Labels",
-    due: "Due",
-    created: "Created",
-    updated: "Updated",
-};
-
 export const TABLE_STALENESS_COLUMNS: TableColumnKey[] = [
     "inColumn",
     "noComment",
@@ -95,13 +54,12 @@ export const LOCKED_TABLE_COLUMNS = new Set<string>(["ticket", "title"]);
 // built-in columns: presence in the array means visible, same as any
 // built-in. A key simply absent from the array is hidden — deliberately,
 // no different from a user having unchecked "Status".
-const normalizeLockedFrontColumns = (
-    value: unknown,
-    isValidKey: (key: unknown) => key is string,
-    fallback: readonly string[],
-): string[] => {
+export const normalizeTableVisibleColumns = (value: unknown): string[] => {
+    const isValidKey = (key: unknown): key is string =>
+        typeof key === "string" && (TABLE_COLUMN_KEYS.includes(key as TableColumnKey) || isCustomFieldColumnKey(key));
+
     if (!Array.isArray(value) || value.length === 0 || value.some((key) => !isValidKey(key))) {
-        return [...fallback];
+        return [...DEFAULT_TABLE_COLUMNS];
     }
 
     const seen = new Set<string>();
@@ -112,19 +70,6 @@ const normalizeLockedFrontColumns = (
         if (key !== "ticket" && key !== "title") rest.push(key);
     }
     return ["ticket", "title", ...rest];
-};
-
-export const normalizeTableVisibleColumns = (value: unknown): string[] => {
-    const isValidKey = (key: unknown): key is string =>
-        typeof key === "string" && (TABLE_COLUMN_KEYS.includes(key as TableColumnKey) || isCustomFieldColumnKey(key));
-    return normalizeLockedFrontColumns(value, isValidKey, DEFAULT_TABLE_COLUMNS);
-};
-
-export const normalizeMyTasksTableVisibleColumns = (value: unknown): string[] => {
-    const allowed = new Set<string>(MY_TASKS_TABLE_COLUMN_KEYS);
-    const isValidKey = (key: unknown): key is string =>
-        typeof key === "string" && allowed.has(key);
-    return normalizeLockedFrontColumns(value, isValidKey, DEFAULT_MY_TASKS_TABLE_COLUMNS);
 };
 
 export const setTableStalenessColumns = (visible: string[], enabled: boolean): string[] => {

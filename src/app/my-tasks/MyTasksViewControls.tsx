@@ -6,7 +6,6 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
-  MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -20,7 +19,7 @@ import {
   type MyTasksGroupBy,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
-import { ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, Layers, LayoutGrid, SlidersHorizontal } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 interface Props {
@@ -29,8 +28,6 @@ interface Props {
   onChange: (config: MyTasksViewConfig) => void;
   onOpenKanbanFilters?: () => void;
   timeGroupEnabled?: boolean;
-  tableColumnsEnabled?: boolean;
-  onOpenTableColumns?: () => void;
 }
 
 const DUE_DATE_OPTIONS: Array<{ value: MyTasksDueDatePreset; label: string }> = [
@@ -91,13 +88,10 @@ const MyTasksViewControls = ({
   onChange,
   onOpenKanbanFilters,
   timeGroupEnabled = false,
-  tableColumnsEnabled = false,
-  onOpenTableColumns,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
-  const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const [filterOpen, setFilterOpen] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -263,29 +257,8 @@ const MyTasksViewControls = ({
 
   if (!myTasksViewsEnabled) return null;
 
-  const closeOtherMenus = () => {
-    setScopeOpen(false);
-    setSortOpen(false);
-    setGroupOpen(false);
-    setFilterOpen(false);
-  };
-
   return (
     <div className="ml-auto flex shrink-0 items-center gap-1">
-      {myTasksTableColumnsFlag && tableColumnsEnabled && onOpenTableColumns ? (
-        <button
-          type="button"
-          aria-label="Configure table columns"
-          onClick={() => {
-            closeOtherMenus();
-            onOpenTableColumns();
-          }}
-          className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black @md:min-h-0 @md:min-w-0`}
-        >
-          <Columns3 size={16} strokeWidth={1.5} />
-          <span className="hidden @md:inline">Columns</span>
-        </button>
-      ) : null}
       {filterParityEnabled ? (
         <>
           <div ref={scopeRef} className="relative">

@@ -1,9 +1,5 @@
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import {
-  DEFAULT_MY_TASKS_TABLE_COLUMNS,
-  normalizeMyTasksTableVisibleColumns,
-} from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 
 export type MyTasksDueDatePreset =
   | "overdue"
@@ -49,11 +45,6 @@ export type MyTasksViewConfig = {
   };
   /** Optional so older saved views keep working. Flag-off UI ignores this and stays on board. */
   groupBy?: MyTasksGroupBy;
-  /**
-   * Visible My Tasks table columns, in display order. Optional so older views
-   * keep working; parse always recognizes the field even when the UI flag is off.
-   */
-  tableVisibleColumns?: string[];
 };
 
 export type MyTasksSavedView = {
@@ -194,7 +185,6 @@ const KNOWN_CONFIG_KEYS = new Set([
   "filterSettings",
   "sort",
   "groupBy",
-  "tableVisibleColumns",
 ]);
 
 const parseFilterSettings = (
@@ -221,22 +211,6 @@ const parseFilterSettings = (
   };
 };
 
-
-/** Visible columns for My Tasks. Missing field uses today's default snapshot. */
-export function effectiveMyTasksTableVisibleColumns(
-  config: Pick<MyTasksViewConfig, "tableVisibleColumns">,
-): string[] {
-  if (config.tableVisibleColumns === undefined) {
-    return [...DEFAULT_MY_TASKS_TABLE_COLUMNS];
-  }
-  return normalizeMyTasksTableVisibleColumns(config.tableVisibleColumns);
-}
-
-const tableVisibleColumnsValue = (value: unknown): string[] | undefined => {
-  if (value === undefined) return undefined;
-  return normalizeMyTasksTableVisibleColumns(value);
-};
-
 /** Returns a complete, safe config for persisted JSON or untrusted API input. */
 export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
   const value = isRecord(json) ? json : {};
@@ -250,7 +224,6 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       ? (sort.field as MyTasksSortField)
       : DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field;
   const groupBy = groupByValue(value.groupBy);
-  const tableVisibleColumns = tableVisibleColumnsValue(value.tableVisibleColumns);
 
   const extras: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -277,6 +250,5 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       direction: sort.direction === "desc" ? "desc" : "asc",
     },
     ...(groupBy ? { groupBy } : {}),
-    ...(tableVisibleColumns ? { tableVisibleColumns } : {}),
   };
 }

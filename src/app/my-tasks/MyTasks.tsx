@@ -11,7 +11,6 @@ import {
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
-  MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -22,7 +21,7 @@ import {
   myTasksViewsAPIRoute,
 } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { useRecoilValue } from "@/lib/state";
 import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
 import {
   applyMyTasksView,
@@ -41,14 +40,12 @@ import type {
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
-  effectiveMyTasksTableVisibleColumns,
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { ISection, IUser } from "@/models/model";
 import type { TBoardSortingViewMode } from "@/models/Views/model";
-import { appShellRailAtom,
-  myTasksTableColumnsPickerRequestAtom, showCommandsAtom } from "@/store";
+import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Filter } from "lucide-react";
@@ -62,13 +59,6 @@ import {
 } from "react";
 import toast from "react-hot-toast";
 import MyTasksKanbanFilterModal from "./MyTasksKanbanFilterModal";
-import {
-  DEFAULT_MY_TASKS_TABLE_COLUMNS,
-  MY_TASKS_TABLE_COLUMN_KEYS,
-  MY_TASKS_TABLE_COLUMN_LABELS,
-  normalizeMyTasksTableVisibleColumns,
-} from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
-import TableColumnsPicker from "@/components/PageComponents/Kanban/TableView/TableColumnsPicker";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
@@ -123,11 +113,8 @@ const MyTasks = ({
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
-  const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
-  const tableColumnsFeatureEnabled =
-    myTasksTableColumnsEnabled && viewsFeatureEnabled;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
   const viewParam = searchParams?.get("view") ?? null;
@@ -139,11 +126,6 @@ const MyTasks = ({
   );
   const [viewBusy, setViewBusy] = useState(false);
   const [dateFilterVersion, setDateFilterVersion] = useState(0);
-  const [columnsPickerOpen, setColumnsPickerOpen] = useState(false);
-  const [columnsPickerRequest, setColumnsPickerRequest] = useRecoilState(
-    myTasksTableColumnsPickerRequestAtom,
-  );
-  const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   // My Tasks spans every board, so unlike board filters (which persist to a
@@ -619,39 +601,7 @@ const MyTasks = ({
     [updateViewConfig],
   );
 
-  
-  const openTableColumnsPicker = useCallback(() => {
-    if (!tableColumnsFeatureEnabled) return;
-    setColumnsPickerOpen(true);
-  }, [tableColumnsFeatureEnabled]);
-  const updateTableVisibleColumns = useCallback(
-    (columns: string[]) => {
-      updateViewConfig((current) => ({
-        ...current,
-        tableVisibleColumns: normalizeMyTasksTableVisibleColumns(columns),
-      }));
-    },
-    [updateViewConfig],
-  );
-  const myTasksVisibleColumns = tableColumnsFeatureEnabled
-    ? effectiveMyTasksTableVisibleColumns(viewConfig)
-    : undefined;
-
-  useEffect(() => {
-    if (!tableColumnsFeatureEnabled) return;
-    if (columnsPickerRequest === lastColumnsPickerRequest.current) return;
-    lastColumnsPickerRequest.current = columnsPickerRequest;
-    setColumnsPickerOpen(true);
-  }, [columnsPickerRequest, tableColumnsFeatureEnabled]);
-
-  useEffect(() => {
-    if (tableColumnsFeatureEnabled) return;
-    if (columnsPickerRequest === 0) return;
-    setColumnsPickerRequest(0);
-    lastColumnsPickerRequest.current = 0;
-  }, [columnsPickerRequest, setColumnsPickerRequest, tableColumnsFeatureEnabled]);
-
-const boardTabCounts = useMemo(() => {
+  const boardTabCounts = useMemo(() => {
     const counts = new Map<number, number>();
     for (const task of allTasksForBoardTabs) {
       const boardId = task.project?.id ?? task.projectId;
@@ -727,8 +677,6 @@ const boardTabCounts = useMemo(() => {
             config={viewConfig}
             onChange={updateViewConfig}
             timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
-            tableColumnsEnabled={tableColumnsFeatureEnabled}
-            onOpenTableColumns={openTableColumnsPicker}
             onOpenKanbanFilters={() => {
               updateViewConfig((current) =>
                 migrateFlatFiltersToFilterSettings(
@@ -808,29 +756,12 @@ const boardTabCounts = useMemo(() => {
           myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
           myTasksSortKey={activeViewId}
           onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
-          myTasksVisibleColumns={myTasksVisibleColumns}
-          onMyTasksVisibleColumnsChange={
-            tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
-          }
         />
       </div>
 
       <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
         {splitTitles}
       </div>
-      {myTasksTableColumnsEnabled && tableColumnsFeatureEnabled && columnsPickerOpen ? (
-        <TableColumnsPicker
-          closeHandler={() => setColumnsPickerOpen(false)}
-          availableColumns={MY_TASKS_TABLE_COLUMN_KEYS}
-          columnLabels={MY_TASKS_TABLE_COLUMN_LABELS}
-          value={myTasksVisibleColumns}
-          onChange={updateTableVisibleColumns}
-          defaultColumns={DEFAULT_MY_TASKS_TABLE_COLUMNS}
-          normalize={normalizeMyTasksTableVisibleColumns}
-          hideCustomFields
-          hideWidthReset
-        />
-      ) : null}
     </div>
   );
 
