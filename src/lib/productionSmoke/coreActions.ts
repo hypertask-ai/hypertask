@@ -473,16 +473,13 @@ export async function runCoreActionsSmoke(options: {
           "activity ownership was ambiguous",
         );
       }
-      const reachedExpected =
-        typeof options.maxCandidates === "number" &&
-        claimed.length >= options.maxCandidates;
       if (
         claimed.length > 0 &&
-        (!options.allowMultiple || reachedExpected || attempt === 2)
+        (!options.allowMultiple || attempt === 2)
       ) {
         // HTPR-6434: one userId unassign can emit several Unassigned activities
-        // across delayed writes. Keep polling until maxCandidates, the last
-        // attempt, or a single-activity capture completes.
+        // across delayed writes. Keep polling through the final attempt so an
+        // extra late candidate still trips the maxCandidates ambiguity check.
         for (const id of claimed) ownedCommentIds.add(id);
         if (persist) await persistOwnedCommentIds();
         return;

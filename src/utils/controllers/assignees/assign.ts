@@ -235,10 +235,17 @@ const assigneesAssign = async (
         assignStatus = result.outcome === "stale-task" ? "Conflict" : "Assigned";
         if (
           result.outcome === "created" &&
-          Number.isSafeInteger(Number((result as { activityCommentId?: number }).activityCommentId))
+          typeof (result as { activityCommentId?: number | null }).activityCommentId ===
+            "number" &&
+          Number.isSafeInteger(
+            (result as { activityCommentId?: number | null }).activityCommentId,
+          ) &&
+          ((result as { activityCommentId?: number | null }).activityCommentId as number) >
+            0
         ) {
           activityCommentIds = [
-            Number((result as { activityCommentId?: number }).activityCommentId),
+            (result as { activityCommentId?: number | null })
+              .activityCommentId as number,
           ];
         }
       } else {
@@ -288,10 +295,17 @@ const assigneesAssign = async (
         assignmentOutcome = result.outcome;
         if (
           result.outcome === "created" &&
-          Number.isSafeInteger(Number((result as { activityCommentId?: number }).activityCommentId))
+          typeof (result as { activityCommentId?: number | null }).activityCommentId ===
+            "number" &&
+          Number.isSafeInteger(
+            (result as { activityCommentId?: number | null }).activityCommentId,
+          ) &&
+          ((result as { activityCommentId?: number | null }).activityCommentId as number) >
+            0
         ) {
           activityCommentIds = [
-            Number((result as { activityCommentId?: number }).activityCommentId),
+            (result as { activityCommentId?: number | null })
+              .activityCommentId as number,
           ];
         }
       } else {
