@@ -1,6 +1,8 @@
 "use client";
 
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
+import { useFlag } from "@/hooks/useFlag";
+import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal, Plus } from "lucide-react";
 import { useRef, useState } from "react";
@@ -32,6 +34,7 @@ const MyTasksViewTabs = ({
   onDelete,
   onSetDefault,
 }: Props) => {
+  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   useClickOutside(actionsRef, () => setActionsOpen(false));
@@ -55,7 +58,7 @@ const MyTasksViewTabs = ({
     setActionsOpen(false);
   };
 
-  return (
+  return myTasksViewsEnabled ? (
     <div className="pills-row relative flex w-full min-w-0 items-center gap-2">
       <div
         id="my-tasks-view-tabs-bar"
@@ -170,7 +173,7 @@ const MyTasksViewTabs = ({
         </div>
       )}
     </div>
-  );
+  ) : null;
 };
 
 export default MyTasksViewTabs;

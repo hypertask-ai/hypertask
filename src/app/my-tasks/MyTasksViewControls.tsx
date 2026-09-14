@@ -1,7 +1,9 @@
 "use client";
 
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
+import { useFlag } from "@/hooks/useFlag";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
+import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   type MyTasksBoardMetadata,
@@ -66,6 +68,7 @@ const inputClass =
   "h-8 rounded-[4px] border border-border bg-containerBackground px-2 text-content text-white-black outline-none focus:border-[#51A4F1]";
 
 const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
+  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -161,7 +164,7 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
       ? "custom"
       : (config.filters.dueDate ?? "");
 
-  return (
+  return myTasksViewsEnabled ? (
     <div className="ml-auto flex shrink-0 items-center gap-1">
       <div ref={filterRef} className="relative">
         <button
@@ -459,7 +462,7 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
         )}
       </div>
     </div>
-  );
+  ) : null;
 };
 
 export default MyTasksViewControls;

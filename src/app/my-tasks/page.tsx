@@ -3,12 +3,12 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
+import { isFeatureEnabled } from "@/lib/flags";
+import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { IUser } from "@/models/model";
 import getMyTasks from "@/utils/controllers/tasks/myTasks";
-import {
-  getMyTasksViews,
-  myTasksViewsEnabled,
-} from "@/utils/controllers/tasks/myTasksViews";
+import { getMyTasksViews } from "@/utils/controllers/tasks/myTasksViews";
 import MyTasks from "./MyTasks";
 
 export const metadata: Metadata = {
@@ -40,7 +40,10 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const viewsEnabled = await myTasksViewsEnabled(sessionUser.userId);
+  const viewsEnabled = await isFeatureEnabled(
+    MY_TASKS_VIEWS_FLAG,
+    sessionUser.userId,
+  );
   const [myTasks, views] = await Promise.all([
     getMyTasks(sessionUser.userId, viewsEnabled),
     viewsEnabled ? getMyTasksViews(sessionUser.userId) : Promise.resolve([]),
@@ -59,7 +62,7 @@ export default async function Page({
         tabs={myTasks.tabs}
         boards={myTasks.boards}
         currentUser={userObj}
-        initialViews={views}
+        initialViews={viewsEnabled ? views : []}
         initialViewId={initialViewId}
         viewsEnabled={viewsEnabled}
       />

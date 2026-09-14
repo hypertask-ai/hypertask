@@ -17,6 +17,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
+  MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
   applyMyTasksView,
@@ -86,7 +87,9 @@ const MyTasks = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
+  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
+  const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const boardParam = searchParams?.get("board") ?? null;
   const viewParam = searchParams?.get("view") ?? null;
   const initialView = initialViews.find((view) => view.id === initialViewId);
@@ -117,7 +120,7 @@ const MyTasks = ({
     activeView?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
   );
   const dirty = JSON.stringify(viewConfig) !== JSON.stringify(baselineConfig);
-  const selectedPriorities = viewsEnabled
+  const selectedPriorities = viewsFeatureEnabled
     ? PriorityConstants.filter((priority) =>
         viewConfig.filters.priorityIds.includes(priority.priority_index),
       )
@@ -126,7 +129,7 @@ const MyTasks = ({
       : [];
 
   const filteredSections = useMemo(() => {
-    if (!viewsEnabled) {
+    if (!viewsFeatureEnabled) {
       return filterMyTasksByPriority(sections, selectedPriorities);
     }
     const now = new Date();
@@ -148,14 +151,14 @@ const MyTasks = ({
         ),
       }));
     return sortMyTasksViewSections(next, viewConfig, now);
-  }, [sections, selectedPriorities, viewConfig, viewsEnabled]);
+  }, [sections, selectedPriorities, viewConfig, viewsFeatureEnabled]);
 
   const activeTabs = useMemo(
     () =>
-      viewsEnabled
+      viewsFeatureEnabled
         ? ["All", ...filteredSections.map((section) => section.section_title)]
         : tabs,
-    [filteredSections, tabs, viewsEnabled],
+    [filteredSections, tabs, viewsFeatureEnabled],
   );
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
@@ -240,7 +243,7 @@ const MyTasks = ({
   }, [boardParam, filteredSections, myTasksShortcutsWidthEnabled, replaceBoardParam]);
 
   useEffect(() => {
-    if (!viewsEnabled || observedViewParam.current === viewParam) return;
+    if (!viewsFeatureEnabled || observedViewParam.current === viewParam) return;
     observedViewParam.current = viewParam;
     if (!viewParam) {
       if (activeViewId !== null) replaceParams({ viewId: activeViewId });
@@ -257,7 +260,7 @@ const MyTasks = ({
     setActiveViewId(requestedView.id);
     updateViewConfig(parseMyTasksViewConfig(requestedView.config));
     setFilterOpen(false);
-  }, [activeViewId, replaceParams, updateViewConfig, viewParam, views, viewsEnabled]);
+  }, [activeViewId, replaceParams, updateViewConfig, viewParam, views, viewsFeatureEnabled]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -430,7 +433,7 @@ const MyTasks = ({
     index === 0 ? totalCount : filteredSections[index - 1]?.items.length ?? 0;
 
   const togglePriority = (priority: IPrioritiesConstants) => {
-    if (viewsEnabled) {
+    if (viewsFeatureEnabled) {
       updateViewConfig((current) => ({
         ...current,
         filters: {
@@ -470,7 +473,7 @@ const MyTasks = ({
       suppressHydrationWarning
       className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 ${myTasksShortcutsWidthEnabled ? "w-full" : "global-view-width"} flex linksModal ${styles.links_modal}`}
     >
-      {viewsEnabled && (
+      {viewsEnabled && myTasksViewsEnabled && (
         <div className="mb-4 px-[16px] @md:!px-[78px]">
           <MyTasksViewTabs
             views={views}
@@ -495,7 +498,7 @@ const MyTasks = ({
             {totalCount}
           </span>
         </span>
-        {viewsEnabled && (
+        {viewsEnabled && myTasksViewsEnabled && (
           <MyTasksViewControls
             boards={boards}
             config={viewConfig}
@@ -505,7 +508,7 @@ const MyTasks = ({
         {filterEnabled && (
           <div
             ref={filterRef}
-            className={`relative self-center ${viewsEnabled ? "" : "ml-auto"}`}
+            className={`relative self-center ${viewsFeatureEnabled ? "" : "ml-auto"}`}
           >
             <button
               id="my-tasks-priority-filter"
@@ -566,9 +569,9 @@ const MyTasks = ({
           _currentProject={null}
           _activeSortingMode={MY_TASKS_SORTING_MODE}
           currentUser={currentUser}
-          myTasksSort={viewsEnabled ? viewConfig.sort : undefined}
+          myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
           myTasksSortKey={activeViewId}
-          onMyTasksSortChange={viewsEnabled ? updateViewSort : undefined}
+          onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
         />
       </div>
 
