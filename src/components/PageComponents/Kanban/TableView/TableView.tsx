@@ -78,6 +78,7 @@ import {
 } from "@/lib/flags/keys";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { splitAssignees } from "@/lib/assignees";
+import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 const AssignModal = lazy(
@@ -470,6 +471,12 @@ const TableView = ({
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [assignTask, setAssignTask] = useState<ITask | null>(null);
+  const { project: assignProject } = useTaskProjectFallback(
+    _currentProject,
+    assignTask?.projectId,
+    currentUser?.id,
+    rowShortcutsEnabled && Boolean(assignTask),
+  );
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
   // My Tasks has no board cache to mutate, so Ctrl+E hides the row locally
   // until router.refresh() returns the server list without it (HTPR-6445).
@@ -1731,11 +1738,11 @@ const TableView = ({
           <HypertasksCommands contextOptions={buildCommandContext()} />
         </Suspense>
       )}
-      {rowShortcutsEnabled && assignTask && _currentProject?.name && (
+      {rowShortcutsEnabled && assignTask && assignProject?.name && (
         <Suspense fallback={null}>
           <AssignModal
             onClose={closeAssignModal}
-            project={_currentProject}
+            project={assignProject}
             task={{
               id: assignTask.id,
               title: assignTask.title ?? "",
