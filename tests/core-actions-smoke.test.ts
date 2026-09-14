@@ -484,23 +484,43 @@ function fakeApp(
     if (url.pathname === "/api/assignees/assign") {
       if (body.intent === "assign") {
         state.assignees.push({ agentId: null, userId: fixture.userId });
-      } else {
-        state.assignees = state.assignees.filter(
-          (row) => row.agentId || row.userId !== fixture.userId,
-        );
-      }
-      state.comments.push({
-        id: state.nextCommentId++,
-        text: "",
-        activity: {
-          type: "TaskAssigned",
-          data: {
-            fromUserId: fixture.userId,
-            toUser: { userId: fixture.userId },
-            updatedStatus: body.intent === "assign" ? "Assigned" : "Unassigned",
+        state.comments.push({
+          id: state.nextCommentId++,
+          text: "",
+          activity: {
+            type: "TaskAssigned",
+            data: {
+              fromUserId: fixture.userId,
+              toUser: { userId: fixture.userId },
+              updatedStatus: "Assigned",
+            },
           },
-        },
-      });
+        });
+      } else {
+        // HTPR-6428: userId unassign clears human + owned-agent rows and emits
+        // one Unassigned activity per removed row.
+        const removed = state.assignees.filter(
+          (row) => row.userId === fixture.userId,
+        );
+        state.assignees = state.assignees.filter(
+          (row) => row.userId !== fixture.userId,
+        );
+        for (const row of removed) {
+          state.comments.push({
+            id: state.nextCommentId++,
+            text: "",
+            activity: {
+              type: "TaskAssigned",
+              data: {
+                fromUserId: fixture.userId,
+                toUser: { userId: fixture.userId },
+                updatedStatus: "Unassigned",
+                ...(row.agentId ? { toAgent: { id: row.agentId } } : {}),
+              },
+            },
+          });
+        }
+      }
       return json({
         body: state.assignees,
         assignStatus: body.intent === "assign" ? "Assigned" : "Unassigned",
@@ -565,10 +585,27 @@ test("runs every core action and restores the fixture", async () => {
   ]);
   assert.equal(app.state.sectionId, fixture.baseSectionId);
   assert.equal(app.state.ranking, "rank-original");
+  assert.deepEqual(app.state.assignees, []);
+  assert.deepEqual(app.state.comments, []);
+});
+
+test("claims every Unassigned activity when userId unassign clears person and agent rows", async () => {
+  const app = fakeApp();
   assert.equal(
-    app.state.assignees.some((row) => !row.agentId),
-    false,
+    app.state.assignees.some((row) => row.agentId === fixture.agentId),
+    true,
   );
+
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai",
+    cookieHeader: "ht_session=signed; nookies_user=user",
+    fixture,
+    runId: "run-multi-unassign-activity",
+    fetchImpl: app.fetchImpl,
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(app.state.assignees, []);
   assert.deepEqual(app.state.comments, []);
 });
 
@@ -671,10 +708,7 @@ test("restores all visible state after a failure that follows mutations", async 
   assert.equal(result.action, "search");
   assert.equal(app.state.sectionId, fixture.baseSectionId);
   assert.equal(app.state.ranking, "rank-original");
-  assert.equal(
-    app.state.assignees.some((row) => !row.agentId),
-    false,
-  );
+  assert.deepEqual(app.state.assignees, []);
   assert.deepEqual(app.state.comments, []);
 });
 
@@ -728,10 +762,7 @@ test("repairs an interrupted prior run before starting a new one", async () => {
 
   assert.equal(result.ok, true);
   assert.equal(app.state.sectionId, fixture.baseSectionId);
-  assert.equal(
-    app.state.assignees.some((row) => !row.agentId),
-    false,
-  );
+  assert.deepEqual(app.state.assignees, []);
   assert.deepEqual(app.state.comments, []);
 });
 
