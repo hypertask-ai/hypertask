@@ -204,7 +204,7 @@ const CustomCalendarScreen: React.FC<IScreenProps> = ({
       </span>
       <Calendar
         className=""
-        initialFocus
+        autoFocus
         mode="range"
         defaultMonth={date?.from}
         selected={date}

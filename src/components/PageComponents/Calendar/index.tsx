@@ -243,15 +243,15 @@ const CalenderView = ({ currentUser }: { currentUser: IUser }) => {
   const boardsFilterContent = (
     <>
       <CalendarCommon
-        initialFocus={false}
+        autoFocus={false}
         mode="single"
         defaultMonth={currentDate}
         selected={new Date()}
         onSelect={handleDateSelect}
         numberOfMonths={1}
         classNames={{
-          day_selected:
-            "dark:bg-[#f9f9f9] bg-[#2F343C] text-white-black-inverted rounded hover:dark:bg-[#f9f9f9] hover:bg-[#2F343C] focus:dark:bg-[#f9f9f9] focus:bg-[#2F343C]",
+          selected:
+            "rounded bg-[#2F343C] text-white-black-inverted dark:bg-[#f9f9f9] [&>button]:bg-[#2F343C] [&>button]:text-white-black-inverted [&>button]:hover:bg-[#2F343C] [&>button]:focus:bg-[#2F343C] [&>button]:dark:bg-[#f9f9f9] [&>button]:hover:dark:bg-[#f9f9f9] [&>button]:focus:dark:bg-[#f9f9f9]",
         }}
       />
 

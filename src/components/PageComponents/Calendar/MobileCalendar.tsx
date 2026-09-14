@@ -48,7 +48,7 @@ const WeekStrip = () => {
       {monthOpen ? (
         <div className="flex justify-center pb-2">
           <CalendarCommon
-            initialFocus={false}
+            autoFocus={false}
             mode="single"
             month={pickerMonth}
             onMonthChange={setPickerMonth}
