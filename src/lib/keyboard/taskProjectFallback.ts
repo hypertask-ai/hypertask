@@ -22,7 +22,7 @@ export function useTaskProjectFallback(
   taskProjectId: number | null | undefined,
   userId: number | null | undefined,
   enabled: boolean,
-): { project: IProject | null; isLoading: boolean } {
+): { project: IProject | null; isLoading: boolean; isError: boolean; error: unknown } {
   const shouldFetch =
     enabled &&
     !currentProject &&
@@ -53,5 +53,7 @@ export function useTaskProjectFallback(
   return {
     project: currentProject ?? query.data ?? null,
     isLoading: shouldFetch && query.isLoading,
+    isError: shouldFetch && query.isError,
+    error: shouldFetch ? query.error : null,
   };
 }

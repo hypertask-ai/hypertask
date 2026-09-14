@@ -54,7 +54,7 @@ export function getTaskShortcutAction(
   event: TaskShortcutEvent,
   isApple: boolean,
 ): TaskShortcutAction | null {
-  const cmdControl = isApple ? event.metaKey : event.ctrlKey;
+  const cmdControl = event.ctrlKey || event.metaKey;
 
   if (
     event.keyCode === KeyCodes.X &&
@@ -65,7 +65,9 @@ export function getTaskShortcutAction(
   ) {
     return "select";
   }
-  if (event.shiftKey && event.keyCode === KeyCodes.THREE) return "delete";
+  if (event.shiftKey && event.keyCode === KeyCodes.THREE && !event.repeat) {
+    return "delete";
+  }
   if (event.keyCode === KeyCodes.E && cmdControl) return "archive";
   if (
     event.keyCode === KeyCodes.S &&
@@ -78,8 +80,17 @@ export function getTaskShortcutAction(
   if (event.keyCode === KeyCodes.P && !cmdControl && !event.altKey) {
     return "priority";
   }
-  if (event.keyCode === KeyCodes.E && !cmdControl) return "edit";
-  if (event.keyCode === KeyCodes.A) return "assignee";
+  if (event.keyCode === KeyCodes.E && !cmdControl && !event.altKey && !event.shiftKey) {
+    return "edit";
+  }
+  if (
+    event.keyCode === KeyCodes.A &&
+    !cmdControl &&
+    !event.altKey &&
+    !event.shiftKey
+  ) {
+    return "assignee";
+  }
   if (
     matchesShortcut(
       event as KeyboardEvent,
@@ -89,7 +100,14 @@ export function getTaskShortcutAction(
   ) {
     return "dueDate";
   }
-  if (event.keyCode === KeyCodes.T && !event.shiftKey) return "label";
+  if (
+    event.keyCode === KeyCodes.T &&
+    !event.shiftKey &&
+    !cmdControl &&
+    !event.altKey
+  ) {
+    return "label";
+  }
   if (event.keyCode === KeyCodes.S && cmdControl) return "share";
   if (event.keyCode === KeyCodes.M && !cmdControl && !event.shiftKey) {
     return "moveColumn";
