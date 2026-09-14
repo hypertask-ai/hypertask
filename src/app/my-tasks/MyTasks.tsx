@@ -578,13 +578,8 @@ const MyTasks = ({
       </div>
 
       <div className="mt-3 flex-1 min-h-0 w-full">
-        {myTasksBulkSelectionEnabled ? (
-          <MyTasksBulkSelectionProvider
-            resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
-              .map((priority) => priority.priority_index)
-              .join(",")}`}
-            onAfterMutation={() => router.refresh()}
-          >
+        {(() => {
+          const tableView = (
             <TableView
               filteredSections={visibleSections}
               _sections={visibleSections}
@@ -594,22 +589,22 @@ const MyTasks = ({
               myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
               myTasksSortKey={activeViewId}
               onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
-              enableMyTasksBulkSelection
+              enableMyTasksBulkSelection={myTasksBulkSelectionEnabled}
             />
-            <MyTasksBulkActionBar />
-          </MyTasksBulkSelectionProvider>
-        ) : (
-          <TableView
-            filteredSections={visibleSections}
-            _sections={visibleSections}
-            _currentProject={null}
-            _activeSortingMode={MY_TASKS_SORTING_MODE}
-            currentUser={currentUser}
-            myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
-            myTasksSortKey={activeViewId}
-            onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
-          />
-        )}
+          );
+          if (!myTasksBulkSelectionEnabled) return tableView;
+          return (
+            <MyTasksBulkSelectionProvider
+              resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
+                .map((priority) => priority.priority_index)
+                .join(",")}`}
+              onAfterMutation={() => router.refresh()}
+            >
+              {tableView}
+              <MyTasksBulkActionBar />
+            </MyTasksBulkSelectionProvider>
+          );
+        })()}
       </div>
 
       <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">

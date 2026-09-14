@@ -1129,8 +1129,6 @@ const TableView = ({
       // keyCode matches every other Ctrl+E surface; e.key can be unreliable
       // under modifiers on some browsers.
       if ((e.ctrlKey || e.metaKey) && e.keyCode === KeyCodes.E) {
-        const row = rows[selectedIndex];
-        if (!row || !isTaskRow(row)) return;
         e.preventDefault();
         if (!shouldRunArchiveShortcut(e)) return;
         if (
@@ -1141,6 +1139,8 @@ const TableView = ({
           void myTasksBulk.archiveSelected();
           return;
         }
+        const row = rows[selectedIndex];
+        if (!row || !isTaskRow(row)) return;
         void archiveTaskFromTable(row.task);
         return;
       }

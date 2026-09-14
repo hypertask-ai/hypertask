@@ -88,23 +88,13 @@ export const MyTasksBulkSelectionProvider = ({
   const setVisibleItems = useCallback((tasks: ITask[]) => {
     itemsRef.current = tasks;
     setItems((previous) => {
-      const sameIds =
+      if (
         previous.length === tasks.length &&
-        previous.every((task, index) => task.id === tasks[index]?.id);
-      if (!sameIds) return tasks;
-      // IDs matched, but metadata (column, labels, assignees) may have refreshed.
-      const sameMeta = previous.every((task, index) => {
-        const next = tasks[index];
-        if (!next) return false;
-        return (
-          task.projectId === next.projectId &&
-          task.sectionId === next.sectionId &&
-          task.title === next.title &&
-          (task.taskLabels?.length ?? 0) === (next.taskLabels?.length ?? 0) &&
-          (task.assignees?.length ?? 0) === (next.assignees?.length ?? 0)
-        );
-      });
-      return sameMeta ? previous : tasks;
+        previous.every((task, index) => task.id === tasks[index]?.id)
+      ) {
+        return previous;
+      }
+      return tasks;
     });
   }, []);
 

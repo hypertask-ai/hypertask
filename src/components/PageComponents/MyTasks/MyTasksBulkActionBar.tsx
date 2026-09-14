@@ -4,13 +4,15 @@ import { Archive, Columns3, Tag, UserRoundPlus } from "lucide-react";
 
 import { CommandMode } from "@/models/enums";
 import { useMyTasksBulkSelection } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import { sharedProjectId } from "@/lib/myTasksBulkSelection";
 
 const iconButtonClass =
-  "rounded-[4px] p-1.5 text-white-black transition-colors hover:bg-hover-active disabled:cursor-wait disabled:opacity-60";
+  "rounded-[4px] p-1.5 text-white-black transition-colors hover:bg-hover-active disabled:cursor-not-allowed disabled:opacity-40";
 
 const MyTasksBulkActionBar = () => {
   const {
     selectedCount,
+    selectedTasks,
     failedIds,
     isProcessing,
     archiveSelected,
@@ -19,6 +21,8 @@ const MyTasksBulkActionBar = () => {
   } = useMyTasksBulkSelection();
 
   if (selectedCount === 0) return null;
+
+  const sameBoard = sharedProjectId(selectedTasks) != null;
 
   return (
     <div
@@ -43,7 +47,8 @@ const MyTasksBulkActionBar = () => {
         type="button"
         className={iconButtonClass}
         aria-label="Assign selected"
-        disabled={isProcessing}
+        disabled={isProcessing || !sameBoard}
+        title={sameBoard ? undefined : "Select tasks from one board"}
         onClick={() => openBulkCommand(CommandMode.OpenAssignModal)}
       >
         <UserRoundPlus size={16} strokeWidth={1.75} />
@@ -52,7 +57,8 @@ const MyTasksBulkActionBar = () => {
         type="button"
         className={iconButtonClass}
         aria-label="Label selected"
-        disabled={isProcessing}
+        disabled={isProcessing || !sameBoard}
+        title={sameBoard ? undefined : "Select tasks from one board"}
         onClick={() => openBulkCommand(CommandMode.LabelModal)}
       >
         <Tag size={16} strokeWidth={1.75} />
@@ -61,7 +67,8 @@ const MyTasksBulkActionBar = () => {
         type="button"
         className={iconButtonClass}
         aria-label="Move selected"
-        disabled={isProcessing}
+        disabled={isProcessing || !sameBoard}
+        title={sameBoard ? undefined : "Select tasks from one board"}
         onClick={() => openBulkCommand(CommandMode.MoveToColumn)}
       >
         <Columns3 size={16} strokeWidth={1.75} />
