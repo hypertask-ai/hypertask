@@ -2,6 +2,7 @@ import { searchConfig } from "@/lib/configs/search.config";
 import {
   rankAndGroupHits,
   resolveContextProjectId,
+  shouldKeepRankedHit,
   tokenize,
 } from "@/utils/controllers/search/rankHits";
 import {
@@ -126,6 +127,9 @@ export async function turbopufferGetDocuments(
   const contextProjectId = applyRelevanceCut
     ? resolveContextProjectId(options?.contextProjectId, projectIds)
     : null;
+  // Ranked search also reads archived rows so an exact ticket or title match
+  // is not dropped just because that ticket is already Done.
+  const fetchStatus = applyRelevanceCut ? null : archive;
 
   try {
     const [globalTasks, globalComments, contextTasks, contextComments] =
@@ -133,14 +137,14 @@ export async function turbopufferGetDocuments(
         searchTasks({
           searchQuery,
           projectIds,
-          status: archive,
+          status: fetchStatus,
           topK: applyRelevanceCut ? RANKED_TASK_TOP_K : DEFAULT_TASK_TOP_K,
           keywordOnly: true,
         }),
         searchComments({
           searchQuery,
           projectIds,
-          status: archive,
+          status: fetchStatus,
           topK: 200,
           limit: applyRelevanceCut
             ? RANKED_COMMENT_LIMIT
@@ -152,7 +156,7 @@ export async function turbopufferGetDocuments(
               searchQuery,
               projectIds,
               projectId: contextProjectId,
-              status: archive,
+              status: fetchStatus,
               topK: CONTEXT_TASK_TOP_K,
               keywordOnly: true,
             })
@@ -161,7 +165,7 @@ export async function turbopufferGetDocuments(
           ? searchComments({
               searchQuery,
               projectIds: [contextProjectId],
-              status: archive,
+              status: fetchStatus,
               topK: 200,
               limit: CONTEXT_COMMENT_LIMIT,
               keywordOnly: true,
@@ -254,7 +258,9 @@ export async function turbopufferGetDocuments(
     }
 
     const rankedData = applyRelevanceCut
-      ? rankAndGroupHits(processedData, searchQuery, contextProjectId)
+      ? rankAndGroupHits(processedData, searchQuery, contextProjectId).filter(
+          (hit) => shouldKeepRankedHit(hit, searchQuery, archive)
+        )
       : activeBeforeArchived(processedData.slice(0, 50));
     const finalData = rankedData.slice(0, 50);
 
@@ -271,7 +277,8 @@ export async function turbopufferGetDocuments(
     const uniqueStatuses = new Set(
       finalData.map((item: any) => item?.status).filter(Boolean)
     );
-    const hasMultipleStatuses = uniqueStatuses.size > 1;
+    const hasMultipleStatuses =
+      !applyRelevanceCut && uniqueStatuses.size > 1;
     if (hasMultipleStatuses) {
       tabs.push("Open", "Archived");
 

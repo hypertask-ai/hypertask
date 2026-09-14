@@ -80,23 +80,54 @@ export function isExactTicketHit(
   );
 }
 
-export function isStrongLexicalHit(hit: SearchRankHit, query: string): boolean {
-  const queryTokens = tokenize(query);
-  if (queryTokens.length === 0) return false;
+export function isTitleStrongHit(hit: SearchRankHit, query: string): boolean {
+  return everyQueryTokenInFields(query, [
+    hit.ticketNumber,
+    hit.title,
+    hit.taskTitle,
+  ]);
+}
 
-  const haystackText = [
+export function isStrongLexicalHit(hit: SearchRankHit, query: string): boolean {
+  return everyQueryTokenInFields(query, [
     hit.ticketNumber,
     hit.title,
     hit.taskTitle,
     hit.descriptionText,
     hit.commentText,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .join(" ")
-    .toLowerCase();
-  const haystackTokens = new Set(tokenize(haystackText));
+  ]);
+}
+
+function everyQueryTokenInFields(
+  query: string,
+  fields: Array<string | null | undefined>
+): boolean {
+  const queryTokens = tokenize(query);
+  if (queryTokens.length === 0) return false;
+
+  const haystackTokens = new Set(
+    tokenize(
+      fields
+        .filter((value): value is string => Boolean(value))
+        .join(" ")
+        .toLowerCase()
+    )
+  );
 
   return queryTokens.every((token) => haystackTokens.has(token));
+}
+
+export function shouldKeepRankedHit(
+  hit: SearchRankHit,
+  query: string,
+  archive: "Normal" | "Archive" | null
+): boolean {
+  if (archive !== "Normal") return true;
+  if (hit.status !== "Archive") return true;
+  return (
+    isExactTicketHit(hit, parseTicketSearchQuery(query)) ||
+    isTitleStrongHit(hit, query)
+  );
 }
 
 export function rankAndGroupHits<T extends SearchRankHit>(
@@ -119,8 +150,8 @@ export function rankAndGroupHits<T extends SearchRankHit>(
 
   if (contextProjectId === null) {
     return [
-      ...openBeforeArchived(exactHits),
-      ...openBeforeArchived(restHits),
+      ...titleBeforeBodyThenOpen(exactHits, query),
+      ...titleBeforeBodyThenOpen(restHits, query),
     ];
   }
 
@@ -130,16 +161,25 @@ export function rankAndGroupHits<T extends SearchRankHit>(
   const otherHits = restHits.filter((hit) => hit.projectId !== contextProjectId);
 
   return [
-    ...openBeforeArchived(exactHits).map((hit) =>
+    ...titleBeforeBodyThenOpen(exactHits, query).map((hit) =>
       withGroup(hit, contextProjectId)
     ),
-    ...openBeforeArchived(currentHits).map((hit) =>
+    ...titleBeforeBodyThenOpen(currentHits, query).map((hit) =>
       withGroup(hit, contextProjectId)
     ),
-    ...openBeforeArchived(otherHits).map((hit) =>
+    ...titleBeforeBodyThenOpen(otherHits, query).map((hit) =>
       withGroup(hit, contextProjectId)
     ),
   ];
+}
+
+function titleBeforeBodyThenOpen<T extends SearchRankHit>(
+  items: T[],
+  query: string
+): T[] {
+  const titleHits = items.filter((item) => isTitleStrongHit(item, query));
+  const bodyHits = items.filter((item) => !isTitleStrongHit(item, query));
+  return [...openBeforeArchived(titleHits), ...openBeforeArchived(bodyHits)];
 }
 
 function openBeforeArchived<T extends SearchRankHit>(items: T[]): T[] {
