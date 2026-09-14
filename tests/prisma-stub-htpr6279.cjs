@@ -75,9 +75,11 @@ const prisma = {
   assignees: {
     findFirst: async () => {
       findFirstCalls += 1;
-      return findFirstCalls === 1 ? state.outerAssignee : state.reAssignee;
+      // Outer existence check now uses findMany. The first findFirst is the
+      // post-P2002 winner re-read (HTPR-6428).
+      return findFirstCalls === 1 ? state.reAssignee : state.reAssignee;
     },
-    findMany: async () => [],
+    findMany: async () => (state.outerAssignee ? [state.outerAssignee] : []),
   },
   $transaction: async (cb) => cb(tx),
   // Test knobs ride on the same object because interopDefault exposes exactly

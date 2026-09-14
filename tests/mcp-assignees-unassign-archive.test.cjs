@@ -2,29 +2,38 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { pathToFileURL } = require("node:url");
+const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const helperUrl = pathToFileURL(
-  path.join(root, "src/lib/mcp/tasks/activeTaskMutation.ts"),
-).href;
-const routeSource = fs.readFileSync(
-  path.join(root, "src/app/api/mcp/assignees/assign/route.ts"),
-  "utf8",
-);
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("assignee lookup status filter: unassign allows any status, assign stays Normal (HTPR-6428)", async () => {
+const compile = (file) =>
+  ts.transpileModule(read(file), {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText;
+
+test("assignee lookup status filter: unassign allows any status, assign stays Normal (HTPR-6428)", () => {
+  const mod = { exports: {} };
+  // Same load pattern as other controller unit tests in this suite.
+  new Function("module", "exports", "require", compile("src/lib/mcp/tasks/activeTaskMutation.ts"))(
+    mod,
+    mod.exports,
+    require,
+  );
   const {
     ACTIVE_TASK_MUTATION_STATUS,
     assigneeLookupStatusFilter,
-  } = await import(helperUrl);
+  } = mod.exports;
 
   assert.equal(assigneeLookupStatusFilter("assign"), ACTIVE_TASK_MUTATION_STATUS);
   assert.equal(assigneeLookupStatusFilter("assign"), "Normal");
   assert.equal(assigneeLookupStatusFilter("unassign"), undefined);
 
-  // MCP assignees/assign only accepts assign|unassign (no toggle). Unassign
-  // alone gets the non-Normal lookup; assign keeps the Normal filter.
+  const routeSource = read("src/app/api/mcp/assignees/assign/route.ts");
   assert.match(
     routeSource,
     /assigneeLookupStatusFilter\(\s*allowNonNormalStatus\s*\?\s*"unassign"\s*:\s*"assign"\s*\)/,

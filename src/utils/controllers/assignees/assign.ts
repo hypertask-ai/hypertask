@@ -665,7 +665,7 @@ const removeMatchingAssignees = async ({
   task,
   currentUser,
   agentAssignerId,
-  assigns,
+  assigns: _assigns,
   assigneeIntent,
   skipNotificationCleanup,
   expectedProjectId,
