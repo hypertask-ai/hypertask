@@ -311,8 +311,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const router = useRouter();
   const pathname = usePathname();
   const onMyTasks = !!pathname?.startsWith(globalConstants.myTasksRoute);
-  const myTasksControlledColumns =
-    onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled;
   const { startTour, setSelectedTourId, endTour } = useTourContext();
   const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
   const boardLayout = useRecoilValue(boardLayoutAtom);
@@ -961,7 +959,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         boardCloseHandler();
         break;
       case CommandMode.ConfigureTableColumns:
-        if (myTasksControlledColumns) {
+        if (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) {
           setMyTasksColumnsPickerRequest((current) => current + 1);
           boardCloseHandler();
         }
@@ -2520,7 +2518,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             />
           )}
           {commandMode === CommandMode.ConfigureTableColumns &&
-            !myTasksControlledColumns && (
+            !(onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) && (
             <TableColumnsPicker closeHandler={boardCloseHandler} projectId={_currentProject?.id} />
           )}
           {commandMode === CommandMode.ManageCustomFields && (

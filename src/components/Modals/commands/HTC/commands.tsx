@@ -98,8 +98,6 @@ const Commands = (props: Props) => {
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const myTasksTableColumnsCommand =
-    onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -165,7 +163,7 @@ const Commands = (props: Props) => {
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
               boardLayout === "table" ||
-              myTasksTableColumnsCommand) &&
+              (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled)) &&
             (![
               CommandMode.ToggleCalendarWeekends,
               CommandMode.CalendarWeekStartsMonday,
@@ -286,7 +284,9 @@ const Commands = (props: Props) => {
     isMobile,
     onAgentChat,
     onCalendar,
-    myTasksTableColumnsCommand,
+    onMyTasks,
+    myTasksViewsEnabled,
+    myTasksTableColumnsEnabled,
     projects,
     showByokApiKeys,
   ])
