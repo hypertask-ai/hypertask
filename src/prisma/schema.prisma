@@ -311,6 +311,7 @@ model User {
   userAnnouncements         UserAnnouncement[]
   project_views             View[]
   calendar_views            Calendar_View[]
+  myTasksViews              MyTasksView[]
   ViewLastUsed              View_Last_Used[]
   tasksSharing              TaskSharing[]
   savedContent              SavedContent[]
@@ -961,6 +962,20 @@ model Calendar_View {
 
   @@index([userId])
   @@index([visibility])
+}
+
+model MyTasksView {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  position  Int
+  isDefault Boolean  @default(false)
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Project_View {
