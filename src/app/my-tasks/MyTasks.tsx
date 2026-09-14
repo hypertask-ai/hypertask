@@ -95,7 +95,6 @@ const MyTasks = ({
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
-  const timeGroupFeatureEnabled = viewsFeatureEnabled && myTasksTimeGroupEnabled;
   const viewParam = searchParams?.get("view") ?? null;
   const initialView = initialViews.find((view) => view.id === initialViewId);
   const [views, setViews] = useState(initialViews);
@@ -146,7 +145,10 @@ const MyTasks = ({
     [sections, selectedPriorities]
   );
 
-  const groupBy = effectiveMyTasksGroupBy(viewConfig, timeGroupFeatureEnabled);
+  const groupBy = effectiveMyTasksGroupBy(
+    viewConfig,
+    Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled),
+  );
 
   const availableBoards = useMemo(() => {
     if (!viewConfig.boardIds) return boards;
@@ -628,7 +630,7 @@ const MyTasks = ({
             boards={boards}
             config={viewConfig}
             onChange={updateViewConfig}
-            timeGroupEnabled={timeGroupFeatureEnabled}
+            timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
           />
         )}
         {filterEnabled && (

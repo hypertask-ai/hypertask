@@ -4,7 +4,7 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
-import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_TIME_GROUP_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
@@ -83,6 +83,7 @@ const MyTasksViewControls = ({
   timeGroupEnabled = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
@@ -93,7 +94,10 @@ const MyTasksViewControls = ({
   useClickOutside(sortRef, () => setSortOpen(false));
   useClickOutside(groupRef, () => setGroupOpen(false));
 
-  const groupBy = effectiveMyTasksGroupBy(config, timeGroupEnabled);
+  const groupBy = effectiveMyTasksGroupBy(
+    config,
+    Boolean(myTasksTimeGroupEnabled && timeGroupEnabled),
+  );
 
   const selectedBoardIds = config.boardIds ?? boards.map((board) => board.id);
   const selectedBoards = useMemo(
@@ -483,7 +487,7 @@ const MyTasksViewControls = ({
         )}
       </div>
 
-      {timeGroupEnabled && (
+      {myTasksTimeGroupEnabled && timeGroupEnabled && (
         <div ref={groupRef} className="relative">
           <button
             type="button"
