@@ -99,6 +99,18 @@ test("hideDock drops tab-bar pad; keyboard still clears inset", () => {
   assert.match(chat, /hideDock:\s*hideDockInset/);
 });
 
+test("6476 chrome-aware height applies only while an agent is open", () => {
+  assert.match(chat, /mobileFullscreenChrome/);
+  assert.match(
+    chat,
+    /mobileLayoutEnabled \|\|\s*mobileAgentChatViewportEnabled \|\|\s*mobileFullscreenChrome/,
+  );
+  assert.match(
+    chat,
+    /\(mobileLayoutEnabled \|\| mobileFullscreenChrome\) &&\s*\n\s*"mobile-agent-chat/,
+  );
+});
+
 test("slim header keeps back + name only when fullscreen", () => {
   assert.match(chat, /!mobileFullscreenChrome && \(/);
   assert.match(chat, /isNarrow && !mobileFullscreenChrome/);

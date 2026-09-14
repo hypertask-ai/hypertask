@@ -647,12 +647,6 @@ const AgentChatClient = (props: IProp) => {
   }, [rosterStatusEnabled]);
   const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
-  const mobileAgentChatViewport = useMobileVisualViewport(
-    isMbl &&
-      (mobileAgentChatViewportEnabled ||
-        mobileLayoutEnabled ||
-        mobileFullscreenFlag),
-  );
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
   const setAgentChatMobileFullscreen = useSetRecoilState(
@@ -664,6 +658,12 @@ const AgentChatClient = (props: IProp) => {
   const [search, setSearch] = useState("");
   const [teamId, setTeamId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const mobileAgentChatViewport = useMobileVisualViewport(
+    isMbl &&
+      (mobileAgentChatViewportEnabled ||
+        mobileLayoutEnabled ||
+        (mobileFullscreenFlag && Boolean(selectedId))),
+  );
   const [session, setSession] = useState<TAgentChatSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [messages, setMessages] = useState<TChatMessage[] | null>(null);
@@ -2584,12 +2584,15 @@ const AgentChatClient = (props: IProp) => {
   ) : null;
 
   let mobileAgentChatHeight: string | undefined;
-  if (
+  // 6407 keeps chrome-aware height for the whole mobile Agent Chat page.
+  // 6476 only needs it while an agent thread is open (roster keeps normal shell).
+  const mobileChromeAwareHeight = Boolean(
     isMbl &&
-    (mobileLayoutEnabled ||
-      mobileAgentChatViewportEnabled ||
-      mobileFullscreenFlag)
-  ) {
+      (mobileLayoutEnabled ||
+        mobileAgentChatViewportEnabled ||
+        mobileFullscreenChrome),
+  );
+  if (mobileChromeAwareHeight) {
     // Full visible viewport with top/dock padding inside the same border-box
     // (AI chat pattern). Avoids h-screen oversizing and mid-screen composer gap.
     mobileAgentChatHeight = mobileAgentChatViewport
@@ -2619,7 +2622,7 @@ const AgentChatClient = (props: IProp) => {
       <div
         className={cn(
           "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
-          !(isMbl && (mobileLayoutEnabled || mobileFullscreenFlag)) &&
+          !(isMbl && (mobileLayoutEnabled || mobileFullscreenChrome)) &&
             "h-screen",
           // Flag-off: reserve app top bar + dock. Flag-on with an agent open:
           // no shell chrome; keep safe-area only when the keyboard is closed.
@@ -2631,7 +2634,7 @@ const AgentChatClient = (props: IProp) => {
             !keyboardOpen &&
             "pb-[env(safe-area-inset-bottom)]",
           isMbl &&
-            (mobileLayoutEnabled || mobileFullscreenFlag) &&
+            (mobileLayoutEnabled || mobileFullscreenChrome) &&
             "mobile-agent-chat min-h-0 overscroll-y-none",
         )}
         style={{
