@@ -42,7 +42,7 @@ export function parseTicketSearchQuery(query: string): TicketSearchQuery | null 
   return null;
 }
 
-export function tokenize(value: string): string[] {
+function tokenizeInOrder(value: string): string[] {
   const normalized = value.toLowerCase();
   if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
     const segmenter = new Intl.Segmenter("und", { granularity: "word" });
@@ -50,10 +50,14 @@ export function tokenize(value: string): string[] {
     for (const { segment, isWordLike } of segmenter.segment(normalized)) {
       if (isWordLike) tokens.push(segment);
     }
-    return Array.from(new Set(tokens));
+    return tokens;
   }
 
-  return Array.from(new Set(normalized.match(/[\p{L}\p{N}_-]+/gu) ?? []));
+  return normalized.match(/[\p{L}\p{N}_-]+/gu) ?? [];
+}
+
+export function tokenize(value: string): string[] {
+  return Array.from(new Set(tokenizeInOrder(value)));
 }
 
 export function isExactTicketHit(
@@ -86,6 +90,25 @@ export function isTitleStrongHit(hit: SearchRankHit, query: string): boolean {
     hit.title,
     hit.taskTitle,
   ]);
+}
+
+export function isTitlePhraseHit(hit: SearchRankHit, query: string): boolean {
+  const queryTokens = tokenizeInOrder(query);
+  if (queryTokens.length === 0) return false;
+
+  const titleTokens = tokenizeInOrder(
+    [hit.ticketNumber, hit.title, hit.taskTitle]
+      .filter((value): value is string => Boolean(value))
+      .join(" ")
+  );
+  if (titleTokens.length < queryTokens.length) return false;
+
+  for (let index = 0; index <= titleTokens.length - queryTokens.length; index += 1) {
+    if (queryTokens.every((token, offset) => titleTokens[index + offset] === token)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function isStrongLexicalHit(hit: SearchRankHit, query: string): boolean {
@@ -178,9 +201,16 @@ function titleBeforeBodyThenOpen<T extends SearchRankHit>(
   items: T[],
   query: string
 ): T[] {
-  const titleHits = items.filter((item) => isTitleStrongHit(item, query));
+  const phraseHits = items.filter((item) => isTitlePhraseHit(item, query));
+  const titleHits = items.filter(
+    (item) => isTitleStrongHit(item, query) && !isTitlePhraseHit(item, query)
+  );
   const bodyHits = items.filter((item) => !isTitleStrongHit(item, query));
-  return [...openBeforeArchived(titleHits), ...openBeforeArchived(bodyHits)];
+  return [
+    ...openBeforeArchived(phraseHits),
+    ...openBeforeArchived(titleHits),
+    ...openBeforeArchived(bodyHits),
+  ];
 }
 
 function openBeforeArchived<T extends SearchRankHit>(items: T[]): T[] {
