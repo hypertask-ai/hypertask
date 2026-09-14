@@ -5,16 +5,18 @@
 // per-board manual rank, due date, etc.) don't mean anything compared across
 // boards. Priority is the exception: it's a fixed level (No
 // Priority/Urgent/High/Medium/Low) that's already comparable across every
-// board, so HTPR-6215 flattens rows for that one sort column, behind a flag.
+// board, so HTPR-6215 flattens rows for that one sort column, behind a flag;
+// a HTPR-6422 saved priority sort opts into the same behavior.
 export function shouldFlattenSortedRows(
   hasCurrentProject: boolean,
   hasActiveSort: boolean,
   isPrioritySort: boolean,
-  crossBoardPrioritySortEnabled: boolean
+  crossBoardPrioritySortEnabled: boolean,
+  savedViewPrioritySort = false,
 ): boolean {
   if (!hasActiveSort) return false;
   if (hasCurrentProject) return true;
-  return crossBoardPrioritySortEnabled && isPrioritySort;
+  return (crossBoardPrioritySortEnabled || savedViewPrioritySort) && isPrioritySort;
 }
 
 export function sortedTaskRowSectionKey(

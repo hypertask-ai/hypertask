@@ -17,5 +17,8 @@ CREATE TABLE "MyTasksView" (
 -- CreateIndex
 CREATE INDEX "MyTasksView_userId_idx" ON "MyTasksView"("userId");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "MyTasksView_one_default_per_user" ON "MyTasksView"("userId") WHERE "isDefault" = true;
+
 -- AddForeignKey
 ALTER TABLE "MyTasksView" ADD CONSTRAINT "MyTasksView_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

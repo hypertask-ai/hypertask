@@ -4,6 +4,7 @@ import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } f
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { IProject, ISection, ITask } from "@/models/model";
+import type { MyTasksSortField, MyTasksViewConfig } from "@/models/MyTasksView";
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useShowArchivedOnBoard } from "@/hooks/Homepage/useShowArchivedOnBoard";
 import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
@@ -69,8 +70,6 @@ import { MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG } from "@/lib/flags/keys";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 
-type TableViewProps = { filteredSections?: ISection[]; _sections: ISection[]; _currentProject: IProject | null; _activeSortingMode: TBoardSortingViewMode; currentUser: any; handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void };
-
 const SECTION_CAP = 20;
 const TABLE_GRID_CLASS = "grid";
 const LABEL_CLASS = "border-border-labelComponent text-label-component";
@@ -82,6 +81,17 @@ type CustomFieldSortColumn = `customField:${string}`;
 type SortColumn = StaticSortColumn | CustomFieldSortColumn;
 type SortDirection = "asc" | "desc";
 type SortState = { column: SortColumn; direction: SortDirection }[];
+type TableViewProps = {
+  filteredSections?: ISection[];
+  _sections: ISection[];
+  _currentProject: IProject | null;
+  _activeSortingMode: TBoardSortingViewMode;
+  currentUser: any;
+  handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void;
+  myTasksSort?: MyTasksViewConfig["sort"];
+  myTasksSortKey?: number | null;
+  onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
+};
 type CustomField = { id: string; name: string; type: CustomFieldType; showInTable?: boolean | null };
 type CustomFieldValue = { fieldId: string; value: string; numericValue: number | null };
 type TableColumn = { key: SortColumn; label: string; width: string; className?: string };
@@ -137,6 +147,33 @@ const resolveSortState = (project?: IProject | null): SortState => {
   if (!tableColumnByKey.has(active.column as SortColumn) && !isCustomFieldSortColumn(active.column)) return [];
   if (active.direction !== "asc" && active.direction !== "desc") return [];
   return [{ column: active.column as SortColumn, direction: active.direction }];
+};
+
+const resolveMyTasksSortState = (sort: MyTasksViewConfig["sort"]): SortState => {
+  const columns: Partial<Record<MyTasksSortField, SortColumn>> = {
+    dueDate: "due",
+    priority: "priority",
+    createdAt: "created",
+    updatedAt: "updated",
+    title: "title",
+  };
+  const column = columns[sort.field];
+  return column ? [{ column, direction: sort.direction }] : [];
+};
+
+const myTasksSortFromTable = (
+  sort: SortState[number] | undefined,
+): MyTasksViewConfig["sort"] | null => {
+  if (!sort) return null;
+  const fields: Partial<Record<SortColumn, MyTasksSortField>> = {
+    due: "dueDate",
+    priority: "priority",
+    created: "createdAt",
+    updated: "updatedAt",
+    title: "title",
+  };
+  const field = fields[sort.column];
+  return field ? { field, direction: sort.direction } : null;
 };
 
 const taskInColumnDays = (t: ITask) => daysSince(t.sectionChangedAt ?? t.createdAt);
@@ -342,7 +379,15 @@ const ColumnResizeHandle = ({
   );
 };
 
-const TableView = ({ filteredSections, _sections, _currentProject, handleBoardChange }: TableViewProps) => {
+const TableView = ({
+  filteredSections,
+  _sections,
+  _currentProject,
+  handleBoardChange,
+  myTasksSort,
+  myTasksSortKey,
+  onMyTasksSortChange,
+}: TableViewProps) => {
   const queryClient = useQueryClient();
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
@@ -395,7 +440,9 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   // My Tasks has no board cache to mutate, so Ctrl+E hides the row locally
   // until router.refresh() returns the server list without it (HTPR-6445).
   const [excludedTaskIds, setExcludedTaskIds] = useState<Set<number>>(() => new Set());
-  const [sortState, setSortState] = useState<SortState>(() => resolveSortState(_currentProject));
+  const [sortState, setSortState] = useState<SortState>(() =>
+    myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
+  );
   const { setTableSortViewAndReturn, changeBoardLayout } = useKanbanViews(_currentProject);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
@@ -406,9 +453,17 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
     _currentProject?.project_view?.default_view?.id;
   useEffect(() => {
-    setSortState(resolveSortState(_currentProject));
+    setSortState(
+      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSortViewId, _currentProject?.showTimeTotals]);
+  }, [
+    activeSortViewId,
+    myTasksSort?.direction,
+    myTasksSort?.field,
+    myTasksSortKey,
+    _currentProject?.showTimeTotals,
+  ]);
   const sections = useMemo(() => {
     // An active filter may intentionally produce zero visible sections. Only
     // fall back when no filtered value was supplied, not when it is empty.
@@ -656,6 +711,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   // comparable across boards. Limited to Owner + QA by default; see tableSortFlatten.ts.
   const crossBoardPrioritySortEnabled = useFlag(MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG);
   const isPrioritySort = sortState[0]?.column === "priority";
+  const savedViewPrioritySort = myTasksSort?.field === "priority";
 
   const rows = useMemo(() => {
     if (sortState.length > 0) {
@@ -663,7 +719,8 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
         Boolean(_currentProject),
         true,
         isPrioritySort,
-        crossBoardPrioritySortEnabled
+        crossBoardPrioritySortEnabled,
+        savedViewPrioritySort,
       );
       // sectionId and sid share a numeric namespace only when there's a current
       // project (real sections); on /my-tasks, sid is the boardId (see
@@ -733,6 +790,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     timeTotals,
     isPrioritySort,
     crossBoardPrioritySortEnabled,
+    savedViewPrioritySort,
   ]);
 
   // HTPR-4876: table view rendered <HypertasksCommands /> with no context, so
@@ -827,7 +885,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       const initial = initialDirection(column, customFieldBySortColumn);
       const existingIndex = sortState.findIndex((level) => level.column === column);
       let next: SortState;
-      if (shiftKey) {
+      if (shiftKey && !myTasksSort) {
         if (existingIndex >= 0) {
           next = sortState.map((level, index) =>
             index === existingIndex
@@ -846,10 +904,24 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       } else {
         next = [];
       }
+      if (myTasksSort && onMyTasksSortChange) {
+        const controlledSort = myTasksSortFromTable(
+          next[0] ?? { column, direction: initial },
+        );
+        if (controlledSort) onMyTasksSortChange(controlledSort);
+        return;
+      }
       setSortState(next);
       if (_currentProject) setTableSortViewAndReturn(_currentProject, next[0] ?? null);
     },
-    [sortState, _currentProject, setTableSortViewAndReturn, customFieldBySortColumn]
+    [
+      sortState,
+      _currentProject,
+      setTableSortViewAndReturn,
+      customFieldBySortColumn,
+      myTasksSort,
+      onMyTasksSortChange,
+    ]
   );
 
   const getTicketText = useCallback(
@@ -1422,7 +1494,8 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
             Boolean(_currentProject),
             sortState.length > 0,
             isPrioritySort,
-            crossBoardPrioritySortEnabled
+            crossBoardPrioritySortEnabled,
+            savedViewPrioritySort,
           ) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">

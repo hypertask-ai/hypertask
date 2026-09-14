@@ -183,3 +183,28 @@ test("sorts by title and does not mutate the source array", () => {
   assert.deepEqual(sorted.map(({ id }) => id), [2, 1]);
   assert.deepEqual(tasks.map(({ id }) => id), [1, 2]);
 });
+
+test("priority sorting matches the existing My Tasks ascending semantics", () => {
+  const tasks = [
+    task(1, { priority: { priority_index: 1 } as MyTasksTask["priority"] }),
+    task(2, { priority: { priority_index: 4 } as MyTasksTask["priority"] }),
+    task(3),
+  ];
+
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({ sort: { field: "priority", direction: "asc" } }),
+      NOW,
+    ).map(({ id }) => id),
+    [2, 1, 3],
+  );
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({ sort: { field: "priority", direction: "desc" } }),
+      NOW,
+    ).map(({ id }) => id),
+    [1, 2, 3],
+  );
+});

@@ -99,7 +99,7 @@ export const myTasksSortComparator = (
       result = compareOptional(
         a.priority?.priority_index ?? null,
         b.priority?.priority_index ?? null,
-        direction,
+        direction === "asc" ? "desc" : "asc",
       );
     } else if (field === "createdAt") {
       result = compareOptional(taskTime(a.createdAt), taskTime(b.createdAt), direction);

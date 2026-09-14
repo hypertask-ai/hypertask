@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { parseMyTasksViewConfig } from "@/models/MyTasksView";
 import {
   getMyTasksViews,
+  MAX_MY_TASKS_VIEWS,
   myTasksViewSelect,
   serializeMyTasksView,
 } from "@/utils/controllers/tasks/myTasksViews";
@@ -38,8 +39,15 @@ export async function POST(request: NextRequest) {
 
     const aggregate = await prisma.myTasksView.aggregate({
       where: { userId: auth.userId },
+      _count: true,
       _max: { position: true },
     });
+    if (aggregate._count >= MAX_MY_TASKS_VIEWS) {
+      return NextResponse.json(
+        { error: `You can save up to ${MAX_MY_TASKS_VIEWS} My Tasks views` },
+        { status: 400 },
+      );
+    }
     const view = await prisma.myTasksView.create({
       data: {
         userId: auth.userId,

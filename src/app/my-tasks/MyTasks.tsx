@@ -88,6 +88,7 @@ const MyTasks = ({
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
+  const viewParam = searchParams?.get("view") ?? null;
   const initialView = initialViews.find((view) => view.id === initialViewId);
   const [views, setViews] = useState(initialViews);
   const [activeViewId, setActiveViewId] = useState<number | null>(initialViewId);
@@ -100,6 +101,15 @@ const MyTasks = ({
   >([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const saveRequestToken = useRef(0);
+  const observedViewParam = useRef<string | null | undefined>(undefined);
+  const updateViewConfig = useCallback(
+    (next: MyTasksViewConfig | ((current: MyTasksViewConfig) => MyTasksViewConfig)) => {
+      saveRequestToken.current += 1;
+      setViewConfig(next);
+    },
+    [],
+  );
   useClickOutside(filterRef, () => setFilterOpen(false));
 
   const activeView = views.find((view) => view.id === activeViewId);
@@ -152,6 +162,9 @@ const MyTasks = ({
       ? getMyTasksSplitIndex(filteredSections, boardParam)
       : 0,
   );
+  const activeBoardId = useRef<number | null>(
+    filteredSections[activeSplit - 1]?.projectId ?? null,
+  );
 
   const totalCount = useMemo(
     () =>
@@ -196,6 +209,7 @@ const MyTasks = ({
   const updateSplit = useCallback(
     (index: number) => {
       const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
+      activeBoardId.current = filteredSections[nextIndex - 1]?.projectId ?? null;
       setActiveSplit(nextIndex);
       if (myTasksShortcutsWidthEnabled) {
         replaceBoardParam(filteredSections[nextIndex - 1]?.projectId ?? null);
@@ -210,21 +224,40 @@ const MyTasks = ({
   );
 
   useEffect(() => {
-    if (!myTasksShortcutsWidthEnabled) return;
+    if (!myTasksShortcutsWidthEnabled) {
+      const split = getMyTasksSplitIndex(
+        filteredSections,
+        activeBoardId.current === null ? null : String(activeBoardId.current),
+      );
+      activeBoardId.current = filteredSections[split - 1]?.projectId ?? null;
+      setActiveSplit(split);
+      return;
+    }
     const split = getMyTasksSplitIndex(filteredSections, boardParam);
+    activeBoardId.current = filteredSections[split - 1]?.projectId ?? null;
     setActiveSplit(split);
     if (boardParam && split === 0) replaceBoardParam(null);
   }, [boardParam, filteredSections, myTasksShortcutsWidthEnabled, replaceBoardParam]);
 
   useEffect(() => {
-    if (!viewsEnabled) return;
-    const viewParam = searchParams?.get("view") ?? null;
-    if (activeViewId !== null && !viewParam) {
-      replaceParams({ viewId: activeViewId });
-    } else if (viewParam && !views.some((view) => String(view.id) === viewParam)) {
-      replaceParams({ viewId: null });
+    if (!viewsEnabled || observedViewParam.current === viewParam) return;
+    observedViewParam.current = viewParam;
+    if (!viewParam) {
+      if (activeViewId !== null) replaceParams({ viewId: activeViewId });
+      return;
     }
-  }, [activeViewId, replaceParams, searchParams, views, viewsEnabled]);
+
+    const requestedView = views.find((view) => String(view.id) === viewParam);
+    if (!requestedView) {
+      setActiveViewId(null);
+      updateViewConfig(parseMyTasksViewConfig(DEFAULT_MY_TASKS_VIEW_CONFIG));
+      replaceParams({ viewId: null });
+      return;
+    }
+    setActiveViewId(requestedView.id);
+    updateViewConfig(parseMyTasksViewConfig(requestedView.config));
+    setFilterOpen(false);
+  }, [activeViewId, replaceParams, updateViewConfig, viewParam, views, viewsEnabled]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -266,7 +299,7 @@ const MyTasks = ({
       view?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
     );
     setActiveViewId(view?.id ?? null);
-    setViewConfig(nextConfig);
+    updateViewConfig(nextConfig);
     setFilterOpen(false);
     const currentBoardId = boardParam ? Number(boardParam) : null;
     const boardStillVisible =
@@ -292,7 +325,7 @@ const MyTasks = ({
       const created = { ...body.view, config: parseMyTasksViewConfig(body.view.config) };
       setViews((current) => [...current, created]);
       setActiveViewId(created.id);
-      setViewConfig(created.config);
+      updateViewConfig(created.config);
       replaceParams({ viewId: created.id });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create view");
@@ -317,15 +350,19 @@ const MyTasks = ({
 
   const saveView = async () => {
     if (!activeView) return;
+    const requestToken = ++saveRequestToken.current;
     setViewBusy(true);
     try {
       const saved = await patchView(activeView.id, { config: viewConfig });
       setViews((current) =>
         current.map((view) => (view.id === saved.id ? saved : view)),
       );
+      if (requestToken !== saveRequestToken.current) return;
       setViewConfig(saved.config);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save view");
+      if (requestToken === saveRequestToken.current) {
+        toast.error(error instanceof Error ? error.message : "Unable to save view");
+      }
     } finally {
       setViewBusy(false);
     }
@@ -372,7 +409,7 @@ const MyTasks = ({
       setViews((current) => current.filter((view) => view.id !== viewId));
       if (activeViewId === viewId) {
         setActiveViewId(null);
-        setViewConfig(parseMyTasksViewConfig(DEFAULT_MY_TASKS_VIEW_CONFIG));
+        updateViewConfig(parseMyTasksViewConfig(DEFAULT_MY_TASKS_VIEW_CONFIG));
         replaceParams({ viewId: null });
       }
     } catch (error) {
@@ -382,14 +419,19 @@ const MyTasks = ({
     }
   };
 
-  const resetView = () => setViewConfig(baselineConfig);
+  const resetView = () => updateViewConfig(baselineConfig);
+  const updateViewSort = useCallback(
+    (sort: MyTasksViewConfig["sort"]) =>
+      updateViewConfig((current) => ({ ...current, sort })),
+    [updateViewConfig],
+  );
 
   const tabLength = (index: number) =>
     index === 0 ? totalCount : filteredSections[index - 1]?.items.length ?? 0;
 
   const togglePriority = (priority: IPrioritiesConstants) => {
     if (viewsEnabled) {
-      setViewConfig((current) => ({
+      updateViewConfig((current) => ({
         ...current,
         filters: {
           ...current.filters,
@@ -457,7 +499,7 @@ const MyTasks = ({
           <MyTasksViewControls
             boards={boards}
             config={viewConfig}
-            onChange={setViewConfig}
+            onChange={updateViewConfig}
           />
         )}
         {filterEnabled && (
@@ -524,6 +566,9 @@ const MyTasks = ({
           _currentProject={null}
           _activeSortingMode={MY_TASKS_SORTING_MODE}
           currentUser={currentUser}
+          myTasksSort={viewsEnabled ? viewConfig.sort : undefined}
+          myTasksSortKey={activeViewId}
+          onMyTasksSortChange={viewsEnabled ? updateViewSort : undefined}
         />
       </div>
 

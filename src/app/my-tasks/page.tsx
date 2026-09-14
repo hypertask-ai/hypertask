@@ -42,7 +42,7 @@ export default async function Page({
 
   const viewsEnabled = await myTasksViewsEnabled(sessionUser.userId);
   const [myTasks, views] = await Promise.all([
-    getMyTasks(sessionUser.userId),
+    getMyTasks(sessionUser.userId, viewsEnabled),
     viewsEnabled ? getMyTasksViews(sessionUser.userId) : Promise.resolve([]),
   ]);
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;

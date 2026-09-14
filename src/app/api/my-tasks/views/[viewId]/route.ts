@@ -69,25 +69,32 @@ export async function PATCH(
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const result = await tx.myTasksView.updateMany({
+      const existing = await tx.myTasksView.findFirst({
         where: { id: viewId, userId: auth.userId },
-        data,
+        select: { id: true },
       });
-      if (result.count === 0) return null;
+      if (!existing) return null;
       if (data.isDefault === true) {
         await tx.myTasksView.updateMany({
           where: { userId: auth.userId, isDefault: true, id: { not: viewId } },
           data: { isDefault: false },
         });
       }
-      return tx.myTasksView.findFirst({
-        where: { id: viewId, userId: auth.userId },
+      return tx.myTasksView.update({
+        where: { id: viewId },
+        data,
         select: myTasksViewSelect,
       });
     });
     if (!updated) return NextResponse.json({ error: "View not found" }, { status: 404 });
     return NextResponse.json({ view: serializeMyTasksView(updated) });
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return NextResponse.json(
+        { error: "Another view was set as default; try again" },
+        { status: 409 },
+      );
+    }
     console.error("[my-tasks-views] update failed", error);
     return NextResponse.json({ error: "Unable to update view" }, { status: 500 });
   }
