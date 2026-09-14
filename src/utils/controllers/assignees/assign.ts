@@ -142,11 +142,18 @@ const assigneesAssign = async (
     // the owner's user id). Unassign by userId must clear every row for that
     // person, or CLI/MCP callers still see the assignee after a "successful"
     // unassign (HTPR-6428). Agent-id targeting stays exact.
-    const assigneeWhere = agentId
-      ? { taskId, agentId }
-      : intent === "unassign"
-        ? { taskId, userId: assigneeUserId }
-        : { taskId, userId: assigneeUserId, agentId: null };
+    let assigneeWhere: {
+      taskId: number;
+      agentId?: string | null;
+      userId?: number;
+    };
+    if (agentId) {
+      assigneeWhere = { taskId, agentId };
+    } else if (intent === "unassign") {
+      assigneeWhere = { taskId, userId: assigneeUserId };
+    } else {
+      assigneeWhere = { taskId, userId: assigneeUserId, agentId: null };
+    }
 
     const matchingAssignees = await prisma.assignees.findMany({
       where: assigneeWhere,
@@ -225,17 +232,14 @@ const assigneesAssign = async (
     } else if (intent === "unassign") {
       if (matchingAssignees.length > 0) {
         assignStatus = "Unassigned";
-        for (const row of matchingAssignees) {
-          const removalOutcome = await removeAssignee({
-            ...props,
-            assign: row,
-            assigneeIntent: "Unassigned",
-          });
-          if (removalOutcome === "stale-task") {
-            assignmentOutcome = "stale-task";
-            assignStatus = "Conflict";
-            break;
-          }
+        const removalOutcome = await removeMatchingAssignees({
+          ...props,
+          assigns: matchingAssignees,
+          assigneeIntent: "Unassigned",
+        });
+        if (removalOutcome === "stale-task") {
+          assignmentOutcome = "stale-task";
+          assignStatus = "Conflict";
         }
       } else {
         // Not assigned — idempotent no-op
@@ -627,6 +631,176 @@ interface IRemoveAssigneeProps extends ICreateAssigneeProps {
     } | null;
   };
 }
+
+interface IRemoveMatchingAssigneesProps extends ICreateAssigneeProps {
+  skipNotificationCleanup?: boolean;
+  assigns: IRemoveAssigneeProps["assign"][];
+}
+
+// HTPR-6428: userId unassign can match person + agent rows. Delete them in one
+// transaction so a mid-loop failure cannot leave a half-cleared assignee set.
+const removeMatchingAssignees = async ({
+  afterAppDomain,
+  devices,
+  taskId,
+  userId,
+  task,
+  currentUser,
+  agentAssignerId,
+  assigns,
+  assigneeIntent,
+  skipNotificationCleanup,
+  expectedProjectId,
+  expectedSectionId,
+  allowHumanOverride,
+}: IRemoveMatchingAssigneesProps) => {
+  if (assigns.length === 0) return "already-unassigned" as const;
+  if (assigns.length === 1) {
+    return removeAssignee({
+      afterAppDomain,
+      devices,
+      taskId,
+      userId,
+      task,
+      currentUser,
+      agentAssignerId,
+      assign: assigns[0],
+      assigneeIntent,
+      skipNotificationCleanup,
+      expectedProjectId,
+      expectedSectionId,
+      allowHumanOverride,
+    });
+  }
+
+  const removal = await prisma.$transaction(async (tx) => {
+    await assertAgentAssignmentChangeAllowed(
+      tx,
+      taskId,
+      agentAssignerId,
+      currentUser.id,
+      { allowHumanOverride }
+    );
+    if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
+      const currentTask = await tx.task.findUnique({
+        where: { id: taskId },
+        select: { projectId: true, sectionId: true, status: true },
+      });
+      if (
+        !currentTask ||
+        currentTask.status !== "Normal" ||
+        (expectedProjectId !== undefined &&
+          currentTask.projectId !== expectedProjectId) ||
+        (expectedSectionId !== undefined &&
+          currentTask.sectionId !== expectedSectionId)
+      ) {
+        return {
+          removed: [] as IRemoveAssigneeProps["assign"][],
+          staleTask: true as const,
+          agentWebhookDeliveryIds: [] as (string | null)[],
+          boardWebhookDeliveryIds: [] as string[],
+        };
+      }
+    }
+
+    const requestedIds = new Set(assigns.map((row) => row.id));
+    const current = await tx.assignees.findMany({
+      where: {
+        taskId,
+        userId,
+        id: { in: [...requestedIds] },
+      },
+      select: { id: true },
+    });
+    const liveIds = new Set(current.map(({ id }) => id));
+    const liveAssigns = assigns.filter((row) => liveIds.has(row.id));
+    if (liveAssigns.length === 0) {
+      return {
+        removed: [] as IRemoveAssigneeProps["assign"][],
+        agentWebhookDeliveryIds: [] as (string | null)[],
+        boardWebhookDeliveryIds: [] as string[],
+      };
+    }
+
+    if (allowHumanOverride) {
+      await cancelAgentMutationLeaseForHumanOverride(tx, taskId, currentUser.id);
+    }
+    await tx.assignees.deleteMany({
+      where: { id: { in: liveAssigns.map(({ id }) => id) } },
+    });
+
+    const agentWebhookDeliveryIds: (string | null)[] = [];
+    const boardWebhookDeliveryIds: string[] = [];
+    for (const assign of liveAssigns) {
+      agentWebhookDeliveryIds.push(
+        assign.agentId
+          ? await persistAgentWebhookEvent(tx, {
+              event: "task.unassigned",
+              agentId: assign.agentId,
+              projectId: task.projectId,
+              taskId,
+              ticketNumber: task.ticketNumber,
+              taskTitle: task.title,
+              actor: {
+                userId: currentUser.id,
+                agentId: agentAssignerId ?? null,
+                displayName:
+                  assign.agentAssigner?.displayName?.trim() ||
+                  currentUser.displayName?.trim() ||
+                  "Hypertask user",
+              },
+            })
+          : null
+      );
+      const unassignedEvent: WebhookDelivery = {
+        event: "task.unassigned",
+        data: {
+          task: {
+            id: taskId,
+            ticketNumber: task.ticketNumber,
+            projectId: task.projectId,
+            title: task.title,
+          },
+          action: "unassigned",
+          assignee: { userId, agentId: assign.agentId ?? null },
+          actor: { userId: currentUser.id, agentId: agentAssignerId ?? null },
+        },
+      };
+      boardWebhookDeliveryIds.push(
+        ...(await persistBoardWebhookEvent(tx, task.projectId, unassignedEvent))
+      );
+    }
+
+    return { removed: liveAssigns, agentWebhookDeliveryIds, boardWebhookDeliveryIds };
+  });
+
+  if ("staleTask" in removal && removal.staleTask) {
+    return "stale-task" as const;
+  }
+  if (removal.removed.length === 0) return "already-unassigned" as const;
+
+  await publishAgentWebhookDeliveries(removal.agentWebhookDeliveryIds);
+  await publishBoardWebhookDeliveries(removal.boardWebhookDeliveryIds);
+
+  for (const assign of removal.removed) {
+    await finishRemovingAssignee({
+      afterAppDomain,
+      devices,
+      taskId,
+      userId,
+      task,
+      currentUser,
+      agentAssignerId,
+      assign,
+      assigneeIntent,
+      skipNotificationCleanup,
+      expectedProjectId,
+      expectedSectionId,
+      allowHumanOverride,
+    });
+  }
+  return "removed" as const;
+};
 
 const removeAssignee = async ({
   afterAppDomain,

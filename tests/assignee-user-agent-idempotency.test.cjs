@@ -27,9 +27,17 @@ const load = (javascript, stubs) => {
 };
 
 const matches = (row, where) =>
-  Object.entries(where).every(
-    ([key, value]) => value === undefined || row[key] === value,
-  );
+  Object.entries(where).every(([key, value]) => {
+    if (value === undefined) return true;
+    if (
+      value &&
+      typeof value === "object" &&
+      Array.isArray(value.in)
+    ) {
+      return value.in.includes(row[key]);
+    }
+    return row[key] === value;
+  });
 
 test("a human assignment coexists with an agent owned by the same user", async () => {
   const owner = {
@@ -233,9 +241,9 @@ test("a human assignment coexists with an agent owned by the same user", async (
   // agent self-assign that shares the same userId.
   assert.deepEqual(unassigned.json.body, []);
   assert.equal(rows.length, 0);
-  assert.equal(calls.transactions, 3);
-  assert.equal(calls.fences, 3);
-  assert.equal(calls.cancellations, 3);
+  assert.equal(calls.transactions, 2);
+  assert.equal(calls.fences, 2);
+  assert.equal(calls.cancellations, 2);
 
   rows.push({ ...agentAssignment });
   const toggledOn = await assign(owner, owner.id, task.id, undefined, undefined, {
@@ -258,9 +266,9 @@ test("a human assignment coexists with an agent owned by the same user", async (
     toggledOff.json.body.map(({ userId, agentId }) => ({ userId, agentId })),
     [{ userId: owner.id, agentId: agentAssignment.agentId }],
   );
-  assert.equal(calls.transactions, 5);
-  assert.equal(calls.fences, 5);
-  assert.equal(calls.cancellations, 5);
+  assert.equal(calls.transactions, 4);
+  assert.equal(calls.fences, 4);
+  assert.equal(calls.cancellations, 4);
   assert.deepEqual(calls.activities, [
     "Assigned",
     "Unassigned",
@@ -298,7 +306,7 @@ test("a human assignment coexists with an agent owned by the same user", async (
     rows.map(({ userId, agentId }) => ({ userId, agentId })),
     [{ userId: owner.id, agentId: agentAssignment.agentId }],
   );
-  assert.equal(calls.cancellations, 5);
+  assert.equal(calls.cancellations, 4);
   assert.deepEqual(calls.fenceOptions.at(-1), { allowHumanOverride: false });
 
   const staleToggle = await assign(
