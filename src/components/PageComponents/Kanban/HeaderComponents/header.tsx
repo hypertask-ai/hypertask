@@ -167,7 +167,7 @@ const Header = ({
                 <HiddenColumns currentProject={currentProject} />
                 <ViewsHeaderKanban currentProject={currentProject} />
                 <CalendarIcon />
-                <SearchTasksHeader />
+                <SearchTasksHeader fromProject={currentProject.id} />
               </div>
 
               <HeaderDivider />

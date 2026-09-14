@@ -44,6 +44,7 @@ import {
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
+  HTPR_6372_SEARCH_RANKING_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -371,6 +372,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Enables global shortcuts on My Tasks, remembers the selected board in the URL, and uses the full available page width.",
+  },
+  {
+    key: HTPR_6372_SEARCH_RANKING_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Hides search results that do not contain every word you typed, and when you open search from a board, shows that board's matches first.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

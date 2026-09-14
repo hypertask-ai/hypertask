@@ -1,5 +1,6 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { HTPR_6372_SEARCH_RANKING_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -11,7 +12,7 @@ const handler: NextApiHandler = async (
 ) => {
   if (req.method === "POST") {
     try {
-      const { searchQuery, projectIds, archive } = req.body;
+      const { searchQuery, projectIds, archive, contextProjectId } = req.body;
       const normalizedSearchQuery =
         typeof searchQuery === "string" ? searchQuery.trim() : "";
       const requestedProjectIds = Array.isArray(projectIds)
@@ -50,10 +51,18 @@ const handler: NextApiHandler = async (
         return res.status(403).json({ message: "Project access denied" });
       }
 
+      const applyRelevanceCut = await isFeatureEnabled(
+        HTPR_6372_SEARCH_RANKING_FLAG,
+        session.userId
+      );
       const results = await turbopufferGetDocuments(
         normalizedSearchQuery,
         requestedProjectIds,
-        archive
+        archive,
+        {
+          contextProjectId,
+          applyRelevanceCut,
+        }
       );
       return res.status(results.status).json(results);
     } catch (error) {

@@ -40,6 +40,18 @@ export default async function Page(
     ? searchParams.includeArchived[0]
     : searchParams?.includeArchived;
   const includeArchived = rawIncludeArchived === "1";
+  const rawFromProject = Array.isArray(searchParams?.fromProject)
+    ? searchParams.fromProject[0]
+    : searchParams?.fromProject;
+  const parsedFromProject = rawFromProject === undefined
+    ? null
+    : Number(rawFromProject);
+  const fromProject =
+    parsedFromProject !== null &&
+    Number.isInteger(parsedFromProject) &&
+    parsedFromProject > 0
+      ? parsedFromProject
+      : null;
 
   return (
     <Suspense fallback={<>Loading...</>}>
@@ -47,6 +59,7 @@ export default async function Page(
         _searchTerm={searchTerm}
         _initialTabIndex={initialTabIndex}
         _includeArchived={includeArchived}
+        _fromProject={fromProject}
         currentUser={currentUser}
       />
     </Suspense>

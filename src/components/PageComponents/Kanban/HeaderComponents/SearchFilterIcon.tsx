@@ -1,5 +1,5 @@
 import Tooltip from "@/components/Common/Tooltip";
-import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import { buildSearchUrl } from "@/lib/searchArchive";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import HeaderIconWrapper from "./HeaderIconWrapper";
@@ -12,6 +12,7 @@ const SearchTasksHeader = ({
   className,
   keyCombination = ["/"],
   tooltipPosition = { left: -10, bottom: -40 },
+  fromProject = null,
 }: {
   readOnly?: boolean;
   onClick?: () => void;
@@ -20,13 +21,16 @@ const SearchTasksHeader = ({
   keyCombination?: (string | null)[];
   /** Defaults to the board header's below-left tooltip; the rail places it right. */
   tooltipPosition?: { left: number; bottom: number };
+  fromProject?: number | null;
 }) => {
   const router = useRouter();
   return (
     <HeaderIconWrapper
       className={className}
       onClick={
-        readOnly && onClick ? onClick : () => router.push("/search?searchTerm=")
+        readOnly && onClick
+          ? onClick
+          : () => router.push(buildSearchUrl("", null, false, fromProject))
       }
     >
       {icon ?? (
