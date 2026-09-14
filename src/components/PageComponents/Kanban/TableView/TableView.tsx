@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { IProject, ISection, ITask } from "@/models/model";
+import { IAssignees, IProject, ISection, ITask } from "@/models/model";
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useShowArchivedOnBoard } from "@/hooks/Homepage/useShowArchivedOnBoard";
 import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
@@ -1062,7 +1062,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, currentUser, 
   );
 
   const closeAssignModal = useCallback(
-    (assignees?: any[], keepOpen?: boolean) => {
+    (assignees?: IAssignees[], keepOpen?: boolean) => {
       if (assignTask && Array.isArray(assignees)) {
         updateTaskAfterRowMutation(assignTask, { assignees });
         setAssignTask((task) => (task ? { ...task, assignees } : null));

@@ -55,6 +55,11 @@ test("uses Command instead of Control for platform-modified task actions on Appl
     getTaskShortcutAction(event(83, { metaKey: true }), true),
     "share",
   );
+  assert.equal(
+    getTaskShortcutAction(event(65, { ctrlKey: true }), true),
+    null,
+    "Ctrl+A must not open assignee on Apple",
+  );
 });
 
 test("does not turn positional or follower shortcuts into table task actions", () => {
@@ -70,6 +75,11 @@ test("does not turn positional or follower shortcuts into table task actions", (
   assert.equal(
     getTaskShortcutAction(event(88, { repeat: true }), false),
     null,
+  );
+  assert.equal(
+    getTaskShortcutAction(event(51, { shiftKey: true, repeat: true }), false),
+    null,
+    "held Shift+3 must not keep deleting",
   );
   assert.equal(
     getTaskShortcutAction(event(68, { shiftKey: true }), false),
