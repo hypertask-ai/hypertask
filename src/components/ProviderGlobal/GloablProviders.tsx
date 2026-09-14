@@ -169,6 +169,8 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
+import { useFlag } from "@/hooks/useFlag";
+import { MY_TASKS_SHORTCUTS_WIDTH_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -183,6 +185,7 @@ import {
 import {
   areGlobalShortcutsEnabled,
   isGlobalCreateTaskShortcut,
+  shouldOpenGlobalCreateTask,
 } from "@/lib/keyboard/globalShortcutRoutes";
 import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShortcuts";
 
@@ -302,6 +305,7 @@ export default function GlobalProvider({
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
+  const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
   const projectRoute = pathname?.startsWith("/project") ?? false;
@@ -1096,9 +1100,9 @@ export default function GlobalProvider({
         e.preventDefault();
         lastgClick.current = null;
         return navigate("Calendar");
-      } else if (!pathname?.startsWith("/my-tasks")) {
-        // My Tasks is read-only, so [c] stays unclaimed there rather than
-        // being swallowed by a preventDefault that opens nothing.
+      } else if (
+        shouldOpenGlobalCreateTask(pathname, myTasksShortcutsWidthEnabled)
+      ) {
         e.preventDefault();
         toggleCreateTaskGlobally();
       }

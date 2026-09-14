@@ -28,6 +28,17 @@ const compareTasks = (nowTime: number) =>
     return aDue - bDue || a.id - b.id;
   };
 
+export function getMyTasksSplitIndex(
+  sections: Pick<ISection, "projectId">[],
+  boardId: string | null,
+): number {
+  if (!boardId) return 0;
+  const sectionIndex = sections.findIndex(
+    (section) => String(section.projectId) === boardId
+  );
+  return sectionIndex === -1 ? 0 : sectionIndex + 1;
+}
+
 /** Pure cross-board grouping used by the My Tasks controller and its tests. */
 export function groupMyTasksByBoard(
   tasks: MyTasksBoardTask[],

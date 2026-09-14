@@ -7,7 +7,7 @@ const jiti = require("jiti")(path.join(root, "tests/my-tasks-entry.cjs"), {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
-const { groupMyTasksByBoard } = jiti(
+const { getMyTasksSplitIndex, groupMyTasksByBoard } = jiti(
   path.join(root, "src/lib/myTasksGrouping.ts")
 );
 
@@ -35,6 +35,23 @@ test("creates one section per board and matching tabs", () => {
     [[1, 2], [3]]
   );
   assert.deepEqual(tabs, ["All", "Product", "Marketing"]);
+});
+
+test("maps board ids to stable split indexes and falls back to All", () => {
+  const { sections } = groupMyTasksByBoard(
+    [
+      task(1, 10, "Product", "2026-08-06T09:00:00.000Z"),
+      task(2, 20, "Marketing", "2026-08-07T09:00:00.000Z"),
+    ],
+    NOW
+  );
+
+  sections.forEach((section, index) => {
+    assert.equal(getMyTasksSplitIndex(sections, String(section.projectId)), index + 1);
+  });
+  assert.equal(getMyTasksSplitIndex(sections, null), 0);
+  assert.equal(getMyTasksSplitIndex(sections, ""), 0);
+  assert.equal(getMyTasksSplitIndex(sections, "999"), 0);
 });
 
 test("puts boards with overdue work first", () => {
