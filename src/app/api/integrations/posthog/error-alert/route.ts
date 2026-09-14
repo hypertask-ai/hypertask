@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac } from "node:crypto";
-import { verifySvixPayload } from "@/lib/svixWebhook";
+import { Webhook } from "svix";
 
 import {
   FEATURE_FLAG_OWNER_USER_ID,
@@ -27,11 +27,15 @@ function requiredEnv(name: string) {
 }
 
 function verifyWebhook(rawBody: string, request: NextRequest) {
-  return verifySvixPayload(requiredEnv("POSTHOG_ERROR_WEBHOOK_SECRET"), rawBody, {
-    "webhook-id": request.headers.get("webhook-id") || "",
-    "webhook-timestamp": request.headers.get("webhook-timestamp") || "",
-    "webhook-signature": request.headers.get("webhook-signature") || "",
-  });
+  new Webhook(requiredEnv("POSTHOG_ERROR_WEBHOOK_SECRET")).verify(
+    rawBody,
+    {
+      "webhook-id": request.headers.get("webhook-id") || "",
+      "webhook-timestamp": request.headers.get("webhook-timestamp") || "",
+      "webhook-signature": request.headers.get("webhook-signature") || "",
+    },
+  );
+  return JSON.parse(rawBody);
 }
 
 function workflowRef() {
