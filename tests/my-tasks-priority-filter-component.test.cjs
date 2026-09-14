@@ -35,6 +35,9 @@ let backCalls = 0;
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: (key) => flagValues[key] ?? false,
 });
+stubSourceModule("src/hooks/Task Detail/useTimeTracking.ts", {
+  useRunningTimers: () => ({ data: [] }),
+});
 stubSourceModule("src/lib/state.tsx", {
   useRecoilValue: () => false,
 });

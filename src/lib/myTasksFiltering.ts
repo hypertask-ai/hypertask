@@ -3,7 +3,10 @@ import { addDays, endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns"
 import type { IPrioritiesConstants } from "@/lib/constants/constants";
 import { compareMyTasksByDueDate } from "@/lib/myTasksGrouping";
 import type { IProject, ITask } from "@/models/model";
-import { migrateFlatFiltersToFilterSettings } from "@/lib/filterSettingsMutations";
+import {
+  hasMigratableFlatFilters,
+  migrateFlatFiltersToFilterSettings,
+} from "@/lib/filterSettingsMutations";
 import {
   parseMyTasksViewConfig,
   type MyTasksDateRange,
@@ -210,10 +213,14 @@ export function applyMyTasksView(
   options: ApplyMyTasksViewOptions = {},
 ): MyTasksTask[] {
   const parsed = parseMyTasksViewConfig(rawConfig);
+  // Explicit `true` (My Tasks filter-parity flag) migrates flat → filterSettings for
+  // evaluation. Default/undefined keeps legacy flat filtering when settings are empty.
   const config =
-    options.applyFilterSettings === false
-      ? parsed
-      : migrateFlatFiltersToFilterSettings(parsed);
+    options.applyFilterSettings === true &&
+    !parsed.filterSettings?.addedFilters?.length &&
+    hasMigratableFlatFilters(parsed.filters)
+      ? migrateFlatFiltersToFilterSettings(parsed)
+      : parsed;
   const { filters } = config;
   const boardIds = config.boardIds ? new Set(config.boardIds) : null;
   const sectionIds = new Set(filters.sectionIds);
