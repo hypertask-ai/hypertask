@@ -18,6 +18,7 @@ import {
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
+  myTasksAPIRoute,
   myTasksViewAPIRoute,
   myTasksViewsAPIRoute,
 } from "@/lib/constants/APIRouteConstants";
@@ -33,6 +34,7 @@ import {
   getMyTasksSplitIndex,
   groupMyTasksByTime,
 } from "@/lib/myTasksGrouping";
+import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import type {
   MyTasksBoardMetadata,
   MyTasksSavedView,
@@ -90,6 +92,7 @@ interface IProps {
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
   viewsEnabled: boolean;
+  scopesEnabled?: boolean;
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
@@ -100,13 +103,14 @@ const readError = async (response: Response, fallback: string): Promise<string> 
 };
 
 const MyTasks = ({
-  sections,
-  tabs,
-  boards = [],
+  sections: initialSections,
+  tabs: initialTabs,
+  boards: initialBoards = [],
   currentUser,
   initialViews = [],
   initialViewId = null,
   viewsEnabled = false,
+  scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
@@ -115,9 +119,12 @@ const MyTasks = ({
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
+  const [sections, setSections] = useState(initialSections);
+  const [tabs, setTabs] = useState(initialTabs);
+  const [boards, setBoards] = useState(initialBoards);
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
-      ? getMyTasksSplitIndex(sections, boardParam)
+      ? getMyTasksSplitIndex(initialSections, boardParam)
       : 0
   );
 
@@ -155,6 +162,8 @@ const MyTasks = ({
   const filterRef = useRef<HTMLDivElement>(null);
   const saveRequestToken = useRef(0);
   const observedViewParam = useRef<string | null | undefined>(undefined);
+  const scopesFetchToken = useRef(0);
+  const lastFetchedScopesKey = useRef<string | null>(null);
   const updateViewConfig = useCallback(
     (next: MyTasksViewConfig | ((current: MyTasksViewConfig) => MyTasksViewConfig)) => {
       saveRequestToken.current += 1;
@@ -163,6 +172,49 @@ const MyTasks = ({
     [],
   );
   useClickOutside(filterRef, () => setFilterOpen(false));
+
+  useEffect(() => {
+    setSections(initialSections);
+    setTabs(initialTabs);
+    setBoards(initialBoards);
+  }, [initialBoards, initialSections, initialTabs]);
+
+  const scopesKey = JSON.stringify(
+    effectiveMyTasksScopes(viewConfig.scopes, scopesEnabled),
+  );
+
+  useEffect(() => {
+    if (!scopesEnabled) return;
+    if (lastFetchedScopesKey.current === null) {
+      lastFetchedScopesKey.current = scopesKey;
+      return;
+    }
+    if (lastFetchedScopesKey.current === scopesKey) return;
+    lastFetchedScopesKey.current = scopesKey;
+    const token = ++scopesFetchToken.current;
+    const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
+    void (async () => {
+      try {
+        const response = await fetch(
+          `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
+        );
+        if (!response.ok || token !== scopesFetchToken.current) return;
+        const body = (await response.json()) as {
+          sections?: ISection[];
+          tabs?: string[];
+          boards?: MyTasksBoardMetadata[];
+        };
+        if (!Array.isArray(body.sections)) return;
+        setSections(body.sections);
+        if (Array.isArray(body.tabs)) setTabs(body.tabs);
+        if (Array.isArray(body.boards)) setBoards(body.boards);
+      } catch {
+        if (token === scopesFetchToken.current) {
+          toast.error("Unable to refresh My Tasks");
+        }
+      }
+    })();
+  }, [scopesEnabled, scopesKey, viewConfig.scopes]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled) return;
