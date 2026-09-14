@@ -13,7 +13,7 @@ export function sharedProjectId(
 ): number | null {
   if (tasks.length === 0) return null;
   const first = tasks[0]?.projectId;
-  if (first == null) return null;
+  if (first === null || first === undefined) return null;
   for (const task of tasks) {
     if (task.projectId !== first) return null;
   }
@@ -25,7 +25,7 @@ export function visibleTaskIdsFromRows(
 ): number[] {
   const ids: number[] = [];
   for (const row of rows) {
-    if (row.type === "task" && row.task?.id != null) {
+    if (row.type === "task" && row.task && typeof row.task.id === "number") {
       ids.push(row.task.id);
     }
   }

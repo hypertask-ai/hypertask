@@ -318,6 +318,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const onMyTasks = !!pathname?.startsWith(globalConstants.myTasksRoute);
   const { startTour, setSelectedTourId, endTour } = useTourContext();
   const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
+  // My Tasks bulk must use the selection's shared board only. Falling back to
+  // currentProjectAtom would load columns/labels from a previously opened board.
+  const bulkActionProjectId = myTasksBulkSelection
+    ? bulkProjectId
+    : (bulkProjectId ?? _currentProject?.id ?? null);
   const boardLayout = useRecoilValue(boardLayoutAtom);
   const [, setTableVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
   const [, setMyTasksColumnsPickerRequest] = useRecoilState(
@@ -2288,10 +2293,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             />
           )}
           {commandMode === CommandMode.OpenAssignModal && (
-            hasBulkSelection && bulkSelection && bulkTasks[0] && bulkProjectId ? (
+            hasBulkSelection && bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
               <AssignModal
                 onClose={boardCloseHandler}
-                project={{ id: bulkProjectId } as IProject}
+                project={{ id: bulkActionProjectId } as IProject}
                 task={{
                   id: bulkTasks[0].id,
                   title: bulkTasks[0].title,
@@ -2371,9 +2376,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             hasBulkSelection &&
             bulkSelection &&
             bulkTasks[0] &&
-            (_currentProject || bulkProjectId) ? (
+            bulkActionProjectId ? (
               <MoveToColumn
-                projectId={_currentProject?.id ?? bulkProjectId!}
+                projectId={bulkActionProjectId}
                 task={{
                   taskId: bulkTasks[0].id,
                   projectId: bulkTasks[0].projectId,
@@ -2463,11 +2468,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
 
           {commandMode === CommandMode.LabelModal && (
-            hasBulkSelection && bulkSelection && bulkProjectId ? (
+            hasBulkSelection && bulkSelection && bulkActionProjectId ? (
               <CreateLabel
-                currentProject={
-                  _currentProject ?? ({ id: bulkProjectId } as IProject)
-                }
+                currentProject={{ id: bulkActionProjectId } as IProject}
                 taskIds={bulkTasks.map((task) => task.id)}
                 onBulkLabel={(label) => bulkSelection.labelSelected(label)}
                 closeHandler={boardCloseHandler}
