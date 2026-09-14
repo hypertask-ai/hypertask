@@ -54,40 +54,59 @@ export function getTaskShortcutAction(
   event: TaskShortcutEvent,
   isApple: boolean,
 ): TaskShortcutAction | null {
-  const cmdControl = event.ctrlKey || event.metaKey;
+  if (event.repeat) return null;
+
+  // Block plain-key actions when either modifier is held (avoids Ctrl+A on Mac).
+  const anyCommandModifier = event.ctrlKey || event.metaKey;
+  // Archive/share stay platform-native: Command on Apple, Control elsewhere.
+  const nativeCommandModifier = isApple ? event.metaKey : event.ctrlKey;
 
   if (
     event.keyCode === KeyCodes.X &&
     !event.shiftKey &&
     !event.altKey &&
-    !cmdControl &&
-    !event.repeat
+    !anyCommandModifier
   ) {
     return "select";
   }
-  if (event.shiftKey && event.keyCode === KeyCodes.THREE && !event.repeat) {
+  if (
+    event.shiftKey &&
+    event.keyCode === KeyCodes.THREE &&
+    !event.altKey &&
+    !anyCommandModifier
+  ) {
     return "delete";
   }
-  if (event.keyCode === KeyCodes.E && cmdControl && !event.repeat) {
+  if (
+    event.keyCode === KeyCodes.E &&
+    nativeCommandModifier &&
+    !event.shiftKey &&
+    !event.altKey
+  ) {
     return "archive";
   }
   if (
     event.keyCode === KeyCodes.S &&
     !event.shiftKey &&
-    !cmdControl &&
+    !anyCommandModifier &&
     !event.altKey
   ) {
     return "size";
   }
-  if (event.keyCode === KeyCodes.P && !cmdControl && !event.altKey) {
+  if (event.keyCode === KeyCodes.P && !anyCommandModifier && !event.altKey) {
     return "priority";
   }
-  if (event.keyCode === KeyCodes.E && !cmdControl && !event.altKey && !event.shiftKey) {
+  if (
+    event.keyCode === KeyCodes.E &&
+    !anyCommandModifier &&
+    !event.altKey &&
+    !event.shiftKey
+  ) {
     return "edit";
   }
   if (
     event.keyCode === KeyCodes.A &&
-    !cmdControl &&
+    !anyCommandModifier &&
     !event.altKey &&
     !event.shiftKey
   ) {
@@ -105,16 +124,23 @@ export function getTaskShortcutAction(
   if (
     event.keyCode === KeyCodes.T &&
     !event.shiftKey &&
-    !cmdControl &&
+    !anyCommandModifier &&
     !event.altKey
   ) {
     return "label";
   }
-  if (event.keyCode === KeyCodes.S && cmdControl) return "share";
-  if (event.keyCode === KeyCodes.M && !cmdControl && !event.shiftKey) {
+  if (
+    event.keyCode === KeyCodes.S &&
+    nativeCommandModifier &&
+    !event.shiftKey &&
+    !event.altKey
+  ) {
+    return "share";
+  }
+  if (event.keyCode === KeyCodes.M && !anyCommandModifier && !event.shiftKey) {
     return "moveColumn";
   }
-  if (event.keyCode === KeyCodes.M && event.shiftKey && !cmdControl) {
+  if (event.keyCode === KeyCodes.M && event.shiftKey && !anyCommandModifier) {
     return "moveBoard";
   }
   if (event.keyCode === KeyCodes.ENTER) return "open";

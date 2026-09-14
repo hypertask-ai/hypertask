@@ -318,7 +318,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     paletteContextOptions?.task?.projectId ?? inViewObject.taskProjectId;
   const isRowTaskProjectFallback =
     rowShortcutsEnabled && Boolean(paletteContextOptions?.task) && !_currentProject;
-  const { project: taskProject, isLoading: isTaskProjectLoading } =
+  const { project: taskProject, isLoading: isTaskProjectLoading, isError: isTaskProjectError } =
     useTaskProjectFallback(
       _currentProject,
       taskProjectId,
@@ -350,6 +350,19 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const [, setCalendarSettings] = useRecoilState(calendarSettingsAtom);
 
   useGetBoardInviteURL(_currentProject?.id!, currentUser?.id);
+  useEffect(() => {
+    if (!isRowTaskProjectFallback || isTaskProjectLoading) return;
+    if (isTaskProjectError || !taskProject?.name) {
+      resetShowCommands();
+      toast.error("Unable to open command for this task's board");
+    }
+  }, [
+    isRowTaskProjectFallback,
+    isTaskProjectError,
+    isTaskProjectLoading,
+    resetShowCommands,
+    taskProject?.name,
+  ]);
   const { data: _activeTask } = useGetSingleTask(inViewObject.taskId);
   const _activeTaskAssignees: (IUser | IAgent)[] = (() => {
     if (!_activeTask?.assignees) return [];

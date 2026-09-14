@@ -79,6 +79,7 @@ import {
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { splitAssignees } from "@/lib/assignees";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
+import { taskBaseUri } from "@/utils";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 const AssignModal = lazy(
@@ -1759,7 +1760,7 @@ const TableView = ({
             task={{
               id: assignTask.id,
               title: assignTask.title ?? "",
-              link: "",
+              link: `${taskBaseUri}${assignProject.name}/${assignTask.uniqueIndex}`,
             }}
             assignees={[
               ...selectedAssignees.humanAssignees,

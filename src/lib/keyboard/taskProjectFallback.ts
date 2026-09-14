@@ -7,16 +7,6 @@ export const taskProjectFallbackQueryKey = (
   projectId: number | null | undefined,
 ) => ["taskProjectFallback", userId ?? null, projectId ?? null] as const;
 
-export function resolveTaskProject<T extends { id: number }>(
-  currentProject: T | null | undefined,
-  taskProjectId: number | null | undefined,
-  projects: readonly T[],
-): T | null {
-  if (currentProject) return currentProject;
-  if (!taskProjectId) return null;
-  return projects.find((project) => project.id === taskProjectId) ?? null;
-}
-
 export function useTaskProjectFallback(
   currentProject: IProject | null,
   taskProjectId: number | null | undefined,

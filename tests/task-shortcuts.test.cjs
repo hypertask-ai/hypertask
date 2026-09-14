@@ -52,6 +52,11 @@ test("uses Command instead of Control for platform-modified task actions on Appl
     "archive",
   );
   assert.equal(
+    getTaskShortcutAction(event(69, { ctrlKey: true }), true),
+    null,
+    "Ctrl+E must not archive on Apple",
+  );
+  assert.equal(
     getTaskShortcutAction(event(69, { metaKey: true, repeat: true }), true),
     null,
     "held Cmd+E must not keep archiving",
@@ -61,9 +66,19 @@ test("uses Command instead of Control for platform-modified task actions on Appl
     "share",
   );
   assert.equal(
+    getTaskShortcutAction(event(83, { ctrlKey: true }), true),
+    null,
+    "Ctrl+S must not share on Apple",
+  );
+  assert.equal(
     getTaskShortcutAction(event(65, { ctrlKey: true }), true),
     null,
     "Ctrl+A must not open assignee on Apple",
+  );
+  assert.equal(
+    getTaskShortcutAction(event(83, { altKey: true, repeat: true }), true),
+    null,
+    "held Alt+S must not keep starring",
   );
 });
 
@@ -88,6 +103,25 @@ test("does not turn positional or follower shortcuts into table task actions", (
   );
   assert.equal(
     getTaskShortcutAction(event(68, { shiftKey: true }), false),
+    null,
+  );
+});
+
+test("rejects destructive shortcuts with extra modifiers", () => {
+  assert.equal(
+    getTaskShortcutAction(event(51, { shiftKey: true, altKey: true }), false),
+    null,
+  );
+  assert.equal(
+    getTaskShortcutAction(event(51, { shiftKey: true, ctrlKey: true }), false),
+    null,
+  );
+  assert.equal(
+    getTaskShortcutAction(event(69, { ctrlKey: true, shiftKey: true }), false),
+    null,
+  );
+  assert.equal(
+    getTaskShortcutAction(event(69, { ctrlKey: true, altKey: true }), false),
     null,
   );
 });
