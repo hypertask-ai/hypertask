@@ -1444,7 +1444,7 @@ const TableView = ({
           );
         case "board":
           return (
-            <span key="board" className="min-w-0 flex items-center text-[11px] text-text-light-gray truncate">
+            <span key="board" className="min-w-0 flex items-center text-micro text-text-light-gray truncate">
               {task.project?.title ?? task.project?.name ?? ""}
             </span>
           );

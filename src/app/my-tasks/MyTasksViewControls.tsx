@@ -6,6 +6,7 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
+  MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
