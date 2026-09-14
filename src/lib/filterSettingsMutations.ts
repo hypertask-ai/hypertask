@@ -185,24 +185,35 @@ export function hasMigratableFlatFilters(
 }
 
 /**
- * One-shot move of overlapping flat My Tasks filters into Kanban filterSettings.
- * Leaves board/column/showDone flat fields alone. Keeps starred:false in flat
- * filters because Kanban Starred only means "is starred". No-ops when
- * filterSettings already has entries or there is nothing migratable.
+ * Move overlapping flat My Tasks filters into Kanban filterSettings.
+ * Leaves board/column/showDone flat. Keeps starred:false flat (Kanban Starred
+ * only means "is starred"). Flat values win when the same type already exists
+ * so flag-off legacy edits are not discarded when parity turns back on.
  */
 export function migrateFlatFiltersToFilterSettings(
   config: MyTasksViewConfig,
   labelNames?: ReadonlyMap<string, string>,
 ): MyTasksViewConfig {
-  if (config.filterSettings?.addedFilters?.length) return config;
   if (!hasMigratableFlatFilters(config.filters)) return config;
 
   const { filters } = config;
-  const addedFilters: SerializableFilterSettings["addedFilters"] = [];
+  const existing = cloneSettings(
+    config.filterSettings ?? emptyFilterSettings(),
+  );
+  let addedFilters = [...existing.addedFilters];
+  const upsert = (
+    type: TFilter,
+    entry: SerializableFilterSettings["addedFilters"][number],
+  ) => {
+    addedFilters = [
+      ...addedFilters.filter((filter) => filter.type !== type),
+      entry,
+    ];
+  };
 
   if (filters.priorityIds.length > 0) {
     const ids = new Set(filters.priorityIds);
-    addedFilters.push({
+    upsert("Priority", {
       type: "Priority",
       searchPayload: PriorityConstants.filter((p) =>
         ids.has(p.priority_index),
@@ -210,7 +221,7 @@ export function migrateFlatFiltersToFilterSettings(
     });
   }
   if (filters.labelIds.length > 0) {
-    addedFilters.push({
+    upsert("Labels", {
       type: "Labels",
       searchPayload: filters.labelIds.map((id) => {
         const key = String(id);
@@ -221,7 +232,7 @@ export function migrateFlatFiltersToFilterSettings(
   }
   if (filters.sizeIds.length > 0) {
     const ids = new Set(filters.sizeIds);
-    addedFilters.push({
+    upsert("Size", {
       type: "Size",
       searchPayload: EstimateConstants.filter((e) =>
         ids.has(e.estimate_index),
@@ -229,29 +240,26 @@ export function migrateFlatFiltersToFilterSettings(
     });
   }
   if (filters.starred === true) {
-    addedFilters.push({ type: "Starred", searchPayload: [{ id: 0 }] });
+    upsert("Starred", { type: "Starred", searchPayload: [{ id: 0 }] });
   }
   if (filters.dueDate !== null) {
-    if (typeof filters.dueDate === "string") {
-      addedFilters.push({
-        type: "DueDate",
-        searchPayload: [dynamicDatePayload(DUE_PRESET_TO_DYNAMIC[filters.dueDate])],
-      });
-    } else {
-      addedFilters.push({
-        type: "DueDate",
-        searchPayload: [dateRangePayload(filters.dueDate)],
-      });
-    }
+    upsert("DueDate", {
+      type: "DueDate",
+      searchPayload: [
+        typeof filters.dueDate === "string"
+          ? dynamicDatePayload(DUE_PRESET_TO_DYNAMIC[filters.dueDate])
+          : dateRangePayload(filters.dueDate),
+      ],
+    });
   }
   if (filters.createdRange) {
-    addedFilters.push({
+    upsert("CreatedAt", {
       type: "CreatedAt",
       searchPayload: [dateRangePayload(filters.createdRange)],
     });
   }
   if (filters.updatedRange) {
-    addedFilters.push({
+    upsert("UpdatedRange", {
       type: "UpdatedRange",
       searchPayload: [dateRangePayload(filters.updatedRange)],
     });
@@ -271,7 +279,7 @@ export function migrateFlatFiltersToFilterSettings(
       updatedRange: null,
     },
     filterSettings: {
-      matchFilters: config.filterSettings?.matchFilters === "ALL" ? "ALL" : "ANY",
+      matchFilters: existing.matchFilters === "ALL" ? "ALL" : "ANY",
       addedFilters,
     },
   };

@@ -45,7 +45,7 @@ export default function MyTasksKanbanFilterModal({
     >
       {notStarred ? (
         <div className="pointer-events-none fixed inset-x-0 top-3 z-[80] flex justify-center px-3">
-          <div className="pointer-events-auto flex max-w-md items-center gap-3 rounded-[4px] border border-border-light bg-white px-3 py-2 text-content shadow-md dark:bg-zinc-900">
+          <div className="pointer-events-auto flex max-w-md items-center gap-3 rounded-[4px] border border-border-light bg-modalBackground px-3 py-2 text-content text-white-black shadow-md">
             <span>Not starred is on.</span>
             <button
               type="button"

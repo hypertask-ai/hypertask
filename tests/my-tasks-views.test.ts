@@ -434,6 +434,28 @@ test("migrate keeps starred:false flat and attaches label names", () => {
   );
 });
 
+test("migrate merges flat edits into existing filterSettings", () => {
+  const migrated = migrateFlatFiltersToFilterSettings(
+    config({
+      filters: {
+        ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+        priorityIds: [2],
+      },
+      filterSettings: {
+        matchFilters: "ALL",
+        addedFilters: [{ type: "Inbox", searchPayload: [{ id: 0 }] }],
+      },
+    }),
+  );
+
+  assert.equal(migrated.filters.priorityIds.length, 0);
+  assert.equal(migrated.filterSettings?.matchFilters, "ALL");
+  assert.deepEqual(
+    migrated.filterSettings?.addedFilters.map((filter) => filter.type).sort(),
+    ["Inbox", "Priority"],
+  );
+});
+
 test("filterSettings path still applies flat starred:false", () => {
   const high = PriorityConstants.find((p) => p.priority_index === 2)!;
   const tasks = [
