@@ -89,7 +89,7 @@ function Calendar({
         hidden: "invisible",
         ...classNames,
         selected: cn(
-          "bg-shadcn-primary text-primary-foreground [&>button]:bg-shadcn-primary [&>button]:text-primary-foreground [&>button]:hover:bg-shadcn-primary [&>button]:focus:bg-shadcn-primary",
+          "[&:not(.rdp-range_middle)]:bg-shadcn-primary [&:not(.rdp-range_middle)]:text-primary-foreground [&:not(.rdp-range_middle)>button]:bg-shadcn-primary [&:not(.rdp-range_middle)>button]:text-primary-foreground [&:not(.rdp-range_middle)>button]:hover:bg-shadcn-primary [&:not(.rdp-range_middle)>button]:focus:bg-shadcn-primary",
           classNames?.selected
         ),
         day_button: cn(

@@ -152,6 +152,23 @@ test("range mode reports from and to", () => {
   assert.equal(picks[0].from.getDate(), 15);
   assert.equal(picks[0].to.getDate(), 18);
 
+  act(() => {
+    reactRoot.render(
+      React.createElement(Calendar, {
+        mode: "range",
+        selected: { from: selectedDay, to: rangeEnd },
+        onSelect: (range) => picks.push(range),
+        defaultMonth: selectedDay,
+      }),
+    );
+  });
+  const midCell = dayButton(dom, nextDay)?.parentElement;
+  assert.match(midCell?.className || "", /rdp-range_middle/);
+  assert.match(
+    midCell?.className || "",
+    /\[&:not\(\.rdp-range_middle\)\]:bg-shadcn-primary/,
+  );
+
   cleanupDom(reactRoot);
 });
 
