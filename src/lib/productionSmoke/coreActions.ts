@@ -8,6 +8,9 @@ export const CORE_SMOKE_BASE_SECTION = "Baseline";
 export const CORE_SMOKE_ALT_SECTION = "Alternate";
 export const CORE_SMOKE_AGENT_NAME = "Core Actions Smoke Agent";
 export const CORE_SMOKE_RUN_ID_PATTERN = /^[A-Za-z0-9._:-]{1,100}$/;
+// Lost-response cleanup has no live assignee count. Bound Unassigned claims so
+// an unrelated burst still fails as ambiguous instead of deleting the thread.
+export const CORE_SMOKE_PENDING_UNASSIGN_ACTIVITY_LIMIT = 8;
 
 type FetchLike = typeof fetch;
 
@@ -412,9 +415,9 @@ export async function runCoreActionsSmoke(options: {
       maxCandidates?: number;
     } = {},
   ) => {
+    const claimed: number[] = [];
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const comments = await getComments(action);
-      const candidates = [];
       for (const comment of comments) {
         const id = Number(comment?.id);
         if (!Number.isSafeInteger(id) || knownCommentIds.has(id)) continue;
@@ -431,12 +434,12 @@ export async function runCoreActionsSmoke(options: {
           continue;
         }
         knownCommentIds.add(id);
-        candidates.push(id);
+        claimed.push(id);
       }
       const overLimit =
         typeof options.maxCandidates === "number" &&
-        candidates.length > options.maxCandidates;
-      if ((candidates.length > 1 && !options.allowMultiple) || overLimit) {
+        claimed.length > options.maxCandidates;
+      if ((claimed.length > 1 && !options.allowMultiple) || overLimit) {
         throw new SmokeFailure(
           "unrunnable",
           action,
@@ -444,11 +447,17 @@ export async function runCoreActionsSmoke(options: {
           "activity ownership was ambiguous",
         );
       }
-      if (candidates.length > 0) {
+      const reachedExpected =
+        typeof options.maxCandidates === "number" &&
+        claimed.length >= options.maxCandidates;
+      if (
+        claimed.length > 0 &&
+        (!options.allowMultiple || reachedExpected || attempt === 2)
+      ) {
         // HTPR-6434: one userId unassign can emit several Unassigned activities
-        // (person row plus owned-agent rows). Claim only when the caller opts
-        // into allowMultiple for that status and stays within maxCandidates.
-        for (const id of candidates) ownedCommentIds.add(id);
+        // across delayed writes. Keep polling until maxCandidates, the last
+        // attempt, or a single-activity capture completes.
+        for (const id of claimed) ownedCommentIds.add(id);
         if (persist) await persistOwnedCommentIds();
         return;
       }
@@ -823,9 +832,7 @@ export async function runCoreActionsSmoke(options: {
           {
             updatedStatus: "Unassigned",
             allowMultiple: true,
-            // Lost-response cleanup has no live assignee count; bound the claim
-            // so an unrelated burst still fails as ambiguous.
-            maxCandidates: 8,
+            maxCandidates: CORE_SMOKE_PENDING_UNASSIGN_ACTIVITY_LIMIT,
           },
         );
         await captureNewFixtureActivity(
