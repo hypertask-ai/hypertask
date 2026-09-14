@@ -47,6 +47,8 @@ export function useMyTasksFilterController() {
 type ProviderProps = {
   settings: SerializableFilterSettings | null | undefined;
   onChange: (next: SerializableFilterSettings) => void;
+  /** Clear All: empty settings plus any leftover flat not-starred. */
+  onClearAll?: () => void;
   members: CalendarUserSummary[];
   labels: CalendarLabelSummary[];
   children: ReactNode;
@@ -55,6 +57,7 @@ type ProviderProps = {
 export function MyTasksFilterProvider({
   settings,
   onChange,
+  onClearAll,
   members,
   labels,
   children,
@@ -76,12 +79,15 @@ export function MyTasksFilterProvider({
       overrideFilter: (type, value) =>
         update(overrideFilterValue(resolved, type, value)),
       removeFilter: (type) => update(removeFilterType(resolved, type)),
-      resetFilters: () => update(resetFilterSettings()),
+      resetFilters: () => {
+        if (onClearAll) onClearAll();
+        else update(resetFilterSettings());
+      },
       toggleFilterMatchOptions: () => update(toggleMatchFilters(resolved)),
       toggleFilterValueMatch: (type, next) =>
         update(toggleFilterValueMatchMode(resolved, type, next)),
     }),
-    [resolved, members, labels, update],
+    [resolved, members, labels, update, onClearAll],
   );
 
   return (

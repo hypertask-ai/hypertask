@@ -13,15 +13,21 @@ import { MyTasksFilterProvider } from "@/lib/myTasksFilterContext";
 type Props = {
   settings: SerializableFilterSettings | null | undefined;
   onChange: (next: SerializableFilterSettings) => void;
+  onClearAll: () => void;
+  notStarred: boolean;
+  onClearNotStarred: () => void;
   members: CalendarUserSummary[];
   labels: CalendarLabelSummary[];
   onClose: () => void;
 };
 
-/** Isolated so MyTasks.tsx can load FilterHTC only when the modal opens (jiti-safe). */
+/** Board-agnostic FilterHTC host for My Tasks (static import keeps feature-flag-gate coverage). */
 export default function MyTasksKanbanFilterModal({
   settings,
   onChange,
+  onClearAll,
+  notStarred,
+  onClearNotStarred,
   members,
   labels,
   onClose,
@@ -33,9 +39,24 @@ export default function MyTasksKanbanFilterModal({
     <MyTasksFilterProvider
       settings={settings}
       onChange={onChange}
+      onClearAll={onClearAll}
       members={members}
       labels={labels}
     >
+      {notStarred ? (
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-[80] flex justify-center px-3">
+          <div className="pointer-events-auto flex max-w-md items-center gap-3 rounded-[4px] border border-border-light bg-white px-3 py-2 text-content shadow-md dark:bg-zinc-900">
+            <span>Not starred is on.</span>
+            <button
+              type="button"
+              className="shrink-0 text-shadcn-primary underline"
+              onClick={onClearNotStarred}
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      ) : null}
       <AllFilterHTC
         view="MyTasks"
         toggle={onClose}

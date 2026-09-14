@@ -62,7 +62,10 @@ import MyTasksKanbanFilterModal from "./MyTasksKanbanFilterModal";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
-import { migrateFlatFiltersToFilterSettings } from "@/lib/filterSettingsMutations";
+import {
+  emptyFilterSettings,
+  migrateFlatFiltersToFilterSettings,
+} from "@/lib/filterSettingsMutations";
 import { useRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import type {
   CalendarLabelSummary,
@@ -793,12 +796,10 @@ const MyTasks = ({
         const hasStarredFilter = next.addedFilters.some(
           (filter) => filter.type === "Starred",
         );
-        // Clear All (empty settings) or explicit Starred drops flat not-starred.
-        // Other edits keep starred:false; Kanban Starred cannot express it.
+        // Keep flat not-starred across ordinary edits; Clear All uses onClearAllFilters.
+        // Explicit Starred in filterSettings replaces it.
         const keepNotStarred =
-          current.filters.starred === false &&
-          !hasStarredFilter &&
-          next.addedFilters.length > 0;
+          current.filters.starred === false && !hasStarredFilter;
         return {
           ...current,
           // FilterHTC owns these overlapping fields once parity is in use.
@@ -818,6 +819,33 @@ const MyTasks = ({
     },
     [updateViewConfig],
   );
+
+  const onClearAllFilters = useCallback(() => {
+    updateViewConfig((current) => ({
+      ...current,
+      filters: {
+        ...current.filters,
+        priorityIds: [],
+        labelIds: [],
+        sizeIds: [],
+        starred: null,
+        dueDate: null,
+        createdRange: null,
+        updatedRange: null,
+      },
+      filterSettings: emptyFilterSettings(),
+    }));
+  }, [updateViewConfig]);
+
+  const onClearNotStarred = useCallback(() => {
+    updateViewConfig((current) => ({
+      ...current,
+      filters: {
+        ...current.filters,
+        starred: null,
+      },
+    }));
+  }, [updateViewConfig]);
 
   return (
     <>
@@ -842,6 +870,9 @@ const MyTasks = ({
         <MyTasksKanbanFilterModal
           settings={viewConfig.filterSettings}
           onChange={onFilterSettingsChange}
+          onClearAll={onClearAllFilters}
+          notStarred={viewConfig.filters.starred === false}
+          onClearNotStarred={onClearNotStarred}
           members={myTasksFilterMembers}
           labels={myTasksFilterLabels}
           onClose={() => setKanbanFiltersOpen(false)}
