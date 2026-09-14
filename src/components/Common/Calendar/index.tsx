@@ -60,7 +60,7 @@ function Calendar({
       className={cn("p-3", className)}
       classNames={{
         months:
-          "flex flex-col sm:flex-row justify-around space-y-4 sm:space-x-4 sm:space-y-0",
+          "relative flex flex-col sm:flex-row justify-around space-y-4 sm:space-x-4 sm:space-y-0",
         month: "relative space-y-4",
         month_caption: "flex justify-center pt-1 relative items-center",
         caption_label: "text-content font-medium",

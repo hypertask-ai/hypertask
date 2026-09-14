@@ -109,6 +109,12 @@ test("single mode selects a day and reports that date", () => {
     );
   });
 
+  const nav = [...dom.window.document.querySelectorAll("nav")].find((node) =>
+    /previous month|next month/i.test(node.textContent || node.getAttribute("aria-label") || "")
+  ) || dom.window.document.querySelector("[class*='absolute'][class*='inset-x-0']");
+  const navHost = nav?.closest("[class*='relative']");
+  assert.ok(navHost, "month navigation must sit in a positioned container");
+
   const selected = dayButton(dom, selectedDay);
   assert.ok(selected, "selected September 15 must render");
   assert.match(selected.getAttribute("aria-label") || "", /selected/i);
