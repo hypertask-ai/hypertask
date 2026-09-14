@@ -310,7 +310,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const currentUser: IUser = JSON.parse(cookies.nookies_user);
   const router = useRouter();
   const pathname = usePathname();
-  const onMyTasks = !!pathname?.startsWith("/my-tasks");
+  const onMyTasks = !!pathname?.startsWith(globalConstants.myTasksRoute);
   const myTasksControlledColumns =
     onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled;
   const { startTour, setSelectedTourId, endTour } = useTourContext();

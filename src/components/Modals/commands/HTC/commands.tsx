@@ -54,6 +54,7 @@ import {
   type InboxCluster,
 } from "@/lib/inboxClusters";
 import { INBOX_ARCHIVE_CLUSTER_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { myTasksRoute } from "@/lib/constants/constants";
 
 type Props = {
   handleAction?: (mode?: CommandMode, action?: string) => void;
@@ -92,7 +93,7 @@ const Commands = (props: Props) => {
   // settings from the applied saved view on mount and overwrites them.
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
-  const onMyTasks = !!pathname?.startsWith("/my-tasks");
+  const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
