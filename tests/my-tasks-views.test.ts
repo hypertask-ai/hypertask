@@ -438,12 +438,12 @@ test("filterSettings path still applies flat starred:false", () => {
   const high = PriorityConstants.find((p) => p.priority_index === 2)!;
   const tasks = [
     task(1, {
-      priority: high as MyTasksTask["priority"],
-      savedContent: [{ id: 1 }] as MyTasksTask["savedContent"],
+      priority: { priority_index: high.priority_index } as MyTasksTask["priority"],
+      savedContent: [{ id: 1 }] as unknown as MyTasksTask["savedContent"],
     }),
     task(2, {
-      priority: high as MyTasksTask["priority"],
-      savedContent: [] as MyTasksTask["savedContent"],
+      priority: { priority_index: high.priority_index } as MyTasksTask["priority"],
+      savedContent: [] as unknown as MyTasksTask["savedContent"],
     }),
   ];
 
