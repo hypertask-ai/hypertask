@@ -50,16 +50,15 @@ import styles from "@/styles/search.module.scss";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Filter } from "lucide-react";
 import {
-  Suspense,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type ComponentType,
 } from "react";
 import toast from "react-hot-toast";
+import MyTasksKanbanFilterModal from "./MyTasksKanbanFilterModal";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
@@ -81,61 +80,6 @@ interface IProps {
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
-
-type KanbanFilterModalProps = {
-  settings: SerializableFilterSettings | null | undefined;
-  onChange: (next: SerializableFilterSettings) => void;
-  members: CalendarUserSummary[];
-  labels: CalendarLabelSummary[];
-  onClose: () => void;
-};
-
-const MyTasksKanbanFilterModalGate = (props: KanbanFilterModalProps) => {
-  const [Modal, setModal] = useState<ComponentType<KanbanFilterModalProps> | null>(
-    null,
-  );
-  const [loadFailed, setLoadFailed] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    void import("./MyTasksKanbanFilterModal")
-      .then((mod) => {
-        if (!cancelled) setModal(() => mod.default);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  if (loadFailed) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-        <div className="rounded-lg bg-white p-4 shadow-lg dark:bg-zinc-900">
-          <p className="mb-3 text-sm">Could not open filters. Try again.</p>
-          <button
-            type="button"
-            className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900"
-            onClick={() => {
-              setLoadFailed(false);
-              setModal(null);
-              props.onClose();
-            }}
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (!Modal) return null;
-  return (
-    <Suspense fallback={null}>
-      <Modal {...props} />
-    </Suspense>
-  );
-};
-
 
 const readError = async (response: Response, fallback: string): Promise<string> => {
   const body = await response.json().catch(() => null);
@@ -895,7 +839,7 @@ const MyTasks = ({
       )}
       <BackButton left={appShellRailOn ? 56 : undefined} />
       {filterParityEnabled && kanbanFiltersOpen && (
-        <MyTasksKanbanFilterModalGate
+        <MyTasksKanbanFilterModal
           settings={viewConfig.filterSettings}
           onChange={onFilterSettingsChange}
           members={myTasksFilterMembers}

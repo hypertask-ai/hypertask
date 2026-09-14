@@ -64,6 +64,9 @@ stubSourceModule("src/components/PageComponents/Kanban/HeaderComponents/AppShell
 stubSourceModule("src/components/Buttons/BackButton.tsx", {
   default: () => null,
 });
+stubSourceModule("src/app/my-tasks/MyTasksKanbanFilterModal.tsx", {
+  default: () => null,
+});
 stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
   SplitTitle: () => null,
 });
