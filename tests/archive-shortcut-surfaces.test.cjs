@@ -25,7 +25,7 @@ for (const relative of SURFACES) {
     assert.match(source, /from "@\/lib\/keyboard\/archiveShortcutGuard"/);
 
     const branchStart = source.search(
-      /KeyCodes\.E && cmdControl|\(e\.ctrlKey \|\| e\.metaKey\) && e\.keyCode === KeyCodes\.E|e\.key\.toLowerCase\(\) === "e"/,
+      /KeyCodes\.E && cmdControl|\(e\.ctrlKey \|\| e\.metaKey\) && e\.keyCode === KeyCodes\.E|e\.key\.toLowerCase\(\) === "e"|taskShortcutAction === "archive"/,
     );
     assert.notEqual(branchStart, -1, "the archive shortcut must exist");
     const branch = source.slice(branchStart, branchStart + 600);
@@ -52,6 +52,6 @@ test("TableView My Tasks Ctrl+E focuses the hovered row before archiving", () =>
   assert.match(source, /setExcludedTaskIds/);
   assert.match(
     source,
-    /\(e\.ctrlKey \|\| e\.metaKey\) && e\.keyCode === KeyCodes\.E/,
+    /\(e\.ctrlKey \|\| e\.metaKey\) && e\.keyCode === KeyCodes\.E|taskShortcutAction === "archive"/,
   );
 });
