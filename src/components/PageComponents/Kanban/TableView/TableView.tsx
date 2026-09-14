@@ -430,6 +430,26 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       items: returnSortedItems([...(section.items || [])], _currentProject),
     }));
   }, [filteredSections, _sections, _currentProject, excludedTaskIds]);
+
+  // Drop optimistic exclusions once the server list no longer contains them
+  // (refresh confirmed the archive). Keeps a later unarchive+refresh visible.
+  useEffect(() => {
+    if (excludedTaskIds.size === 0) return;
+    const presentIds = new Set(
+      (filteredSections ?? _sections ?? []).flatMap((section) =>
+        (section.items || []).map((task) => task.id),
+      ),
+    );
+    setExcludedTaskIds((previous) => {
+      let changed = false;
+      const next = new Set<number>();
+      for (const id of previous) {
+        if (presentIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : previous;
+    });
+  }, [excludedTaskIds, filteredSections, _sections]);
   // Drag is only ever allowed between real sections of a real board. The
   // _currentProject gate is what keeps /my-tasks out: it renders this table
   // with _currentProject={null} and groups by boardId, so a "section" there is

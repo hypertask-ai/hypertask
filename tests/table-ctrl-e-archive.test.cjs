@@ -56,6 +56,10 @@ test("Table archive supports both board rows and cross-board My Tasks rows", () 
   // before the server refresh returns (HTPR-6445).
   assert.match(archiveHelper, /setExcludedTaskIds/);
   assert.match(tableView, /excludedTaskIds/);
+  assert.match(
+    tableView,
+    /Drop optimistic exclusions once the server list no longer contains them/,
+  );
 });
 
 test("Table rows take DOM focus on hover so Ctrl+E is not blocked by leftover chat focus", () => {
