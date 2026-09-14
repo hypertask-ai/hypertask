@@ -19,7 +19,7 @@ type CalendarLabelOption = ILabel | CalendarLabelSummary;
 type Props = {
   closeHandler: (param?: CalendarLabelOption) => Promise<void>;
   calendarTags?: CalendarLabelSummary[];
-  view: "Kanban" | "Calendar";
+  view: "Kanban" | "Calendar" | "MyTasks";
 };
 
 const TagsFilterModal: React.FC<Props> = ({

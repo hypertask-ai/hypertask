@@ -41,7 +41,15 @@ const getMyTasks = async (userId: number, includeViewMetadata = false) => {
       },
       include: {
         project: {
-          select: { id: true, title: true, uniqueIdentifier: true },
+          select: {
+            id: true,
+            title: true,
+            uniqueIdentifier: true,
+            timeTrackingEnabled: true,
+            stalenessEnabled: true,
+            staleWarnDays: true,
+            staleHotDays: true,
+          },
         },
         priority: true,
         estimate: true,
@@ -125,21 +133,54 @@ const getMyTasks = async (userId: number, includeViewMetadata = false) => {
       tasksWithSections as unknown as MyTasksBoardTask[],
     );
     const boards: MyTasksBoardMetadata[] = includeViewMetadata
-      ? projects.map((project) => ({
-          id: project.id,
-          title: project.title ?? project.name,
-          sections: taskSections
-            .filter((section) => section.projectId === project.id)
-            .map((section) => ({
-              id: section.id,
-              title: section.section_title,
-              isDone: section.isDone,
+      ? projects.map((project) => {
+          const memberMap = new Map<
+            number,
+            { id: number; displayName: string; photoURL: string | null }
+          >();
+          const owner = "owner" in project ? project.owner : null;
+          if (owner && typeof owner === "object" && owner && "id" in owner) {
+            const o = owner as {
+              id: number;
+              displayName?: string | null;
+              photoURL?: string | null;
+            };
+            memberMap.set(o.id, {
+              id: o.id,
+              displayName: o.displayName ?? "Unknown",
+              photoURL: o.photoURL ?? null,
+            });
+          }
+          const members = "members" in project ? project.members : [];
+          if (Array.isArray(members)) {
+            for (const row of members) {
+              const user = row?.user;
+              if (user?.id) {
+                memberMap.set(user.id, {
+                  id: user.id,
+                  displayName: user.displayName ?? "Unknown",
+                  photoURL: user.photoURL ?? null,
+                });
+              }
+            }
+          }
+          return {
+            id: project.id,
+            title: project.title ?? project.name,
+            sections: taskSections
+              .filter((section) => section.projectId === project.id)
+              .map((section) => ({
+                id: section.id,
+                title: section.section_title,
+                isDone: section.isDone,
+              })),
+            labels: ("labels" in project ? project.labels : []).map((label) => ({
+              id: label.id,
+              name: label.value ?? "Untitled label",
             })),
-          labels: ("labels" in project ? project.labels : []).map((label) => ({
-            id: label.id,
-            name: label.value ?? "Untitled label",
-          })),
-        }))
+            members: [...memberMap.values()],
+          };
+        })
       : [];
 
     return { ...grouped, boards };

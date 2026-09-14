@@ -126,7 +126,7 @@ export const ToggleFilterType = ({
   );
 };
 
-const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Calendar" }> = ({
+const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Calendar" | "MyTasks" }> = ({
   el,
   activeFilters,
   view,
@@ -139,7 +139,7 @@ const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Cal
     <>
       <span>{el.name}</span>
 
-      {currentlyActive && view === "Kanban" && (
+      {currentlyActive && (view === "Kanban" || view === "MyTasks") && (
         <RenderActiveFilters elKey={el.key} currentlyActive={currentlyActive} />
       )}
     </>

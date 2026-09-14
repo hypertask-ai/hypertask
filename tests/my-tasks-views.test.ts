@@ -5,6 +5,7 @@ import {
   applyMyTasksView,
   type MyTasksTask,
 } from "../src/lib/myTasksFiltering";
+import { migrateFlatFiltersToFilterSettings } from "../src/lib/filterSettingsMutations";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   parseMyTasksViewConfig,
@@ -42,6 +43,10 @@ const config = (
     ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
     ...overrides.filters,
   },
+  filterSettings:
+    overrides.filterSettings === undefined
+      ? DEFAULT_MY_TASKS_VIEW_CONFIG.filterSettings
+      : overrides.filterSettings,
   sort: {
     ...DEFAULT_MY_TASKS_VIEW_CONFIG.sort,
     ...overrides.sort,
@@ -222,5 +227,173 @@ test("priority sorting matches the existing My Tasks ascending semantics", () =>
       NOW,
     ).map(({ id }) => id),
     [1, 2, 3],
+  );
+});
+
+test("parseMyTasksViewConfig keeps filterSettings and unknown top-level keys", () => {
+  const parsed = parseMyTasksViewConfig({
+    boardIds: [1],
+    futureKey: { keep: true },
+    filterSettings: {
+      matchFilters: "ALL",
+      addedFilters: [
+        {
+          type: "Inbox",
+          searchPayload: [{ id: 0 }],
+          condition: () => true,
+          extra: "drop-me",
+        },
+      ],
+      stray: true,
+    },
+    filters: { showDone: true },
+    sort: { field: "title", direction: "asc" },
+  });
+
+  assert.equal((parsed as { futureKey?: { keep: boolean } }).futureKey?.keep, true);
+  assert.equal(parsed.filterSettings?.matchFilters, "ALL");
+  assert.equal(parsed.filterSettings?.addedFilters.length, 1);
+  assert.equal(parsed.filterSettings?.addedFilters[0].type, "Inbox");
+  assert.deepEqual(parsed.filterSettings?.addedFilters[0].searchPayload, [{ id: 0 }]);
+  assert.equal(
+    "condition" in (parsed.filterSettings?.addedFilters[0] ?? {}),
+    false,
+  );
+});
+
+test("filterSettings apply with match ALL/ANY and leave legacy flat filters alone when empty", () => {
+  const tasks = [
+    task(1, {
+      notifications: [
+        { seen: false, id: "n1", userId: 1, taskId: 1, type: "Comment" },
+      ] as MyTasksTask["notifications"],
+      priority: { priority_index: 2 } as MyTasksTask["priority"],
+    }),
+    task(2, {
+      notifications: [
+        { seen: true, id: "n2", userId: 1, taskId: 2, type: "Comment" },
+      ] as MyTasksTask["notifications"],
+      priority: { priority_index: 2 } as MyTasksTask["priority"],
+    }),
+    task(3, {
+      priority: { priority_index: 4 } as MyTasksTask["priority"],
+    }),
+  ];
+
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({
+        filters: { priorityIds: [2] } as MyTasksViewConfig["filters"],
+        filterSettings: {
+          matchFilters: "ANY",
+          addedFilters: [{ type: "Unread", searchPayload: [{ id: 0 }] }],
+        },
+      }),
+      NOW,
+    ).map(({ id }) => id),
+    [1],
+  );
+
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({
+        filters: { priorityIds: [2] } as MyTasksViewConfig["filters"],
+        filterSettings: { matchFilters: "ANY", addedFilters: [] },
+      }),
+      NOW,
+      { applyFilterSettings: true },
+    ).map(({ id }) => id),
+    [1, 2],
+  );
+
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({
+        filterSettings: {
+          matchFilters: "ALL",
+          addedFilters: [
+            { type: "Unread", searchPayload: [{ id: 0 }] },
+            {
+              type: "Priority",
+              searchPayload: [{ id: 2, priority_index: 2 }],
+            },
+          ],
+        },
+      }),
+      NOW,
+    ).map(({ id }) => id),
+    [1],
+  );
+});
+
+test("flag-off evaluation ignores filterSettings so legacy panel saves stay safe", () => {
+  const tasks = [
+    task(1, {
+      notifications: [
+        { seen: false, id: "n1", userId: 1, taskId: 1, type: "Comment" },
+      ] as MyTasksTask["notifications"],
+    }),
+    task(2),
+  ];
+
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({
+        filterSettings: {
+          matchFilters: "ANY",
+          addedFilters: [{ type: "Inbox", searchPayload: [{ id: 0 }] }],
+        },
+      }),
+      NOW,
+      { applyFilterSettings: false },
+    ).map(({ id }) => id),
+    [1, 2],
+  );
+});
+
+test("apply path migrates flat overlapping filters into filterSettings", () => {
+  const migrated = migrateFlatFiltersToFilterSettings(
+    config({
+      filters: {
+        ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+        priorityIds: [2],
+        dueDate: "today",
+        showDone: true,
+        sectionIds: [11],
+      },
+    }),
+  );
+
+  assert.equal(migrated.filters.priorityIds.length, 0);
+  assert.equal(migrated.filters.dueDate, null);
+  assert.equal(migrated.filters.showDone, true);
+  assert.deepEqual(migrated.filters.sectionIds, [11]);
+  assert.equal(migrated.filterSettings?.addedFilters.length, 2);
+  assert.equal(migrated.filterSettings?.addedFilters[0].type, "Priority");
+  assert.equal(migrated.filterSettings?.addedFilters[1].type, "DueDate");
+
+  const tasks = [
+    task(1, { priority: { priority_index: 2 } as MyTasksTask["priority"] }),
+    task(2, { priority: { priority_index: 1 } as MyTasksTask["priority"] }),
+  ];
+
+  // Flat priority still filters correctly via in-memory migration before persist.
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({
+        filters: {
+          ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+          priorityIds: [2],
+        },
+      }),
+      NOW,
+      { applyFilterSettings: true },
+    ).map(({ id }) => id),
+    [1],
   );
 });

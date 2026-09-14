@@ -12,12 +12,19 @@ import {
   useBlockedByPersonFilter,
 } from "@/hooks/MultiPages/Filters/useBlockedByPersonFilter";
 import UserAvatar from "@/components/Common/UserAvatar";
+import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
 
 interface IProps {
   closeHandler: (user?: BlockedByPersonOption) => Promise<void>;
+  calendarMembers?: CalendarUserSummary[];
+  view?: "Kanban" | "Calendar" | "MyTasks";
 }
 
-const BlockedByPersonFilters = ({ closeHandler }: IProps) => {
+const BlockedByPersonFilters = ({
+  closeHandler,
+  calendarMembers,
+  view = "Kanban",
+}: IProps) => {
   const {
     keyword,
     onKeyChange,
@@ -26,7 +33,7 @@ const BlockedByPersonFilters = ({ closeHandler }: IProps) => {
     filteredPeople,
     enterHandler,
     activeFilters,
-  } = useBlockedByPersonFilter({ closeHandler });
+  } = useBlockedByPersonFilter({ closeHandler, calendarMembers, view });
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } =
     useHandleMouseGlobal({ setSelectedIndex });
 

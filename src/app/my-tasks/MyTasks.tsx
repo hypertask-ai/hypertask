@@ -8,6 +8,7 @@ import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
+  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
@@ -48,10 +49,26 @@ import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Filter } from "lucide-react";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import toast from "react-hot-toast";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
+import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
+import { migrateFlatFiltersToFilterSettings } from "@/lib/filterSettingsMutations";
+import { useRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
+import type {
+  CalendarLabelSummary,
+  CalendarUserSummary,
+} from "@/lib/calendarSync/contract";
 
 interface IProps {
   sections: ISection[];
@@ -64,6 +81,36 @@ interface IProps {
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
+
+type KanbanFilterModalProps = {
+  settings: SerializableFilterSettings | null | undefined;
+  onChange: (next: SerializableFilterSettings) => void;
+  members: CalendarUserSummary[];
+  labels: CalendarLabelSummary[];
+  onClose: () => void;
+};
+
+const MyTasksKanbanFilterModalGate = (props: KanbanFilterModalProps) => {
+  const [Modal, setModal] = useState<ComponentType<KanbanFilterModalProps> | null>(
+    null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    void import("./MyTasksKanbanFilterModal").then((mod) => {
+      if (!cancelled) setModal(() => mod.default);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  if (!Modal) return null;
+  return (
+    <Suspense fallback={null}>
+      <Modal {...props} />
+    </Suspense>
+  );
+};
+
 
 const readError = async (response: Response, fallback: string): Promise<string> => {
   const body = await response.json().catch(() => null);
@@ -94,7 +141,10 @@ const MyTasks = ({
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
+  const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
+  const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
+  const { data: runningTimerEntries } = useRunningTimers();
   const viewParam = searchParams?.get("view") ?? null;
   const initialView = initialViews.find((view) => view.id === initialViewId);
   const [views, setViews] = useState(initialViews);
@@ -161,6 +211,13 @@ const MyTasks = ({
     [availableBoards],
   );
 
+  const runtimeContext = useMemo(() => {
+    if (!Array.isArray(runningTimerEntries)) return undefined;
+    return {
+      runningTaskIds: new Set(runningTimerEntries.map((timer) => timer.taskId)),
+    };
+  }, [runningTimerEntries]);
+
   const allTasksForBoardTabs = useMemo(() => {
     if (!viewsFeatureEnabled || groupBy !== "time") return [];
     const now = new Date();
@@ -174,8 +231,19 @@ const MyTasks = ({
           (section.projectId !== undefined && selectedBoards.has(section.projectId)),
       )
       .flatMap((section) => section.items as MyTasksTask[]);
-    return applyMyTasksView(flat, viewConfig, now);
-  }, [dateFilterVersion, groupBy, sections, viewConfig, viewsFeatureEnabled]);
+    return applyMyTasksView(flat, viewConfig, now, {
+      applyFilterSettings: filterParityEnabled,
+      runtimeContext,
+    });
+  }, [
+    dateFilterVersion,
+    filterParityEnabled,
+    groupBy,
+    runtimeContext,
+    sections,
+    viewConfig,
+    viewsFeatureEnabled,
+  ]);
 
   const viewFilteredSections = useMemo(() => {
     const now = new Date();
@@ -207,6 +275,10 @@ const MyTasks = ({
         section.items as MyTasksTask[],
         viewConfig,
         now,
+        {
+          applyFilterSettings: filterParityEnabled,
+          runtimeContext,
+        },
       ),
     }));
     return sortMyTasksViewSections(next, viewConfig, now);
@@ -215,7 +287,9 @@ const MyTasks = ({
     allTasksForBoardTabs,
     availableBoards,
     dateFilterVersion,
+    filterParityEnabled,
     groupBy,
+    runtimeContext,
     sections,
     viewConfig,
   ]);
@@ -631,6 +705,12 @@ const MyTasks = ({
             config={viewConfig}
             onChange={updateViewConfig}
             timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
+            onOpenKanbanFilters={() => {
+              updateViewConfig((current) =>
+                migrateFlatFiltersToFilterSettings(current),
+              );
+              setKanbanFiltersOpen(true);
+            }}
           />
         )}
         {filterEnabled && (
@@ -706,6 +786,52 @@ const MyTasks = ({
     </div>
   );
 
+
+  const myTasksFilterMembers = useMemo<CalendarUserSummary[]>(() => {
+    const map = new Map<number, CalendarUserSummary>();
+    for (const board of boards) {
+      for (const member of board.members ?? []) {
+        map.set(member.id, {
+          id: member.id,
+          displayName: member.displayName,
+          photoURL: member.photoURL,
+        });
+      }
+    }
+    return [...map.values()];
+  }, [boards]);
+
+  const myTasksFilterLabels = useMemo<CalendarLabelSummary[]>(() => {
+    return boards.flatMap((board) =>
+      board.labels.map((label) => ({
+        id: label.id,
+        value: label.name,
+        projectId: board.id,
+      })),
+    );
+  }, [boards]);
+
+  const onFilterSettingsChange = useCallback(
+    (next: SerializableFilterSettings) => {
+      updateViewConfig((current) => ({
+        ...current,
+        // FilterHTC owns these overlapping fields once parity is in use.
+        filters: {
+          ...current.filters,
+          priorityIds: [],
+          labelIds: [],
+          sizeIds: [],
+          starred: null,
+          dueDate: null,
+          createdRange: null,
+          updatedRange: null,
+        },
+        filterSettings: next,
+      }));
+    },
+    [updateViewConfig],
+  );
+
   return (
     <>
       {appShellRailOn && (
@@ -725,6 +851,15 @@ const MyTasks = ({
         content
       )}
       <BackButton left={appShellRailOn ? 56 : undefined} />
+      {filterParityEnabled && kanbanFiltersOpen && (
+        <MyTasksKanbanFilterModalGate
+          settings={viewConfig.filterSettings}
+          onChange={onFilterSettingsChange}
+          members={myTasksFilterMembers}
+          labels={myTasksFilterLabels}
+          onClose={() => setKanbanFiltersOpen(false)}
+        />
+      )}
     </>
   );
 };

@@ -2,19 +2,33 @@ import type { ISection } from "@/models/model";
 import { addDays, endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
 import type { IPrioritiesConstants } from "@/lib/constants/constants";
 import { compareMyTasksByDueDate } from "@/lib/myTasksGrouping";
-import type { ITask } from "@/models/model";
+import type { IProject, ITask } from "@/models/model";
+import { migrateFlatFiltersToFilterSettings } from "@/lib/filterSettingsMutations";
 import {
   parseMyTasksViewConfig,
   type MyTasksDateRange,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
-import { priorityFilterCondition } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
+import {
+  defaultConditions,
+  priorityFilterCondition,
+} from "@/utils/helperFunctions/Views/FilterHelperFunctions";
+import type {
+  IFilterRuntimeContext,
+  TMatchFilters,
+} from "@/models/Filters/model";
 
 export type MyTasksTask = ITask & {
   myTasksSection?: {
     id: number;
     isDone: boolean | null;
   } | null;
+};
+
+export type ApplyMyTasksViewOptions = {
+  /** When false, ignore filterSettings (flag off). Default true. */
+  applyFilterSettings?: boolean;
+  runtimeContext?: IFilterRuntimeContext;
 };
 
 const taskTime = (value: Date | string | null | undefined): number | null => {
@@ -122,19 +136,90 @@ export const myTasksSortComparator = (
   };
 };
 
+const projectForTask = (task: MyTasksTask): IProject | undefined => {
+  const project = task.project as IProject | undefined;
+  return project?.id ? project : undefined;
+};
+
+const matchesFilterSettings = (
+  task: MyTasksTask,
+  config: MyTasksViewConfig,
+  runtimeContext?: IFilterRuntimeContext,
+): boolean => {
+  const settings = config.filterSettings;
+  if (!settings?.addedFilters?.length) return true;
+  const overall: TMatchFilters =
+    settings.matchFilters === "ALL" ? "ALL" : "ANY";
+  const project = projectForTask(task);
+  const run = (
+    type: (typeof settings.addedFilters)[number]["type"],
+    searchPayload: unknown[],
+    match?: TMatchFilters,
+  ) => {
+    const condition = defaultConditions[type];
+    return (
+      condition?.(task, searchPayload, project, match, runtimeContext) ?? false
+    );
+  };
+  if (overall === "ALL") {
+    return settings.addedFilters.every((filter) =>
+      run(filter.type, filter.searchPayload, filter.match),
+    );
+  }
+  return settings.addedFilters.some((filter) =>
+    run(filter.type, filter.searchPayload, filter.match),
+  );
+};
+
+const matchesFlatTaskFilters = (
+  task: MyTasksTask,
+  filters: MyTasksViewConfig["filters"],
+  now: Date,
+): boolean => {
+  const priorityIds = new Set(filters.priorityIds);
+  const labelIds = new Set(filters.labelIds.map(String));
+  const sizeIds = new Set(filters.sizeIds);
+
+  const priorityId = task.priority?.priority_index ?? 0;
+  if (priorityIds.size > 0 && !priorityIds.has(priorityId)) return false;
+  const sizeId = task.estimate?.estimate_index ?? 0;
+  if (sizeIds.size > 0 && !sizeIds.has(sizeId)) return false;
+  if (
+    labelIds.size > 0 &&
+    !task.taskLabels?.some((taskLabel) =>
+      taskLabel.label?.id ? labelIds.has(String(taskLabel.label.id)) : false,
+    )
+  ) {
+    return false;
+  }
+  const starred = Boolean(task.savedContent?.length);
+  if (filters.starred !== null && starred !== filters.starred) return false;
+  if (!matchesDueDate(task, filters.dueDate, now)) return false;
+  if (!matchesRange(task.createdAt, filters.createdRange)) return false;
+  if (!matchesRange(task.updatedAt ?? task.createdAt, filters.updatedRange)) {
+    return false;
+  }
+  return true;
+};
+
 /** Pure, board-agnostic filtering and sorting for saved My Tasks views. */
 export function applyMyTasksView(
   tasks: MyTasksTask[],
   rawConfig: MyTasksViewConfig,
   now: Date = new Date(),
+  options: ApplyMyTasksViewOptions = {},
 ): MyTasksTask[] {
-  const config = parseMyTasksViewConfig(rawConfig);
+  const parsed = parseMyTasksViewConfig(rawConfig);
+  const config =
+    options.applyFilterSettings === false
+      ? parsed
+      : migrateFlatFiltersToFilterSettings(parsed);
   const { filters } = config;
   const boardIds = config.boardIds ? new Set(config.boardIds) : null;
-  const priorityIds = new Set(filters.priorityIds);
-  const labelIds = new Set(filters.labelIds.map(String));
-  const sizeIds = new Set(filters.sizeIds);
   const sectionIds = new Set(filters.sectionIds);
+  const useFilterSettings =
+    options.applyFilterSettings !== false &&
+    Boolean(config.filterSettings?.addedFilters?.length);
 
   return tasks
     .filter((task) => {
@@ -142,7 +227,8 @@ export function applyMyTasksView(
       const nestedSection = task.section as unknown as
         | { id?: number; isDone?: boolean | null }
         | undefined;
-      const hasNestedSection = typeof nestedSection === "object" && nestedSection !== null;
+      const hasNestedSection =
+        typeof nestedSection === "object" && nestedSection !== null;
       const isDone =
         task.myTasksSection?.isDone ??
         (hasNestedSection ? nestedSection.isDone : null);
@@ -151,25 +237,16 @@ export function applyMyTasksView(
         task.myTasksSection?.id ??
         (hasNestedSection ? nestedSection.id : undefined);
       if (!filters.showDone && isDone === true) return false;
-      if (sectionIds.size > 0 && (!sectionId || !sectionIds.has(sectionId))) return false;
-      const priorityId = task.priority?.priority_index ?? 0;
-      if (priorityIds.size > 0 && !priorityIds.has(priorityId)) return false;
-      const sizeId = task.estimate?.estimate_index ?? 0;
-      if (sizeIds.size > 0 && !sizeIds.has(sizeId)) return false;
-      if (
-        labelIds.size > 0 &&
-        !task.taskLabels?.some((taskLabel) =>
-          taskLabel.label?.id ? labelIds.has(String(taskLabel.label.id)) : false,
-        )
-      ) {
+      if (sectionIds.size > 0 && (!sectionId || !sectionIds.has(sectionId))) {
         return false;
       }
-      const starred = Boolean(task.savedContent?.length);
-      if (filters.starred !== null && starred !== filters.starred) return false;
-      if (!matchesDueDate(task, filters.dueDate, now)) return false;
-      if (!matchesRange(task.createdAt, filters.createdRange)) return false;
-      if (!matchesRange(task.updatedAt ?? task.createdAt, filters.updatedRange)) return false;
-      return true;
+
+      // Boards/columns/showDone always apply. Kanban-parity filterSettings replace
+      // the overlapping flat fields when present so both UIs do not double-AND.
+      if (useFilterSettings) {
+        return matchesFilterSettings(task, config, options.runtimeContext);
+      }
+      return matchesFlatTaskFilters(task, filters, now);
     })
     .sort(myTasksSortComparator(config, now));
 }
@@ -179,7 +256,9 @@ export function sortMyTasksViewSections(
   config: MyTasksViewConfig,
   now: Date = new Date(),
 ): ISection[] {
-  if (config.sort.field !== "board" && config.sort.field !== "dueDate") return sections;
+  if (config.sort.field !== "board" && config.sort.field !== "dueDate") {
+    return sections;
+  }
   const direction = config.sort.direction === "asc" ? 1 : -1;
   const taskComparator = myTasksSortComparator(config, now);
 
@@ -192,7 +271,10 @@ export function sortMyTasksViewSections(
     if (!firstA && !firstB) return a.section_title.localeCompare(b.section_title);
     if (!firstA) return 1;
     if (!firstB) return -1;
-    return taskComparator(firstA, firstB) || a.section_title.localeCompare(b.section_title);
+    return (
+      taskComparator(firstA, firstB) ||
+      a.section_title.localeCompare(b.section_title)
+    );
   });
 }
 

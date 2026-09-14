@@ -9,7 +9,7 @@ interface IProps {
     param?: IUser | CalendarUserSummary | IAgent,
   ) => Promise<void>;
   calendarMembers?: CalendarUserSummary[];
-  view: "Kanban" | "Calendar";
+  view: "Kanban" | "Calendar" | "MyTasks";
 }
 const UpdatedByFilterModal: FC<IProps> = ({
   updatedByHandler,

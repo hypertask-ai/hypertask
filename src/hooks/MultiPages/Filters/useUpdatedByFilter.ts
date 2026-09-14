@@ -6,6 +6,7 @@ import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/Views
 import { useRecoilValue } from "@/lib/state";
 import { useAgents } from "@/hooks/MultiPages/useAgents";
 import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
+import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
 import type { UserSelectionEntry } from "@/components/Modals/UserSelectionModal";
 
 export const useUpdatedByFilter = ({
@@ -17,10 +18,11 @@ export const useUpdatedByFilter = ({
         param?: IUser | CalendarUserSummary | IAgent,
     ) => Promise<void>;
     calendarMembers?: CalendarUserSummary[];
-    view: "Kanban" | "Calendar";
+    view: "Kanban" | "Calendar" | "MyTasks";
 }) => {
     const currentProject = useRecoilValue(currentProjectAtom);
     const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom);
+    const myTasksFilters = useMyTasksFilterController();
     const { data: membersAndOwner } = useGetAllMembersForAssign(
         ["updated-by-filter", currentProject?.id ?? -1],
         currentProject?.id!
@@ -35,7 +37,7 @@ export const useUpdatedByFilter = ({
         const uniqueUsersMap = new Map<number, IUser | CalendarUserSummary>();
         const uniqueAgentsMap = new Map<string, IAgent>();
 
-        if (view === "Calendar" && calendarMembers?.length) {
+        if ((view === "Calendar" || view === "MyTasks") && calendarMembers?.length) {
             for (const user of calendarMembers) {
                 if (user) uniqueUsersMap.set(user.id, user);
             }
@@ -68,6 +70,9 @@ export const useUpdatedByFilter = ({
                 ...calendarTaskFilters.updatedBy,
                 ...calendarTaskFilters.updatedByAgents,
             ];
+        }
+        if (view === "MyTasks") {
+            return myTasksFilters?.activeFilters.addedFilters.find((x) => x.type === "UpdatedBy")?.searchPayload.flatMap((x: { id: number | string }) => x.id) ?? [];
         }
         return activeFilters?.searchPayload.flatMap((x: { id: number | string }) => x.id) ?? [];
     }, [view, calendarTaskFilters.updatedBy, calendarTaskFilters.updatedByAgents, activeFilters]);

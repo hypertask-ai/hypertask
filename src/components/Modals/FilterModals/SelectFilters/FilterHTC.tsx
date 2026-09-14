@@ -24,15 +24,16 @@ import CreatedByFilterModal from "../CreatedByFilterModal";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { calendarTaskFiltersAtom, currentUserAtom } from "@/store";
-import { IAgent, ILabel, IProject, IUser } from "@/models/model";
+import { IAgent, IUser } from "@/models/model";
 import type {
   CalendarLabelSummary,
   CalendarUserSummary,
 } from "@/lib/calendarSync/contract";
+import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
 
 interface Props {
   toggle: () => void;
-  view: "Kanban" | "Calendar";
+  view: "Kanban" | "Calendar" | "MyTasks";
   filteredMembers?: CalendarUserSummary[];
   allTags?: CalendarLabelSummary[];
 }
@@ -48,13 +49,49 @@ const AllFilterHTC: React.FC<Props> = ({
   );
   const currentUser = useRecoilValue(currentUserAtom);
   const setCalendarTaskFilters = useSetRecoilState(calendarTaskFiltersAtom);
-  const {
-    addFilter,
-    resetFilters,
-    toggleFilterMatchOptions,
-    overrideFilter,
-    removeFilter,
-  } = useFilters();
+  const myTasksFilters = useMyTasksFilterController();
+  // Always called (hook rules). My Tasks / Calendar ignore these write paths.
+  const kanbanFilters = useFilters();
+
+  const addFilter = async (type: TFilter, value: any) => {
+    if (view === "MyTasks") {
+      myTasksFilters?.addFilter(type, value);
+      return;
+    }
+    await kanbanFilters.addFilter(type, value);
+  };
+
+  const resetFilters = () => {
+    if (view === "MyTasks") {
+      myTasksFilters?.resetFilters();
+      return;
+    }
+    kanbanFilters.resetFilters();
+  };
+
+  const toggleFilterMatchOptions = () => {
+    if (view === "MyTasks") {
+      myTasksFilters?.toggleFilterMatchOptions();
+      return;
+    }
+    kanbanFilters.toggleFilterMatchOptions();
+  };
+
+  const overrideFilter = (type: TFilter, value: any) => {
+    if (view === "MyTasks") {
+      myTasksFilters?.overrideFilter(type, value);
+      return;
+    }
+    kanbanFilters.overrideFilter(type, value);
+  };
+
+  const removeFilter = (type: TFilter) => {
+    if (view === "MyTasks") {
+      myTasksFilters?.removeFilter(type);
+      return;
+    }
+    kanbanFilters.removeFilter(type);
+  };
 
   const handleAction = (mode?: FilterCommandMode) => {
     if (mode) setCommandMode(mode);
@@ -90,7 +127,6 @@ const AllFilterHTC: React.FC<Props> = ({
         break;
       case FilterCommandMode.ClearAll:
         if (view === "Calendar") {
-          console.log("Clearing calendar filters");
           setCalendarTaskFilters((prev) => ({
             ...prev,
             assignedToMe: false,
@@ -267,6 +303,9 @@ const AllFilterHTC: React.FC<Props> = ({
     }
   };
 
+  const myTasksMembers = filteredMembers ?? myTasksFilters?.members;
+  const myTasksTags = allTags ?? myTasksFilters?.labels;
+
   const commandComponents: TFilterCommandComponents = {
     [FilterCommandMode.ShowAllFilters]: (
       <ShowFilterOptions
@@ -285,7 +324,7 @@ const AllFilterHTC: React.FC<Props> = ({
     [FilterCommandMode.Labels]: (
       <TagsFilterModal
         closeHandler={(param) => addFilterElseClose("Labels", param)}
-        calendarTags={allTags}
+        calendarTags={view === "MyTasks" ? myTasksTags : allTags}
         view={view}
       />
     ),
@@ -370,13 +409,15 @@ const AllFilterHTC: React.FC<Props> = ({
     [FilterCommandMode.Assignees]: (
       <AssigneeFilters
         closeHandler={(param) => addFilterElseClose("Assignees", param)}
-        calendarAssignees={filteredMembers}
+        calendarAssignees={view === "MyTasks" ? myTasksMembers : filteredMembers}
         view={view}
       />
     ),
     [FilterCommandMode.BlockedByPerson]: (
       <BlockedByPersonFilters
         closeHandler={(user) => addFilterElseClose("BlockedByPerson", user)}
+        calendarMembers={view === "MyTasks" ? myTasksMembers : filteredMembers}
+        view={view}
       />
     ),
     [FilterCommandMode.UpdatedRange]: (
@@ -411,14 +452,14 @@ const AllFilterHTC: React.FC<Props> = ({
     [FilterCommandMode.UpdatedBy]: (
       <UpdatedByFilterModal
         updatedByHandler={(param) => updatedByHandler(param)}
-        calendarMembers={filteredMembers}
+        calendarMembers={view === "MyTasks" ? myTasksMembers : filteredMembers}
         view={view}
       />
     ),
     [FilterCommandMode.CreatedBy]: (
       <CreatedByFilterModal
         createdByHandler={(param) => createdByHandler(param)}
-        calendarMembers={filteredMembers}
+        calendarMembers={view === "MyTasks" ? myTasksMembers : filteredMembers}
         view={view}
       />
     ),
@@ -436,7 +477,6 @@ const AllFilterHTC: React.FC<Props> = ({
       e.preventDefault();
       setCommandMode(FilterCommandMode.ShowAllFilters);
     }
-    // [shift] + [f]
     if (e.keyCode === KeyCodes.ESCAPE && !e.shiftKey) {
       e.preventDefault();
       boardCloseHandler();

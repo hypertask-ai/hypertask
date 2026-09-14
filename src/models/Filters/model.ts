@@ -10,7 +10,7 @@ export interface IGetBoardAppliedViewReturnBody {
 export interface IFilterModalProps {
       handleAction: (mode?: FilterCommandMode) => void;
       toggleFilterMatchOptions: () => void;
-      view: "Kanban" | "Calendar";
+      view: "Kanban" | "Calendar" | "MyTasks";
 }
 export interface IFilterCommandList {
     key: string;
