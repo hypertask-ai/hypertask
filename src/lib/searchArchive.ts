@@ -17,7 +17,12 @@ export function buildSearchUrl(
     params.set("index", String(tabIndex));
   }
   if (includeArchived) params.set("includeArchived", "1");
-  if (fromProject != null && Number.isInteger(fromProject) && fromProject > 0) {
+  if (
+    fromProject !== null &&
+    fromProject !== undefined &&
+    Number.isInteger(fromProject) &&
+    fromProject > 0
+  ) {
     params.set("fromProject", String(fromProject));
   }
   return `/search?${params.toString()}`;
@@ -29,15 +34,18 @@ export function boardContextFromPath(
 ): number | null {
   if (!pathname) return null;
 
-  const detailMatch = pathname.match(/^\/detail\/project-(\d+)/);
+  const detailMatch = pathname.match(/^\/detail\/project-(\d+)(?:\/|$)/);
   if (detailMatch) {
     const projectId = Number(detailMatch[1]);
     return Number.isInteger(projectId) && projectId > 0 ? projectId : null;
   }
 
+  const onBoardRoute =
+    pathname === "/project" || pathname.startsWith("/project/");
   if (
-    pathname.startsWith("/project") &&
-    currentProjectId != null &&
+    onBoardRoute &&
+    currentProjectId !== null &&
+    currentProjectId !== undefined &&
     Number.isInteger(currentProjectId) &&
     currentProjectId > 0
   ) {

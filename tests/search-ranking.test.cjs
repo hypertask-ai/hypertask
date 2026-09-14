@@ -121,4 +121,13 @@ test("a context board outside the searched set is ignored", () => {
   assert.equal(resolveContextProjectId("15", [15]), null);
 });
 
+test("a missing unique index is not an exact match for query 0", () => {
+  const ranked = rankAndGroupHits(
+    [{ ticketNumber: "HTPR-1", title: "Unrelated", projectId: 15, uniqueIndex: null }],
+    "0",
+    null
+  );
+  assert.deepEqual(ranked, []);
+});
+
 console.log("search ranking checks passed");

@@ -41,7 +41,9 @@ test("search URLs preserve archived preference and resettable tabs", () => {
   );
   assert.equal(buildSearchUrl("", null, false, null), "/search?searchTerm=");
   assert.equal(boardContextFromPath("/detail/project-15/6365"), 15);
+  assert.equal(boardContextFromPath("/detail/project-12-invalid"), null);
   assert.equal(boardContextFromPath("/project", 15), 15);
+  assert.equal(boardContextFromPath("/projects", 15), null);
   assert.equal(boardContextFromPath("/inbox", 15), null);
 });
 

@@ -54,7 +54,6 @@ export function isExactTicketHit(
   if (!ticketQuery) return false;
 
   const ticketNumber = String(hit.ticketNumber ?? "").toLowerCase();
-  const uniqueIndex = Number(hit.uniqueIndex);
 
   if (ticketQuery.prefix) {
     const dashed =
@@ -66,7 +65,10 @@ export function isExactTicketHit(
     );
   }
 
-  return uniqueIndex === ticketQuery.uniqueIndex;
+  return (
+    Number.isInteger(hit.uniqueIndex) &&
+    hit.uniqueIndex === ticketQuery.uniqueIndex
+  );
 }
 
 export function isStrongLexicalHit(hit: SearchRankHit, query: string): boolean {
