@@ -193,7 +193,7 @@ const MyTasks = ({
         }
       }
       if ("viewId" in changes) {
-        if (changes.viewId === null) next.delete("view");
+        if (changes.viewId === null) next.set("view", "all");
         else if (changes.viewId !== undefined) {
           next.set("view", String(changes.viewId));
         }

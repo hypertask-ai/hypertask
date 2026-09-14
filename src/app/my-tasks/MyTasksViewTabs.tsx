@@ -2,6 +2,7 @@
 
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal, Plus } from "lucide-react";
@@ -67,7 +68,7 @@ const MyTasksViewTabs = ({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className={`flex items-center gap-1 whitespace-nowrap rounded-md px-3 py-[7px] text-dense leading-none transition-colors ${
+          className={`flex items-center gap-1 whitespace-nowrap rounded-[4px] px-3 py-1.5 text-dense leading-none transition-colors ${
             activeViewId === null
               ? "bg-containerBackground font-semibold text-white-black"
               : "font-medium text-header-text hover:bg-hover-active"
@@ -83,13 +84,13 @@ const MyTasksViewTabs = ({
               type="button"
               title={view.name}
               onClick={() => onSelect(view.id)}
-              className={`flex items-center gap-1 whitespace-nowrap rounded-md px-3 py-[7px] text-dense leading-none transition-colors ${
+              className={`flex items-center gap-1 whitespace-nowrap rounded-[4px] px-3 py-1.5 text-dense leading-none transition-colors ${
                 active
                   ? "bg-containerBackground font-semibold text-white-black"
                   : "font-medium text-header-text hover:bg-hover-active"
               }`}
             >
-              {view.isDefault && <House size={12} strokeWidth={1.75} />}
+              {view.isDefault && <House size={12} strokeWidth={1.5} />}
               {view.name}
             </button>
           );
@@ -98,16 +99,6 @@ const MyTasksViewTabs = ({
 
       {dirty && (
         <div className="flex shrink-0 items-center gap-1 text-meta">
-          {activeView && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onSave}
-              className="rounded-[4px] bg-active-elementBg px-2 py-1 font-medium text-white-black hover:bg-hover-active disabled:opacity-50"
-            >
-              Save
-            </button>
-          )}
           <button
             type="button"
             disabled={busy}
@@ -116,6 +107,16 @@ const MyTasksViewTabs = ({
           >
             Reset
           </button>
+          {activeView && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onSave}
+              className="rounded-[4px] bg-shadcn-primary px-2 py-1 font-medium text-primary-foreground hover:opacity-80 disabled:opacity-50"
+            >
+              Save
+            </button>
+          )}
         </div>
       )}
 
@@ -123,9 +124,9 @@ const MyTasksViewTabs = ({
         type="button"
         disabled={busy}
         onClick={saveAs}
-        className="flex h-7 shrink-0 items-center gap-1 rounded-[4px] px-2 text-content text-text-light-gray hover:bg-hover-active hover:text-white-black disabled:opacity-50"
+        className={`${MOBILE_TARGET} h-7 gap-1 rounded-[4px] px-2 text-content text-text-light-gray hover:bg-hover-active hover:text-white-black disabled:opacity-50 @md:min-h-0 @md:min-w-0`}
       >
-        <Plus size={14} strokeWidth={1.75} />
+        <Plus size={14} strokeWidth={1.5} />
         <span className="hidden @md:inline">Save as view</span>
       </button>
 
@@ -136,9 +137,9 @@ const MyTasksViewTabs = ({
             aria-label="View actions"
             aria-expanded={actionsOpen}
             onClick={() => setActionsOpen((open) => !open)}
-            className="flex size-7 items-center justify-center rounded-[4px] text-text-light-gray hover:bg-hover-active hover:text-white-black"
+            className={`${MOBILE_TARGET} h-7 w-7 rounded-[4px] text-text-light-gray hover:bg-hover-active hover:text-white-black @md:min-h-0 @md:min-w-0`}
           >
-            <MoreHorizontal size={16} strokeWidth={1.75} />
+            <MoreHorizontal size={16} strokeWidth={1.5} />
           </button>
           {actionsOpen && (
             <div className="absolute right-0 top-full z-40 mt-1 min-w-[170px] rounded-[5px] bg-modalBackground py-1 text-content shadow-md">
@@ -164,7 +165,7 @@ const MyTasksViewTabs = ({
               <button
                 type="button"
                 onClick={remove}
-                className="w-full px-3 py-2 text-left text-red-400 hover:bg-hover-active"
+                className="w-full px-3 py-2 text-left text-destructive hover:bg-hover-active"
               >
                 Delete
               </button>

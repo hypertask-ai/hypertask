@@ -2,6 +2,7 @@
 
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import {
@@ -37,6 +38,11 @@ const SORT_FIELDS: Array<{ value: MyTasksViewConfig["sort"]["field"]; label: str
   { value: "board", label: "Board" },
 ];
 
+const localDateInputValue = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <section className="space-y-1.5">
     <p className="text-meta font-semibold text-text-light-gray">{label}</p>
@@ -58,14 +64,14 @@ const CheckRow = ({
       type="checkbox"
       checked={checked}
       onChange={onChange}
-      className="size-3.5 accent-[#51A4F1]"
+      className="size-3.5 accent-shadcn-primary"
     />
     <span className="min-w-0 truncate">{label}</span>
   </label>
 );
 
 const inputClass =
-  "h-8 rounded-[4px] border border-border bg-containerBackground px-2 text-content text-white-black outline-none focus:border-[#51A4F1]";
+  "h-8 rounded-[4px] border-0 bg-transparent px-2 text-content text-white-black outline-none focus:bg-active-modal-element";
 
 const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -175,17 +181,17 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
             setFilterOpen((open) => !open);
             setSortOpen(false);
           }}
-          className={`flex h-8 items-center gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active ${
-            filterCount > 0 ? "text-[#51A4F1]" : "text-text-light-gray hover:text-white-black"
+          className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
+            filterCount > 0 ? "text-shadcn-primary" : "text-text-light-gray hover:text-white-black"
           }`}
         >
-          <SlidersHorizontal size={16} strokeWidth={1.75} />
+          <SlidersHorizontal size={16} strokeWidth={1.5} />
           <span className="hidden @md:inline">Filters</span>
           {filterCount > 0 && <span className="text-meta font-semibold">{filterCount}</span>}
         </button>
 
         {filterOpen && (
-          <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,560px)] overflow-y-auto rounded-[6px] bg-modalBackground p-4 shadow-md">
+          <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,560px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
             <div className="grid gap-5 @md:grid-cols-2">
               <Field label="Boards">
                 <CheckRow
@@ -274,7 +280,7 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
                     const value = event.target.value;
                     if (!value) updateFilters({ dueDate: null });
                     else if (value === "custom") {
-                      const today = new Date().toISOString().slice(0, 10);
+                      const today = localDateInputValue(new Date());
                       updateFilters({ dueDate: { from: today, to: today } });
                     } else {
                       updateFilters({ dueDate: value as MyTasksDueDatePreset });
@@ -412,13 +418,13 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
             setSortOpen((open) => !open);
             setFilterOpen(false);
           }}
-          className="flex h-8 items-center gap-1.5 rounded-[4px] px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black"
+          className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black @md:min-h-0 @md:min-w-0`}
         >
-          <ArrowUpDown size={16} strokeWidth={1.75} />
+          <ArrowUpDown size={16} strokeWidth={1.5} />
           <span className="hidden @md:inline">Sort</span>
         </button>
         {sortOpen && (
-          <div className="absolute right-0 top-full z-40 mt-1 w-56 space-y-3 rounded-[6px] bg-modalBackground p-3 shadow-md">
+          <div className="absolute right-0 top-full z-40 mt-1 w-56 space-y-3 rounded-[5px] bg-modalBackground p-3 shadow-md">
             <Field label="Field">
               <select
                 value={config.sort.field}

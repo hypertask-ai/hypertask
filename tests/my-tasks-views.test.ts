@@ -124,6 +124,22 @@ test("filters boards, columns, priority, labels, size and starred together", () 
   assert.deepEqual(filtered.map(({ id }) => id), [matching.id]);
 });
 
+test("column filtering uses the resolved My Tasks section for legacy tasks", () => {
+  const legacyTask = task(1, {
+    sectionId: null as unknown as number,
+    section: "Doing",
+    myTasksSection: { id: 11, isDone: false },
+  });
+
+  const filtered = applyMyTasksView(
+    [legacyTask],
+    config({ filters: { sectionIds: [11] } } as Partial<MyTasksViewConfig>),
+    NOW,
+  );
+
+  assert.deepEqual(filtered.map(({ id }) => id), [legacyTask.id]);
+});
+
 test("supports due-date presets and inclusive date ranges", () => {
   const tasks = [
     task(1, { dueDate: new Date("2026-09-13T20:00:00.000Z") }),

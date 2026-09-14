@@ -53,7 +53,9 @@ export default async function Page({
   const initialViewId =
     rawView === undefined
       ? (views.find((view) => view.isDefault)?.id ?? null)
-      : (views.find((view) => view.id === requestedViewId)?.id ?? null);
+      : rawView === "all"
+        ? null
+        : (views.find((view) => view.id === requestedViewId)?.id ?? null);
 
   return (
     <Suspense fallback={<>Loading...</>}>

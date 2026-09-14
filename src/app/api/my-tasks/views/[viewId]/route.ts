@@ -50,9 +50,13 @@ export async function PATCH(
       data.config = parseMyTasksViewConfig(body.config) as unknown as Prisma.InputJsonValue;
     }
     if (hasOwn(body, "position")) {
-      if (!Number.isSafeInteger(body.position) || body.position < 0) {
+      if (
+        !Number.isSafeInteger(body.position) ||
+        body.position < 0 ||
+        body.position > 2_147_483_647
+      ) {
         return NextResponse.json(
-          { error: "position must be a non-negative integer" },
+          { error: "position must be a non-negative 32-bit integer" },
           { status: 400 },
         );
       }

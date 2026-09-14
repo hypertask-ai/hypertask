@@ -145,7 +145,10 @@ export function applyMyTasksView(
       const isDone =
         task.myTasksSection?.isDone ??
         (hasNestedSection ? nestedSection.isDone : null);
-      const sectionId = task.sectionId ?? (hasNestedSection ? nestedSection.id : undefined);
+      const sectionId =
+        task.sectionId ??
+        task.myTasksSection?.id ??
+        (hasNestedSection ? nestedSection.id : undefined);
       if (!filters.showDone && isDone === true) return false;
       if (sectionIds.size > 0 && (!sectionId || !sectionIds.has(sectionId))) return false;
       const priorityId = task.priority?.priority_index ?? 0;

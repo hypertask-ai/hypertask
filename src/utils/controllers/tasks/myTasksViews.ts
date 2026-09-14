@@ -1,5 +1,3 @@
-import { isFeatureEnabled } from "@/lib/flags";
-import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import {
   parseMyTasksViewConfig,
@@ -26,9 +24,6 @@ export const serializeMyTasksView = (view: {
   ...view,
   config: parseMyTasksViewConfig(view.config),
 });
-
-export const myTasksViewsEnabled = (userId: number) =>
-  isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId);
 
 export const getMyTasksViews = async (userId: number): Promise<MyTasksSavedView[]> => {
   const views = await prisma.myTasksView.findMany({
