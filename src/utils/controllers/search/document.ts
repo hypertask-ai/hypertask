@@ -139,6 +139,8 @@ export async function turbopufferGetDocuments(
       contextComments,
       archivedTasks,
       archivedComments,
+      contextArchivedTasks,
+      contextArchivedComments,
     ] = await Promise.all([
         searchTasks({
           searchQuery,
@@ -196,13 +198,39 @@ export async function turbopufferGetDocuments(
               keywordOnly: true,
             })
           : Promise.resolve([] as TurbopufferCommentRow[]),
+        includeArchivedTitleLane && contextProjectId !== null
+          ? searchTasks({
+              searchQuery,
+              projectIds,
+              projectId: contextProjectId,
+              status: "Archive",
+              topK: CONTEXT_TASK_TOP_K,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferTaskRow[]),
+        includeArchivedTitleLane && contextProjectId !== null
+          ? searchComments({
+              searchQuery,
+              projectIds: [contextProjectId],
+              status: "Archive",
+              topK: 200,
+              limit: CONTEXT_COMMENT_LIMIT,
+              keywordOnly: true,
+            })
+          : Promise.resolve([] as TurbopufferCommentRow[]),
       ]);
 
-    const taskRows = mergeRowsById(globalTasks, contextTasks, archivedTasks);
+    const taskRows = mergeRowsById(
+      globalTasks,
+      contextTasks,
+      archivedTasks,
+      contextArchivedTasks
+    );
     const commentRows = mergeRowsById(
       globalComments,
       contextComments,
-      archivedComments
+      archivedComments,
+      contextArchivedComments
     );
 
     if (taskRows.length === 0 && commentRows.length === 0) {
@@ -307,7 +335,8 @@ export async function turbopufferGetDocuments(
       finalData.map((item: any) => item?.status).filter(Boolean)
     );
     const hasMultipleStatuses =
-      !applyRelevanceCut && uniqueStatuses.size > 1;
+      uniqueStatuses.size > 1 &&
+      !(applyRelevanceCut && archive === "Normal");
     if (hasMultipleStatuses) {
       tabs.push("Open", "Archived");
 

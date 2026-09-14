@@ -94,7 +94,10 @@ test("ranked search fetches archived rows and still pins the title match", async
   );
   assert.ok(
     calls.some(
-      ([name, params]) => name === "searchTasks" && params.status === "Archive"
+      ([name, params]) =>
+        name === "searchTasks" &&
+        params.status === "Archive" &&
+        params.projectId === 15
     )
   );
 });
