@@ -90,7 +90,7 @@ const MyTasksViewTabs = ({
                   : "font-medium text-header-text hover:bg-hover-active"
               }`}
             >
-              {view.isDefault && <House size={12} strokeWidth={1.5} />}
+              {view.isDefault && <House size={14} strokeWidth={1.5} />}
               {view.name}
             </button>
           );

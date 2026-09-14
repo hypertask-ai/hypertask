@@ -1,7 +1,8 @@
+import type { ISection } from "@/models/model";
 import { addDays, endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
 import type { IPrioritiesConstants } from "@/lib/constants/constants";
 import { compareMyTasksByDueDate } from "@/lib/myTasksGrouping";
-import type { ISection, ITask } from "@/models/model";
+import type { ITask } from "@/models/model";
 import {
   parseMyTasksViewConfig,
   type MyTasksDateRange,
@@ -195,7 +196,15 @@ export function sortMyTasksViewSections(
   });
 }
 
-/** Legacy priority-only filter retained exactly when HTPR-6422 is off. */
+/**
+ * Pure, board-agnostic filtering for the My Tasks page (HTPR-6312).
+ *
+ * My Tasks spans every board, so it cannot reuse the project-scoped filter
+ * system (FilterHTC/useFilters bail out without a current project and persist
+ * to one board's saved view). This keeps its own selection in component state
+ * only and reuses the shared per-type condition functions here. An empty
+ * selection means "no filter".
+ */
 export function filterMyTasksByPriority(
   sections: ISection[],
   selected: IPrioritiesConstants[],

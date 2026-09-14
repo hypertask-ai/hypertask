@@ -7,26 +7,26 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
-import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
-import {
-  myTasksViewAPIRoute,
-  myTasksViewsAPIRoute,
-} from "@/lib/constants/APIRouteConstants";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
+import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import {
+  myTasksViewAPIRoute,
+  myTasksViewsAPIRoute,
+} from "@/lib/constants/APIRouteConstants";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useRecoilValue } from "@/lib/state";
+import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
 import {
   applyMyTasksView,
-  filterMyTasksByPriority,
   sortMyTasksViewSections,
   type MyTasksTask,
 } from "@/lib/myTasksFiltering";
 import { getMyTasksSplitIndex } from "@/lib/myTasksGrouping";
-import { useRecoilValue } from "@/lib/state";
 import type {
   MyTasksBoardMetadata,
   MyTasksSavedView,
@@ -36,21 +36,14 @@ import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
+import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { ISection, IUser } from "@/models/model";
 import type { TBoardSortingViewMode } from "@/models/Views/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
-import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
-import { Check, Filter } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Check, Filter } from "lucide-react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
@@ -87,10 +80,15 @@ const MyTasks = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
-  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
-  const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const boardParam = searchParams?.get("board") ?? null;
+  const [activeSplit, setActiveSplit] = useState(() =>
+    myTasksShortcutsWidthEnabled
+      ? getMyTasksSplitIndex(sections, boardParam)
+      : 0
+  );
+
+  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const viewParam = searchParams?.get("view") ?? null;
   const initialView = initialViews.find((view) => view.id === initialViewId);
   const [views, setViews] = useState(initialViews);
@@ -99,6 +97,11 @@ const MyTasks = ({
     parseMyTasksViewConfig(initialView?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG),
   );
   const [viewBusy, setViewBusy] = useState(false);
+  const [dateFilterVersion, setDateFilterVersion] = useState(0);
+
+  const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
+  // My Tasks spans every board, so unlike board filters (which persist to a
+  // saved view) this selection lives in state only and resets on reload.
   const [prioritySelection, setPrioritySelection] = useState<
     IPrioritiesConstants[]
   >([]);
@@ -115,23 +118,28 @@ const MyTasks = ({
   );
   useClickOutside(filterRef, () => setFilterOpen(false));
 
+  useEffect(() => {
+    if (!viewsFeatureEnabled) return;
+    const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
+    window.addEventListener("focus", refreshDateFilters);
+    return () => window.removeEventListener("focus", refreshDateFilters);
+  }, [viewsFeatureEnabled]);
+
   const activeView = views.find((view) => view.id === activeViewId);
   const baselineConfig = parseMyTasksViewConfig(
     activeView?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
   );
   const dirty = JSON.stringify(viewConfig) !== JSON.stringify(baselineConfig);
-  const selectedPriorities = viewsFeatureEnabled
-    ? PriorityConstants.filter((priority) =>
-        viewConfig.filters.priorityIds.includes(priority.priority_index),
-      )
-    : filterEnabled
-      ? prioritySelection
-      : [];
 
-  const filteredSections = useMemo(() => {
-    if (!viewsFeatureEnabled) {
-      return filterMyTasksByPriority(sections, selectedPriorities);
-    }
+  // One gate for both control and behavior: if the flag flips off while a
+  // selection exists, filtering stops too instead of hiding the control.
+  const selectedPriorities = filterEnabled ? prioritySelection : [];
+  const priorityFilteredSections = useMemo(
+    () => filterMyTasksByPriority(sections, selectedPriorities),
+    [sections, selectedPriorities]
+  );
+
+  const viewFilteredSections = useMemo(() => {
     const now = new Date();
     const selectedBoards = viewConfig.boardIds
       ? new Set(viewConfig.boardIds)
@@ -151,7 +159,10 @@ const MyTasks = ({
         ),
       }));
     return sortMyTasksViewSections(next, viewConfig, now);
-  }, [sections, selectedPriorities, viewConfig, viewsFeatureEnabled]);
+  }, [dateFilterVersion, sections, viewConfig]);
+  const filteredSections = viewsFeatureEnabled
+    ? viewFilteredSections
+    : priorityFilteredSections;
 
   const activeTabs = useMemo(
     () =>
@@ -160,22 +171,14 @@ const MyTasks = ({
         : tabs,
     [filteredSections, tabs, viewsFeatureEnabled],
   );
-  const [activeSplit, setActiveSplit] = useState(() =>
-    myTasksShortcutsWidthEnabled
-      ? getMyTasksSplitIndex(filteredSections, boardParam)
-      : 0,
-  );
   const activeBoardId = useRef<number | null>(
     filteredSections[activeSplit - 1]?.projectId ?? null,
   );
 
   const totalCount = useMemo(
     () =>
-      filteredSections.reduce(
-        (total, section) => total + section.items.length,
-        0,
-      ),
-    [filteredSections],
+      filteredSections.reduce((total, section) => total + section.items.length, 0),
+    [filteredSections]
   );
   const visibleSections = useMemo(() => {
     if (activeSplit === 0) return filteredSections;
@@ -183,34 +186,46 @@ const MyTasks = ({
     return active ? [active] : [];
   }, [activeSplit, filteredSections]);
 
-  const replaceParams = useCallback(
-    (changes: { boardId?: number | null; viewId?: number | null }) => {
+  const replaceBoardParam = useCallback(
+    (boardId: number | null) => {
       const next = new URLSearchParams(searchParams?.toString() ?? "");
-      if ("boardId" in changes) {
-        if (changes.boardId === null) next.delete("board");
-        else if (changes.boardId !== undefined) {
-          next.set("board", String(changes.boardId));
-        }
-      }
-      if ("viewId" in changes) {
-        if (changes.viewId === null) next.set("view", "all");
-        else if (changes.viewId !== undefined) {
-          next.set("view", String(changes.viewId));
-        }
-      }
+      if (boardId === null) next.delete("board");
+      else next.set("board", String(boardId));
+      const query = next.toString();
+      router.replace(`/my-tasks${query ? `?${query}` : ""}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
+
+  const replaceParams = useCallback(
+    (changes: { boardId?: null; viewId: number | null }) => {
+      const next = new URLSearchParams(searchParams?.toString() ?? "");
+      if (changes.boardId === null) next.delete("board");
+      if (changes.viewId === null) next.set("view", "all");
+      else next.set("view", String(changes.viewId));
       const query = next.toString();
       router.replace(`/my-tasks${query ? `?${query}` : ""}`, { scroll: false });
     },
     [router, searchParams],
   );
 
-  const replaceBoardParam = useCallback(
-    (boardId: number | null) => replaceParams({ boardId }),
-    [replaceParams],
+  const updateLegacySplit = useCallback(
+    (index: number) => {
+      const nextIndex = Math.max(0, Math.min(index, tabs.length - 1));
+      setActiveSplit(nextIndex);
+      if (myTasksShortcutsWidthEnabled) {
+        replaceBoardParam(sections[nextIndex - 1]?.projectId ?? null);
+      }
+    },
+    [myTasksShortcutsWidthEnabled, replaceBoardParam, sections, tabs.length]
   );
 
   const updateSplit = useCallback(
     (index: number) => {
+      if (!viewsFeatureEnabled) {
+        updateLegacySplit(index);
+        return;
+      }
       const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
       activeBoardId.current = filteredSections[nextIndex - 1]?.projectId ?? null;
       setActiveSplit(nextIndex);
@@ -223,10 +238,18 @@ const MyTasks = ({
       filteredSections,
       myTasksShortcutsWidthEnabled,
       replaceBoardParam,
+      updateLegacySplit,
+      viewsFeatureEnabled,
     ],
   );
 
   useEffect(() => {
+    if (!myTasksShortcutsWidthEnabled) return;
+    setActiveSplit(getMyTasksSplitIndex(sections, boardParam));
+  }, [boardParam, myTasksShortcutsWidthEnabled, sections]);
+
+  useEffect(() => {
+    if (!viewsFeatureEnabled) return;
     if (!myTasksShortcutsWidthEnabled) {
       const split = getMyTasksSplitIndex(
         filteredSections,
@@ -240,7 +263,13 @@ const MyTasks = ({
     activeBoardId.current = filteredSections[split - 1]?.projectId ?? null;
     setActiveSplit(split);
     if (boardParam && split === 0) replaceBoardParam(null);
-  }, [boardParam, filteredSections, myTasksShortcutsWidthEnabled, replaceBoardParam]);
+  }, [
+    boardParam,
+    filteredSections,
+    myTasksShortcutsWidthEnabled,
+    replaceBoardParam,
+    viewsFeatureEnabled,
+  ]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled || observedViewParam.current === viewParam) return;
@@ -339,7 +368,7 @@ const MyTasks = ({
 
   const patchView = async (
     viewId: number,
-    update: Partial<Pick<MyTasksSavedView, "name" | "position" | "isDefault" | "config">>,
+    update: Partial<Pick<MyTasksSavedView, "name" | "isDefault" | "config">>,
   ): Promise<MyTasksSavedView> => {
     const response = await fetch(myTasksViewAPIRoute(viewId), {
       method: "PATCH",
@@ -432,27 +461,12 @@ const MyTasks = ({
   const tabLength = (index: number) =>
     index === 0 ? totalCount : filteredSections[index - 1]?.items.length ?? 0;
 
-  const togglePriority = (priority: IPrioritiesConstants) => {
-    if (viewsFeatureEnabled) {
-      updateViewConfig((current) => ({
-        ...current,
-        filters: {
-          ...current.filters,
-          priorityIds: current.filters.priorityIds.includes(priority.priority_index)
-            ? current.filters.priorityIds.filter(
-                (id) => id !== priority.priority_index,
-              )
-            : [...current.filters.priorityIds, priority.priority_index],
-        },
-      }));
-      return;
-    }
+  const togglePriority = (priority: IPrioritiesConstants) =>
     setPrioritySelection((current) =>
-      current.some((item) => item.priority_index === priority.priority_index)
-        ? current.filter((item) => item.priority_index !== priority.priority_index)
-        : [...current, priority],
+      current.some((p) => p.priority_index === priority.priority_index)
+        ? current.filter((p) => p.priority_index !== priority.priority_index)
+        : [...current, priority]
     );
-  };
 
   const splitTitles = activeTabs.map((item, index) => (
     <SplitTitle
@@ -506,10 +520,8 @@ const MyTasks = ({
           />
         )}
         {filterEnabled && (
-          <div
-            ref={filterRef}
-            className={`relative self-center ${viewsFeatureEnabled ? "" : "ml-auto"}`}
-          >
+          !viewsFeatureEnabled ? (
+          <div ref={filterRef} className="relative ml-auto self-center">
             <button
               id="my-tasks-priority-filter"
               type="button"
@@ -521,9 +533,7 @@ const MyTasks = ({
               <Filter size={14} strokeWidth={1.75} />
               <span className="sr-only">Filter by priority</span>
               {selectedPriorities.length > 0 && (
-                <span className="text-meta font-medium" aria-hidden="true">
-                  {selectedPriorities.length}
-                </span>
+                <span className="text-meta font-medium" aria-hidden="true">{selectedPriorities.length}</span>
               )}
             </button>
             {filterOpen && (
@@ -534,7 +544,7 @@ const MyTasks = ({
               >
                 {PriorityConstants.map((priority) => {
                   const checked = selectedPriorities.some(
-                    (item) => item.priority_index === priority.priority_index,
+                    (p) => p.priority_index === priority.priority_index
                   );
                   return (
                     <button
@@ -555,6 +565,7 @@ const MyTasks = ({
               </div>
             )}
           </div>
+          ) : null
         )}
       </div>
 

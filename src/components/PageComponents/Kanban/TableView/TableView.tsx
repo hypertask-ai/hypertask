@@ -719,9 +719,8 @@ const TableView = ({
         Boolean(_currentProject),
         true,
         isPrioritySort,
-        crossBoardPrioritySortEnabled,
-        savedViewPrioritySort,
-      );
+        crossBoardPrioritySortEnabled
+      ) || savedViewPrioritySort;
       // sectionId and sid share a numeric namespace only when there's a current
       // project (real sections); on /my-tasks, sid is the boardId (see
       // myTasksGrouping.ts), so sectionOrder would compare unrelated ids (HTPR-4887).
@@ -1490,13 +1489,12 @@ const TableView = ({
               );
             })}
           </div>
-          {shouldFlattenSortedRows(
+          {(shouldFlattenSortedRows(
             Boolean(_currentProject),
             sortState.length > 0,
             isPrioritySort,
-            crossBoardPrioritySortEnabled,
-            savedViewPrioritySort,
-          ) ? (
+            crossBoardPrioritySortEnabled
+          ) || savedViewPrioritySort) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
                 {rows.filter(isTaskRow).map(({ task }, index) => renderTaskRow(task, index))}

@@ -49,19 +49,6 @@ export async function PATCH(
     if (hasOwn(body, "config")) {
       data.config = parseMyTasksViewConfig(body.config) as unknown as Prisma.InputJsonValue;
     }
-    if (hasOwn(body, "position")) {
-      if (
-        !Number.isSafeInteger(body.position) ||
-        body.position < 0 ||
-        body.position > 2_147_483_647
-      ) {
-        return NextResponse.json(
-          { error: "position must be a non-negative 32-bit integer" },
-          { status: 400 },
-        );
-      }
-      data.position = body.position;
-    }
     if (hasOwn(body, "isDefault")) {
       if (typeof body.isDefault !== "boolean") {
         return NextResponse.json({ error: "isDefault must be boolean" }, { status: 400 });
