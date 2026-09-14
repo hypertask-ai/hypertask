@@ -8,9 +8,6 @@ export const CORE_SMOKE_BASE_SECTION = "Baseline";
 export const CORE_SMOKE_ALT_SECTION = "Alternate";
 export const CORE_SMOKE_AGENT_NAME = "Core Actions Smoke Agent";
 export const CORE_SMOKE_RUN_ID_PATTERN = /^[A-Za-z0-9._:-]{1,100}$/;
-// Lost-response cleanup has no live assignee count. Bound Unassigned claims so
-// an unrelated burst still fails as ambiguous instead of deleting the thread.
-export const CORE_SMOKE_PENDING_UNASSIGN_ACTIVITY_LIMIT = 8;
 
 type FetchLike = typeof fetch;
 
@@ -404,7 +401,7 @@ export async function runCoreActionsSmoke(options: {
   ) => {
     if (await claimReturnedActivityIds(response, persist)) return;
     throw new SmokeFailure(
-      "unrunnable",
+      "application",
       action,
       response.status,
       "mutation did not return its activity ids",
@@ -429,70 +426,6 @@ export async function runCoreActionsSmoke(options: {
         commentId: markerId,
       }),
     });
-  };
-
-  const captureNewFixtureActivity = async (
-    action: string,
-    requireOne: boolean,
-    persist: boolean,
-    options: {
-      updatedStatus?: "Assigned" | "Unassigned";
-      allowMultiple?: boolean;
-      maxCandidates?: number;
-    } = {},
-  ) => {
-    const claimed: number[] = [];
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const comments = await getComments(action);
-      for (const comment of comments) {
-        const id = Number(comment?.id);
-        if (!Number.isSafeInteger(id) || knownCommentIds.has(id)) continue;
-        if (!isFixtureActivity(comment, fixture)) {
-          knownCommentIds.add(id);
-          continue;
-        }
-        if (
-          options.updatedStatus &&
-          comment?.activity?.data?.updatedStatus !== options.updatedStatus
-        ) {
-          // Leave status mismatches unknown so a later capture with the matching
-          // updatedStatus can still claim them (pending Assigned vs Unassigned).
-          continue;
-        }
-        knownCommentIds.add(id);
-        claimed.push(id);
-      }
-      const overLimit =
-        typeof options.maxCandidates === "number" &&
-        claimed.length > options.maxCandidates;
-      if ((claimed.length > 1 && !options.allowMultiple) || overLimit) {
-        throw new SmokeFailure(
-          "unrunnable",
-          action,
-          200,
-          "activity ownership was ambiguous",
-        );
-      }
-      if (
-        claimed.length > 0 &&
-        (!options.allowMultiple || attempt === 2)
-      ) {
-        // HTPR-6434: one userId unassign can emit several Unassigned activities
-        // across delayed writes. Keep polling through the final attempt so an
-        // extra late candidate still trips the maxCandidates ambiguity check.
-        for (const id of claimed) ownedCommentIds.add(id);
-        if (persist) await persistOwnedCommentIds();
-        return;
-      }
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    if (!requireOne) return;
-    throw new SmokeFailure(
-      "application",
-      action,
-      200,
-      "the mutation activity was not visible on re-read",
-    );
   };
 
   const captureReturnedMoveActivity = async (
@@ -616,9 +549,11 @@ export async function runCoreActionsSmoke(options: {
           "recover interrupted assignment",
           "unassign",
         );
-        // Prefer exact ids. An empty list means already-unassigned / race; do
-        // not discover ownership by status, or we may delete another run's audit.
-        await claimReturnedActivityIds(recoveryUnassign, false);
+        await requireReturnedActivityIds(
+          "capture recovery assignment activity",
+          recoveryUnassign,
+          false,
+        );
       }
       await deleteOwnedComments();
       ownedCommentIds.clear();
@@ -839,22 +774,9 @@ export async function runCoreActionsSmoke(options: {
             ownedCommentIds.add(markerId);
           }
         }
-        await captureNewFixtureActivity(
-          "capture pending mutation activity",
-          false,
-          true,
-          {
-            updatedStatus: "Unassigned",
-            allowMultiple: true,
-            maxCandidates: CORE_SMOKE_PENDING_UNASSIGN_ACTIVITY_LIMIT,
-          },
-        );
-        await captureNewFixtureActivity(
-          "capture pending assignment activity",
-          false,
-          true,
-          { updatedStatus: "Assigned" },
-        );
+        // Only claim activities returned by mutations or recorded on the marker.
+        // Do not discover Unassigned/Assigned rows by status here: that can delete
+        // another same-user request's audit trail on this fixture.
         const task = await getTask("cleanup task read");
         if (Number(task.sectionId) !== fixture.baseSectionId) {
           const cleanupMove = await move(
@@ -876,7 +798,11 @@ export async function runCoreActionsSmoke(options: {
             "cleanup assignment",
             "unassign",
           );
-          await claimReturnedActivityIds(cleanupUnassign, true);
+          await requireReturnedActivityIds(
+            "capture cleanup assignment activity",
+            cleanupUnassign,
+            true,
+          );
           cleanup.push("removed test-user assignment");
         }
         if (ownedCommentIds.size > 0) {
