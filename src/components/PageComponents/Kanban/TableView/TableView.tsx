@@ -28,7 +28,13 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
+import {
+  getTaskShortcutAction,
+  shouldIgnoreTaskShortcutTarget,
+  type TaskShortcutAction,
+} from "@/lib/keyboard/taskShortcuts";
 import type { IAllCommands } from "@/models/model";
+import { CommandMode } from "@/models/enums";
 import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
 import EstimateLabelComponent from "@/components/Modals/TaskEstimate/EstimateLabelComponent";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
@@ -66,9 +72,17 @@ import {
 } from "./TableCreateTaskControl";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6427_ROW_SHORTCUTS_FLAG,
+  MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+} from "@/lib/flags/keys";
+import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
+import { splitAssignees } from "@/lib/assignees";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
+const AssignModal = lazy(
+  () => import("@/components/Modals/AssignToUser/AssignToUser"),
+);
 
 const SECTION_CAP = 20;
 const TABLE_GRID_CLASS = "grid";
@@ -91,6 +105,19 @@ type TableViewProps = {
   myTasksSort?: MyTasksViewConfig["sort"];
   myTasksSortKey?: number | null;
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
+};
+const TASK_SHORTCUT_COMMAND_MODES: Partial<
+  Record<TaskShortcutAction, CommandMode>
+> = {
+  delete: CommandMode.DeleteTask,
+  size: CommandMode.EstimateModal,
+  priority: CommandMode.PriorityModal,
+  dueDate: CommandMode.SetDueDate,
+  label: CommandMode.LabelModal,
+  share: CommandMode.ShareTaskPublic,
+  moveColumn: CommandMode.MoveToColumn,
+  moveBoard: CommandMode.MoveTaskToBoard,
+  rename: CommandMode.RenameTask,
 };
 type CustomField = { id: string; name: string; type: CustomFieldType; showInTable?: boolean | null };
 type CustomFieldValue = { fieldId: string; value: string; numericValue: number | null };
@@ -246,7 +273,7 @@ const getSortComparator = (
   return sortByUpdatedAtOrder(order);
 };
 
-export const renderAssigneeAvatars = (task: ITask) => {
+const renderAssigneeAvatarsContent = (task: ITask) => {
   const assignees = task.assignees || [];
   if (!assignees.length) return null;
 
@@ -285,6 +312,9 @@ export const renderAssigneeAvatars = (task: ITask) => {
     </div>
   );
 };
+
+export const renderAssigneeAvatars = (task: ITask) =>
+  renderAssigneeAvatarsContent(task);
 
 // Right-edge drag handle for a header cell (feature 3: Excel-style column resize).
 // A thin pointer-event hit strip, sibling to the sort <button> (not a child of
@@ -383,17 +413,20 @@ const TableView = ({
   filteredSections,
   _sections,
   _currentProject,
+  currentUser,
   handleBoardChange,
   myTasksSort,
   myTasksSortKey,
   onMyTasksSortChange,
 }: TableViewProps) => {
   const queryClient = useQueryClient();
+  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
   const { updateActiveItemAndItemInView } = useProjectQuery();
-  const { removeFromListWithStatus } = UpdateKanban();
+  const { removeFromListWithStatus, updateTaskInCache } = UpdateKanban();
+  const { starTask } = useStarAndPin();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const persistedActiveItem = useRecoilValue(activeItemAtom);
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
@@ -436,6 +469,7 @@ const TableView = ({
     queryFn: async () => (await axios.get(`/api/customFields?projectId=${_currentProject!.id}`)).data,
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [assignTask, setAssignTask] = useState<ITask | null>(null);
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
   // My Tasks has no board cache to mutate, so Ctrl+E hides the row locally
   // until router.refresh() returns the server list without it (HTPR-6445).
@@ -1036,6 +1070,119 @@ const TableView = ({
     }
   }, [_currentProject, removeFromListWithStatus, router]);
 
+  const updateTaskAfterRowMutation = useCallback(
+    (task: ITask, update: Partial<ITask>) => {
+      if (_currentProject) {
+        updateTaskInCache(
+          update,
+          task.id,
+          task.projectId,
+          task.sectionId,
+          _currentProject,
+        );
+      } else {
+        router.refresh();
+      }
+    },
+    [_currentProject, router, updateTaskInCache],
+  );
+
+  const starTaskFromTable = useCallback(
+    async (task: ITask) => {
+      try {
+        const response = await starTask(task.id, task.projectId!);
+        const starred = response.status === 200;
+        updateTaskAfterRowMutation(task, {
+          savedContent: starred ? [{ ...response.data }] : [],
+        });
+        toast(`${starred ? "Starred" : "Unstarred"} Task ${task.ticketNumber?.toUpperCase()}`);
+      } catch {
+        toast.error("Unable to update starred task");
+      }
+    },
+    [starTask, updateTaskAfterRowMutation],
+  );
+
+  const archiveNotificationFromTable = useCallback(
+    async (task: ITask) => {
+      if (
+        task._count?.notifications ||
+        task._count?.notifications === 0
+      ) {
+        toast("This task is not in inbox");
+        return;
+      }
+      try {
+        await globalAPIHandlers.archiveTaskNotification(task.id, currentUser?.id);
+        updateTaskAfterRowMutation(task, {
+          notifications: [],
+          _count: { ...task._count, notifications: 0 },
+        });
+        toast("Notifications archived");
+      } catch {
+        toast.error("Unable to archive notifications");
+      }
+    },
+    [currentUser?.id, updateTaskAfterRowMutation],
+  );
+
+  const closeAssignModal = useCallback(
+    (assignees?: any[], keepOpen?: boolean) => {
+      if (assignTask && Array.isArray(assignees)) {
+        updateTaskAfterRowMutation(assignTask, { assignees });
+        setAssignTask((task) => (task ? { ...task, assignees } : null));
+      }
+      if (!keepOpen) setAssignTask(null);
+    },
+    [assignTask, updateTaskAfterRowMutation],
+  );
+
+  const runTaskShortcut = useCallback(
+    (event: KeyboardEvent, row: Row | undefined, index: number) => {
+      if (!rowShortcutsEnabled || !row || !isTaskRow(row)) return false;
+      const action = getTaskShortcutAction(event, isApple);
+      if (!action) return false;
+
+      event.preventDefault();
+      updateActiveItemAndItemInView(row.task);
+      if (action === "select") return true;
+      if (action === "archive") {
+        if (shouldRunArchiveShortcut(event)) void archiveTaskFromTable(row.task);
+        return true;
+      }
+      if (action === "star") {
+        void starTaskFromTable(row.task);
+        return true;
+      }
+      if (action === "edit") {
+        void archiveNotificationFromTable(row.task);
+        return true;
+      }
+      if (action === "assignee") {
+        setAssignTask(row.task);
+        return true;
+      }
+      if (action === "open") {
+        void openTask(row.task, index);
+        return true;
+      }
+
+      const mode = TASK_SHORTCUT_COMMAND_MODES[action];
+      if (mode !== undefined) setShowCommands({ show: true, mode });
+      return true;
+    },
+    [
+      archiveNotificationFromTable,
+      archiveTaskFromTable,
+      isApple,
+      openTask,
+      rowShortcutsEnabled,
+      setShowCommands,
+      starTaskFromTable,
+      updateActiveItemAndItemInView,
+    ],
+  );
+
   useEffect(() => {
     if (didRestore.current || !rows.length) return;
     didRestore.current = true;
@@ -1102,7 +1249,16 @@ const TableView = ({
         handleBoardChange(Number(e.code.replace("Digit", "")), _sections);
         return;
       }
-      if (returnIfModalOrInputActive() || showCommands.show) return;
+      if (
+        (rowShortcutsEnabled &&
+          shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null)) ||
+        returnIfModalOrInputActive() ||
+        showCommands.show ||
+        assignTask
+      )
+        return;
+      const selectedRow = rows[selectedIndex];
+      if (runTaskShortcut(e, selectedRow, selectedIndex)) return;
       // [ctrl/cmd]+[e] archives the selected task. This component also powers
       // My Tasks, so archiveTaskFromTable handles both board cache updates and
       // the cross-board server-data refresh used there.
@@ -1158,7 +1314,7 @@ const TableView = ({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [_currentProject, _sections, archiveTaskFromTable, changeBoardLayout, createTaskInCurrentTableContext, expandSection, focusTo, handleBoardChange, openTask, rows, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
+  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, expandSection, focusTo, handleBoardChange, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
 
   const renderTaskRow = (task: ITask, flatIndex: number) => {
     const selected = selectedIndex === flatIndex;
@@ -1375,11 +1531,16 @@ const TableView = ({
     );
   };
 
+  const selectedAssignees = splitAssignees(assignTask?.assignees);
   let cursor = -1;
   return (
     // h-full fills the flex-sized board column (rail shell), so the horizontal
     // scrollbar sits at the bottom of the viewport instead of under the last row.
-    <div className="w-full h-full min-h-0 bg-taskDetailPage overflow-x-auto overflow-y-auto table-hscroll" style={{ maxHeight: "calc(100vh - 64px)" }}>
+    <div
+      data-task-shortcuts={rowShortcutsEnabled ? "enabled" : undefined}
+      className="w-full h-full min-h-0 bg-taskDetailPage overflow-x-auto overflow-y-auto table-hscroll"
+      style={{ maxHeight: "calc(100vh - 64px)" }}
+    >
       <div className="w-full px-4 pb-6 pt-3">
         <TableCreateTaskControl
           {...getTableCreateTaskControlProps({
@@ -1568,6 +1729,23 @@ const TableView = ({
       {showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands contextOptions={buildCommandContext()} />
+        </Suspense>
+      )}
+      {rowShortcutsEnabled && assignTask && _currentProject?.name && (
+        <Suspense fallback={null}>
+          <AssignModal
+            onClose={closeAssignModal}
+            project={_currentProject}
+            task={{
+              id: assignTask.id,
+              title: assignTask.title ?? "",
+              link: "",
+            }}
+            assignees={[
+              ...selectedAssignees.humanAssignees,
+              ...selectedAssignees.agentAssignees,
+            ]}
+          />
         </Suspense>
       )}
     </div>
