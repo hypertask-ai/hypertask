@@ -385,6 +385,25 @@ export async function runCoreActionsSmoke(options: {
     });
   };
 
+  const claimReturnedActivityIds = async (
+    response: JsonResponse,
+    persist: boolean,
+  ) => {
+    const ids = response.data?.activityCommentIds;
+    if (!Array.isArray(ids) || ids.length === 0) return false;
+    let claimed = 0;
+    for (const raw of ids) {
+      const id = Number(raw);
+      if (!Number.isSafeInteger(id)) continue;
+      knownCommentIds.add(id);
+      ownedCommentIds.add(id);
+      claimed += 1;
+    }
+    if (claimed === 0) return false;
+    if (persist) await persistOwnedCommentIds();
+    return true;
+  };
+
   const rememberCommentIds = (comments: any[]) => {
     for (const comment of comments) {
       const id = Number(comment?.id);
@@ -590,17 +609,22 @@ export async function runCoreActionsSmoke(options: {
       }
       if (assigneeHasUser(task, fixture.userId)) {
         const recoveryRows = assigneeRowCountForUser(task, fixture.userId);
-        await assign("recover interrupted assignment", "unassign");
-        await captureNewFixtureActivity(
-          "capture recovery assignment activity",
-          true,
-          false,
-          {
-            updatedStatus: "Unassigned",
-            allowMultiple: true,
-            maxCandidates: Math.max(recoveryRows, 1),
-          },
+        const recoveryUnassign = await assign(
+          "recover interrupted assignment",
+          "unassign",
         );
+        if (!(await claimReturnedActivityIds(recoveryUnassign, false))) {
+          await captureNewFixtureActivity(
+            "capture recovery assignment activity",
+            true,
+            false,
+            {
+              updatedStatus: "Unassigned",
+              allowMultiple: true,
+              maxCandidates: Math.max(recoveryRows, 1),
+            },
+          );
+        }
       }
       await deleteOwnedComments();
       ownedCommentIds.clear();
@@ -746,10 +770,15 @@ export async function runCoreActionsSmoke(options: {
     }
     steps.push("move task");
 
-    await assign("assign user", "assign");
-    await captureNewFixtureActivity("capture assignment activity", true, true, {
-      updatedStatus: "Assigned",
-    });
+    const assignResponse = await assign("assign user", "assign");
+    if (!(await claimReturnedActivityIds(assignResponse, true))) {
+      await captureNewFixtureActivity(
+        "capture assignment activity",
+        true,
+        true,
+        { updatedStatus: "Assigned" },
+      );
+    }
     const assigned = await getBoardTask("verify assignment");
     if (!assigneeHasUser(assigned, fixture.userId)) {
       throw new SmokeFailure(
@@ -760,17 +789,19 @@ export async function runCoreActionsSmoke(options: {
       );
     }
     const unassignRows = assigneeRowCountForUser(assigned, fixture.userId);
-    await assign("unassign user", "unassign");
-    await captureNewFixtureActivity(
-      "capture unassignment activity",
-      true,
-      true,
-      {
-        updatedStatus: "Unassigned",
-        allowMultiple: true,
-        maxCandidates: Math.max(unassignRows, 1),
-      },
-    );
+    const unassignResponse = await assign("unassign user", "unassign");
+    if (!(await claimReturnedActivityIds(unassignResponse, true))) {
+      await captureNewFixtureActivity(
+        "capture unassignment activity",
+        true,
+        true,
+        {
+          updatedStatus: "Unassigned",
+          allowMultiple: true,
+          maxCandidates: Math.max(unassignRows, 1),
+        },
+      );
+    }
     const unassigned = await getBoardTask("verify unassignment");
     if (assigneeHasUser(unassigned, fixture.userId)) {
       throw new SmokeFailure(
@@ -859,17 +890,22 @@ export async function runCoreActionsSmoke(options: {
         const current = await getTask("cleanup assignment read");
         if (assigneeHasUser(current, fixture.userId)) {
           const cleanupRows = assigneeRowCountForUser(current, fixture.userId);
-          await assign("cleanup assignment", "unassign");
-          await captureNewFixtureActivity(
-            "capture cleanup assignment activity",
-            true,
-            true,
-            {
-              updatedStatus: "Unassigned",
-              allowMultiple: true,
-              maxCandidates: Math.max(cleanupRows, 1),
-            },
+          const cleanupUnassign = await assign(
+            "cleanup assignment",
+            "unassign",
           );
+          if (!(await claimReturnedActivityIds(cleanupUnassign, true))) {
+            await captureNewFixtureActivity(
+              "capture cleanup assignment activity",
+              true,
+              true,
+              {
+                updatedStatus: "Unassigned",
+                allowMultiple: true,
+                maxCandidates: Math.max(cleanupRows, 1),
+              },
+            );
+          }
           cleanup.push("removed test-user assignment");
         }
         if (ownedCommentIds.size > 0) {

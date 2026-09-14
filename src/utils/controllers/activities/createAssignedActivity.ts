@@ -63,10 +63,11 @@ const createAssignedActivity = async ({
       toAgent: toAgent ?? undefined,
     },
   };
-  createActivity({
+  const comment = await createActivity({
     activityBody,
     taskId,
   });
+  return Number.isSafeInteger(Number(comment?.id)) ? Number(comment.id) : null;
 };
 
 export default createAssignedActivity;

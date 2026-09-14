@@ -484,8 +484,9 @@ function fakeApp(
     if (url.pathname === "/api/assignees/assign") {
       if (body.intent === "assign") {
         state.assignees.push({ agentId: null, userId: fixture.userId });
+        const activityId = state.nextCommentId++;
         state.comments.push({
-          id: state.nextCommentId++,
+          id: activityId,
           text: "",
           activity: {
             type: "TaskAssigned",
@@ -496,34 +497,42 @@ function fakeApp(
             },
           },
         });
-      } else {
-        // HTPR-6428: userId unassign clears human + owned-agent rows and emits
-        // one Unassigned activity per removed row.
-        const removed = state.assignees.filter(
-          (row) => row.userId === fixture.userId,
-        );
-        state.assignees = state.assignees.filter(
-          (row) => row.userId !== fixture.userId,
-        );
-        for (const row of removed) {
-          state.comments.push({
-            id: state.nextCommentId++,
-            text: "",
-            activity: {
-              type: "TaskAssigned",
-              data: {
-                fromUserId: fixture.userId,
-                toUser: { userId: fixture.userId },
-                updatedStatus: "Unassigned",
-                ...(row.agentId ? { toAgent: { id: row.agentId } } : {}),
-              },
+        return json({
+          body: state.assignees,
+          assignStatus: "Assigned",
+          activityCommentIds: [activityId],
+        });
+      }
+      // HTPR-6428: userId unassign clears human + owned-agent rows and emits
+      // one Unassigned activity per removed row.
+      const removed = state.assignees.filter(
+        (row) => row.userId === fixture.userId,
+      );
+      state.assignees = state.assignees.filter(
+        (row) => row.userId !== fixture.userId,
+      );
+      const activityCommentIds: number[] = [];
+      for (const row of removed) {
+        const activityId = state.nextCommentId++;
+        activityCommentIds.push(activityId);
+        state.comments.push({
+          id: activityId,
+          text: "",
+          activity: {
+            type: "TaskAssigned",
+            data: {
+              fromUserId: fixture.userId,
+              toUser: { userId: fixture.userId },
+              updatedStatus: "Unassigned",
+              ...(row.agentId ? { toAgent: { id: row.agentId } } : {}),
             },
-          });
-        }
+          },
+        });
       }
       return json({
         body: state.assignees,
-        assignStatus: body.intent === "assign" ? "Assigned" : "Unassigned",
+        assignStatus: "Unassigned",
+        activityCommentIds,
       });
     }
     if (url.pathname === "/api/section/getProjectSections") {

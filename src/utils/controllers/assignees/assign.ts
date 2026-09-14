@@ -221,6 +221,8 @@ const assigneesAssign = async (
       allowHumanOverride,
     };
 
+    let activityCommentIds: number[] = [];
+
     if (intent === "assign") {
       if (!assign) {
         const result = await createAssignee({
@@ -231,6 +233,14 @@ const assigneesAssign = async (
         });
         assignmentOutcome = result.outcome;
         assignStatus = result.outcome === "stale-task" ? "Conflict" : "Assigned";
+        if (
+          result.outcome === "created" &&
+          Number.isSafeInteger(Number((result as { activityCommentId?: number }).activityCommentId))
+        ) {
+          activityCommentIds = [
+            Number((result as { activityCommentId?: number }).activityCommentId),
+          ];
+        }
       } else {
         // Already assigned is an idempotent success. assignmentOutcome below
         // still tells callers whether this request created a row.
@@ -245,7 +255,8 @@ const assigneesAssign = async (
             assign,
             assigneeIntent: "Unassigned",
           });
-          if (removalOutcome === "stale-task") {
+          activityCommentIds = removalOutcome.activityCommentIds;
+          if (removalOutcome.outcome === "stale-task") {
             assignmentOutcome = "stale-task";
             assignStatus = "Conflict";
           }
@@ -258,7 +269,8 @@ const assigneesAssign = async (
           assigns: matchingAssignees,
           assigneeIntent: "Unassigned",
         });
-        if (removalOutcome === "stale-task") {
+        activityCommentIds = removalOutcome.activityCommentIds;
+        if (removalOutcome.outcome === "stale-task") {
           assignmentOutcome = "stale-task";
           assignStatus = "Conflict";
         }
@@ -274,6 +286,14 @@ const assigneesAssign = async (
           expectedSectionId: options?.expectedSectionId ?? task.sectionId,
         });
         assignmentOutcome = result.outcome;
+        if (
+          result.outcome === "created" &&
+          Number.isSafeInteger(Number((result as { activityCommentId?: number }).activityCommentId))
+        ) {
+          activityCommentIds = [
+            Number((result as { activityCommentId?: number }).activityCommentId),
+          ];
+        }
       } else {
         assignStatus = "Unassigned";
         const removalOutcome = await removeAssignee({
@@ -281,7 +301,8 @@ const assigneesAssign = async (
           assign,
           assigneeIntent: "Unassigned",
         });
-        if (removalOutcome === "stale-task") {
+        activityCommentIds = removalOutcome.activityCommentIds;
+        if (removalOutcome.outcome === "stale-task") {
           assignmentOutcome = "stale-task";
           assignStatus = "Conflict";
         }
@@ -318,7 +339,7 @@ const assigneesAssign = async (
 
     return {
       status: 200,
-      json: { body: assignees, assignStatus, assignmentOutcome },
+      json: { body: assignees, assignStatus, assignmentOutcome, activityCommentIds },
     };
   } catch (error) {
     if (error instanceof AgentMutationLeaseConflictError) {
@@ -542,7 +563,7 @@ const createAssignee = async ({
   const assign = result.assign;
 
   // ======================= create activity of task assignment
-  createAssignedActivity({
+  const activityCommentId = await createAssignedActivity({
     taskId: taskId,
     updatedStatus: "Assigned",
     toUser: {
@@ -617,7 +638,7 @@ const createAssignee = async ({
       );
     }
   }
-  return result;
+  return { ...result, activityCommentId };
 };
 
 interface IRemoveAssigneeProps extends ICreateAssigneeProps {
@@ -796,15 +817,21 @@ const removeMatchingAssignees = async ({
   });
 
   if ("staleTask" in removal && removal.staleTask) {
-    return "stale-task" as const;
+    return { outcome: "stale-task" as const, activityCommentIds: [] as number[] };
   }
-  if (removal.removed.length === 0) return "already-unassigned" as const;
+  if (removal.removed.length === 0) {
+    return {
+      outcome: "already-unassigned" as const,
+      activityCommentIds: [] as number[],
+    };
+  }
 
   await publishAgentWebhookDeliveries(removal.agentWebhookDeliveryIds);
   await publishBoardWebhookDeliveries(removal.boardWebhookDeliveryIds);
 
+  const activityCommentIds: number[] = [];
   for (const assign of removal.removed) {
-    await finishRemovingAssignee({
+    const activityCommentId = await finishRemovingAssignee({
       afterAppDomain,
       devices,
       taskId,
@@ -819,8 +846,9 @@ const removeMatchingAssignees = async ({
       expectedSectionId,
       allowHumanOverride,
     });
+    if (activityCommentId != null) activityCommentIds.push(activityCommentId);
   }
-  return "removed" as const;
+  return { outcome: "removed" as const, activityCommentIds };
 };
 
 const removeAssignee = async ({
@@ -934,13 +962,18 @@ const removeAssignee = async ({
     return { removed: true, webhookDeliveryId, boardWebhookDeliveryIds };
   });
   if ("staleTask" in removal && removal.staleTask) {
-    return "stale-task" as const;
+    return { outcome: "stale-task" as const, activityCommentIds: [] as number[] };
   }
-  if (!removal.removed) return "already-unassigned" as const;
+  if (!removal.removed) {
+    return {
+      outcome: "already-unassigned" as const,
+      activityCommentIds: [] as number[],
+    };
+  }
   await publishAgentWebhookDeliveries([removal.webhookDeliveryId]);
   await publishBoardWebhookDeliveries(removal.boardWebhookDeliveryIds);
 
-  await finishRemovingAssignee({
+  const activityCommentId = await finishRemovingAssignee({
     afterAppDomain,
     devices,
     taskId,
@@ -955,7 +988,11 @@ const removeAssignee = async ({
     expectedSectionId,
     allowHumanOverride,
   });
-  return "removed" as const;
+  return {
+    outcome: "removed" as const,
+    activityCommentIds:
+      activityCommentId != null ? [activityCommentId] : ([] as number[]),
+  };
 };
 
 const finishRemovingAssignee = async ({
@@ -971,7 +1008,7 @@ const finishRemovingAssignee = async ({
   skipNotificationCleanup,
 }: IRemoveAssigneeProps) => {
   // ======================== handle assignment activity
-  createAssignedActivity({
+  const activityCommentId = await createAssignedActivity({
     taskId: taskId,
     updatedStatus: "Unassigned",
     toUser: {
@@ -1041,6 +1078,7 @@ const finishRemovingAssignee = async ({
       task.id
     );
   }
+  return activityCommentId;
 };
 
 export const clearHumanAssignees = async (
