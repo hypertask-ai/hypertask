@@ -12,7 +12,7 @@ import assigneesAssign from "@/utils/controllers/assignees/assign";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { IUser } from "@/models/model";
 import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server";
-import { ACTIVE_TASK_MUTATION_STATUS } from "@/lib/mcp/tasks/activeTaskMutation";
+import { assigneeLookupStatusFilter } from "@/lib/mcp/tasks/activeTaskMutation";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
@@ -87,12 +87,13 @@ async function findTaskByIdentifier(
 
   if (orConditions.length === 0) return null;
 
+  const statusFilter = assigneeLookupStatusFilter(
+    allowNonNormalStatus ? "unassign" : "assign"
+  );
   const tasks = await prisma.task.findMany({
     where: {
       OR: orConditions,
-      ...(allowNonNormalStatus
-        ? {}
-        : { status: ACTIVE_TASK_MUTATION_STATUS }),
+      ...(statusFilter ? { status: statusFilter } : {}),
       project: getProjectWhere(user.id, agentId),
     },
     select: { id: true, projectId: true },

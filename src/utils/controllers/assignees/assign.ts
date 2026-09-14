@@ -686,9 +686,11 @@ const removeMatchingAssignees = async ({
         where: { id: taskId },
         select: { projectId: true, sectionId: true, status: true },
       });
+      // Removals may target Archive/Deleted tasks (HTPR-6428). Only the
+      // project/section race check applies here; createAssignee still requires
+      // Normal.
       if (
         !currentTask ||
-        currentTask.status !== "Normal" ||
         (expectedProjectId !== undefined &&
           currentTask.projectId !== expectedProjectId) ||
         (expectedSectionId !== undefined &&
@@ -830,9 +832,11 @@ const removeAssignee = async ({
         where: { id: taskId },
         select: { projectId: true, sectionId: true, status: true },
       });
+      // Removals may target Archive/Deleted tasks (HTPR-6428). Only the
+      // project/section race check applies here; createAssignee still requires
+      // Normal.
       if (
         !currentTask ||
-        currentTask.status !== "Normal" ||
         (expectedProjectId !== undefined &&
           currentTask.projectId !== expectedProjectId) ||
         (expectedSectionId !== undefined &&
