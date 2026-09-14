@@ -187,11 +187,13 @@ export async function turbopufferGetDocuments(
     // ranked by relevance, and sorting by timestamp buried the best matches
     // under whatever was most recently updated (so "stripe" surfaced recent
     // migration tickets instead of the Stripe tasks).
-    const commentTextByTaskId = new Map<number, string>();
+    const commentTextByTaskId = new Map<number, string[]>();
     for (const hit of commentHits) {
       const taskId = parseInt(hit.document.taskId, 10);
-      if (!Number.isInteger(taskId) || commentTextByTaskId.has(taskId)) continue;
-      commentTextByTaskId.set(taskId, String(hit.document.commentText ?? ""));
+      if (!Number.isInteger(taskId)) continue;
+      const texts = commentTextByTaskId.get(taskId) ?? [];
+      texts.push(String(hit.document.commentText ?? ""));
+      commentTextByTaskId.set(taskId, texts);
     }
 
     const seenTaskIds = new Set<number>();
@@ -226,7 +228,9 @@ export async function turbopufferGetDocuments(
           status: hit.document.status,
           updatedAt: hit.document.updatedAt,
           uniqueIndex: hit.document.uniqueIndex,
-          commentText: commentTextByTaskId.get(parseInt(hit.document.id, 10)),
+          commentText: commentTextByTaskId
+            .get(parseInt(hit.document.id, 10))
+            ?.join(" "),
         };
         processedData.push({ ...data });
       } else if (hit.collection === searchConfig.collections.comment.name) {

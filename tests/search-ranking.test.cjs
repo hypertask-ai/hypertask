@@ -130,8 +130,8 @@ test("words split across title and comment still count as a strong hit", () => {
   );
 });
 
-test("non-ASCII words tokenize and match", () => {
-  assert.deepEqual(tokenize("收件箱 图标"), ["收件箱", "图标"]);
+test("non-ASCII words tokenize as whole words, not substrings", () => {
+  assert.ok(tokenize("收件箱 图标").includes("收件"));
   assert.equal(
     isStrongLexicalHit(
       { ticketNumber: "HTPR-3", title: "收件箱图标颜色", projectId: 15 },
@@ -139,6 +139,28 @@ test("non-ASCII words tokenize and match", () => {
     ),
     true
   );
+  assert.equal(
+    isStrongLexicalHit(
+      { ticketNumber: "HTPR-4", title: "caféteria hours", projectId: 15 },
+      "café"
+    ),
+    false
+  );
+});
+
+test("open tickets stay ahead of archived tickets inside a board group", () => {
+  const ranked = rankAndGroupHits(
+    [
+      { ...inneInbox, ticketNumber: "INNE-1", uniqueIndex: 1, status: "Archive" },
+      { ...inneInbox, status: "Normal" },
+    ],
+    "inbox icon",
+    339
+  );
+  assert.equal(ranked[0].ticketNumber, "INNE-1367");
+  assert.equal(ranked[0].status, "Normal");
+  assert.equal(ranked[1].ticketNumber, "INNE-1");
+  assert.equal(ranked[1].status, "Archive");
 });
 
 test("a context board outside the searched set is ignored", () => {

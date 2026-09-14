@@ -12,6 +12,7 @@ export type SearchRankHit = {
   commentText?: string | null;
   projectId: number;
   uniqueIndex?: number | null;
+  status?: string | null;
 };
 
 export type SearchResultGroup = "current-board" | "other";
@@ -42,9 +43,17 @@ export function parseTicketSearchQuery(query: string): TicketSearchQuery | null 
 }
 
 export function tokenize(value: string): string[] {
-  return Array.from(
-    new Set(value.toLowerCase().match(/[\p{L}\p{N}_-]+/gu) ?? [])
-  );
+  const normalized = value.toLowerCase();
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const segmenter = new Intl.Segmenter("und", { granularity: "word" });
+    const tokens: string[] = [];
+    for (const { segment, isWordLike } of segmenter.segment(normalized)) {
+      if (isWordLike) tokens.push(segment);
+    }
+    return Array.from(new Set(tokens));
+  }
+
+  return Array.from(new Set(normalized.match(/[\p{L}\p{N}_-]+/gu) ?? []));
 }
 
 export function isExactTicketHit(
@@ -87,15 +96,7 @@ export function isStrongLexicalHit(hit: SearchRankHit, query: string): boolean {
     .toLowerCase();
   const haystackTokens = new Set(tokenize(haystackText));
 
-  return queryTokens.every(
-    (token) =>
-      haystackTokens.has(token) ||
-      (hasNonAsciiLetter(token) && haystackText.includes(token))
-  );
-}
-
-function hasNonAsciiLetter(value: string): boolean {
-  return /[^\u0000-\u007f]/.test(value);
+  return queryTokens.every((token) => haystackTokens.has(token));
 }
 
 export function rankAndGroupHits<T extends SearchRankHit>(
@@ -117,7 +118,10 @@ export function rankAndGroupHits<T extends SearchRankHit>(
     : strongHits;
 
   if (contextProjectId === null) {
-    return [...exactHits, ...restHits];
+    return [
+      ...openBeforeArchived(exactHits),
+      ...openBeforeArchived(restHits),
+    ];
   }
 
   const currentHits = restHits.filter(
@@ -126,9 +130,22 @@ export function rankAndGroupHits<T extends SearchRankHit>(
   const otherHits = restHits.filter((hit) => hit.projectId !== contextProjectId);
 
   return [
-    ...exactHits.map((hit) => withGroup(hit, contextProjectId)),
-    ...currentHits.map((hit) => withGroup(hit, contextProjectId)),
-    ...otherHits.map((hit) => withGroup(hit, contextProjectId)),
+    ...openBeforeArchived(exactHits).map((hit) =>
+      withGroup(hit, contextProjectId)
+    ),
+    ...openBeforeArchived(currentHits).map((hit) =>
+      withGroup(hit, contextProjectId)
+    ),
+    ...openBeforeArchived(otherHits).map((hit) =>
+      withGroup(hit, contextProjectId)
+    ),
+  ];
+}
+
+function openBeforeArchived<T extends SearchRankHit>(items: T[]): T[] {
+  return [
+    ...items.filter((item) => item.status !== "Archive"),
+    ...items.filter((item) => item.status === "Archive"),
   ];
 }
 
