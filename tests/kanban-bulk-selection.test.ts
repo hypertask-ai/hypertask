@@ -3,7 +3,13 @@ import test from "node:test";
 
 import { CommandMode } from "../src/models/enums";
 import { getAllCommands } from "../src/components/Modals/commands/HTC/AllCommands";
-import { getInclusiveRange, toggleId } from "../src/lib/kanbanBulkSelection";
+import {
+  getInclusiveRange,
+  getSharedProjectId,
+  getTaskIdsByGroup,
+  toggleId,
+  toggleVisibleIds,
+} from "../src/lib/kanbanBulkSelection";
 
 test("range selection includes every card between the anchor and target", () => {
   assert.deepEqual(getInclusiveRange([11, 12, 13, 14], 13, 11), [11, 12, 13]);
@@ -17,6 +23,30 @@ test("toggling selection adds and removes one task without changing others", () 
   const selected = new Set([11, 13]);
   assert.deepEqual([...toggleId(selected, 12)], [11, 13, 12]);
   assert.deepEqual([...toggleId(selected, 11)], [13]);
+});
+
+test("table range groups keep My Tasks boards separate", () => {
+  const groups = getTaskIdsByGroup(
+    [
+      { id: 11, projectId: 3 },
+      { id: 12, projectId: 3 },
+      { id: 21, projectId: 4 },
+    ],
+    (task) => task.projectId,
+  );
+  assert.deepEqual(getInclusiveRange(groups.get(3) ?? [], 11, 12), [11, 12]);
+  assert.deepEqual(getInclusiveRange(groups.get(4) ?? [], 11, 21), [21]);
+});
+
+test("select all toggles only the visible task ids", () => {
+  assert.deepEqual([...toggleVisibleIds(new Set([99]), [11, 12])], [99, 11, 12]);
+  assert.deepEqual([...toggleVisibleIds(new Set([99, 11, 12]), [11, 12])], [99]);
+});
+
+test("project-scoped bulk actions require one shared board", () => {
+  assert.equal(getSharedProjectId([{ projectId: 3 }, { projectId: 3 }]), 3);
+  assert.equal(getSharedProjectId([{ projectId: 3 }, { projectId: 4 }]), null);
+  assert.equal(getSharedProjectId([]), null);
 });
 
 test("the command center exposes batch actions only when tasks are selected", () => {

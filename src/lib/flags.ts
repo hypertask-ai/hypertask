@@ -47,6 +47,7 @@ import {
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
+  HTPR_6444_TABLE_BULK_SELECT_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -70,6 +71,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6444_TABLE_BULK_SELECT_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Adds Inbox-style multi-selection and Kanban bulk actions to table rows on My Tasks.",
+  },
   {
     key: HTPR_6427_ROW_SHORTCUTS_FLAG,
     shippedOn: "2026-09-14",
