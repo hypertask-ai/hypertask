@@ -116,7 +116,7 @@ export function rankAndGroupHits<T extends SearchRankHit>(
     ? strongHits.filter((hit) => !isExactTicketHit(hit, ticketQuery))
     : strongHits;
 
-  if (contextProjectId == null) {
+  if (contextProjectId === null) {
     return [...exactHits, ...restHits];
   }
 

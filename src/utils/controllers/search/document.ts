@@ -147,7 +147,7 @@ export async function turbopufferGetDocuments(
             : DEFAULT_COMMENT_LIMIT,
           keywordOnly: true,
         }),
-        contextProjectId != null
+        contextProjectId !== null
           ? searchTasks({
               searchQuery,
               projectIds,
@@ -157,7 +157,7 @@ export async function turbopufferGetDocuments(
               keywordOnly: true,
             })
           : Promise.resolve([] as TurbopufferTaskRow[]),
-        contextProjectId != null
+        contextProjectId !== null
           ? searchComments({
               searchQuery,
               projectIds: [contextProjectId],
