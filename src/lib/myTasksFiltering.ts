@@ -217,7 +217,6 @@ export function applyMyTasksView(
   // evaluation. Default/undefined keeps legacy flat filtering when settings are empty.
   const config =
     options.applyFilterSettings === true &&
-    !parsed.filterSettings?.addedFilters?.length &&
     hasMigratableFlatFilters(parsed.filters)
       ? migrateFlatFiltersToFilterSettings(parsed)
       : parsed;

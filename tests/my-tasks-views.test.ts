@@ -456,6 +456,34 @@ test("migrate merges flat edits into existing filterSettings", () => {
   );
 });
 
+test("apply migrates flat edits even when filterSettings already exist", () => {
+  const tasks = [
+    task(1, { priority: { priority_index: 2 } as MyTasksTask["priority"] }),
+    task(2, { priority: { priority_index: 1 } as MyTasksTask["priority"] }),
+  ];
+
+  assert.deepEqual(
+    applyMyTasksView(
+      tasks,
+      config({
+        filters: {
+          ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+          priorityIds: [2],
+        },
+        filterSettings: {
+          matchFilters: "ANY",
+          addedFilters: [{ type: "Inbox", searchPayload: [{ id: 0 }] }],
+        },
+      }),
+      NOW,
+      { applyFilterSettings: true },
+    ).map(({ id }) => id),
+    // Inbox alone would keep both; merged Priority keeps only task 1.
+    // Tasks without inbox still fail Inbox unless they match ANY with Priority.
+    [1],
+  );
+});
+
 test("filterSettings path still applies flat starred:false", () => {
   const high = PriorityConstants.find((p) => p.priority_index === 2)!;
   const tasks = [
