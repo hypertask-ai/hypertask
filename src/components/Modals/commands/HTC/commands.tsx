@@ -53,7 +53,7 @@ import {
   isInboxClusterCommandKey,
   type InboxCluster,
 } from "@/lib/inboxClusters";
-import { INBOX_ARCHIVE_CLUSTER_FLAG } from "@/lib/flags/keys";
+import { INBOX_ARCHIVE_CLUSTER_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 
 type Props = {
   handleAction?: (mode?: CommandMode, action?: string) => void;
@@ -92,8 +92,13 @@ const Commands = (props: Props) => {
   // settings from the applied saved view on mount and overwrites them.
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
+  const onMyTasks = !!pathname?.startsWith("/my-tasks");
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
+  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksTableColumnsCommand =
+    onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -158,7 +163,8 @@ const Commands = (props: Props) => {
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
-              boardLayout === "table") &&
+              boardLayout === "table" ||
+              myTasksTableColumnsCommand) &&
             (![
               CommandMode.ToggleCalendarWeekends,
               CommandMode.CalendarWeekStartsMonday,
@@ -279,6 +285,7 @@ const Commands = (props: Props) => {
     isMobile,
     onAgentChat,
     onCalendar,
+    myTasksTableColumnsCommand,
     projects,
     showByokApiKeys,
   ])

@@ -7,7 +7,7 @@ import { IAssignees, IProject, ISection, ITask } from "@/models/model";
 import type { MyTasksSortField, MyTasksViewConfig } from "@/models/MyTasksView";
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useShowArchivedOnBoard } from "@/hooks/Homepage/useShowArchivedOnBoard";
-import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
+import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
 import type { SortingOrder } from "@prisma/client";
 import type { CustomFieldType } from "@prisma/client";
 import {
@@ -37,6 +37,7 @@ import type { IAllCommands } from "@/models/model";
 import { CommandMode } from "@/models/enums";
 import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
 import EstimateLabelComponent from "@/components/Modals/TaskEstimate/EstimateLabelComponent";
+import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelComponent";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import formatDateDifference, { formatDateWithYearIfPast } from "@/utils/generateTime";
 import { daysSince, stalenessLevel } from "@/lib/staleness";
@@ -92,7 +93,7 @@ const LABEL_CLASS = "border-border-labelComponent text-label-component";
 const MIN_COLUMN_WIDTH_PX = 60;
 type TaskRow = { type: "task"; task: ITask; sid: string | number };
 type Row = TaskRow | { type: "more"; sid: string | number; hidden: number };
-type StaticSortColumn = "ticket" | "title" | "status" | "assignee" | "priority" | "size" | "due" | "inColumn" | "noComment" | "onBoard" | "time" | "created" | "updated";
+type StaticSortColumn = "ticket" | "title" | "board" | "status" | "assignee" | "priority" | "size" | "labels" | "due" | "inColumn" | "noComment" | "onBoard" | "time" | "created" | "updated";
 type CustomFieldSortColumn = `customField:${string}`;
 type SortColumn = StaticSortColumn | CustomFieldSortColumn;
 type SortDirection = "asc" | "desc";
@@ -107,6 +108,9 @@ type TableViewProps = {
   myTasksSort?: MyTasksViewConfig["sort"];
   myTasksSortKey?: number | null;
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
+  /** Controlled My Tasks columns. When set, never reads/writes the board localStorage atom. */
+  myTasksVisibleColumns?: string[];
+  onMyTasksVisibleColumnsChange?: (columns: string[]) => void;
 };
 const TASK_SHORTCUT_COMMAND_MODES: Partial<
   Record<TaskShortcutAction, CommandMode>
@@ -135,10 +139,12 @@ const isTaskRow = (row: Row): row is TaskRow => row.type === "task";
 const tableColumns: TableColumn[] = [
   { key: "ticket", label: "Ticket", width: "90px" },
   { key: "title", label: "Title", width: "minmax(200px,1fr)" },
+  { key: "board", label: "Board", width: "120px" },
   { key: "status", label: "Status", width: "110px" },
   { key: "assignee", label: "Assignee", width: "64px" },
   { key: "priority", label: "Priority", width: "100px" },
   { key: "size", label: "Size", width: "80px" },
+  { key: "labels", label: "Labels", width: "140px" },
   { key: "due", label: "Due", width: "104px" },
   { key: "inColumn", label: "In column", width: "84px" },
   { key: "noComment", label: "No comment", width: "92px" },
@@ -420,6 +426,8 @@ const TableView = ({
   myTasksSort,
   myTasksSortKey,
   onMyTasksSortChange,
+  myTasksVisibleColumns,
+  onMyTasksVisibleColumnsChange,
 }: TableViewProps) => {
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
@@ -434,7 +442,31 @@ const TableView = ({
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
   const isApple = useDeviceContext();
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
-  const [storedVisibleColumns, setStoredVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
+  const myTasksColumnsControlled = myTasksVisibleColumns !== undefined;
+  const [atomVisibleColumns, setAtomVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
+  const storedVisibleColumns = myTasksColumnsControlled
+    ? myTasksVisibleColumns
+    : atomVisibleColumns;
+  const normalizeVisibleColumns = myTasksColumnsControlled
+    ? normalizeMyTasksTableVisibleColumns
+    : normalizeTableVisibleColumns;
+  const setStoredVisibleColumns = useCallback(
+    (next: string[] | ((current: string[]) => string[])) => {
+      if (myTasksColumnsControlled) {
+        if (!onMyTasksVisibleColumnsChange) return;
+        const current = normalizeMyTasksTableVisibleColumns(myTasksVisibleColumns);
+        onMyTasksVisibleColumnsChange(typeof next === "function" ? next(current) : next);
+        return;
+      }
+      setAtomVisibleColumns(next);
+    },
+    [
+      myTasksColumnsControlled,
+      myTasksVisibleColumns,
+      onMyTasksVisibleColumnsChange,
+      setAtomVisibleColumns,
+    ],
+  );
   const [timeColumnSeededBoards, setTimeColumnSeededBoards] = useRecoilState(
     tableTimeColumnSeededBoardsAtom,
   );
@@ -605,6 +637,7 @@ const TableView = ({
     (key: string): TableColumn | undefined => {
       if (key === "time" && !_currentProject?.showTimeTotals) return undefined;
       if (isCustomFieldColumnKey(key)) {
+        if (myTasksColumnsControlled) return undefined;
         const field = customFieldById.get(customFieldIdFromColumnKey(key));
         if (!field) return undefined; // stored id for a field that's since been deleted
         if (field.showInTable === false) return undefined; // hidden board-wide via manage-custom-fields
@@ -615,9 +648,14 @@ const TableView = ({
           className: field.type === "Number" ? "text-right" : undefined,
         };
       }
-      return tableColumnByKey.get(key as StaticSortColumn);
+      const column = tableColumnByKey.get(key as StaticSortColumn);
+      if (!column) return undefined;
+      if (myTasksColumnsControlled && key === "status") {
+        return { ...column, label: "Column" };
+      }
+      return column;
     },
-    [customFieldById, _currentProject?.showTimeTotals]
+    [customFieldById, _currentProject?.showTimeTotals, myTasksColumnsControlled]
   );
   // Custom fields, unlike the fixed built-in columns, are created at runtime and
   // need seeding into the stored order once (like DEFAULT_TABLE_COLUMNS seeds the
@@ -625,7 +663,7 @@ const TableView = ({
   // presence/absence is the user's own toggle choice via TableColumnsPicker,
   // same as any built-in column.
   useEffect(() => {
-    if (!customFields.length) return;
+    if (myTasksColumnsControlled || !customFields.length) return;
     // Fields hidden board-wide (showInTable: false) never get seeded as a
     // visible column — same rule toTableColumn enforces at render time.
     const customFieldKeys = customFields
@@ -635,8 +673,9 @@ const TableView = ({
       const seeded = seedMissingCustomFieldColumns(normalizeTableVisibleColumns(current), customFieldKeys);
       return seeded.length === current.length ? current : seeded;
     });
-  }, [customFields, setStoredVisibleColumns]);
+  }, [customFields, myTasksColumnsControlled, setStoredVisibleColumns]);
   useEffect(() => {
+    if (myTasksColumnsControlled) return;
     const projectId = _currentProject?.id;
     if (
       !projectId ||
@@ -655,19 +694,20 @@ const TableView = ({
   }, [
     _currentProject?.id,
     _currentProject?.showTimeTotals,
+    myTasksColumnsControlled,
     setStoredVisibleColumns,
     setTimeColumnSeededBoards,
     timeColumnSeededBoards,
   ]);
   const visibleColumns = useMemo(() => {
-    const normalized = normalizeTableVisibleColumns(storedVisibleColumns);
+    const normalized = normalizeVisibleColumns(storedVisibleColumns);
     // While sorted, 'status' shows regardless of the picker so the sorted-by
     // column is always visible; it disappears again once the sort clears.
     const keys = sortState.length > 0 && !normalized.includes("status")
       ? [normalized[0], normalized[1], "status", ...normalized.slice(2)]
       : normalized;
     return keys.map(toTableColumn).filter((column): column is TableColumn => Boolean(column));
-  }, [storedVisibleColumns, sortState, toTableColumn]);
+  }, [normalizeVisibleColumns, storedVisibleColumns, sortState, toTableColumn]);
   // A drag-resized column (feature 3) overrides its default base width; that
   // override becomes the column's minimum, same as the unresized default did.
   const getColumnWidth = useCallback(
@@ -743,7 +783,7 @@ const TableView = ({
     (fromKey: string, toKey: string) => {
       if (fromKey === toKey || LOCKED_TABLE_COLUMNS.has(fromKey) || LOCKED_TABLE_COLUMNS.has(toKey)) return;
       setStoredVisibleColumns((current) => {
-        const normalized = normalizeTableVisibleColumns(current);
+        const normalized = normalizeVisibleColumns(current);
         const from = normalized.indexOf(fromKey);
         const to = normalized.indexOf(toKey);
         if (from < 0 || to < 0) return current;
@@ -753,12 +793,15 @@ const TableView = ({
         return next;
       });
     },
-    [setStoredVisibleColumns]
+    [normalizeVisibleColumns, setStoredVisibleColumns]
   );
   // The 'status' column can appear in visibleColumns while sorted without being
   // in storedVisibleColumns (forced-visible injection above) — only columns
   // actually in the stored order are valid drag sources/targets.
-  const normalizedColumnOrder = useMemo(() => normalizeTableVisibleColumns(storedVisibleColumns), [storedVisibleColumns]);
+  const normalizedColumnOrder = useMemo(
+    () => normalizeVisibleColumns(storedVisibleColumns),
+    [normalizeVisibleColumns, storedVisibleColumns],
+  );
   const storedColumnKeys = useMemo(() => new Set(normalizedColumnOrder), [normalizedColumnOrder]);
 
   // HTPR-6215: sorting My Tasks by priority interleaves every board's tasks by
@@ -1394,6 +1437,29 @@ const TableView = ({
               {_currentProject
                 ? sectionTitleBySid.get(task.sectionId ?? "") ?? task.section
                 : task.section}
+            </span>
+          );
+        case "board":
+          return (
+            <span key="board" className="min-w-0 flex items-center text-[11px] text-text-light-gray truncate">
+              {task.project?.title ?? task.project?.name ?? ""}
+            </span>
+          );
+        case "labels":
+          return (
+            <span key="labels" className="min-w-0 flex items-center gap-1 overflow-hidden">
+              {task.taskLabels?.slice(0, 3).map((taskLabel) => (
+                <TaskLabelComponent
+                  key={`table-label-${taskLabel.id}`}
+                  stopPropogation={true}
+                  fontWeight={500}
+                  fontSize={11}
+                  onClick={openCurrentTask}
+                  flexBasis={false}
+                  labelValue={taskLabel.label?.value ?? ""}
+                  className={LABEL_CLASS}
+                />
+              ))}
             </span>
           );
         case "assignee":
