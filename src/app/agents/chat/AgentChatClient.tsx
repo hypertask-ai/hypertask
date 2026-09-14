@@ -83,7 +83,7 @@ import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { AiChatComposerActionRow } from "@/components/AI_CHAT/AiChatComposerActionRow";
-import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
+import { SendMessageButton } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
 import styles from "@/styles/tiptap.module.scss";

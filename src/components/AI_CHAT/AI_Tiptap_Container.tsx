@@ -47,6 +47,7 @@ import { sortBoardsByRecent } from "@/utils/aiChat/sortBoardsByRecent";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { SendMessageButton } from "./SendMessageButton";
+export { SendMessageButton } from "./SendMessageButton";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
 import toast from "react-hot-toast";
 import {

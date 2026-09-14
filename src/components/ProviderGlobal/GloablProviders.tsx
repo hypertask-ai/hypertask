@@ -172,7 +172,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_SHORTCUTS_WIDTH_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -572,9 +572,14 @@ export default function GlobalProvider({
   // including task detail. The bottom dock is the exception: hidden on detail
   // (shouldShowMobileDock) so the composer owns the bottom edge.
   // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
-  const agentChatMobileFullscreen = useRecoilValue(
+  const agentChatMobileFullscreenFlag = useFlag(
+    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+  );
+  const agentChatMobileFullscreenAtomOn = useRecoilValue(
     agentChatMobileFullscreenAtom,
   );
+  const agentChatMobileFullscreen =
+    agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn;
   const showMobileTabBar =
     mbl &&
     Boolean(currentUser?.id) &&

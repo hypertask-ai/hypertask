@@ -68,7 +68,7 @@ test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
 test("mobile fullscreen reuses AI send button and action row, not a new send control", () => {
   assert.match(sendButton, /export function SendMessageButton/);
   assert.match(tipTap, /from "\.\/SendMessageButton"/);
-  assert.match(chat, /from "@\/components\/AI_CHAT\/SendMessageButton"/);
+  assert.match(chat, /from "@\/components\/AI_CHAT\/AI_Tiptap_Container"/);
   assert.match(chat, /from "@\/components\/AI_CHAT\/AiChatComposerActionRow"/);
   assert.match(chat, /data-agent-chat-ai-composer/);
 
