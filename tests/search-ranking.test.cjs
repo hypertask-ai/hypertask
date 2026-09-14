@@ -149,6 +149,55 @@ test("non-ASCII words tokenize as whole words, not substrings", () => {
   );
 });
 
+test("a title phrase beats a title that only has the words out of order", () => {
+  const scrambledTitle = {
+    ticketNumber: "HTPR-3081",
+    title: "Archive and defer icon inbox overview mobile",
+    projectId: 15,
+    uniqueIndex: 3081,
+    status: "Archive",
+  };
+  const laterPhrase = {
+    ticketNumber: "HTPR-4286",
+    title: "icon first then later inbox icon on mobile",
+    projectId: 15,
+    uniqueIndex: 4286,
+    status: "Archive",
+  };
+  const ranked = rankAndGroupHits(
+    [scrambledTitle, { ...inboxIcon, status: "Archive" }, laterPhrase],
+    "inbox icon",
+    15
+  );
+  assert.equal(ranked[0].ticketNumber, "HTPR-6365");
+  assert.equal(ranked[1].ticketNumber, "HTPR-4286");
+  assert.equal(ranked[2].ticketNumber, "HTPR-3081");
+});
+
+test("a phrase is not assembled across ticket number and title", () => {
+  const acrossFields = {
+    ticketNumber: "HTPR-6365",
+    title: "Mobile calendar header",
+    projectId: 15,
+    uniqueIndex: 6365,
+    status: "Normal",
+  };
+  const realPhrase = {
+    ticketNumber: "HTPR-1",
+    title: "6365 mobile inbox",
+    projectId: 15,
+    uniqueIndex: 1,
+    status: "Normal",
+  };
+  const ranked = rankAndGroupHits(
+    [acrossFields, realPhrase],
+    "6365 mobile",
+    15
+  );
+  assert.equal(ranked[0].ticketNumber, "HTPR-1");
+  assert.equal(ranked[1].ticketNumber, "HTPR-6365");
+});
+
 test("an archived title match beats an open comment-only mention", () => {
   const thisTicket = {
     ticketNumber: "HTPR-6372",
