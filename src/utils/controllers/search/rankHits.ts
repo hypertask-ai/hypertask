@@ -96,15 +96,21 @@ export function isTitlePhraseHit(hit: SearchRankHit, query: string): boolean {
   const queryTokens = tokenizeInOrder(query);
   if (queryTokens.length === 0) return false;
 
-  const titleTokens = tokenizeInOrder(
-    [hit.ticketNumber, hit.title, hit.taskTitle]
-      .filter((value): value is string => Boolean(value))
-      .join(" ")
+  return [hit.ticketNumber, hit.title, hit.taskTitle].some((field) =>
+    containsOrderedTokens(field, queryTokens)
   );
-  if (titleTokens.length < queryTokens.length) return false;
+}
 
-  for (let index = 0; index <= titleTokens.length - queryTokens.length; index += 1) {
-    if (queryTokens.every((token, offset) => titleTokens[index + offset] === token)) {
+function containsOrderedTokens(
+  field: string | null | undefined,
+  queryTokens: string[]
+): boolean {
+  if (!field) return false;
+  const fieldTokens = tokenizeInOrder(field);
+  if (fieldTokens.length < queryTokens.length) return false;
+
+  for (let index = 0; index <= fieldTokens.length - queryTokens.length; index += 1) {
+    if (queryTokens.every((token, offset) => fieldTokens[index + offset] === token)) {
       return true;
     }
   }
