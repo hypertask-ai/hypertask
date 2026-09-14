@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
+import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
 
 export type BlockedByPersonOption = Pick<
   IUser,
@@ -13,11 +15,18 @@ export type BlockedByPersonOption = Pick<
 
 interface IProps {
   closeHandler: (user?: BlockedByPersonOption) => Promise<void>;
+  calendarMembers?: CalendarUserSummary[];
+  view?: "Kanban" | "Calendar" | "MyTasks";
 }
 
-export const useBlockedByPersonFilter = ({ closeHandler }: IProps) => {
+export const useBlockedByPersonFilter = ({
+  closeHandler,
+  calendarMembers,
+  view = "Kanban",
+}: IProps) => {
   const [keyword, setKeyword] = useState("");
   const currentProject = useRecoilValue(currentProjectAtom);
+  const myTasksFilters = useMyTasksFilterController();
   const { data: membersAndOwner } = useGetAllMembersForAssign(
     ["blocked-by-person-filter", currentProject?.id],
     currentProject?.id!
@@ -27,34 +36,57 @@ export const useBlockedByPersonFilter = ({ closeHandler }: IProps) => {
   >([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const activeFilter = getActiveFiltersFromProject(
+  const kanbanActive = getActiveFiltersFromProject(
     currentProject
   ).addedFilters.find((filter) => filter.type === "BlockedByPerson");
+  const myTasksActive = myTasksFilters?.activeFilters.addedFilters.find(
+    (filter) => filter.type === "BlockedByPerson"
+  );
+  // Calendar excludes this filter from its menu; keep active empty there.
+  const activeFilter =
+    view === "MyTasks"
+      ? myTasksActive
+      : view === "Calendar"
+        ? undefined
+        : kanbanActive;
 
   const activeFilters =
     (activeFilter?.searchPayload as BlockedByPersonOption[] | undefined) ?? [];
 
   const people = useMemo<BlockedByPersonOption[]>(() => {
     const uniqueUsers = new Map<number, BlockedByPersonOption>();
-    const owner = membersAndOwner?.owner as IUser | undefined;
-    if (owner) {
-      uniqueUsers.set(owner.id, {
-        id: owner.id,
-        displayName: owner.displayName,
-        photoURL: owner.photoURL,
-      });
-    }
-    for (const member of membersAndOwner?.members ?? []) {
-      if (member.user) {
-        uniqueUsers.set(member.user.id, {
-          id: member.user.id,
-          displayName: member.user.displayName,
-          photoURL: member.user.photoURL,
+    if ((view === "MyTasks" || view === "Calendar") && calendarMembers?.length) {
+      for (const user of calendarMembers) {
+        uniqueUsers.set(user.id, {
+          id: user.id,
+          displayName: user.displayName ?? "Unknown",
+          photoURL: user.photoURL ?? undefined,
         });
       }
+    } else {
+      const owner = membersAndOwner?.owner as IUser | undefined;
+      if (owner) {
+        uniqueUsers.set(owner.id, {
+          id: owner.id,
+          displayName: owner.displayName,
+          photoURL: owner.photoURL ?? undefined,
+        });
+      }
+      for (const member of membersAndOwner?.members ?? []) {
+        if (member.user) {
+          uniqueUsers.set(member.user.id, {
+            id: member.user.id,
+            displayName: member.user.displayName,
+            photoURL: member.user.photoURL ?? undefined,
+          });
+        }
+      }
     }
-    return [{ id: 0, displayName: "Anyone" }, ...uniqueUsers.values()];
-  }, [membersAndOwner]);
+    return [
+      { id: 0, displayName: "Anyone", photoURL: undefined },
+      ...uniqueUsers.values(),
+    ];
+  }, [membersAndOwner, calendarMembers, view]);
 
   const handleCommandSelect = (index: number) => {
     setSelectedIndex(index);

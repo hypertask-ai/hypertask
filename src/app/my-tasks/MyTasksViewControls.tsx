@@ -4,7 +4,12 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
-import { MY_TASKS_TIME_GROUP_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import {
+  MY_TASKS_FILTER_PARITY_FLAG,
+  MY_TASKS_TIME_GROUP_FLAG,
+  MY_TASKS_VIEWS_FLAG,
+} from "@/lib/flags/keys";
+import { migrateFlatFiltersToFilterSettings, myTasksParityFilterCount } from "@/lib/filterSettingsMutations";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
@@ -14,13 +19,14 @@ import {
   type MyTasksGroupBy,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
-import { ArrowUpDown, Layers, SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, Layers, LayoutGrid, SlidersHorizontal } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 interface Props {
   boards: MyTasksBoardMetadata[];
   config: MyTasksViewConfig;
   onChange: (config: MyTasksViewConfig) => void;
+  onOpenKanbanFilters?: () => void;
   timeGroupEnabled?: boolean;
 }
 
@@ -80,17 +86,22 @@ const MyTasksViewControls = ({
   boards,
   config,
   onChange,
+  onOpenKanbanFilters,
   timeGroupEnabled = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [scopeOpen, setScopeOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const scopeRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef, () => setFilterOpen(false));
+  useClickOutside(scopeRef, () => setScopeOpen(false));
   useClickOutside(sortRef, () => setSortOpen(false));
   useClickOutside(groupRef, () => setGroupOpen(false));
 
@@ -104,7 +115,7 @@ const MyTasksViewControls = ({
     () => boards.filter((board) => selectedBoardIds.includes(board.id)),
     [boards, selectedBoardIds],
   );
-  const filterCount = [
+  const flatFilterCount = [
     config.boardIds,
     config.filters.priorityIds.length ? config.filters.priorityIds : null,
     config.filters.labelIds.length ? config.filters.labelIds : null,
@@ -114,6 +125,13 @@ const MyTasksViewControls = ({
     config.filters.dueDate,
     config.filters.createdRange,
     config.filters.updatedRange,
+    config.filters.showDone ? true : null,
+  ].filter((value) => value !== null).length;
+
+  const kanbanFilterCount = myTasksParityFilterCount(config);
+  const scopeCount = [
+    config.boardIds,
+    config.filters.sectionIds.length ? config.filters.sectionIds : null,
     config.filters.showDone ? true : null,
   ].filter((value) => value !== null).length;
 
@@ -187,245 +205,385 @@ const MyTasksViewControls = ({
       ? "custom"
       : (config.filters.dueDate ?? "");
 
-  return myTasksViewsEnabled ? (
+  const scopePanel = (
+    <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,420px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
+      <div className="grid gap-5">
+        <Field label="Boards">
+          <CheckRow
+            checked={config.boardIds === null}
+            label="All boards"
+            onChange={() => setBoards(null)}
+          />
+          <div className="max-h-36 overflow-y-auto">
+            {boards.map((board) => (
+              <CheckRow
+                key={board.id}
+                checked={selectedBoardIds.includes(board.id)}
+                label={board.title}
+                onChange={() => toggleBoard(board.id)}
+              />
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Columns">
+          <div className="max-h-44 overflow-y-auto">
+            {selectedBoards.map((board) => (
+              <div key={board.id} className="mb-2">
+                <p className="px-1 text-micro text-text-light-gray">{board.title}</p>
+                {board.sections.map((section) => (
+                  <CheckRow
+                    key={section.id}
+                    checked={config.filters.sectionIds.includes(section.id)}
+                    label={section.title}
+                    onChange={() => toggleNumber("sectionIds", section.id)}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Completed tasks">
+          <CheckRow
+            checked={config.filters.showDone}
+            label="Show done"
+            onChange={() => updateFilters({ showDone: !config.filters.showDone })}
+          />
+        </Field>
+      </div>
+    </div>
+  );
+
+  if (!myTasksViewsEnabled) return null;
+
+  return (
     <div className="ml-auto flex shrink-0 items-center gap-1">
-      <div ref={filterRef} className="relative">
-        <button
-          type="button"
-          aria-label="Filter My Tasks"
-          aria-expanded={filterOpen}
-          onClick={() => {
-            setFilterOpen((open) => !open);
-            setSortOpen(false);
-            setGroupOpen(false);
-          }}
-          className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
-            filterCount > 0 ? "text-shadcn-primary" : "text-text-light-gray hover:text-white-black"
-          }`}
-        >
-          <SlidersHorizontal size={16} strokeWidth={1.5} />
-          <span className="hidden @md:inline">Filters</span>
-          {filterCount > 0 && <span className="text-meta font-semibold">{filterCount}</span>}
-        </button>
+      {filterParityEnabled ? (
+        <>
+          <div ref={scopeRef} className="relative">
+            <button
+              type="button"
+              aria-label="My Tasks scope"
+              aria-expanded={scopeOpen}
+              onClick={() => {
+                setScopeOpen((open) => !open);
+                setSortOpen(false);
+                setGroupOpen(false);
+              }}
+              className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
+                scopeCount > 0
+                  ? "text-shadcn-primary"
+                  : "text-text-light-gray hover:text-white-black"
+              }`}
+            >
+              <LayoutGrid size={16} strokeWidth={1.5} />
+              <span className="hidden @md:inline">Scope</span>
+              {scopeCount > 0 && (
+                <span className="text-meta font-semibold">{scopeCount}</span>
+              )}
+            </button>
+            {scopeOpen && scopePanel}
+          </div>
 
-        {filterOpen && (
-          <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,560px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
-            <div className="grid gap-5 @md:grid-cols-2">
-              <Field label="Boards">
-                <CheckRow
-                  checked={config.boardIds === null}
-                  label="All boards"
-                  onChange={() => setBoards(null)}
-                />
-                <div className="max-h-36 overflow-y-auto">
-                  {boards.map((board) => (
-                    <CheckRow
-                      key={board.id}
-                      checked={selectedBoardIds.includes(board.id)}
-                      label={board.title}
-                      onChange={() => toggleBoard(board.id)}
-                    />
-                  ))}
-                </div>
-              </Field>
+          <button
+            type="button"
+            aria-label="Filter My Tasks"
+            onClick={() => {
+              setScopeOpen(false);
+              setSortOpen(false);
+              setGroupOpen(false);
+              onOpenKanbanFilters?.();
+            }}
+            className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
+              kanbanFilterCount > 0
+                ? "text-shadcn-primary"
+                : "text-text-light-gray hover:text-white-black"
+            }`}
+          >
+            <SlidersHorizontal size={16} strokeWidth={1.5} />
+            <span className="hidden @md:inline">Filters</span>
+            {kanbanFilterCount > 0 && (
+              <span className="text-meta font-semibold">{kanbanFilterCount}</span>
+            )}
+          </button>
+        </>
+      ) : (
+        <div ref={filterRef} className="relative">
+          <button
+            type="button"
+            aria-label="Filter My Tasks"
+            aria-expanded={filterOpen}
+            onClick={() => {
+              setFilterOpen((open) => !open);
+              setSortOpen(false);
+              setGroupOpen(false);
+            }}
+            className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
+              flatFilterCount > 0
+                ? "text-shadcn-primary"
+                : "text-text-light-gray hover:text-white-black"
+            }`}
+          >
+            <SlidersHorizontal size={16} strokeWidth={1.5} />
+            <span className="hidden @md:inline">Filters</span>
+            {flatFilterCount > 0 && (
+              <span className="text-meta font-semibold">{flatFilterCount}</span>
+            )}
+          </button>
 
-              <Field label="Columns">
-                <div className="max-h-44 overflow-y-auto">
-                  {selectedBoards.map((board) => (
-                    <div key={board.id} className="mb-2">
-                      <p className="px-1 text-micro text-text-light-gray">{board.title}</p>
-                      {board.sections.map((section) => (
-                        <CheckRow
-                          key={section.id}
-                          checked={config.filters.sectionIds.includes(section.id)}
-                          label={section.title}
-                          onChange={() => toggleNumber("sectionIds", section.id)}
+          {filterOpen && (
+            <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,560px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
+              <div className="grid gap-5 @md:grid-cols-2">
+                <Field label="Boards">
+                  <CheckRow
+                    checked={config.boardIds === null}
+                    label="All boards"
+                    onChange={() => setBoards(null)}
+                  />
+                  <div className="max-h-36 overflow-y-auto">
+                    {boards.map((board) => (
+                      <CheckRow
+                        key={board.id}
+                        checked={selectedBoardIds.includes(board.id)}
+                        label={board.title}
+                        onChange={() => toggleBoard(board.id)}
+                      />
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Columns">
+                  <div className="max-h-44 overflow-y-auto">
+                    {selectedBoards.map((board) => (
+                      <div key={board.id} className="mb-2">
+                        <p className="px-1 text-micro text-text-light-gray">
+                          {board.title}
+                        </p>
+                        {board.sections.map((section) => (
+                          <CheckRow
+                            key={section.id}
+                            checked={config.filters.sectionIds.includes(section.id)}
+                            label={section.title}
+                            onChange={() => toggleNumber("sectionIds", section.id)}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Priority">
+                  <div className="grid grid-cols-2 gap-x-2">
+                    {PriorityConstants.map((priority) => (
+                      <CheckRow
+                        key={priority.priority_index}
+                        checked={config.filters.priorityIds.includes(
+                          priority.priority_index,
+                        )}
+                        label={priority.Priority_Value}
+                        onChange={() =>
+                          toggleNumber("priorityIds", priority.priority_index)
+                        }
+                      />
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Size">
+                  <div className="grid grid-cols-2 gap-x-2">
+                    {EstimateConstants.map((estimate) => (
+                      <CheckRow
+                        key={estimate.estimate_index}
+                        checked={config.filters.sizeIds.includes(
+                          estimate.estimate_index,
+                        )}
+                        label={estimate.estimate_value}
+                        onChange={() =>
+                          toggleNumber("sizeIds", estimate.estimate_index)
+                        }
+                      />
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Labels">
+                  <div className="max-h-44 overflow-y-auto">
+                    {selectedBoards.map((board) => (
+                      <div key={board.id} className="mb-2">
+                        <p className="px-1 text-micro text-text-light-gray">
+                          {board.title}
+                        </p>
+                        {board.labels.map((label) => (
+                          <CheckRow
+                            key={label.id}
+                            checked={config.filters.labelIds.some(
+                              (id) => String(id) === label.id,
+                            )}
+                            label={label.name}
+                            onChange={() => toggleLabel(label.id)}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </Field>
+
+                <Field label="Due date">
+                  <select
+                    value={dueDateValue}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === "custom") {
+                        const today = localDateInputValue(new Date());
+                        updateFilters({ dueDate: { from: today, to: today } });
+                        return;
+                      }
+                      updateFilters({
+                        dueDate: value
+                          ? (value as MyTasksDueDatePreset)
+                          : null,
+                      });
+                    }}
+                    className={`${inputClass} w-full`}
+                  >
+                    <option value="">Any</option>
+                    {DUE_DATE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                    <option value="custom">Custom range</option>
+                  </select>
+                  {typeof config.filters.dueDate === "object" &&
+                    config.filters.dueDate && (
+                      <div className="mt-2 flex gap-2">
+                        <input
+                          type="date"
+                          aria-label="Due date from"
+                          value={config.filters.dueDate.from.slice(0, 10)}
+                          onChange={(event) =>
+                            updateFilters({
+                              dueDate: {
+                                ...(config.filters.dueDate as MyTasksDateRange),
+                                from: event.target.value,
+                              },
+                            })
+                          }
+                          className={inputClass}
                         />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="Priority">
-                <div className="grid grid-cols-2 gap-x-2">
-                  {PriorityConstants.map((priority) => (
-                    <CheckRow
-                      key={priority.priority_index}
-                      checked={config.filters.priorityIds.includes(priority.priority_index)}
-                      label={priority.Priority_Value}
-                      onChange={() => toggleNumber("priorityIds", priority.priority_index)}
-                    />
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="Size">
-                <div className="grid grid-cols-2 gap-x-2">
-                  {EstimateConstants.map((estimate) => (
-                    <CheckRow
-                      key={estimate.estimate_index}
-                      checked={config.filters.sizeIds.includes(estimate.estimate_index)}
-                      label={estimate.estimate_value}
-                      onChange={() => toggleNumber("sizeIds", estimate.estimate_index)}
-                    />
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="Labels">
-                <div className="max-h-44 overflow-y-auto">
-                  {selectedBoards.map((board) => (
-                    <div key={board.id} className="mb-2">
-                      <p className="px-1 text-micro text-text-light-gray">{board.title}</p>
-                      {board.labels.map((label) => (
-                        <CheckRow
-                          key={label.id}
-                          checked={config.filters.labelIds.some((id) => String(id) === label.id)}
-                          label={label.name}
-                          onChange={() => toggleLabel(label.id)}
+                        <input
+                          type="date"
+                          aria-label="Due date to"
+                          value={config.filters.dueDate.to.slice(0, 10)}
+                          onChange={(event) =>
+                            updateFilters({
+                              dueDate: {
+                                ...(config.filters.dueDate as MyTasksDateRange),
+                                to: event.target.value,
+                              },
+                            })
+                          }
+                          className={inputClass}
                         />
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </Field>
+                      </div>
+                    )}
+                </Field>
 
-              <Field label="Due date">
-                <select
-                  value={dueDateValue}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (!value) updateFilters({ dueDate: null });
-                    else if (value === "custom") {
-                      const today = localDateInputValue(new Date());
-                      updateFilters({ dueDate: { from: today, to: today } });
-                    } else {
-                      updateFilters({ dueDate: value as MyTasksDueDatePreset });
-                    }
-                  }}
-                  className={`${inputClass} w-full`}
-                >
-                  <option value="">Any due date</option>
-                  {DUE_DATE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                  <option value="custom">Custom range</option>
-                </select>
-                {typeof config.filters.dueDate === "object" && config.filters.dueDate && (
-                  <div className="mt-2 grid grid-cols-2 gap-2">
+                <Field label="Created">
+                  <div className="flex gap-2">
                     <input
                       type="date"
-                      aria-label="Due date from"
-                      value={config.filters.dueDate.from}
+                      aria-label="Created from"
+                      value={config.filters.createdRange?.from.slice(0, 10) ?? ""}
                       onChange={(event) =>
-                        updateFilters({
-                          dueDate: {
-                            ...config.filters.dueDate as MyTasksDateRange,
-                            from: event.target.value,
-                          },
-                        })
+                        setRange("createdRange", "from", event.target.value)
                       }
                       className={inputClass}
                     />
                     <input
                       type="date"
-                      aria-label="Due date to"
-                      value={config.filters.dueDate.to}
+                      aria-label="Created to"
+                      value={config.filters.createdRange?.to.slice(0, 10) ?? ""}
                       onChange={(event) =>
-                        updateFilters({
-                          dueDate: {
-                            ...config.filters.dueDate as MyTasksDateRange,
-                            to: event.target.value,
-                          },
-                        })
+                        setRange("createdRange", "to", event.target.value)
                       }
                       className={inputClass}
                     />
                   </div>
-                )}
-              </Field>
+                </Field>
 
-              <Field label="Created range">
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="date"
-                    aria-label="Created from"
-                    value={config.filters.createdRange?.from ?? ""}
-                    onChange={(event) => setRange("createdRange", "from", event.target.value)}
-                    className={inputClass}
-                  />
-                  <input
-                    type="date"
-                    aria-label="Created to"
-                    value={config.filters.createdRange?.to ?? ""}
-                    onChange={(event) => setRange("createdRange", "to", event.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-              </Field>
+                <Field label="Updated">
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      aria-label="Updated from"
+                      value={config.filters.updatedRange?.from.slice(0, 10) ?? ""}
+                      onChange={(event) =>
+                        setRange("updatedRange", "from", event.target.value)
+                      }
+                      className={inputClass}
+                    />
+                    <input
+                      type="date"
+                      aria-label="Updated to"
+                      value={config.filters.updatedRange?.to.slice(0, 10) ?? ""}
+                      onChange={(event) =>
+                        setRange("updatedRange", "to", event.target.value)
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+                </Field>
 
-              <Field label="Updated range">
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="date"
-                    aria-label="Updated from"
-                    value={config.filters.updatedRange?.from ?? ""}
-                    onChange={(event) => setRange("updatedRange", "from", event.target.value)}
-                    className={inputClass}
-                  />
-                  <input
-                    type="date"
-                    aria-label="Updated to"
-                    value={config.filters.updatedRange?.to ?? ""}
-                    onChange={(event) => setRange("updatedRange", "to", event.target.value)}
-                    className={inputClass}
-                  />
-                </div>
-              </Field>
+                <Field label="Starred">
+                  <select
+                    value={
+                      config.filters.starred === null
+                        ? "any"
+                        : String(config.filters.starred)
+                    }
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      updateFilters({
+                        starred:
+                          value === "any" ? null : value === "true",
+                      });
+                    }}
+                    className={`${inputClass} w-full`}
+                  >
+                    <option value="any">Any</option>
+                    <option value="true">Starred</option>
+                    <option value="false">Not starred</option>
+                  </select>
+                </Field>
 
-              <Field label="Starred">
-                <select
-                  value={config.filters.starred === null ? "any" : String(config.filters.starred)}
-                  onChange={(event) =>
-                    updateFilters({
-                      starred:
-                        event.target.value === "any"
-                          ? null
-                          : event.target.value === "true",
-                    })
+                <Field label="Completed tasks">
+                  <CheckRow
+                    checked={config.filters.showDone}
+                    label="Show done"
+                    onChange={() =>
+                      updateFilters({ showDone: !config.filters.showDone })
+                    }
+                  />
+                </Field>
+              </div>
+
+              <div className="mt-4 flex justify-end border-t border-border pt-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateFilters(DEFAULT_MY_TASKS_VIEW_CONFIG.filters)
                   }
-                  className={`${inputClass} w-full`}
+                  className="rounded-[4px] px-2 py-1 text-content text-text-light-gray hover:bg-hover-active hover:text-white-black"
                 >
-                  <option value="any">Any</option>
-                  <option value="true">Starred</option>
-                  <option value="false">Not starred</option>
-                </select>
-              </Field>
-
-              <Field label="Completed tasks">
-                <CheckRow
-                  checked={config.filters.showDone}
-                  label="Show done"
-                  onChange={() => updateFilters({ showDone: !config.filters.showDone })}
-                />
-              </Field>
+                  Clear filters
+                </button>
+              </div>
             </div>
-
-            <div className="mt-4 flex justify-end border-t border-border pt-3">
-              <button
-                type="button"
-                onClick={() => updateFilters(DEFAULT_MY_TASKS_VIEW_CONFIG.filters)}
-                className="rounded-[4px] px-2 py-1 text-content text-text-light-gray hover:bg-hover-active hover:text-white-black"
-              >
-                Clear filters
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div ref={sortRef} className="relative">
         <button
@@ -435,6 +593,7 @@ const MyTasksViewControls = ({
           onClick={() => {
             setSortOpen((open) => !open);
             setFilterOpen(false);
+            setScopeOpen(false);
             setGroupOpen(false);
           }}
           className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black @md:min-h-0 @md:min-w-0`}
@@ -452,7 +611,8 @@ const MyTasksViewControls = ({
                     ...config,
                     sort: {
                       ...config.sort,
-                      field: event.target.value as MyTasksViewConfig["sort"]["field"],
+                      field: event.target
+                        .value as MyTasksViewConfig["sort"]["field"],
                     },
                   })
                 }
@@ -496,6 +656,7 @@ const MyTasksViewControls = ({
             onClick={() => {
               setGroupOpen((open) => !open);
               setFilterOpen(false);
+              setScopeOpen(false);
               setSortOpen(false);
             }}
             className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
@@ -539,7 +700,7 @@ const MyTasksViewControls = ({
         </div>
       )}
     </div>
-  ) : null;
+  );
 };
 
 export default MyTasksViewControls;

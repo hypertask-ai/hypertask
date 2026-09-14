@@ -47,6 +47,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
 } from "@/lib/flags/keys";
@@ -400,6 +401,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
+  },
+  {
+    key: MY_TASKS_FILTER_PARITY_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Opens the same Kanban filter menu on My Tasks, including match all/any, clear all, and the filters that were still missing.",
   },
   {
     key: MY_TASKS_TIME_GROUP_FLAG,

@@ -319,6 +319,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6447-my-tasks-filter-parity",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6455-my-tasks-time-group",
         mode: "OWNER_AND_QA",
         updatedAt: null,

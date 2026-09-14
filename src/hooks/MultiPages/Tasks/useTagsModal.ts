@@ -14,18 +14,20 @@ import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/Views
 import { sortLabels } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import type { CalendarLabelSummary } from "@/lib/calendarSync/contract";
+import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
 
 type CalendarLabelOption = ILabel | CalendarLabelSummary;
 
 export const useTagsModal = (
   closeHandler: (label?: CalendarLabelOption) => Promise<void>,
-  view: "Kanban" | "Calendar",
+  view: "Kanban" | "Calendar" | "MyTasks",
   calendarTags?: CalendarLabelSummary[],
 ) => {
   const [keyword, setKeyword] = useState("");
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
+  const myTasksFilters = useMyTasksFilterController();
   // HTPR-4878: this is the BOARD's tag filter, so it must load the board's
   // labels. It used to read inViewObject.taskProjectId, which is the focused
   // task, so on a freshly loaded board with nothing focused the query ran with
@@ -40,7 +42,7 @@ export const useTagsModal = (
   ).addedFilters.find((filter) => filter.type === "Labels");
 
   const labelSource = useMemo(() => {
-    if (view === "Calendar") return calendarTags ?? [];
+    if (view === "Calendar" || view === "MyTasks") return calendarTags ?? [];
     return labelsFromTQ ?? [];
   }, [calendarTags, labelsFromTQ, view]);
 
@@ -52,8 +54,20 @@ export const useTagsModal = (
         condition: () => false,
       };
     }
+    if (view === "MyTasks") {
+      return (
+        myTasksFilters?.activeFilters.addedFilters.find(
+          (filter) => filter.type === "Labels",
+        ) ?? []
+      );
+    }
     return projectCurrentlyActive ?? [];
-  }, [view, calendarTaskFilters.labels, projectCurrentlyActive]);
+  }, [
+    view,
+    calendarTaskFilters.labels,
+    projectCurrentlyActive,
+    myTasksFilters?.activeFilters,
+  ]);
 
   const sortedLabelsFn = useCallback(
     (x: any[], y: IFilter | ILabel[], z: boolean) => sortLabels(x, y, z),
@@ -94,12 +108,15 @@ export const useTagsModal = (
   );
 
   const reSort = useCallback(() => {
-    const active =
-      view === "Calendar"
-        ? activeForSort
-        : (getActiveFiltersFromProject(currentProject).addedFilters.find(
-            (f) => f.type === "Labels",
-          ) ?? []);
+    let active: IFilter | ILabel[] = [];
+    if (view === "Calendar" || view === "MyTasks") {
+      active = activeForSort;
+    } else {
+      active =
+        getActiveFiltersFromProject(currentProject).addedFilters.find(
+          (f) => f.type === "Labels",
+        ) ?? [];
+    }
     const newSorted = sortedLabelsFn(deepCopy(labelSource), active, false);
     setFilteredCommands(newSorted);
   }, [view, labelSource, activeForSort, currentProject, sortedLabelsFn]);

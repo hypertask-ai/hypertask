@@ -35,6 +35,9 @@ let backCalls = 0;
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: (key) => flagValues[key] ?? false,
 });
+stubSourceModule("src/hooks/Task Detail/useTimeTracking.ts", {
+  useRunningTimers: () => ({ data: [] }),
+});
 stubSourceModule("src/lib/state.tsx", {
   useRecoilValue: () => false,
 });
@@ -59,6 +62,9 @@ stubSourceModule("src/components/PageComponents/Kanban/HeaderComponents/AppShell
   default: () => null,
 });
 stubSourceModule("src/components/Buttons/BackButton.tsx", {
+  default: () => null,
+});
+stubSourceModule("src/app/my-tasks/MyTasksKanbanFilterModal.tsx", {
   default: () => null,
 });
 stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {

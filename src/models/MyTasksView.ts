@@ -1,3 +1,6 @@
+import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
+import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+
 export type MyTasksDueDatePreset =
   | "overdue"
   | "today"
@@ -34,6 +37,8 @@ export type MyTasksViewConfig = {
     updatedRange: MyTasksDateRange | null;
     showDone: boolean;
   };
+  /** Kanban-parity filters (HTPR-6447). Absent on older saved views. */
+  filterSettings?: SerializableFilterSettings | null;
   sort: {
     field: MyTasksSortField;
     direction: "asc" | "desc";
@@ -50,6 +55,12 @@ export type MyTasksSavedView = {
   config: MyTasksViewConfig;
 };
 
+export type MyTasksBoardMember = {
+  id: number;
+  displayName: string;
+  photoURL: string | null;
+};
+
 export type MyTasksBoardMetadata = {
   id: number;
   title: string;
@@ -62,6 +73,7 @@ export type MyTasksBoardMetadata = {
     id: string;
     name: string;
   }>;
+  members?: MyTasksBoardMember[];
 };
 
 export const DEFAULT_MY_TASKS_VIEW_CONFIG: MyTasksViewConfig = {
@@ -77,6 +89,7 @@ export const DEFAULT_MY_TASKS_VIEW_CONFIG: MyTasksViewConfig = {
     updatedRange: null,
     showDone: false,
   },
+  filterSettings: null,
   sort: {
     field: "dueDate",
     direction: "asc",
@@ -166,6 +179,38 @@ export function effectiveMyTasksGroupBy(
   return config.groupBy ?? "time";
 }
 
+const KNOWN_CONFIG_KEYS = new Set([
+  "boardIds",
+  "filters",
+  "filterSettings",
+  "sort",
+  "groupBy",
+]);
+
+const parseFilterSettings = (
+  value: unknown,
+): SerializableFilterSettings | null => {
+  if (value == null) return null;
+  if (!isRecord(value)) return null;
+  const sanitized = sanitizeBoardFilters(value) as Record<string, unknown>;
+  if (!Array.isArray(sanitized.addedFilters)) return null;
+  return {
+    matchFilters: sanitized.matchFilters === "ALL" ? "ALL" : "ANY",
+    addedFilters: sanitized.addedFilters
+      .filter(isRecord)
+      .filter((entry) => typeof entry.type === "string")
+      .map((entry) => ({
+        type: entry.type as SerializableFilterSettings["addedFilters"][number]["type"],
+        searchPayload: Array.isArray(entry.searchPayload)
+          ? entry.searchPayload
+          : [],
+        ...(entry.match === "ALL" || entry.match === "ANY"
+          ? { match: entry.match }
+          : {}),
+      })),
+  };
+};
+
 /** Returns a complete, safe config for persisted JSON or untrusted API input. */
 export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
   const value = isRecord(json) ? json : {};
@@ -180,7 +225,13 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       : DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field;
   const groupBy = groupByValue(value.groupBy);
 
+  const extras: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!KNOWN_CONFIG_KEYS.has(key)) extras[key] = entry;
+  }
+
   return {
+    ...extras,
     boardIds: value.boardIds === undefined ? null : boardIds,
     filters: {
       priorityIds: numberIds(filters.priorityIds),
@@ -193,6 +244,7 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       updatedRange: dateRange(filters.updatedRange),
       showDone: filters.showDone === true,
     },
+    filterSettings: parseFilterSettings(value.filterSettings),
     sort: {
       field: sortField,
       direction: sort.direction === "desc" ? "desc" : "asc",
