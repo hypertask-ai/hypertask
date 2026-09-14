@@ -47,6 +47,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
@@ -441,6 +442,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
+  },
+  {
+    key: MY_TASKS_BULK_SELECTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Adds Inbox-style multi-select on My Tasks with bulk archive, assign, label, and move to column.",
   },
   {
     key: MY_TASKS_FILTER_PARITY_FLAG,

@@ -18,6 +18,7 @@ import {
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -29,6 +30,8 @@ import {
   myTasksQuickAddTaskVisibleInPayload,
 } from "@/lib/myTasks/quickAddHelpers";
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
+import { MyTasksBulkSelectionProvider } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import MyTasksBulkActionBar from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
@@ -195,6 +198,7 @@ const MyTasks = ({
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
+  const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   // My Tasks spans every board, so unlike board filters (which persist to a
   // saved view) this selection lives in state only and resets on reload.
   const [prioritySelection, setPrioritySelection] = useState<
@@ -1161,21 +1165,38 @@ const boardTabCounts = useMemo(() => {
             onRefresh={refreshMyTasksAfterQuickAdd}
           />
         ) : null}
-        <TableView
-          filteredSections={visibleSections}
-          _sections={visibleSections}
-          _currentProject={null}
-          _activeSortingMode={MY_TASKS_SORTING_MODE}
-          currentUser={currentUser}
-          myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
-          myTasksSortKey={activeViewId}
-          myTasksSnoozeActive={myTasksSnoozeEnabled}
-          onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
-          myTasksVisibleColumns={myTasksVisibleColumns}
-          onMyTasksVisibleColumnsChange={
-            tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
-          }
-        />
+        {(() => {
+          const tableView = (
+            <TableView
+              filteredSections={visibleSections}
+              _sections={visibleSections}
+              _currentProject={null}
+              _activeSortingMode={MY_TASKS_SORTING_MODE}
+              currentUser={currentUser}
+              myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
+              myTasksSortKey={activeViewId}
+              myTasksSnoozeActive={myTasksSnoozeEnabled}
+              onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
+              myTasksVisibleColumns={myTasksVisibleColumns}
+              onMyTasksVisibleColumnsChange={
+                tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
+              }
+              enableMyTasksBulkSelection={myTasksBulkSelectionEnabled}
+            />
+          );
+          if (!myTasksBulkSelectionEnabled) return tableView;
+          return (
+            <MyTasksBulkSelectionProvider
+              resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
+                .map((priority) => priority.priority_index)
+                .join(",")}`}
+              onAfterMutation={() => router.refresh()}
+            >
+              {tableView}
+              <MyTasksBulkActionBar />
+            </MyTasksBulkSelectionProvider>
+          );
+        })()}
       </div>
 
       <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">

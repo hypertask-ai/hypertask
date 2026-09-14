@@ -56,6 +56,8 @@ export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";
 export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
 export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
+export const MY_TASKS_BULK_SELECTION_FLAG =
+  "htpr-6444-my-tasks-bulk-selection";
 export const MY_TASKS_FILTER_PARITY_FLAG = "htpr-6447-my-tasks-filter-parity";
 export const MY_TASKS_TIME_GROUP_FLAG = "htpr-6455-my-tasks-time-group";
 export const MY_TASKS_TABLE_COLUMNS_FLAG = "htpr-6456-my-tasks-table-columns";
