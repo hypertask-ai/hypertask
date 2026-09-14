@@ -139,18 +139,25 @@ const assigneesAssign = async (
     } as const;
 
     // Person and agent rows can share the same userId (agent self-assign uses
-    // the owner's user id). Unassign by userId must clear every row for that
-    // person, or CLI/MCP callers still see the assignee after a "successful"
-    // unassign (HTPR-6428). Agent-id targeting stays exact.
-    let assigneeWhere: {
-      taskId: number;
-      agentId?: string | null;
-      userId?: number;
-    };
+    // the owner's user id). Unassign by userId clears human rows plus only
+    // agent rows the caller owns, so board members cannot strip someone else's
+    // agents via a userId unassign (HTPR-6428). Agent-id targeting stays exact.
+    let assigneeWhere:
+      | { taskId: number; agentId: string }
+      | { taskId: number; userId: number; agentId: null }
+      | {
+          taskId: number;
+          userId: number;
+          OR: Array<{ agentId: null } | { agent: { userId: number } }>;
+        };
     if (agentId) {
       assigneeWhere = { taskId, agentId };
     } else if (intent === "unassign") {
-      assigneeWhere = { taskId, userId: assigneeUserId };
+      assigneeWhere = {
+        taskId,
+        userId: assigneeUserId,
+        OR: [{ agentId: null }, { agent: { userId: currentUser.id } }],
+      };
     } else {
       assigneeWhere = { taskId, userId: assigneeUserId, agentId: null };
     }
@@ -230,8 +237,22 @@ const assigneesAssign = async (
         assignStatus = "Assigned";
       }
     } else if (intent === "unassign") {
-      if (matchingAssignees.length > 0) {
-        assignStatus = "Unassigned";
+      assignStatus = "Unassigned";
+      if (agentId) {
+        if (assign) {
+          const removalOutcome = await removeAssignee({
+            ...props,
+            assign,
+            assigneeIntent: "Unassigned",
+          });
+          if (removalOutcome === "stale-task") {
+            assignmentOutcome = "stale-task";
+            assignStatus = "Conflict";
+          }
+        }
+      } else {
+        // Always take the fenced bulk path so a concurrent owned-agent assign
+        // between the pre-read and the fence cannot survive a success response.
         const removalOutcome = await removeMatchingAssignees({
           ...props,
           assigns: matchingAssignees,
@@ -241,9 +262,6 @@ const assigneesAssign = async (
           assignmentOutcome = "stale-task";
           assignStatus = "Conflict";
         }
-      } else {
-        // Not assigned — idempotent no-op
-        assignStatus = "Unassigned";
       }
     } else {
       // toggle (legacy UI): assign or unassign
@@ -654,23 +672,12 @@ const removeMatchingAssignees = async ({
   expectedSectionId,
   allowHumanOverride,
 }: IRemoveMatchingAssigneesProps) => {
-  if (assigns.length === 0) return "already-unassigned" as const;
-  if (assigns.length === 1) {
-    return removeAssignee({
-      afterAppDomain,
-      devices,
-      taskId,
-      userId,
-      task,
-      currentUser,
-      agentAssignerId,
-      assign: assigns[0],
-      assigneeIntent,
-      skipNotificationCleanup,
-      expectedProjectId,
-      expectedSectionId,
-      allowHumanOverride,
-    });
+  // User-id bulk path always re-queries inside the transaction. The `assigns`
+  // snapshot is only a hint for empty short-circuit when agentId targeting
+  // delegates below; do not delete by that ID list alone.
+  if (assigns.length === 0) {
+    // Still enter the transaction below so a row that appeared after the
+    // caller's pre-read is cleared under the fence.
   }
 
   const removal = await prisma.$transaction(async (tx) => {
@@ -705,17 +712,37 @@ const removeMatchingAssignees = async ({
       }
     }
 
-    const requestedIds = new Set(assigns.map((row) => row.id));
-    const current = await tx.assignees.findMany({
+    // Re-read after the fence with the same authorization policy as the
+    // outer lookup. Do not reuse the pre-transaction ID list, or a concurrent
+    // owned-agent assign can survive a reported success (HTPR-6428 review).
+    const liveAssigns = await tx.assignees.findMany({
       where: {
         taskId,
         userId,
-        id: { in: [...requestedIds] },
+        OR: [{ agentId: null }, { agent: { userId: currentUser.id } }],
       },
-      select: { id: true },
+      include: {
+        user: {
+          select: assignmentActivityUserSelect,
+        },
+        agent: {
+          select: {
+            id: true,
+            userId: true,
+            photoURL: true,
+            displayName: true,
+          },
+        },
+        agentAssigner: {
+          select: {
+            id: true,
+            userId: true,
+            photoURL: true,
+            displayName: true,
+          },
+        },
+      },
     });
-    const liveIds = new Set(current.map(({ id }) => id));
-    const liveAssigns = assigns.filter((row) => liveIds.has(row.id));
     if (liveAssigns.length === 0) {
       return {
         removed: [] as IRemoveAssigneeProps["assign"][],

@@ -29,12 +29,18 @@ const load = (javascript, stubs) => {
 const matches = (row, where) =>
   Object.entries(where).every(([key, value]) => {
     if (value === undefined) return true;
+    if (key === "OR" && Array.isArray(value)) {
+      return value.some((clause) => matches(row, clause));
+    }
     if (
       value &&
       typeof value === "object" &&
       Array.isArray(value.in)
     ) {
       return value.in.includes(row[key]);
+    }
+    if (key === "agent" && value && typeof value === "object") {
+      return matches(row.agent ?? { userId: row.userId }, value);
     }
     return row[key] === value;
   });
@@ -79,8 +85,14 @@ test("a human assignment coexists with an agent owned by the same user", async (
   const findAssignment = (where) => rows.find((row) => matches(row, where)) ?? null;
   const findAssignments = (where) => {
     if (!where) return [...rows];
-    // Final assignee list queries use OR visibility clauses; return remaining rows.
-    if (where.OR) return [...rows];
+    // Board visibility listing uses nested agent filters we do not model; when
+    // the OR is only the authorized userId unassign policy, filter precisely.
+    const authorizedUnassign =
+      Array.isArray(where.OR) &&
+      where.OR.length === 2 &&
+      where.OR.some((clause) => clause.agentId === null) &&
+      where.OR.some((clause) => clause.agent && clause.agent.userId != null);
+    if (where.OR && !authorizedUnassign) return [...rows];
     return rows.filter((row) => matches(row, where));
   };
   const prisma = {
