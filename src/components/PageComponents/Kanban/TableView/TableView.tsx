@@ -1129,18 +1129,19 @@ const TableView = ({
       // keyCode matches every other Ctrl+E surface; e.key can be unreliable
       // under modifiers on some browsers.
       if ((e.ctrlKey || e.metaKey) && e.keyCode === KeyCodes.E) {
-        e.preventDefault();
         if (!shouldRunArchiveShortcut(e)) return;
         if (
           enableMyTasksBulkSelection &&
           myTasksBulk &&
           myTasksBulk.selectedCount > 0
         ) {
+          e.preventDefault();
           void myTasksBulk.archiveSelected();
           return;
         }
         const row = rows[selectedIndex];
         if (!row || !isTaskRow(row)) return;
+        e.preventDefault();
         void archiveTaskFromTable(row.task);
         return;
       }
