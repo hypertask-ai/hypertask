@@ -38,6 +38,7 @@ import useFollowerKanban from "@/hooks/General/useFollowerKanban";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
+import { getTaskShortcutAction } from "@/lib/keyboard/taskShortcuts";
 import {
   keyboard_shortcuts,
   matchesShortcut,
@@ -48,6 +49,8 @@ import KanbanTaskCard from "./KanbanTaskCard";
 import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG } from "@/lib/flags/keys";
 import type {
   DraggableProvided,
   DraggableStateSnapshot,
@@ -74,7 +77,9 @@ interface IProps {
   dragSnapshot?: DraggableStateSnapshot;
 }
 
-const Task = ({
+type TaskContentProps = IProps & { rowShortcutsEnabled: boolean };
+
+const TaskContent = ({
   task,
   tasksPlayList,
   index,
@@ -93,7 +98,8 @@ const Task = ({
   blockingUser,
   dragProvided,
   dragSnapshot,
-}: IProps) => {
+  rowShortcutsEnabled,
+}: TaskContentProps) => {
   const isApple = useDeviceContext();
   const {
     selectedCount: bulkSelectedCount,
@@ -346,6 +352,9 @@ const Task = ({
       return;
 
     let cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
+    const taskShortcutAction = rowShortcutsEnabled
+      ? getTaskShortcutAction(e, isApple)
+      : null;
     if (returnIfModalOrInputActive()) return;
 
     if (
@@ -358,11 +367,13 @@ const Task = ({
       return;
 
     if (
-      e.keyCode === KeyCodes.X &&
-      !e.shiftKey &&
-      !e.altKey &&
-      !cmdControl &&
-      !e.repeat
+      taskShortcutAction === "select" ||
+      (!rowShortcutsEnabled &&
+        e.keyCode === KeyCodes.X &&
+        !e.shiftKey &&
+        !e.altKey &&
+        !cmdControl &&
+        !e.repeat)
     ) {
       updateActiveItemAndItemInView(task);
     }
@@ -381,7 +392,10 @@ const Task = ({
       e.preventDefault();
     }
     // [#] for delete task
-    if (e.shiftKey && e.keyCode === KeyCodes.THREE) {
+    if (
+      taskShortcutAction === "delete" ||
+      (!rowShortcutsEnabled && e.shiftKey && e.keyCode === KeyCodes.THREE)
+    ) {
       return toggleDeleteModal(true, {
         id: task.id,
         section: task.section,
@@ -390,7 +404,10 @@ const Task = ({
     }
 
     // [ctrl]+[e]
-    if (e.keyCode === KeyCodes.E && cmdControl) {
+    if (
+      taskShortcutAction === "archive" ||
+      (!rowShortcutsEnabled && e.keyCode === KeyCodes.E && cmdControl)
+    ) {
       e.preventDefault();
       // A held key emits repeated keydown events. Archiving advances focus to
       // the next card and then into the next column, so those repeats would
@@ -401,10 +418,12 @@ const Task = ({
 
     // [s] for size / estimate
     if (
-      e.keyCode === KeyCodes.S &&
-      !e.shiftKey &&
-      !cmdControl &&
-      !e.altKey &&
+      (taskShortcutAction === "size" ||
+        (!rowShortcutsEnabled &&
+          e.keyCode === KeyCodes.S &&
+          !e.shiftKey &&
+          !cmdControl &&
+          !e.altKey)) &&
       !lastgPress.current
     ) {
       e.preventDefault();
@@ -416,9 +435,11 @@ const Task = ({
 
     // [p] for set priority
     if (
-      e.keyCode === KeyCodes.P &&
-      !cmdControl &&
-      !e.altKey &&
+      (taskShortcutAction === "priority" ||
+        (!rowShortcutsEnabled &&
+          e.keyCode === KeyCodes.P &&
+          !cmdControl &&
+          !e.altKey)) &&
       !lastgPress.current
     ) {
       e.preventDefault();
@@ -429,10 +450,18 @@ const Task = ({
     }
 
     // press [e]
-    if (e.keyCode === KeyCodes.E && !cmdControl) eHandler();
+    if (
+      taskShortcutAction === "edit" ||
+      (!rowShortcutsEnabled && e.keyCode === KeyCodes.E && !cmdControl)
+    )
+      eHandler();
 
     //[a]
-    if (e.keyCode === KeyCodes.A && !lastgPress.current) {
+    if (
+      (taskShortcutAction === "assignee" ||
+        (!rowShortcutsEnabled && e.keyCode === KeyCodes.A)) &&
+      !lastgPress.current
+    ) {
       const now = new Date().getTime();
       if (lastM_APress.current && now - lastM_APress.current < 500) {
         lastM_APress.current = null;
@@ -478,7 +507,13 @@ const Task = ({
     // [d]
     if (
       !lastgPress.current &&
-      matchesShortcut(e, keyboard_shortcuts.dueDateModal.default, isApple)
+      (taskShortcutAction === "dueDate" ||
+        (!rowShortcutsEnabled &&
+          matchesShortcut(
+            e,
+            keyboard_shortcuts.dueDateModal.default,
+            isApple,
+          )))
     ) {
       e.preventDefault();
       return setShowCommands({
@@ -526,7 +561,10 @@ const Task = ({
     }
 
     // [t] for tag
-    if (e.keyCode === KeyCodes.T && !e.shiftKey) {
+    if (
+      taskShortcutAction === "label" ||
+      (!rowShortcutsEnabled && e.keyCode === KeyCodes.T && !e.shiftKey)
+    ) {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -560,7 +598,10 @@ const Task = ({
       }
     }
 
-    if (e.keyCode === KeyCodes.S && cmdControl) {
+    if (
+      taskShortcutAction === "share" ||
+      (!rowShortcutsEnabled && e.keyCode === KeyCodes.S && cmdControl)
+    ) {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -570,9 +611,11 @@ const Task = ({
 
     // [m]
     if (
-      e.keyCode === KeyCodes.M &&
-      !cmdControl &&
-      !e.shiftKey &&
+      (taskShortcutAction === "moveColumn" ||
+        (!rowShortcutsEnabled &&
+          e.keyCode === KeyCodes.M &&
+          !cmdControl &&
+          !e.shiftKey)) &&
       (!lastgPress.current ||
         new Date().getTime() - lastgPress.current >=
           globalConstants.gThenKeyDelay)
@@ -591,7 +634,13 @@ const Task = ({
       });
     }
     // [shift][m]
-    if (e.keyCode === KeyCodes.M && e.shiftKey && !cmdControl) {
+    if (
+      taskShortcutAction === "moveBoard" ||
+      (!rowShortcutsEnabled &&
+        e.keyCode === KeyCodes.M &&
+        e.shiftKey &&
+        !cmdControl)
+    ) {
       e.preventDefault();
       return setShowCommands({
         show: true,
@@ -600,7 +649,11 @@ const Task = ({
     }
 
     // enter
-    if (e.keyCode === KeyCodes.ENTER && !showCommands.show) {
+    if (
+      (taskShortcutAction === "open" ||
+        (!rowShortcutsEnabled && e.keyCode === KeyCodes.ENTER)) &&
+      !showCommands.show
+    ) {
       console.time("EnterPressOnTask");
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
@@ -716,7 +769,13 @@ const Task = ({
     }
 
     // [alt][s]
-    if (e.keyCode === KeyCodes.S && e.altKey && !e.shiftKey) {
+    if (
+      taskShortcutAction === "star" ||
+      (!rowShortcutsEnabled &&
+        e.keyCode === KeyCodes.S &&
+        e.altKey &&
+        !e.shiftKey)
+    ) {
       e.preventDefault();
       return handleStarTask();
     }
@@ -740,13 +799,16 @@ const Task = ({
       navigateToTask(task.projectId, task.uniqueIndex, "push", `?audio=true`);
     }
 
-    if (e.keyCode === KeyCodes.F2) {
+    if (
+      taskShortcutAction === "rename" ||
+      (!rowShortcutsEnabled && e.keyCode === KeyCodes.F2)
+    ) {
       return setShowCommands({
         show: true,
         mode: CommandMode.RenameTask,
       });
     }
-  }, [handleBulkKeyDown, task.id]);
+  }, [handleBulkKeyDown, rowShortcutsEnabled, task.id]);
 
   async function addFollowerHandler() {
     return await addFollowerKanban(task.id);
@@ -1022,4 +1084,13 @@ const Task = ({
   );
 };
 
-export default React.memo(Task);
+const MemoizedTaskContent = React.memo(TaskContent);
+
+export default function Task(props: IProps) {
+  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
+  return rowShortcutsEnabled ? (
+    <MemoizedTaskContent {...props} rowShortcutsEnabled />
+  ) : (
+    <MemoizedTaskContent {...props} rowShortcutsEnabled={false} />
+  );
+}
