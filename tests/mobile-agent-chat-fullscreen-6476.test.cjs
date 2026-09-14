@@ -53,7 +53,7 @@ test("HTPR-6476 flag is registered and defaults with Owner+QA mode", () => {
 test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   assert.match(store, /agentChatMobileFullscreenAtom/);
   assert.match(providers, /agentChatMobileFullscreenAtom/);
-  assert.match(providers, /!agentChatMobileFullscreen/);
+  assert.match(providers, /agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn/);
   assert.match(chat, /setAgentChatMobileFullscreen\(mobileFullscreenChrome\)/);
   assert.match(
     chat,

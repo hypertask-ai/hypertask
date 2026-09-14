@@ -21,14 +21,18 @@ test("mobile Agent Chat follows the keyboard-visible viewport behind its ticket 
   );
   assert.match(
     chat,
-    /useMobileVisualViewport\(\s*isMbl\s*&&\s*\(mobileAgentChatViewportEnabled \|\| mobileLayoutEnabled\),?\s*\)/,
+    /useMobileVisualViewport\(\s*isMbl\s*&&\s*\([\s\S]*mobileAgentChatViewportEnabled \|\|[\s\S]*mobileLayoutEnabled \|\|[\s\S]*mobileFullscreenFlag && Boolean\(selectedId\)[\s\S]*\)\s*\)/,
   );
-  assert.match(narrowLayout, /!\(isMbl && mobileLayoutEnabled\) && "h-screen"/);
+  assert.match(
+    narrowLayout,
+    /!\(isMbl && \(mobileLayoutEnabled \|\| mobileFullscreenChrome\)\) &&\s*\n\s*"h-screen"/,
+  );
   assert.match(narrowLayout, /height: mobileAgentChatHeight/);
-  assert.match(narrowLayout, /paddingBottom: mobileComposerBottomInset/);
+  assert.match(narrowLayout, /mobileShellPaddingStyle/);
+  assert.match(chat, /mobileChromeAwareHeight/);
   assert.match(
     chat,
-    /if \(\s*isMbl &&\s*\(mobileLayoutEnabled \|\| mobileAgentChatViewportEnabled\)\s*\) \{[\s\S]*?`\$\{mobileAgentChatViewport\.visibleHeight\}px`[\s\S]*?: "100dvh"/,
+    /`\$\{mobileAgentChatViewport\.visibleHeight\}px`[\s\S]*?: "100dvh"/,
   );
 });
 

@@ -318,6 +318,16 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      {
+        key: "htpr-6455-my-tasks-time-group",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6476-mobile-agent-chat-fullscreen",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
