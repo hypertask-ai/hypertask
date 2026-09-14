@@ -248,10 +248,9 @@ test("autoFocus moves focus into the date grid", () => {
   const active = dom.window.document.activeElement;
   assert.ok(active);
   assert.equal(active.tagName, "BUTTON");
-  assert.match(
-    active.getAttribute("aria-label") || active.textContent || "",
-    /15|September|Previous|Next/,
-  );
+  const activeName = active.getAttribute("aria-label") || "";
+  assert.match(activeName, /September/);
+  assert.doesNotMatch(activeName, /Previous|Next/);
 
   cleanupDom(reactRoot);
 });

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { DayPicker } from "react-day-picker"
+import { DayPicker, getDefaultClassNames } from "react-day-picker"
 
 import { cn } from "@/utils/undoActions/helperFuncs"
 import {
@@ -52,6 +52,7 @@ function Calendar({
   ...props
 }: CalendarProps) {
   const calendarSettings = useRecoilValue(calendarSettingsAtom)
+  const defaultClassNames = getDefaultClassNames()
 
   return (
     <DayPicker
@@ -84,8 +85,10 @@ function Calendar({
         outside:
           "day-outside text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
         disabled: "text-muted-foreground opacity-50",
-        range_middle:
-          "bg-accent text-accent-foreground [&>button]:bg-accent [&>button]:text-accent-foreground",
+        range_middle: cn(
+          defaultClassNames.range_middle,
+          "bg-accent text-accent-foreground [&>button]:bg-accent [&>button]:text-accent-foreground"
+        ),
         hidden: "invisible",
         ...classNames,
         selected: cn(
