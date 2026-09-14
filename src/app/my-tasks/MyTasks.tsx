@@ -52,7 +52,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Filter } from "lucide-react";
 import toast from "react-hot-toast";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import toast from "react-hot-toast";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
 
