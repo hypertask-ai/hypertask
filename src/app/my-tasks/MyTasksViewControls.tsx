@@ -7,18 +7,21 @@ import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants"
 import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
+  effectiveMyTasksGroupBy,
   type MyTasksBoardMetadata,
   type MyTasksDateRange,
   type MyTasksDueDatePreset,
+  type MyTasksGroupBy,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
-import { ArrowUpDown, SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, Layers, SlidersHorizontal } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 interface Props {
   boards: MyTasksBoardMetadata[];
   config: MyTasksViewConfig;
   onChange: (config: MyTasksViewConfig) => void;
+  timeGroupEnabled?: boolean;
 }
 
 const DUE_DATE_OPTIONS: Array<{ value: MyTasksDueDatePreset; label: string }> = [
@@ -73,14 +76,24 @@ const CheckRow = ({
 const inputClass =
   "h-8 rounded-[4px] border-0 bg-transparent px-2 text-content text-white-black outline-none focus:bg-active-modal-element";
 
-const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
+const MyTasksViewControls = ({
+  boards,
+  config,
+  onChange,
+  timeGroupEnabled = false,
+}: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const [groupOpen, setGroupOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
+  const groupRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef, () => setFilterOpen(false));
   useClickOutside(sortRef, () => setSortOpen(false));
+  useClickOutside(groupRef, () => setGroupOpen(false));
+
+  const groupBy = effectiveMyTasksGroupBy(config, timeGroupEnabled);
 
   const selectedBoardIds = config.boardIds ?? boards.map((board) => board.id);
   const selectedBoards = useMemo(
@@ -180,6 +193,7 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
           onClick={() => {
             setFilterOpen((open) => !open);
             setSortOpen(false);
+            setGroupOpen(false);
           }}
           className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
             filterCount > 0 ? "text-shadcn-primary" : "text-text-light-gray hover:text-white-black"
@@ -417,6 +431,7 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
           onClick={() => {
             setSortOpen((open) => !open);
             setFilterOpen(false);
+            setGroupOpen(false);
           }}
           className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black @md:min-h-0 @md:min-w-0`}
         >
@@ -467,6 +482,58 @@ const MyTasksViewControls = ({ boards, config, onChange }: Props) => {
           </div>
         )}
       </div>
+
+      {timeGroupEnabled && (
+        <div ref={groupRef} className="relative">
+          <button
+            type="button"
+            aria-label="Group My Tasks"
+            aria-expanded={groupOpen}
+            onClick={() => {
+              setGroupOpen((open) => !open);
+              setFilterOpen(false);
+              setSortOpen(false);
+            }}
+            className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
+              groupBy === "time"
+                ? "text-shadcn-primary"
+                : "text-text-light-gray hover:text-white-black"
+            }`}
+          >
+            <Layers size={16} strokeWidth={1.5} />
+            <span className="hidden @md:inline">
+              {groupBy === "time" ? "Time" : "Board"}
+            </span>
+          </button>
+          {groupOpen && (
+            <div className="absolute right-0 top-full z-40 mt-1 w-44 space-y-1 rounded-[5px] bg-modalBackground p-2 shadow-md">
+              {(
+                [
+                  { value: "time", label: "Time" },
+                  { value: "board", label: "Board" },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    const next: MyTasksGroupBy = option.value;
+                    onChange({ ...config, groupBy: next });
+                    setGroupOpen(false);
+                  }}
+                  className={`flex w-full items-center rounded-[4px] px-2 py-1.5 text-left text-content hover:bg-hover-active ${
+                    groupBy === option.value
+                      ? "text-shadcn-primary"
+                      : "text-white-black"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   ) : null;
 };
