@@ -54,6 +54,7 @@ export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";
 export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
 export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
+export const MY_TASKS_TIME_GROUP_FLAG = "htpr-6455-my-tasks-time-group";
 export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =

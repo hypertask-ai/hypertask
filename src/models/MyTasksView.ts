@@ -18,6 +18,8 @@ export type MyTasksSortField =
   | "title"
   | "board";
 
+export type MyTasksGroupBy = "time" | "board";
+
 export type MyTasksViewConfig = {
   boardIds: number[] | null;
   filters: {
@@ -36,6 +38,8 @@ export type MyTasksViewConfig = {
     field: MyTasksSortField;
     direction: "asc" | "desc";
   };
+  /** Optional so older saved views keep working. Flag-off UI ignores this and stays on board. */
+  groupBy?: MyTasksGroupBy;
 };
 
 export type MyTasksSavedView = {
@@ -143,6 +147,25 @@ const SORT_FIELDS = new Set<MyTasksSortField>([
   "board",
 ]);
 
+const GROUP_BY_VALUES = new Set<MyTasksGroupBy>(["time", "board"]);
+
+const groupByValue = (value: unknown): MyTasksGroupBy | undefined =>
+  typeof value === "string" && GROUP_BY_VALUES.has(value as MyTasksGroupBy)
+    ? (value as MyTasksGroupBy)
+    : undefined;
+
+/**
+ * Flag-off always returns board. Flag-on uses the saved value, or time when
+ * the field is missing so My Tasks defaults to a personal to-do layout.
+ */
+export function effectiveMyTasksGroupBy(
+  config: Pick<MyTasksViewConfig, "groupBy">,
+  flagEnabled: boolean,
+): MyTasksGroupBy {
+  if (!flagEnabled) return "board";
+  return config.groupBy ?? "time";
+}
+
 /** Returns a complete, safe config for persisted JSON or untrusted API input. */
 export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
   const value = isRecord(json) ? json : {};
@@ -155,6 +178,7 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
     typeof sort.field === "string" && SORT_FIELDS.has(sort.field as MyTasksSortField)
       ? (sort.field as MyTasksSortField)
       : DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field;
+  const groupBy = groupByValue(value.groupBy);
 
   return {
     boardIds: value.boardIds === undefined ? null : boardIds,
@@ -173,5 +197,6 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       field: sortField,
       direction: sort.direction === "desc" ? "desc" : "asc",
     },
+    ...(groupBy ? { groupBy } : {}),
   };
 }

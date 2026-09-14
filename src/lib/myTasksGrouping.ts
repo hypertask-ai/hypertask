@@ -1,4 +1,5 @@
 import type { ISection, ITask } from "@/models/model";
+import { endOfDay, endOfWeek, startOfDay } from "date-fns";
 
 export type MyTasksBoardTask = {
   id: number;
@@ -6,6 +7,21 @@ export type MyTasksBoardTask = {
   dueDate?: Date | string | null;
   project?: { id: number; title?: string | null };
 };
+
+export type MyTasksTimeBucket =
+  | "Overdue"
+  | "Today"
+  | "This week"
+  | "Later"
+  | "No due date";
+
+const TIME_BUCKET_ORDER: MyTasksTimeBucket[] = [
+  "Overdue",
+  "Today",
+  "This week",
+  "Later",
+  "No due date",
+];
 
 const dueTime = (task: MyTasksBoardTask): number | null => {
   if (!task.dueDate) return null;
@@ -36,6 +52,60 @@ export function getMyTasksSplitIndex(
     (section) => String(section.projectId) === boardId
   );
   return sectionIndex === -1 ? 0 : sectionIndex + 1;
+}
+
+/**
+ * Same calendar rules as My Tasks due-date filters: Overdue is before the
+ * start of today, not "due earlier this afternoon".
+ */
+export function classifyMyTasksTimeBucket(
+  dueDate: Date | string | null | undefined,
+  now: Date = new Date(),
+): MyTasksTimeBucket {
+  if (!dueDate) return "No due date";
+  const time = new Date(dueDate).getTime();
+  if (!Number.isFinite(time)) return "No due date";
+
+  const todayStart = startOfDay(now).getTime();
+  if (time < todayStart) return "Overdue";
+
+  const todayEnd = endOfDay(now).getTime();
+  if (time <= todayEnd) return "Today";
+
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 }).getTime();
+  if (time <= weekEnd) return "This week";
+  return "Later";
+}
+
+/** Pure time grouping for My Tasks when a saved view asks for groupBy time. */
+export function groupMyTasksByTime(
+  tasks: MyTasksBoardTask[],
+  now: Date = new Date(),
+): { sections: ISection[]; tabs: string[] } {
+  const buckets = new Map<MyTasksTimeBucket, MyTasksBoardTask[]>(
+    TIME_BUCKET_ORDER.map((bucket) => [bucket, []]),
+  );
+
+  for (const task of tasks) {
+    buckets.get(classifyMyTasksTimeBucket(task.dueDate, now))!.push(task);
+  }
+
+  const sections: ISection[] = TIME_BUCKET_ORDER.flatMap((bucket) => {
+    const items = buckets.get(bucket) ?? [];
+    if (items.length === 0) return [];
+    return [
+      {
+        sectionId: TIME_BUCKET_ORDER.indexOf(bucket) + 1,
+        section_title: bucket,
+        items: items as unknown as ITask[],
+      },
+    ];
+  });
+
+  return {
+    sections,
+    tabs: ["All", ...sections.map((section) => section.section_title)],
+  };
 }
 
 /** Pure cross-board grouping used by the My Tasks controller and its tests. */
