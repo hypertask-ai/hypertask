@@ -25,6 +25,7 @@ import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigat
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
+import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import type { IAllCommands } from "@/models/model";
 import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
@@ -391,6 +392,9 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
+  // My Tasks has no board cache to mutate, so Ctrl+E hides the row locally
+  // until router.refresh() returns the server list without it (HTPR-6445).
+  const [excludedTaskIds, setExcludedTaskIds] = useState<Set<number>>(() => new Set());
   const [sortState, setSortState] = useState<SortState>(() => resolveSortState(_currentProject));
   const { setTableSortViewAndReturn, changeBoardLayout } = useKanbanViews(_currentProject);
   const didRestore = useRef(false);
@@ -409,16 +413,23 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     // An active filter may intentionally produce zero visible sections. Only
     // fall back when no filtered value was supplied, not when it is empty.
     const base = filteredSections ?? _sections ?? [];
-    if (!_currentProject) return base;
+    const withoutExcluded =
+      excludedTaskIds.size === 0
+        ? base
+        : base.map((section) => ({
+            ...section,
+            items: (section.items || []).filter((task) => !excludedTaskIds.has(task.id)),
+          }));
+    if (!_currentProject) return withoutExcluded;
     // Reuse the same empty-sections setting the kanban board applies (useHandleKeyDownOperations),
     // recomputed here so a live toggle of the setting reflects immediately, not just after refetch.
-    const emptyFiltered = getFilteredEmptySections(base, _currentProject);
+    const emptyFiltered = getFilteredEmptySections(withoutExcluded, _currentProject);
     return emptyFiltered.map((section) => ({
       ...section,
       // returnSortedItems sorts in place; copy so frozen Recoil/React state isn't mutated
       items: returnSortedItems([...(section.items || [])], _currentProject),
     }));
-  }, [filteredSections, _sections, _currentProject]);
+  }, [filteredSections, _sections, _currentProject, excludedTaskIds]);
   // Drag is only ever allowed between real sections of a real board. The
   // _currentProject gate is what keeps /my-tasks out: it renders this table
   // with _currentProject={null} and groups by boardId, so a "section" there is
@@ -759,16 +770,29 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     document.getElementById(id)?.scrollIntoView({ block: "nearest" });
   }, []);
 
+  // Kanban cards take DOM focus on hover via spaceship; table rows only tracked
+  // selectedIndex. Leftover focus in AI chat or an input then made
+  // returnIfModalOrInputActive() swallow Ctrl+E on My Tasks (HTPR-6445).
+  const focusRowElement = useCallback((taskId: number) => {
+    const element = document.getElementById(`inbox-${taskId}`);
+    if (element instanceof HTMLElement) {
+      element.focus({ preventScroll: true });
+    }
+  }, []);
+
   const focusTo = useCallback(
     (index: number) => {
       const nextIndex = Math.max(0, Math.min(index, rows.length - 1));
       const row = rows[nextIndex];
       if (!row) return;
       setSelectedIndex(nextIndex);
-      if (isTaskRow(row)) updateActiveItemAndItemInView(row.task);
+      if (isTaskRow(row)) {
+        updateActiveItemAndItemInView(row.task);
+        focusRowElement(row.task.id);
+      }
       scrollToRow(row);
     },
-    [rows, scrollToRow, updateActiveItemAndItemInView]
+    [focusRowElement, rows, scrollToRow, updateActiveItemAndItemInView]
   );
 
   const expandSection = useCallback((sid: string | number) => {
@@ -825,7 +849,14 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     },
     [navigateToTask, rows, setTasksPlayList, updateActiveItemAndItemInView]
   );
-  const handleMouseEnter = useCallback((index: number) => setSelectedIndex(index), []);
+  const handleMouseEnter = useCallback(
+    (index: number) => {
+      setSelectedIndex(index);
+      const row = rows[index];
+      if (row && isTaskRow(row)) focusRowElement(row.task.id);
+    },
+    [focusRowElement, rows],
+  );
   const handleMouseLeave = useCallback(() => {}, []);
 
   const clearTaskDrag = useCallback(() => {
@@ -895,11 +926,21 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       return;
     }
 
+    setExcludedTaskIds((previous) => {
+      const next = new Set(previous);
+      next.add(task.id);
+      return next;
+    });
     try {
       await globalAPIHandlers.archiveTask(task.id, "Archive");
       router.refresh();
       toast("Task archived");
     } catch {
+      setExcludedTaskIds((previous) => {
+        const next = new Set(previous);
+        next.delete(task.id);
+        return next;
+      });
       toast.error("Unable to archive task");
     }
   }, [_currentProject, removeFromListWithStatus, router]);
@@ -974,7 +1015,9 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       // [ctrl/cmd]+[e] archives the selected task. This component also powers
       // My Tasks, so archiveTaskFromTable handles both board cache updates and
       // the cross-board server-data refresh used there.
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "e") {
+      // keyCode matches every other Ctrl+E surface; e.key can be unreliable
+      // under modifiers on some browsers.
+      if ((e.ctrlKey || e.metaKey) && e.keyCode === KeyCodes.E) {
         const row = rows[selectedIndex];
         if (!row || !isTaskRow(row)) return;
         e.preventDefault();
@@ -1216,6 +1259,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       <li
         id={`inbox-${task.id}`}
         key={`table-row-${task.id}`}
+        tabIndex={-1}
         draggable={Boolean(dragData)}
         onDragStart={(event) => {
           if (!dragData) {
@@ -1231,7 +1275,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
         onMouseEnter={() => handleMouseEnter(flatIndex)}
         onMouseLeave={handleMouseLeave}
         style={{ gridTemplateColumns }}
-        className={`${TABLE_GRID_CLASS} table-view-row cursor-pointer items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense ${
+        className={`${TABLE_GRID_CLASS} table-view-row cursor-pointer items-center gap-2 py-[6px] md:py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-meta md:text-dense outline-none ${
           selected ? "md:bg-active-elementBg md:border-l-selected-item-border" : "md:border-l-transparent bg-transparent"
         }`}
       >
