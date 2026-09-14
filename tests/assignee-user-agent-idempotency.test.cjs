@@ -319,7 +319,10 @@ test("a human assignment coexists with an agent owned by the same user", async (
     [{ userId: owner.id, agentId: agentAssignment.agentId }],
   );
   assert.equal(calls.cancellations, 4);
-  assert.deepEqual(calls.fenceOptions.at(-1), { allowHumanOverride: false });
+  assert.deepEqual(calls.fenceOptions.at(-1), {
+    allowHumanOverride: false,
+    allowNonNormalLeaseAdoption: true,
+  });
 
   const staleToggle = await assign(
     owner,

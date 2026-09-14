@@ -493,6 +493,19 @@ test('adoption refuses archived and deleted tasks, like the claim endpoint', asy
   assert.equal(tx.state.lease, null);
 });
 
+test('adoption allows archived tasks when allowNonNormalLeaseAdoption is set', async () => {
+  const tx = adoptingTx({ status: 'Archive' });
+
+  await withAgentMutationLeaseAdoption({ agentId: 'agent-a', userId: 7 }, async () => {
+    await assertFencedWriteAllowed(tx, 42, 'agent-a', 7, {
+      allowNonNormalLeaseAdoption: true,
+    });
+  });
+
+  assert.equal(tx.state.lease.agentId, 'agent-a');
+  assert.equal(tx.state.lease.holder, 7);
+});
+
 test('adoption never takes a lease another agent already holds', async () => {
   const tx = adoptingTx({
     lease: { agentId: 'agent-b', expiresAt: new Date(Date.now() + 60_000) },

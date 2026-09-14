@@ -58,13 +58,16 @@ export async function lockAgentMutationFence(
 // Adopts a lease for the current request, under the fence lock the caller
 // already holds. Only reachable when the fence found no live lease and the
 // request boundary opted in, and only for the first fenced transaction of that
-// request. The insert keeps the claim endpoint's conditions: the task must
-// still be Normal, and an unexpired row is never overwritten.
+// request. The insert keeps the claim endpoint's conditions by default: the
+// task must still be Normal, and an unexpired row is never overwritten.
+// Unassign may opt into Archive/Deleted adoption so cleanup does not require a
+// status round-trip or an explicit claim (HTPR-6428).
 async function adoptAgentMutationLease(
   tx: Prisma.TransactionClient,
   taskId: number,
   agentId: string,
-  userId: number
+  userId: number,
+  options: { allowNonNormalLeaseAdoption?: boolean } = {}
 ): Promise<boolean> {
   const grant = consumeAgentMutationLeaseAdoption(agentId, userId, taskId)
   if (!grant) return false
@@ -73,7 +76,13 @@ async function adoptAgentMutationLease(
     where: { id: taskId },
     select: { status: true },
   })
-  if (liveTask?.status !== 'Normal') return false
+  if (
+    !options.allowNonNormalLeaseAdoption &&
+    liveTask?.status !== 'Normal'
+  ) {
+    return false
+  }
+  if (!liveTask) return false
 
   const token = randomUUID()
   const referenceToken = `${token}:${randomUUID()}`
@@ -161,7 +170,10 @@ export async function assertAgentAssignmentChangeAllowed(
   taskId: number,
   actingAgentId?: string | null,
   actingUserId?: number | null,
-  options: { allowHumanOverride?: boolean } = {}
+  options: {
+    allowHumanOverride?: boolean
+    allowNonNormalLeaseAdoption?: boolean
+  } = {}
 ): Promise<void> {
   await lockAgentMutationFence(tx, taskId)
   // Leases are issued with PostgreSQL now(), so expiry must use that same
@@ -253,7 +265,10 @@ export async function assertAgentAssignmentChangeAllowed(
           tx,
           taskId,
           verifiedActingAgentId,
-          actingUserId as number
+          actingUserId as number,
+          {
+            allowNonNormalLeaseAdoption: options.allowNonNormalLeaseAdoption,
+          }
         ))
       ) {
         return

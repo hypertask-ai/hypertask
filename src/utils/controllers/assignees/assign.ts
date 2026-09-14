@@ -219,6 +219,8 @@ const assigneesAssign = async (
       expectedProjectId: options?.expectedProjectId,
       expectedSectionId: options?.expectedSectionId,
       allowHumanOverride,
+      // Archive/Deleted cleanup must adopt a lease without Normal status.
+      allowNonNormalLeaseAdoption: intent === "unassign",
     };
 
     if (intent === "assign") {
@@ -349,6 +351,8 @@ interface ICreateAssigneeProps {
   expectedProjectId?: number;
   expectedSectionId?: number | null;
   allowHumanOverride?: boolean;
+  // HTPR-6428: removals may adopt a lease on Archive/Deleted. Assign never.
+  allowNonNormalLeaseAdoption?: boolean;
 }
 const createAssignee = async ({
   afterAppDomain,
@@ -671,6 +675,7 @@ const removeMatchingAssignees = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  allowNonNormalLeaseAdoption,
 }: IRemoveMatchingAssigneesProps) => {
   const removal = await prisma.$transaction(async (tx) => {
     await assertAgentAssignmentChangeAllowed(
@@ -678,7 +683,7 @@ const removeMatchingAssignees = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride }
+      { allowHumanOverride, allowNonNormalLeaseAdoption }
     );
     if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
       const currentTask = await tx.task.findUnique({
@@ -837,6 +842,7 @@ const removeAssignee = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  allowNonNormalLeaseAdoption,
 }: IRemoveAssigneeProps) => {
   const removal = await prisma.$transaction(async (tx) => {
     await assertAgentAssignmentChangeAllowed(
@@ -844,7 +850,7 @@ const removeAssignee = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride }
+      { allowHumanOverride, allowNonNormalLeaseAdoption }
     );
     if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
       const currentTask = await tx.task.findUnique({
