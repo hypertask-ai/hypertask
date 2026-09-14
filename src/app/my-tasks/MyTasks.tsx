@@ -159,56 +159,6 @@ const MyTasks = ({
     [availableBoards],
   );
 
-  const viewFilteredSections = useMemo(() => {
-    const now = new Date();
-    const selectedBoards = viewConfig.boardIds
-      ? new Set(viewConfig.boardIds)
-      : null;
-    const boardSections = sections.filter(
-      (section) =>
-        !selectedBoards ||
-        (section.projectId !== undefined && selectedBoards.has(section.projectId)),
-    );
-
-    if (groupBy === "time") {
-      const flat = boardSections.flatMap(
-        (section) => section.items as MyTasksTask[],
-      );
-      const filteredTasks = applyMyTasksView(flat, viewConfig, now);
-      const selectedBoardId =
-        activeSplit === 0
-          ? null
-          : availableBoards[activeSplit - 1]?.id ?? null;
-      const scopedTasks =
-        selectedBoardId === null
-          ? filteredTasks
-          : filteredTasks.filter(
-              (task) => (task.project?.id ?? task.projectId) === selectedBoardId,
-            );
-      return groupMyTasksByTime(scopedTasks, now).sections;
-    }
-
-    const next = boardSections.map((section) => ({
-      ...section,
-      items: applyMyTasksView(
-        section.items as MyTasksTask[],
-        viewConfig,
-        now,
-      ),
-    }));
-    return sortMyTasksViewSections(next, viewConfig, now);
-  }, [
-    activeSplit,
-    availableBoards,
-    dateFilterVersion,
-    groupBy,
-    sections,
-    viewConfig,
-  ]);
-  const filteredSections = viewsFeatureEnabled
-    ? viewFilteredSections
-    : priorityFilteredSections;
-
   const allTasksForBoardTabs = useMemo(() => {
     if (!viewsFeatureEnabled || groupBy !== "time") return [];
     const now = new Date();
@@ -224,6 +174,52 @@ const MyTasks = ({
       .flatMap((section) => section.items as MyTasksTask[]);
     return applyMyTasksView(flat, viewConfig, now);
   }, [dateFilterVersion, groupBy, sections, viewConfig, viewsFeatureEnabled]);
+
+  const viewFilteredSections = useMemo(() => {
+    const now = new Date();
+    if (groupBy === "time") {
+      const selectedBoardId =
+        activeSplit === 0
+          ? null
+          : availableBoards[activeSplit - 1]?.id ?? null;
+      const scopedTasks =
+        selectedBoardId === null
+          ? allTasksForBoardTabs
+          : allTasksForBoardTabs.filter(
+              (task) => (task.project?.id ?? task.projectId) === selectedBoardId,
+            );
+      return groupMyTasksByTime(scopedTasks, now).sections;
+    }
+
+    const selectedBoards = viewConfig.boardIds
+      ? new Set(viewConfig.boardIds)
+      : null;
+    const boardSections = sections.filter(
+      (section) =>
+        !selectedBoards ||
+        (section.projectId !== undefined && selectedBoards.has(section.projectId)),
+    );
+    const next = boardSections.map((section) => ({
+      ...section,
+      items: applyMyTasksView(
+        section.items as MyTasksTask[],
+        viewConfig,
+        now,
+      ),
+    }));
+    return sortMyTasksViewSections(next, viewConfig, now);
+  }, [
+    activeSplit,
+    allTasksForBoardTabs,
+    availableBoards,
+    dateFilterVersion,
+    groupBy,
+    sections,
+    viewConfig,
+  ]);
+  const filteredSections = viewsFeatureEnabled
+    ? viewFilteredSections
+    : priorityFilteredSections;
 
   const activeTabs = useMemo(() => {
     if (!viewsFeatureEnabled) return tabs;
