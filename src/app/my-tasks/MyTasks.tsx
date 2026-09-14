@@ -5,8 +5,10 @@ import { SplitTitle } from "@/components/Common/TaskRowComponents/TaskListRow";
 import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
-import { useUndoContext } from "@/hooks/General/useUndo";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
+import useMoveTaskToSection from "@/hooks/MultiPages/useMoveTaskToSection";
+import { useUndoContext } from "@/hooks/General/useUndo";
+import { useAssignTaskUser } from "@/hooks/Task Detail/useAssignTaskUser";
 import { useFlag } from "@/hooks/useFlag";
 import {
   HTPR_6444_TABLE_BULK_SELECT_FLAG,
@@ -40,8 +42,9 @@ import {
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
-import { ISection, ITask, IUser } from "@/models/model";
+import { IAgent, ILabel, ISection, ITask, IUser } from "@/models/model";
 import type { TBoardSortingViewMode } from "@/models/Views/model";
+import axiosClient from "@/utils/axiosClient";
 import globalAPIHandlers from "@/utils/api/global";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
@@ -82,6 +85,8 @@ const BulkSelectableMyTasksTable = ({
   onMyTasksSortChange,
 }: BulkSelectableMyTasksTableProps) => {
   const router = useRouter();
+  const assignTaskUser = useAssignTaskUser();
+  const moveTaskToSection = useMoveTaskToSection();
   const { performActionAndStoreUndoData } = useUndoContext();
   const items = useMemo(
     () => sections.flatMap((section) => section.items ?? []),
@@ -89,10 +94,52 @@ const BulkSelectableMyTasksTable = ({
   );
 
   const archiveTaskForBulk = useCallback(async (task: ITask) => {
-    if (!getTaskProjectGroup(task)) {
-      throw new Error("Task board is unavailable");
-    }
+    const projectId = task.project?.id ?? task.projectId;
+    if (!projectId) throw new Error("Task board is unavailable");
     await globalAPIHandlers.archiveTask(task.id, "Archive");
+  }, []);
+
+  const moveTaskForBulk = useCallback(
+    async (task: ITask, destination: ISection) => {
+      const projectId = task.project?.id ?? task.projectId;
+      const sourceSectionId = task.sectionId;
+      const destinationSectionId = destination.sectionId ?? destination.id;
+      if (!projectId || sourceSectionId == null || destinationSectionId == null) {
+        throw new Error("Task column is unavailable");
+      }
+      if (sourceSectionId === destinationSectionId) return;
+      await moveTaskToSection.mutateAsync({
+        projectId,
+        taskId: task.id,
+        ticketNumber: task.ticketNumber,
+        sourceSectionId,
+        destinationSectionId,
+        destinationSectionTitle: destination.section_title,
+      });
+    },
+    [moveTaskToSection],
+  );
+
+  const assignTaskForBulk = useCallback(
+    async (
+      task: ITask,
+      assignee: IUser | IAgent,
+      intent?: "assign" | "unassign" | "toggle",
+    ) => {
+      await assignTaskUser(assignee, task.id, intent ?? "assign");
+    },
+    [assignTaskUser],
+  );
+
+  const labelTaskForBulk = useCallback(async (task: ITask, label: ILabel) => {
+    const hasLabel =
+      task.taskLabels?.some((taskLabel) => taskLabel.labelId === label.id) ??
+      false;
+    if (hasLabel === !label.check) return;
+    await axiosClient.post("/labels/assignLabel", {
+      taskId: task.id,
+      labelId: label.id,
+    });
   }, []);
 
   const bulkUndoHandler = useCallback(
@@ -116,7 +163,7 @@ const BulkSelectableMyTasksTable = ({
           {
             tasks: archivedTasks.map((task) => ({
               id: task.id,
-              projectId: getTaskProjectGroup(task)!,
+              projectId: task.project?.id ?? task.projectId!,
             })),
           },
           `Undo archive (${archivedTasks.length} tasks)`,
@@ -128,12 +175,19 @@ const BulkSelectableMyTasksTable = ({
     [bulkUndoHandler, performActionAndStoreUndoData, router],
   );
 
+  const refreshAfterMutation = useCallback(() => router.refresh(), [router]);
+
   return (
     <KanbanBulkSelectionProvider
       items={items}
       onArchiveTask={archiveTaskForBulk}
+      onMoveTask={moveTaskForBulk}
+      onAssignTask={assignTaskForBulk}
+      onLabelTask={labelTaskForBulk}
       getSelectionGroupId={getTaskProjectGroup}
+      requireSingleProject
       onArchiveComplete={handleArchiveComplete}
+      onMutationComplete={refreshAfterMutation}
     >
       <TableView
         filteredSections={sections}

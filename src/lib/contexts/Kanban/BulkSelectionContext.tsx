@@ -18,6 +18,7 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import {
   getInclusiveRange,
+  getSharedProjectId,
   getTaskIdsByGroup,
   toggleId,
   toggleVisibleIds,
@@ -33,6 +34,7 @@ interface KanbanBulkSelectionContextValue {
   selectedIdsArray: number[];
   selectedTasks: ITask[];
   selectedCount: number;
+  sharedProjectId: number | null;
   failedIds: Set<number>;
   isProcessing: boolean;
   isSelected: (taskId: number) => boolean;
@@ -45,6 +47,7 @@ interface KanbanBulkSelectionContextValue {
   toggleVisibleSelection: (visibleIds: readonly number[]) => void;
   isAllVisibleSelected: (visibleIds: readonly number[]) => boolean;
   clearSelection: () => void;
+  guardProjectScopedAction: () => boolean;
   openBulkCommand: (mode?: CommandMode) => void;
   archiveSelected: () => Promise<void>;
   moveSelected: (section: ISection) => Promise<void>;
@@ -72,6 +75,8 @@ interface KanbanBulkSelectionProviderProps {
     task: ITask,
   ) => string | number | null | undefined;
   onArchiveComplete?: (tasks: ITask[]) => Promise<void> | void;
+  requireSingleProject?: boolean;
+  onMutationComplete?: () => Promise<void> | void;
 }
 
 const KanbanBulkSelectionContext =
@@ -86,6 +91,8 @@ export const KanbanBulkSelectionProvider = ({
   onLabelTask,
   getSelectionGroupId = (task) => task.sectionId,
   onArchiveComplete,
+  requireSingleProject = false,
+  onMutationComplete,
 }: KanbanBulkSelectionProviderProps) => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
@@ -104,6 +111,10 @@ export const KanbanBulkSelectionProvider = ({
   const selectedTasks = useMemo(
     () => items.filter((task) => selectedIds.has(task.id)),
     [items, selectedIds],
+  );
+  const sharedProjectId = useMemo(
+    () => getSharedProjectId(selectedTasks),
+    [selectedTasks],
   );
 
   // A task can disappear after an action or a realtime update. Do not leave a
@@ -183,11 +194,25 @@ export const KanbanBulkSelectionProvider = ({
     [selectedIds],
   );
 
+  const guardProjectScopedAction = useCallback(() => {
+    if (!requireSingleProject || sharedProjectId !== null) return true;
+    toast.error("Select tasks from one board to assign, label or move");
+    return false;
+  }, [requireSingleProject, sharedProjectId]);
+
   const openBulkCommand = useCallback(
     (mode = CommandMode.Command) => {
+      if (
+        (mode === CommandMode.OpenAssignModal ||
+          mode === CommandMode.LabelModal ||
+          mode === CommandMode.MoveToColumn) &&
+        !guardProjectScopedAction()
+      ) {
+        return;
+      }
       setShowCommands({ show: true, mode });
     },
-    [setShowCommands],
+    [guardProjectScopedAction, setShowCommands],
   );
 
   const runTaskOperation = useCallback(
@@ -249,35 +274,56 @@ export const KanbanBulkSelectionProvider = ({
 
   const moveSelected = useCallback(
     (section: ISection) => {
-      if (!onMoveTask) return Promise.resolve();
+      if (!onMoveTask || !guardProjectScopedAction()) return Promise.resolve();
       return runTaskOperation(
         (task) => onMoveTask(task, section),
         `${selectedTasks.length} tasks moved to ${section.section_title}`,
+        onMutationComplete,
       );
     },
-    [onMoveTask, runTaskOperation, selectedTasks.length],
+    [
+      guardProjectScopedAction,
+      onMoveTask,
+      onMutationComplete,
+      runTaskOperation,
+      selectedTasks.length,
+    ],
   );
 
   const assignSelected = useCallback(
     (assignee: Assignee, intent: AssigneeIntent = "assign") => {
-      if (!onAssignTask) return Promise.resolve();
+      if (!onAssignTask || !guardProjectScopedAction()) return Promise.resolve();
       return runTaskOperation(
         (task) => onAssignTask(task, assignee, intent),
         `${selectedTasks.length} tasks updated`,
+        onMutationComplete,
       );
     },
-    [onAssignTask, runTaskOperation, selectedTasks.length],
+    [
+      guardProjectScopedAction,
+      onAssignTask,
+      onMutationComplete,
+      runTaskOperation,
+      selectedTasks.length,
+    ],
   );
 
   const labelSelected = useCallback(
     (label: ILabel) => {
-      if (!onLabelTask) return Promise.resolve();
+      if (!onLabelTask || !guardProjectScopedAction()) return Promise.resolve();
       return runTaskOperation(
         (task) => onLabelTask(task, label),
         `${selectedTasks.length} tasks updated`,
+        onMutationComplete,
       );
     },
-    [onLabelTask, runTaskOperation, selectedTasks.length],
+    [
+      guardProjectScopedAction,
+      onLabelTask,
+      onMutationComplete,
+      runTaskOperation,
+      selectedTasks.length,
+    ],
   );
 
   const handleBulkKeyDown = useCallback(
@@ -393,6 +439,7 @@ export const KanbanBulkSelectionProvider = ({
       selectedIdsArray: [...selectedIds],
       selectedTasks,
       selectedCount: selectedTasks.length,
+      sharedProjectId,
       failedIds,
       isProcessing,
       isSelected: (taskId) => selectedIds.has(taskId),
@@ -400,6 +447,7 @@ export const KanbanBulkSelectionProvider = ({
       toggleVisibleSelection,
       isAllVisibleSelected,
       clearSelection,
+      guardProjectScopedAction,
       openBulkCommand,
       archiveSelected,
       moveSelected,
@@ -412,6 +460,7 @@ export const KanbanBulkSelectionProvider = ({
       assignSelected,
       clearSelection,
       failedIds,
+      guardProjectScopedAction,
       handleBulkKeyDown,
       isAllVisibleSelected,
       isProcessing,
@@ -420,6 +469,7 @@ export const KanbanBulkSelectionProvider = ({
       openBulkCommand,
       selectedIds,
       selectedTasks,
+      sharedProjectId,
       toggleTaskSelection,
       toggleVisibleSelection,
     ],

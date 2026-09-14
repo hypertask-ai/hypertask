@@ -212,7 +212,10 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6427_ROW_SHORTCUTS_FLAG,
+  HTPR_6444_TABLE_BULK_SELECT_FLAG,
+} from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -225,6 +228,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const queryClient = useQueryClient();
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
+  const tableBulkSelectEnabled = useFlag(HTPR_6444_TABLE_BULK_SELECT_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -316,15 +320,32 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
   const taskProjectId =
     paletteContextOptions?.task?.projectId ?? inViewObject.taskProjectId;
+  const bulkTaskProjectId =
+    tableBulkSelectEnabled && hasBulkSelection
+      ? bulkSelection?.sharedProjectId
+      : null;
+  const resolvedTaskProjectId = bulkTaskProjectId ?? taskProjectId;
   const isRowTaskProjectFallback =
     rowShortcutsEnabled && Boolean(paletteContextOptions?.task) && !_currentProject;
-  const { project: taskProject, isLoading: isTaskProjectLoading, isError: isTaskProjectError } =
+  const isBulkTaskProjectFallback =
+    tableBulkSelectEnabled &&
+    hasBulkSelection &&
+    !_currentProject &&
+    (commandMode === CommandMode.OpenAssignModal ||
+      commandMode === CommandMode.LabelModal ||
+      commandMode === CommandMode.MoveToColumn);
+  const {
+    project: taskProject,
+    isLoading: isTaskProjectLoading,
+    isError: isTaskProjectError,
+  } =
     useTaskProjectFallback(
       _currentProject,
-      taskProjectId,
+      resolvedTaskProjectId,
       currentUser.id,
-      isRowTaskProjectFallback,
+      isRowTaskProjectFallback || isBulkTaskProjectFallback,
     );
+  const bulkProject = _currentProject ?? taskProject;
   const activeTaskId =
     paletteContextOptions?.task?.taskId ??
     inViewObject.taskId;
@@ -770,6 +791,18 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
 
   const handleAction = (mode?: CommandMode, action?: string) => {
     if (mode === CommandMode.CopyViewURL && !copyCurrentUrlEnabled) {
+      boardCloseHandler();
+      return;
+    }
+    if (
+      tableBulkSelectEnabled &&
+      hasBulkSelection &&
+      bulkSelection &&
+      (mode === CommandMode.OpenAssignModal ||
+        mode === CommandMode.LabelModal ||
+        mode === CommandMode.MoveToColumn) &&
+      !bulkSelection.guardProjectScopedAction()
+    ) {
       boardCloseHandler();
       return;
     }
@@ -2085,7 +2118,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   }, [commandMode, resetShowCommands, showCommands.show]);
 
   if (!showCommands.show) return null;
-  if (rowShortcutsEnabled && isRowTaskProjectFallback && isTaskProjectLoading)
+  if (
+    (isRowTaskProjectFallback || isBulkTaskProjectFallback) &&
+    isTaskProjectLoading
+  )
     return <span className="hidden" />;
 
   return (
@@ -2247,6 +2283,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             hasBulkSelection && bulkSelection && bulkTasks[0] ? (
               <AssignModal
                 onClose={boardCloseHandler}
+                project={
+                  tableBulkSelectEnabled && !_currentProject
+                    ? bulkProject ?? undefined
+                    : undefined
+                }
                 task={{
                   id: bulkTasks[0].id,
                   title: bulkTasks[0].title,
@@ -2326,9 +2367,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             hasBulkSelection &&
             bulkSelection &&
             bulkTasks[0] &&
-            _currentProject ? (
+            bulkProject ? (
               <MoveToColumn
-                projectId={_currentProject.id}
+                projectId={bulkProject.id}
                 task={{
                   taskId: bulkTasks[0].id,
                   projectId: bulkTasks[0].projectId,
@@ -2420,7 +2461,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           {commandMode === CommandMode.LabelModal && (
             hasBulkSelection && bulkSelection ? (
               <CreateLabel
-                currentProject={_currentProject ?? undefined}
+                currentProject={bulkProject ?? undefined}
                 taskIds={bulkTasks.map((task) => task.id)}
                 onBulkLabel={(label) => bulkSelection.labelSelected(label)}
                 closeHandler={boardCloseHandler}
