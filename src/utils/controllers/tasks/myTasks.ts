@@ -6,6 +6,7 @@ import type { MyTasksBoardMetadata } from "@/models/MyTasksView";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import {
   buildMyTasksScopeOr,
+  DEFAULT_MY_TASKS_SCOPES,
   effectiveMyTasksScopes,
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
@@ -15,7 +16,7 @@ export { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 const getMyTasks = async (
   userId: number,
   includeViewMetadata = false,
-  scopes: MyTasksScope[] = ["assigned"],
+  scopes: MyTasksScope[] = DEFAULT_MY_TASKS_SCOPES,
 ) => {
   try {
     const { json: projects } = await getAllMinimal(

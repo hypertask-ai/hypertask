@@ -32,8 +32,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const scopesEnabled = await isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId);
-    const viewsEnabled = await isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId);
+    const [scopesEnabled, viewsEnabled] = await Promise.all([
+      isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
+      isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
+    ]);
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
     const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
 

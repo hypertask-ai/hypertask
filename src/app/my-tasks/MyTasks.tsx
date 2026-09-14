@@ -198,12 +198,17 @@ const MyTasks = ({
         const response = await fetch(
           `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
         );
-        if (!response.ok || token !== scopesFetchToken.current) return;
+        if (token !== scopesFetchToken.current) return;
+        if (!response.ok) {
+          toast.error("Unable to refresh My Tasks");
+          return;
+        }
         const body = (await response.json()) as {
           sections?: ISection[];
           tabs?: string[];
           boards?: MyTasksBoardMetadata[];
         };
+        if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
         setSections(body.sections);
         if (Array.isArray(body.tabs)) setTabs(body.tabs);
