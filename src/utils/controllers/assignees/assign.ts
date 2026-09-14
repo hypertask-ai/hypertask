@@ -672,14 +672,6 @@ const removeMatchingAssignees = async ({
   expectedSectionId,
   allowHumanOverride,
 }: IRemoveMatchingAssigneesProps) => {
-  // User-id bulk path always re-queries inside the transaction. The `assigns`
-  // snapshot is only a hint for empty short-circuit when agentId targeting
-  // delegates below; do not delete by that ID list alone.
-  if (assigns.length === 0) {
-    // Still enter the transaction below so a row that appeared after the
-    // caller's pre-read is cleared under the fence.
-  }
-
   const removal = await prisma.$transaction(async (tx) => {
     await assertAgentAssignmentChangeAllowed(
       tx,
