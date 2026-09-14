@@ -41,7 +41,7 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
-  const boardParam = searchParams.get("board");
+  const boardParam = searchParams?.get("board") ?? null;
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
       ? getMyTasksSplitIndex(sections, boardParam)
@@ -79,7 +79,7 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
 
   const replaceBoardParam = useCallback(
     (boardId: number | null) => {
-      const next = new URLSearchParams(searchParams.toString());
+      const next = new URLSearchParams(searchParams?.toString() ?? "");
       if (boardId === null) next.delete("board");
       else next.set("board", String(boardId));
       const query = next.toString();
