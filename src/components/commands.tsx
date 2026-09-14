@@ -2375,7 +2375,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           {commandMode === CommandMode.LabelModal && (
             hasBulkSelection && bulkSelection && bulkProjectId ? (
               <CreateLabel
-                currentProject={_currentProject ?? undefined}
+                currentProject={
+                  _currentProject ?? ({ id: bulkProjectId } as IProject)
+                }
                 taskIds={bulkTasks.map((task) => task.id)}
                 onBulkLabel={(label) => bulkSelection.labelSelected(label)}
                 closeHandler={boardCloseHandler}

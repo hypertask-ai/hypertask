@@ -196,16 +196,16 @@ export const MyTasksBulkSelectionProvider = ({
   }, [clearSelection, isAllSelected, visibleIds]);
 
   const requireSameBoard = useCallback(() => {
-    const projectId = sharedProjectId(selectedTasks);
+    const projectId = sharedProjectId(selectedTasksSnapshot());
     if (projectId == null) {
       toast.error(MIXED_BOARD_TOAST);
       return null;
     }
     return projectId;
-  }, [selectedTasks]);
+  }, [selectedTasksSnapshot]);
 
   const seedInViewFromSelection = useCallback(() => {
-    const task = selectedTasks[0];
+    const task = selectedTasksSnapshot()[0];
     if (!task) return;
     setInViewObject({
       taskId: task.id,
@@ -215,7 +215,7 @@ export const MyTasksBulkSelectionProvider = ({
       taskTitle: task.title ?? undefined,
       taskTicketNumber: task.ticketNumber ?? undefined,
     });
-  }, [selectedTasks, setInViewObject]);
+  }, [selectedTasksSnapshot, setInViewObject]);
 
   const openBulkCommand = useCallback(
     (mode = CommandMode.Command) => {

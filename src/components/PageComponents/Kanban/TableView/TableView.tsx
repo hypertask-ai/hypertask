@@ -1433,6 +1433,22 @@ const TableView = ({
   };
 
   let cursor = -1;
+  const bulkSelectAllHeader =
+    enableMyTasksBulkSelection && myTasksBulk ? (
+      myTasksBulk.selectedCount > 0 ? (
+        <SelectionCheckbox
+          id="my-tasks-select-all"
+          isChecked={myTasksBulk.isAllSelected}
+          alwaysVisible
+          borderColorClass="!border-text-light-gray"
+          checkmarkColorClass="text-white-black"
+          onClick={() => myTasksBulk.selectAllVisible()}
+        />
+      ) : (
+        <span aria-hidden className="block h-[15px] w-[15px]" />
+      )
+    ) : null;
+
   return (
     // h-full fills the flex-sized board column (rail shell), so the horizontal
     // scrollbar sits at the bottom of the viewport instead of under the last row.
@@ -1457,18 +1473,7 @@ const TableView = ({
             />
           )}
           <div style={{ gridTemplateColumns }} className={`${TABLE_GRID_CLASS} table-view-header group/header sticky top-0 z-10 items-center gap-2 bg-taskDetailPage px-[20px] md:px-5 py-2 text-micro font-semibold uppercase text-text-light-gray`}>
-            {enableMyTasksBulkSelection && myTasksBulk && myTasksBulk.selectedCount > 0 ? (
-              <SelectionCheckbox
-                id="my-tasks-select-all"
-                isChecked={myTasksBulk.isAllSelected}
-                alwaysVisible
-                borderColorClass="!border-text-light-gray"
-                checkmarkColorClass="text-white-black"
-                onClick={() => myTasksBulk.selectAllVisible()}
-              />
-            ) : enableMyTasksBulkSelection ? (
-              <span aria-hidden className="block h-[15px] w-[15px]" />
-            ) : null}
+            {bulkSelectAllHeader}
             {visibleColumns.map((column) => {
               const sortIndex = sortState.findIndex((level) => level.column === column.key);
               const activeSort = sortState[sortIndex];
