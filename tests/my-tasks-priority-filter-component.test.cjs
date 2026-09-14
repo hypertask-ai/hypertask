@@ -40,10 +40,12 @@ stubSourceModule("src/hooks/Task Detail/useTimeTracking.ts", {
 });
 stubSourceModule("src/lib/state.tsx", {
   useRecoilValue: () => false,
+  useRecoilState: () => [0, () => {}],
 });
 stubSourceModule("src/store/index.ts", {
   appShellRailAtom: {},
   showCommandsAtom: { show: false },
+  myTasksTableColumnsPickerRequestAtom: {},
 });
 stubModule(require.resolve("next/navigation"), {
   useRouter: () => ({
@@ -57,6 +59,16 @@ stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx",
     tableViewProps.push(props);
     return null;
   },
+});
+// HTPR-6456: MyTasks imports TableColumnsPicker; its modal SCSS blows up under jiti.
+stubSourceModule("src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx", {
+  default: () => null,
+});
+stubSourceModule("src/app/my-tasks/MyTasksViewControls.tsx", {
+  default: () => null,
+});
+stubSourceModule("src/app/my-tasks/MyTasksViewTabs.tsx", {
+  default: () => null,
 });
 stubSourceModule("src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", {
   default: () => null,
