@@ -2,15 +2,35 @@ import prisma from "@/lib/prisma";
 import getAllMinimal from "../projects/getAllMinimal";
 import { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 import type { MyTasksBoardTask } from "@/lib/myTasksGrouping";
+import type { MyTasksBoardMetadata } from "@/models/MyTasksView";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 export { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 
-const getMyTasks = async (userId: number) => {
+const getMyTasks = async (userId: number, includeViewMetadata = false) => {
   try {
-    const { json: projects } = await getAllMinimal(userId, "Calendar");
+    const { json: projects } = await getAllMinimal(
+      userId,
+      "Calendar",
+      includeViewMetadata,
+    );
     const projectIds = projects.map((project) => project.id);
-    if (projectIds.length === 0) return { sections: [], tabs: ["All"] };
+    if (projectIds.length === 0) {
+      return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
+    }
+
+    const taskSectionsPromise = includeViewMetadata
+      ? prisma.section.findMany({
+          where: { projectId: { in: projectIds }, deleted: false },
+          orderBy: [{ projectId: "asc" }, { ranking: "asc" }],
+          select: {
+            id: true,
+            projectId: true,
+            section_title: true,
+            isDone: true,
+          },
+        })
+      : Promise.resolve([]);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -79,11 +99,53 @@ const getMyTasks = async (userId: number) => {
         },
       },
     });
+    const taskSections = await taskSectionsPromise;
+    const sectionById = new Map(taskSections.map((section) => [section.id, section]));
+    const sectionByLegacyName = new Map(
+      taskSections.map((section) => [
+        `${section.projectId}:${section.section_title}`,
+        section,
+      ]),
+    );
+    const tasksWithSections = includeViewMetadata
+      ? tasks.map((task) => {
+          const taskSection =
+            (task.sectionId ? sectionById.get(task.sectionId) : undefined) ??
+            sectionByLegacyName.get(`${task.projectId}:${task.section}`) ??
+            null;
+          return {
+            ...task,
+            myTasksSection: taskSection
+              ? { id: taskSection.id, isDone: taskSection.isDone }
+              : null,
+          };
+        })
+      : tasks;
+    const grouped = groupMyTasksByBoard(
+      tasksWithSections as unknown as MyTasksBoardTask[],
+    );
+    const boards: MyTasksBoardMetadata[] = includeViewMetadata
+      ? projects.map((project) => ({
+          id: project.id,
+          title: project.title ?? project.name,
+          sections: taskSections
+            .filter((section) => section.projectId === project.id)
+            .map((section) => ({
+              id: section.id,
+              title: section.section_title,
+              isDone: section.isDone,
+            })),
+          labels: ("labels" in project ? project.labels : []).map((label) => ({
+            id: label.id,
+            name: label.value ?? "Untitled label",
+          })),
+        }))
+      : [];
 
-    return groupMyTasksByBoard(tasks as unknown as MyTasksBoardTask[]);
+    return { ...grouped, boards };
   } catch (error) {
     console.log("🚀 ~ getMyTasks ~ error:", error);
-    return { sections: [], tabs: ["All"] };
+    return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
   }
 };
 

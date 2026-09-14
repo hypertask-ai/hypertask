@@ -87,7 +87,8 @@ export const extraMinimalProjectWhere = (
 
 const getAllMinimal = async (
   userId: number,
-  mode?: "ExtraMinimal" | "Calendar"
+  mode?: "ExtraMinimal" | "Calendar",
+  includeCalendarLabels = true,
 ) => {
   try {
     if (!userId) {
@@ -112,7 +113,7 @@ const getAllMinimal = async (
           title: true,
           owner: true,
           members: { include: { user: true } },
-          labels: true,
+          labels: includeCalendarLabels,
           _count: {
             select: {
               tasks: {

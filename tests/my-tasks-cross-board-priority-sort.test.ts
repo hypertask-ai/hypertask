@@ -35,6 +35,11 @@ test("My Tasks flattens across boards when sorted by priority with the flag on",
   assert.equal(shouldFlattenSortedRows(false, true, true, true), true);
 });
 
+test("a saved My Tasks priority sort flattens without the older header-sort flag", () => {
+  assert.equal(shouldFlattenSortedRows(false, true, true, false, true), true);
+  assert.equal(shouldFlattenSortedRows(false, true, false, false, true), false);
+});
+
 test("flat rows keep section ids on boards and board ids on My Tasks", () => {
   const task = { projectId: 200, sectionId: 300 };
   assert.equal(sortedTaskRowSectionKey(true, task), task.sectionId);

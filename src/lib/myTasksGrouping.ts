@@ -4,8 +4,7 @@ export type MyTasksBoardTask = {
   id: number;
   projectId: number;
   dueDate?: Date | string | null;
-  project?: { id: number; title: string };
-  [key: string]: unknown;
+  project?: { id: number; title?: string | null };
 };
 
 const dueTime = (task: MyTasksBoardTask): number | null => {
@@ -14,7 +13,7 @@ const dueTime = (task: MyTasksBoardTask): number | null => {
   return Number.isFinite(time) ? time : null;
 };
 
-const compareTasks = (nowTime: number) =>
+export const compareMyTasksByDueDate = (nowTime: number) =>
   (a: MyTasksBoardTask, b: MyTasksBoardTask): number => {
     const aDue = dueTime(a);
     const bDue = dueTime(b);
@@ -62,7 +61,7 @@ export function groupMyTasksByBoard(
   }
 
   const groupedBoards = [...boards.values()].map((board) => {
-    const items = [...board.items].sort(compareTasks(nowTime));
+    const items = [...board.items].sort(compareMyTasksByDueDate(nowTime));
     return {
       ...board,
       items,
