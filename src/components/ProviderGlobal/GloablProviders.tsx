@@ -578,13 +578,13 @@ export default function GlobalProvider({
   const agentChatMobileFullscreenAtomOn = useRecoilValue(
     agentChatMobileFullscreenAtom,
   );
-  const agentChatMobileFullscreen =
+  // Keep the path/auth shell check separate so the ticket flag can gate the
+  // rendered chrome in JSX (feature-flag-gate requires that shape).
+  const showMobileShellPath =
+    mbl && Boolean(currentUser?.id) && shouldShowMobileTabBar(pathname);
+  const agentChatHidesMobileShell =
     agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn;
-  const showMobileTabBar =
-    mbl &&
-    Boolean(currentUser?.id) &&
-    shouldShowMobileTabBar(pathname) &&
-    !agentChatMobileFullscreen;
+  const showMobileTabBar = showMobileShellPath && !agentChatHidesMobileShell;
   // Entering the mobile comment composer hides the bottom nav so the sheet
   // sits directly on the keyboard (the top bar stays for the back button).
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
@@ -593,7 +593,7 @@ export default function GlobalProvider({
     Boolean(currentUser?.id) &&
     shouldShowMobileDock(pathname) &&
     !commentComposerOpen &&
-    !agentChatMobileFullscreen;
+    !agentChatHidesMobileShell;
   const showMobileBottomNav =
     showMobileBottomInset && shouldShowMobilePrimaryDock(pathname);
   // Pull-to-command follows the shell, not the dock, so it stays live on detail
@@ -1404,7 +1404,8 @@ export default function GlobalProvider({
         />
       )}
 
-      {showMobileTabBar && (
+      {agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn ? null : (
+        showMobileShellPath && (
         <>
           <MobileTopBar
             currentUser={currentUser}
@@ -1418,6 +1419,7 @@ export default function GlobalProvider({
             <MobilePullDownCommand />
           )}
         </>
+        )
       )}
 
       {showAnnouncements && (
