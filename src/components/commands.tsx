@@ -334,6 +334,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     (commandMode === CommandMode.OpenAssignModal ||
       commandMode === CommandMode.LabelModal ||
       commandMode === CommandMode.MoveToColumn);
+  const isTaskProjectFallback =
+    isRowTaskProjectFallback || isBulkTaskProjectFallback;
   const {
     project: taskProject,
     isLoading: isTaskProjectLoading,
@@ -343,7 +345,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       _currentProject,
       resolvedTaskProjectId,
       currentUser.id,
-      isRowTaskProjectFallback || isBulkTaskProjectFallback,
+      isTaskProjectFallback,
     );
   const bulkProject = _currentProject ?? taskProject;
   const activeTaskId =
@@ -372,14 +374,19 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
 
   useGetBoardInviteURL(_currentProject?.id!, currentUser?.id);
   useEffect(() => {
-    if (!isRowTaskProjectFallback || isTaskProjectLoading) return;
+    if (!isTaskProjectFallback || isTaskProjectLoading) return;
     if (isTaskProjectError || !taskProject?.name) {
       resetShowCommands();
-      toast.error("Unable to open command for this task's board");
+      toast.error(
+        isBulkTaskProjectFallback
+          ? "Unable to open bulk actions for the selected board"
+          : "Unable to open command for this task's board",
+      );
     }
   }, [
-    isRowTaskProjectFallback,
+    isBulkTaskProjectFallback,
     isTaskProjectError,
+    isTaskProjectFallback,
     isTaskProjectLoading,
     resetShowCommands,
     taskProject?.name,
@@ -2118,10 +2125,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   }, [commandMode, resetShowCommands, showCommands.show]);
 
   if (!showCommands.show) return null;
-  if (
-    (isRowTaskProjectFallback || isBulkTaskProjectFallback) &&
-    isTaskProjectLoading
-  )
+  if (isTaskProjectFallback && isTaskProjectLoading)
     return <span className="hidden" />;
 
   return (

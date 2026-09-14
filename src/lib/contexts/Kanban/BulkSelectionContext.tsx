@@ -15,6 +15,7 @@ import { IAgent, ILabel, ISection, ITask, IUser } from "@/models/model";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import { shouldIgnoreTaskShortcutTarget } from "@/lib/keyboard/taskShortcuts";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import {
   getInclusiveRange,
@@ -97,6 +98,7 @@ export const KanbanBulkSelectionProvider = ({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
+  const processingRef = useRef(false);
   const anchorRef = useRef<{
     groupId: string | number;
     taskId: number;
@@ -135,9 +137,17 @@ export const KanbanBulkSelectionProvider = ({
       if (next.size === current.size) return current;
       return next;
     });
-  }, [items]);
+    const anchor = anchorRef.current;
+    if (
+      anchor &&
+      !taskIdsByGroup.get(anchor.groupId)?.includes(anchor.taskId)
+    ) {
+      anchorRef.current = null;
+    }
+  }, [items, taskIdsByGroup]);
 
   const clearSelection = useCallback(() => {
+    if (processingRef.current) return;
     setSelectedIds(new Set());
     setFailedIds(new Set());
     anchorRef.current = null;
@@ -150,6 +160,7 @@ export const KanbanBulkSelectionProvider = ({
       withRange = false,
       orderedGroupIds?: readonly number[],
     ) => {
+      if (processingRef.current) return;
       setSelectedIds((current) => {
         if (withRange && anchorRef.current?.groupId === groupId) {
           const taskIds = orderedGroupIds ?? taskIdsByGroup.get(groupId) ?? [];
@@ -179,6 +190,7 @@ export const KanbanBulkSelectionProvider = ({
   );
 
   const toggleVisibleSelection = useCallback((visibleIds: readonly number[]) => {
+    if (processingRef.current) return;
     setSelectedIds((current) => toggleVisibleIds(current, visibleIds));
     setFailedIds((current) => {
       const next = new Set(current);
@@ -202,6 +214,7 @@ export const KanbanBulkSelectionProvider = ({
 
   const openBulkCommand = useCallback(
     (mode = CommandMode.Command) => {
+      if (processingRef.current) return;
       if (
         (mode === CommandMode.OpenAssignModal ||
           mode === CommandMode.LabelModal ||
@@ -222,10 +235,11 @@ export const KanbanBulkSelectionProvider = ({
       onComplete?: (tasks: ITask[]) => Promise<void> | void,
       showSuccessToast = true,
     ) => {
-      if (isProcessing || selectedTasks.length === 0) return;
+      if (processingRef.current || selectedTasks.length === 0) return;
 
       const snapshot = selectedTasks;
       const failures: ITask[] = [];
+      processingRef.current = true;
       setIsProcessing(true);
 
       try {
@@ -246,6 +260,7 @@ export const KanbanBulkSelectionProvider = ({
         );
         setSelectedIds(failedTaskIds);
         setFailedIds(failedTaskIds);
+        anchorRef.current = null;
         await onComplete?.(completedTasks);
 
         if (failures.length > 0) {
@@ -256,10 +271,11 @@ export const KanbanBulkSelectionProvider = ({
           toast.success(successText);
         }
       } finally {
+        processingRef.current = false;
         setIsProcessing(false);
       }
     },
-    [isProcessing, selectedTasks],
+    [selectedTasks],
   );
 
   const archiveSelected = useCallback(() => {
@@ -332,7 +348,13 @@ export const KanbanBulkSelectionProvider = ({
       focusedTaskId?: number,
       sequencePending = false,
     ) => {
-      if (event.defaultPrevented || returnIfModalOrInputActive()) return false;
+      if (
+        event.defaultPrevented ||
+        shouldIgnoreTaskShortcutTarget(event.target as HTMLElement | null) ||
+        returnIfModalOrInputActive()
+      ) {
+        return false;
+      }
 
       const isApple = /Mac|iPhone|iPad/.test(navigator.platform);
       const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
