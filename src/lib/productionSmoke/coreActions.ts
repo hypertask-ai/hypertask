@@ -85,6 +85,13 @@ const assigneeHasUser = (task: any, userId: number) =>
       Number(row?.userId ?? row?.user?.id) === userId && !row?.agentId,
   );
 
+const assigneeRowCountForUser = (task: any, userId: number) =>
+  Array.isArray(task?.assignees)
+    ? task.assignees.filter(
+        (row: any) => Number(row?.userId ?? row?.user?.id) === userId,
+      ).length
+    : 0;
+
 const isRecord = (value: unknown): value is Record<string, any> =>
   typeof value === "object" && value !== null;
 
@@ -402,6 +409,7 @@ export async function runCoreActionsSmoke(options: {
     options: {
       updatedStatus?: "Assigned" | "Unassigned";
       allowMultiple?: boolean;
+      maxCandidates?: number;
     } = {},
   ) => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -410,17 +418,25 @@ export async function runCoreActionsSmoke(options: {
       for (const comment of comments) {
         const id = Number(comment?.id);
         if (!Number.isSafeInteger(id) || knownCommentIds.has(id)) continue;
-        knownCommentIds.add(id);
-        if (!isFixtureActivity(comment, fixture)) continue;
+        if (!isFixtureActivity(comment, fixture)) {
+          knownCommentIds.add(id);
+          continue;
+        }
         if (
           options.updatedStatus &&
           comment?.activity?.data?.updatedStatus !== options.updatedStatus
         ) {
+          // Leave status mismatches unknown so a later capture with the matching
+          // updatedStatus can still claim them (pending Assigned vs Unassigned).
           continue;
         }
+        knownCommentIds.add(id);
         candidates.push(id);
       }
-      if (candidates.length > 1 && !options.allowMultiple) {
+      const overLimit =
+        typeof options.maxCandidates === "number" &&
+        candidates.length > options.maxCandidates;
+      if ((candidates.length > 1 && !options.allowMultiple) || overLimit) {
         throw new SmokeFailure(
           "unrunnable",
           action,
@@ -431,7 +447,7 @@ export async function runCoreActionsSmoke(options: {
       if (candidates.length > 0) {
         // HTPR-6434: one userId unassign can emit several Unassigned activities
         // (person row plus owned-agent rows). Claim only when the caller opts
-        // into allowMultiple for that status; Assigned stays exact-one.
+        // into allowMultiple for that status and stays within maxCandidates.
         for (const id of candidates) ownedCommentIds.add(id);
         if (persist) await persistOwnedCommentIds();
         return;
@@ -564,12 +580,17 @@ export async function runCoreActionsSmoke(options: {
         );
       }
       if (assigneeHasUser(task, fixture.userId)) {
+        const recoveryRows = assigneeRowCountForUser(task, fixture.userId);
         await assign("recover interrupted assignment", "unassign");
         await captureNewFixtureActivity(
           "capture recovery assignment activity",
           true,
           false,
-          { updatedStatus: "Unassigned", allowMultiple: true },
+          {
+            updatedStatus: "Unassigned",
+            allowMultiple: true,
+            maxCandidates: Math.max(recoveryRows, 1),
+          },
         );
       }
       await deleteOwnedComments();
@@ -729,12 +750,17 @@ export async function runCoreActionsSmoke(options: {
         "test user was not assigned",
       );
     }
+    const unassignRows = assigneeRowCountForUser(assigned, fixture.userId);
     await assign("unassign user", "unassign");
     await captureNewFixtureActivity(
       "capture unassignment activity",
       true,
       true,
-      { updatedStatus: "Unassigned", allowMultiple: true },
+      {
+        updatedStatus: "Unassigned",
+        allowMultiple: true,
+        maxCandidates: Math.max(unassignRows, 1),
+      },
     );
     const unassigned = await getBoardTask("verify unassignment");
     if (assigneeHasUser(unassigned, fixture.userId)) {
@@ -794,6 +820,19 @@ export async function runCoreActionsSmoke(options: {
           "capture pending mutation activity",
           false,
           true,
+          {
+            updatedStatus: "Unassigned",
+            allowMultiple: true,
+            // Lost-response cleanup has no live assignee count; bound the claim
+            // so an unrelated burst still fails as ambiguous.
+            maxCandidates: 8,
+          },
+        );
+        await captureNewFixtureActivity(
+          "capture pending assignment activity",
+          false,
+          true,
+          { updatedStatus: "Assigned" },
         );
         const task = await getTask("cleanup task read");
         if (Number(task.sectionId) !== fixture.baseSectionId) {
@@ -812,12 +851,17 @@ export async function runCoreActionsSmoke(options: {
         }
         const current = await getTask("cleanup assignment read");
         if (assigneeHasUser(current, fixture.userId)) {
+          const cleanupRows = assigneeRowCountForUser(current, fixture.userId);
           await assign("cleanup assignment", "unassign");
           await captureNewFixtureActivity(
             "capture cleanup assignment activity",
             true,
             true,
-            { updatedStatus: "Unassigned", allowMultiple: true },
+            {
+              updatedStatus: "Unassigned",
+              allowMultiple: true,
+              maxCandidates: Math.max(cleanupRows, 1),
+            },
           );
           cleanup.push("removed test-user assignment");
         }
