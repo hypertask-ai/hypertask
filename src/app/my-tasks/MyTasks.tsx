@@ -7,18 +7,22 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_PRIORITY_FILTER_FLAG } from "@/lib/flags/keys";
+import {
+  MY_TASKS_PRIORITY_FILTER_FLAG,
+  MY_TASKS_SHORTCUTS_WIDTH_FLAG,
+} from "@/lib/flags/keys";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
+import { getMyTasksSplitIndex } from "@/lib/myTasksGrouping";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { ISection, IUser } from "@/models/model";
 import type { TBoardSortingViewMode } from "@/models/Views/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Filter } from "lucide-react";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -34,8 +38,15 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const showCommands = useRecoilValue(showCommandsAtom);
-  const [activeSplit, setActiveSplit] = useState(0);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
+  const boardParam = searchParams.get("board");
+  const [activeSplit, setActiveSplit] = useState(() =>
+    myTasksShortcutsWidthEnabled
+      ? getMyTasksSplitIndex(sections, boardParam)
+      : 0
+  );
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   // My Tasks spans every board, so unlike board filters (which persist to a
@@ -66,12 +77,32 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
     return active ? [active] : [];
   }, [activeSplit, filteredSections]);
 
+  const replaceBoardParam = useCallback(
+    (boardId: number | null) => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (boardId === null) next.delete("board");
+      else next.set("board", String(boardId));
+      const query = next.toString();
+      router.replace(`/my-tasks${query ? `?${query}` : ""}`, { scroll: false });
+    },
+    [router, searchParams]
+  );
+
   const updateSplit = useCallback(
     (index: number) => {
-      setActiveSplit(Math.max(0, Math.min(index, tabs.length - 1)));
+      const nextIndex = Math.max(0, Math.min(index, tabs.length - 1));
+      setActiveSplit(nextIndex);
+      if (myTasksShortcutsWidthEnabled) {
+        replaceBoardParam(sections[nextIndex - 1]?.projectId ?? null);
+      }
     },
-    [tabs.length]
+    [myTasksShortcutsWidthEnabled, replaceBoardParam, sections, tabs.length]
   );
+
+  useEffect(() => {
+    if (!myTasksShortcutsWidthEnabled) return;
+    setActiveSplit(getMyTasksSplitIndex(sections, boardParam));
+  }, [boardParam, myTasksShortcutsWidthEnabled, sections]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -127,7 +158,7 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
   const content = (
     <div
       suppressHydrationWarning
-      className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex linksModal ${styles.links_modal}`}
+      className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 ${myTasksShortcutsWidthEnabled ? "w-full" : "global-view-width"} flex linksModal ${styles.links_modal}`}
     >
       <div className="flex gap-5 px-[16px] @md:!px-[88px]">
         <span className="flex items-baseline gap-2 font-bold text-subheading text-white-black">
@@ -210,7 +241,15 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
         <AppShellRail variant="global" currentUser={currentUser} />
       )}
       {appShellRailOn ? (
-        <div className="pl-[var(--app-shell-rail-w,48px)]">{content}</div>
+        <div
+          className={
+            myTasksShortcutsWidthEnabled
+              ? "ml-[var(--app-shell-rail-w,48px)] w-[calc(100%-var(--app-shell-rail-w,48px))]"
+              : "pl-[var(--app-shell-rail-w,48px)]"
+          }
+        >
+          {content}
+        </div>
       ) : (
         content
       )}

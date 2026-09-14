@@ -29,6 +29,11 @@ export const isGlobalCreateTaskShortcutEnabled = (
   pathname: string | null | undefined,
 ) => !startsWithAny(pathname, GLOBAL_CREATE_TASK_BLOCKED_ROUTES);
 
+export const shouldOpenGlobalCreateTask = (
+  pathname: string | null | undefined,
+  myTasksShortcutsEnabled: boolean,
+) => myTasksShortcutsEnabled || !pathname?.startsWith("/my-tasks");
+
 type GlobalCreateTaskKeyboardEvent = Pick<
   KeyboardEvent,
   "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey"

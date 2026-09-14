@@ -43,7 +43,11 @@ stubSourceModule("src/store/index.ts", {
   showCommandsAtom: { show: false },
 });
 stubModule(require.resolve("next/navigation"), {
-  useRouter: () => ({ back: () => { backCalls += 1; } }),
+  useRouter: () => ({
+    back: () => { backCalls += 1; },
+    replace: () => {},
+  }),
+  useSearchParams: () => new URLSearchParams(),
 });
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx", {
   default: (props) => {

@@ -43,6 +43,7 @@ import {
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+  MY_TASKS_SHORTCUTS_WIDTH_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -364,6 +365,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-12",
     description:
       "On a live board change, reloads only the board that changed instead of every board in the account, so updates appear with one request. Other boards' names still refresh when the tab reconnects or you move between boards.",
+  },
+  {
+    key: MY_TASKS_SHORTCUTS_WIDTH_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Enables global shortcuts on My Tasks, remembers the selected board in the URL, and uses the full available page width.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
