@@ -84,6 +84,7 @@ import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { taskBaseUri } from "@/utils";
 import { getTaskIdsByGroup } from "@/lib/kanbanBulkSelection";
 import { useKanbanBulkSelectionOptional } from "@/lib/contexts/Kanban/BulkSelectionContext";
+import KanbanBulkActionBar from "../KanbanHomepageComponents/KanbanBulkActionBar";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 const AssignModal = lazy(
@@ -137,7 +138,7 @@ const customFieldIdFromSortColumn = (column: CustomFieldSortColumn) => column.sl
 const initialDirection = (column: SortColumn, customFieldBySortColumn: Map<SortColumn, CustomField>): SortDirection =>
   DEFAULT_DESC.has(column as StaticSortColumn) || customFieldBySortColumn.get(column)?.type === "Number" ? "desc" : "asc";
 const isTaskRow = (row: Row): row is TaskRow => row.type === "task";
-const getTaskProjectGroup = (task: ITask) => task.projectId;
+const getTaskProjectGroup = (task: ITask) => task.project?.id ?? task.projectId;
 const tableColumns: TableColumn[] = [
   { key: "ticket", label: "Ticket", width: "90px" },
   { key: "title", label: "Title", width: "minmax(200px,1fr)" },
@@ -1377,7 +1378,7 @@ const TableView = ({
     );
     const selectionMode =
       tableBulkSelectionEnabled && (bulkSelection?.selectedCount ?? 0) > 0;
-    const selectionGroupId = task.projectId ?? 0;
+    const selectionGroupId = getTaskProjectGroup(task) ?? 0;
     const orderedSelectionIds = selectionIdsByBoard.get(selectionGroupId) ?? [];
     const stickyBackground = bulkSelected
       ? "md:bg-kanban-active-cardbg"
@@ -1855,6 +1856,9 @@ const TableView = ({
           )}
         </div>
       </div>
+      {tableBulkSelectionEnabled && bulkSelection && (
+        <KanbanBulkActionBar tableActionsEnabled />
+      )}
       {showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands contextOptions={buildCommandContext()} />

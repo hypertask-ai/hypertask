@@ -71,6 +71,7 @@ interface KanbanBulkSelectionProviderProps {
   getSelectionGroupId?: (
     task: ITask,
   ) => string | number | null | undefined;
+  onArchiveComplete?: (tasks: ITask[]) => Promise<void> | void;
 }
 
 const KanbanBulkSelectionContext =
@@ -84,6 +85,7 @@ export const KanbanBulkSelectionProvider = ({
   onAssignTask,
   onLabelTask,
   getSelectionGroupId = (task) => task.sectionId,
+  onArchiveComplete,
 }: KanbanBulkSelectionProviderProps) => {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
@@ -189,7 +191,12 @@ export const KanbanBulkSelectionProvider = ({
   );
 
   const runTaskOperation = useCallback(
-    async (operation: TaskOperation, successText: string) => {
+    async (
+      operation: TaskOperation,
+      successText: string,
+      onComplete?: (tasks: ITask[]) => Promise<void> | void,
+      showSuccessToast = true,
+    ) => {
       if (isProcessing || selectedTasks.length === 0) return;
 
       const snapshot = selectedTasks;
@@ -208,15 +215,19 @@ export const KanbanBulkSelectionProvider = ({
           }
         }
 
-        const nextFailedIds = new Set(failures.map((task) => task.id));
-        setSelectedIds(nextFailedIds);
-        setFailedIds(nextFailedIds);
+        const failedTaskIds = new Set(failures.map((task) => task.id));
+        const completedTasks = snapshot.filter(
+          (task) => !failedTaskIds.has(task.id),
+        );
+        setSelectedIds(failedTaskIds);
+        setFailedIds(failedTaskIds);
+        await onComplete?.(completedTasks);
 
         if (failures.length > 0) {
           toast.error(
             `${failures.length} of ${snapshot.length} tasks could not be updated`,
           );
-        } else {
+        } else if (showSuccessToast) {
           toast.success(successText);
         }
       } finally {
@@ -231,8 +242,10 @@ export const KanbanBulkSelectionProvider = ({
     return runTaskOperation(
       onArchiveTask,
       `${selectedTasks.length} tasks archived`,
+      onArchiveComplete,
+      !onArchiveComplete,
     );
-  }, [onArchiveTask, runTaskOperation, selectedTasks.length]);
+  }, [onArchiveComplete, onArchiveTask, runTaskOperation, selectedTasks.length]);
 
   const moveSelected = useCallback(
     (section: ISection) => {

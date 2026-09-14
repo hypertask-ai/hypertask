@@ -5,6 +5,7 @@ import { SplitTitle } from "@/components/Common/TaskRowComponents/TaskListRow";
 import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
+import { useUndoContext } from "@/hooks/General/useUndo";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
@@ -41,10 +42,12 @@ import {
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { ISection, ITask, IUser } from "@/models/model";
 import type { TBoardSortingViewMode } from "@/models/Views/model";
+import globalAPIHandlers from "@/utils/api/global";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Check, Filter } from "lucide-react";
+import toast from "react-hot-toast";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import MyTasksViewControls from "./MyTasksViewControls";
@@ -61,7 +64,7 @@ interface IProps {
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
-const getTaskProjectGroup = (task: ITask) => task.projectId;
+const getTaskProjectGroup = (task: ITask) => task.project?.id ?? task.projectId;
 
 type BulkSelectableMyTasksTableProps = {
   sections: ISection[];
@@ -78,15 +81,59 @@ const BulkSelectableMyTasksTable = ({
   myTasksSortKey,
   onMyTasksSortChange,
 }: BulkSelectableMyTasksTableProps) => {
+  const router = useRouter();
+  const { performActionAndStoreUndoData } = useUndoContext();
   const items = useMemo(
     () => sections.flatMap((section) => section.items ?? []),
     [sections],
   );
 
+  const archiveTaskForBulk = useCallback(async (task: ITask) => {
+    if (!getTaskProjectGroup(task)) {
+      throw new Error("Task board is unavailable");
+    }
+    await globalAPIHandlers.archiveTask(task.id, "Archive");
+  }, []);
+
+  const bulkUndoHandler = useCallback(
+    async (
+      data: { tasks: { id: number; projectId: number }[] },
+      toastId: string,
+    ) => {
+      for (const task of data.tasks) {
+        await globalAPIHandlers.archiveTask(task.id, "Normal");
+      }
+      toast.dismiss(toastId);
+      router.refresh();
+    },
+    [router],
+  );
+
+  const handleArchiveComplete = useCallback(
+    (archivedTasks: ITask[]) => {
+      if (archivedTasks.length > 0) {
+        performActionAndStoreUndoData(
+          {
+            tasks: archivedTasks.map((task) => ({
+              id: task.id,
+              projectId: getTaskProjectGroup(task)!,
+            })),
+          },
+          `Undo archive (${archivedTasks.length} tasks)`,
+          bulkUndoHandler,
+        );
+      }
+      router.refresh();
+    },
+    [bulkUndoHandler, performActionAndStoreUndoData, router],
+  );
+
   return (
     <KanbanBulkSelectionProvider
       items={items}
+      onArchiveTask={archiveTaskForBulk}
       getSelectionGroupId={getTaskProjectGroup}
+      onArchiveComplete={handleArchiveComplete}
     >
       <TableView
         filteredSections={sections}
