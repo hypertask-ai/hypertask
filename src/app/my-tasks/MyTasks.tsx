@@ -7,50 +7,94 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
+import {
+  myTasksViewAPIRoute,
+  myTasksViewsAPIRoute,
+} from "@/lib/constants/APIRouteConstants";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
 } from "@/lib/flags/keys";
-import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
-import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { useRecoilValue } from "@/lib/state";
-import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
+import {
+  applyMyTasksView,
+  filterMyTasksByPriority,
+  sortMyTasksViewSections,
+  type MyTasksTask,
+} from "@/lib/myTasksFiltering";
 import { getMyTasksSplitIndex } from "@/lib/myTasksGrouping";
-import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
+import { useRecoilValue } from "@/lib/state";
+import type {
+  MyTasksBoardMetadata,
+  MyTasksSavedView,
+  MyTasksViewConfig,
+} from "@/models/MyTasksView";
+import {
+  DEFAULT_MY_TASKS_VIEW_CONFIG,
+  parseMyTasksViewConfig,
+} from "@/models/MyTasksView";
 import { ISection, IUser } from "@/models/model";
 import type { TBoardSortingViewMode } from "@/models/Views/model";
 import { appShellRailAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
-import { useRouter, useSearchParams } from "next/navigation";
+import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { Check, Filter } from "lucide-react";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import toast from "react-hot-toast";
+import MyTasksViewControls from "./MyTasksViewControls";
+import MyTasksViewTabs from "./MyTasksViewTabs";
 
 interface IProps {
   sections: ISection[];
   tabs: string[];
+  boards: MyTasksBoardMetadata[];
   currentUser: IUser;
+  initialViews: MyTasksSavedView[];
+  initialViewId: number | null;
+  viewsEnabled: boolean;
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
 
-const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
+const readError = async (response: Response, fallback: string): Promise<string> => {
+  const body = await response.json().catch(() => null);
+  return typeof body?.error === "string" ? body.error : fallback;
+};
+
+const MyTasks = ({
+  sections,
+  tabs,
+  boards = [],
+  currentUser,
+  initialViews = [],
+  initialViewId = null,
+  viewsEnabled = false,
+}: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const showCommands = useRecoilValue(showCommandsAtom);
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
-  const boardParam = searchParams?.get("board") ?? null;
-  const [activeSplit, setActiveSplit] = useState(() =>
-    myTasksShortcutsWidthEnabled
-      ? getMyTasksSplitIndex(sections, boardParam)
-      : 0
-  );
-
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
-  // My Tasks spans every board, so unlike board filters (which persist to a
-  // saved view) this selection lives in state only and resets on reload.
+  const boardParam = searchParams?.get("board") ?? null;
+  const initialView = initialViews.find((view) => view.id === initialViewId);
+  const [views, setViews] = useState(initialViews);
+  const [activeViewId, setActiveViewId] = useState<number | null>(initialViewId);
+  const [viewConfig, setViewConfig] = useState<MyTasksViewConfig>(() =>
+    parseMyTasksViewConfig(initialView?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG),
+  );
+  const [viewBusy, setViewBusy] = useState(false);
   const [prioritySelection, setPrioritySelection] = useState<
     IPrioritiesConstants[]
   >([]);
@@ -58,18 +102,64 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
   const filterRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef, () => setFilterOpen(false));
 
-  // One gate for both control and behavior: if the flag flips off while a
-  // selection exists, filtering stops too instead of hiding the control.
-  const selectedPriorities = filterEnabled ? prioritySelection : [];
-  const filteredSections = useMemo(
-    () => filterMyTasksByPriority(sections, selectedPriorities),
-    [sections, selectedPriorities]
+  const activeView = views.find((view) => view.id === activeViewId);
+  const baselineConfig = parseMyTasksViewConfig(
+    activeView?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
+  );
+  const dirty = JSON.stringify(viewConfig) !== JSON.stringify(baselineConfig);
+  const selectedPriorities = viewsEnabled
+    ? PriorityConstants.filter((priority) =>
+        viewConfig.filters.priorityIds.includes(priority.priority_index),
+      )
+    : filterEnabled
+      ? prioritySelection
+      : [];
+
+  const filteredSections = useMemo(() => {
+    if (!viewsEnabled) {
+      return filterMyTasksByPriority(sections, selectedPriorities);
+    }
+    const now = new Date();
+    const selectedBoards = viewConfig.boardIds
+      ? new Set(viewConfig.boardIds)
+      : null;
+    const next = sections
+      .filter(
+        (section) =>
+          !selectedBoards ||
+          (section.projectId !== undefined && selectedBoards.has(section.projectId)),
+      )
+      .map((section) => ({
+        ...section,
+        items: applyMyTasksView(
+          section.items as MyTasksTask[],
+          viewConfig,
+          now,
+        ),
+      }));
+    return sortMyTasksViewSections(next, viewConfig, now);
+  }, [sections, selectedPriorities, viewConfig, viewsEnabled]);
+
+  const activeTabs = useMemo(
+    () =>
+      viewsEnabled
+        ? ["All", ...filteredSections.map((section) => section.section_title)]
+        : tabs,
+    [filteredSections, tabs, viewsEnabled],
+  );
+  const [activeSplit, setActiveSplit] = useState(() =>
+    myTasksShortcutsWidthEnabled
+      ? getMyTasksSplitIndex(filteredSections, boardParam)
+      : 0,
   );
 
   const totalCount = useMemo(
     () =>
-      filteredSections.reduce((total, section) => total + section.items.length, 0),
-    [filteredSections]
+      filteredSections.reduce(
+        (total, section) => total + section.items.length,
+        0,
+      ),
+    [filteredSections],
   );
   const visibleSections = useMemo(() => {
     if (activeSplit === 0) return filteredSections;
@@ -77,36 +167,72 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
     return active ? [active] : [];
   }, [activeSplit, filteredSections]);
 
-  const replaceBoardParam = useCallback(
-    (boardId: number | null) => {
+  const replaceParams = useCallback(
+    (changes: { boardId?: number | null; viewId?: number | null }) => {
       const next = new URLSearchParams(searchParams?.toString() ?? "");
-      if (boardId === null) next.delete("board");
-      else next.set("board", String(boardId));
+      if ("boardId" in changes) {
+        if (changes.boardId === null) next.delete("board");
+        else if (changes.boardId !== undefined) {
+          next.set("board", String(changes.boardId));
+        }
+      }
+      if ("viewId" in changes) {
+        if (changes.viewId === null) next.delete("view");
+        else if (changes.viewId !== undefined) {
+          next.set("view", String(changes.viewId));
+        }
+      }
       const query = next.toString();
       router.replace(`/my-tasks${query ? `?${query}` : ""}`, { scroll: false });
     },
-    [router, searchParams]
+    [router, searchParams],
+  );
+
+  const replaceBoardParam = useCallback(
+    (boardId: number | null) => replaceParams({ boardId }),
+    [replaceParams],
   );
 
   const updateSplit = useCallback(
     (index: number) => {
-      const nextIndex = Math.max(0, Math.min(index, tabs.length - 1));
+      const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
       setActiveSplit(nextIndex);
       if (myTasksShortcutsWidthEnabled) {
-        replaceBoardParam(sections[nextIndex - 1]?.projectId ?? null);
+        replaceBoardParam(filteredSections[nextIndex - 1]?.projectId ?? null);
       }
     },
-    [myTasksShortcutsWidthEnabled, replaceBoardParam, sections, tabs.length]
+    [
+      activeTabs.length,
+      filteredSections,
+      myTasksShortcutsWidthEnabled,
+      replaceBoardParam,
+    ],
   );
 
   useEffect(() => {
     if (!myTasksShortcutsWidthEnabled) return;
-    setActiveSplit(getMyTasksSplitIndex(sections, boardParam));
-  }, [boardParam, myTasksShortcutsWidthEnabled, sections]);
+    const split = getMyTasksSplitIndex(filteredSections, boardParam);
+    setActiveSplit(split);
+    if (boardParam && split === 0) replaceBoardParam(null);
+  }, [boardParam, filteredSections, myTasksShortcutsWidthEnabled, replaceBoardParam]);
+
+  useEffect(() => {
+    if (!viewsEnabled) return;
+    const viewParam = searchParams?.get("view") ?? null;
+    if (activeViewId !== null && !viewParam) {
+      replaceParams({ viewId: activeViewId });
+    } else if (viewParam && !views.some((view) => String(view.id) === viewParam)) {
+      replaceParams({ viewId: null });
+    }
+  }, [activeViewId, replaceParams, searchParams, views, viewsEnabled]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !showCommands.show && !returnIfModalOrInputActive()) {
+      if (
+        event.key === "Escape" &&
+        !showCommands.show &&
+        !returnIfModalOrInputActive()
+      ) {
         event.preventDefault();
         if (filterOpen) {
           setFilterOpen(false);
@@ -117,31 +243,173 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
       }
       if (
         event.key !== "Tab" ||
-        tabs.length === 0 ||
+        activeTabs.length === 0 ||
         returnIfModalOrInputActive()
-      )
+      ) {
         return;
+      }
 
       event.preventDefault();
       const direction = event.shiftKey ? -1 : 1;
-      updateSplit((activeSplit + direction + tabs.length) % tabs.length);
+      updateSplit(
+        (activeSplit + direction + activeTabs.length) % activeTabs.length,
+      );
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeSplit, router, showCommands.show, tabs.length, updateSplit, filterOpen]);
+  }, [activeSplit, activeTabs.length, filterOpen, router, showCommands.show, updateSplit]);
+
+  const selectView = (viewId: number | null) => {
+    const view = views.find((candidate) => candidate.id === viewId);
+    const nextConfig = parseMyTasksViewConfig(
+      view?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
+    );
+    setActiveViewId(view?.id ?? null);
+    setViewConfig(nextConfig);
+    setFilterOpen(false);
+    const currentBoardId = boardParam ? Number(boardParam) : null;
+    const boardStillVisible =
+      currentBoardId === null ||
+      nextConfig.boardIds === null ||
+      nextConfig.boardIds.includes(currentBoardId);
+    replaceParams({
+      viewId: view?.id ?? null,
+      ...(!boardStillVisible ? { boardId: null } : {}),
+    });
+  };
+
+  const createView = async (name: string) => {
+    setViewBusy(true);
+    try {
+      const response = await fetch(myTasksViewsAPIRoute, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, config: viewConfig }),
+      });
+      if (!response.ok) throw new Error(await readError(response, "Unable to create view"));
+      const body = (await response.json()) as { view: MyTasksSavedView };
+      const created = { ...body.view, config: parseMyTasksViewConfig(body.view.config) };
+      setViews((current) => [...current, created]);
+      setActiveViewId(created.id);
+      setViewConfig(created.config);
+      replaceParams({ viewId: created.id });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create view");
+    } finally {
+      setViewBusy(false);
+    }
+  };
+
+  const patchView = async (
+    viewId: number,
+    update: Partial<Pick<MyTasksSavedView, "name" | "position" | "isDefault" | "config">>,
+  ): Promise<MyTasksSavedView> => {
+    const response = await fetch(myTasksViewAPIRoute(viewId), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(update),
+    });
+    if (!response.ok) throw new Error(await readError(response, "Unable to update view"));
+    const body = (await response.json()) as { view: MyTasksSavedView };
+    return { ...body.view, config: parseMyTasksViewConfig(body.view.config) };
+  };
+
+  const saveView = async () => {
+    if (!activeView) return;
+    setViewBusy(true);
+    try {
+      const saved = await patchView(activeView.id, { config: viewConfig });
+      setViews((current) =>
+        current.map((view) => (view.id === saved.id ? saved : view)),
+      );
+      setViewConfig(saved.config);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save view");
+    } finally {
+      setViewBusy(false);
+    }
+  };
+
+  const renameView = async (viewId: number, name: string) => {
+    setViewBusy(true);
+    try {
+      const saved = await patchView(viewId, { name });
+      setViews((current) =>
+        current.map((view) => (view.id === saved.id ? saved : view)),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to rename view");
+    } finally {
+      setViewBusy(false);
+    }
+  };
+
+  const setDefaultView = async (viewId: number) => {
+    setViewBusy(true);
+    try {
+      const saved = await patchView(viewId, { isDefault: true });
+      setViews((current) =>
+        current.map((view) => ({
+          ...(view.id === saved.id ? saved : view),
+          isDefault: view.id === saved.id,
+        })),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to set default view");
+    } finally {
+      setViewBusy(false);
+    }
+  };
+
+  const deleteView = async (viewId: number) => {
+    setViewBusy(true);
+    try {
+      const response = await fetch(myTasksViewAPIRoute(viewId), {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error(await readError(response, "Unable to delete view"));
+      setViews((current) => current.filter((view) => view.id !== viewId));
+      if (activeViewId === viewId) {
+        setActiveViewId(null);
+        setViewConfig(parseMyTasksViewConfig(DEFAULT_MY_TASKS_VIEW_CONFIG));
+        replaceParams({ viewId: null });
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete view");
+    } finally {
+      setViewBusy(false);
+    }
+  };
+
+  const resetView = () => setViewConfig(baselineConfig);
 
   const tabLength = (index: number) =>
     index === 0 ? totalCount : filteredSections[index - 1]?.items.length ?? 0;
 
-  const togglePriority = (priority: IPrioritiesConstants) =>
+  const togglePriority = (priority: IPrioritiesConstants) => {
+    if (viewsEnabled) {
+      setViewConfig((current) => ({
+        ...current,
+        filters: {
+          ...current.filters,
+          priorityIds: current.filters.priorityIds.includes(priority.priority_index)
+            ? current.filters.priorityIds.filter(
+                (id) => id !== priority.priority_index,
+              )
+            : [...current.filters.priorityIds, priority.priority_index],
+        },
+      }));
+      return;
+    }
     setPrioritySelection((current) =>
-      current.some((p) => p.priority_index === priority.priority_index)
-        ? current.filter((p) => p.priority_index !== priority.priority_index)
-        : [...current, priority]
+      current.some((item) => item.priority_index === priority.priority_index)
+        ? current.filter((item) => item.priority_index !== priority.priority_index)
+        : [...current, priority],
     );
+  };
 
-  const splitTitles = tabs.map((item, index) => (
+  const splitTitles = activeTabs.map((item, index) => (
     <SplitTitle
       key={`split-my-tasks-${index}`}
       isSelected={activeSplit === index}
@@ -160,15 +428,43 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
       suppressHydrationWarning
       className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 ${myTasksShortcutsWidthEnabled ? "w-full" : "global-view-width"} flex linksModal ${styles.links_modal}`}
     >
-      <div className="flex gap-5 px-[16px] @md:!px-[88px]">
+      {viewsEnabled && (
+        <div className="mb-4 px-[16px] @md:!px-[78px]">
+          <MyTasksViewTabs
+            views={views}
+            activeViewId={activeViewId}
+            dirty={dirty}
+            busy={viewBusy}
+            onSelect={selectView}
+            onSave={() => void saveView()}
+            onReset={resetView}
+            onSaveAs={(name) => void createView(name)}
+            onRename={(viewId, name) => void renameView(viewId, name)}
+            onDelete={(viewId) => void deleteView(viewId)}
+            onSetDefault={(viewId) => void setDefaultView(viewId)}
+          />
+        </div>
+      )}
+
+      <div className="flex gap-2 px-[16px] @md:!px-[88px]">
         <span className="flex items-baseline gap-2 font-bold text-subheading text-white-black">
           <p>My Tasks</p>
           <span className="text-content font-normal text-text-light-gray">
             {totalCount}
           </span>
         </span>
+        {viewsEnabled && (
+          <MyTasksViewControls
+            boards={boards}
+            config={viewConfig}
+            onChange={setViewConfig}
+          />
+        )}
         {filterEnabled && (
-          <div ref={filterRef} className="relative ml-auto self-center">
+          <div
+            ref={filterRef}
+            className={`relative self-center ${viewsEnabled ? "" : "ml-auto"}`}
+          >
             <button
               id="my-tasks-priority-filter"
               type="button"
@@ -180,7 +476,9 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
               <Filter size={14} strokeWidth={1.75} />
               <span className="sr-only">Filter by priority</span>
               {selectedPriorities.length > 0 && (
-                <span className="text-meta font-medium" aria-hidden="true">{selectedPriorities.length}</span>
+                <span className="text-meta font-medium" aria-hidden="true">
+                  {selectedPriorities.length}
+                </span>
               )}
             </button>
             {filterOpen && (
@@ -191,7 +489,7 @@ const MyTasks = ({ sections, tabs, currentUser }: IProps) => {
               >
                 {PriorityConstants.map((priority) => {
                   const checked = selectedPriorities.some(
-                    (p) => p.priority_index === priority.priority_index
+                    (item) => item.priority_index === priority.priority_index,
                   );
                   return (
                     <button
