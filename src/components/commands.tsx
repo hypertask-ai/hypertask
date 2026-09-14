@@ -207,6 +207,7 @@ import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { useUndoContext } from "@/hooks/General/useUndo";
 import { useKanbanBulkSelectionOptional } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import { sharedProjectId } from "@/lib/myTasksBulkSelection";
 import {
   openTaskTemplateDraft,
   taskTemplatePickerForProject,
@@ -264,7 +265,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const bulkSelection = kanbanBulkSelection ?? myTasksBulkSelection;
   const hasBulkSelection = (bulkSelection?.selectedCount ?? 0) > 0;
   const bulkTasks = bulkSelection?.selectedTasks ?? [];
-  const bulkProjectId = bulkTasks[0]?.projectId ?? null;
+  const bulkProjectId = sharedProjectId(bulkTasks);
   const paletteContextOptions = hasBulkSelection
     ? {
         ...contextOptions,
@@ -2287,14 +2288,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             />
           )}
           {commandMode === CommandMode.OpenAssignModal && (
-            hasBulkSelection && bulkSelection && bulkTasks[0] ? (
+            hasBulkSelection && bulkSelection && bulkTasks[0] && bulkProjectId ? (
               <AssignModal
                 onClose={boardCloseHandler}
-                project={
-                  bulkProjectId
-                    ? ({ id: bulkProjectId } as IProject)
-                    : undefined
-                }
+                project={{ id: bulkProjectId } as IProject}
                 task={{
                   id: bulkTasks[0].id,
                   title: bulkTasks[0].title,
@@ -2466,7 +2463,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
 
           {commandMode === CommandMode.LabelModal && (
-            hasBulkSelection && bulkSelection ? (
+            hasBulkSelection && bulkSelection && bulkProjectId ? (
               <CreateLabel
                 currentProject={_currentProject ?? undefined}
                 taskIds={bulkTasks.map((task) => task.id)}
