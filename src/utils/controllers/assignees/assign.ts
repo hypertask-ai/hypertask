@@ -116,37 +116,43 @@ const assigneesAssign = async (
       };
     }
 
-    const assigneeIdentity = agentId
-      ? { agentId }
-      : { userId: assigneeUserId, agentId: null };
+    const assigneeInclude = {
+      user: {
+        select: assignmentActivityUserSelect,
+      },
+      agent: {
+        select: {
+          id: true,
+          userId: true,
+          photoURL: true,
+          displayName: true,
+        },
+      },
+      agentAssigner: {
+        select: {
+          id: true,
+          userId: true,
+          photoURL: true,
+          displayName: true,
+        },
+      },
+    } as const;
 
-    const assign = await prisma.assignees.findFirst({
-      where: {
-        taskId,
-        ...assigneeIdentity,
-      },
-      include: {
-        user: {
-          select: assignmentActivityUserSelect,
-        },
-        agent: {
-          select: {
-            id: true,
-            userId: true,
-            photoURL: true,
-            displayName: true,
-          },
-        },
-        agentAssigner: {
-          select: {
-            id: true,
-            userId: true,
-            photoURL: true,
-            displayName: true,
-          },
-        },
-      },
+    // Person and agent rows can share the same userId (agent self-assign uses
+    // the owner's user id). Unassign by userId must clear every row for that
+    // person, or CLI/MCP callers still see the assignee after a "successful"
+    // unassign (HTPR-6428). Agent-id targeting stays exact.
+    const assigneeWhere = agentId
+      ? { taskId, agentId }
+      : intent === "unassign"
+        ? { taskId, userId: assigneeUserId }
+        : { taskId, userId: assigneeUserId, agentId: null };
+
+    const matchingAssignees = await prisma.assignees.findMany({
+      where: assigneeWhere,
+      include: assigneeInclude,
     });
+    const assign = matchingAssignees[0] ?? null;
 
     const validateUserAssignee = async () => {
       const memberCheck = await validateProjectMemberIds(task.projectId, [assigneeUserId]);
@@ -217,16 +223,19 @@ const assigneesAssign = async (
         assignStatus = "Assigned";
       }
     } else if (intent === "unassign") {
-      if (assign) {
+      if (matchingAssignees.length > 0) {
         assignStatus = "Unassigned";
-        const removalOutcome = await removeAssignee({
-          ...props,
-          assign,
-          assigneeIntent: "Unassigned",
-        });
-        if (removalOutcome === "stale-task") {
-          assignmentOutcome = "stale-task";
-          assignStatus = "Conflict";
+        for (const row of matchingAssignees) {
+          const removalOutcome = await removeAssignee({
+            ...props,
+            assign: row,
+            assigneeIntent: "Unassigned",
+          });
+          if (removalOutcome === "stale-task") {
+            assignmentOutcome = "stale-task";
+            assignStatus = "Conflict";
+            break;
+          }
         }
       } else {
         // Not assigned — idempotent no-op

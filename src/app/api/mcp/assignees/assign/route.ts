@@ -51,9 +51,13 @@ async function findTaskByIdentifier(
     ticket_number?: string | null;
     unique_index?: number | null;
     project_id?: number | null;
+    // Unassign must reach Archive/Deleted tasks so cleanup does not require a
+    // status round-trip (HTPR-6428). Assign stays Normal-only.
+    allowNonNormalStatus?: boolean;
   }
 ) {
-  const { task_id, ticket_number, unique_index, project_id } = options;
+  const { task_id, ticket_number, unique_index, project_id, allowNonNormalStatus } =
+    options;
 
   const orConditions: any[] = [];
 
@@ -86,7 +90,9 @@ async function findTaskByIdentifier(
   const tasks = await prisma.task.findMany({
     where: {
       OR: orConditions,
-      status: ACTIVE_TASK_MUTATION_STATUS,
+      ...(allowNonNormalStatus
+        ? {}
+        : { status: ACTIVE_TASK_MUTATION_STATUS }),
       project: getProjectWhere(user.id, agentId),
     },
     select: { id: true, projectId: true },
@@ -206,6 +212,7 @@ export async function POST(request: NextRequest) {
       ticket_number: ticket_number ?? null,
       unique_index: unique_index ?? null,
       project_id: project_id ?? null,
+      allowNonNormalStatus: assignIntent === "unassign",
     });
 
     if (!task) {
