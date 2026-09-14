@@ -1,5 +1,5 @@
 "use client";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -1433,9 +1433,10 @@ const TableView = ({
   };
 
   let cursor = -1;
-  const bulkSelectAllHeader =
-    enableMyTasksBulkSelection && myTasksBulk ? (
-      myTasksBulk.selectedCount > 0 ? (
+  let bulkSelectAllHeader: ReactNode = null;
+  if (enableMyTasksBulkSelection && myTasksBulk) {
+    if (myTasksBulk.selectedCount > 0) {
+      bulkSelectAllHeader = (
         <SelectionCheckbox
           id="my-tasks-select-all"
           isChecked={myTasksBulk.isAllSelected}
@@ -1444,10 +1445,13 @@ const TableView = ({
           checkmarkColorClass="text-white-black"
           onClick={() => myTasksBulk.selectAllVisible()}
         />
-      ) : (
+      );
+    } else {
+      bulkSelectAllHeader = (
         <span aria-hidden className="block h-[15px] w-[15px]" />
-      )
-    ) : null;
+      );
+    }
+  }
 
   return (
     // h-full fills the flex-sized board column (rail shell), so the horizontal
