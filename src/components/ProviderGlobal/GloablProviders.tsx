@@ -37,6 +37,7 @@ import {
   currentProjectAtom,
   lastUsedBoardsAtom,
   agentChatTeamCycleAtom,
+  agentChatMobileFullscreenAtom,
 } from "@/store";
 import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -171,7 +172,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_SHORTCUTS_WIDTH_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -570,8 +571,20 @@ export default function GlobalProvider({
   // The mobile shell (top bar + pull-to-command) is present on every root view
   // including task detail. The bottom dock is the exception: hidden on detail
   // (shouldShowMobileDock) so the composer owns the bottom edge.
-  const showMobileTabBar =
+  // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
+  const agentChatMobileFullscreenFlag = useFlag(
+    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+  );
+  const agentChatMobileFullscreenAtomOn = useRecoilValue(
+    agentChatMobileFullscreenAtom,
+  );
+  // Keep the path/auth shell check separate so the ticket flag can gate the
+  // rendered chrome in JSX (feature-flag-gate requires that shape).
+  const showMobileShellPath =
     mbl && Boolean(currentUser?.id) && shouldShowMobileTabBar(pathname);
+  const agentChatHidesMobileShell =
+    agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn;
+  const showMobileTabBar = showMobileShellPath && !agentChatHidesMobileShell;
   // Entering the mobile comment composer hides the bottom nav so the sheet
   // sits directly on the keyboard (the top bar stays for the back button).
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
@@ -579,7 +592,8 @@ export default function GlobalProvider({
     mbl &&
     Boolean(currentUser?.id) &&
     shouldShowMobileDock(pathname) &&
-    !commentComposerOpen;
+    !commentComposerOpen &&
+    !agentChatHidesMobileShell;
   const showMobileBottomNav =
     showMobileBottomInset && shouldShowMobilePrimaryDock(pathname);
   // Pull-to-command follows the shell, not the dock, so it stays live on detail
@@ -1390,7 +1404,8 @@ export default function GlobalProvider({
         />
       )}
 
-      {showMobileTabBar && (
+      {agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn ? null : (
+        showMobileShellPath && (
         <>
           <MobileTopBar
             currentUser={currentUser}
@@ -1404,6 +1419,7 @@ export default function GlobalProvider({
             <MobilePullDownCommand />
           )}
         </>
+        )
       )}
 
       {showAnnouncements && (
