@@ -318,12 +318,20 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     paletteContextOptions?.task?.projectId ?? inViewObject.taskProjectId;
   const isRowTaskProjectFallback =
     rowShortcutsEnabled && Boolean(paletteContextOptions?.task) && !_currentProject;
+  const taskProjectResource = isRowTaskProjectFallback
+    ? commandMode === CommandMode.OpenAssignModal
+      ? "assign"
+      : commandMode === CommandMode.LabelModal
+        ? "labels"
+        : commandMode === CommandMode.MoveToColumn
+          ? "sections"
+          : null
+    : null;
   const { project: taskProject, isLoading: isTaskProjectLoading } =
     useTaskProjectFallback(
       _currentProject,
       taskProjectId,
-      currentUser.id,
-      isRowTaskProjectFallback,
+      taskProjectResource,
     );
   const activeTaskId =
     paletteContextOptions?.task?.taskId ??

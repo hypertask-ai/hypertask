@@ -430,6 +430,7 @@ const TableView = ({
   const { starTask } = useStarAndPin();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const persistedActiveItem = useRecoilValue(activeItemAtom);
+  const setPersistedActiveItem = useSetRecoilState(activeItemAtom);
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
   const isApple = useDeviceContext();
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
@@ -470,12 +471,15 @@ const TableView = ({
     queryFn: async () => (await axios.get(`/api/customFields?projectId=${_currentProject!.id}`)).data,
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedTaskIdRef = useRef<number | null>(null);
   const [assignTask, setAssignTask] = useState<ITask | null>(null);
-  const { project: assignProject } = useTaskProjectFallback(
+  const {
+    project: assignProject,
+    isError: isAssignProjectError,
+  } = useTaskProjectFallback(
     _currentProject,
     assignTask?.projectId,
-    currentUser?.id,
-    rowShortcutsEnabled && Boolean(assignTask),
+    rowShortcutsEnabled && assignTask ? "assign" : null,
   );
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
   // My Tasks has no board cache to mutate, so Ctrl+E hides the row locally
@@ -904,6 +908,7 @@ const TableView = ({
       const row = rows[nextIndex];
       if (!row) return;
       setSelectedIndex(nextIndex);
+      selectedTaskIdRef.current = isTaskRow(row) ? row.task.id : null;
       if (isTaskRow(row)) {
         updateActiveItemAndItemInView(row.task);
         focusRowElement(row.task.id);
@@ -975,6 +980,7 @@ const TableView = ({
   const openTask = useCallback(
     async (task: ITask, index: number) => {
       setSelectedIndex(index);
+      selectedTaskIdRef.current = task.id;
       updateActiveItemAndItemInView(task);
       setTasksPlayList(rows.filter(isTaskRow).map(({ task }) => ({ projectId: task.projectId, uniqueIndex: task.uniqueIndex })));
       navigateToTask(task.projectId, task.uniqueIndex);
@@ -985,6 +991,7 @@ const TableView = ({
     (index: number) => {
       setSelectedIndex(index);
       const row = rows[index];
+      selectedTaskIdRef.current = row && isTaskRow(row) ? row.task.id : null;
       if (row && isTaskRow(row)) focusRowElement(row.task.id);
     },
     [focusRowElement, rows],
@@ -1112,10 +1119,7 @@ const TableView = ({
 
   const archiveNotificationFromTable = useCallback(
     async (task: ITask) => {
-      if (
-        task._count?.notifications ||
-        task._count?.notifications === 0
-      ) {
+      if (!task._count?.notifications) {
         toast("This task is not in inbox");
         return;
       }
@@ -1143,6 +1147,18 @@ const TableView = ({
     },
     [assignTask, updateTaskAfterRowMutation],
   );
+
+  useEffect(() => {
+    if (!assignTask) return;
+    if (!rowShortcutsEnabled) {
+      setAssignTask(null);
+      return;
+    }
+    if (isAssignProjectError) {
+      setAssignTask(null);
+      toast.error("Unable to load assignees");
+    }
+  }, [assignTask, isAssignProjectError, rowShortcutsEnabled]);
 
   const runTaskShortcut = useCallback(
     (event: KeyboardEvent, row: Row | undefined, index: number) => {
@@ -1198,12 +1214,26 @@ const TableView = ({
   }, [focusTo, persistedActiveItem, rows]);
 
   useEffect(() => {
-    if (!rows.length) {
-      if (selectedIndex !== 0) setSelectedIndex(0);
+    const selectedTaskId = selectedTaskIdRef.current;
+    if (selectedTaskId !== null) {
+      const nextIndex = rows.findIndex(
+        (row) => isTaskRow(row) && row.task.id === selectedTaskId,
+      );
+      if (nextIndex >= 0) {
+        if (selectedIndex !== nextIndex) setSelectedIndex(nextIndex);
+        return;
+      }
+      selectedTaskIdRef.current = null;
+      setSelectedIndex(-1);
+      setPersistedActiveItem(null);
       return;
     }
-    if (selectedIndex > rows.length - 1) focusTo(rows.length - 1);
-  }, [focusTo, rows.length, selectedIndex]);
+    if (!rows.length) {
+      if (selectedIndex !== -1) setSelectedIndex(-1);
+      return;
+    }
+    if (selectedIndex > rows.length - 1) setSelectedIndex(rows.length - 1);
+  }, [rows, selectedIndex, setPersistedActiveItem]);
 
   // HTPR-6175: quick entry creates straight from a title, no modal.
   const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
@@ -1717,8 +1747,15 @@ const TableView = ({
                           <li
                             id={`table-more-${sid}`}
                             key={`table-more-${sid}`}
-                            onClick={() => { setSelectedIndex(flatIndex); expandSection(sid); }}
-                            onMouseEnter={() => setSelectedIndex(flatIndex)}
+                            onClick={() => {
+                              selectedTaskIdRef.current = null;
+                              setSelectedIndex(flatIndex);
+                              expandSection(sid);
+                            }}
+                            onMouseEnter={() => {
+                              selectedTaskIdRef.current = null;
+                              setSelectedIndex(flatIndex);
+                            }}
                             className={`cursor-pointer py-[8px] px-[20px] md:px-5 rounded-md md:border-l-4 text-text-light-gray text-dense ${selectedIndex===flatIndex ? "md:bg-active-elementBg md:border-l-selected-item-border" : "md:border-l-transparent"}`}
                           >
                             Show {hidden} more

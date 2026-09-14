@@ -2,10 +2,17 @@ import { useQuery } from "@tanstack/react-query";
 import type { IProject } from "@/models/model";
 import globalAPIHandlers from "@/utils/api/global";
 
+export type TaskProjectFallbackResource = "assign" | "labels" | "sections";
+
 export const taskProjectFallbackQueryKey = (
-  userId: number | null | undefined,
+  resource: TaskProjectFallbackResource | null,
   projectId: number | null | undefined,
-) => ["taskProjectFallback", userId ?? null, projectId ?? null] as const;
+) => {
+  if (resource === "assign") return ["assign", projectId] as const;
+  if (resource === "labels") return ["projectLabels", projectId] as const;
+  if (resource === "sections") return ["moveTaskModal", projectId] as const;
+  return ["taskProjectFallback", null] as const;
+};
 
 export function resolveTaskProject<T extends { id: number }>(
   currentProject: T | null | undefined,
@@ -20,38 +27,55 @@ export function resolveTaskProject<T extends { id: number }>(
 export function useTaskProjectFallback(
   currentProject: IProject | null,
   taskProjectId: number | null | undefined,
-  userId: number | null | undefined,
-  enabled: boolean,
-): { project: IProject | null; isLoading: boolean; isError: boolean; error: unknown } {
+  resource: TaskProjectFallbackResource | null,
+): {
+  project: IProject | null;
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+} {
+  const projectId = Number(taskProjectId);
   const shouldFetch =
-    enabled &&
+    Boolean(resource) &&
     !currentProject &&
-    Boolean(userId) &&
-    Number.isInteger(taskProjectId) &&
-    Number(taskProjectId) > 0;
-  const query = useQuery<IProject | null>({
-    queryKey: taskProjectFallbackQueryKey(userId, taskProjectId),
+    Number.isInteger(projectId) &&
+    projectId > 0;
+  const query = useQuery({
+    queryKey: taskProjectFallbackQueryKey(resource, taskProjectId),
     enabled: shouldFetch,
     staleTime: 5 * 60_000,
     queryFn: async () => {
-      const projectId = Number(taskProjectId);
-      const [project, labels, sections] = await Promise.all([
-        globalAPIHandlers.getMembersOwnersForAssignees(projectId),
-        globalAPIHandlers.getAllProjectLabels(projectId),
-        globalAPIHandlers.getSectionsForMoveTask(projectId),
-      ]);
-
-      return {
-        ...project,
-        labels: labels ?? [],
-        section: sections ?? [],
-        sections: sections ?? [],
-      } as IProject;
+      if (resource === "assign") {
+        return globalAPIHandlers.getMembersOwnersForAssignees(projectId);
+      }
+      if (resource === "labels") {
+        return globalAPIHandlers.getAllProjectLabels(projectId);
+      }
+      if (resource === "sections") {
+        return globalAPIHandlers.getSectionsForMoveTask(projectId);
+      }
+      throw new Error("Missing task project resource");
     },
   });
 
+  let project = currentProject;
+  if (!project && projectId > 0 && (!resource || query.isSuccess)) {
+    if (resource === "assign") {
+      project = query.data as IProject;
+    } else {
+      const resources = Array.isArray(query.data) ? query.data : [];
+      project = {
+        id: projectId,
+        ...(resource === "labels" ? { labels: resources } : {}),
+        ...(resource === "sections"
+          ? { section: resources, sections: resources }
+          : {}),
+      } as IProject;
+    }
+  }
+
   return {
-    project: currentProject ?? query.data ?? null,
+    project,
     isLoading: shouldFetch && query.isLoading,
     isError: shouldFetch && query.isError,
     error: shouldFetch ? query.error : null,

@@ -30,23 +30,22 @@ test("resolves the task board when there is no current board", () => {
   assert.equal(resolveTaskProject(null, null, projects), null);
 });
 
-test("scopes fallback cache entries by user and project", () => {
-  assert.deepEqual(taskProjectFallbackQueryKey(6, 42), [
-    "taskProjectFallback",
-    6,
+test("shares each modal's query key and scopes it by project", () => {
+  assert.deepEqual(taskProjectFallbackQueryKey("assign", 42), ["assign", 42]);
+  assert.deepEqual(taskProjectFallbackQueryKey("labels", 42), [
+    "projectLabels",
+    42,
+  ]);
+  assert.deepEqual(taskProjectFallbackQueryKey("sections", 42), [
+    "moveTaskModal",
     42,
   ]);
   assert.notDeepEqual(
-    taskProjectFallbackQueryKey(6, 42),
-    taskProjectFallbackQueryKey(7, 42),
+    taskProjectFallbackQueryKey("assign", 42),
+    taskProjectFallbackQueryKey("assign", 43),
   );
-  assert.notDeepEqual(
-    taskProjectFallbackQueryKey(6, 42),
-    taskProjectFallbackQueryKey(6, 43),
-  );
-  assert.deepEqual(taskProjectFallbackQueryKey(undefined, undefined), [
+  assert.deepEqual(taskProjectFallbackQueryKey(null, undefined), [
     "taskProjectFallback",
-    null,
     null,
   ]);
 });
