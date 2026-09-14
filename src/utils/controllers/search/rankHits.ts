@@ -122,7 +122,8 @@ export function shouldKeepRankedHit(
   query: string,
   archive: "Normal" | "Archive" | null
 ): boolean {
-  if (archive !== "Normal") return true;
+  if (archive === null) return true;
+  if (archive === "Archive") return hit.status === "Archive";
   if (hit.status !== "Archive") return true;
   return (
     isExactTicketHit(hit, parseTicketSearchQuery(query)) ||

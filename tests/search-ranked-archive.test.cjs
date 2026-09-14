@@ -91,6 +91,28 @@ test("ranked search fetches archived rows and still pins the title match", async
   );
 });
 
+test("archived-only ranked search keeps the archive filter", async () => {
+  calls.length = 0;
+  const result = await turbopufferGetDocuments("inbox icon", [15], "Archive", {
+    contextProjectId: 15,
+    applyRelevanceCut: true,
+  });
+  assert.ok(
+    calls.some(
+      ([name, params]) => name === "searchTasks" && params.status === "Archive"
+    )
+  );
+  assert.ok(
+    calls.every(
+      ([name, params]) => name !== "searchTasks" || params.status === "Archive"
+    )
+  );
+  assert.deepEqual(
+    result.processedData.All.map((hit) => hit.ticketNumber),
+    ["HTPR-6365"]
+  );
+});
+
 test("ranked ticket search pins an archived ticket first", async () => {
   const result = await turbopufferGetDocuments("HTPR-6365", [15], "Normal", {
     contextProjectId: 15,

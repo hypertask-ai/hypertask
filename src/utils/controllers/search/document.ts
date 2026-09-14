@@ -127,9 +127,10 @@ export async function turbopufferGetDocuments(
   const contextProjectId = applyRelevanceCut
     ? resolveContextProjectId(options?.contextProjectId, projectIds)
     : null;
-  // Ranked search also reads archived rows so an exact ticket or title match
-  // is not dropped just because that ticket is already Done.
-  const fetchStatus = applyRelevanceCut ? null : archive;
+  // Default open search still reads archived rows so an exact ticket or title
+  // match is not dropped just because that ticket is already Done.
+  const fetchStatus =
+    applyRelevanceCut && archive === "Normal" ? null : archive;
 
   try {
     const [globalTasks, globalComments, contextTasks, contextComments] =

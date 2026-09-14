@@ -199,6 +199,14 @@ test("default open search keeps archived exact and title hits, not comment-only"
   assert.equal(shouldKeepRankedHit(archivedTitle, "inbox icon", "Normal"), true);
   assert.equal(shouldKeepRankedHit(archivedComment, "inbox icon", "Normal"), false);
   assert.equal(shouldKeepRankedHit(archivedTitle, "HTPR-6365", "Normal"), true);
+  assert.equal(
+    shouldKeepRankedHit(
+      { ...inboxIcon, status: "Normal" },
+      "inbox icon",
+      "Archive"
+    ),
+    false
+  );
 });
 
 test("open tickets stay ahead of archived tickets inside a board group", () => {
