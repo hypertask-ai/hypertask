@@ -2,6 +2,8 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6514_COMMENT_LONG_PRESS_FLAG } from "@/lib/flags/keys";
 
 const ENGAGE_PX = 10;
 const COMMIT_PX = 72;
@@ -20,7 +22,7 @@ const MOVE_CANCEL_PX = 10;
 const SwipeableCommentRow = ({
   children,
   onMore,
-  useLongPress = false,
+  useLongPress: _useLongPress = false,
 }: {
   children: ReactNode;
   onMore: () => void;
@@ -57,7 +59,8 @@ const SwipeableCommentRow = ({
 
   useEffect(() => () => clearLongPress(), []);
 
-  if (useLongPress) {
+  const longPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  if (longPressEnabled) {
     return (
       <div
         className="relative"
