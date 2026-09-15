@@ -11,6 +11,7 @@ import {
   DEFAULT_TABLE_COLUMNS,
   normalizeMyTasksTableVisibleColumns,
   normalizeTableVisibleColumns,
+  withForcedStatusWhileSorted,
 } from "../src/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 
 test("My Tasks default columns match today's board table default snapshot", () => {
@@ -77,4 +78,16 @@ test("missing tableVisibleColumns uses today's default; malformed falls back", (
     [...DEFAULT_MY_TASKS_TABLE_COLUMNS],
   );
   assert.deepEqual(parseMyTasksViewConfig(null), DEFAULT_MY_TASKS_VIEW_CONFIG);
+});
+
+test("My Tasks does not force status back while sorted; board table still does", () => {
+  const withoutStatus = ["ticket", "title", "board", "due"];
+  assert.deepEqual(
+    withForcedStatusWhileSorted(withoutStatus, true, false),
+    withoutStatus,
+  );
+  assert.deepEqual(
+    withForcedStatusWhileSorted(withoutStatus, true, true),
+    ["ticket", "title", "status", "board", "due"],
+  );
 });

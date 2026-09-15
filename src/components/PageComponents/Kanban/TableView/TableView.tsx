@@ -7,7 +7,7 @@ import { IAssignees, IProject, ISection, ITask } from "@/models/model";
 import type { MyTasksSortField, MyTasksViewConfig } from "@/models/MyTasksView";
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useShowArchivedOnBoard } from "@/hooks/Homepage/useShowArchivedOnBoard";
-import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
+import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns, withForcedStatusWhileSorted, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
 import type { SortingOrder } from "@prisma/client";
 import type { CustomFieldType } from "@prisma/client";
 import {
@@ -704,13 +704,21 @@ const TableView = ({
   ]);
   const visibleColumns = useMemo(() => {
     const normalized = normalizeVisibleColumns(storedVisibleColumns);
-    // While sorted, 'status' shows regardless of the picker so the sorted-by
-    // column is always visible; it disappears again once the sort clears.
-    const keys = sortState.length > 0 && !normalized.includes("status")
-      ? [normalized[0], normalized[1], "status", ...normalized.slice(2)]
-      : normalized;
+    // Board table: while sorted, force 'status' visible so the sorted-by
+    // column stays on screen. My Tasks controlled picker must win (HTPR-6456).
+    const keys = withForcedStatusWhileSorted(
+      normalized,
+      sortState.length > 0,
+      !myTasksColumnsControlled,
+    );
     return keys.map(toTableColumn).filter((column): column is TableColumn => Boolean(column));
-  }, [normalizeVisibleColumns, storedVisibleColumns, sortState, toTableColumn]);
+  }, [
+    myTasksColumnsControlled,
+    normalizeVisibleColumns,
+    storedVisibleColumns,
+    sortState,
+    toTableColumn,
+  ]);
   // A drag-resized column (feature 3) overrides its default base width; that
   // override becomes the column's minimum, same as the unresized default did.
   const getColumnWidth = useCallback(
