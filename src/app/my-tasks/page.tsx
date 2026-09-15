@@ -122,13 +122,40 @@ export default async function Page({
 
   return (
     <Suspense fallback={<>Loading...</>}>
-      {scopesEnabled ? (
+      {snoozeEnabled ? (
+        scopesEnabled ? (
+          <MyTasks
+            sections={myTasks.sections}
+            tabs={myTasks.tabs}
+            boards={myTasks.boards}
+            accessibleProjectIds={accessibleProjectIds}
+            nearestSnoozeUntil={myTasks.nearestSnoozeUntil ?? null}
+            currentUser={userObj}
+            initialViews={viewsEnabled ? views : []}
+            initialViewId={initialViewId}
+            viewsEnabled={viewsEnabled}
+            scopesEnabled
+          />
+        ) : (
+          <MyTasks
+            sections={myTasks.sections}
+            tabs={myTasks.tabs}
+            boards={myTasks.boards}
+            accessibleProjectIds={accessibleProjectIds}
+            nearestSnoozeUntil={myTasks.nearestSnoozeUntil ?? null}
+            currentUser={userObj}
+            initialViews={viewsEnabled ? views : []}
+            initialViewId={initialViewId}
+            viewsEnabled={viewsEnabled}
+            scopesEnabled={false}
+          />
+        )
+      ) : scopesEnabled ? (
         <MyTasks
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
           accessibleProjectIds={accessibleProjectIds}
-          nearestSnoozeUntil={myTasks.nearestSnoozeUntil ?? null}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
@@ -141,7 +168,6 @@ export default async function Page({
           tabs={myTasks.tabs}
           boards={myTasks.boards}
           accessibleProjectIds={accessibleProjectIds}
-          nearestSnoozeUntil={myTasks.nearestSnoozeUntil ?? null}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}

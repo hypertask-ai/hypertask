@@ -75,8 +75,6 @@ const MyTasksSnoozeModal = ({ closeHandler, onPickDate }: Props) => {
     return () => document.removeEventListener("keydown", onKey);
   });
 
-  if (!snoozeEnabled) return null;
-
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target.value;
     setUserInput(input);
@@ -148,6 +146,10 @@ const MyTasksSnoozeModal = ({ closeHandler, onPickDate }: Props) => {
       />
     </div>
   );
+
+  if (!snoozeEnabled) {
+    return <span hidden data-htpr-6461-my-tasks-snooze />;
+  }
 
   if (_mbl) {
     return (

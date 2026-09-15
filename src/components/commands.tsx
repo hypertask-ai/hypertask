@@ -56,6 +56,7 @@ import { setRecurrenceApiHandler } from "@/utils/api/Task Detail";
 import type { PickerOption } from "./Modals/OptionPicker";
 import { RECURRENCE_LABELS, RECURRENCE_RULES } from "@/lib/recurrence";
 import { myTasksSnoozeAPIRoute } from "@/lib/constants/APIRouteConstants";
+import MyTasksSnoozeModal from "@/app/my-tasks/MyTasksSnoozeModal";
 import {
   LEARN_TUTORIAL_COLUMN_CREATED_EVENT,
   type LearnTutorialColumnCreatedDetail,
@@ -85,9 +86,6 @@ const ManageLabels = dynamic(() => import("./Modals/ManageLabels"));
 const CreateLabel = dynamic(() => import("./Modals/CreateLabel/CreateLabel"));
 const RemindMeComponent = dynamic(
   () => import("./Modals/RemindMe/RemindMeComponent")
-);
-const MyTasksSnoozeModal = dynamic(
-  () => import("@/app/my-tasks/MyTasksSnoozeModal")
 );
 const TrialModal = dynamic(() => import("./Modals/TrialPlan/TrialModal"));
 const SubtaskLinkingModal = dynamic(
