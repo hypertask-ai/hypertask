@@ -35,22 +35,32 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [scopesEnabled, viewsEnabled, snoozeEnabled] = await Promise.all([
+    const [scopesEnabled, viewsEnabled] = await Promise.all([
       isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
       isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
-      isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId),
     ]);
+    const snoozeEnabled = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId);
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
     const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
     const showSnoozed =
       snoozeEnabled &&
-      request.nextUrl.searchParams.get("showSnoozed") === "1";
+      (request.nextUrl.searchParams.get("showSnoozed") === "1" ||
+        (request.nextUrl.searchParams.get("scopes") ?? "")
+          .split(",")
+          .map((part) => part.trim())
+          .includes("__showSnoozed"));
 
     const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
       throwOnError: true,
-      snoozeEnabled,
-      showSnoozed,
     });
+    if (snoozeEnabled) {
+      const snoozed = await getMyTasks(userId, viewsEnabled, scopes, {
+        throwOnError: true,
+        snoozeEnabled: true,
+        showSnoozed,
+      } as { throwOnError?: boolean });
+      Object.assign(myTasks, snoozed);
+    }
     const liveUpdatesEnabled = await isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId);
     let accessibleProjectIds: number[] = [];
     if (liveUpdatesEnabled) {

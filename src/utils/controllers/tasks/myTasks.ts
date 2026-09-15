@@ -12,28 +12,21 @@ import {
 } from "@/lib/myTasksScopes";
 import {
   annotateMyTasksSnoozeFields,
-  myTasksActiveSnoozeWhere,
+  isMyTasksSnoozed,
   nearestFutureSnoozeUntil,
   omitAssigneeSnoozeUntil,
 } from "@/lib/myTasksSnooze";
-import type { Prisma } from "@prisma/client";
 
 export { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
-
-export type GetMyTasksOptions = {
-  throwOnError?: boolean;
-  /** When true, hide tasks with an active current-user snooze unless showSnoozed. */
-  snoozeEnabled?: boolean;
-  showSnoozed?: boolean;
-};
 
 const getMyTasks = async (
   userId: number,
   includeViewMetadata = false,
   scopes: MyTasksScope[] = DEFAULT_MY_TASKS_SCOPES,
-  options: GetMyTasksOptions = {},
+  options: { throwOnError?: boolean } = {},
 ) => {
   try {
+    let snoozeEnabled = false;
     const { json: projects } = await getAllMinimal(
       userId,
       "Calendar",
@@ -41,12 +34,7 @@ const getMyTasks = async (
     );
     const projectIds = projects.map((project) => project.id);
     if (projectIds.length === 0) {
-      return {
-        sections: [],
-        tabs: ["All"],
-        boards: [] as MyTasksBoardMetadata[],
-        nearestSnoozeUntil: null as string | null,
-      };
+      return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
     }
 
     const taskSectionsPromise = includeViewMetadata
@@ -66,41 +54,16 @@ const getMyTasks = async (
       userId,
       effectiveMyTasksScopes(scopes, true),
     );
-    const now = new Date();
-    const snoozeEnabled = options.snoozeEnabled === true;
-    const hideActiveSnoozes = snoozeEnabled && options.showSnoozed !== true;
-    const andFilters: Prisma.TaskWhereInput[] = [
-      {
-        projectId: { in: projectIds },
-        deletedAt: null,
-        status: "Normal",
-      },
-      { OR: scopeOr },
-    ];
-    if (hideActiveSnoozes) {
-      andFilters.push(myTasksActiveSnoozeWhere(userId, now));
-    }
-
-    const nearestSnoozePromise = hideActiveSnoozes
-      ? prisma.assignees.findMany({
-          where: {
-            userId,
-            agentId: null,
-            snoozeUntil: { gt: now },
-            task: {
-              projectId: { in: projectIds },
-              deletedAt: null,
-              status: "Normal",
-              OR: scopeOr,
-            },
-          },
-          select: { snoozeUntil: true },
-        })
-      : Promise.resolve([] as Array<{ snoozeUntil: Date | null }>);
-
-    const tasksPromise = prisma.task.findMany({
+    const tasks = await prisma.task.findMany({
       where: {
-        AND: andFilters,
+        AND: [
+          {
+            projectId: { in: projectIds },
+            deletedAt: null,
+            status: "Normal",
+          },
+          { OR: scopeOr },
+        ],
       },
       include: {
         project: {
@@ -170,26 +133,59 @@ const getMyTasks = async (
         },
       },
     });
-
-    const [tasks, hiddenSnoozes, taskSections] = await Promise.all([
-      tasksPromise,
-      nearestSnoozePromise,
-      taskSectionsPromise,
-    ]);
-    const nearestSnoozeUntil = snoozeEnabled
-      ? nearestFutureSnoozeUntil(
-          hiddenSnoozes.map((row) => row.snoozeUntil),
+    const taskSections = await taskSectionsPromise;
+    const snoozeOptions = options as {
+      throwOnError?: boolean;
+      snoozeEnabled?: boolean;
+      showSnoozed?: boolean;
+    };
+    snoozeEnabled = snoozeOptions.snoozeEnabled === true;
+    const now = new Date();
+    let nearestSnoozeUntil: string | null = null;
+    if (snoozeEnabled) {
+      const hideActiveSnoozes = snoozeOptions.showSnoozed !== true;
+      if (hideActiveSnoozes) {
+        const hidden = await prisma.assignees.findMany({
+          where: {
+            userId,
+            agentId: null,
+            snoozeUntil: { gt: now },
+            task: {
+              projectId: { in: projectIds },
+              deletedAt: null,
+              status: "Normal",
+              OR: scopeOr,
+            },
+          },
+          select: { snoozeUntil: true },
+        });
+        nearestSnoozeUntil = nearestFutureSnoozeUntil(
+          hidden.map((row) => row.snoozeUntil),
           now,
-        )
-      : null;
-
-    const annotatedTasks = snoozeEnabled
-      ? annotateMyTasksSnoozeFields(tasks, userId)
-      : tasks.map((task) => ({
+        );
+        for (let index = tasks.length - 1; index >= 0; index -= 1) {
+          const mine = (tasks[index].assignees ?? []).find(
+            (row) =>
+              row.userId === userId &&
+              (row.agentId === null || row.agentId === undefined),
+          );
+          if (isMyTasksSnoozed(mine?.snoozeUntil, now)) {
+            tasks.splice(index, 1);
+          }
+        }
+      }
+      const annotated = annotateMyTasksSnoozeFields(tasks, userId);
+      tasks.length = 0;
+      tasks.push(...(annotated as typeof tasks));
+    } else {
+      for (let index = 0; index < tasks.length; index += 1) {
+        const task = tasks[index];
+        tasks[index] = {
           ...task,
           assignees: (task.assignees ?? []).map(omitAssigneeSnoozeUntil),
-        }));
-
+        } as (typeof tasks)[number];
+      }
+    }
     const sectionById = new Map(taskSections.map((section) => [section.id, section]));
     const sectionByLegacyName = new Map(
       taskSections.map((section) => [
@@ -198,7 +194,7 @@ const getMyTasks = async (
       ]),
     );
     const tasksWithSections = includeViewMetadata
-      ? annotatedTasks.map((task) => {
+      ? tasks.map((task) => {
           const taskSection =
             (task.sectionId ? sectionById.get(task.sectionId) : undefined) ??
             sectionByLegacyName.get(`${task.projectId}:${task.section}`) ??
@@ -210,7 +206,7 @@ const getMyTasks = async (
               : null,
           };
         })
-      : annotatedTasks;
+      : tasks;
     const grouped = groupMyTasksByBoard(
       tasksWithSections as unknown as MyTasksBoardTask[],
     );
@@ -265,16 +261,14 @@ const getMyTasks = async (
         })
       : [];
 
-    return { ...grouped, boards, nearestSnoozeUntil };
+    if (snoozeEnabled) {
+      return { ...grouped, boards, nearestSnoozeUntil };
+    }
+    return { ...grouped, boards };
   } catch (error) {
     console.log("🚀 ~ getMyTasks ~ error:", error);
     if (options.throwOnError) throw error;
-    return {
-      sections: [],
-      tabs: ["All"],
-      boards: [] as MyTasksBoardMetadata[],
-      nearestSnoozeUntil: null as string | null,
-    };
+    return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
   }
 };
 

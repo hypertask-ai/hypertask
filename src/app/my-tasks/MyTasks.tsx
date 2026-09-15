@@ -12,11 +12,11 @@ import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
-  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -163,8 +163,8 @@ const MyTasks = ({
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
-  const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
@@ -212,29 +212,30 @@ const MyTasks = ({
     () => effectiveMyTasksScopes(viewConfig.scopes, scopesFeatureEnabled),
     [scopesFeatureEnabled, viewConfig.scopes],
   );
+  const scopesRef = useRef(reconcileScopes);
+  scopesRef.current = reconcileScopes;
   const showSnoozed = Boolean(
     myTasksSnoozeEnabled && viewConfig.filters.showSnoozed,
   );
-  const scopesRef = useRef(reconcileScopes);
-  scopesRef.current = reconcileScopes;
   const showSnoozedRef = useRef(showSnoozed);
   showSnoozedRef.current = showSnoozed;
+  if (showSnoozedRef.current) {
+    scopesRef.current = [
+      ...reconcileScopes,
+      "__showSnoozed" as (typeof reconcileScopes)[number],
+    ];
+  }
   const activeViewIdRef = useRef(activeViewId);
   activeViewIdRef.current = activeViewId;
   const reconcileRunner = useMemo(
     () =>
       createMyTasksReconcileRunner({
         fetchList: async (signal) => {
-          const response = await fetch(
-            buildMyTasksListUrl(scopesRef.current, {
-              showSnoozed: showSnoozedRef.current,
-            }),
-            {
-              signal,
-              cache: "no-store",
-              credentials: "same-origin",
-            },
-          );
+          const response = await fetch(buildMyTasksListUrl(scopesRef.current), {
+            signal,
+            cache: "no-store",
+            credentials: "same-origin",
+          });
           if (!response.ok) {
             throw new Error(
               await readError(response, "Unable to refresh My Tasks"),
@@ -272,7 +273,7 @@ const MyTasks = ({
   useEffect(() => {
     if (!liveUpdatesEnabled) return;
     reconcileRunner.request();
-  }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(","), showSnoozed]);
+  }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
 
   useEffect(() => {
     const onSnoozeChanged = () => reconcileRunner.request();
@@ -280,6 +281,11 @@ const MyTasks = ({
     return () =>
       window.removeEventListener("my-tasks-snooze-changed", onSnoozeChanged);
   }, [reconcileRunner]);
+
+  useEffect(() => {
+    if (!myTasksSnoozeEnabled) return;
+    reconcileRunner.request();
+  }, [myTasksSnoozeEnabled, reconcileRunner, showSnoozed]);
 
   useEffect(() => {
     if (!myTasksSnoozeEnabled || !nearestSnoozeUntil) return;
@@ -310,13 +316,9 @@ const MyTasks = ({
     };
   }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
 
-  const scopesKey = JSON.stringify({
-    scopes: effectiveMyTasksScopes(
-      viewConfig.scopes,
-      Boolean(myTasksScopesFlag && scopesEnabled),
-    ),
-    showSnoozed,
-  });
+  const scopesKey = JSON.stringify(
+    effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
+  );
 
   useEffect(() => {
     // Only seed from SSR while we have not fetched a scopes selection yet.
@@ -335,8 +337,7 @@ const MyTasks = ({
       // Live effect owns reconcile; only stop the legacy scopes-fetch token.
       return;
     }
-    const scopesActive = Boolean(myTasksScopesFlag && scopesEnabled);
-    if (!scopesActive && !myTasksSnoozeEnabled) {
+    if (!myTasksScopesFlag || !scopesEnabled) {
       lastFetchedScopesKey.current = null;
       setSections(initialSections);
       setTabs(initialTabs);
@@ -350,11 +351,14 @@ const MyTasks = ({
       return;
     }
     if (lastFetchedScopesKey.current === scopesKey) return;
-    const scopes = effectiveMyTasksScopes(viewConfig.scopes, scopesActive);
+    const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
+    if (showSnoozed) {
+      scopes.push("__showSnoozed" as (typeof scopes)[number]);
+    }
     void (async () => {
       try {
         const response = await fetch(
-          buildMyTasksListUrl(scopesActive ? scopes : undefined, { showSnoozed }),
+          `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
         );
         if (token !== scopesFetchToken.current) return;
         if (!response.ok) {
@@ -366,7 +370,6 @@ const MyTasks = ({
           tabs?: string[];
           boards?: MyTasksBoardMetadata[];
           accessibleProjectIds?: number[];
-          nearestSnoozeUntil?: string | null;
         };
         if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
@@ -378,9 +381,6 @@ const MyTasks = ({
           setAccessibleProjectIds(
             body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
           );
-        }
-        if (body.nearestSnoozeUntil !== undefined) {
-          setNearestSnoozeUntil(body.nearestSnoozeUntil ?? null);
         }
       } catch {
         if (token === scopesFetchToken.current) {
@@ -395,11 +395,9 @@ const MyTasks = ({
     initialTabs,
     liveUpdatesEnabled,
     myTasksScopesFlag,
-    myTasksSnoozeEnabled,
     reconcileRunner,
     scopesEnabled,
     scopesKey,
-    showSnoozed,
     viewConfig.scopes,
   ]);
 
