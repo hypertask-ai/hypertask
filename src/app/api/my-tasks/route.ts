@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
+  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -33,18 +34,27 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [scopesEnabled, viewsEnabled] = await Promise.all([
+    const [scopesEnabled, viewsEnabled, liveUpdatesEnabled] = await Promise.all([
       isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
       isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
+      isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId),
     ]);
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
     const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
 
-    const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
+    const myTasksPromise = getMyTasks(userId, viewsEnabled, scopes, {
       throwOnError: true,
     });
-    const { json: projects } = await getAllMinimal(userId, "Calendar", false);
-    const accessibleProjectIds = projects.map((project) => project.id);
+    const projectsPromise = liveUpdatesEnabled
+      ? getAllMinimal(userId, "Calendar", false)
+      : Promise.resolve({ json: [] as { id: number }[] });
+    const [myTasks, { json: projects }] = await Promise.all([
+      myTasksPromise,
+      projectsPromise,
+    ]);
+    const accessibleProjectIds = liveUpdatesEnabled
+      ? projects.map((project) => project.id)
+      : [];
     return NextResponse.json({ ...myTasks, accessibleProjectIds }, {
       headers: {
         "Cache-Control": "private, no-store",
