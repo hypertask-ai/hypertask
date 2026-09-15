@@ -29,7 +29,6 @@ import {
   getBoardMenuCommands,
   getMobileCommandGroups,
 } from "./AllCommands";
-import { pinCommentGroupFirst } from "@/lib/htc/pinCommentGroupFirst";
 import {
   getActiveEmptySectionSettingFromProject,
   getActiveStalenessFromProject,
@@ -54,12 +53,7 @@ import {
   isInboxClusterCommandKey,
   type InboxCluster,
 } from "@/lib/inboxClusters";
-import {
-  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
-  INBOX_ARCHIVE_CLUSTER_FLAG,
-  MY_TASKS_TABLE_COLUMNS_FLAG,
-  MY_TASKS_VIEWS_FLAG,
-} from "@/lib/flags/keys";
+import { INBOX_ARCHIVE_CLUSTER_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { myTasksRoute } from "@/lib/constants/constants";
 
 type Props = {
@@ -104,8 +98,6 @@ const Commands = (props: Props) => {
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
-  const pinCommentActions = !!contextOptions?.commentOptions;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -221,12 +213,9 @@ const Commands = (props: Props) => {
       ...registryGroups.slice(boardsInsertIndex),
     ].map((group) => ({
       ...group,
-      commandLists:
-        commentLongPressEnabled && pinCommentActions && group.group === "Comment"
-          ? group.commandLists
-          : [...group.commandLists].sort(
-              (left, right) => scoreCommand(right) - scoreCommand(left)
-            ),
+      commandLists: [...group.commandLists].sort(
+        (left, right) => scoreCommand(right) - scoreCommand(left)
+      ),
     }));
     // Appended, and added after the per-group frecency sort so the piles keep
     // size order. Position is only visible on an empty query, and the group is
@@ -240,10 +229,7 @@ const Commands = (props: Props) => {
       });
     }
     if (contextOptions?.context === "Task") {
-      const taskGroups = getMobileCommandGroups(commandGroups, isMobile);
-      return commentLongPressEnabled && pinCommentActions
-        ? pinCommentGroupFirst(taskGroups)
-        : taskGroups;
+      return getMobileCommandGroups(commandGroups, isMobile);
     }
 
     const canonicalCommands = new Map(
@@ -285,17 +271,12 @@ const Commands = (props: Props) => {
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
         : commandGroups;
 
-    const rankedGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
-    return commentLongPressEnabled && pinCommentActions
-      ? pinCommentGroupFirst(rankedGroups)
-      : rankedGroups;
+    return getMobileCommandGroups(rankedCommandGroups, isMobile);
   }, [
     appShellRailOn,
     boardLayout,
     calendarSettings.showWeekends,
     contextOptions,
-    commentLongPressEnabled,
-    pinCommentActions,
     copyCurrentUrlEnabled,
     currentProject,
     inboxClusterEnabled,
@@ -522,24 +503,6 @@ const Commands = (props: Props) => {
     </div>
   );
 
-  const commandGroups = (
-    <CommandGroups
-      handleMouseMove={handleMouseMove}
-      filterCommands={filterCommands}
-      selectedCommand={selectedCommand}
-      handleMouseLeave={handleMouseLeave}
-      handleMouseEnter={handleMouseEnter}
-      commandRef={commandRef}
-      onClickHandler={updateCommandFrequency}
-      isMobile={isMobile}
-    />
-  );
-  const gatedCommandGroups = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG) ? (
-    <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
-  ) : (
-    commandGroups
-  );
-
   if (isMobile) {
     return (
       <MobileBottomSheet
@@ -550,7 +513,16 @@ const Commands = (props: Props) => {
         keyboardAware
         bottomSlot={searchInput}
       >
-        {gatedCommandGroups}
+        <CommandGroups
+          handleMouseMove={handleMouseMove}
+          filterCommands={filterCommands}
+          selectedCommand={selectedCommand}
+          handleMouseLeave={handleMouseLeave}
+          handleMouseEnter={handleMouseEnter}
+          commandRef={commandRef}
+          onClickHandler={updateCommandFrequency}
+          isMobile
+        />
       </MobileBottomSheet>
     );
   }
@@ -602,7 +574,15 @@ const Commands = (props: Props) => {
                className="px-0"
             />
           </div>
-          {gatedCommandGroups}
+          <CommandGroups
+            handleMouseMove={handleMouseMove}
+            filterCommands={filterCommands}
+            selectedCommand={selectedCommand}
+            handleMouseLeave={handleMouseLeave}
+            handleMouseEnter={handleMouseEnter}
+            commandRef={commandRef}
+            onClickHandler={updateCommandFrequency}
+          />
           <ModalHintBar />
         </ModalBody>
       </ModalContainerCustom>
