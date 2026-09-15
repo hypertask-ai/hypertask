@@ -12,6 +12,7 @@ import {
   type MyTasksDateRange,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
+import { isMyTasksSnoozed } from "@/lib/myTasksSnooze";
 import {
   defaultConditions,
   priorityFilterCondition,
@@ -243,6 +244,12 @@ export function applyMyTasksView(
         task.myTasksSection?.id ??
         (hasNestedSection ? nestedSection.id : undefined);
       if (!filters.showDone && isDone === true) return false;
+      if (
+        !filters.showSnoozed &&
+        isMyTasksSnoozed(task.currentUserSnoozeUntil, now)
+      ) {
+        return false;
+      }
       if (sectionIds.size > 0 && (!sectionId || !sectionIds.has(sectionId))) {
         return false;
       }

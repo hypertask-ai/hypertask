@@ -38,6 +38,7 @@ interface Props {
   tableColumnsEnabled?: boolean;
   onOpenTableColumns?: () => void;
   scopesEnabled?: boolean;
+  snoozeEnabled?: boolean;
 }
 
 const INVOLVEMENT_OPTIONS: Array<{ value: MyTasksScope; label: string }> = [
@@ -108,6 +109,7 @@ const MyTasksViewControls = ({
   tableColumnsEnabled = false,
   onOpenTableColumns,
   scopesEnabled = false,
+  snoozeEnabled = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
@@ -170,6 +172,7 @@ const MyTasksViewControls = ({
     config.filters.createdRange,
     config.filters.updatedRange,
     config.filters.showDone ? true : null,
+    config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
 
   const kanbanFilterCount = myTasksParityFilterCount(config);
@@ -177,6 +180,7 @@ const MyTasksViewControls = ({
     config.boardIds,
     config.filters.sectionIds.length ? config.filters.sectionIds : null,
     config.filters.showDone ? true : null,
+    config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
 
   const updateFilters = (filters: Partial<MyTasksViewConfig["filters"]>) =>
@@ -295,6 +299,17 @@ const MyTasksViewControls = ({
             onChange={() => updateFilters({ showDone: !config.filters.showDone })}
           />
         </Field>
+        {snoozeEnabled ? (
+          <Field label="Snoozed tasks">
+            <CheckRow
+              checked={config.filters.showSnoozed === true}
+              label="Show snoozed"
+              onChange={() =>
+                updateFilters({ showSnoozed: !config.filters.showSnoozed })
+              }
+            />
+          </Field>
+        ) : null}
       </div>
     </div>
   );
@@ -683,6 +698,19 @@ const MyTasksViewControls = ({
                     }
                   />
                 </Field>
+                {snoozeEnabled ? (
+                  <Field label="Snoozed tasks">
+                    <CheckRow
+                      checked={config.filters.showSnoozed === true}
+                      label="Show snoozed"
+                      onChange={() =>
+                        updateFilters({
+                          showSnoozed: !config.filters.showSnoozed,
+                        })
+                      }
+                    />
+                  </Field>
+                ) : null}
               </div>
 
               <div className="mt-4 flex justify-end border-t border-border pt-3">

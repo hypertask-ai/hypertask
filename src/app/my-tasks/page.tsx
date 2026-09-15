@@ -8,6 +8,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
@@ -50,9 +51,10 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [viewsEnabled, scopesEnabled] = await Promise.all([
+  const [viewsEnabled, scopesEnabled, snoozeEnabled] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
+    isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, sessionUser.userId),
   ]);
   const liveUpdatesEnabled = await isFeatureEnabled(
     MY_TASKS_LIVE_UPDATES_FLAG,
@@ -61,23 +63,9 @@ export default async function Page({
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
 
-  let views: Awaited<ReturnType<typeof getMyTasksViews>> = [];
-  let myTasks: Awaited<ReturnType<typeof getMyTasks>>;
-  myTasks = undefined as unknown as Awaited<ReturnType<typeof getMyTasks>>;
-
-  if (!scopesEnabled) {
-    // Assigned-only query does not need saved view config; load in parallel.
-    const [tasksResult, viewsResult] = await Promise.all([
-      getMyTasks(sessionUser.userId, viewsEnabled),
-      viewsEnabled
-        ? getMyTasksViews(sessionUser.userId)
-        : Promise.resolve([] as Awaited<ReturnType<typeof getMyTasksViews>>),
-    ]);
-    myTasks = tasksResult;
-    views = viewsResult;
-  } else {
-    views = viewsEnabled ? await getMyTasksViews(sessionUser.userId) : [];
-  }
+  const views = viewsEnabled
+    ? await getMyTasksViews(sessionUser.userId)
+    : [];
 
   const initialViewId =
     rawView === undefined
@@ -86,16 +74,17 @@ export default async function Page({
         ? null
         : (views.find((view) => view.id === requestedViewId)?.id ?? null);
 
-  if (scopesEnabled) {
-    const scopes = effectiveMyTasksScopes(
-      parseMyTasksViewConfig(
-        views.find((view) => view.id === initialViewId)?.config ??
-          DEFAULT_MY_TASKS_VIEW_CONFIG,
-      ).scopes,
-      true,
-    );
-    myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes);
-  }
+  const viewConfig = parseMyTasksViewConfig(
+    views.find((view) => view.id === initialViewId)?.config ??
+      DEFAULT_MY_TASKS_VIEW_CONFIG,
+  );
+  const scopes = effectiveMyTasksScopes(viewConfig.scopes, scopesEnabled);
+  const showSnoozed = snoozeEnabled && viewConfig.filters.showSnoozed === true;
+
+  const myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes, {
+    snoozeEnabled,
+    showSnoozed,
+  });
 
   let accessibleProjectIds: number[] = [];
   if (liveUpdatesEnabled) {
@@ -109,31 +98,18 @@ export default async function Page({
 
   return (
     <Suspense fallback={<>Loading...</>}>
-      {scopesEnabled ? (
-        <MyTasks
-          sections={myTasks.sections}
-          tabs={myTasks.tabs}
-          boards={myTasks.boards}
-          accessibleProjectIds={accessibleProjectIds}
-          currentUser={userObj}
-          initialViews={viewsEnabled ? views : []}
-          initialViewId={initialViewId}
-          viewsEnabled={viewsEnabled}
-          scopesEnabled
-        />
-      ) : (
-        <MyTasks
-          sections={myTasks.sections}
-          tabs={myTasks.tabs}
-          boards={myTasks.boards}
-          accessibleProjectIds={accessibleProjectIds}
-          currentUser={userObj}
-          initialViews={viewsEnabled ? views : []}
-          initialViewId={initialViewId}
-          viewsEnabled={viewsEnabled}
-          scopesEnabled={false}
-        />
-      )}
+      <MyTasks
+        sections={myTasks.sections}
+        tabs={myTasks.tabs}
+        boards={myTasks.boards}
+        accessibleProjectIds={accessibleProjectIds}
+        nearestSnoozeUntil={myTasks.nearestSnoozeUntil ?? null}
+        currentUser={userObj}
+        initialViews={viewsEnabled ? views : []}
+        initialViewId={initialViewId}
+        viewsEnabled={viewsEnabled}
+        scopesEnabled={scopesEnabled}
+      />
     </Suspense>
   );
 }

@@ -8,11 +8,18 @@ export type MyTasksListPayload = {
   tabs: string[];
   boards: MyTasksBoardMetadata[];
   accessibleProjectIds: number[];
+  nearestSnoozeUntil?: string | null;
 };
 
-export const buildMyTasksListUrl = (scopes?: MyTasksScope[]): string => {
-  if (!scopes?.length) return myTasksAPIRoute;
-  return `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`;
+export const buildMyTasksListUrl = (
+  scopes?: MyTasksScope[],
+  options?: { showSnoozed?: boolean },
+): string => {
+  const params = new URLSearchParams();
+  if (scopes?.length) params.set("scopes", scopes.join(","));
+  if (options?.showSnoozed) params.set("showSnoozed", "1");
+  const query = params.toString();
+  return query ? `${myTasksAPIRoute}?${query}` : myTasksAPIRoute;
 };
 
 export const createMyTasksReconcileRunner = (options: {
@@ -113,10 +120,17 @@ export const parseMyTasksListPayload = (body: unknown): MyTasksListPayload | nul
   const accessibleProjectIds = Array.isArray(record.accessibleProjectIds)
     ? record.accessibleProjectIds.filter((id): id is number => typeof id === "number")
     : [];
+  const nearestSnoozeUntil =
+    typeof record.nearestSnoozeUntil === "string"
+      ? record.nearestSnoozeUntil
+      : record.nearestSnoozeUntil === null
+        ? null
+        : undefined;
   return {
     sections: record.sections as ISection[],
     tabs: record.tabs as string[],
     boards,
     accessibleProjectIds,
+    nearestSnoozeUntil,
   };
 };

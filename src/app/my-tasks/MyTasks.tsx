@@ -16,6 +16,7 @@ import {
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -104,6 +105,8 @@ interface IProps {
   boards: MyTasksBoardMetadata[];
   /** Boards the session can open, including ones with zero My Tasks rows. */
   accessibleProjectIds?: number[];
+  /** Soonest future snooze among hidden rows; client refreshes when it elapses. */
+  nearestSnoozeUntil?: string | null;
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
@@ -126,6 +129,7 @@ const MyTasks = ({
   tabs: initialTabs,
   boards: initialBoards = EMPTY_MY_TASKS_BOARDS,
   accessibleProjectIds: initialAccessibleProjectIds = EMPTY_ACCESSIBLE_PROJECT_IDS,
+  nearestSnoozeUntil: initialNearestSnoozeUntil = null,
   currentUser,
   initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
@@ -145,6 +149,9 @@ const MyTasks = ({
   const [accessibleProjectIds, setAccessibleProjectIds] = useState(
     initialAccessibleProjectIds,
   );
+  const [nearestSnoozeUntil, setNearestSnoozeUntil] = useState<string | null>(
+    initialNearestSnoozeUntil,
+  );
   const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
@@ -157,6 +164,7 @@ const MyTasks = ({
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
   const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
@@ -204,19 +212,29 @@ const MyTasks = ({
     () => effectiveMyTasksScopes(viewConfig.scopes, scopesFeatureEnabled),
     [scopesFeatureEnabled, viewConfig.scopes],
   );
+  const showSnoozed = Boolean(
+    myTasksSnoozeEnabled && viewConfig.filters.showSnoozed,
+  );
   const scopesRef = useRef(reconcileScopes);
   scopesRef.current = reconcileScopes;
+  const showSnoozedRef = useRef(showSnoozed);
+  showSnoozedRef.current = showSnoozed;
   const activeViewIdRef = useRef(activeViewId);
   activeViewIdRef.current = activeViewId;
   const reconcileRunner = useMemo(
     () =>
       createMyTasksReconcileRunner({
         fetchList: async (signal) => {
-          const response = await fetch(buildMyTasksListUrl(scopesRef.current), {
-            signal,
-            cache: "no-store",
-            credentials: "same-origin",
-          });
+          const response = await fetch(
+            buildMyTasksListUrl(scopesRef.current, {
+              showSnoozed: showSnoozedRef.current,
+            }),
+            {
+              signal,
+              cache: "no-store",
+              credentials: "same-origin",
+            },
+          );
           if (!response.ok) {
             throw new Error(
               await readError(response, "Unable to refresh My Tasks"),
@@ -231,6 +249,9 @@ const MyTasks = ({
           setTabs(payload.tabs);
           setBoards(payload.boards);
           setAccessibleProjectIds(payload.accessibleProjectIds);
+          if (payload.nearestSnoozeUntil !== undefined) {
+            setNearestSnoozeUntil(payload.nearestSnoozeUntil ?? null);
+          }
         },
         onError: () => {
           toast.error("Unable to refresh My Tasks");
@@ -251,11 +272,33 @@ const MyTasks = ({
   useEffect(() => {
     if (!liveUpdatesEnabled) return;
     reconcileRunner.request();
-  }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
+  }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(","), showSnoozed]);
 
-  const scopesKey = JSON.stringify(
-    effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
-  );
+  useEffect(() => {
+    const onSnoozeChanged = () => reconcileRunner.request();
+    window.addEventListener("my-tasks-snooze-changed", onSnoozeChanged);
+    return () =>
+      window.removeEventListener("my-tasks-snooze-changed", onSnoozeChanged);
+  }, [reconcileRunner]);
+
+  useEffect(() => {
+    if (!myTasksSnoozeEnabled || !nearestSnoozeUntil) return;
+    const ms = new Date(nearestSnoozeUntil).getTime() - Date.now();
+    if (!Number.isFinite(ms)) return;
+    const delay = Math.max(250, Math.min(ms + 50, 2147483647));
+    const timer = window.setTimeout(() => {
+      reconcileRunner.request();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
+
+  const scopesKey = JSON.stringify({
+    scopes: effectiveMyTasksScopes(
+      viewConfig.scopes,
+      Boolean(myTasksScopesFlag && scopesEnabled),
+    ),
+    showSnoozed,
+  });
 
   useEffect(() => {
     // Only seed from SSR while we have not fetched a scopes selection yet.
@@ -274,7 +317,8 @@ const MyTasks = ({
       // Live effect owns reconcile; only stop the legacy scopes-fetch token.
       return;
     }
-    if (!myTasksScopesFlag || !scopesEnabled) {
+    const scopesActive = Boolean(myTasksScopesFlag && scopesEnabled);
+    if (!scopesActive && !myTasksSnoozeEnabled) {
       lastFetchedScopesKey.current = null;
       setSections(initialSections);
       setTabs(initialTabs);
@@ -288,11 +332,11 @@ const MyTasks = ({
       return;
     }
     if (lastFetchedScopesKey.current === scopesKey) return;
-    const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
+    const scopes = effectiveMyTasksScopes(viewConfig.scopes, scopesActive);
     void (async () => {
       try {
         const response = await fetch(
-          `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
+          buildMyTasksListUrl(scopesActive ? scopes : undefined, { showSnoozed }),
         );
         if (token !== scopesFetchToken.current) return;
         if (!response.ok) {
@@ -304,6 +348,7 @@ const MyTasks = ({
           tabs?: string[];
           boards?: MyTasksBoardMetadata[];
           accessibleProjectIds?: number[];
+          nearestSnoozeUntil?: string | null;
         };
         if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
@@ -315,6 +360,9 @@ const MyTasks = ({
           setAccessibleProjectIds(
             body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
           );
+        }
+        if (body.nearestSnoozeUntil !== undefined) {
+          setNearestSnoozeUntil(body.nearestSnoozeUntil ?? null);
         }
       } catch {
         if (token === scopesFetchToken.current) {
@@ -329,9 +377,11 @@ const MyTasks = ({
     initialTabs,
     liveUpdatesEnabled,
     myTasksScopesFlag,
+    myTasksSnoozeEnabled,
     reconcileRunner,
     scopesEnabled,
     scopesKey,
+    showSnoozed,
     viewConfig.scopes,
   ]);
 
@@ -974,6 +1024,7 @@ const boardTabCounts = useMemo(() => {
             timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
             tableColumnsEnabled={tableColumnsFeatureEnabled}
             scopesEnabled={scopesEnabled}
+            snoozeEnabled={myTasksSnoozeEnabled}
             onOpenTableColumns={openTableColumnsPicker}
             onOpenKanbanFilters={() => {
               updateViewConfig((current) =>

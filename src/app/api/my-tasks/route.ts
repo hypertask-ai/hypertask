@@ -4,6 +4,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -34,15 +35,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [scopesEnabled, viewsEnabled] = await Promise.all([
+    const [scopesEnabled, viewsEnabled, snoozeEnabled] = await Promise.all([
       isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
       isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
+      isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId),
     ]);
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
     const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
+    const showSnoozed =
+      snoozeEnabled &&
+      request.nextUrl.searchParams.get("showSnoozed") === "1";
 
     const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
       throwOnError: true,
+      snoozeEnabled,
+      showSnoozed,
     });
     const liveUpdatesEnabled = await isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId);
     let accessibleProjectIds: number[] = [];

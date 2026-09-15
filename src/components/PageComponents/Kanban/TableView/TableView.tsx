@@ -76,6 +76,7 @@ import { useFlag } from "@/hooks/useFlag";
 import {
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
 } from "@/lib/flags/keys";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
@@ -432,6 +433,7 @@ const TableView = ({
 }: TableViewProps) => {
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG) && Boolean(myTasksSort);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
@@ -940,6 +942,7 @@ const TableView = ({
               currentTask._count.notifications > 0
             ),
             isKanban: true,
+            isMyTasks: Boolean(myTasksSort) && myTasksSnoozeEnabled,
             hasSubtasks: !!currentTask.subTasks?.length,
             hasParent: !!currentTask.parentTaskId,
             isStarred: !!currentTask.savedContent?.length,
@@ -948,7 +951,7 @@ const TableView = ({
         : undefined,
       commentOptions: undefined,
     };
-  }, [_currentProject, isApple, persistedActiveItem, rows, showArchivedOnBoard]);
+  }, [_currentProject, isApple, myTasksSnoozeEnabled, myTasksSort, persistedActiveItem, rows, showArchivedOnBoard]);
 
 
   const scrollToRow = useCallback((row: Row) => {
@@ -1215,6 +1218,24 @@ const TableView = ({
   const runTaskShortcut = useCallback(
     (event: KeyboardEvent, row: Row | undefined, index: number) => {
       if (!rowShortcutsEnabled || !row || !isTaskRow(row)) return false;
+      if (
+        myTasksSnoozeEnabled &&
+        event.keyCode === KeyCodes.H &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.repeat
+      ) {
+        event.preventDefault();
+        updateActiveItemAndItemInView(row.task);
+        setShowCommands({
+          show: true,
+          mode: CommandMode.MyTasksSnooze,
+          payload: { assignmentId: row.task.currentUserAssignmentId ?? null },
+        });
+        return true;
+      }
       const action = getTaskShortcutAction(event, isApple);
       if (!action) return false;
 
@@ -1250,6 +1271,7 @@ const TableView = ({
       archiveNotificationFromTable,
       archiveTaskFromTable,
       isApple,
+      myTasksSnoozeEnabled,
       openTask,
       rowShortcutsEnabled,
       setShowCommands,

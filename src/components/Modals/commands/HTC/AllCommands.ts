@@ -1709,13 +1709,22 @@ const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => {
           getTaskCommand("markAsBlocking"),
           getTaskCommand("markDuplicateOf"),
           getTaskCommand("archiveTask"),
-          !taskProps?.isKanban
+          !taskProps?.isKanban && !taskProps?.isMyTasks
             ? {
                 key: "setReminder",
                 name: "Set reminder",
                 commandMode: CommandMode.SetReminder,
                 keyboard: ["H"],
                 keywords: "reminder remind alert",
+              }
+            : null,
+          taskProps?.isMyTasks
+            ? {
+                key: "myTasksSnooze",
+                name: "Snooze until",
+                commandMode: CommandMode.MyTasksSnooze,
+                keyboard: ["H"],
+                keywords: "snooze hide until later my tasks",
               }
             : null,
           {

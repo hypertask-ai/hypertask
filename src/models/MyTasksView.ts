@@ -47,6 +47,8 @@ export type MyTasksViewConfig = {
     createdRange: MyTasksDateRange | null;
     updatedRange: MyTasksDateRange | null;
     showDone: boolean;
+    /** HTPR-6461: when true, include tasks snoozed past now. Default false. */
+    showSnoozed?: boolean;
   };
   /** Kanban-parity filters (HTPR-6447). Absent on older saved views. */
   filterSettings?: SerializableFilterSettings | null;
@@ -114,6 +116,7 @@ export const DEFAULT_MY_TASKS_VIEW_CONFIG: MyTasksViewConfig = {
     createdRange: null,
     updatedRange: null,
     showDone: false,
+    showSnoozed: false,
   },
   filterSettings: null,
   sort: {
@@ -306,6 +309,7 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       createdRange: dateRange(filters.createdRange),
       updatedRange: dateRange(filters.updatedRange),
       showDone: filters.showDone === true,
+      showSnoozed: filters.showSnoozed === true,
     },
     filterSettings: parseFilterSettings(value.filterSettings),
     sort: {

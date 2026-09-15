@@ -48,6 +48,7 @@ import axios from "axios";
 import { useRouter, usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { parseCookies } from "nookies";
+import formatDateDifference from "@/utils/generateTime";
 import { useQueryClient } from "@tanstack/react-query";
 import { createTeam } from "@/utils/api/Homepage";
 import { markAsUnseen } from "@/utils/api/Inbox";
@@ -1375,6 +1376,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       case CommandMode.SetReminder:
         setReminderHandler();
         return;
+      case CommandMode.MyTasksSnooze:
+        // Modal opens via commandMode === MyTasksSnooze below.
+        return;
       case CommandMode.RemoveParent:
         removeParentHandler();
         return;
@@ -2459,6 +2463,51 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
           {commandMode === CommandMode.RemindMe && (
             <RemindMeComponent closeHandler={togglRemindMeModal} />
+          )}
+          {commandMode === CommandMode.MyTasksSnooze && (
+            <RemindMeComponent
+              closeHandler={togglRemindMeModal}
+              modalTitle="Snooze until"
+              onPickDate={async (date) => {
+                const assignmentId =
+                  typeof showCommands.payload?.assignmentId === "number"
+                    ? showCommands.payload.assignmentId
+                    : null;
+                const taskId = inViewObject.taskId;
+                if (!assignmentId && !taskId) {
+                  toast.error("Select a My Tasks row first.");
+                  return;
+                }
+                const { myTasksSnoozeAPIRoute } = await import(
+                  "@/lib/constants/APIRouteConstants"
+                );
+                const response = await fetch(myTasksSnoozeAPIRoute, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "same-origin",
+                  body: JSON.stringify({
+                    assignmentId: assignmentId ?? undefined,
+                    taskId: assignmentId ? undefined : taskId,
+                    snoozeUntil: date,
+                  }),
+                });
+                if (!response.ok) {
+                  const body = await response.json().catch(() => null);
+                  throw new Error(
+                    typeof body?.error === "string"
+                      ? body.error
+                      : "Unable to snooze task",
+                  );
+                }
+                toast(
+                  "Hidden from My Tasks until " +
+                    formatDateDifference(date, true),
+                );
+                if (typeof window !== "undefined") {
+                  window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
+                }
+              }}
+            />
           )}
           {commandMode === CommandMode.SubtaskSettings && (
             <SubtaskSettings toggle={toggleSubTaskSettingsHandler} />
