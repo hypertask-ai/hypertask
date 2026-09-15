@@ -17,6 +17,7 @@ import {
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import getMyTasks from "@/utils/controllers/tasks/myTasks";
+import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 import { getMyTasksViews } from "@/utils/controllers/tasks/myTasksViews";
 import MyTasks from "./MyTasks";
 
@@ -92,6 +93,16 @@ export default async function Page({
     myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes);
   }
 
+  let accessibleProjectIds: number[] = [];
+  if (liveUpdatesEnabled) {
+    const { json: projects } = await getAllMinimal(
+      sessionUser.userId,
+      "Calendar",
+      false,
+    );
+    accessibleProjectIds = projects.map((project) => project.id);
+  }
+
   return (
     <Suspense fallback={<>Loading...</>}>
       {scopesEnabled ? (
@@ -99,7 +110,7 @@ export default async function Page({
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
-          accessibleProjectIds={liveUpdatesEnabled ? myTasks.accessibleProjectIds : []}
+          accessibleProjectIds={accessibleProjectIds}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
@@ -111,7 +122,7 @@ export default async function Page({
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
-          accessibleProjectIds={liveUpdatesEnabled ? myTasks.accessibleProjectIds : []}
+          accessibleProjectIds={accessibleProjectIds}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}

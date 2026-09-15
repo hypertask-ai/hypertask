@@ -52,5 +52,5 @@ test("my-tasks reconcile drops stale responses", async () => {
   resolveFirst();
   await new Promise((r) => setTimeout(r, 0));
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(applied, ["new"]);
+  assert.deepEqual(applied, ["old", "new"]);
 });

@@ -55,9 +55,8 @@ export const createMyTasksReconcileRunner = (options: {
   return {
     request: () => {
       if (activeRuns > 0) {
+        // Keep the in-flight fetch; trail one more after it finishes.
         dirty = true;
-        generation += 1;
-        controller?.abort();
         return;
       }
       void run();

@@ -25,16 +25,10 @@ const getMyTasks = async (
       "Calendar",
       includeViewMetadata,
     );
-    const accessibleProjectIds = projects.map((project) => project.id);
-    if (accessibleProjectIds.length === 0) {
-      return {
-        sections: [],
-        tabs: ["All"],
-        boards: [] as MyTasksBoardMetadata[],
-        accessibleProjectIds: [] as number[],
-      };
+    const projectIds = projects.map((project) => project.id);
+    if (projectIds.length === 0) {
+      return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
     }
-    const projectIds = accessibleProjectIds;
 
     const taskSectionsPromise = includeViewMetadata
       ? prisma.section.findMany({
@@ -208,16 +202,11 @@ const getMyTasks = async (
         })
       : [];
 
-    return { ...grouped, boards, accessibleProjectIds };
+    return { ...grouped, boards };
   } catch (error) {
     console.log("🚀 ~ getMyTasks ~ error:", error);
     if (options.throwOnError) throw error;
-    return {
-      sections: [],
-      tabs: ["All"],
-      boards: [] as MyTasksBoardMetadata[],
-      accessibleProjectIds: [] as number[],
-    };
+    return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
   }
 };
 

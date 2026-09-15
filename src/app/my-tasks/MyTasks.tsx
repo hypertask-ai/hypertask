@@ -260,7 +260,7 @@ const MyTasks = ({
     // Invalidate any in-flight refetch before deciding whether to fetch.
     const token = ++scopesFetchToken.current;
     if (liveUpdatesEnabled) {
-      reconcileRunner.cancel();
+      // Live effect owns reconcile; only stop the legacy scopes-fetch token.
       return;
     }
     if (!myTasksScopesFlag || !scopesEnabled) {

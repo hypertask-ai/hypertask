@@ -11,6 +11,7 @@ import {
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
 import getMyTasks from "@/utils/controllers/tasks/myTasks";
+import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,9 @@ export async function GET(request: NextRequest) {
     const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
       throwOnError: true,
     });
-    return NextResponse.json(myTasks, {
+    const { json: projects } = await getAllMinimal(userId, "Calendar", false);
+    const accessibleProjectIds = projects.map((project) => project.id);
+    return NextResponse.json({ ...myTasks, accessibleProjectIds }, {
       headers: {
         "Cache-Control": "private, no-store",
       },
