@@ -219,6 +219,54 @@ const CommentsContainer = () => {
       </>
     );
   } else {
+    const openCommentCommands = () => {
+      // Select the comment first: the menu labels come from commentIndex,
+      // but the action handlers resolve their target from currentId.
+      // Without this, actions (incl. delete) would hit the previously
+      // selected comment.
+      setCurrentId(`comment-${i}`);
+      setShowCommands({
+        show: true,
+        mode: CommandMode.Command,
+        commentIndex: i,
+      });
+    };
+    const commentBubble = (
+      <div
+        className={`
+                        rounded-sm
+                        ${styles.hellow}
+                        ${
+                          comment.creator?.id === currentUser?.id
+                            ? "bg-self-comment"
+                            : // they look the same now but wasn't always t
+                              "bg-comment-description"
+                        }`}
+      >
+        <CommentText />
+
+        {comment.attachments && editState !== i && (
+          <AttachmentView
+            active={
+              currentId === `comment-${i}` ||
+              currentId === `comment-${i}-input`
+            }
+            attachments={comment.attachments}
+            setCarousalItems={setCarousalItems}
+            compact={true}
+          />
+        )}
+
+        <div className="flex items-center justify-start gap-2">
+          <CommentReactions />
+          <Reply size={14}
+            className={"text-emphasis mt-2 text-white-black"}
+            onClick={() => replyToCommentHandler(i)}
+           strokeWidth={1.75}/>
+        </div>
+        <CommentReadReceipts />
+      </div>
+    );
     return !comment.activity ? (
       <div {...bind} className={`py-1`} id={`comment-${comment.id}`}>
         {isFirstNewComment ? (
@@ -229,56 +277,15 @@ const CommentsContainer = () => {
           </div>
         ) : null}
         <CommentCreatedBy />
-        <SwipeableCommentRow
-          useLongPress={commentLongPress}
-          onMore={() => {
-            // Select the swiped comment first: the menu labels come from
-            // commentIndex, but the action handlers resolve their target from
-            // currentId. Without this, actions (incl. delete) would hit the
-            // previously selected comment.
-            setCurrentId(`comment-${i}`);
-            setShowCommands({
-              show: true,
-              mode: CommandMode.Command,
-              commentIndex: i,
-            });
-          }}
-        >
-          <div
-            className={`
-                        rounded-sm
-                        ${styles.hellow}
-                        ${
-                          comment.creator?.id === currentUser?.id
-                            ? "bg-self-comment"
-                            : // they look the same now but wasn't always t
-                              "bg-comment-description"
-                        }`}
-          >
-            <CommentText />
-
-            {comment.attachments && editState !== i && (
-              <AttachmentView
-                active={
-                  currentId === `comment-${i}` ||
-                  currentId === `comment-${i}-input`
-                }
-                attachments={comment.attachments}
-                setCarousalItems={setCarousalItems}
-                compact={true}
-              />
-            )}
-
-            <div className="flex items-center justify-start gap-2">
-              <CommentReactions />
-              <Reply size={14}
-                className={"text-emphasis mt-2 text-white-black"}
-                onClick={() => replyToCommentHandler(i)}
-               strokeWidth={1.75}/>
-            </div>
-            <CommentReadReceipts />
-          </div>
-        </SwipeableCommentRow>
+        {commentLongPress ? (
+          <SwipeableCommentRow useLongPress onMore={openCommentCommands}>
+            {commentBubble}
+          </SwipeableCommentRow>
+        ) : (
+          <SwipeableCommentRow onMore={openCommentCommands}>
+            {commentBubble}
+          </SwipeableCommentRow>
+        )}
       </div>
     ) : (
       <CommentTaskActivity />
