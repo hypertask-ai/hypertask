@@ -105,7 +105,6 @@ const Commands = (props: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
-  const pinCommentActions = !!contextOptions?.commentOptions;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -222,7 +221,8 @@ const Commands = (props: Props) => {
     ].map((group) => ({
       ...group,
       commandLists:
-        commentLongPressEnabled && pinCommentActions && group.group === "Comment"
+        commentLongPressEnabled && contextOptions?.commentOptions &&
+        group.group === "Comment"
           ? group.commandLists
           : [...group.commandLists].sort(
               (left, right) => scoreCommand(right) - scoreCommand(left)
@@ -241,7 +241,7 @@ const Commands = (props: Props) => {
     }
     if (contextOptions?.context === "Task") {
       const taskGroups = getMobileCommandGroups(commandGroups, isMobile);
-      return commentLongPressEnabled && pinCommentActions
+      return commentLongPressEnabled && contextOptions?.commentOptions
         ? pinCommentGroupFirst(taskGroups)
         : taskGroups;
     }
@@ -286,7 +286,7 @@ const Commands = (props: Props) => {
         : commandGroups;
 
     const rankedGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
-    return commentLongPressEnabled && pinCommentActions
+    return commentLongPressEnabled && contextOptions?.commentOptions
       ? pinCommentGroupFirst(rankedGroups)
       : rankedGroups;
   }, [
@@ -295,7 +295,6 @@ const Commands = (props: Props) => {
     calendarSettings.showWeekends,
     contextOptions,
     commentLongPressEnabled,
-    pinCommentActions,
     copyCurrentUrlEnabled,
     currentProject,
     inboxClusterEnabled,
