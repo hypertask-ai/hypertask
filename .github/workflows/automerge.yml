@@ -112,6 +112,9 @@ jobs:
           # (visual-regression reports success when it skips, HTPR-5652).
           REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title"
           REQUIRED="$REQUIRED feature-flag-gate"
+          # design-gate reports on every pull request, including ones that
+          # change no UI file, so it can never leave a PR without a result.
+          REQUIRED="$REQUIRED design-gate"
 
           # Any changed file matching this (case-insensitive) parks the PR for a
           # human: auth/identity, billing, security
