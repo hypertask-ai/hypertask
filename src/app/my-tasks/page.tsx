@@ -59,7 +59,7 @@ export default async function Page({
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
 
   let views: Awaited<ReturnType<typeof getMyTasksViews>> = [];
-  let myTasks: Awaited<ReturnType<typeof getMyTasks>>;
+  let myTasks: Awaited<ReturnType<typeof getMyTasks>> | undefined;
 
   if (!scopesEnabled) {
     // Assigned-only query does not need saved view config; load in parallel.
@@ -91,6 +91,10 @@ export default async function Page({
       true,
     );
     myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes);
+  }
+
+  if (!myTasks) {
+    throw new Error("My Tasks payload was not loaded");
   }
 
   let accessibleProjectIds: number[] = [];
