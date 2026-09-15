@@ -1,9 +1,20 @@
 #!/bin/bash
-# agent-template: owned v3.11.0 sha256:e74fa37ec8d176cf798057d8a15f194c9fde76dfc5ab94a87faee5d5c7f91db3
+# agent-template: owned v3.11.0 sha256:847ecc19560d701fdf97d4c33f96a56b8ab76371cd5a085c37637126bd3275a8
 # PreToolUse guard (Valentin, 2026-09-15, HARD RULE): sessions never touch the Hypertask board by hand.
 # Board writes come only from the runner (agent-board-poll) and the supervisor (ht-supervisor), which run as
 # systemd timers outside any session. A session fixes the mechanism and runs it (ht-supervisor --now).
 # Override only when Valentin says so in chat: touch /tmp/ht-board-write-approved (remove it when done).
+#
+# This copy is a reference, not an active gate. A hook only runs when a settings
+# file registers it, and nothing in this repo does; the live registration is in
+# ~/.claude/settings.json and points at the copy in ~/.claude/hooks. It is kept
+# here so the rule travels with the repo and so a host that wants it can point
+# its own settings at this path.
+#
+# It does not, and cannot, stop the fleet working tickets. agent-board-poll and
+# ht-supervisor are systemd timers, not Claude Code sessions, so no PreToolUse
+# hook sees them. An agent claiming a ticket, commenting on it, or recording a
+# QA verdict goes through its runner and is unaffected.
 [ -f /tmp/ht-board-write-approved ] && exit 0
 cmd=$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("tool_input",{}).get("command",""))' 2>/dev/null)
 block() {
