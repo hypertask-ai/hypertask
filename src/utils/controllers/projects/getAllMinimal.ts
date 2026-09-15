@@ -9,8 +9,10 @@ import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/Board
  * - Move task modal: project.id, project.title, column list via returnActiveOrDefaultColumnSections
  * - Create task modal: board filters plus the destination team's AI entitlement
  *   and model default when the user switches boards before creating the task
+ * - Board settings lifecycle (Archive / Delete / Leave): ownerId + member
+ *   role/status so canManageBoardLifecycle / canLeaveBoard match the server
  *
- * NOT needed here: allViews, full View rows, tasks, members, full team data,
+ * NOT needed here: allViews, full View rows, tasks, full team data,
  * custom AI instructions beyond the selected model
  */
 const minimalViewSelect = {
@@ -30,6 +32,20 @@ export function extraMinimalProjectInclude(
     title: true,
     name: true,
     teamId: true,
+    // Settings Board management reuses this payload; without ownerId the
+    // owner check fails open on Leave and never shows Delete (HTPR-6471).
+    ownerId: true,
+    members: {
+      // Only the caller's row: lifecycle checks need this user's role,
+      // not the whole board roster.
+      where: { userId },
+      select: {
+        userId: true,
+        role: true,
+        status: true,
+        agentId: true,
+      },
+    },
     team: {
       select: teamBillingSnapshotSelect,
     },
