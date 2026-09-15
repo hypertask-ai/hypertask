@@ -174,7 +174,12 @@ const MyTasksQuickAdd = ({
 
   return (
     <div className="mb-2 px-1 @md:px-[78px] @lg:px-[73px]">
-      <p className="mb-1 text-sm text-white-black/70">Quick add a task</p>
+      <p
+        className="mb-1 text-sm text-white-black/70"
+        data-htpr-6460-quick-add-label=""
+      >
+        Quick add a task
+      </p>
       <NewTask
         title={title}
         onTitleChange={setTitle}
