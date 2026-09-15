@@ -25,8 +25,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(new URL("..", import.meta.url).pathname);
+const REPO_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const ALLOW_FILE = path.join(REPO_ROOT, "docs/design/lint-allow.txt");
 const TOKENS_FILE = path.join(REPO_ROOT, "docs/design/tokens.json");
 const TAILWIND_CONFIG = path.join(REPO_ROOT, "tailwind.config.ts");

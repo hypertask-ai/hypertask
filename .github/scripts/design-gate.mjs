@@ -43,6 +43,11 @@ function git(args) {
   return execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
 
+function hasCommit(sha) {
+  const res = spawnSync("git", ["cat-file", "-e", `${sha}^{commit}`], { encoding: "utf8" });
+  return res.status === 0;
+}
+
 function publishStatus(sha, state, description) {
   const payload = JSON.stringify({
     state,
@@ -133,18 +138,27 @@ function evaluate(prNumber) {
 
   publishStatus(headSha, "pending", "design-gate is checking the changed lines");
 
+  // The checkout is a full clone of production, so the base commit is normally
+  // already present. Never pass --depth here: it would turn that full clone
+  // shallow and truncate the history the diff needs.
   try {
-    git(["fetch", "--no-tags", "--depth=200", "origin", `refs/pull/${prNumber}/head`, baseSha]);
-  } catch {
-    // A shallow fetch of a base commit can fail on old bases; fall back to full.
+    git(["fetch", "--no-tags", "origin", `refs/pull/${prNumber}/head`]);
+  } catch (err) {
+    console.error(`::error::#${prNumber}: cannot fetch the head commit: ${err.message}`);
+    publishStatus(headSha, "error", "design-gate could not fetch this pull request");
+    return false;
+  }
+  if (!hasCommit(headSha) || !hasCommit(baseSha)) {
     try {
-      git(["fetch", "--no-tags", "origin", `refs/pull/${prNumber}/head`]);
       git(["fetch", "--no-tags", "origin", "production"]);
-    } catch (err) {
-      console.error(`::error::#${prNumber}: cannot fetch the commits: ${err.message}`);
-      publishStatus(headSha, "error", "design-gate could not fetch this pull request");
-      return false;
+    } catch {
+      /* the check below reports the real problem */
     }
+  }
+  if (!hasCommit(headSha) || !hasCommit(baseSha)) {
+    console.error(`::error::#${prNumber}: the pull request commits are unavailable.`);
+    publishStatus(headSha, "error", "design-gate could not reach this pull request's commits");
+    return false;
   }
 
   const run = spawnSync(
