@@ -3,10 +3,10 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
-// e2e/midscene has no install or build step in CI, so ci-tests reports SKIPPED
-// for every change to it. These assertions are the only gate that notices when
-// the advisory dependency comes back or the @midscene/web floor slips below the
-// major that dropped it (HTPR-6289).
+// No workflow installs or runs e2e/midscene, so nothing in CI would notice the
+// advisory dependency coming back or the @midscene/web floor slipping below the
+// major that dropped it. Reading the committed manifest and lockfile is a check
+// that needs no install (HTPR-6289).
 const root = path.resolve(__dirname, "..");
 
 const readJson = (relativePath) =>
@@ -14,13 +14,6 @@ const readJson = (relativePath) =>
 
 const manifest = readJson("e2e/midscene/package.json");
 const lock = readJson("e2e/midscene/package-lock.json");
-
-const dependencyMaps = (entry) => [
-  entry.dependencies,
-  entry.devDependencies,
-  entry.peerDependencies,
-  entry.optionalDependencies,
-];
 
 test("midscene e2e keeps @midscene/web on the major that dropped @xmldom/xmldom", () => {
   const range = manifest.dependencies["@midscene/web"];
@@ -43,11 +36,15 @@ test("midscene e2e resolves no @xmldom/xmldom at any depth", () => {
       !installPath.includes("@xmldom/xmldom"),
       `${installPath} is back in the lockfile`,
     );
-    for (const map of dependencyMaps(entry)) {
-      assert.ok(
-        !map || !("@xmldom/xmldom" in map),
-        `${installPath || "the root package"} requires @xmldom/xmldom again`,
-      );
-    }
+    const required = [
+      entry.dependencies,
+      entry.devDependencies,
+      entry.peerDependencies,
+      entry.optionalDependencies,
+    ].some((map) => map && "@xmldom/xmldom" in map);
+    assert.ok(
+      !required,
+      `${installPath || "the root package"} requires @xmldom/xmldom again`,
+    );
   }
 });
