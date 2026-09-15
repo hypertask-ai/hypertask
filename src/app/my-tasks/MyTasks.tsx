@@ -107,6 +107,8 @@ interface IProps {
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
 const EMPTY_ACCESSIBLE_PROJECT_IDS: number[] = [];
+const EMPTY_MY_TASKS_BOARDS: MyTasksBoardMetadata[] = [];
+const EMPTY_MY_TASKS_VIEWS: MyTasksSavedView[] = [];
 
 const readError = async (response: Response, fallback: string): Promise<string> => {
   const body = await response.json().catch(() => null);
@@ -116,10 +118,10 @@ const readError = async (response: Response, fallback: string): Promise<string> 
 const MyTasks = ({
   sections: initialSections,
   tabs: initialTabs,
-  boards: initialBoards = [],
+  boards: initialBoards = EMPTY_MY_TASKS_BOARDS,
   accessibleProjectIds: initialAccessibleProjectIds = EMPTY_ACCESSIBLE_PROJECT_IDS,
   currentUser,
-  initialViews = [],
+  initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
   viewsEnabled = false,
   scopesEnabled = false,
