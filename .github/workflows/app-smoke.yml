@@ -58,9 +58,11 @@ jobs:
           path: node_modules
           key: ${{ steps.restore-node-modules.outputs.cache-primary-key }}
 
+  # The request workflow cancels superseded duplicates. Only its surviving run
+  # may validate or publish the required status for that revision.
   validate:
     name: validate app-smoke request
-    if: github.event_name == 'workflow_run'
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -176,7 +178,7 @@ jobs:
 
   report:
     name: report app-smoke result
-    if: always() && github.event_name == 'workflow_run'
+    if: always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'
     needs: [validate, app-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 1
