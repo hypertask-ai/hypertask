@@ -1,9 +1,16 @@
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
+import {
+  DEFAULT_MY_TASKS_SCOPES,
+  normalizeMyTasksScopes,
+  type MyTasksScope,
+} from "@/lib/myTasksScopes";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import {
   DEFAULT_MY_TASKS_TABLE_COLUMNS,
   normalizeMyTasksTableVisibleColumns,
 } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
+
+export type { MyTasksScope };
 
 export type MyTasksDueDatePreset =
   | "overdue"
@@ -54,6 +61,11 @@ export type MyTasksViewConfig = {
    * keep working; parse always recognizes the field even when the UI flag is off.
    */
   tableVisibleColumns?: string[];
+  /**
+   * Relationship scopes for the My Tasks query (HTPR-6457). Always parsed so
+   * flag-off saves do not wipe a stored choice.
+   */
+  scopes?: MyTasksScope[];
 };
 
 export type MyTasksSavedView = {
@@ -103,6 +115,7 @@ export const DEFAULT_MY_TASKS_VIEW_CONFIG: MyTasksViewConfig = {
     field: "dueDate",
     direction: "asc",
   },
+  scopes: [...DEFAULT_MY_TASKS_SCOPES],
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -195,6 +208,7 @@ const KNOWN_CONFIG_KEYS = new Set([
   "sort",
   "groupBy",
   "tableVisibleColumns",
+  "scopes",
 ]);
 
 const parseFilterSettings = (
@@ -251,6 +265,9 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       : DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field;
   const groupBy = groupByValue(value.groupBy);
   const tableVisibleColumns = tableVisibleColumnsValue(value.tableVisibleColumns);
+  const scopes = normalizeMyTasksScopes(
+    value.scopes === undefined ? DEFAULT_MY_TASKS_SCOPES : value.scopes,
+  );
 
   const extras: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -278,5 +295,6 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
     },
     ...(groupBy ? { groupBy } : {}),
     ...(tableVisibleColumns ? { tableVisibleColumns } : {}),
+    scopes,
   };
 }

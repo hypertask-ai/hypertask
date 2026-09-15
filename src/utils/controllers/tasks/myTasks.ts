@@ -4,10 +4,21 @@ import { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 import type { MyTasksBoardTask } from "@/lib/myTasksGrouping";
 import type { MyTasksBoardMetadata } from "@/models/MyTasksView";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import {
+  buildMyTasksScopeOr,
+  DEFAULT_MY_TASKS_SCOPES,
+  effectiveMyTasksScopes,
+  type MyTasksScope,
+} from "@/lib/myTasksScopes";
 
 export { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 
-const getMyTasks = async (userId: number, includeViewMetadata = false) => {
+const getMyTasks = async (
+  userId: number,
+  includeViewMetadata = false,
+  scopes: MyTasksScope[] = DEFAULT_MY_TASKS_SCOPES,
+  options: { throwOnError?: boolean } = {},
+) => {
   try {
     const { json: projects } = await getAllMinimal(
       userId,
@@ -32,12 +43,20 @@ const getMyTasks = async (userId: number, includeViewMetadata = false) => {
         })
       : Promise.resolve([]);
 
+    const scopeOr = buildMyTasksScopeOr(
+      userId,
+      effectiveMyTasksScopes(scopes, true),
+    );
     const tasks = await prisma.task.findMany({
       where: {
-        projectId: { in: projectIds },
-        deletedAt: null,
-        status: "Normal",
-        assignees: { some: { userId, agentId: null } },
+        AND: [
+          {
+            projectId: { in: projectIds },
+            deletedAt: null,
+            status: "Normal",
+          },
+          { OR: scopeOr },
+        ],
       },
       include: {
         project: {
@@ -186,6 +205,7 @@ const getMyTasks = async (userId: number, includeViewMetadata = false) => {
     return { ...grouped, boards };
   } catch (error) {
     console.log("🚀 ~ getMyTasks ~ error:", error);
+    if (options.throwOnError) throw error;
     return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
   }
 };

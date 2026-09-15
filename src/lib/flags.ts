@@ -50,6 +50,7 @@ import {
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
+  MY_TASKS_SCOPES_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
 } from "@/lib/flags/keys";
 
@@ -420,6 +421,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "Lets you choose which My Tasks table columns show, and saves that choice in the active My Tasks view.",
+  },
+  {
+    key: MY_TASKS_SCOPES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Lets My Tasks show tasks you created, were mentioned in, or watch, not only tasks assigned to you. Multi-select, saved per view.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
