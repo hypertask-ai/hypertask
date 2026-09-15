@@ -38,7 +38,7 @@ test("ExtraMinimal payload includes ownership fields Settings Delete needs", () 
   assert.match(include, /ownerId:\s*true/);
   assert.match(
     include,
-    /members:\s*\{[\s\S]*?select:\s*\{[\s\S]*?userId:\s*true[\s\S]*?role:\s*true[\s\S]*?status:\s*true[\s\S]*?agentId:\s*true/,
+    /members:\s*\{[\s\S]*?where:\s*\{\s*userId\s*\}[\s\S]*?select:\s*\{[\s\S]*?userId:\s*true[\s\S]*?role:\s*true[\s\S]*?status:\s*true[\s\S]*?agentId:\s*true/,
   );
 });
 

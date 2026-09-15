@@ -36,6 +36,9 @@ export function extraMinimalProjectInclude(
     // owner check fails open on Leave and never shows Delete (HTPR-6471).
     ownerId: true,
     members: {
+      // Only the caller's row: lifecycle checks need this user's role,
+      // not the whole board roster.
+      where: { userId },
       select: {
         userId: true,
         role: true,
