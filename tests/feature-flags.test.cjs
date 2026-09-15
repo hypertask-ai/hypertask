@@ -344,6 +344,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6460-my-tasks-quick-add",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6476-mobile-agent-chat-fullscreen",
         mode: "OWNER_AND_QA",
         updatedAt: null,
