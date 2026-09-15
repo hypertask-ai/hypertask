@@ -37,6 +37,7 @@ interface Props {
   timeGroupEnabled?: boolean;
   tableColumnsEnabled?: boolean;
   onOpenTableColumns?: () => void;
+  scopesEnabled?: boolean;
 }
 
 const INVOLVEMENT_OPTIONS: Array<{ value: MyTasksScope; label: string }> = [
@@ -106,12 +107,14 @@ const MyTasksViewControls = ({
   timeGroupEnabled = false,
   tableColumnsEnabled = false,
   onOpenTableColumns,
+  scopesEnabled = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
+  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
+  const myTasksScopesEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const [filterOpen, setFilterOpen] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
   const [involvementOpen, setInvolvementOpen] = useState(false);

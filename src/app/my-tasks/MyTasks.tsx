@@ -180,23 +180,28 @@ const MyTasks = ({
   );
 
   useEffect(() => {
-    if (
-      lastFetchedScopesKey.current !== null &&
-      lastFetchedScopesKey.current !== scopesKey
-    ) {
-      return;
-    }
+    // Only seed from SSR while we have not fetched a scopes selection yet.
+    if (lastFetchedScopesKey.current !== null) return;
     setSections(initialSections);
     setTabs(initialTabs);
     setBoards(initialBoards);
-  }, [initialBoards, initialSections, initialTabs, scopesKey]);
+  }, [initialBoards, initialSections, initialTabs]);
 
   useEffect(() => {
-    if (!myTasksScopesFlag) return;
-    if (!scopesEnabled) return;
-    // Always invalidate in-flight fetches when scopesKey changes, including
-    // when returning to an already-displayed selection.
+    // Invalidate any in-flight refetch before deciding whether to fetch.
     const token = ++scopesFetchToken.current;
+    if (!myTasksScopesFlag || !scopesEnabled) {
+      lastFetchedScopesKey.current = null;
+      setSections(initialSections);
+      setTabs(initialTabs);
+      setBoards(initialBoards);
+      return;
+    }
+    // First paint already matches SSR for the active scopes; only refetch on change.
+    if (lastFetchedScopesKey.current === null) {
+      lastFetchedScopesKey.current = scopesKey;
+      return;
+    }
     if (lastFetchedScopesKey.current === scopesKey) return;
     const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
     void (async () => {
@@ -226,13 +231,15 @@ const MyTasks = ({
         }
       }
     })();
-  }, [myTasksScopesFlag, scopesEnabled, scopesKey, viewConfig.scopes]);
-
-  useEffect(() => {
-    if (lastFetchedScopesKey.current === null) {
-      lastFetchedScopesKey.current = scopesKey;
-    }
-  }, [scopesKey]);
+  }, [
+    initialBoards,
+    initialSections,
+    initialTabs,
+    myTasksScopesFlag,
+    scopesEnabled,
+    scopesKey,
+    viewConfig.scopes,
+  ]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled) return;
@@ -798,6 +805,7 @@ const boardTabCounts = useMemo(() => {
             onChange={updateViewConfig}
             timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
             tableColumnsEnabled={tableColumnsFeatureEnabled}
+            scopesEnabled={scopesEnabled}
             onOpenTableColumns={openTableColumnsPicker}
             onOpenKanbanFilters={() => {
               updateViewConfig((current) =>
