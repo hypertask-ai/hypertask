@@ -23,6 +23,7 @@ import {
   createMyTasksReconcileRunner,
   parseMyTasksListPayload,
 } from "@/lib/myTasks/reconcileMyTasks";
+import { MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY } from "@/lib/myTasks/quickAddHelpers";
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -711,7 +712,7 @@ const MyTasks = ({
       if (viewId === null) {
         try {
           localStorage.setItem(
-            "htpr-6460-my-tasks-default-board",
+            MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY,
             String(defaultBoardId),
           );
         } catch {
@@ -731,13 +732,11 @@ const MyTasks = ({
       });
       const saved = await patchView(viewId, { config: nextConfig });
       setViews((current) =>
-        current.map((view) =>
-          view.id === saved.id
-            ? saved
-            : view.id === viewId
-              ? { ...view, config: nextConfig }
-              : view,
-        ),
+        current.map((view) => {
+          if (view.id === saved.id) return saved;
+          if (view.id === viewId) return { ...view, config: nextConfig };
+          return view;
+        }),
       );
       if (viewId === activeViewId) {
         updateViewConfig((current) => ({ ...current, defaultBoardId }));

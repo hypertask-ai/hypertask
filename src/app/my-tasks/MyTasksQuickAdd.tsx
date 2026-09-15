@@ -9,6 +9,7 @@ import {
   myTasksQuickAddLikelyVisible,
   resolveMyTasksQuickAddBoardId,
 } from "@/lib/myTasks/quickAdd";
+import { MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY } from "@/lib/myTasks/quickAddHelpers";
 import type { MyTasksScope } from "@/lib/myTasksScopes";
 import type { MyTasksViewConfig } from "@/models/MyTasksView";
 import type { IProject, IUser } from "@/models/model";
@@ -50,7 +51,7 @@ const MyTasksQuickAdd = ({
     if (activeViewId !== null) return null;
     if (viewConfig.defaultBoardId != null) return null;
     try {
-      const raw = localStorage.getItem("htpr-6460-my-tasks-default-board");
+      const raw = localStorage.getItem(MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY);
       const parsed = Number(raw);
       return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
     } catch {
@@ -165,7 +166,11 @@ const MyTasksQuickAdd = ({
     const pendingViewId = pendingViewIdRef.current;
     pendingTitleRef.current = null;
     pendingViewIdRef.current = null;
-    if (!project || !pendingTitle) return;
+    if (!project) {
+      if (pendingTitle) setTitle(pendingTitle);
+      return;
+    }
+    if (!pendingTitle) return;
     try {
       await createOnBoard(project, pendingTitle, pendingViewId);
       setTitle("");

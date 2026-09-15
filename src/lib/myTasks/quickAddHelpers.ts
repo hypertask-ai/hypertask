@@ -1,6 +1,9 @@
 import type { MyTasksScope } from "@/lib/myTasksScopes";
 import { parseMyTasksDefaultBoardId } from "@/models/MyTasksView";
 
+export const MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY =
+  "htpr-6460-my-tasks-default-board";
+
 /** Prefer a saved default board that is still in the writable board list. */
 export function resolveMyTasksQuickAddBoardId(
   defaultBoardId: unknown,
