@@ -2,8 +2,6 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6514_COMMENT_LONG_PRESS_FLAG } from "@/lib/flags/keys";
 
 const ENGAGE_PX = 10;
 const COMMIT_PX = 72;
@@ -37,7 +35,6 @@ const SwipeableCommentRow = ({
   const longPressStart = useRef<{ x: number; y: number; id: number } | null>(
     null,
   );
-  const flaggedLongPress = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
 
   const setOffsetSynced = (value: number) => {
     offsetRef.current = value;
@@ -60,7 +57,7 @@ const SwipeableCommentRow = ({
 
   useEffect(() => () => clearLongPress(), []);
 
-  if (flaggedLongPress || useLongPress) {
+  if (useLongPress) {
     return (
       <div
         className="relative"

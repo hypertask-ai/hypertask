@@ -8,8 +8,11 @@ const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
 });
 const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
-const { getAllCommands, pinCommentGroupFirst } = jiti(
+const { getAllCommands } = jiti(
   path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts")
+);
+const { pinCommentGroupFirst } = jiti(
+  path.join(root, "src/lib/htc/pinCommentGroupFirst.ts")
 );
 
 const commentOptions = {

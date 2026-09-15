@@ -218,10 +218,12 @@ const CommentsContainer = () => {
       </div>
       </>
     );
-  } else if (comment.activity) {
-    return <CommentTaskActivity />;
   } else {
     const openCommentCommands = () => {
+      // Select the comment first: the menu labels come from commentIndex,
+      // but the action handlers resolve their target from currentId.
+      // Without this, actions (incl. delete) would hit the previously
+      // selected comment.
       setCurrentId(`comment-${i}`);
       setShowCommands({
         show: true,
@@ -229,7 +231,7 @@ const CommentsContainer = () => {
         commentIndex: i,
       });
     };
-    const commentBody = (
+    const commentBubble = (
       <div
         className={`
                         rounded-sm
@@ -237,10 +239,12 @@ const CommentsContainer = () => {
                         ${
                           comment.creator?.id === currentUser?.id
                             ? "bg-self-comment"
-                            : "bg-comment-description"
+                            : // they look the same now but wasn't always t
+                              "bg-comment-description"
                         }`}
       >
         <CommentText />
+
         {comment.attachments && editState !== i && (
           <AttachmentView
             active={
@@ -252,19 +256,18 @@ const CommentsContainer = () => {
             compact={true}
           />
         )}
+
         <div className="flex items-center justify-start gap-2">
           <CommentReactions />
-          <Reply
-            size={14}
+          <Reply size={14}
             className={"text-emphasis mt-2 text-white-black"}
             onClick={() => replyToCommentHandler(i)}
-            strokeWidth={1.75}
-          />
+           strokeWidth={1.75}/>
         </div>
         <CommentReadReceipts />
       </div>
     );
-    return (
+    return !comment.activity ? (
       <div {...bind} className={`py-1`} id={`comment-${comment.id}`}>
         {isFirstNewComment ? (
           <div className="flex items-center gap-2 px-1 pb-1 pt-2 text-micro font-semibold uppercase text-amber-500">
@@ -276,14 +279,16 @@ const CommentsContainer = () => {
         <CommentCreatedBy />
         {commentLongPress ? (
           <SwipeableCommentRow useLongPress onMore={openCommentCommands}>
-            {commentBody}
+            {commentBubble}
           </SwipeableCommentRow>
         ) : (
           <SwipeableCommentRow onMore={openCommentCommands}>
-            {commentBody}
+            {commentBubble}
           </SwipeableCommentRow>
         )}
       </div>
+    ) : (
+      <CommentTaskActivity />
     );
   }
 };

@@ -15,14 +15,6 @@ const mobileAppCommands: CommandGroup = {
   ],
 };
 
-export const pinCommentGroupFirst = (
-  commandGroups: CommandGroup[],
-): CommandGroup[] => {
-  const comment = commandGroups.find((group) => group.group === "Comment");
-  if (!comment) return commandGroups;
-  return [comment, ...commandGroups.filter((group) => group !== comment)];
-};
-
 export const getMobileCommandGroups = (
   commandGroups: CommandGroup[],
   isMobile: boolean
