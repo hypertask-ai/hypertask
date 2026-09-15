@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureChatParticipant,
+  isAgentChatPollingActive,
   loadUserAgentChatSession,
 } from "@/lib/agents/chatAccess";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
@@ -79,7 +80,7 @@ export async function GET(
     const access = await loadUserAgentChatSession({
       sessionId,
       userId,
-      select: {},
+      select: { agent: { select: { heartbeatAt: true } } },
     });
     if (!access.ok) {
       return NextResponse.json(
@@ -209,7 +210,8 @@ export async function GET(
       ? { draft: participant.draft, unreadCount: unreadCount ?? 0 }
       : null;
     const chatEnabled = Boolean(
-      subscription?.active && subscription.events.includes("chat.message")
+      (subscription?.active && subscription.events.includes("chat.message")) ||
+        isAgentChatPollingActive(session.agent?.heartbeatAt)
     );
 
     return NextResponse.json({

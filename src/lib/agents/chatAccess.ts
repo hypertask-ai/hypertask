@@ -12,6 +12,18 @@ import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
 export const AGENT_CHAT_SESSION_NOT_FOUND = "Session not found";
 export const AGENT_CHAT_WRONG_AGENT = "This session belongs to a different agent";
 
+export const AGENT_CHAT_POLL_HEARTBEAT_TTL_MS = 2 * 60 * 1000;
+
+export function isAgentChatPollingActive(
+  heartbeatAt: Date | null | undefined,
+  now = new Date(),
+): boolean {
+  return (
+    heartbeatAt instanceof Date &&
+    now.getTime() - heartbeatAt.getTime() <= AGENT_CHAT_POLL_HEARTBEAT_TTL_MS
+  );
+}
+
 export type ChatAccessDenied = {
   ok: false;
   status: number;

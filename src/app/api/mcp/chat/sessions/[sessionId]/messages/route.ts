@@ -15,7 +15,7 @@ import {
   parseChatTicketProposal,
   serializeChatTicketProposal,
 } from '@/lib/agents/chatTicketProposal'
-import { loadAgentTokenChatSession } from '@/lib/agents/chatAccess'
+import { isAgentChatPollingActive, loadAgentTokenChatSession } from '@/lib/agents/chatAccess'
 
 const MAX_MESSAGE_LENGTH = 8000
 const TRANSCRIPT_LIMIT = 50
@@ -181,7 +181,7 @@ export async function POST(
     const access = await loadAgentTokenChatSession({
       sessionId,
       agentId: tokenAgentId,
-      select: { userId: true },
+      select: { userId: true, agent: { select: { heartbeatAt: true } } },
     })
     if (!access.ok) {
       return NextResponse.json(
@@ -191,6 +191,7 @@ export async function POST(
     }
     const session = access.session
     const exactChatReply = await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, session.userId)
+    const pollingRuntime = isAgentChatPollingActive(session.agent?.heartbeatAt)
 
     const serialize = ({ id, role, content, createdAt, ticketProposal }: {
       id: string
@@ -303,7 +304,7 @@ export async function POST(
         // This update is first on purpose: it takes the ChatSession row lock, so
         // the turn-validity checks below cannot race a concurrent reply or stop.
         await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
-        if (exactChatReply && !(await tx.agentRun.findFirst({ where: { agentId: session.agentId!, chatSessionId: session.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES }, chatPromptMessageId: replyToMessageId }, select: { id: true } }))) throw new Error('This chat turn is no longer active')
+        if (exactChatReply && !pollingRuntime && !(await tx.agentRun.findFirst({ where: { agentId: session.agentId!, chatSessionId: session.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES }, chatPromptMessageId: replyToMessageId }, select: { id: true } }))) throw new Error('This chat turn is no longer active')
         if (await tx.chatMessage.findUnique({ where: { replyToMessageId } })) throw Object.assign(new Error('Concurrent reply'), { code: 'P2002' })
         if (exactChatReply) {
           // Behind the flag only: without it a reply to an older turn still
