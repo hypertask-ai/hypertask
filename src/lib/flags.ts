@@ -52,7 +52,6 @@ import {
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
-  MY_TASKS_QUICK_ADD_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
 } from "@/lib/flags/keys";
 
@@ -435,12 +434,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "Updates My Tasks rows live when another tab, the CLI, or an agent changes a task, without reloading the page.",
-  },
-  {
-    key: MY_TASKS_QUICK_ADD_FLAG,
-    shippedOn: "2026-09-15",
-    description:
-      "Adds a quick-add row at the top of My Tasks that creates a task on the view's default board, assigned to you.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
