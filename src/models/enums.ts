@@ -213,7 +213,6 @@ export enum CommandMode {
   AgentChatNextTeam,
   AgentChatPreviousTeam,
   ArchiveInboxCluster,
-  MyTasksSnooze,
 }
 
 export enum ELogType {
