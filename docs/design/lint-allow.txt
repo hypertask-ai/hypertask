@@ -10,7 +10,7 @@
 # itself by adding a line here.
 #
 # rule ids: raw-hex-colour, raw-colour-function, banned-radius, gradient,
-#           white-focus-ring, arbitrary-text-size, off-scale-spacing,
+#           white-border, arbitrary-text-size, arbitrary-spacing,
 #           inline-style-colour-or-spacing, foreign-icon-set, foreign-ui-kit
 
 # Charts map data series to colours that have no semantic UI role. The review
@@ -25,5 +25,5 @@ src/components/analytics::raw-colour-function
 src/templates
 
 # Loading spinners animate geometry the 4px scale cannot express.
-src/components/LoadingSpinners::off-scale-spacing
+src/components/LoadingSpinners::arbitrary-spacing
 src/components/LoadingSpinners::raw-colour-function

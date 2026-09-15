@@ -32,8 +32,13 @@ const ALLOW_FILE = path.join(REPO_ROOT, "docs/design/lint-allow.txt");
 const TOKENS_FILE = path.join(REPO_ROOT, "docs/design/tokens.json");
 const TAILWIND_CONFIG = path.join(REPO_ROOT, "tailwind.config.ts");
 
-/** Files whose changed lines are linted. */
-const LINTED = /^src\/.*\.(tsx|jsx|css|scss)$/;
+/**
+ * Files whose changed lines are linted. `.ts` is included because Tailwind class
+ * strings, icon imports and UI-kit imports live in helpers too, and a class
+ * string added in a helper reaches the screen exactly like one added in a
+ * component. Declaration files carry no runtime styling.
+ */
+const LINTED = /^src\/(?!.*\.d\.ts$).*\.(tsx|jsx|ts|css|scss)$/;
 
 /**
  * Theme and token definition files. They are where raw colour values are
@@ -55,6 +60,29 @@ const BRAND_LITERALS = new Set([
 /** Radii the guide sanctions. Dia's 10px/12px stay scoped to .dia themes. */
 const ALLOWED_ARBITRARY_RADII = new Set([0, 2, 4, 5]);
 
+/**
+ * The mobile comment input well is the one place the guide sanctions an 8px
+ * corner, and it names the files. Both `rounded-lg` and `rounded-[8px]` are
+ * correct there and wrong everywhere else.
+ */
+const MOBILE_COMMENT_WELL = [
+  "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent.tsx",
+  "src/components/Common/AttachmentsUpload/mobileCommentComposer.ts",
+  "src/components/Common/AttachmentsUpload/index.tsx",
+];
+
+/**
+ * Kanban section containers are the guide's named exception to the no-white-
+ * border rule: they carry the keyboard focus ring for the board.
+ */
+const KANBAN_SECTION = [
+  "src/components/PageComponents/Kanban/KanbanSectionComponents/",
+];
+
+function inAny(file, paths) {
+  return paths.some((p) => file === p || file.startsWith(p));
+}
+
 /** Named font-size utilities from tailwind.config.ts (HTPR-4215 scale). */
 const NAMED_TEXT_SIZES = [
   "text-micro",
@@ -68,12 +96,13 @@ const NAMED_TEXT_SIZES = [
 ];
 
 /**
- * Spacing: Tailwind's base unit is 4px, and the guide permits 2px and 6px half
- * steps for compact internal alignment. Everything else is off-scale.
+ * Tailwind's base unit is 4px, and the guide permits 2px and 6px half steps for
+ * compact internal alignment. Every other arbitrary spacing value is wrong:
+ * off the grid it breaks the rhythm, and on the grid a named utility already
+ * exists, which is what the guide means by "do not add arbitrary padding when
+ * the nearest established step works".
  */
-function spacingIsOnScale(px) {
-  return px === 2 || px === 6 || px % 4 === 0;
-}
+const HALF_STEPS = new Set([2, 6]);
 
 const SPACING_PREFIX = "(?:p|m|gap|space-[xy]|inset)[trblxyse]?";
 
@@ -120,15 +149,25 @@ const RULES = [
   {
     id: "banned-radius",
     fix: "Use rounded-[2px] for key badges, rounded-sm or rounded-[4px] for compact controls, rounded-[5px] for cards and modals, rounded-full for avatars and dots.",
-    find(line) {
+    find(line, file) {
       const hits = [];
-      for (const m of line.matchAll(/\brounded(?:-[trbl]{1,2})?-(lg|xl|2xl|3xl)\b/g)) {
-        hits.push(`rounded-${m[1]} is a generic large-SaaS radius`);
+      const wellFile = inAny(file, MOBILE_COMMENT_WELL);
+      for (const m of line.matchAll(/\brounded(?:-[trbl]{1,2})?-(md|lg|xl|2xl|3xl)\b/g)) {
+        if (m[1] === "lg" && wellFile) continue; // the sanctioned 8px well
+        hits.push(`rounded-${m[1]} is off the 2 / 4 / 5px radius scale`);
       }
-      for (const m of line.matchAll(/\brounded(?:-[trbl]{1,2})?-\[(\d+)px\]/g)) {
-        const px = Number(m[1]);
-        if (!ALLOWED_ARBITRARY_RADII.has(px)) {
-          hits.push(`rounded-[${px}px] is off the 2 / 4 / 5px radius scale`);
+      for (const m of line.matchAll(/\brounded(?:-[trbl]{1,2})?-\[([^\]]+)\]/g)) {
+        const value = m[1].trim();
+        const px = /^(\d+(?:\.\d+)?)px$/.exec(value);
+        if (!px) {
+          if (value === "50%" || value === "9999px") continue; // the same circle rounded-full gives
+          hits.push(`rounded-[${value}] is not a pixel value on the 2 / 4 / 5px scale`);
+          continue;
+        }
+        const n = Number(px[1]);
+        if (n === 8 && wellFile) continue; // the sanctioned 8px well
+        if (!ALLOWED_ARBITRARY_RADII.has(n)) {
+          hits.push(`rounded-[${value}] is off the 2 / 4 / 5px radius scale`);
         }
       }
       return hits;
@@ -145,16 +184,22 @@ const RULES = [
     },
   },
   {
-    id: "white-focus-ring",
+    id: "white-border",
     fix: "Inputs, popovers, dropdowns, badges and chips are borderless. Use surface contrast and the established overlay shadow. Kanban section containers are the only keyboard-focus exception.",
+    appliesTo: (file) => !inAny(file, KANBAN_SECTION),
     find(line) {
       const hits = [];
       for (const m of line.matchAll(
-        /\b(?:focus|focus-visible|focus-within)[:-](?:border|ring|outline)-(white|white-black)\b/g
+        /\b(?:focus|focus-visible|focus-within|hover|active)[:-](?:border|ring|outline)-(?:white|white-black)\b/g
       )) {
         hits.push(`${m[0]} paints a white focus ring`);
       }
-      if (/\bfocus:border-white-black\b/.test(line)) hits.push("focus:border-white-black");
+      // A plain white box border is banned too, not only the focus variant.
+      for (const m of line.matchAll(
+        /(?<![\w:-])border(?:-[trblxy])?-(white|white-black)\b/g
+      )) {
+        hits.push(`${m[0]} is a white box border`);
+      }
       return hits;
     },
   },
@@ -163,21 +208,34 @@ const RULES = [
     fix: `Use a named size: ${NAMED_TEXT_SIZES.join(", ")}.`,
     find(line) {
       const hits = [];
-      for (const m of line.matchAll(/\btext-\[(\d+(?:\.\d+)?)px\]/g)) {
-        hits.push(`text-[${m[1]}px] bypasses the named type scale`);
+      // Any unit, not only px: text-[0.875rem] bypasses the scale just as well.
+      for (const m of line.matchAll(
+        /\btext-\[(\d+(?:\.\d+)?(?:px|rem|em|pt|%)?)\]/g
+      )) {
+        hits.push(`text-[${m[1]}] bypasses the named type scale`);
       }
       return hits;
     },
   },
   {
-    id: "off-scale-spacing",
+    id: "arbitrary-spacing",
     fix: "Build rhythm from the 4px scale (1, 2, 3, 4, 5, 6, 8). 2px and 6px half steps are allowed for compact internal alignment.",
     find(line) {
       const hits = [];
-      const re = new RegExp(`\\b${SPACING_PREFIX}-\\[(\\d+(?:\\.\\d+)?)px\\]`, "g");
+      const re = new RegExp(`\\b${SPACING_PREFIX}-\\[([^\\]]+)\\]`, "g");
       for (const m of line.matchAll(re)) {
-        const px = Number(m[1]);
-        if (!Number.isInteger(px) || !spacingIsOnScale(px)) {
+        const value = m[1].trim();
+        const px = /^(\d+(?:\.\d+)?)px$/.exec(value);
+        if (!px) {
+          hits.push(`${m[0]} is not a pixel value on the 4px spacing scale`);
+          continue;
+        }
+        const n = Number(px[1]);
+        if (HALF_STEPS.has(n)) continue;
+        if (Number.isInteger(n) && n % 4 === 0) {
+          // On the grid, so a named utility already exists. p-[16px] is p-4.
+          hits.push(`${m[0]} has a named equivalent (${m[0].split("-[")[0]}-${n / 4})`);
+        } else {
           hits.push(`${m[0]} is off the 4px spacing scale`);
         }
       }
@@ -255,7 +313,12 @@ function resolveBase(explicit) {
  * -U0 keeps the hunks to changed lines only.
  */
 function addedLines(base, head) {
-  const range = head ? [`${base}..${head}`] : [base];
+  // Three dots, never two. `pr.base.sha` is the CURRENT tip of production, so
+  // `base..head` would diff two whole trees and report every commit that landed
+  // on production since the branch point as a reverted "addition" from this
+  // pull request, including files it never touched. `base...head` diffs from
+  // the merge base, which is the pull request's own change.
+  const range = head ? [`${base}...${head}`] : [base];
   const diff = git(["diff", "-U0", "--no-color", "--no-ext-diff", ...range, "--", "src"]);
   const files = new Map();
   let current = null;
@@ -360,7 +423,7 @@ function lint({ base, head }) {
         if (isAllowed(allowlist, file, rule.id)) continue;
         if (rule.appliesTo && !rule.appliesTo(file)) continue;
 
-        let messages = rule.find(text);
+        let messages = rule.find(text, file);
         if (rule.id === "inline-style-colour-or-spacing" && inlineStyle.has(line)) {
           messages = ["inline style sets colour or spacing"];
         }
@@ -494,4 +557,24 @@ function main() {
   return result.findings.length ? 1 : 0;
 }
 
-process.exit(main());
+/**
+ * Applies every single-line rule to one line. The inline-style rule needs whole
+ * file context and is not included here. Exported for tests.
+ */
+export function lintLine(file, text) {
+  const out = [];
+  for (const rule of RULES) {
+    if (rule.appliesTo && !rule.appliesTo(file)) continue;
+    for (const message of rule.find(text, file)) {
+      out.push({ rule: rule.id, message });
+    }
+  }
+  return out;
+}
+
+export { RULES, NAMED_TEXT_SIZES, verifyTokens };
+
+// Only run when invoked as a script, so tests can import the rules.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exit(main());
+}

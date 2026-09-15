@@ -20,7 +20,7 @@ values live in `src/styles/tailwindThemes/*.css`; utilities live in
 | Axis | Values | Source |
 |---|---|---|
 | Type | `text-micro` 11, `text-meta` 12, `text-dense` 13, `text-content` 14, `text-emphasis` 16, `text-subheading` 18, `text-heading` 24, `text-display` 32 | `tailwind.config.ts` |
-| Radius | 2px badges, 4px compact controls, 5px cards and modals, `rounded-full` avatars and dots | `openwiki/style-guide.md` |
+| Radius | 2px badges, 4px compact controls, 5px cards and modals, `rounded-full` avatars and dots. 8px only in the mobile comment input well | `openwiki/style-guide.md` |
 | Spacing | 4px base: 4, 8, 12, 16, 20, 24, 32. 2px and 6px half steps for compact internal alignment | Tailwind default scale |
 | Colour | Semantic utilities only: `bg-pageBackground`, `bg-cardBackground`, `bg-modalBackground`, `text-white-black`, `text-text-light-gray`, `border-border-light-gray-thin`, `bg-shadcn-primary` | theme CSS files |
 | Icons | `lucide-react` at 14, 16, 18, 20, 22. Stroke 1.5 from the theme | `openwiki/style-guide.md` |
@@ -76,8 +76,9 @@ step by step.
 1. **No new colours.** No hex literal, no `rgb()`, no `hsl()` in a component. A
    colour that does not exist yet is declared in every theme file first, then
    used through its semantic utility.
-2. **No ad-hoc spacing.** No arbitrary padding, margin or gap off the 4px scale.
-   `p-[13px]` is always wrong; `p-3` is what you meant.
+2. **No ad-hoc spacing.** No arbitrary padding, margin or gap at all, beyond the
+   2px and 6px half steps. `p-[13px]` is off the scale, and `p-[16px]` is `p-4`
+   written the long way. Only 2px and 6px have no named equivalent.
 3. **No inline styles for colour or spacing.** `style={{}}` is for values only
    the runtime knows, such as a measured height. Colour and spacing are
    utilities.
@@ -87,14 +88,16 @@ step by step.
    another family. Not `react-icons`, not `@heroicons`, not Material.
 6. **No foreign UI kit.** Not `reactstrap`, not MUI, not Ant, not
    react-bootstrap. Compose from the table above.
-7. **No generic large radii.** No `rounded-lg`, `rounded-xl`, `rounded-2xl`.
-   Dia's 10px and 12px corners stay scoped under `.dia`.
+7. **No off-scale radii.** No `rounded-md`, `rounded-lg`, `rounded-xl`,
+   `rounded-2xl`, and no arbitrary radius outside 2, 4 and 5px. The mobile
+   comment input well keeps its sanctioned 8px; Dia's 10px and 12px corners stay
+   scoped under `.dia`.
 8. **No gradients.** Flat semantic surfaces.
 9. **No white focus rings or white box borders** on inputs, popovers,
    dropdowns, badges or chips. Kanban section containers are the one keyboard
    focus exception.
-10. **No arbitrary text sizes.** `text-[10px]` is off the scale; pick a named
-    size.
+10. **No arbitrary text sizes.** `text-[10px]` and `text-[0.875rem]` are both off
+    the scale, whatever the unit. Pick a named size.
 
 ## Run the check
 
@@ -104,7 +107,9 @@ node scripts/design-lint.mjs --json          # machine-readable findings
 node scripts/design-lint.mjs --verify-tokens # tokens.json still matches tailwind.config.ts
 ```
 
-The lint reads **changed lines only**. It never reports historical drift,
+The lint covers `src/**` `.tsx`, `.jsx`, `.ts`, `.css` and `.scss`, because a
+Tailwind class string added in a helper reaches the screen exactly like one
+added in a component. It reads **changed lines only**. It never reports historical drift,
 because `openwiki/style-guide.md` says a style finding gates only when the diff
 itself proves the pull request introduced or extended the violation. Run it
 before you open the pull request; `design-gate` runs the same script in CI and

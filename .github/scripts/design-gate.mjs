@@ -92,8 +92,8 @@ function upsertComment(prNumber, body) {
   let existing = [];
   try {
     existing = JSON.parse(
-      gh(["api", "--paginate", `repos/${REPO}/issues/${prNumber}/comments?per_page=100`])
-    );
+      gh(["api", "--paginate", "--slurp", `repos/${REPO}/issues/${prNumber}/comments?per_page=100`])
+    ).flat();
   } catch {
     existing = [];
   }
@@ -110,8 +110,8 @@ function clearComment(prNumber) {
   let existing = [];
   try {
     existing = JSON.parse(
-      gh(["api", "--paginate", `repos/${REPO}/issues/${prNumber}/comments?per_page=100`])
-    );
+      gh(["api", "--paginate", "--slurp", `repos/${REPO}/issues/${prNumber}/comments?per_page=100`])
+    ).flat();
   } catch {
     return;
   }
