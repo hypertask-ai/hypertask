@@ -106,11 +106,8 @@ import {
   type AgentChatActivityGroup,
   type AgentChatFilter,
 } from "@/lib/agents/chatActivityFeed";
-import {
-  PROPOSAL_HEADING_CREATED,
-  PROPOSAL_HEADING_PENDING,
-  type SerializedChatTicketProposal,
-} from "@/lib/agents/chatTicketProposal";
+import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketProposal";
+
 
 // While we are waiting for an external agent to answer, the only way to see
 // the reply arrive is to keep asking.
@@ -241,8 +238,8 @@ function ProposalCard({
           {confirmedHeadingEnabled &&
           proposal.status === "CONFIRMED" &&
           proposal.task
-            ? PROPOSAL_HEADING_CREATED
-            : PROPOSAL_HEADING_PENDING}
+            ? "Ticket created"
+            : "Ticket proposed, nothing done yet"}
         </span>
       </div>
       <p className="text-white-black">{proposal.ticketTitle}</p>
