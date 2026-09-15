@@ -19,11 +19,17 @@ import {
 
 export { groupMyTasksByBoard } from "@/lib/myTasksGrouping";
 
+type GetMyTasksOptions = {
+  throwOnError?: boolean;
+  snoozeEnabled?: boolean;
+  showSnoozed?: boolean;
+};
+
 const getMyTasks = async (
   userId: number,
   includeViewMetadata = false,
   scopes: MyTasksScope[] = DEFAULT_MY_TASKS_SCOPES,
-  options: { throwOnError?: boolean } = {},
+  options: GetMyTasksOptions = {},
 ) => {
   try {
     let snoozeEnabled = false;
@@ -34,7 +40,12 @@ const getMyTasks = async (
     );
     const projectIds = projects.map((project) => project.id);
     if (projectIds.length === 0) {
-      return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
+      return {
+        sections: [],
+        tabs: ["All"],
+        boards: [] as MyTasksBoardMetadata[],
+        nearestSnoozeUntil: null as string | null,
+      };
     }
 
     const taskSectionsPromise = includeViewMetadata
@@ -134,16 +145,11 @@ const getMyTasks = async (
       },
     });
     const taskSections = await taskSectionsPromise;
-    const snoozeOptions = options as {
-      throwOnError?: boolean;
-      snoozeEnabled?: boolean;
-      showSnoozed?: boolean;
-    };
-    snoozeEnabled = snoozeOptions.snoozeEnabled === true;
+    snoozeEnabled = options.snoozeEnabled === true;
     const now = new Date();
     let nearestSnoozeUntil: string | null = null;
     if (snoozeEnabled) {
-      const hideActiveSnoozes = snoozeOptions.showSnoozed !== true;
+      const hideActiveSnoozes = options.showSnoozed !== true;
       if (hideActiveSnoozes) {
         const hidden = await prisma.assignees.findMany({
           where: {
@@ -261,14 +267,16 @@ const getMyTasks = async (
         })
       : [];
 
-    if (snoozeEnabled) {
-      return { ...grouped, boards, nearestSnoozeUntil };
-    }
-    return { ...grouped, boards };
+    return { ...grouped, boards, nearestSnoozeUntil };
   } catch (error) {
     console.log("🚀 ~ getMyTasks ~ error:", error);
     if (options.throwOnError) throw error;
-    return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
+    return {
+      sections: [],
+      tabs: ["All"],
+      boards: [] as MyTasksBoardMetadata[],
+      nearestSnoozeUntil: null as string | null,
+    };
   }
 };
 

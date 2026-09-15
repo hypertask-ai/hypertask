@@ -116,31 +116,15 @@ export default async function Page({
         ).scopes,
         true,
       );
-      const scopedSnoozeOptions = {} as {
-        snoozeEnabled?: boolean;
-        showSnoozed?: boolean;
-      };
-      scopedSnoozeOptions.snoozeEnabled = true;
-      scopedSnoozeOptions.showSnoozed = showSnoozed;
-      myTasks = await getMyTasks(
-        sessionUser.userId,
-        viewsEnabled,
-        scopes,
-        scopedSnoozeOptions,
-      );
+      myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes, {
+        snoozeEnabled: true,
+        showSnoozed,
+      });
     } else {
-      const assignedSnoozeOptions = {} as {
-        snoozeEnabled?: boolean;
-        showSnoozed?: boolean;
-      };
-      assignedSnoozeOptions.snoozeEnabled = true;
-      assignedSnoozeOptions.showSnoozed = showSnoozed;
-      myTasks = await getMyTasks(
-        sessionUser.userId,
-        viewsEnabled,
-        undefined,
-        assignedSnoozeOptions,
-      );
+      myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, undefined, {
+        snoozeEnabled: true,
+        showSnoozed,
+      });
     }
   }
 

@@ -52,15 +52,9 @@ export async function GET(request: NextRequest) {
 
     const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
       throwOnError: true,
+      snoozeEnabled,
+      showSnoozed,
     });
-    if (snoozeEnabled) {
-      const snoozed = await getMyTasks(userId, viewsEnabled, scopes, {
-        throwOnError: true,
-        snoozeEnabled: true,
-        showSnoozed,
-      } as { throwOnError?: boolean });
-      Object.assign(myTasks, snoozed);
-    }
     const liveUpdatesEnabled = await isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId);
     let accessibleProjectIds: number[] = [];
     if (liveUpdatesEnabled) {
