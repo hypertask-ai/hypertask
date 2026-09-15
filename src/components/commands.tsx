@@ -55,6 +55,7 @@ import { markAsUnseen } from "@/utils/api/Inbox";
 import { setRecurrenceApiHandler } from "@/utils/api/Task Detail";
 import type { PickerOption } from "./Modals/OptionPicker";
 import { RECURRENCE_LABELS, RECURRENCE_RULES } from "@/lib/recurrence";
+import { myTasksSnoozeAPIRoute } from "@/lib/constants/APIRouteConstants";
 import {
   LEARN_TUTORIAL_COLUMN_CREATED_EVENT,
   type LearnTutorialColumnCreatedDetail,
@@ -2472,22 +2473,19 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                 const assignmentId =
                   typeof showCommands.payload?.assignmentId === "number"
                     ? showCommands.payload.assignmentId
-                    : null;
-                const taskId = inViewObject.taskId;
+                    : undefined;
+                const taskId = assignmentId ? undefined : inViewObject.taskId;
                 if (!assignmentId && !taskId) {
                   toast.error("Select a My Tasks row first.");
                   return;
                 }
-                const { myTasksSnoozeAPIRoute } = await import(
-                  "@/lib/constants/APIRouteConstants"
-                );
                 const response = await fetch(myTasksSnoozeAPIRoute, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   credentials: "same-origin",
                   body: JSON.stringify({
-                    assignmentId: assignmentId ?? undefined,
-                    taskId: assignmentId ? undefined : taskId,
+                    assignmentId,
+                    taskId,
                     snoozeUntil: date,
                   }),
                 });
@@ -2503,9 +2501,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                   "Hidden from My Tasks until " +
                     formatDateDifference(date, true),
                 );
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
-                }
+                window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
               }}
             />
           )}

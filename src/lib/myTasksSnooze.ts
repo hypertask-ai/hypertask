@@ -65,6 +65,14 @@ export function parseMyTasksSnoozeUntil(
   return { ok: true, snoozeUntil: date };
 }
 
+/** Strip Assignees.snoozeUntil before sending tasks to clients. */
+export function omitAssigneeSnoozeUntil<T extends { snoozeUntil?: unknown }>(
+  row: T,
+): Omit<T, "snoozeUntil"> {
+  const { snoozeUntil: _drop, ...rest } = row;
+  return rest;
+}
+
 export function annotateMyTasksSnoozeFields<
   T extends {
     assignees?: Array<{
@@ -79,21 +87,17 @@ export function annotateMyTasksSnoozeFields<
   userId: number,
 ): Array<T & MyTasksSnoozeAnnotation> {
   return tasks.map((task) => {
-    const mine = (task.assignees ?? []).find(
+    const assignees = task.assignees ?? [];
+    const mine = assignees.find(
       (row) => row.userId === userId && row.agentId == null,
     );
-    const snoozeUntil = mine?.snoozeUntil
-      ? new Date(mine.snoozeUntil).toISOString()
-      : null;
-    const assignees = (task.assignees ?? []).map((row) => {
-      const { snoozeUntil: _drop, ...rest } = row;
-      return rest;
-    });
     return {
       ...task,
-      assignees: assignees as T["assignees"],
+      assignees: assignees.map(omitAssigneeSnoozeUntil) as T["assignees"],
       currentUserAssignmentId: mine?.id ?? null,
-      currentUserSnoozeUntil: snoozeUntil,
+      currentUserSnoozeUntil: mine?.snoozeUntil
+        ? new Date(mine.snoozeUntil).toISOString()
+        : null,
     };
   });
 }

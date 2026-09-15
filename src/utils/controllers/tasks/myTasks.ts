@@ -14,6 +14,7 @@ import {
   annotateMyTasksSnoozeFields,
   myTasksActiveSnoozeWhere,
   nearestFutureSnoozeUntil,
+  omitAssigneeSnoozeUntil,
 } from "@/lib/myTasksSnooze";
 import type { Prisma } from "@prisma/client";
 
@@ -67,7 +68,7 @@ const getMyTasks = async (
     );
     const now = new Date();
     const snoozeEnabled = options.snoozeEnabled === true;
-    const showSnoozed = options.showSnoozed === true;
+    const hideActiveSnoozes = snoozeEnabled && options.showSnoozed !== true;
     const andFilters: Prisma.TaskWhereInput[] = [
       {
         projectId: { in: projectIds },
@@ -76,27 +77,26 @@ const getMyTasks = async (
       },
       { OR: scopeOr },
     ];
-    if (snoozeEnabled && !showSnoozed) {
+    if (hideActiveSnoozes) {
       andFilters.push(myTasksActiveSnoozeWhere(userId, now));
     }
 
-    const nearestSnoozePromise =
-      snoozeEnabled && !showSnoozed
-        ? prisma.assignees.findMany({
-            where: {
-              userId,
-              agentId: null,
-              snoozeUntil: { gt: now },
-              task: {
-                projectId: { in: projectIds },
-                deletedAt: null,
-                status: "Normal",
-                OR: scopeOr,
-              },
+    const nearestSnoozePromise = hideActiveSnoozes
+      ? prisma.assignees.findMany({
+          where: {
+            userId,
+            agentId: null,
+            snoozeUntil: { gt: now },
+            task: {
+              projectId: { in: projectIds },
+              deletedAt: null,
+              status: "Normal",
+              OR: scopeOr,
             },
-            select: { snoozeUntil: true },
-          })
-        : Promise.resolve([] as Array<{ snoozeUntil: Date | null }>);
+          },
+          select: { snoozeUntil: true },
+        })
+      : Promise.resolve([] as Array<{ snoozeUntil: Date | null }>);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -180,15 +180,10 @@ const getMyTasks = async (
 
     const annotatedTasks = snoozeEnabled
       ? annotateMyTasksSnoozeFields(tasks, userId)
-      : tasks.map((task) => {
-          const assignees = (task.assignees ?? []).map((row) => {
-            const { snoozeUntil: _drop, ...rest } = row as typeof row & {
-              snoozeUntil?: unknown;
-            };
-            return rest;
-          });
-          return { ...task, assignees };
-        });
+      : tasks.map((task) => ({
+          ...task,
+          assignees: (task.assignees ?? []).map(omitAssigneeSnoozeUntil),
+        }));
 
     const taskSections = await taskSectionsPromise;
     const sectionById = new Map(taskSections.map((section) => [section.id, section]));

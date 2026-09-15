@@ -120,12 +120,12 @@ export const parseMyTasksListPayload = (body: unknown): MyTasksListPayload | nul
   const accessibleProjectIds = Array.isArray(record.accessibleProjectIds)
     ? record.accessibleProjectIds.filter((id): id is number => typeof id === "number")
     : [];
-  const nearestSnoozeUntil =
-    typeof record.nearestSnoozeUntil === "string"
-      ? record.nearestSnoozeUntil
-      : record.nearestSnoozeUntil === null
-        ? null
-        : undefined;
+  let nearestSnoozeUntil: string | null | undefined;
+  if (typeof record.nearestSnoozeUntil === "string") {
+    nearestSnoozeUntil = record.nearestSnoozeUntil;
+  } else if (record.nearestSnoozeUntil === null) {
+    nearestSnoozeUntil = null;
+  }
   return {
     sections: record.sections as ISection[],
     tabs: record.tabs as string[],

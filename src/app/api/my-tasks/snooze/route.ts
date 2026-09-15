@@ -6,6 +6,12 @@ import { setMyTasksSnooze } from "@/utils/controllers/tasks/myTasksSnooze";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function optionalFiniteNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userId = (await getSessionUser(request.headers))?.userId;
@@ -28,22 +34,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid body" }, { status: 400 });
     }
 
-    const assignmentId =
-      body.assignmentId === undefined || body.assignmentId === null
-        ? undefined
-        : typeof body.assignmentId === "number"
-          ? body.assignmentId
-          : Number(body.assignmentId);
-    const taskId =
-      body.taskId === undefined || body.taskId === null
-        ? undefined
-        : typeof body.taskId === "number"
-          ? body.taskId
-          : Number(body.taskId);
     const result = await setMyTasksSnooze({
       userId,
-      assignmentId: Number.isFinite(assignmentId) ? assignmentId : undefined,
-      taskId: Number.isFinite(taskId) ? taskId : undefined,
+      assignmentId: optionalFiniteNumber(body.assignmentId),
+      taskId: optionalFiniteNumber(body.taskId),
       snoozeUntil: body.snoozeUntil,
     });
     if (!result.ok) {

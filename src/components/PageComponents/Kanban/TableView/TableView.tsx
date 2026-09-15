@@ -942,7 +942,7 @@ const TableView = ({
               currentTask._count.notifications > 0
             ),
             isKanban: true,
-            isMyTasks: Boolean(myTasksSort) && myTasksSnoozeEnabled,
+            isMyTasks: myTasksSnoozeEnabled,
             hasSubtasks: !!currentTask.subTasks?.length,
             hasParent: !!currentTask.parentTaskId,
             isStarred: !!currentTask.savedContent?.length,
@@ -951,7 +951,7 @@ const TableView = ({
         : undefined,
       commentOptions: undefined,
     };
-  }, [_currentProject, isApple, myTasksSnoozeEnabled, myTasksSort, persistedActiveItem, rows, showArchivedOnBoard]);
+  }, [_currentProject, isApple, myTasksSnoozeEnabled, persistedActiveItem, rows, showArchivedOnBoard]);
 
 
   const scrollToRow = useCallback((row: Row) => {

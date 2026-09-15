@@ -254,6 +254,14 @@ const RemindMeComponent = (props: Props) => {
     return "Remind Me";
   };
 
+  const reminderOptionDropdown = onPickDate ? null : (
+    <DropDownButton
+      reminderSelected={reminderOptionSelected}
+      optionCallback={handleDropDownCallback}
+      _mbl={_mbl}
+    />
+  );
+
   const mobileSearchInput = (
     <div className="flex items-center gap-2.5 border-t border-light-black-border-1 px-4">
       <Search strokeWidth={1.75} size={16} className="shrink-0 text-text-light-gray" />
@@ -264,13 +272,7 @@ const RemindMeComponent = (props: Props) => {
         placeholder="e.g. 5 July 2pm, 8pm tomorrow"
         className="px-0"
       />
-      {!onPickDate ? (
-        <DropDownButton
-          reminderSelected={reminderOptionSelected}
-          optionCallback={handleDropDownCallback}
-          _mbl={_mbl}
-        />
-      ) : null}
+      {reminderOptionDropdown}
     </div>
   );
 
@@ -341,13 +343,7 @@ const RemindMeComponent = (props: Props) => {
             placeholder="e.g. 5 July 2pm, 8pm tomorrow, next Thursday"
             className="px-0"
           />
-          {!onPickDate ? (
-            <DropDownButton
-              reminderSelected={reminderOptionSelected}
-              optionCallback={handleDropDownCallback}
-              _mbl={_mbl}
-            />
-          ) : null}
+          {reminderOptionDropdown}
         </div>
 
         <div className="max-h-[364px] overflow-y-scroll bg-inherit pb-1.5 no-scrollbar">

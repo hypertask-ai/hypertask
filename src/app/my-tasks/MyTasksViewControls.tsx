@@ -186,6 +186,18 @@ const MyTasksViewControls = ({
   const updateFilters = (filters: Partial<MyTasksViewConfig["filters"]>) =>
     onChange({ ...config, filters: { ...config.filters, ...filters } });
 
+  const snoozeFilterField = snoozeEnabled ? (
+    <Field label="Snoozed tasks">
+      <CheckRow
+        checked={config.filters.showSnoozed === true}
+        label="Show snoozed"
+        onChange={() =>
+          updateFilters({ showSnoozed: !config.filters.showSnoozed })
+        }
+      />
+    </Field>
+  ) : null;
+
   const toggleNumber = (
     key: "priorityIds" | "sizeIds" | "sectionIds",
     value: number,
@@ -299,17 +311,7 @@ const MyTasksViewControls = ({
             onChange={() => updateFilters({ showDone: !config.filters.showDone })}
           />
         </Field>
-        {snoozeEnabled ? (
-          <Field label="Snoozed tasks">
-            <CheckRow
-              checked={config.filters.showSnoozed === true}
-              label="Show snoozed"
-              onChange={() =>
-                updateFilters({ showSnoozed: !config.filters.showSnoozed })
-              }
-            />
-          </Field>
-        ) : null}
+        {snoozeFilterField}
       </div>
     </div>
   );
@@ -698,19 +700,7 @@ const MyTasksViewControls = ({
                     }
                   />
                 </Field>
-                {snoozeEnabled ? (
-                  <Field label="Snoozed tasks">
-                    <CheckRow
-                      checked={config.filters.showSnoozed === true}
-                      label="Show snoozed"
-                      onChange={() =>
-                        updateFilters({
-                          showSnoozed: !config.filters.showSnoozed,
-                        })
-                      }
-                    />
-                  </Field>
-                ) : null}
+                {snoozeFilterField}
               </div>
 
               <div className="mt-4 flex justify-end border-t border-border pt-3">
