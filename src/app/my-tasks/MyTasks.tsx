@@ -19,6 +19,7 @@ import {
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
+  myTasksAPIRoute,
   myTasksViewAPIRoute,
   myTasksViewsAPIRoute,
 } from "@/lib/constants/APIRouteConstants";
@@ -34,6 +35,7 @@ import {
   getMyTasksSplitIndex,
   groupMyTasksByTime,
 } from "@/lib/myTasksGrouping";
+import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import type {
   MyTasksBoardMetadata,
   MyTasksSavedView,
@@ -91,7 +93,6 @@ interface IProps {
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
   viewsEnabled: boolean;
-  /** Server flag for HTPR-6457; UI control lands in the follow-up PR. */
   scopesEnabled?: boolean;
 }
 
@@ -103,9 +104,9 @@ const readError = async (response: Response, fallback: string): Promise<string> 
 };
 
 const MyTasks = ({
-  sections,
-  tabs,
-  boards = [],
+  sections: initialSections,
+  tabs: initialTabs,
+  boards: initialBoards = [],
   currentUser,
   initialViews = [],
   initialViewId = null,
@@ -119,9 +120,12 @@ const MyTasks = ({
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
+  const [sections, setSections] = useState(initialSections);
+  const [tabs, setTabs] = useState(initialTabs);
+  const [boards, setBoards] = useState(initialBoards);
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
-      ? getMyTasksSplitIndex(sections, boardParam)
+      ? getMyTasksSplitIndex(initialSections, boardParam)
       : 0
   );
 
@@ -129,12 +133,10 @@ const MyTasks = ({
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
-  const scopesFeatureEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
     myTasksTableColumnsEnabled && viewsFeatureEnabled;
-  void scopesFeatureEnabled;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
   const viewParam = searchParams?.get("view") ?? null;
@@ -162,6 +164,8 @@ const MyTasks = ({
   const filterRef = useRef<HTMLDivElement>(null);
   const saveRequestToken = useRef(0);
   const observedViewParam = useRef<string | null | undefined>(undefined);
+  const scopesFetchToken = useRef(0);
+  const lastFetchedScopesKey = useRef<string | null>(null);
   const updateViewConfig = useCallback(
     (next: MyTasksViewConfig | ((current: MyTasksViewConfig) => MyTasksViewConfig)) => {
       saveRequestToken.current += 1;
@@ -170,6 +174,65 @@ const MyTasks = ({
     [],
   );
   useClickOutside(filterRef, () => setFilterOpen(false));
+
+  const scopesKey = JSON.stringify(
+    effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
+  );
+
+  useEffect(() => {
+    if (
+      lastFetchedScopesKey.current !== null &&
+      lastFetchedScopesKey.current !== scopesKey
+    ) {
+      return;
+    }
+    setSections(initialSections);
+    setTabs(initialTabs);
+    setBoards(initialBoards);
+  }, [initialBoards, initialSections, initialTabs, scopesKey]);
+
+  useEffect(() => {
+    if (!myTasksScopesFlag) return;
+    if (!scopesEnabled) return;
+    // Always invalidate in-flight fetches when scopesKey changes, including
+    // when returning to an already-displayed selection.
+    const token = ++scopesFetchToken.current;
+    if (lastFetchedScopesKey.current === scopesKey) return;
+    const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
+    void (async () => {
+      try {
+        const response = await fetch(
+          `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
+        );
+        if (token !== scopesFetchToken.current) return;
+        if (!response.ok) {
+          toast.error("Unable to refresh My Tasks");
+          return;
+        }
+        const body = (await response.json()) as {
+          sections?: ISection[];
+          tabs?: string[];
+          boards?: MyTasksBoardMetadata[];
+        };
+        if (token !== scopesFetchToken.current) return;
+        if (!Array.isArray(body.sections)) return;
+        lastFetchedScopesKey.current = scopesKey;
+        setSections(body.sections);
+        if (Array.isArray(body.tabs)) setTabs(body.tabs);
+        if (Array.isArray(body.boards)) setBoards(body.boards);
+      } catch {
+        if (token === scopesFetchToken.current) {
+          toast.error("Unable to refresh My Tasks");
+        }
+      }
+    })();
+  }, [myTasksScopesFlag, scopesEnabled, scopesKey, viewConfig.scopes]);
+
+  useEffect(() => {
+    if (lastFetchedScopesKey.current === null) {
+      lastFetchedScopesKey.current = scopesKey;
+    }
+  }, [scopesKey]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled) return;
