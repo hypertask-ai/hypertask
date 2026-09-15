@@ -145,6 +145,9 @@ export default async function Page({
       {snoozeEnabled ? (
         <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
       ) : null}
+      {timeGroupEnabled ? (
+        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
+      ) : null}
       {scopesEnabled ? (
         <MyTasks
           sections={myTasks.sections}

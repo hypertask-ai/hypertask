@@ -9,6 +9,7 @@ import {
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
+  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -116,6 +117,8 @@ const MyTasksViewControls = ({
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const timeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
+  const timeGroupOn = Boolean(timeGroupEnabled || timeGroupFlag);
   const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
   const myTasksScopesEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -152,7 +155,7 @@ const MyTasksViewControls = ({
     });
   };
 
-  const groupBy = effectiveMyTasksGroupBy(config, timeGroupEnabled);
+  const groupBy = effectiveMyTasksGroupBy(config, timeGroupOn);
 
   const selectedBoardIds = config.boardIds ?? boards.map((board) => board.id);
   const selectedBoards = useMemo(
@@ -314,7 +317,7 @@ const MyTasksViewControls = ({
     </div>
   );
 
-  if (!myTasksViewsEnabled && !timeGroupEnabled) return null;
+  if (!myTasksViewsEnabled && !timeGroupOn) return null;
 
   const closeOtherMenus = () => {
     setScopeOpen(false);
@@ -332,6 +335,9 @@ const MyTasksViewControls = ({
           : "ml-auto flex shrink-0 items-center gap-1"
       }
     >
+      {timeGroupFlag ? (
+        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
+      ) : null}
       {myTasksScopesEnabled ? (
         <div ref={involvementRef} className="relative">
           <button
@@ -782,7 +788,7 @@ const MyTasksViewControls = ({
       </div>
       ) : null}
 
-      {timeGroupEnabled && (
+      {timeGroupOn && (
         <div ref={groupRef} className="relative">
           <button
             type="button"

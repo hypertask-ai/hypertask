@@ -164,9 +164,10 @@ const MyTasks = ({
   );
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const myTasksTimeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTimeGroupEnabled = myTasksTimeGroupOn(
     timeGroupEnabled,
-    Boolean(useFlag(MY_TASKS_TIME_GROUP_FLAG)),
+    Boolean(myTasksTimeGroupFlag),
   );
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
@@ -1046,6 +1047,9 @@ const boardTabCounts = useMemo(() => {
           </span>
           {liveUpdatesEnabled ? (
             <span className="sr-only">Live list updates on</span>
+          ) : null}
+          {myTasksTimeGroupFlag ? (
+            <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
           ) : null}
         </span>
         {((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
