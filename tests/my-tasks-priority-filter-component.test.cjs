@@ -79,6 +79,19 @@ stubSourceModule("src/components/Buttons/BackButton.tsx", {
 stubSourceModule("src/app/my-tasks/MyTasksKanbanFilterModal.tsx", {
   default: () => null,
 });
+// HTPR-6458: realtime client is not available under jsdom/jiti component tests.
+stubSourceModule("src/hooks/realtime/useMyTasksRealtime.ts", {
+  useMyTasksRealtime: () => {},
+  createMyTasksRealtimeEventHandler: () => () => {},
+});
+stubSourceModule("src/lib/myTasks/reconcileMyTasks.ts", {
+  buildMyTasksListUrl: () => "/api/my-tasks",
+  createMyTasksReconcileRunner: () => ({
+    request: () => {},
+    cancel: () => {},
+  }),
+  parseMyTasksListPayload: () => null,
+});
 stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
   SplitTitle: () => null,
 });

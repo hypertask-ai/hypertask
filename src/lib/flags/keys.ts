@@ -60,6 +60,7 @@ export const MY_TASKS_FILTER_PARITY_FLAG = "htpr-6447-my-tasks-filter-parity";
 export const MY_TASKS_TIME_GROUP_FLAG = "htpr-6455-my-tasks-time-group";
 export const MY_TASKS_TABLE_COLUMNS_FLAG = "htpr-6456-my-tasks-table-columns";
 export const MY_TASKS_SCOPES_FLAG = "htpr-6457-my-tasks-scopes";
+export const MY_TASKS_LIVE_UPDATES_FLAG = "htpr-6458-my-tasks-live-updates";
 export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =

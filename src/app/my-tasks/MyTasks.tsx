@@ -9,6 +9,7 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
+  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
@@ -16,6 +17,12 @@ import {
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
+import {
+  buildMyTasksListUrl,
+  createMyTasksReconcileRunner,
+  parseMyTasksListPayload,
+} from "@/lib/myTasks/reconcileMyTasks";
+import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
@@ -89,6 +96,8 @@ interface IProps {
   sections: ISection[];
   tabs: string[];
   boards: MyTasksBoardMetadata[];
+  /** Boards the session can open, including ones with zero My Tasks rows. */
+  accessibleProjectIds?: number[];
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
@@ -97,6 +106,9 @@ interface IProps {
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
+const EMPTY_ACCESSIBLE_PROJECT_IDS: number[] = [];
+const EMPTY_MY_TASKS_BOARDS: MyTasksBoardMetadata[] = [];
+const EMPTY_MY_TASKS_VIEWS: MyTasksSavedView[] = [];
 
 const readError = async (response: Response, fallback: string): Promise<string> => {
   const body = await response.json().catch(() => null);
@@ -106,9 +118,10 @@ const readError = async (response: Response, fallback: string): Promise<string> 
 const MyTasks = ({
   sections: initialSections,
   tabs: initialTabs,
-  boards: initialBoards = [],
+  boards: initialBoards = EMPTY_MY_TASKS_BOARDS,
+  accessibleProjectIds: initialAccessibleProjectIds = EMPTY_ACCESSIBLE_PROJECT_IDS,
   currentUser,
-  initialViews = [],
+  initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
   viewsEnabled = false,
   scopesEnabled = false,
@@ -123,6 +136,10 @@ const MyTasks = ({
   const [sections, setSections] = useState(initialSections);
   const [tabs, setTabs] = useState(initialTabs);
   const [boards, setBoards] = useState(initialBoards);
+  const [accessibleProjectIds, setAccessibleProjectIds] = useState(
+    initialAccessibleProjectIds,
+  );
+  const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
       ? getMyTasksSplitIndex(initialSections, boardParam)
@@ -175,26 +192,85 @@ const MyTasks = ({
   );
   useClickOutside(filterRef, () => setFilterOpen(false));
 
+  const scopesFeatureEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
+  const reconcileScopes = useMemo(
+    () => effectiveMyTasksScopes(viewConfig.scopes, scopesFeatureEnabled),
+    [scopesFeatureEnabled, viewConfig.scopes],
+  );
+  const scopesRef = useRef(reconcileScopes);
+  scopesRef.current = reconcileScopes;
+  const reconcileRunner = useMemo(
+    () =>
+      createMyTasksReconcileRunner({
+        fetchList: async (signal) => {
+          const response = await fetch(buildMyTasksListUrl(scopesRef.current), {
+            signal,
+            cache: "no-store",
+            credentials: "same-origin",
+          });
+          if (!response.ok) {
+            throw new Error(
+              await readError(response, "Unable to refresh My Tasks"),
+            );
+          }
+          const payload = parseMyTasksListPayload(await response.json());
+          if (!payload) throw new Error("Invalid My Tasks payload");
+          return payload;
+        },
+        apply: (payload) => {
+          setSections(payload.sections);
+          setTabs(payload.tabs);
+          setBoards(payload.boards);
+          setAccessibleProjectIds(payload.accessibleProjectIds);
+        },
+        onError: () => {
+          toast.error("Unable to refresh My Tasks");
+        },
+      }),
+    [],
+  );
+  useEffect(() => () => reconcileRunner.cancel(), [reconcileRunner]);
+  const onMyTasksReconcile = useCallback(() => {
+    reconcileRunner.request();
+  }, [reconcileRunner]);
+  useMyTasksRealtime(
+    currentUser.id,
+    accessibleProjectIds,
+    liveUpdatesEnabled,
+    onMyTasksReconcile,
+  );
+  useEffect(() => {
+    if (!liveUpdatesEnabled) return;
+    reconcileRunner.request();
+  }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
+
   const scopesKey = JSON.stringify(
     effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
   );
 
   useEffect(() => {
     // Only seed from SSR while we have not fetched a scopes selection yet.
+    if (liveUpdatesEnabled) return;
     if (lastFetchedScopesKey.current !== null) return;
     setSections(initialSections);
     setTabs(initialTabs);
     setBoards(initialBoards);
-  }, [initialBoards, initialSections, initialTabs]);
+    setAccessibleProjectIds(initialAccessibleProjectIds);
+  }, [initialAccessibleProjectIds, initialBoards, initialSections, initialTabs, liveUpdatesEnabled]);
 
   useEffect(() => {
     // Invalidate any in-flight refetch before deciding whether to fetch.
     const token = ++scopesFetchToken.current;
+    if (liveUpdatesEnabled) {
+      // Live effect owns reconcile; only stop the legacy scopes-fetch token.
+      return;
+    }
     if (!myTasksScopesFlag || !scopesEnabled) {
       lastFetchedScopesKey.current = null;
       setSections(initialSections);
       setTabs(initialTabs);
       setBoards(initialBoards);
+      setAccessibleProjectIds(initialAccessibleProjectIds);
       return;
     }
     // First paint already matches SSR for the active scopes; only refetch on change.
@@ -218,6 +294,7 @@ const MyTasks = ({
           sections?: ISection[];
           tabs?: string[];
           boards?: MyTasksBoardMetadata[];
+          accessibleProjectIds?: number[];
         };
         if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
@@ -225,6 +302,11 @@ const MyTasks = ({
         setSections(body.sections);
         if (Array.isArray(body.tabs)) setTabs(body.tabs);
         if (Array.isArray(body.boards)) setBoards(body.boards);
+        if (Array.isArray(body.accessibleProjectIds)) {
+          setAccessibleProjectIds(
+            body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
+          );
+        }
       } catch {
         if (token === scopesFetchToken.current) {
           toast.error("Unable to refresh My Tasks");
@@ -232,10 +314,13 @@ const MyTasks = ({
       }
     })();
   }, [
+    initialAccessibleProjectIds,
     initialBoards,
     initialSections,
     initialTabs,
+    liveUpdatesEnabled,
     myTasksScopesFlag,
+    reconcileRunner,
     scopesEnabled,
     scopesKey,
     viewConfig.scopes,
@@ -797,6 +882,9 @@ const boardTabCounts = useMemo(() => {
           <span className="text-content font-normal text-text-light-gray">
             {totalCount}
           </span>
+          {liveUpdatesEnabled ? (
+            <span className="sr-only">Live list updates on</span>
+          ) : null}
         </span>
         {viewsEnabled && myTasksViewsEnabled && (
           <MyTasksViewControls

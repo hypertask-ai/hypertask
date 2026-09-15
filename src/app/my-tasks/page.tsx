@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
 import {
+  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -16,6 +17,7 @@ import {
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import getMyTasks from "@/utils/controllers/tasks/myTasks";
+import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 import { getMyTasksViews } from "@/utils/controllers/tasks/myTasksViews";
 import MyTasks from "./MyTasks";
 
@@ -52,11 +54,16 @@ export default async function Page({
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
   ]);
+  const liveUpdatesEnabled = await isFeatureEnabled(
+    MY_TASKS_LIVE_UPDATES_FLAG,
+    sessionUser.userId,
+  );
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
 
   let views: Awaited<ReturnType<typeof getMyTasksViews>> = [];
   let myTasks: Awaited<ReturnType<typeof getMyTasks>>;
+  myTasks = undefined as unknown as Awaited<ReturnType<typeof getMyTasks>>;
 
   if (!scopesEnabled) {
     // Assigned-only query does not need saved view config; load in parallel.
@@ -90,6 +97,16 @@ export default async function Page({
     myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes);
   }
 
+  let accessibleProjectIds: number[] = [];
+  if (liveUpdatesEnabled) {
+    const { json: projects } = await getAllMinimal(
+      sessionUser.userId,
+      "Calendar",
+      false,
+    );
+    accessibleProjectIds = projects.map((project) => project.id);
+  }
+
   return (
     <Suspense fallback={<>Loading...</>}>
       {scopesEnabled ? (
@@ -97,6 +114,7 @@ export default async function Page({
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
+          accessibleProjectIds={accessibleProjectIds}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
@@ -108,6 +126,7 @@ export default async function Page({
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
+          accessibleProjectIds={accessibleProjectIds}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}

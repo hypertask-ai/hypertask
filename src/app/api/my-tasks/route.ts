@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
+  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -11,6 +12,7 @@ import {
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
 import getMyTasks from "@/utils/controllers/tasks/myTasks";
+import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,6 +44,13 @@ export async function GET(request: NextRequest) {
     const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
       throwOnError: true,
     });
+    const liveUpdatesEnabled = await isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId);
+    let accessibleProjectIds: number[] = [];
+    if (liveUpdatesEnabled) {
+      const { json: projects } = await getAllMinimal(userId, "Calendar", false);
+      accessibleProjectIds = projects.map((project) => project.id);
+    }
+    Object.assign(myTasks, { accessibleProjectIds });
     return NextResponse.json(myTasks, {
       headers: {
         "Cache-Control": "private, no-store",
