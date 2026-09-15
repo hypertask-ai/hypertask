@@ -92,17 +92,31 @@ export default async function Page({
 
   return (
     <Suspense fallback={<>Loading...</>}>
-      <MyTasks
-        sections={myTasks.sections}
-        tabs={myTasks.tabs}
-        boards={myTasks.boards}
-        accessibleProjectIds={myTasks.accessibleProjectIds}
-        currentUser={userObj}
-        initialViews={viewsEnabled ? views : []}
-        initialViewId={initialViewId}
-        viewsEnabled={viewsEnabled}
-        scopesEnabled={scopesEnabled}
-      />
+      {scopesEnabled ? (
+        <MyTasks
+          sections={myTasks.sections}
+          tabs={myTasks.tabs}
+          boards={myTasks.boards}
+          accessibleProjectIds={myTasks.accessibleProjectIds}
+          currentUser={userObj}
+          initialViews={viewsEnabled ? views : []}
+          initialViewId={initialViewId}
+          viewsEnabled={viewsEnabled}
+          scopesEnabled
+        />
+      ) : (
+        <MyTasks
+          sections={myTasks.sections}
+          tabs={myTasks.tabs}
+          boards={myTasks.boards}
+          accessibleProjectIds={myTasks.accessibleProjectIds}
+          currentUser={userObj}
+          initialViews={viewsEnabled ? views : []}
+          initialViewId={initialViewId}
+          viewsEnabled={viewsEnabled}
+          scopesEnabled={false}
+        />
+      )}
     </Suspense>
   );
 }

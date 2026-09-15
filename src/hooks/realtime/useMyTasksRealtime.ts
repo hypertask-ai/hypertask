@@ -11,13 +11,7 @@ export const createMyTasksRealtimeEventHandler = (
   return () => refresh("event");
 };
 
-/**
- * Subscribes to every accessible board channel. On board:changed (or reconnect),
- * calls onReconcile so My Tasks can refetch /api/my-tasks.
- *
- * Unlike calendar, runs one reconcile right after subscribe so events that
- * landed between SSR and the subscription are not missed (HTPR-6458 grill).
- */
+/** Board channels → reconcile. Initial refresh closes the SSR gap (HTPR-6458). */
 export function useMyTasksRealtime(
   accountId: number,
   projectIds: number[],

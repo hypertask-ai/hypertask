@@ -11,10 +11,8 @@ export type MyTasksListPayload = {
 };
 
 export const buildMyTasksListUrl = (scopes?: MyTasksScope[]): string => {
-  if (!scopes || scopes.length === 0) return myTasksAPIRoute;
-  const params = new URLSearchParams();
-  params.set("scopes", scopes.join(","));
-  return `${myTasksAPIRoute}?${params.toString()}`;
+  if (!scopes?.length) return myTasksAPIRoute;
+  return `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`;
 };
 
 export const createMyTasksReconcileRunner = (options: {
@@ -27,7 +25,7 @@ export const createMyTasksReconcileRunner = (options: {
   let dirty = false;
   let controller: AbortController | null = null;
 
-  const run = async (): Promise<void> => {
+  const run = async () => {
     if (activeRuns > 0) {
       dirty = true;
       return;
@@ -73,36 +71,20 @@ export const createMyTasksReconcileRunner = (options: {
   };
 };
 
-export const parseMyTasksListPayload = (
-  body: unknown,
-): MyTasksListPayload | null => {
+export const parseMyTasksListPayload = (body: unknown): MyTasksListPayload | null => {
   if (!body || typeof body !== "object") return null;
   const record = body as Record<string, unknown>;
-  if (!Array.isArray(record.sections) || !Array.isArray(record.tabs)) {
-    return null;
-  }
-  if (
-    !record.sections.every(
-      (section) => section !== null && typeof section === "object",
-    )
-  ) {
-    return null;
-  }
-  if (!record.tabs.every((tab) => typeof tab === "string")) {
-    return null;
-  }
+  if (!Array.isArray(record.sections) || !Array.isArray(record.tabs)) return null;
+  if (!record.sections.every((s) => s && typeof s === "object")) return null;
+  if (!record.tabs.every((t) => typeof t === "string")) return null;
   const boards = Array.isArray(record.boards)
     ? record.boards.filter(
-        (board): board is MyTasksBoardMetadata =>
-          board !== null &&
-          typeof board === "object" &&
-          typeof (board as { id?: unknown }).id === "number",
+        (b): b is MyTasksBoardMetadata =>
+          !!b && typeof b === "object" && typeof (b as { id?: unknown }).id === "number",
       )
     : [];
   const accessibleProjectIds = Array.isArray(record.accessibleProjectIds)
-    ? record.accessibleProjectIds.filter(
-        (id): id is number => typeof id === "number",
-      )
+    ? record.accessibleProjectIds.filter((id): id is number => typeof id === "number")
     : [];
   return {
     sections: record.sections as ISection[],
