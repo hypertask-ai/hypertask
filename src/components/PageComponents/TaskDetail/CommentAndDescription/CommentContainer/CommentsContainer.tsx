@@ -80,9 +80,7 @@ const CommentsContainer = () => {
     useDescriptionAndCommentsContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
-  const commentLongPress = Boolean(
-    useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG),
-  );
+  const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
   });
@@ -279,7 +277,7 @@ const CommentsContainer = () => {
           </div>
         ) : null}
         <CommentCreatedBy />
-        {commentLongPress ? (
+        {commentLongPressEnabled ? (
           <div data-htpr-6514-comment-long-press="">
             <SwipeableCommentRow onMore={openCommentCommands}>
               {commentBubble}
