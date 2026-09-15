@@ -128,10 +128,13 @@ const MyTasks = ({
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  // Gates the client tree for htpr-6457 until the Involvement UI PR lands.
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
-  void (myTasksScopesFlag && scopesEnabled);
+  const scopesFeatureEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
+  const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
+  const tableColumnsFeatureEnabled =
+    myTasksTableColumnsEnabled && viewsFeatureEnabled;
+  void scopesFeatureEnabled;
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
     myTasksTableColumnsEnabled && viewsFeatureEnabled;

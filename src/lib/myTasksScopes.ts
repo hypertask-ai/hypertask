@@ -54,13 +54,17 @@ export function buildMyTasksScopeOr(
       case "watching":
         clauses.push({ followers: { some: { userId, agentId: null } } });
         break;
-      case "mentioned":
-        // ponytail: uses inbox Mentioned rows. Clearing the notification drops the
-        // task from this scope. Upgrade path: durable mention relation on the task.
+      case "mentioned": {
+        // TipTap mention chips store the user as data-label="name-{userId}".
+        const mentionMarker = `data-label="name-${userId}"`;
         clauses.push({
-          notifications: { some: { userId, type: "Mentioned" } },
+          OR: [
+            { comments: { some: { text: { contains: mentionMarker } } } },
+            { description: { contains: mentionMarker } },
+          ],
         });
         break;
+      }
     }
   }
   return clauses;

@@ -68,7 +68,14 @@ test("buildMyTasksScopeOr emits one human-safe clause per scope", () => {
   });
   assert.deepEqual(clauses[1], { userId: 6 });
   assert.deepEqual(clauses[2], {
-    notifications: { some: { userId: 6, type: "Mentioned" } },
+    OR: [
+      {
+        comments: {
+          some: { text: { contains: 'data-label="name-6"' } },
+        },
+      },
+      { description: { contains: 'data-label="name-6"' } },
+    ],
   });
   assert.deepEqual(clauses[3], {
     followers: { some: { userId: 6, agentId: null } },
