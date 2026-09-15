@@ -107,7 +107,7 @@ import {
   type AgentChatFilter,
 } from "@/lib/agents/chatActivityFeed";
 import {
-  proposalCardHeading,
+  PROPOSAL_HEADING_CREATED,
   PROPOSAL_HEADING_PENDING,
   type SerializedChatTicketProposal,
 } from "@/lib/agents/chatTicketProposal";
@@ -238,8 +238,10 @@ function ProposalCard({
       <div className="mb-1 flex items-center gap-1.5 font-medium text-white-black">
         <TicketIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         <span>
-          {confirmedHeadingEnabled
-            ? proposalCardHeading(proposal)
+          {confirmedHeadingEnabled &&
+          proposal.status === "CONFIRMED" &&
+          proposal.task
+            ? PROPOSAL_HEADING_CREATED
             : PROPOSAL_HEADING_PENDING}
         </span>
       </div>
