@@ -19,6 +19,8 @@ import { DELIBERATE_DOUBLE_CLICK_MS } from "@/lib/constants/TaskDetail";
 import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6514_COMMENT_LONG_PRESS_FLAG } from "@/lib/flags/keys";
 const CommentReactions = dynamic(() => import("./CommentReactions"));
 
 const CommentReadReceipts = () => {
@@ -78,6 +80,7 @@ const CommentsContainer = () => {
     useDescriptionAndCommentsContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
+  const commentLongPress = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
   });
@@ -227,6 +230,7 @@ const CommentsContainer = () => {
         ) : null}
         <CommentCreatedBy />
         <SwipeableCommentRow
+          useLongPress={commentLongPress}
           onMore={() => {
             // Select the swiped comment first: the menu labels come from
             // commentIndex, but the action handlers resolve their target from

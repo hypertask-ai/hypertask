@@ -28,6 +28,7 @@ import {
   getAllCommands,
   getBoardMenuCommands,
   getMobileCommandGroups,
+  pinCommentGroupFirst,
 } from "./AllCommands";
 import {
   getActiveEmptySectionSettingFromProject,
@@ -53,7 +54,12 @@ import {
   isInboxClusterCommandKey,
   type InboxCluster,
 } from "@/lib/inboxClusters";
-import { INBOX_ARCHIVE_CLUSTER_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  INBOX_ARCHIVE_CLUSTER_FLAG,
+  MY_TASKS_TABLE_COLUMNS_FLAG,
+  MY_TASKS_VIEWS_FLAG,
+} from "@/lib/flags/keys";
 import { myTasksRoute } from "@/lib/constants/constants";
 
 type Props = {
@@ -98,6 +104,9 @@ const Commands = (props: Props) => {
   const inboxClusterEnabled = useFlag(INBOX_ARCHIVE_CLUSTER_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const commentLongPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const pinCommentActions =
+    commentLongPressEnabled && !!contextOptions?.commentOptions;
   const currentProject = useRecoilValue(currentProjectAtom);
   const { data: projects = [] } = useGetAllProjectsMinimal([
     "projectsAllMinimal",
@@ -213,9 +222,12 @@ const Commands = (props: Props) => {
       ...registryGroups.slice(boardsInsertIndex),
     ].map((group) => ({
       ...group,
-      commandLists: [...group.commandLists].sort(
-        (left, right) => scoreCommand(right) - scoreCommand(left)
-      ),
+      commandLists:
+        pinCommentActions && group.group === "Comment"
+          ? group.commandLists
+          : [...group.commandLists].sort(
+              (left, right) => scoreCommand(right) - scoreCommand(left)
+            ),
     }));
     // Appended, and added after the per-group frecency sort so the piles keep
     // size order. Position is only visible on an empty query, and the group is
@@ -229,7 +241,10 @@ const Commands = (props: Props) => {
       });
     }
     if (contextOptions?.context === "Task") {
-      return getMobileCommandGroups(commandGroups, isMobile);
+      const taskGroups = getMobileCommandGroups(commandGroups, isMobile);
+      return pinCommentActions
+        ? pinCommentGroupFirst(taskGroups)
+        : taskGroups;
     }
 
     const canonicalCommands = new Map(
@@ -271,12 +286,16 @@ const Commands = (props: Props) => {
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
         : commandGroups;
 
-    return getMobileCommandGroups(rankedCommandGroups, isMobile);
+    const rankedGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
+    return pinCommentActions
+      ? pinCommentGroupFirst(rankedGroups)
+      : rankedGroups;
   }, [
     appShellRailOn,
     boardLayout,
     calendarSettings.showWeekends,
     contextOptions,
+    pinCommentActions,
     copyCurrentUrlEnabled,
     currentProject,
     inboxClusterEnabled,

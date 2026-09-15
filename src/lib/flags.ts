@@ -55,6 +55,7 @@ import {
   MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -78,6 +79,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "On a phone, press and hold a comment to open the Command Center with comment actions at the top and Edit first. Swipe on a comment is off so it does not fight the task swipe.",
+  },
   {
     key: HTPR_6427_ROW_SHORTCUTS_FLAG,
     shippedOn: "2026-09-14",

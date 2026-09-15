@@ -358,6 +358,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      {
+        key: "htpr-6514-comment-long-press",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
