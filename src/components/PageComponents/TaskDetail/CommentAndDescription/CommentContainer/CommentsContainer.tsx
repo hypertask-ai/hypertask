@@ -80,7 +80,9 @@ const CommentsContainer = () => {
     useDescriptionAndCommentsContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
-  const commentLongPress = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  const commentLongPress = Boolean(
+    useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG),
+  );
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
   });
