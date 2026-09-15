@@ -310,7 +310,13 @@ const MyTasksViewControls = ({
   };
 
   return (
-    <div className="ml-auto flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-1">
+    <div
+      className={
+        myTasksScopesEnabled
+          ? "ml-auto flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-1"
+          : "ml-auto flex shrink-0 items-center gap-1"
+      }
+    >
       {myTasksScopesEnabled ? (
         <div ref={involvementRef} className="relative">
           <button
