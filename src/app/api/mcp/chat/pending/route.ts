@@ -41,6 +41,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const heartbeat = await prisma.agent.updateMany({
+      where: { id: ctx.agentId, revokedAt: null },
+      data: { heartbeatAt: new Date() },
+    });
+    if (heartbeat.count !== 1) {
+      return NextResponse.json(
+        { success: false, error: "Agent not found" },
+        { status: 404 },
+      );
+    }
+
     const messages = await prisma.$queryRaw<PendingChatMessage[]>`
       SELECT
         message."id",

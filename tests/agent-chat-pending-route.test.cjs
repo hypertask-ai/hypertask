@@ -12,6 +12,7 @@ let authContext = {
 };
 let rows = [];
 let queryArgs = null;
+const heartbeats = [];
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -20,6 +21,12 @@ function stubModule(relativePath, exports) {
 
 stubModule("src/lib/prisma.ts", {
   default: {
+    agent: {
+      updateMany: async (args) => {
+        heartbeats.push(args);
+        return { count: 1 };
+      },
+    },
     $queryRaw: async (...args) => {
       queryArgs = args;
       return rows;
@@ -56,6 +63,11 @@ test("pending chat returns unanswered messages in the daemon contract", async ()
 
   assert.equal(response.status, 200);
   assert.deepEqual(body, { success: true, messages: rows });
+  assert.deepEqual(heartbeats[0].where, {
+    id: "agent-polling",
+    revokedAt: null,
+  });
+  assert.ok(heartbeats[0].data.heartbeatAt instanceof Date);
   assert.equal(queryArgs[1], "agent-polling");
   const sql = queryArgs[0].join("?");
   assert.match(sql, /session\."agentId" =/);
