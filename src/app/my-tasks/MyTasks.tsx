@@ -17,6 +17,12 @@ import {
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
+import {
+  buildMyTasksListUrl,
+  createMyTasksReconcileRunner,
+  parseMyTasksListPayload,
+} from "@/lib/myTasks/reconcileMyTasks";
+import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
@@ -36,13 +42,7 @@ import {
   getMyTasksSplitIndex,
   groupMyTasksByTime,
 } from "@/lib/myTasksGrouping";
-import {
-  buildMyTasksListUrl,
-  createMyTasksReconcileRunner,
-  parseMyTasksListPayload,
-} from "@/lib/myTasks/reconcileMyTasks";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
-import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import type {
   MyTasksBoardMetadata,
   MyTasksSavedView,
@@ -130,7 +130,6 @@ const MyTasks = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
-  const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
   const [sections, setSections] = useState(initialSections);
   const [tabs, setTabs] = useState(initialTabs);
@@ -138,6 +137,7 @@ const MyTasks = ({
   const [accessibleProjectIds, setAccessibleProjectIds] = useState(
     initialAccessibleProjectIds,
   );
+  const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
       ? getMyTasksSplitIndex(initialSections, boardParam)
@@ -197,8 +197,6 @@ const MyTasks = ({
   );
   const scopesRef = useRef(reconcileScopes);
   scopesRef.current = reconcileScopes;
-  const scopesKey = JSON.stringify(reconcileScopes);
-
   const reconcileRunner = useMemo(
     () =>
       createMyTasksReconcileRunner({
@@ -229,54 +227,43 @@ const MyTasks = ({
       }),
     [],
   );
-
   useEffect(() => () => reconcileRunner.cancel(), [reconcileRunner]);
-
   const onMyTasksReconcile = useCallback(() => {
     reconcileRunner.request();
   }, [reconcileRunner]);
-
   useMyTasksRealtime(
     currentUser.id,
     accessibleProjectIds,
     liveUpdatesEnabled,
     onMyTasksReconcile,
   );
+  useEffect(() => {
+    if (!liveUpdatesEnabled) return;
+    reconcileRunner.request();
+  }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
+
+  const scopesKey = JSON.stringify(
+    effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
+  );
 
   useEffect(() => {
-    // Only seed from SSR while we have not fetched a scopes selection yet,
-    // and never overwrite a live snapshot while live updates are on.
+    // Only seed from SSR while we have not fetched a scopes selection yet.
     if (liveUpdatesEnabled) return;
     if (lastFetchedScopesKey.current !== null) return;
     setSections(initialSections);
     setTabs(initialTabs);
     setBoards(initialBoards);
     setAccessibleProjectIds(initialAccessibleProjectIds);
-  }, [
-    initialAccessibleProjectIds,
-    initialBoards,
-    initialSections,
-    initialTabs,
-    liveUpdatesEnabled,
-  ]);
+  }, [initialAccessibleProjectIds, initialBoards, initialSections, initialTabs, liveUpdatesEnabled]);
 
   useEffect(() => {
-    if (liveUpdatesEnabled) {
-      // Cancel any legacy scopes fetch, then let live path own refetch.
-      scopesFetchToken.current += 1;
-      lastFetchedScopesKey.current = scopesKey;
-      reconcileRunner.request();
-      return () => {
-        reconcileRunner.cancel();
-      };
-    }
-
-    // Leaving live mode: drop in-flight live work before scopes path runs.
-    reconcileRunner.cancel();
-
     // Invalidate any in-flight refetch before deciding whether to fetch.
     const token = ++scopesFetchToken.current;
-    if (!scopesFeatureEnabled) {
+    if (liveUpdatesEnabled) {
+      reconcileRunner.cancel();
+      return;
+    }
+    if (!myTasksScopesFlag || !scopesEnabled) {
       lastFetchedScopesKey.current = null;
       setSections(initialSections);
       setTabs(initialTabs);
@@ -295,21 +282,29 @@ const MyTasks = ({
       try {
         const response = await fetch(
           `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
-          { cache: "no-store", credentials: "same-origin" },
         );
         if (token !== scopesFetchToken.current) return;
         if (!response.ok) {
           toast.error("Unable to refresh My Tasks");
           return;
         }
-        const payload = parseMyTasksListPayload(await response.json());
+        const body = (await response.json()) as {
+          sections?: ISection[];
+          tabs?: string[];
+          boards?: MyTasksBoardMetadata[];
+          accessibleProjectIds?: number[];
+        };
         if (token !== scopesFetchToken.current) return;
-        if (!payload) return;
+        if (!Array.isArray(body.sections)) return;
         lastFetchedScopesKey.current = scopesKey;
-        setSections(payload.sections);
-        setTabs(payload.tabs);
-        setBoards(payload.boards);
-        setAccessibleProjectIds(payload.accessibleProjectIds);
+        setSections(body.sections);
+        if (Array.isArray(body.tabs)) setTabs(body.tabs);
+        if (Array.isArray(body.boards)) setBoards(body.boards);
+        if (Array.isArray(body.accessibleProjectIds)) {
+          setAccessibleProjectIds(
+            body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
+          );
+        }
       } catch {
         if (token === scopesFetchToken.current) {
           toast.error("Unable to refresh My Tasks");
@@ -322,8 +317,9 @@ const MyTasks = ({
     initialSections,
     initialTabs,
     liveUpdatesEnabled,
+    myTasksScopesFlag,
     reconcileRunner,
-    scopesFeatureEnabled,
+    scopesEnabled,
     scopesKey,
     viewConfig.scopes,
   ]);
@@ -884,6 +880,9 @@ const boardTabCounts = useMemo(() => {
           <span className="text-content font-normal text-text-light-gray">
             {totalCount}
           </span>
+          {liveUpdatesEnabled ? (
+            <span className="sr-only">Live list updates on</span>
+          ) : null}
         </span>
         {viewsEnabled && myTasksViewsEnabled && (
           <MyTasksViewControls

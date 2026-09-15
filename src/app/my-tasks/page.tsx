@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
 import {
+  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -48,9 +49,10 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [viewsEnabled, scopesEnabled] = await Promise.all([
+  const [viewsEnabled, scopesEnabled, liveUpdatesEnabled] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
+    isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, sessionUser.userId),
   ]);
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
@@ -97,7 +99,7 @@ export default async function Page({
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
-          accessibleProjectIds={myTasks.accessibleProjectIds}
+          accessibleProjectIds={liveUpdatesEnabled ? myTasks.accessibleProjectIds : []}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
@@ -109,7 +111,7 @@ export default async function Page({
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
-          accessibleProjectIds={myTasks.accessibleProjectIds}
+          accessibleProjectIds={liveUpdatesEnabled ? myTasks.accessibleProjectIds : []}
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
