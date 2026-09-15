@@ -319,7 +319,7 @@ function loadHistoryRoute({
         id: "session-1",
         agentId: "agent-parked",
         // chatAccess evaluates the shared-chat flag against the agent owner.
-        agent: { userId: 6 },
+        agent: { userId: 6, heartbeatAt },
       }),
     },
     chatMessage: {
@@ -338,11 +338,8 @@ function loadHistoryRoute({
       }),
       findMany: async () => [],
     },
-    agent: {
-      findUnique: async () => ({
-        heartbeatAt,
-        agentWebhookSubscription: subscription,
-      }),
+    agentWebhookSubscription: {
+      findUnique: async () => subscription,
     },
   };
   stubModule("src/lib/auth/getSessionUser.ts", {
