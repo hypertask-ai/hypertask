@@ -48,6 +48,7 @@ const MyTasksQuickAdd = ({
     useGetAllProjectsMinimal(["my-tasks-quick-add-projects"], []);
 
   const sessionDefaultBoardId = (() => {
+    if (typeof window === "undefined") return null;
     if (activeViewId !== null) return null;
     if (viewConfig.defaultBoardId != null) return null;
     try {

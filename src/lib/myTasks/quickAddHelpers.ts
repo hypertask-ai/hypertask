@@ -72,7 +72,14 @@ export function myTasksQuickAddTaskVisibleInPayload(
       payload.sections,
       options.filterEnabled ? [...options.prioritySelection] : [],
     );
-    return priorityFiltered.some((section) =>
+    const visibleSections =
+      options.activeSplit === 0
+        ? priorityFiltered
+        : (() => {
+            const active = priorityFiltered[options.activeSplit - 1];
+            return active ? [active] : [];
+          })();
+    return visibleSections.some((section) =>
       (section.items ?? []).some((task) => (task as MyTasksTask).id === taskId),
     );
   }

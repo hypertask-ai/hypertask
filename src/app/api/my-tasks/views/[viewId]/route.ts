@@ -84,10 +84,14 @@ export async function PATCH(
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const existing = await tx.myTasksView.findFirst({
-        where: { id: viewId, userId: auth.userId },
-        select: { id: true, config: true },
-      });
+      const locked = await tx.$queryRaw<
+        Array<{ id: number; config: Prisma.JsonValue }>
+      >`
+        SELECT id, config FROM "MyTasksView"
+        WHERE id = ${viewId} AND "userId" = ${auth.userId}
+        FOR UPDATE
+      `;
+      const existing = locked[0];
       if (!existing) return null;
       if (configPatch || fullConfig !== undefined) {
         data.config = mergeMyTasksViewConfigUpdate({
