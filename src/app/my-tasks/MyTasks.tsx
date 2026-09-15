@@ -10,6 +10,7 @@ import { useFlag } from "@/hooks/useFlag";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
+  MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
@@ -90,6 +91,8 @@ interface IProps {
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
   viewsEnabled: boolean;
+  /** Server flag for HTPR-6457; UI control lands in the follow-up PR. */
+  scopesEnabled?: boolean;
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
@@ -107,6 +110,7 @@ const MyTasks = ({
   initialViews = [],
   initialViewId = null,
   viewsEnabled = false,
+  scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
@@ -124,6 +128,9 @@ const MyTasks = ({
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  // Gates the client tree for htpr-6457 until the Involvement UI PR lands.
+  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
+  void (myTasksScopesFlag && scopesEnabled);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
