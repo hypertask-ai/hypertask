@@ -79,7 +79,7 @@ When referencing a Hypertask ticket in conversation, write the full clickable ap
 
 The moment you actually start working a ticket (writing code / doing the fix, not just reading or triaging), make it visible on the board so no one else picks up the same work:
 
-1. Assign Valentin (userId 6): `hypertask tasks assign <PREFIX-NNN> --assignee 6` (additive, do not replace existing assignees).
+1. Claim as Product Bot: `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. **No agent or session ever writes in Valentin's name (Valentin, 2026-09-15): no ticket, comment, assignment or move goes through his user token. Board writes use an agent identity (Product Bot via `htbot`, or the agent's own). Only Valentin assigns himself.**
 2. Move it to In Progress: `hypertask tasks move <PREFIX-NNN> --section "In Progress"`.
 3. Leave a short comment saying a session is actively working it now.
 
