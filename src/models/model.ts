@@ -1149,7 +1149,7 @@ export interface IAllCommands {
     isArchived: boolean;
     hasNotifications: boolean;
     isKanban: boolean;
-    /** HTPR-6461: My Tasks surface; enables Snooze until instead of Set reminder. */
+    /** HTPR-6461: My Tasks surface; shows Remind me so the date also hides the row. */
     isMyTasks?: boolean;
     hasSubtasks: boolean;
     hasParent: boolean;

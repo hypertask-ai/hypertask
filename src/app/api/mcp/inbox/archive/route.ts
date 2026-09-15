@@ -9,6 +9,8 @@ import {
   scheduleInboxReminderJob,
 } from '@/pages/api/queues/inboxQueue'
 import { nextReminderRevision } from '@/utils/controllers/reminders/revision'
+import { syncMyTasksSnoozeFromReminder } from '@/utils/controllers/tasks/myTasksSnooze'
+import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from '@/lib/flags'
 
 const MAX_NOTIFICATION_IDS = 100
 const MAX_REMINDER_DELAY_MS = 366 * 24 * 60 * 60 * 1000
@@ -105,6 +107,7 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      const hideOnMyTasks = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, user.id)
       const reminders = await prisma.$transaction(async (tx) => {
         const candidateTaskIds = [...new Set(notifications.map((item) => item.taskId!))].sort((a, b) => a - b)
         for (const candidateTaskId of candidateTaskIds) {
@@ -157,6 +160,15 @@ export async function POST(request: NextRequest) {
                   },
                 })
           saved.push({ reminder, previous })
+          if (hideOnMyTasks) {
+            await syncMyTasksSnoozeFromReminder({
+              userId: user.id,
+              taskId: item.taskId!,
+              snoozeUntil: remindAt,
+              client: tx,
+              requireFlag: false,
+            })
+          }
         }
         await tx.notification.updateMany({
           where: { userId: user.id, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal' },

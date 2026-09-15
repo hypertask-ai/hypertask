@@ -18,6 +18,7 @@ import { ChevronDown, CircleCheck, Clock, Search } from "lucide-react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useQueryState from "@/hooks/MultiPages/useQueryState";
 import { useFlag } from "@/hooks/useFlag";
+import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 
 // Bulk action interface for better type safety
@@ -64,6 +65,10 @@ const RemindMeComponent = (props: Props) => {
   const [filteredOptions, setFilteredOptions] = useState<(DisplayDate | undefined)[]>(defaultOptions);
   const _mbl = useContext(MobileViewContext);
   const mobileSafeAreaEnabled = useFlag("htpr-6130-mobile-reminder-safe-area");
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const returnCopy = myTasksSnoozeEnabled
+    ? "inbox and My Tasks at "
+    : "inbox at ";
   
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target.value;
@@ -129,7 +134,7 @@ const RemindMeComponent = (props: Props) => {
         
         const taskCount = bulkItems.length;
         const taskText = taskCount === 1 ? "task" : "tasks";
-        toast(`${taskCount} ${taskText} will reappear in inbox at ` + formatDateDifference(reminderDate!, true))
+        toast(`${taskCount} ${taskText} will reappear in ${returnCopy}` + formatDateDifference(reminderDate!, true))
         
         closeHandler(true)
       } catch (error) {
@@ -152,7 +157,7 @@ const RemindMeComponent = (props: Props) => {
       setLastUsedReminder({ date: reminderDate!, display: "last used" })
       archiveNotificationGetter(body, "Remind", null)
       
-      toast("Task will reappear in inbox at " + formatDateDifference(reminderDate!, true))
+      toast("Task will reappear in " + returnCopy + formatDateDifference(reminderDate!, true))
       closeHandler(true)
     }
   }
