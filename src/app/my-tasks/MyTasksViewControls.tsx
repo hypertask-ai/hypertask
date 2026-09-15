@@ -6,10 +6,16 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
+  MY_TASKS_SCOPES_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
+import {
+  MY_TASKS_SCOPE_VALUES,
+  normalizeMyTasksScopes,
+  type MyTasksScope,
+} from "@/lib/myTasksScopes";
 import { migrateFlatFiltersToFilterSettings, myTasksParityFilterCount } from "@/lib/filterSettingsMutations";
 import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
@@ -20,7 +26,7 @@ import {
   type MyTasksGroupBy,
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
-import { ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal } from "lucide-react";
+import { ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, UserRound } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 interface Props {
@@ -31,7 +37,15 @@ interface Props {
   timeGroupEnabled?: boolean;
   tableColumnsEnabled?: boolean;
   onOpenTableColumns?: () => void;
+  scopesEnabled?: boolean;
 }
+
+const INVOLVEMENT_OPTIONS: Array<{ value: MyTasksScope; label: string }> = [
+  { value: "assigned", label: "Assigned to me" },
+  { value: "created", label: "Created by me" },
+  { value: "mentioned", label: "Mentioned" },
+  { value: "watching", label: "Watching" },
+];
 
 const DUE_DATE_OPTIONS: Array<{ value: MyTasksDueDatePreset; label: string }> = [
   { value: "overdue", label: "Overdue" },
@@ -93,23 +107,47 @@ const MyTasksViewControls = ({
   timeGroupEnabled = false,
   tableColumnsEnabled = false,
   onOpenTableColumns,
+  scopesEnabled = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
+  const myTasksScopesEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const [filterOpen, setFilterOpen] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);
+  const [involvementOpen, setInvolvementOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const scopeRef = useRef<HTMLDivElement>(null);
+  const involvementRef = useRef<HTMLDivElement>(null);
   const sortRef = useRef<HTMLDivElement>(null);
   const groupRef = useRef<HTMLDivElement>(null);
   useClickOutside(filterRef, () => setFilterOpen(false));
   useClickOutside(scopeRef, () => setScopeOpen(false));
+  useClickOutside(involvementRef, () => setInvolvementOpen(false));
   useClickOutside(sortRef, () => setSortOpen(false));
   useClickOutside(groupRef, () => setGroupOpen(false));
+
+  const scopes = normalizeMyTasksScopes(config.scopes);
+  const involvementCount =
+    scopes.length === 1 && scopes[0] === "assigned" ? 0 : scopes.length;
+
+  const toggleScope = (scope: MyTasksScope) => {
+    const selected = new Set(scopes);
+    if (selected.has(scope)) {
+      selected.delete(scope);
+    } else {
+      selected.add(scope);
+    }
+    const next = MY_TASKS_SCOPE_VALUES.filter((value) => selected.has(value));
+    onChange({
+      ...config,
+      scopes: next.length > 0 ? next : ["assigned"],
+    });
+  };
 
   const groupBy = effectiveMyTasksGroupBy(
     config,
@@ -265,13 +303,61 @@ const MyTasksViewControls = ({
 
   const closeOtherMenus = () => {
     setScopeOpen(false);
+    setInvolvementOpen(false);
     setSortOpen(false);
     setGroupOpen(false);
     setFilterOpen(false);
   };
 
   return (
-    <div className="ml-auto flex shrink-0 items-center gap-1">
+    <div
+      className={
+        myTasksScopesEnabled
+          ? "ml-auto flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-1"
+          : "ml-auto flex shrink-0 items-center gap-1"
+      }
+    >
+      {myTasksScopesEnabled ? (
+        <div ref={involvementRef} className="relative">
+          <button
+            type="button"
+            aria-label="My Tasks involvement"
+            aria-expanded={involvementOpen}
+            onClick={() => {
+              setInvolvementOpen((open) => !open);
+              setScopeOpen(false);
+              setSortOpen(false);
+              setGroupOpen(false);
+              setFilterOpen(false);
+            }}
+            className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
+              involvementCount > 0
+                ? "text-shadcn-primary"
+                : "text-text-light-gray hover:text-white-black"
+            }`}
+          >
+            <UserRound size={16} strokeWidth={1.5} />
+            <span className="hidden @md:inline">Involvement</span>
+            {involvementCount > 0 && (
+              <span className="text-meta font-semibold">{involvementCount}</span>
+            )}
+          </button>
+          {involvementOpen && (
+            <div className="absolute right-0 top-full z-40 mt-1 w-56 space-y-1 rounded-[5px] bg-modalBackground p-2 shadow-md">
+              <Field label="Involvement">
+                {INVOLVEMENT_OPTIONS.map((option) => (
+                  <CheckRow
+                    key={option.value}
+                    checked={scopes.includes(option.value)}
+                    label={option.label}
+                    onChange={() => toggleScope(option.value)}
+                  />
+                ))}
+              </Field>
+            </div>
+          )}
+        </div>
+      ) : null}
       {myTasksTableColumnsFlag && tableColumnsEnabled && onOpenTableColumns ? (
         <button
           type="button"
@@ -295,6 +381,7 @@ const MyTasksViewControls = ({
               aria-expanded={scopeOpen}
               onClick={() => {
                 setScopeOpen((open) => !open);
+                setInvolvementOpen(false);
                 setSortOpen(false);
                 setGroupOpen(false);
               }}
@@ -318,6 +405,7 @@ const MyTasksViewControls = ({
             aria-label="Filter My Tasks"
             onClick={() => {
               setScopeOpen(false);
+              setInvolvementOpen(false);
               setSortOpen(false);
               setGroupOpen(false);
               onOpenKanbanFilters?.();
@@ -343,6 +431,7 @@ const MyTasksViewControls = ({
             aria-expanded={filterOpen}
             onClick={() => {
               setFilterOpen((open) => !open);
+              setInvolvementOpen(false);
               setSortOpen(false);
               setGroupOpen(false);
             }}
@@ -621,6 +710,7 @@ const MyTasksViewControls = ({
             setSortOpen((open) => !open);
             setFilterOpen(false);
             setScopeOpen(false);
+            setInvolvementOpen(false);
             setGroupOpen(false);
           }}
           className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black @md:min-h-0 @md:min-w-0`}
@@ -684,6 +774,7 @@ const MyTasksViewControls = ({
               setGroupOpen((open) => !open);
               setFilterOpen(false);
               setScopeOpen(false);
+              setInvolvementOpen(false);
               setSortOpen(false);
             }}
             className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
