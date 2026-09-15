@@ -262,11 +262,17 @@ const MyTasks = ({
 
   useEffect(() => {
     if (liveUpdatesEnabled) {
-      // Live path owns refetch (scopes change + board events).
+      // Cancel any legacy scopes fetch, then let live path own refetch.
+      scopesFetchToken.current += 1;
       lastFetchedScopesKey.current = scopesKey;
       reconcileRunner.request();
-      return;
+      return () => {
+        reconcileRunner.cancel();
+      };
     }
+
+    // Leaving live mode: drop in-flight live work before scopes path runs.
+    reconcileRunner.cancel();
 
     // Invalidate any in-flight refetch before deciding whether to fetch.
     const token = ++scopesFetchToken.current;

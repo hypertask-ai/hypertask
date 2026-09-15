@@ -11,7 +11,7 @@ export const createMyTasksRealtimeEventHandler = (
   return () => refresh("event");
 };
 
-/** Board channels → reconcile. Initial refresh closes the SSR gap (HTPR-6458). */
+/** Board channels → reconcile. Refresh only after channels are live (HTPR-6458). */
 export function useMyTasksRealtime(
   accountId: number,
   projectIds: number[],
@@ -58,15 +58,13 @@ export function useMyTasksRealtime(
           return { channelName, channel, onBoardEvent };
         });
 
-        if (client.connection.state === "connected") wasConnected.current = true;
         const onConnected = () => {
           if (wasConnected.current) refresh("reconnect");
+          else refresh("initial");
           wasConnected.current = true;
         };
         client.connection.bind("connected", onConnected);
-
-        // Close the SSR-to-subscribe gap: one fetch after channels are live.
-        refresh("initial");
+        if (client.connection.state === "connected") onConnected();
 
         unsubscribe = () => {
           client.connection.unbind("connected", onConnected);
