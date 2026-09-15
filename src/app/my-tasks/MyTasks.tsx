@@ -283,13 +283,31 @@ const MyTasks = ({
 
   useEffect(() => {
     if (!myTasksSnoozeEnabled || !nearestSnoozeUntil) return;
-    const ms = new Date(nearestSnoozeUntil).getTime() - Date.now();
-    if (!Number.isFinite(ms)) return;
-    const delay = Math.max(250, Math.min(ms + 50, 2147483647));
-    const timer = window.setTimeout(() => {
-      reconcileRunner.request();
-    }, delay);
-    return () => window.clearTimeout(timer);
+    const targetMs = new Date(nearestSnoozeUntil).getTime();
+    if (!Number.isFinite(targetMs)) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const schedule = () => {
+      if (cancelled) return;
+      const remaining = targetMs - Date.now();
+      if (remaining <= 0) {
+        reconcileRunner.request();
+        return;
+      }
+      const delay = Math.max(250, Math.min(remaining + 50, 2147483647));
+      timer = window.setTimeout(() => {
+        if (remaining + 50 > 2147483647) {
+          schedule();
+          return;
+        }
+        reconcileRunner.request();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
 
   const scopesKey = JSON.stringify({

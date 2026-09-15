@@ -98,7 +98,7 @@ const getMyTasks = async (
         })
       : Promise.resolve([] as Array<{ snoozeUntil: Date | null }>);
 
-    const tasks = await prisma.task.findMany({
+    const tasksPromise = prisma.task.findMany({
       where: {
         AND: andFilters,
       },
@@ -170,7 +170,12 @@ const getMyTasks = async (
         },
       },
     });
-    const hiddenSnoozes = await nearestSnoozePromise;
+
+    const [tasks, hiddenSnoozes, taskSections] = await Promise.all([
+      tasksPromise,
+      nearestSnoozePromise,
+      taskSectionsPromise,
+    ]);
     const nearestSnoozeUntil = snoozeEnabled
       ? nearestFutureSnoozeUntil(
           hiddenSnoozes.map((row) => row.snoozeUntil),
@@ -185,7 +190,6 @@ const getMyTasks = async (
           assignees: (task.assignees ?? []).map(omitAssigneeSnoozeUntil),
         }));
 
-    const taskSections = await taskSectionsPromise;
     const sectionById = new Map(taskSections.map((section) => [section.id, section]));
     const sectionByLegacyName = new Map(
       taskSections.map((section) => [

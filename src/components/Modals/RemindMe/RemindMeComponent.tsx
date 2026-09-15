@@ -106,13 +106,18 @@ const RemindMeComponent = (props: Props) => {
 
     const reminderDate = filteredOptions[fIndex]?.date;
     if (onPickDate) {
-      const iso =
-        typeof reminderDate === "string"
-          ? reminderDate
-          : new Date(reminderDate).toISOString();
+      if (reminderDate === null || reminderDate === undefined) return;
       try {
+        const iso =
+          typeof reminderDate === "string"
+            ? reminderDate
+            : new Date(reminderDate).toISOString();
+        if (!Number.isFinite(new Date(iso).getTime())) {
+          toast.error("Could not save that date. Try again.");
+          return;
+        }
         await onPickDate(iso);
-        setLastUsedReminder({ date: reminderDate!, display: "last used" });
+        setLastUsedReminder({ date: reminderDate, display: "last used" });
         closeHandler(true);
       } catch (error) {
         console.error("Error applying picked date:", error);

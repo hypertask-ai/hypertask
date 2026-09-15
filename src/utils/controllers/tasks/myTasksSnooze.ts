@@ -42,47 +42,52 @@ export async function setMyTasksSnooze(args: {
     };
   }
 
-  const assignment = await prisma.assignees.findFirst({
-    where: {
-      ...(byAssignment ? { id: args.assignmentId } : { taskId: args.taskId }),
-      userId: args.userId,
-      agentId: null,
-    },
-    select: { id: true, taskId: true },
-  });
+  try {
+    const assignment = await prisma.assignees.findFirst({
+      where: {
+        ...(byAssignment ? { id: args.assignmentId } : { taskId: args.taskId }),
+        userId: args.userId,
+        agentId: null,
+      },
+      select: { id: true, taskId: true },
+    });
 
-  if (!assignment) {
-    return { ok: false, status: 404, error: "Assignment not found" };
+    if (!assignment) {
+      return { ok: false, status: 404, error: "Assignment not found" };
+    }
+
+    const task = await prisma.task.findFirst({
+      where: { id: assignment.taskId, deletedAt: null, status: "Normal" },
+      select: { id: true },
+    });
+    if (!task) {
+      return { ok: false, status: 404, error: "Task not found" };
+    }
+
+    if (!(await userCanAccessTask(args.userId, assignment.taskId))) {
+      return { ok: false, status: 403, error: "Forbidden" };
+    }
+
+    const updated = await prisma.assignees.updateMany({
+      where: {
+        id: assignment.id,
+        userId: args.userId,
+        agentId: null,
+      },
+      data: { snoozeUntil: parsed.snoozeUntil },
+    });
+    if (updated.count !== 1) {
+      return { ok: false, status: 409, error: "Assignment changed; retry" };
+    }
+
+    return {
+      ok: true,
+      assignmentId: assignment.id,
+      taskId: assignment.taskId,
+      snoozeUntil: parsed.snoozeUntil ? parsed.snoozeUntil.toISOString() : null,
+    };
+  } catch (error) {
+    console.error("[myTasksSnooze] set failed", error);
+    return { ok: false, status: 500, error: "Unable to snooze task" };
   }
-
-  const task = await prisma.task.findFirst({
-    where: { id: assignment.taskId, deletedAt: null, status: "Normal" },
-    select: { id: true },
-  });
-  if (!task) {
-    return { ok: false, status: 404, error: "Task not found" };
-  }
-
-  if (!(await userCanAccessTask(args.userId, assignment.taskId))) {
-    return { ok: false, status: 403, error: "Forbidden" };
-  }
-
-  const updated = await prisma.assignees.updateMany({
-    where: {
-      id: assignment.id,
-      userId: args.userId,
-      agentId: null,
-    },
-    data: { snoozeUntil: parsed.snoozeUntil },
-  });
-  if (updated.count !== 1) {
-    return { ok: false, status: 409, error: "Assignment changed; retry" };
-  }
-
-  return {
-    ok: true,
-    assignmentId: assignment.id,
-    taskId: assignment.taskId,
-    snoozeUntil: parsed.snoozeUntil ? parsed.snoozeUntil.toISOString() : null,
-  };
 }

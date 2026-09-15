@@ -51,15 +51,13 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [viewsEnabled, scopesEnabled, snoozeEnabled] = await Promise.all([
-    isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, sessionUser.userId),
-  ]);
-  const liveUpdatesEnabled = await isFeatureEnabled(
-    MY_TASKS_LIVE_UPDATES_FLAG,
-    sessionUser.userId,
-  );
+  const [viewsEnabled, scopesEnabled, snoozeEnabled, liveUpdatesEnabled] =
+    await Promise.all([
+      isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
+      isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
+      isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, sessionUser.userId),
+      isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, sessionUser.userId),
+    ]);
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
 

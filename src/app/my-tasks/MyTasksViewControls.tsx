@@ -172,7 +172,7 @@ const MyTasksViewControls = ({
     config.filters.createdRange,
     config.filters.updatedRange,
     config.filters.showDone ? true : null,
-    config.filters.showSnoozed ? true : null,
+    snoozeEnabled && config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
 
   const kanbanFilterCount = myTasksParityFilterCount(config);
@@ -180,7 +180,7 @@ const MyTasksViewControls = ({
     config.boardIds,
     config.filters.sectionIds.length ? config.filters.sectionIds : null,
     config.filters.showDone ? true : null,
-    config.filters.showSnoozed ? true : null,
+    snoozeEnabled && config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
 
   const updateFilters = (filters: Partial<MyTasksViewConfig["filters"]>) =>

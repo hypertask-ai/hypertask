@@ -89,15 +89,22 @@ export function annotateMyTasksSnoozeFields<
   return tasks.map((task) => {
     const assignees = task.assignees ?? [];
     const mine = assignees.find(
-      (row) => row.userId === userId && row.agentId == null,
+      (row) =>
+        row.userId === userId &&
+        (row.agentId === null || row.agentId === undefined),
     );
+    let currentUserSnoozeUntil: string | null = null;
+    if (mine?.snoozeUntil) {
+      const time = new Date(mine.snoozeUntil).getTime();
+      if (Number.isFinite(time)) {
+        currentUserSnoozeUntil = new Date(time).toISOString();
+      }
+    }
     return {
       ...task,
       assignees: assignees.map(omitAssigneeSnoozeUntil) as T["assignees"],
       currentUserAssignmentId: mine?.id ?? null,
-      currentUserSnoozeUntil: mine?.snoozeUntil
-        ? new Date(mine.snoozeUntil).toISOString()
-        : null,
+      currentUserSnoozeUntil,
     };
   });
 }
