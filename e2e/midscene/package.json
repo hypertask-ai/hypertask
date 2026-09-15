@@ -10,7 +10,7 @@
     "cleanup": "./cleanup.sh"
   },
   "dependencies": {
-    "@midscene/web": "^1.12.3",
+    "@midscene/web": "^1.12.6",
     "puppeteer": "^23.0.0"
   }
 }
