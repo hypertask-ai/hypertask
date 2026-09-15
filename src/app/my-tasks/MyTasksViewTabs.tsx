@@ -45,6 +45,17 @@ const MyTasksViewTabs = ({
   const actionsRef = useRef<HTMLDivElement>(null);
   useClickOutside(actionsRef, () => setActionsOpen(false));
   const activeView = views.find((view) => view.id === activeViewId);
+  const overdueBadge = (count: number) =>
+    overdueBadgesEnabled && count > 0 ? (
+      <span
+        data-htpr-6459-my-tasks-overdue-badges=""
+        className="text-micro font-semibold text-[#FE525A]"
+      >
+        {count}
+      </span>
+    ) : null;
+  const overdueLabel = (name: string, count: number) =>
+    overdueBadgesEnabled && count > 0 ? `${name}, ${count} overdue` : undefined;
 
   const saveAs = () => {
     const name = window.prompt("Name this view")?.trim();
@@ -73,11 +84,7 @@ const MyTasksViewTabs = ({
         <button
           type="button"
           onClick={() => onSelect(null)}
-          aria-label={
-            overdueBadgesEnabled && overdueAll > 0
-              ? `All, ${overdueAll} overdue`
-              : undefined
-          }
+          aria-label={overdueLabel("All", overdueAll)}
           className={`flex items-center gap-1 whitespace-nowrap rounded-[4px] px-3 py-1.5 text-dense leading-none transition-colors ${
             activeViewId === null
               ? "bg-containerBackground font-semibold text-white-black"
@@ -85,14 +92,7 @@ const MyTasksViewTabs = ({
           }`}
         >
           All
-          {overdueBadgesEnabled && overdueAll > 0 ? (
-            <span
-              data-htpr-6459-my-tasks-overdue-badges=""
-              className="text-micro font-semibold text-[#FE525A]"
-            >
-              {overdueAll}
-            </span>
-          ) : null}
+          {overdueBadge(overdueAll)}
         </button>
         {views.map((view) => {
           const active = view.id === activeViewId;
@@ -103,11 +103,7 @@ const MyTasksViewTabs = ({
               type="button"
               title={view.name}
               onClick={() => onSelect(view.id)}
-              aria-label={
-                overdueBadgesEnabled && overdueCount > 0
-                  ? `${view.name}, ${overdueCount} overdue`
-                  : undefined
-              }
+              aria-label={overdueLabel(view.name, overdueCount)}
               className={`flex items-center gap-1 whitespace-nowrap rounded-[4px] px-3 py-1.5 text-dense leading-none transition-colors ${
                 active
                   ? "bg-containerBackground font-semibold text-white-black"
@@ -116,14 +112,7 @@ const MyTasksViewTabs = ({
             >
               {view.isDefault && <House size={14} strokeWidth={1.5} />}
               {view.name}
-              {overdueBadgesEnabled && overdueCount > 0 ? (
-                <span
-                  data-htpr-6459-my-tasks-overdue-badges=""
-                  className="text-micro font-semibold text-[#FE525A]"
-                >
-                  {overdueCount}
-                </span>
-              ) : null}
+              {overdueBadge(overdueCount)}
             </button>
           );
         })}
