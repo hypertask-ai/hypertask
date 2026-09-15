@@ -39,6 +39,7 @@ function loadMessageRoute({
   flag = model.AGENT_CHAT_PARKED_REPLY_FLAG,
   flagEnabled = true,
   deliveryIds = [],
+  heartbeatAt = null,
 } = {}) {
   const writes = [];
   const broadcasts = [];
@@ -58,7 +59,7 @@ function loadMessageRoute({
         id: "session-1",
         userId: 6,
         agentId: "agent-parked",
-        agent: { runtimeType: "EXTERNAL" },
+        agent: { runtimeType: "EXTERNAL", heartbeatAt },
       }),
     },
     user: { findUnique: async () => ({ displayName: "Valentin" }) },
@@ -152,6 +153,15 @@ test("a message nobody is listening for is answered in the thread", async () => 
 
 test("a message a runtime did receive is left for that runtime to answer", async () => {
   const { route, writes } = loadMessageRoute({ deliveryIds: ["delivery-1"] });
+  const { body } = await send(route);
+
+  assert.equal(body.delivered, true);
+  assert.equal(body.notice, null);
+  assert.equal(writes.length, 1, "only the human message is written");
+});
+
+test("a recently polling runtime receives the message without a webhook", async () => {
+  const { route, writes } = loadMessageRoute({ heartbeatAt: new Date() });
   const { body } = await send(route);
 
   assert.equal(body.delivered, true);
@@ -280,7 +290,11 @@ test("the runtime's own transcript never carries the parked line", async () => {
  * The browser's read of the thread. Two rows are stored: the human message
  * and, after it, the parked notice the send path wrote.
  */
-function loadHistoryRoute({ flagEnabled }) {
+function loadHistoryRoute({
+  flagEnabled,
+  heartbeatAt = null,
+  subscription = { active: false, events: [] },
+}) {
   const counts = [];
   // Newest first: the route reads descending and flips, like Prisma would.
   const rows = [
@@ -324,8 +338,11 @@ function loadHistoryRoute({ flagEnabled }) {
       }),
       findMany: async () => [],
     },
-    agentWebhookSubscription: {
-      findUnique: async () => ({ active: false, events: [] }),
+    agent: {
+      findUnique: async () => ({
+        heartbeatAt,
+        agentWebhookSubscription: subscription,
+      }),
     },
   };
   stubModule("src/lib/auth/getSessionUser.ts", {
@@ -362,8 +379,8 @@ function loadHistoryRoute({ flagEnabled }) {
   return { route, counts };
 }
 
-async function readHistory(flagEnabled) {
-  const { route, counts } = loadHistoryRoute({ flagEnabled });
+async function readHistory(flagEnabled, availability = {}) {
+  const { route, counts } = loadHistoryRoute({ flagEnabled, ...availability });
   const response = await route.GET(
     new Request("https://app.hypertask.ai/api/agent-chat/session-1"),
     { params: Promise.resolve({ sessionId: "session-1" }) },
@@ -379,6 +396,28 @@ test("a reader inside the rollout sees the parked line", async () => {
     ["human", "system"],
   );
   assert.equal(body.awaiting, false, "the thread is answered, not waiting");
+});
+
+test("agent chat is enabled by a fresh polling heartbeat", async () => {
+  const { body } = await readHistory(true, { heartbeatAt: new Date() });
+
+  assert.equal(body.chatEnabled, true);
+});
+
+test("agent chat is disabled after the polling heartbeat goes stale", async () => {
+  const { body } = await readHistory(true, {
+    heartbeatAt: new Date(Date.now() - 61_000),
+  });
+
+  assert.equal(body.chatEnabled, false);
+});
+
+test("agent chat stays enabled by a webhook without a heartbeat", async () => {
+  const { body } = await readHistory(true, {
+    subscription: { active: true, events: ["chat.message"] },
+  });
+
+  assert.equal(body.chatEnabled, true);
 });
 
 test("a reader outside the rollout keeps today's thread", async () => {

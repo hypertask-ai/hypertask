@@ -19,6 +19,7 @@ import {
   isAgentChatSystemMessage,
 } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
+import { isAgentChatEnabled } from "@/lib/agents/chatAvailability";
 
 export const runtime = "nodejs";
 
@@ -180,7 +181,7 @@ export async function GET(
     const participant = before
       ? null
       : await ensureChatParticipant(session.id, userId);
-    const [unreadCount, participants, subscription] = await Promise.all([
+    const [unreadCount, participants, availability] = await Promise.all([
       participant
         ? unreadSince(
             session.id,
@@ -200,17 +201,23 @@ export async function GET(
               user: { select: { displayName: true, email: true } },
             },
           }),
-      prisma.agentWebhookSubscription.findUnique({
-        where: { agentId: access.agentId },
-        select: { active: true, events: true },
+      prisma.agent.findUnique({
+        where: { id: access.agentId },
+        select: {
+          heartbeatAt: true,
+          agentWebhookSubscription: {
+            select: { active: true, events: true },
+          },
+        },
       }),
     ]);
     const viewer = participant
       ? { draft: participant.draft, unreadCount: unreadCount ?? 0 }
       : null;
-    const chatEnabled = Boolean(
-      subscription?.active && subscription.events.includes("chat.message")
-    );
+    const chatEnabled = isAgentChatEnabled({
+      heartbeatAt: availability?.heartbeatAt ?? null,
+      subscription: availability?.agentWebhookSubscription ?? null,
+    });
 
     return NextResponse.json({
       success: true,

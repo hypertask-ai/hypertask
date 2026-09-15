@@ -21,6 +21,7 @@ import {
   AGENT_CHAT_PARKED_MESSAGE,
   AGENT_CHAT_PARKED_REPLY_FLAG,
 } from "@/lib/agentRuns/model";
+import { hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
 
 export const runtime = "nodejs";
 
@@ -57,7 +58,7 @@ export async function POST(
       sessionId,
       userId,
       select: {
-        agent: { select: { runtimeType: true } },
+        agent: { select: { runtimeType: true, heartbeatAt: true } },
       },
     });
     if (!access.ok) {
@@ -74,6 +75,9 @@ export async function POST(
         { status: 400 }
       );
     }
+    const pollingChatEnabled = hasFreshAgentChatHeartbeat(
+      session.agent?.heartbeatAt ?? null,
+    );
 
     // Sending is taking part, even for someone who reached the thread without
     // going through the open path. After the refusal above, so a rejected send
@@ -159,14 +163,14 @@ export async function POST(
         ...(agentBrief ? { agentBrief } : {}),
       });
 
-      // An empty list means no runtime is subscribed to this agent's chat, so
-      // nothing will ever answer this message. Say so in the thread rather
-      // than leaving the sender watching a typing row that never resolves.
+      // Without a webhook or a recently polling runtime, nothing will ever
+      // answer this message. Say so in the thread rather than leaving the
+      // sender watching a typing row that never resolves.
       // Replying to the turn makes it terminal, like the timeout marker: a
       // runtime that reconnects later cannot append an answer below a notice
       // that already told the reader it was parked.
       const notice =
-        deliveryIds.length === 0 && parkedReplyEnabled
+        deliveryIds.length === 0 && !pollingChatEnabled && parkedReplyEnabled
           ? await tx.chatMessage.create({
               data: {
                 sessionId: session.id,
@@ -196,7 +200,7 @@ export async function POST(
         content: message.content,
         createdAt: message.createdAt,
       },
-      delivered: deliveryIds.length > 0,
+      delivered: deliveryIds.length > 0 || pollingChatEnabled,
       // The sender's own tab can miss the broadcast while its POST is still in
       // flight, so the notice rides back on the response instead.
       notice: notice
