@@ -46,41 +46,45 @@ export function useMyTasksRealtime(
     };
 
     void (async () => {
-      const client = await connectRealtimeClient();
-      if (!client) return;
-      if (cancelled) {
-        releaseRealtimeClientIfIdle(client);
-        return;
-      }
-
-      const channels = projectIds.map((id) => {
-        const channelName = boardChannel(id);
-        const channel = client.subscribe(channelName);
-        const onBoardEvent = createMyTasksRealtimeEventHandler(() =>
-          refresh("event"),
-        );
-        channel.bind(BOARD_EVENT, onBoardEvent);
-        return { channelName, channel, onBoardEvent };
-      });
-
-      if (client.connection.state === "connected") wasConnected.current = true;
-      const onConnected = () => {
-        if (wasConnected.current) refresh("reconnect");
-        wasConnected.current = true;
-      };
-      client.connection.bind("connected", onConnected);
-
-      // Close the SSR-to-subscribe gap: one fetch after channels are live.
-      refresh("initial");
-
-      unsubscribe = () => {
-        client.connection.unbind("connected", onConnected);
-        for (const { channelName, channel, onBoardEvent } of channels) {
-          channel.unbind(BOARD_EVENT, onBoardEvent);
-          client.unsubscribe(channelName);
+      try {
+        const client = await connectRealtimeClient();
+        if (!client) return;
+        if (cancelled) {
+          releaseRealtimeClientIfIdle(client);
+          return;
         }
-        releaseRealtimeClientIfIdle(client);
-      };
+
+        const channels = projectIds.map((id) => {
+          const channelName = boardChannel(id);
+          const channel = client.subscribe(channelName);
+          const onBoardEvent = createMyTasksRealtimeEventHandler(() =>
+            refresh("event"),
+          );
+          channel.bind(BOARD_EVENT, onBoardEvent);
+          return { channelName, channel, onBoardEvent };
+        });
+
+        if (client.connection.state === "connected") wasConnected.current = true;
+        const onConnected = () => {
+          if (wasConnected.current) refresh("reconnect");
+          wasConnected.current = true;
+        };
+        client.connection.bind("connected", onConnected);
+
+        // Close the SSR-to-subscribe gap: one fetch after channels are live.
+        refresh("initial");
+
+        unsubscribe = () => {
+          client.connection.unbind("connected", onConnected);
+          for (const { channelName, channel, onBoardEvent } of channels) {
+            channel.unbind(BOARD_EVENT, onBoardEvent);
+            client.unsubscribe(channelName);
+          }
+          releaseRealtimeClientIfIdle(client);
+        };
+      } catch (error) {
+        console.error("[my-tasks] realtime subscribe failed", error);
+      }
     })();
 
     return () => {

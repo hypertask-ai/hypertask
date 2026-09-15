@@ -23,16 +23,16 @@ export const createMyTasksReconcileRunner = (options: {
   onError?: (error: unknown) => void;
 }) => {
   let generation = 0;
-  let inFlight = false;
+  let activeRuns = 0;
   let dirty = false;
   let controller: AbortController | null = null;
 
   const run = async (): Promise<void> => {
-    if (inFlight) {
+    if (activeRuns > 0) {
       dirty = true;
       return;
     }
-    inFlight = true;
+    activeRuns += 1;
     try {
       do {
         dirty = false;
@@ -50,13 +50,13 @@ export const createMyTasksReconcileRunner = (options: {
         }
       } while (dirty);
     } finally {
-      inFlight = false;
+      activeRuns = Math.max(0, activeRuns - 1);
     }
   };
 
   return {
     request: () => {
-      if (inFlight) {
+      if (activeRuns > 0) {
         dirty = true;
         generation += 1;
         controller?.abort();
@@ -69,7 +69,6 @@ export const createMyTasksReconcileRunner = (options: {
       dirty = false;
       controller?.abort();
       controller = null;
-      inFlight = false;
     },
   };
 };
@@ -82,7 +81,24 @@ export const parseMyTasksListPayload = (
   if (!Array.isArray(record.sections) || !Array.isArray(record.tabs)) {
     return null;
   }
-  const boards = Array.isArray(record.boards) ? record.boards : [];
+  if (
+    !record.sections.every(
+      (section) => section !== null && typeof section === "object",
+    )
+  ) {
+    return null;
+  }
+  if (!record.tabs.every((tab) => typeof tab === "string")) {
+    return null;
+  }
+  const boards = Array.isArray(record.boards)
+    ? record.boards.filter(
+        (board): board is MyTasksBoardMetadata =>
+          board !== null &&
+          typeof board === "object" &&
+          typeof (board as { id?: unknown }).id === "number",
+      )
+    : [];
   const accessibleProjectIds = Array.isArray(record.accessibleProjectIds)
     ? record.accessibleProjectIds.filter(
         (id): id is number => typeof id === "number",
@@ -91,7 +107,7 @@ export const parseMyTasksListPayload = (
   return {
     sections: record.sections as ISection[],
     tabs: record.tabs as string[],
-    boards: boards as MyTasksBoardMetadata[],
+    boards,
     accessibleProjectIds,
   };
 };
