@@ -2,6 +2,8 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6514_COMMENT_LONG_PRESS_FLAG } from "@/lib/flags/keys";
 
 const ENGAGE_PX = 10;
 const COMMIT_PX = 72;
@@ -14,17 +16,15 @@ const MOVE_CANCEL_PX = 10;
  * Default: swipe left to reveal "More" and open the comment's Command Center
  * menu (same as the desktop hover ⋯).
  *
- * HTPR-6514 (`useLongPress`): press and hold instead. Swipe already moves the
+ * HTPR-6514: press and hold instead. Swipe already moves the
  * whole task, so a comment swipe fights that gesture.
  */
 const SwipeableCommentRow = ({
   children,
   onMore,
-  useLongPress = false,
 }: {
   children: ReactNode;
   onMore: () => void;
-  useLongPress?: boolean;
 }) => {
   const [offset, setOffset] = useState(0);
   const offsetRef = useRef(0);
@@ -57,7 +57,8 @@ const SwipeableCommentRow = ({
 
   useEffect(() => () => clearLongPress(), []);
 
-  if (useLongPress) {
+  const longPressEnabled = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG);
+  if (longPressEnabled) {
     return (
       <div
         className="relative"
