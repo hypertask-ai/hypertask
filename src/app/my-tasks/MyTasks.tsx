@@ -194,8 +194,10 @@ const MyTasks = ({
   useEffect(() => {
     if (!myTasksScopesFlag) return;
     if (!scopesEnabled) return;
-    if (lastFetchedScopesKey.current === scopesKey) return;
+    // Always invalidate in-flight fetches when scopesKey changes, including
+    // when returning to an already-displayed selection.
     const token = ++scopesFetchToken.current;
+    if (lastFetchedScopesKey.current === scopesKey) return;
     const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
     void (async () => {
       try {
