@@ -66,6 +66,11 @@ export type MyTasksViewConfig = {
    * flag-off saves do not wipe a stored choice.
    */
   scopes?: MyTasksScope[];
+  /**
+   * Board used by My Tasks quick-add (HTPR-6460). Optional so older views keep
+   * working; null means unset and the UI asks once.
+   */
+  defaultBoardId?: number | null;
 };
 
 export type MyTasksSavedView = {
@@ -209,7 +214,17 @@ const KNOWN_CONFIG_KEYS = new Set([
   "groupBy",
   "tableVisibleColumns",
   "scopes",
+  "defaultBoardId",
 ]);
+
+/** Positive board id, or null when unset / invalid. */
+export function parseMyTasksDefaultBoardId(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
 
 const parseFilterSettings = (
   value: unknown,
@@ -268,6 +283,10 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
   const scopes = normalizeMyTasksScopes(
     value.scopes === undefined ? DEFAULT_MY_TASKS_SCOPES : value.scopes,
   );
+  const defaultBoardId =
+    value.defaultBoardId === undefined
+      ? undefined
+      : parseMyTasksDefaultBoardId(value.defaultBoardId);
 
   const extras: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -296,5 +315,6 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
     ...(groupBy ? { groupBy } : {}),
     ...(tableVisibleColumns ? { tableVisibleColumns } : {}),
     scopes,
+    ...(defaultBoardId !== undefined ? { defaultBoardId } : {}),
   };
 }

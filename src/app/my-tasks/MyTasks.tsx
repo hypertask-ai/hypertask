@@ -15,6 +15,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
+  MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -79,6 +80,7 @@ import {
   normalizeMyTasksTableVisibleColumns,
 } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 import TableColumnsPicker from "@/components/PageComponents/Kanban/TableView/TableColumnsPicker";
+import MyTasksQuickAdd from "./MyTasksQuickAdd";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
@@ -150,6 +152,7 @@ const MyTasks = ({
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
+  const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
@@ -703,6 +706,52 @@ const MyTasks = ({
     return { ...body.view, config: parseMyTasksViewConfig(body.view.config) };
   };
 
+  const persistQuickAddDefaultBoard = useCallback(
+    async (viewId: number, defaultBoardId: number) => {
+      const target = views.find((view) => view.id === viewId);
+      const baseConfig =
+        viewId === activeViewId
+          ? viewConfig
+          : parseMyTasksViewConfig(target?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG);
+      const nextConfig = parseMyTasksViewConfig({
+        ...baseConfig,
+        defaultBoardId,
+      });
+      const saved = await patchView(viewId, { config: nextConfig });
+      setViews((current) =>
+        current.map((view) => (view.id === saved.id ? saved : view)),
+      );
+      if (viewId === activeViewId) {
+        updateViewConfig(saved.config);
+      }
+    },
+    [activeViewId, updateViewConfig, viewConfig, views],
+  );
+
+  const refreshMyTasksAfterQuickAdd = useCallback(
+    async (taskId: number) => {
+      try {
+        const response = await fetch(buildMyTasksListUrl(scopesRef.current), {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) return false;
+        const payload = parseMyTasksListPayload(await response.json());
+        if (!payload) return false;
+        setSections(payload.sections);
+        setTabs(payload.tabs);
+        setBoards(payload.boards);
+        setAccessibleProjectIds(payload.accessibleProjectIds);
+        return payload.sections.some((section) =>
+          (section.items ?? []).some((item) => item.id === taskId),
+        );
+      } catch {
+        return false;
+      }
+    },
+    [],
+  );
+
   const saveView = async () => {
     if (!activeView) return;
     const requestToken = ++saveRequestToken.current;
@@ -965,6 +1014,17 @@ const boardTabCounts = useMemo(() => {
       </div>
 
       <div className="mt-3 flex-1 min-h-0 w-full">
+        {myTasksQuickAddEnabled ? (
+          <MyTasksQuickAdd
+            currentUser={currentUser}
+            activeViewId={activeViewId}
+            viewConfig={viewConfig}
+            scopes={reconcileScopes}
+            accessibleProjectIds={accessibleProjectIds}
+            onPersistDefaultBoard={persistQuickAddDefaultBoard}
+            onRefresh={refreshMyTasksAfterQuickAdd}
+          />
+        ) : null}
         <TableView
           filteredSections={visibleSections}
           _sections={visibleSections}
