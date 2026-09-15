@@ -17,6 +17,7 @@ import {
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
+  MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -41,10 +42,13 @@ import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { filterMyTasksByPriority } from "@/lib/myTasksFiltering";
 import {
   applyMyTasksView,
+  overdueCountForMyTasksView,
   sortMyTasksViewSections,
   type MyTasksTask,
 } from "@/lib/myTasksFiltering";
 import {
+  countMyTasksOverdue,
+  countMyTasksOverdueByBoard,
   getMyTasksSplitIndex,
   groupMyTasksByTime,
 } from "@/lib/myTasksGrouping";
@@ -165,6 +169,7 @@ const MyTasks = ({
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
+  const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
@@ -407,11 +412,11 @@ const MyTasks = ({
   ]);
 
   useEffect(() => {
-    if (!viewsFeatureEnabled) return;
+    if (!viewsFeatureEnabled && !overdueBadgesEnabled) return;
     const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
     window.addEventListener("focus", refreshDateFilters);
     return () => window.removeEventListener("focus", refreshDateFilters);
-  }, [viewsFeatureEnabled]);
+  }, [overdueBadgesEnabled, viewsFeatureEnabled]);
 
   const activeView = views.find((view) => view.id === activeViewId);
   const baselineConfig = parseMyTasksViewConfig(
@@ -983,6 +988,79 @@ const boardTabCounts = useMemo(() => {
     return index === 0 ? totalCount : filteredSections[index - 1]?.items.length ?? 0;
   };
 
+  const viewOverdueCounts = useMemo(() => {
+    if (!overdueBadgesEnabled || !viewsFeatureEnabled) {
+      return { all: 0, byViewId: {} as Record<number, number> };
+    }
+    const now = new Date();
+    const options = {
+      applyFilterSettings: filterParityEnabled,
+      runtimeContext,
+    };
+    const allConfig =
+      activeViewId === null
+        ? viewConfig
+        : parseMyTasksViewConfig(DEFAULT_MY_TASKS_VIEW_CONFIG);
+    const byViewId: Record<number, number> = {};
+    for (const view of views) {
+      const config =
+        view.id === activeViewId
+          ? viewConfig
+          : parseMyTasksViewConfig(view.config);
+      byViewId[view.id] = overdueCountForMyTasksView(
+        sections,
+        config,
+        now,
+        options,
+      );
+    }
+    return {
+      all: overdueCountForMyTasksView(sections, allConfig, now, options),
+      byViewId,
+    };
+  }, [
+    activeViewId,
+    dateFilterVersion,
+    filterParityEnabled,
+    overdueBadgesEnabled,
+    runtimeContext,
+    sections,
+    viewConfig,
+    views,
+    viewsFeatureEnabled,
+  ]);
+
+  const splitOverdueCounts = useMemo(() => {
+    if (!overdueBadgesEnabled) return [] as number[];
+    const now = new Date();
+    if (viewsFeatureEnabled && groupBy === "time") {
+      const { total, byBoardId } = countMyTasksOverdueByBoard(
+        allTasksForBoardTabs,
+        now,
+      );
+      return [
+        total,
+        ...availableBoards.map((board) => byBoardId.get(board.id) ?? 0),
+      ];
+    }
+    const sectionCounts = filteredSections.map((section) =>
+      countMyTasksOverdue(section.items, now),
+    );
+    const total = sectionCounts.reduce((sum, count) => sum + count, 0);
+    return [total, ...sectionCounts];
+  }, [
+    allTasksForBoardTabs,
+    availableBoards,
+    dateFilterVersion,
+    filteredSections,
+    groupBy,
+    overdueBadgesEnabled,
+    viewsFeatureEnabled,
+  ]);
+
+  const tabOverdue = (index: number) =>
+    overdueBadgesEnabled ? (splitOverdueCounts[index] ?? 0) : 0;
+
   const togglePriority = (priority: IPrioritiesConstants) =>
     setPrioritySelection((current) =>
       current.some((p) => p.priority_index === priority.priority_index)
@@ -1000,6 +1078,7 @@ const boardTabCounts = useMemo(() => {
         project: item,
         length: tabLength(index),
         hasUnseen: false,
+        overdueCount: tabOverdue(index),
       }}
     />
   ));
@@ -1023,6 +1102,8 @@ const boardTabCounts = useMemo(() => {
             onRename={(viewId, name) => void renameView(viewId, name)}
             onDelete={(viewId) => void deleteView(viewId)}
             onSetDefault={(viewId) => void setDefaultView(viewId)}
+            overdueAll={viewOverdueCounts.all}
+            overdueByViewId={viewOverdueCounts.byViewId}
           />
         </div>
       )}
