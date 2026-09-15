@@ -67,7 +67,7 @@ export function myTasksQuickAddTaskVisibleInPayload(
   options: QuickAddVisibilityOptions,
 ): boolean {
   const now = new Date();
-  if (!options.viewsFeatureEnabled) {
+  if (!options.viewsFeatureEnabled && options.groupBy !== "time") {
     const priorityFiltered = filterMyTasksByPriority(
       payload.sections,
       options.filterEnabled ? [...options.prioritySelection] : [],

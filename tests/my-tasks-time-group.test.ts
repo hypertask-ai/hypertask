@@ -7,6 +7,7 @@ import {
 } from "../src/lib/myTasksGrouping";
 import {
   effectiveMyTasksGroupBy,
+  myTasksTimeGroupOn,
   parseMyTasksViewConfig,
 } from "../src/models/MyTasksView";
 
@@ -22,6 +23,12 @@ test("effectiveMyTasksGroupBy defaults to time when the flag is on and groupBy i
   assert.equal(effectiveMyTasksGroupBy({}, true), "time");
   assert.equal(effectiveMyTasksGroupBy({ groupBy: "board" }, true), "board");
   assert.equal(effectiveMyTasksGroupBy({ groupBy: "time" }, true), "time");
+});
+
+test("myTasksTimeGroupOn uses the server flag so the first paint is not board-grouped", () => {
+  assert.equal(myTasksTimeGroupOn(true, false), true);
+  assert.equal(myTasksTimeGroupOn(false, true), true);
+  assert.equal(myTasksTimeGroupOn(false, false), false);
 });
 
 test("parseMyTasksViewConfig preserves groupBy and drops invalid values", () => {
