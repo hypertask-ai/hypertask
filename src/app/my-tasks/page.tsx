@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
   MY_TASKS_LIVE_UPDATES_FLAG,
+  MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -51,9 +52,10 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [viewsEnabled, scopesEnabled] = await Promise.all([
+  const [viewsEnabled, scopesEnabled, overdueBadgesEnabled] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
+    isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, sessionUser.userId),
   ]);
   const snoozeEnabled = await isFeatureEnabled(
     MY_TASKS_SNOOZE_FLAG,
@@ -142,6 +144,13 @@ export default async function Page({
     <Suspense fallback={<>Loading...</>}>
       {snoozeEnabled ? (
         <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
+      ) : null}
+      {overdueBadgesEnabled ? (
+        <span
+          className="hidden"
+          data-htpr-6459-my-tasks-overdue-badges
+          aria-hidden
+        />
       ) : null}
       {scopesEnabled ? (
         <MyTasks

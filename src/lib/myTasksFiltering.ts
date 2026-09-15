@@ -1,7 +1,10 @@
 import type { ISection } from "@/models/model";
 import { addDays, endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
 import type { IPrioritiesConstants } from "@/lib/constants/constants";
-import { compareMyTasksByDueDate } from "@/lib/myTasksGrouping";
+import {
+  compareMyTasksByDueDate,
+  countMyTasksOverdue,
+} from "@/lib/myTasksGrouping";
 import type { IProject, ITask } from "@/models/model";
 import {
   hasMigratableFlatFilters,
@@ -266,6 +269,18 @@ export function applyMyTasksView(
       return matchesFlatTaskFilters(task, filters, now);
     })
     .sort(myTasksSortComparator(config, now));
+}
+
+/** Overdue rows that remain after a saved (or dirty) My Tasks view's filters. */
+export function overdueCountForMyTasksView(
+  sections: ISection[],
+  rawConfig: MyTasksViewConfig,
+  now: Date = new Date(),
+  options: ApplyMyTasksViewOptions = {},
+): number {
+  const config = parseMyTasksViewConfig(rawConfig);
+  const flat = sections.flatMap((section) => section.items as MyTasksTask[]);
+  return countMyTasksOverdue(applyMyTasksView(flat, config, now, options), now);
 }
 
 export function sortMyTasksViewSections(
