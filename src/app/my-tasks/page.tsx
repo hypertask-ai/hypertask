@@ -9,6 +9,7 @@ import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
@@ -51,9 +52,10 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [viewsEnabled, scopesEnabled] = await Promise.all([
+  const [viewsEnabled, scopesEnabled, timeGroupEnabled] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
+    isFeatureEnabled(MY_TASKS_TIME_GROUP_FLAG, sessionUser.userId),
   ]);
   const snoozeEnabled = await isFeatureEnabled(
     MY_TASKS_SNOOZE_FLAG,
@@ -143,6 +145,9 @@ export default async function Page({
       {snoozeEnabled ? (
         <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
       ) : null}
+      {timeGroupEnabled ? (
+        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
+      ) : null}
       {scopesEnabled ? (
         <MyTasks
           sections={myTasks.sections}
@@ -156,6 +161,7 @@ export default async function Page({
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
+          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled
         />
       ) : (
@@ -171,6 +177,7 @@ export default async function Page({
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
+          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled={false}
         />
       )}

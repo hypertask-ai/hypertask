@@ -200,6 +200,7 @@ const groupByValue = (value: unknown): MyTasksGroupBy | undefined =>
 /**
  * Flag-off always returns board. Flag-on uses the saved value, or time when
  * the field is missing so My Tasks defaults to a personal to-do layout.
+ * This does not depend on the saved-views flag: 6455 is enough.
  */
 export function effectiveMyTasksGroupBy(
   config: Pick<MyTasksViewConfig, "groupBy">,
@@ -207,6 +208,17 @@ export function effectiveMyTasksGroupBy(
 ): MyTasksGroupBy {
   if (!flagEnabled) return "board";
   return config.groupBy ?? "time";
+}
+
+/**
+ * Server `isFeatureEnabled` covers the first paint. Client `useFlag` is false
+ * until /api/flags loads, which is why QA still photographed board groups.
+ */
+export function myTasksTimeGroupOn(
+  serverEnabled: boolean,
+  clientEnabled: boolean,
+): boolean {
+  return Boolean(serverEnabled || clientEnabled);
 }
 
 const KNOWN_CONFIG_KEYS = new Set([
