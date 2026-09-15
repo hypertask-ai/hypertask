@@ -391,9 +391,13 @@ async function main() {
     taskDetailLoad,
     /hiddenCommentAgent\(userId, Prisma\.sql`ti\."projectId"`\)/,
   );
-  assert.match(
+  assert.doesNotMatch(
     taskDetailLoad,
     /agent\.id IS NULL AND c\."agentDisplayName" IS NOT NULL/,
+  );
+  assert.match(
+    taskDetailLoad,
+    /agent\.id IS NOT NULL/,
   );
   assert.match(taskDetailLoad, /visibility_agent_member\."agentId" = agent\.id/);
   assert.match(

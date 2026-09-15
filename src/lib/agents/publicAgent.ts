@@ -27,6 +27,23 @@ const agentRelationKeys = new Set([
 
 export const PRIVATE_AGENT_DISPLAY_NAME = "Private agent";
 
+/**
+ * A living agent the viewer cannot see stays "Private agent". A deleted agent
+ * has no row left, so the name copied at write time is what we show — never
+ * the owner's name.
+ */
+export function resolvePublicAgentDisplayName(opts: {
+  hasAgentRow: boolean;
+  visibleAgent?: { displayName?: string | null } | null;
+  storedDisplayName?: string | null;
+}): string | null {
+  if (opts.hasAgentRow && !opts.visibleAgent) return PRIVATE_AGENT_DISPLAY_NAME;
+  const stored = opts.storedDisplayName?.trim();
+  if (stored) return stored;
+  const live = opts.visibleAgent?.displayName?.trim();
+  return live || null;
+}
+
 const privateAgentAttribution = {
   displayName: PRIVATE_AGENT_DISPLAY_NAME,
   photoURL: null,

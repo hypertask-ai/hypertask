@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
+import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
@@ -306,9 +307,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       user.id,
       comment.task.projectId
     )
-    const hasAgentAttribution = Boolean(
-      commentWithAgent?.agent || commentWithAgent?.agentDisplayName
-    )
+    const agentDisplayName = resolvePublicAgentDisplayName({
+      hasAgentRow: Boolean(commentWithAgent?.agent),
+      visibleAgent: agent,
+      storedDisplayName: commentWithAgent?.agentDisplayName,
+    })
 
     const response: UpdateCommentResponse = {
       success: true,
@@ -318,8 +321,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         createdAt: updatedComment.createdAt.toISOString(),
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),
-        ...(hasAgentAttribution
-          ? { agent_display_name: agent?.displayName || 'Private agent' }
+        ...(agentDisplayName
+          ? { agent_display_name: agentDisplayName }
           : {}),
       }
     }

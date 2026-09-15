@@ -56,6 +56,7 @@ import {
   MY_TASKS_SNOOZE_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -79,6 +80,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the agent that made a comment, move, assignment or label change by the name it acted under, including after that agent is deleted. Without it a retired agent reads as Private agent.",
+  },
   {
     key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
     shippedOn: "2026-09-15",

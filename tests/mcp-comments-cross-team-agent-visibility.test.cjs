@@ -42,6 +42,18 @@ function loadRoute(comments) {
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent },
+    "@/lib/agents/publicAgent": {
+      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName }) {
+        if (hasAgentRow && !visibleAgent) return "Private agent";
+        const stored = storedDisplayName && String(storedDisplayName).trim();
+        if (stored) return stored;
+        const live =
+          visibleAgent &&
+          visibleAgent.displayName &&
+          String(visibleAgent.displayName).trim();
+        return live || null;
+      },
+    },
     "@/utils/controllers/urls/extractUrlsFromContent": {
       buildMcpImageUrls: () => [],
       persistUrlsForComment: async () => {},

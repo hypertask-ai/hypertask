@@ -92,6 +92,7 @@ import {
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
+import { resolvePublicAgentDisplayName } from "@/lib/agents/publicAgent";
 import {
   listOwnedAgents,
   type AgentManagementDatabase,
@@ -1918,7 +1919,11 @@ const stripInlineDataUris = (html: string) =>
 
 function mapCommentToResponse(comment: any, userId: number, projectId: number) {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId);
-  const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
+  const agentDisplayName = resolvePublicAgentDisplayName({
+    hasAgentRow: Boolean(comment.agent),
+    visibleAgent: agent,
+    storedDisplayName: comment.agentDisplayName,
+  });
   const text = stripInlineDataUris(comment.text);
   return {
     id: comment.id,
@@ -1934,8 +1939,8 @@ function mapCommentToResponse(comment: any, userId: number, projectId: number) {
         }
       : undefined,
     ...(agent ? { agent } : {}),
-    ...(hasAgentAttribution
-      ? { agent_display_name: agent?.displayName || "Private agent" }
+    ...(agentDisplayName
+      ? { agent_display_name: agentDisplayName }
       : {}),
     attachments: (comment.attachments ?? []).map((attachment: any) => ({
       id: attachment.id,
@@ -4693,11 +4698,15 @@ function buildTools(
             user.id,
             input.project_id
           );
+          const agentDisplayName = resolvePublicAgentDisplayName({
+            hasAgentRow: Boolean(comment.agent),
+            visibleAgent: agent,
+            storedDisplayName: comment.agentDisplayName,
+          });
           return {
             id: comment.id,
             author:
-              agent?.displayName ||
-              (comment.agent || comment.agentDisplayName ? "Private agent" : undefined) ||
+              agentDisplayName ||
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown",
