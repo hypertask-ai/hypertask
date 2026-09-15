@@ -23,6 +23,25 @@ const project = (overrides: Partial<IProject> = {}) =>
     ...overrides,
   }) as IProject;
 
+test("ExtraMinimal payload includes ownership fields Settings Delete needs", () => {
+  const source = read("src/utils/controllers/projects/getAllMinimal.ts");
+  const includeStart = source.indexOf(
+    "export function extraMinimalProjectInclude",
+  );
+  const includeEnd = source.indexOf(
+    "export const extraMinimalProjectWhere",
+    includeStart,
+  );
+  assert.ok(includeStart > -1);
+  assert.ok(includeEnd > includeStart);
+  const include = source.slice(includeStart, includeEnd);
+  assert.match(include, /ownerId:\s*true/);
+  assert.match(
+    include,
+    /members:\s*\{[\s\S]*?select:\s*\{[\s\S]*?userId:\s*true[\s\S]*?role:\s*true[\s\S]*?status:\s*true[\s\S]*?agentId:\s*true/,
+  );
+});
+
 test("board lifecycle permissions match the server owner/admin boundary", () => {
   assert.equal(canManageBoardLifecycle(project(), 6), true);
   assert.equal(
@@ -56,6 +75,19 @@ test("board lifecycle permissions match the server owner/admin boundary", () => 
   );
   assert.equal(canLeaveBoard(project(), 6), false);
   assert.equal(canLeaveBoard(project({ ownerId: "9" }), 6), true);
+  // ExtraMinimal used to omit ownerId; missing must not grant Leave.
+  assert.equal(
+    canLeaveBoard(project({ ownerId: undefined as unknown as string }), 6),
+    false,
+  );
+  assert.equal(canLeaveBoard(project({ ownerId: "" }), 6), false);
+  assert.equal(
+    canManageBoardLifecycle(
+      project({ ownerId: undefined as unknown as string }),
+      6,
+    ),
+    false,
+  );
 });
 
 test("archived board recovery stays scoped to the selected team", () => {
