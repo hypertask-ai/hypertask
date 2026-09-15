@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
     const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
 
-    const myTasks = await getMyTasks(userId, viewsEnabled, scopes);
+    const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
+      throwOnError: true,
+    });
     return NextResponse.json(myTasks, {
       headers: {
         "Cache-Control": "private, no-store",

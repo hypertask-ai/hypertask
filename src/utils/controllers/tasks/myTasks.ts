@@ -17,6 +17,7 @@ const getMyTasks = async (
   userId: number,
   includeViewMetadata = false,
   scopes: MyTasksScope[] = DEFAULT_MY_TASKS_SCOPES,
+  options: { throwOnError?: boolean } = {},
 ) => {
   try {
     const { json: projects } = await getAllMinimal(
@@ -204,6 +205,7 @@ const getMyTasks = async (
     return { ...grouped, boards };
   } catch (error) {
     console.log("🚀 ~ getMyTasks ~ error:", error);
+    if (options.throwOnError) throw error;
     return { sections: [], tabs: ["All"], boards: [] as MyTasksBoardMetadata[] };
   }
 };

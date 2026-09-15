@@ -175,25 +175,26 @@ const MyTasks = ({
   );
   useClickOutside(filterRef, () => setFilterOpen(false));
 
-  useEffect(() => {
-    setSections(initialSections);
-    setTabs(initialTabs);
-    setBoards(initialBoards);
-  }, [initialBoards, initialSections, initialTabs]);
-
   const scopesKey = JSON.stringify(
     effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
   );
 
   useEffect(() => {
-    if (!myTasksScopesFlag) return;
-    if (!scopesEnabled) return;
-    if (lastFetchedScopesKey.current === null) {
-      lastFetchedScopesKey.current = scopesKey;
+    if (
+      lastFetchedScopesKey.current !== null &&
+      lastFetchedScopesKey.current !== scopesKey
+    ) {
       return;
     }
+    setSections(initialSections);
+    setTabs(initialTabs);
+    setBoards(initialBoards);
+  }, [initialBoards, initialSections, initialTabs, scopesKey]);
+
+  useEffect(() => {
+    if (!myTasksScopesFlag) return;
+    if (!scopesEnabled) return;
     if (lastFetchedScopesKey.current === scopesKey) return;
-    lastFetchedScopesKey.current = scopesKey;
     const token = ++scopesFetchToken.current;
     const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
     void (async () => {
@@ -213,6 +214,7 @@ const MyTasks = ({
         };
         if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
+        lastFetchedScopesKey.current = scopesKey;
         setSections(body.sections);
         if (Array.isArray(body.tabs)) setTabs(body.tabs);
         if (Array.isArray(body.boards)) setBoards(body.boards);
@@ -223,6 +225,12 @@ const MyTasks = ({
       }
     })();
   }, [myTasksScopesFlag, scopesEnabled, scopesKey, viewConfig.scopes]);
+
+  useEffect(() => {
+    if (lastFetchedScopesKey.current === null) {
+      lastFetchedScopesKey.current = scopesKey;
+    }
+  }, [scopesKey]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled) return;
