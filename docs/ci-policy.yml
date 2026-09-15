@@ -46,9 +46,35 @@ required_checks:
   # An administrator applied these checks through GitHub's ruleset API on
   # 2026-09-08. ci-tests verifies this live ruleset before every build.
   contexts: [app-smoke, ci-tests, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
-  automerge_also_requires: [app-smoke, ci-tests, feature-flag-gate]
+  automerge_also_requires: [app-smoke, ci-tests, feature-flag-gate, design-gate]
+  # design-gate is enforced by the automerge REQUIRED list only. It is not in
+  # contexts above, because ci-tests verifies contexts against the live branch
+  # ruleset and only an administrator can add a context there. Promote it once
+  # an administrator has added it to the ruleset, and not before.
   # ci-tests normally reports after the full-ci label arrives (see
   # review_first_gate); automerge treats a missing result as not green.
+
+design_gate:
+  workflow: .github/workflows/design-gate.yml
+  runner_script: .github/scripts/design-gate.mjs
+  lint_script: scripts/design-lint.mjs
+  rules: docs/design/STYLE-GUIDE.md
+  canonical_guide: openwiki/style-guide.md
+  allowlist: docs/design/lint-allow.txt
+  runs_on: ubuntu-latest
+  trusted_script_source: production_base_commit
+  execute_pull_request_code: false
+  scope: changed_lines_only
+  reports_on_every_pull_request: true
+  reconciliation: production_push_and_pull_request_target_events
+  gating: automerge_required_list
+  in_branch_ruleset: false
+  # The model half of the design review is not an app-repo lane. claude-review
+  # lives in valentinyeo/hypertask-reviewer, this repository is public so fork
+  # pull requests carry no secrets, and app workflows cannot schedule the review
+  # runner. The design rules are carried in the review contract section of
+  # openwiki/style-guide.md, which the reviewer already reads.
+  model_review_lane: claude-review
 
 feature_flag_gate:
   workflow: .github/workflows/feature-flag-gate.yml

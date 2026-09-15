@@ -1,6 +1,6 @@
 # Hypertask Design System
 
-The canonical visual contract is [`openwiki/style-guide.md`](../openwiki/style-guide.md). This page keeps longer component and workflow examples. If an example here disagrees with the canonical guide or production code, follow the guide and update this page.
+The canonical visual contract is [`openwiki/style-guide.md`](../openwiki/style-guide.md). [`design/STYLE-GUIDE.md`](design/STYLE-GUIDE.md) is the checkable subset the `design-gate` check enforces; run `node scripts/design-lint.mjs` before you open a pull request. This page keeps longer component and workflow examples. If an example here disagrees with the canonical guide or production code, follow the guide and update this page.
 
 ## The one rule
 

@@ -1,0 +1,89 @@
+name: Design Gate
+
+# Blocks a pull request that introduces styling docs/design/STYLE-GUIDE.md
+# forbids. The rules are canonically openwiki/style-guide.md.
+#
+# Two things make this trustworthy:
+#
+#   1. It runs from a production checkout, so the linter and the allowlist come
+#      from the trusted base commit, not from the pull request. A pull request
+#      cannot pass itself by editing scripts/design-lint.mjs or
+#      docs/design/lint-allow.txt. This mirrors feature-flag-gate's
+#      trusted_script_source: production_base_commit.
+#   2. It reads diff text only and never executes pull-request code, which is
+#      what makes pull_request_target safe here.
+#
+# There is deliberately no `paths:` filter. A path-filtered required check never
+# reports on a docs-only pull request, which would deadlock automerge for the
+# whole repository. The job runs on every pull request and exits clean when no
+# linted UI file changed.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  # A pull request opened before this gate existed has no design-gate status and
+  # would sit unmergeable forever. Every production push reconciles the open set.
+  push:
+    branches: [production]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: design-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  design-gate:
+    name: design-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Evaluate the changed lines with trusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -uo pipefail
+
+          if [ ! -f scripts/design-lint.mjs ]; then
+            echo "Production has no design-lint yet; nothing to enforce."
+            exit 0
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request_target" ]; then
+            if [ "$PR_BASE_REF" != "production" ]; then
+              echo "Pull request #$PR_NUMBER does not target production; skipping."
+              exit 0
+            fi
+            numbers="$PR_NUMBER"
+          else
+            numbers=$(gh api --paginate --slurp \
+              "repos/$REPO/pulls?state=open&base=production&per_page=100" \
+              --jq 'flatten[] | .number' | tr '\n' ' ')
+            if [ -z "${numbers// /}" ]; then
+              echo "No open production pull requests to reconcile."
+              exit 0
+            fi
+          fi
+
+          # shellcheck disable=SC2086
+          node .github/scripts/design-gate.mjs $numbers
