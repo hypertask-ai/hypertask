@@ -66,8 +66,7 @@ const hiddenCommentAgent = (
   userId: number,
   projectId: Prisma.Sql,
 ) => Prisma.sql`
-  (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
-  OR (
+  (
     agent.id IS NOT NULL
     AND agent."userId" <> ${userId}
     AND NOT (

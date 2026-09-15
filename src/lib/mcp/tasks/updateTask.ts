@@ -36,6 +36,7 @@ import {
     isActiveTaskMutationTarget,
 } from "@/lib/mcp/tasks/activeTaskMutation";
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { actingAgentSelect } from "@/lib/agents/activityAttribution";
 import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests";
 import {
     linkTaskPullRequest,
@@ -761,6 +762,12 @@ export async function executeTaskUpdate({
     }
 
     const persistTaskUpdates = async (): Promise<UpdateTaskResponse> => {
+    const actingAgent = ctx.agentId
+        ? await prisma.agent.findUnique({
+            where: { id: ctx.agentId, revokedAt: null },
+            select: actingAgentSelect,
+        })
+        : null;
     // Update all tasks in parallel
     const updatePromises: Promise<TaskUpdateResult>[] = tasks.map(
         async (task): Promise<TaskUpdateResult> => {
@@ -969,7 +976,8 @@ export async function executeTaskUpdate({
                         task.id,
                         task.projectId,
                         requestBody.labels!,
-                        userObj
+                        userObj,
+                        actingAgent
                     );
                 } catch (labelError) {
                     console.warn(`[MCP Update Task] Failed to update labels for task ${task.id}:`, labelError);
@@ -988,7 +996,8 @@ export async function executeTaskUpdate({
                             remove: requestBody.remove_labels,
                             skipIfPresent: requestBody.skip_if_labels_present,
                         },
-                        userObj
+                        userObj,
+                        actingAgent
                     );
                 } catch (labelError) {
                     console.warn(`[MCP Update Task] Failed to mutate labels for task ${task.id}:`, labelError);

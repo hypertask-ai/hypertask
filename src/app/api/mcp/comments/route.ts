@@ -38,6 +38,7 @@ import {
   mapMcpCommentReaction,
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
+import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 
 export interface CommentItem {
   id: number
@@ -156,10 +157,11 @@ function mapCommentToResponse(
   includeActivity = false
 ): CommentItem {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
-  const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
-  const agentDisplayName = agentVisible
-    ? comment.agentDisplayName
-    : 'Private agent'
+  const agentDisplayName = resolvePublicAgentDisplayName({
+    hasAgentRow: Boolean(comment.agent),
+    visibleAgent: agent,
+    storedDisplayName: comment.agentDisplayName,
+  })
   const mappedComment: CommentItem = {
     id: comment.id,
     text: comment.text,
@@ -802,6 +804,9 @@ export async function POST(request: NextRequest) {
             createdAt: (comment.createdAt instanceof Date ? comment.createdAt : new Date()).toISOString(),
             creatorId: comment.creatorId || user.id,
             ...(mappedComment?.agent ? { agent: mappedComment.agent } : {}),
+            ...(mappedComment?.agent_display_name
+              ? { agent_display_name: mappedComment.agent_display_name }
+              : {}),
             attachments: mappedComment?.attachments?.map(att => ({
               id: att.id,
               fileName: att.fileName,

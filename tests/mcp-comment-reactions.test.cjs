@@ -192,6 +192,18 @@ function loadCommentsRoute({
           : undefined,
       mcpVisibleAgentSelect: () => ({}),
     },
+    '@/lib/agents/publicAgent': {
+      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName }) {
+        if (hasAgentRow && !visibleAgent) return 'Private agent'
+        const stored = storedDisplayName && String(storedDisplayName).trim()
+        if (stored) return stored
+        const live =
+          visibleAgent &&
+          visibleAgent.displayName &&
+          String(visibleAgent.displayName).trim()
+        return live || null
+      },
+    },
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/lib/mcp/tasks/resolveTask': {
       findTaskByIdentifier: async (...args) => { resolverCalls.push(args); return resolveTask(...args) },
@@ -314,7 +326,7 @@ test('MCP comments response includes mapped active reactions', async () => {
     false
   )
   assert.equal(response.body.comments[0].agent, undefined)
-  assert.equal(response.body.comments[0].agent_display_name, 'Private agent')
+  assert.equal(response.body.comments[0].agent_display_name, 'Deleted helper')
   assert.deepEqual(response.body.comments[1].reactions, [{
     id: 'reaction-7002',
     emoji: '👀',
