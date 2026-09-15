@@ -28,7 +28,7 @@ This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, res
 11. **Run `design-compliance`.** The diff is final. Now prove the UI matches the style guide and that `node scripts/design-lint.mjs` is clean, before `design-gate` says so on the PR.
 12. **Open the PR:**
    ```
-   ~/.config/hypertask-agents/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> BUGFIX "<short title>" \
+   .claude/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> BUGFIX "<short title>" \
      --body-file <path> [--lane <lane>]
    ```
    It pushes the current branch, opens the PR against `production`, titles it `HTPR-NNNN [BUGFIX] ...`, sets auto-merge to match the lane, moves the ticket, and reads the board back. It does not branch or commit: do that first. Default lane is `ai-review`.

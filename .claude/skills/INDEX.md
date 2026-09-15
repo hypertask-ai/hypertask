@@ -25,7 +25,7 @@ covers both packs' scripts.
 
 | Name | Trigger | Path |
 |---|---|---|
-| fix-bug | Ticket in Bugs describing wrong behaviour on app.hypertask.ai, where nothing visible changes | .claude/skills/fix-bug/SKILL.md |
+| fix-bug | Ticket in Bugs describing wrong behaviour on app.hypertask.ai, where the fix restores documented or obviously intended behaviour rather than adding something new. The result may well be visible. | .claude/skills/fix-bug/SKILL.md |
 | ship-feature-behind-flag | Ticket asking for new UI or behaviour the user has not seen before | .claude/skills/ship-feature-behind-flag/SKILL.md |
 | reuse-existing-ui | Any ticket that adds or changes UI, before writing a line of code | .claude/skills/reuse-existing-ui/SKILL.md |
 | simplify-before-pr | After the change works and tests pass, before opening the PR (`fix-bug` and `ship-feature-behind-flag` both call it right before their PR step) | .claude/skills/simplify-before-pr/SKILL.md |

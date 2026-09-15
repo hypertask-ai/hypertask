@@ -155,9 +155,9 @@ if [ "$DRY_RUN" = "yes" ]; then
   run git fetch "$REMOTE" "$BASE"
   run git push -u "$REMOTE" HEAD
   run gh pr create --base "$BASE" --title "$PR_TITLE" --body-file "$BODY_FILE"
-  if [ "$AUTOMERGE" = "yes" ]; then run gh pr merge --auto --squash; fi
   run hypertask task move "$TICKET" --section "$SECTION"
   run hypertask --json task get "$TICKET"
+  if [ "$AUTOMERGE" = "yes" ]; then run gh pr merge --auto --squash; fi
   printf 'DRY RUN OK: body file %s has all five write-pr-summary sections.\n' "$BODY_FILE"
   printf 'DRY RUN OK: %s would go to lane %s (section "%s"), automerge=%s, PR title: %s\n' \
     "$TICKET" "$LANE" "$SECTION" "$AUTOMERGE" "$PR_TITLE"
@@ -173,13 +173,6 @@ PR_URL="$(gh pr create --base "$BASE" --title "$PR_TITLE" --body-file "$BODY_FIL
   || die "gh pr create failed: $PR_URL" "Run 'gh auth status' and 'gh pr list --head \"\$(git branch --show-current)\"'. If a PR already exists, update it with 'gh pr edit' instead of opening a new one."
 PR_URL="$(printf '%s\n' "$PR_URL" | grep -oE 'https://github\.com/[^[:space:]]+' | tail -1)"
 [ -n "$PR_URL" ] || die "gh pr create returned no PR URL, so there is no PR to review." "Run 'gh pr list --head \"\$(git branch --show-current)\"' and open the PR by hand."
-
-if [ "$AUTOMERGE" = "yes" ]; then
-  gh pr merge --auto --squash \
-    || die "The PR is open at $PR_URL but auto-merge could not be turned on." "Run 'gh pr merge --auto --squash' in this worktree, or leave it off and tell the review lane a human has to press merge."
-else
-  printf '%s: auto-merge left OFF for lane %s, a human clears this one.\n' "$SELF" "$LANE"
-fi
 
 hypertask task move "$TICKET" --section "$SECTION" \
   || die "Moving $TICKET to '$SECTION' failed, so the PR at $PR_URL is open with the ticket in the wrong column." "Run 'hypertask project sections <project id>' to see the real section names, then 'hypertask task move $TICKET --section \"<name>\"'."
@@ -199,6 +192,16 @@ NOW_ASSIGNEES="${NOW##*$'\t'}"
   || die "Could not read $TICKET back from the board after the move, so the PR at $PR_URL is unverified." "Run 'hypertask --json task get $TICKET' and confirm the section by eye before handing off."
 [ "$NOW_SECTION" = "$SECTION" ] \
   || die "$TICKET is in '$NOW_SECTION', not '$SECTION', after the move, so the PR at $PR_URL is in the wrong review queue." "Run 'hypertask task move $TICKET --section \"$SECTION\"' and check 'hypertask project sections <project id>' for the exact spelling."
+
+# Auto-merge is armed last, after the board has been read back. Arming it
+# before the move meant a PR could merge itself while its ticket sat in the
+# wrong column, with nobody in the review lane aware it existed.
+if [ "$AUTOMERGE" = "yes" ]; then
+  gh pr merge --auto --squash \
+    || die "The PR is open at $PR_URL but auto-merge could not be turned on." "Run 'gh pr merge --auto --squash' in this worktree, or leave it off and tell the review lane a human has to press merge."
+else
+  printf '%s: auto-merge left OFF for lane %s, a human clears this one.\n' "$SELF" "$LANE"
+fi
 
 printf '%s: PR opened.\n' "$SELF"
 printf '  pr:        %s\n' "$PR_URL"

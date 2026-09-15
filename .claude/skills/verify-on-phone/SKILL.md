@@ -17,7 +17,7 @@ A pre-PR gate for any ticket whose change is visible on screen. Run it before `o
 1. **Take the pre-PR shot from the local dev server:**
    ```
    npm run dev   # in your worktree, backgrounded; wait for it to report ready on :3000
-   ~/.config/hypertask-agents/skills/verify-on-phone/scripts/phone-shot.sh http://localhost:3000/<path> <out.png>
+   .claude/skills/verify-on-phone/scripts/phone-shot.sh http://localhost:3000/<path> <out.png>
    ```
    `phone-shot.sh` takes any URL, local or production. It drives `agent-browser` at 390x844 with a mobile Safari user agent. Local dev serves the app unauthenticated in most flows; if the page you're checking requires a signed-in session, pass `--state` pointed at your own runtime's auth state (`$HT_PRODUCTION_STORAGE_STATE_FILE`), never QA's.
    **`storageState-qa.json` and `storageState-qa-normal.json` belong to the QA agent. Do not point `--state` at them.** Borrowing another agent's credentials is banned, and QA's independent verification stops being independent if you shoot with its session. Use `--state <path>` only for a state file that is yours.

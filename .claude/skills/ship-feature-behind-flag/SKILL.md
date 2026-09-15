@@ -20,7 +20,7 @@ Use with `ticket-lifecycle` (company pack) (board mechanics), `verify-on-phone` 
 9. **Run `design-compliance`.** The diff is final. Now prove the new UI matches the style guide and that `node scripts/design-lint.mjs` is clean, before `design-gate` says so on the PR.
 10. **Write the PR body** with `talk-to-valentin` (company pack) into a file, then open the PR:
    ```
-   ~/.config/hypertask-agents/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> FEATURE "<short title>" \
+   .claude/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> FEATURE "<short title>" \
      --body-file <path> [--lane <lane>]
    ```
    Same script `fix-bug` uses; `FEATURE` sets the title to `HTPR-NNNN [FEATURE] ...`. Default lane `ai-review` (auto-merge on) is right for an ordinary flagged feature.
