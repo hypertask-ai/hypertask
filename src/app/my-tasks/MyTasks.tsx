@@ -707,25 +707,43 @@ const MyTasks = ({
   };
 
   const persistQuickAddDefaultBoard = useCallback(
-    async (viewId: number, defaultBoardId: number) => {
+    async (viewId: number | null, defaultBoardId: number) => {
+      if (viewId === null) {
+        try {
+          localStorage.setItem(
+            "htpr-6460-my-tasks-default-board",
+            String(defaultBoardId),
+          );
+        } catch {
+          // Ignore quota / private-mode failures; in-memory config still updates.
+        }
+        updateViewConfig((current) => ({ ...current, defaultBoardId }));
+        return;
+      }
       const target = views.find((view) => view.id === viewId);
-      const baseConfig =
-        viewId === activeViewId
-          ? viewConfig
-          : parseMyTasksViewConfig(target?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG);
+      // Always patch from the last saved view, never the unsaved draft.
+      const baseConfig = parseMyTasksViewConfig(
+        target?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
+      );
       const nextConfig = parseMyTasksViewConfig({
         ...baseConfig,
         defaultBoardId,
       });
       const saved = await patchView(viewId, { config: nextConfig });
       setViews((current) =>
-        current.map((view) => (view.id === saved.id ? saved : view)),
+        current.map((view) =>
+          view.id === saved.id
+            ? saved
+            : view.id === viewId
+              ? { ...view, config: nextConfig }
+              : view,
+        ),
       );
       if (viewId === activeViewId) {
-        updateViewConfig(saved.config);
+        updateViewConfig((current) => ({ ...current, defaultBoardId }));
       }
     },
-    [activeViewId, updateViewConfig, viewConfig, views],
+    [activeViewId, updateViewConfig, views],
   );
 
   const refreshMyTasksAfterQuickAdd = useCallback(
@@ -742,14 +760,16 @@ const MyTasks = ({
         setTabs(payload.tabs);
         setBoards(payload.boards);
         setAccessibleProjectIds(payload.accessibleProjectIds);
-        return payload.sections.some((section) =>
-          (section.items ?? []).some((item) => item.id === taskId),
+        const flatTasks = payload.sections.flatMap(
+          (section) => (section.items ?? []) as MyTasksTask[],
         );
+        const visible = applyMyTasksView(flatTasks, viewConfig, new Date());
+        return visible.some((task) => task.id === taskId);
       } catch {
         return false;
       }
     },
-    [],
+    [viewConfig],
   );
 
   const saveView = async () => {

@@ -22,7 +22,7 @@ type Props = {
   scopes: readonly MyTasksScope[];
   accessibleProjectIds: readonly number[];
   onPersistDefaultBoard: (
-    viewId: number,
+    viewId: number | null,
     defaultBoardId: number,
   ) => Promise<void>;
   /** Returns true when the created task id is present after refresh. */
@@ -46,8 +46,20 @@ const MyTasksQuickAdd = ({
   const { data: projects = [], isFetched: projectsFetched } =
     useGetAllProjectsMinimal(["my-tasks-quick-add-projects"], []);
 
+  const sessionDefaultBoardId = (() => {
+    if (activeViewId !== null) return null;
+    if (viewConfig.defaultBoardId != null) return null;
+    try {
+      const raw = localStorage.getItem("htpr-6460-my-tasks-default-board");
+      const parsed = Number(raw);
+      return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+    } catch {
+      return null;
+    }
+  })();
+
   const resolvedBoardId = resolveMyTasksQuickAddBoardId(
-    viewConfig.defaultBoardId,
+    viewConfig.defaultBoardId ?? sessionDefaultBoardId,
     accessibleProjectIds,
   );
 
@@ -61,7 +73,6 @@ const MyTasksQuickAdd = ({
         section,
       });
       if (
-        viewId !== null &&
         resolveMyTasksQuickAddBoardId(
           viewConfig.defaultBoardId,
           accessibleProjectIds,
@@ -175,7 +186,7 @@ const MyTasksQuickAdd = ({
   return (
     <div className="mb-2 px-1 @md:px-[78px] @lg:px-[73px]">
       <p
-        className="mb-1 text-sm text-white-black/70"
+        className="mb-1 text-content text-text-light-gray"
         data-htpr-6460-quick-add-label=""
       >
         Quick add a task
