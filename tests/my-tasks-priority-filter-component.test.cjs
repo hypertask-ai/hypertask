@@ -88,6 +88,7 @@ stubSourceModule("src/lib/myTasks/reconcileMyTasks.ts", {
   buildMyTasksListUrl: () => "/api/my-tasks",
   createMyTasksReconcileRunner: () => ({
     request: () => {},
+    flush: async () => null,
     cancel: () => {},
   }),
   parseMyTasksListPayload: () => null,
