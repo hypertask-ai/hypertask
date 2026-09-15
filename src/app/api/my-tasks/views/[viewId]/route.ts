@@ -1,7 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { parseMyTasksViewConfig } from "@/models/MyTasksView";
+import { isFeatureEnabled, MY_TASKS_QUICK_ADD_FLAG } from "@/lib/flags";
+import { mergeMyTasksViewConfigUpdate } from "@/lib/myTasks/viewConfigMerge";
 import {
   myTasksViewSelect,
   serializeMyTasksView,
@@ -46,8 +47,9 @@ export async function PATCH(
       }
       data.name = name;
     }
+    let fullConfig: unknown | undefined;
     if (hasOwn(body, "config")) {
-      data.config = parseMyTasksViewConfig(body.config) as unknown as Prisma.InputJsonValue;
+      fullConfig = body.config;
     }
     let configPatch: Record<string, unknown> | null = null;
     // Merge defaultBoardId into the saved row so concurrent full saves cannot
@@ -66,6 +68,9 @@ export async function PATCH(
           { status: 400 },
         );
       }
+      if (!(await isFeatureEnabled(MY_TASKS_QUICK_ADD_FLAG, auth.userId))) {
+        return NextResponse.json({ error: "Feature disabled" }, { status: 403 });
+      }
       configPatch = patch as Record<string, unknown>;
     }
     if (hasOwn(body, "isDefault")) {
@@ -74,7 +79,7 @@ export async function PATCH(
       }
       data.isDefault = body.isDefault;
     }
-    if (Object.keys(data).length === 0 && !configPatch) {
+    if (Object.keys(data).length === 0 && fullConfig === undefined && !configPatch) {
       return NextResponse.json({ error: "No supported fields supplied" }, { status: 400 });
     }
 
@@ -84,14 +89,12 @@ export async function PATCH(
         select: { id: true, config: true },
       });
       if (!existing) return null;
-      if (configPatch) {
-        const merged = parseMyTasksViewConfig({
-          ...parseMyTasksViewConfig(existing.config),
-          ...(hasOwn(configPatch, "defaultBoardId")
-            ? { defaultBoardId: configPatch.defaultBoardId }
-            : {}),
-        });
-        data.config = merged as unknown as Prisma.InputJsonValue;
+      if (configPatch || fullConfig !== undefined) {
+        data.config = mergeMyTasksViewConfigUpdate({
+          existingConfig: existing.config,
+          fullConfig,
+          configPatch,
+        }) as unknown as Prisma.InputJsonValue;
       }
       if (data.isDefault === true) {
         await tx.myTasksView.updateMany({

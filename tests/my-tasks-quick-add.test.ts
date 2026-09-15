@@ -5,6 +5,7 @@ import {
   myTasksQuickAddLikelyVisible,
   resolveMyTasksQuickAddBoardId,
 } from "../src/lib/myTasks/quickAddHelpers";
+import { mergeMyTasksViewConfigUpdate } from "../src/lib/myTasks/viewConfigMerge";
 import {
   parseMyTasksDefaultBoardId,
   parseMyTasksViewConfig,
@@ -55,4 +56,27 @@ test("myTasksQuickAddLikelyVisible matches assigned or created scopes", () => {
   assert.equal(myTasksQuickAddLikelyVisible(["created", "watching"]), true);
   assert.equal(myTasksQuickAddLikelyVisible(["watching"]), false);
   assert.equal(myTasksQuickAddLikelyVisible(["mentioned"]), false);
+});
+
+test("mergeMyTasksViewConfigUpdate keeps defaultBoardId owned by configPatch", () => {
+  const fromPatch = mergeMyTasksViewConfigUpdate({
+    existingConfig: { boardIds: [1], defaultBoardId: 9 },
+    configPatch: { defaultBoardId: 15 },
+  });
+  assert.equal(fromPatch.defaultBoardId, 15);
+  assert.deepEqual(fromPatch.boardIds, [1]);
+
+  const fromFull = mergeMyTasksViewConfigUpdate({
+    existingConfig: { boardIds: [1], defaultBoardId: 15 },
+    fullConfig: { boardIds: [2, 3], defaultBoardId: 99, scopes: ["watching"] },
+  });
+  assert.equal(fromFull.defaultBoardId, 15);
+  assert.deepEqual(fromFull.boardIds, [2, 3]);
+  assert.deepEqual(fromFull.scopes, ["watching"]);
+
+  const clearedExisting = mergeMyTasksViewConfigUpdate({
+    existingConfig: { boardIds: [1] },
+    fullConfig: { boardIds: [2], defaultBoardId: 44 },
+  });
+  assert.equal(clearedExisting.defaultBoardId, undefined);
 });

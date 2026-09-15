@@ -23,7 +23,10 @@ import {
   createMyTasksReconcileRunner,
   parseMyTasksListPayload,
 } from "@/lib/myTasks/reconcileMyTasks";
-import { MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY } from "@/lib/myTasks/quickAddHelpers";
+import {
+  MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY,
+  myTasksQuickAddTaskVisibleInPayload,
+} from "@/lib/myTasks/quickAddHelpers";
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -746,30 +749,38 @@ const MyTasks = ({
     [currentUser.id, updateViewConfig],
   );
 
+  const quickAddVisibilityRef = useRef({
+    viewConfig,
+    viewsFeatureEnabled,
+    filterParityEnabled,
+    groupBy,
+    activeSplit,
+    prioritySelection,
+    filterEnabled,
+    runtimeContext,
+  });
+  quickAddVisibilityRef.current = {
+    viewConfig,
+    viewsFeatureEnabled,
+    filterParityEnabled,
+    groupBy,
+    activeSplit,
+    prioritySelection,
+    filterEnabled,
+    runtimeContext,
+  };
+
   const refreshMyTasksAfterQuickAdd = useCallback(
     async (taskId: number) => {
-      try {
-        const response = await fetch(buildMyTasksListUrl(scopesRef.current), {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
-        if (!response.ok) return false;
-        const payload = parseMyTasksListPayload(await response.json());
-        if (!payload) return false;
-        setSections(payload.sections);
-        setTabs(payload.tabs);
-        setBoards(payload.boards);
-        setAccessibleProjectIds(payload.accessibleProjectIds);
-        const flatTasks = payload.sections.flatMap(
-          (section) => (section.items ?? []) as MyTasksTask[],
-        );
-        const visible = applyMyTasksView(flatTasks, viewConfig, new Date());
-        return visible.some((task) => task.id === taskId);
-      } catch {
-        return false;
-      }
+      const payload = await reconcileRunner.flush();
+      if (!payload) return false;
+      return myTasksQuickAddTaskVisibleInPayload(
+        payload,
+        taskId,
+        quickAddVisibilityRef.current,
+      );
     },
-    [viewConfig],
+    [reconcileRunner],
   );
 
   const saveView = async () => {

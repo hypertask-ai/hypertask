@@ -54,3 +54,27 @@ test("my-tasks reconcile drops stale responses", async () => {
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(applied, ["old", "new"]);
 });
+
+test("my-tasks reconcile flush waits for the applied payload", async () => {
+  const applied = [];
+  let resolveFetch;
+  const runner = createMyTasksReconcileRunner({
+    fetchList: () =>
+      new Promise((resolve) => {
+        resolveFetch = () =>
+          resolve({
+            sections: [{ id: "flushed" }],
+            tabs: ["All"],
+            boards: [],
+            accessibleProjectIds: [3],
+          });
+      }),
+    apply: (payload) => applied.push(payload.sections[0].id),
+  });
+  const pending = runner.flush();
+  await Promise.resolve();
+  resolveFetch();
+  const payload = await pending;
+  assert.equal(payload.sections[0].id, "flushed");
+  assert.deepEqual(applied, ["flushed"]);
+});
