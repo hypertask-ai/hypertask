@@ -9,6 +9,7 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
+  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
@@ -35,7 +36,13 @@ import {
   getMyTasksSplitIndex,
   groupMyTasksByTime,
 } from "@/lib/myTasksGrouping";
+import {
+  buildMyTasksListUrl,
+  createMyTasksReconcileRunner,
+  parseMyTasksListPayload,
+} from "@/lib/myTasks/reconcileMyTasks";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
+import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import type {
   MyTasksBoardMetadata,
   MyTasksSavedView,
@@ -89,6 +96,8 @@ interface IProps {
   sections: ISection[];
   tabs: string[];
   boards: MyTasksBoardMetadata[];
+  /** Boards the session can open, including ones with zero My Tasks rows. */
+  accessibleProjectIds?: number[];
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
@@ -97,6 +106,7 @@ interface IProps {
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
+const EMPTY_ACCESSIBLE_PROJECT_IDS: number[] = [];
 
 const readError = async (response: Response, fallback: string): Promise<string> => {
   const body = await response.json().catch(() => null);
@@ -107,6 +117,7 @@ const MyTasks = ({
   sections: initialSections,
   tabs: initialTabs,
   boards: initialBoards = [],
+  accessibleProjectIds: initialAccessibleProjectIds = EMPTY_ACCESSIBLE_PROJECT_IDS,
   currentUser,
   initialViews = [],
   initialViewId = null,
@@ -119,10 +130,14 @@ const MyTasks = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
+  const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
   const [sections, setSections] = useState(initialSections);
   const [tabs, setTabs] = useState(initialTabs);
   const [boards, setBoards] = useState(initialBoards);
+  const [accessibleProjectIds, setAccessibleProjectIds] = useState(
+    initialAccessibleProjectIds,
+  );
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
       ? getMyTasksSplitIndex(initialSections, boardParam)
@@ -175,26 +190,92 @@ const MyTasks = ({
   );
   useClickOutside(filterRef, () => setFilterOpen(false));
 
-  const scopesKey = JSON.stringify(
-    effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
+  const scopesFeatureEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
+  const reconcileScopes = useMemo(
+    () => effectiveMyTasksScopes(viewConfig.scopes, scopesFeatureEnabled),
+    [scopesFeatureEnabled, viewConfig.scopes],
+  );
+  const scopesRef = useRef(reconcileScopes);
+  scopesRef.current = reconcileScopes;
+  const scopesKey = JSON.stringify(reconcileScopes);
+
+  const reconcileRunner = useMemo(
+    () =>
+      createMyTasksReconcileRunner({
+        fetchList: async (signal) => {
+          const response = await fetch(buildMyTasksListUrl(scopesRef.current), {
+            signal,
+            cache: "no-store",
+            credentials: "same-origin",
+          });
+          if (!response.ok) {
+            throw new Error(
+              await readError(response, "Unable to refresh My Tasks"),
+            );
+          }
+          const payload = parseMyTasksListPayload(await response.json());
+          if (!payload) throw new Error("Invalid My Tasks payload");
+          return payload;
+        },
+        apply: (payload) => {
+          setSections(payload.sections);
+          setTabs(payload.tabs);
+          setBoards(payload.boards);
+          setAccessibleProjectIds(payload.accessibleProjectIds);
+        },
+        onError: () => {
+          toast.error("Unable to refresh My Tasks");
+        },
+      }),
+    [],
+  );
+
+  useEffect(() => () => reconcileRunner.cancel(), [reconcileRunner]);
+
+  const onMyTasksReconcile = useCallback(() => {
+    reconcileRunner.request();
+  }, [reconcileRunner]);
+
+  useMyTasksRealtime(
+    currentUser.id,
+    accessibleProjectIds,
+    liveUpdatesEnabled,
+    onMyTasksReconcile,
   );
 
   useEffect(() => {
-    // Only seed from SSR while we have not fetched a scopes selection yet.
+    // Only seed from SSR while we have not fetched a scopes selection yet,
+    // and never overwrite a live snapshot while live updates are on.
+    if (liveUpdatesEnabled) return;
     if (lastFetchedScopesKey.current !== null) return;
     setSections(initialSections);
     setTabs(initialTabs);
     setBoards(initialBoards);
-  }, [initialBoards, initialSections, initialTabs]);
+    setAccessibleProjectIds(initialAccessibleProjectIds);
+  }, [
+    initialAccessibleProjectIds,
+    initialBoards,
+    initialSections,
+    initialTabs,
+    liveUpdatesEnabled,
+  ]);
 
   useEffect(() => {
+    if (liveUpdatesEnabled) {
+      // Live path owns refetch (scopes change + board events).
+      lastFetchedScopesKey.current = scopesKey;
+      reconcileRunner.request();
+      return;
+    }
+
     // Invalidate any in-flight refetch before deciding whether to fetch.
     const token = ++scopesFetchToken.current;
-    if (!myTasksScopesFlag || !scopesEnabled) {
+    if (!scopesFeatureEnabled) {
       lastFetchedScopesKey.current = null;
       setSections(initialSections);
       setTabs(initialTabs);
       setBoards(initialBoards);
+      setAccessibleProjectIds(initialAccessibleProjectIds);
       return;
     }
     // First paint already matches SSR for the active scopes; only refetch on change.
@@ -208,23 +289,21 @@ const MyTasks = ({
       try {
         const response = await fetch(
           `${myTasksAPIRoute}?scopes=${encodeURIComponent(scopes.join(","))}`,
+          { cache: "no-store", credentials: "same-origin" },
         );
         if (token !== scopesFetchToken.current) return;
         if (!response.ok) {
           toast.error("Unable to refresh My Tasks");
           return;
         }
-        const body = (await response.json()) as {
-          sections?: ISection[];
-          tabs?: string[];
-          boards?: MyTasksBoardMetadata[];
-        };
+        const payload = parseMyTasksListPayload(await response.json());
         if (token !== scopesFetchToken.current) return;
-        if (!Array.isArray(body.sections)) return;
+        if (!payload) return;
         lastFetchedScopesKey.current = scopesKey;
-        setSections(body.sections);
-        if (Array.isArray(body.tabs)) setTabs(body.tabs);
-        if (Array.isArray(body.boards)) setBoards(body.boards);
+        setSections(payload.sections);
+        setTabs(payload.tabs);
+        setBoards(payload.boards);
+        setAccessibleProjectIds(payload.accessibleProjectIds);
       } catch {
         if (token === scopesFetchToken.current) {
           toast.error("Unable to refresh My Tasks");
@@ -232,11 +311,13 @@ const MyTasks = ({
       }
     })();
   }, [
+    initialAccessibleProjectIds,
     initialBoards,
     initialSections,
     initialTabs,
-    myTasksScopesFlag,
-    scopesEnabled,
+    liveUpdatesEnabled,
+    reconcileRunner,
+    scopesFeatureEnabled,
     scopesKey,
     viewConfig.scopes,
   ]);
