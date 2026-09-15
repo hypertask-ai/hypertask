@@ -163,7 +163,7 @@ async function issueCodeAndRedirect(
   }
 
   const redirectParams: Record<string, string> = { code: authCode }
-  if (validated.state) {
+  if (validated.state !== null) {
     redirectParams.state = validated.state
   }
 
@@ -252,6 +252,7 @@ export async function GET(request: NextRequest) {
           clientId: validated.clientId,
           redirectUri: validated.redirectUri,
           codeChallenge: validated.codeChallenge,
+          state: validated.state,
           agentId: agent.agentId,
         })
       )
@@ -310,6 +311,7 @@ export async function POST(request: NextRequest) {
         clientId: validated.clientId,
         redirectUri: validated.redirectUri,
         codeChallenge: validated.codeChallenge,
+        state: validated.state,
         agentId: agent.agentId,
       }
     )
