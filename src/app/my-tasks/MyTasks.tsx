@@ -12,6 +12,7 @@ import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
@@ -104,6 +105,8 @@ interface IProps {
   boards: MyTasksBoardMetadata[];
   /** Boards the session can open, including ones with zero My Tasks rows. */
   accessibleProjectIds?: number[];
+  /** Soonest future snooze among hidden rows; client refreshes when it elapses. */
+  nearestSnoozeUntil?: string | null;
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
@@ -126,6 +129,7 @@ const MyTasks = ({
   tabs: initialTabs,
   boards: initialBoards = EMPTY_MY_TASKS_BOARDS,
   accessibleProjectIds: initialAccessibleProjectIds = EMPTY_ACCESSIBLE_PROJECT_IDS,
+  nearestSnoozeUntil: initialNearestSnoozeUntil = null,
   currentUser,
   initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
@@ -145,6 +149,9 @@ const MyTasks = ({
   const [accessibleProjectIds, setAccessibleProjectIds] = useState(
     initialAccessibleProjectIds,
   );
+  const [nearestSnoozeUntil, setNearestSnoozeUntil] = useState<string | null>(
+    initialNearestSnoozeUntil,
+  );
   const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
@@ -156,6 +163,7 @@ const MyTasks = ({
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
@@ -206,6 +214,17 @@ const MyTasks = ({
   );
   const scopesRef = useRef(reconcileScopes);
   scopesRef.current = reconcileScopes;
+  const showSnoozed = Boolean(
+    myTasksSnoozeEnabled && viewConfig.filters.showSnoozed,
+  );
+  const showSnoozedRef = useRef(showSnoozed);
+  showSnoozedRef.current = showSnoozed;
+  if (showSnoozedRef.current) {
+    scopesRef.current = [
+      ...reconcileScopes,
+      "__showSnoozed" as (typeof reconcileScopes)[number],
+    ];
+  }
   const activeViewIdRef = useRef(activeViewId);
   activeViewIdRef.current = activeViewId;
   const reconcileRunner = useMemo(
@@ -231,6 +250,9 @@ const MyTasks = ({
           setTabs(payload.tabs);
           setBoards(payload.boards);
           setAccessibleProjectIds(payload.accessibleProjectIds);
+          if (payload.nearestSnoozeUntil !== undefined) {
+            setNearestSnoozeUntil(payload.nearestSnoozeUntil ?? null);
+          }
         },
         onError: () => {
           toast.error("Unable to refresh My Tasks");
@@ -252,6 +274,47 @@ const MyTasks = ({
     if (!liveUpdatesEnabled) return;
     reconcileRunner.request();
   }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
+
+  useEffect(() => {
+    const onSnoozeChanged = () => reconcileRunner.request();
+    window.addEventListener("my-tasks-snooze-changed", onSnoozeChanged);
+    return () =>
+      window.removeEventListener("my-tasks-snooze-changed", onSnoozeChanged);
+  }, [reconcileRunner]);
+
+  useEffect(() => {
+    if (!myTasksSnoozeEnabled) return;
+    reconcileRunner.request();
+  }, [myTasksSnoozeEnabled, reconcileRunner, showSnoozed]);
+
+  useEffect(() => {
+    if (!myTasksSnoozeEnabled || !nearestSnoozeUntil) return;
+    const targetMs = new Date(nearestSnoozeUntil).getTime();
+    if (!Number.isFinite(targetMs)) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const schedule = () => {
+      if (cancelled) return;
+      const remaining = targetMs - Date.now();
+      if (remaining <= 0) {
+        reconcileRunner.request();
+        return;
+      }
+      const delay = Math.max(250, Math.min(remaining + 50, 2147483647));
+      timer = window.setTimeout(() => {
+        if (remaining + 50 > 2147483647) {
+          schedule();
+          return;
+        }
+        reconcileRunner.request();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
 
   const scopesKey = JSON.stringify(
     effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
@@ -289,6 +352,9 @@ const MyTasks = ({
     }
     if (lastFetchedScopesKey.current === scopesKey) return;
     const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
+    if (showSnoozed) {
+      scopes.push("__showSnoozed" as (typeof scopes)[number]);
+    }
     void (async () => {
       try {
         const response = await fetch(
@@ -304,6 +370,7 @@ const MyTasks = ({
           tabs?: string[];
           boards?: MyTasksBoardMetadata[];
           accessibleProjectIds?: number[];
+          nearestSnoozeUntil?: string | null;
         };
         if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
@@ -315,6 +382,9 @@ const MyTasks = ({
           setAccessibleProjectIds(
             body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
           );
+        }
+        if (body.nearestSnoozeUntil !== undefined) {
+          setNearestSnoozeUntil(body.nearestSnoozeUntil ?? null);
         }
       } catch {
         if (token === scopesFetchToken.current) {
@@ -332,6 +402,7 @@ const MyTasks = ({
     reconcileRunner,
     scopesEnabled,
     scopesKey,
+    showSnoozed,
     viewConfig.scopes,
   ]);
 
@@ -974,6 +1045,7 @@ const boardTabCounts = useMemo(() => {
             timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
             tableColumnsEnabled={tableColumnsFeatureEnabled}
             scopesEnabled={scopesEnabled}
+            snoozeEnabled={myTasksSnoozeEnabled}
             onOpenTableColumns={openTableColumnsPicker}
             onOpenKanbanFilters={() => {
               updateViewConfig((current) =>
@@ -990,6 +1062,24 @@ const boardTabCounts = useMemo(() => {
             }}
           />
         )}
+        {myTasksSnoozeEnabled && !viewsFeatureEnabled ? (
+          <label className="ml-auto flex items-center gap-2 self-center text-content text-text-light-gray">
+            <input
+              type="checkbox"
+              checked={showSnoozed}
+              onChange={() =>
+                updateViewConfig((current) => ({
+                  ...current,
+                  filters: {
+                    ...current.filters,
+                    showSnoozed: !current.filters.showSnoozed,
+                  },
+                }))
+              }
+            />
+            Show snoozed
+          </label>
+        ) : null}
         {filterEnabled && (
           !viewsFeatureEnabled ? (
           <div ref={filterRef} className="relative ml-auto self-center">
@@ -1064,6 +1154,7 @@ const boardTabCounts = useMemo(() => {
           currentUser={currentUser}
           myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
           myTasksSortKey={activeViewId}
+          myTasksSnoozeActive={myTasksSnoozeEnabled}
           onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
           myTasksVisibleColumns={myTasksVisibleColumns}
           onMyTasksVisibleColumnsChange={

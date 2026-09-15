@@ -8,6 +8,7 @@ export type MyTasksListPayload = {
   tabs: string[];
   boards: MyTasksBoardMetadata[];
   accessibleProjectIds: number[];
+  nearestSnoozeUntil?: string | null;
 };
 
 export const buildMyTasksListUrl = (scopes?: MyTasksScope[]): string => {
@@ -113,10 +114,17 @@ export const parseMyTasksListPayload = (body: unknown): MyTasksListPayload | nul
   const accessibleProjectIds = Array.isArray(record.accessibleProjectIds)
     ? record.accessibleProjectIds.filter((id): id is number => typeof id === "number")
     : [];
+  let nearestSnoozeUntil: string | null | undefined;
+  if (typeof record.nearestSnoozeUntil === "string") {
+    nearestSnoozeUntil = record.nearestSnoozeUntil;
+  } else if (record.nearestSnoozeUntil === null) {
+    nearestSnoozeUntil = null;
+  }
   return {
     sections: record.sections as ISection[],
     tabs: record.tabs as string[],
     boards,
     accessibleProjectIds,
+    nearestSnoozeUntil,
   };
 };
