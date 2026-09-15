@@ -56,6 +56,7 @@ import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_OVERDUE_BADGES_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
@@ -504,6 +505,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "On My Tasks, H opens the existing Remind Me picker. The chosen date hides the row here and in Inbox until it returns to both.",
+  },
+  {
+    key: MY_TASKS_OVERDUE_BADGES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Shows a red overdue count next to each My Tasks view tab and board split tab. Hidden when the count is zero. Counts follow the filters that are on.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

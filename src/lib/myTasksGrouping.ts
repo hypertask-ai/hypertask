@@ -58,6 +58,39 @@ export function getMyTasksSplitIndex(
  * Same calendar rules as My Tasks due-date filters: Overdue is before the
  * start of today, not "due earlier this afternoon".
  */
+export function isMyTasksOverdue(
+  dueDate: Date | string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  return classifyMyTasksTimeBucket(dueDate, now) === "Overdue";
+}
+
+export function countMyTasksOverdue(
+  tasks: Array<{ dueDate?: Date | string | null }>,
+  now: Date = new Date(),
+): number {
+  let count = 0;
+  for (const task of tasks) {
+    if (isMyTasksOverdue(task.dueDate, now)) count += 1;
+  }
+  return count;
+}
+
+export function countMyTasksOverdueByBoard(
+  tasks: MyTasksBoardTask[],
+  now: Date = new Date(),
+): { total: number; byBoardId: Map<number, number> } {
+  const byBoardId = new Map<number, number>();
+  let total = 0;
+  for (const task of tasks) {
+    if (!isMyTasksOverdue(task.dueDate, now)) continue;
+    total += 1;
+    const boardId = task.project?.id ?? task.projectId;
+    byBoardId.set(boardId, (byBoardId.get(boardId) ?? 0) + 1);
+  }
+  return { total, byBoardId };
+}
+
 export function classifyMyTasksTimeBucket(
   dueDate: Date | string | null | undefined,
   now: Date = new Date(),

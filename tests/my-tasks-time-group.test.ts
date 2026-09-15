@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   classifyMyTasksTimeBucket,
+  countMyTasksOverdue,
+  countMyTasksOverdueByBoard,
   groupMyTasksByTime,
 } from "../src/lib/myTasksGrouping";
 import {
@@ -122,4 +124,35 @@ test("groupMyTasksByTime keeps board ids on tasks for split-tab filtering", () =
     boardScoped.map((task) => task.id),
     [2],
   );
+});
+
+test("countMyTasksOverdue hides zero and uses start-of-today, not now", () => {
+  assert.equal(countMyTasksOverdue([], NOW), 0);
+  assert.equal(
+    countMyTasksOverdue(
+      [
+        { dueDate: new Date(2026, 8, 13, 23, 59, 0) },
+        { dueDate: new Date(2026, 8, 14, 8, 0, 0) },
+        { dueDate: null },
+      ],
+      NOW,
+    ),
+    1,
+  );
+});
+
+test("countMyTasksOverdueByBoard respects board and hides empty boards", () => {
+  const { total, byBoardId } = countMyTasksOverdueByBoard(
+    [
+      { id: 1, projectId: 10, dueDate: new Date(2026, 8, 13, 9, 0, 0) },
+      { id: 2, projectId: 10, dueDate: new Date(2026, 8, 14, 9, 0, 0) },
+      { id: 3, projectId: 11, dueDate: new Date(2026, 8, 12, 9, 0, 0) },
+      { id: 4, projectId: 12, dueDate: new Date(2026, 8, 15, 9, 0, 0) },
+    ],
+    NOW,
+  );
+  assert.equal(total, 2);
+  assert.equal(byBoardId.get(10), 1);
+  assert.equal(byBoardId.get(11), 1);
+  assert.equal(byBoardId.has(12), false);
 });
