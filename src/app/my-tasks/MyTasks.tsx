@@ -135,9 +135,6 @@ const MyTasks = ({
   const tableColumnsFeatureEnabled =
     myTasksTableColumnsEnabled && viewsFeatureEnabled;
   void scopesFeatureEnabled;
-  const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
-  const tableColumnsFeatureEnabled =
-    myTasksTableColumnsEnabled && viewsFeatureEnabled;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
   const viewParam = searchParams?.get("view") ?? null;
