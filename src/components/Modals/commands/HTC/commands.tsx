@@ -534,7 +534,7 @@ const Commands = (props: Props) => {
       isMobile={isMobile}
     />
   );
-  const gatedCommandGroups = commentLongPressEnabled ? (
+  const gatedCommandGroups = useFlag(HTPR_6514_COMMENT_LONG_PRESS_FLAG) ? (
     <div data-htpr-6514-comment-long-press="">{commandGroups}</div>
   ) : (
     commandGroups
