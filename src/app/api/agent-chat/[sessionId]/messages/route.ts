@@ -7,9 +7,9 @@ import {
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureChatParticipant,
-  isAgentChatPollingActive,
   loadUserAgentChatSession,
 } from "@/lib/agents/chatAccess";
+import { isAgentChatPollingActive } from "@/lib/agents/chatPolling";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";

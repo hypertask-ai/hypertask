@@ -4,9 +4,9 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import {
   ensureChatParticipant,
-  isAgentChatPollingActive,
   loadUserAgentChatSession,
 } from "@/lib/agents/chatAccess";
+import { isAgentChatPollingActive } from "@/lib/agents/chatPolling";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";

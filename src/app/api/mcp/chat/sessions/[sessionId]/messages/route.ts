@@ -15,7 +15,8 @@ import {
   parseChatTicketProposal,
   serializeChatTicketProposal,
 } from '@/lib/agents/chatTicketProposal'
-import { isAgentChatPollingActive, loadAgentTokenChatSession } from '@/lib/agents/chatAccess'
+import { loadAgentTokenChatSession } from '@/lib/agents/chatAccess'
+import { isAgentChatPollingActive } from '@/lib/agents/chatPolling'
 
 const MAX_MESSAGE_LENGTH = 8000
 const TRANSCRIPT_LIMIT = 50

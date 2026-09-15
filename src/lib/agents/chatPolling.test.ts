@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import {
   AGENT_CHAT_POLL_HEARTBEAT_TTL_MS,
   isAgentChatPollingActive,
-} from "./chatAccess";
+} from "./chatPolling";
 
 const now = new Date("2026-09-16T12:00:00.000Z");
 assert.equal(isAgentChatPollingActive(null, now), false);
