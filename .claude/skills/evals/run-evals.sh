@@ -13,7 +13,7 @@
 #   C. Every repo-relative .claude/skills/... path a skill names (ending in
 #      .sh, .md, .py or .ts) exists.
 #   D. Every board column a skill names in a --section flag exists in
-#      .claude/board.yml, if that file exists.
+#      board.yml (repo root) or .claude/board.yml, whichever exists.
 
 set -euo pipefail
 
@@ -144,19 +144,33 @@ fi
 # D. Board columns a skill names exist.
 # ---------------------------------------------------------------------------
 CHECKS=$((CHECKS + 1))
-BOARD="$REPO_ROOT/.claude/board.yml"
-if [ ! -f "$BOARD" ]; then
-  echo "SKIP D: no .claude/board.yml"
+# The agent template lays board.yml down at the repo root; supervise-board's
+# own board files live under .claude/. Take whichever this repo has, or the
+# check never runs on a synced repo.
+BOARD=""
+for candidate in "$REPO_ROOT/board.yml" "$REPO_ROOT/.claude/board.yml"; do
+  [ -f "$candidate" ] && { BOARD="$candidate"; break; }
+done
+if [ -z "$BOARD" ]; then
+  echo "SKIP D: no board.yml at the repo root or under .claude/"
 else
   d_fail=0
   d_count=0
-  columns="$(sed -n '/^columns:/,$p' "$BOARD" | grep -oE 'title:[[:space:]]*.*' \
-    | sed -E 's/title:[[:space:]]*//; s/^"//; s/"$//; s/^'"'"'//; s/'"'"'$//')"
+  # Two shapes. supervise-board's board files nest "title:" under columns:; the
+  # agent-template skeleton maps a role to a section name directly under roles:.
+  columns="$( { sed -n '/^columns:/,$p' "$BOARD" | grep -oE 'title:[[:space:]]*.*' \
+                  | sed -E 's/title:[[:space:]]*//'
+                sed -n '/^roles:/,/^[^[:space:]]/p' "$BOARD" \
+                  | sed -nE 's/^[[:space:]]+[a-z_]+:[[:space:]]*(.+)$/\1/p'
+              } | sed -E 's/^"//; s/"$//; s/^'"'"'//; s/'"'"'$//' | sed '/^$/d')"
   while IFS= read -r section; do
     [ -z "$section" ] && continue
+    # A shell variable stands in for the column name at that call site; only the
+    # runtime value is a real section, and this check cannot see it.
+    case "$section" in *'$'*|*'{{'*) continue ;; esac
     d_count=$((d_count + 1))
     if ! printf '%s\n' "$columns" | grep -qF "$section"; then
-      echo "FAIL D: skill names board section '$section', not a column in .claude/board.yml"
+      echo "FAIL D: skill names board section '$section', not a column in ${BOARD#"$REPO_ROOT"/}"
       d_fail=1
     fi
   done < <(grep -rhoE -- '--(to-)?section[[:space:]]+"[^"]+"' "$SKILLS_DIR" \
