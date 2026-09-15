@@ -273,7 +273,11 @@ jobs:
             local head_sha="$1"
             local payload="$2"
             local latest state description
-            latest=$(gh api "repos/$REPO/commits/$head_sha/statuses?per_page=100") || return 1
+            if ! latest=$(gh api "repos/$REPO/commits/$head_sha/statuses?per_page=100"); then
+              echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; publishing without deduplication."
+              gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null
+              return
+            fi
             state=$(jq -r '.state' "$payload") || return 1
             description=$(jq -r '.description' "$payload") || return 1
             if jq -e --arg state "$state" --arg description "$description" '

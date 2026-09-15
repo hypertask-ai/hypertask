@@ -958,6 +958,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /publish_reconciliation_error/);
   assert.match(workflow, /publish_status_if_changed/);
   assert.match(workflow, /commits\/\$head_sha\/statuses\?per_page=100/);
+  assert.match(workflow, /publishing without deduplication/);
   assert.match(workflow, /\$current\.state == \$state and \$current\.description == \$description/);
   assert.doesNotMatch(workflow, /feature-flag-gate is reconciling this pull request/);
   assert.match(workflow, /could not refresh pull-request heads/);
