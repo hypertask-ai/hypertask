@@ -86,6 +86,9 @@ const CreateLabel = dynamic(() => import("./Modals/CreateLabel/CreateLabel"));
 const RemindMeComponent = dynamic(
   () => import("./Modals/RemindMe/RemindMeComponent")
 );
+const MyTasksSnoozeModal = dynamic(
+  () => import("@/app/my-tasks/MyTasksSnoozeModal")
+);
 const TrialModal = dynamic(() => import("./Modals/TrialPlan/TrialModal"));
 const SubtaskLinkingModal = dynamic(
   () => import("./Modals/SubtaskLinkingModal/SubtaskLinking")
@@ -215,7 +218,7 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -230,6 +233,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -2465,10 +2469,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           {commandMode === CommandMode.RemindMe && (
             <RemindMeComponent closeHandler={togglRemindMeModal} />
           )}
-          {commandMode === CommandMode.MyTasksSnooze && (
-            <RemindMeComponent
+          {commandMode === CommandMode.MyTasksSnooze && myTasksSnoozeEnabled && (
+            <MyTasksSnoozeModal
               closeHandler={togglRemindMeModal}
-              modalTitle="Snooze until"
               onPickDate={async (date) => {
                 const assignmentId =
                   typeof showCommands.payload?.assignmentId === "number"

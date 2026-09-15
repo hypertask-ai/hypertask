@@ -7,6 +7,7 @@ import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants"
 import {
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
@@ -109,13 +110,15 @@ const MyTasksViewControls = ({
   tableColumnsEnabled = false,
   onOpenTableColumns,
   scopesEnabled = false,
-  snoozeEnabled = false,
+  snoozeEnabled: snoozeEnabledProp = false,
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
+  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
   const myTasksScopesEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const [filterOpen, setFilterOpen] = useState(false);
   const [scopeOpen, setScopeOpen] = useState(false);

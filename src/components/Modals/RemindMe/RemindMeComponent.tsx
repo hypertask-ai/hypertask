@@ -33,9 +33,6 @@ type Props = {
   // New props for bulk actions
   isBulkMode?: boolean;
   bulkItems?: BulkActionInbox[];
-  /** HTPR-6461: when set, pick a date and call this instead of creating an inbox reminder. */
-  onPickDate?: (date: string) => void | Promise<void>;
-  modalTitle?: string;
 }
 
 export interface DisplayDate {
@@ -45,14 +42,7 @@ export interface DisplayDate {
 }
 
 const RemindMeComponent = (props: Props) => {
-  const {
-    closeHandler,
-    remindTask,
-    isBulkMode = false,
-    bulkItems = [],
-    onPickDate,
-    modalTitle,
-  } = props
+  const { closeHandler, remindTask, isBulkMode = false, bulkItems = [] } = props
   const taskRef = useRef<HTMLDivElement>(null);
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
   const [currentUser, ____] = useRecoilState(currentUserAtom);
@@ -105,26 +95,6 @@ const RemindMeComponent = (props: Props) => {
     }
 
     const reminderDate = filteredOptions[fIndex]?.date;
-    if (onPickDate) {
-      if (reminderDate === null || reminderDate === undefined) return;
-      try {
-        const iso =
-          typeof reminderDate === "string"
-            ? reminderDate
-            : new Date(reminderDate).toISOString();
-        if (!Number.isFinite(new Date(iso).getTime())) {
-          toast.error("Could not save that date. Try again.");
-          return;
-        }
-        await onPickDate(iso);
-        setLastUsedReminder({ date: reminderDate, display: "last used" });
-        closeHandler(true);
-      } catch (error) {
-        console.error("Error applying picked date:", error);
-        toast.error("Could not save that date. Try again.");
-      }
-      return;
-    }
     const reminderType = reminderOptionSelected.type;
 
     // Handle bulk actions
@@ -250,7 +220,6 @@ const RemindMeComponent = (props: Props) => {
 
   // Dynamic header text based on mode
   const getHeaderText = () => {
-    if (modalTitle) return modalTitle;
     if (isBulkMode && bulkItems.length > 0) {
       const taskCount = bulkItems.length;
       const taskText = taskCount === 1 ? "task" : "tasks";
@@ -258,14 +227,6 @@ const RemindMeComponent = (props: Props) => {
     }
     return "Remind Me";
   };
-
-  const reminderOptionDropdown = onPickDate ? null : (
-    <DropDownButton
-      reminderSelected={reminderOptionSelected}
-      optionCallback={handleDropDownCallback}
-      _mbl={_mbl}
-    />
-  );
 
   const mobileSearchInput = (
     <div className="flex items-center gap-2.5 border-t border-light-black-border-1 px-4">
@@ -277,7 +238,11 @@ const RemindMeComponent = (props: Props) => {
         placeholder="e.g. 5 July 2pm, 8pm tomorrow"
         className="px-0"
       />
-      {reminderOptionDropdown}
+      <DropDownButton
+        reminderSelected={reminderOptionSelected}
+        optionCallback={handleDropDownCallback}
+        _mbl={_mbl}
+      />
     </div>
   );
 
@@ -348,7 +313,11 @@ const RemindMeComponent = (props: Props) => {
             placeholder="e.g. 5 July 2pm, 8pm tomorrow, next Thursday"
             className="px-0"
           />
-          {reminderOptionDropdown}
+          <DropDownButton
+            reminderSelected={reminderOptionSelected}
+            optionCallback={handleDropDownCallback}
+            _mbl={_mbl}
+          />
         </div>
 
         <div className="max-h-[364px] overflow-y-scroll bg-inherit pb-1.5 no-scrollbar">
