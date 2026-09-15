@@ -44,6 +44,7 @@ export const deleteRenameViewAPIRoute =
 export const myTasksViewsAPIRoute = "/api/my-tasks/views";
 export const myTasksViewAPIRoute = (viewId: number) =>
   `${myTasksViewsAPIRoute}/${viewId}`;
+export const myTasksAPIRoute = "/api/my-tasks";
 
 // ----------------------- Custom Instruction Update
 export const UpdateAICustomInstructionRoute = "/ai/project/customInstruction";
