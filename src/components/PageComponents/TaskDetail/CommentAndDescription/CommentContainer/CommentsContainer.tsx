@@ -278,9 +278,11 @@ const CommentsContainer = () => {
         ) : null}
         <CommentCreatedBy />
         {commentLongPress ? (
-          <SwipeableCommentRow useLongPress onMore={openCommentCommands}>
-            {commentBubble}
-          </SwipeableCommentRow>
+          <div data-htpr-6514-comment-long-press="">
+            <SwipeableCommentRow onMore={openCommentCommands}>
+              {commentBubble}
+            </SwipeableCommentRow>
+          </div>
         ) : (
           <SwipeableCommentRow onMore={openCommentCommands}>
             {commentBubble}

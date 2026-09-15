@@ -16,17 +16,15 @@ const MOVE_CANCEL_PX = 10;
  * Default: swipe left to reveal "More" and open the comment's Command Center
  * menu (same as the desktop hover ⋯).
  *
- * HTPR-6514 (`useLongPress`): press and hold instead. Swipe already moves the
+ * HTPR-6514: press and hold instead. Swipe already moves the
  * whole task, so a comment swipe fights that gesture.
  */
 const SwipeableCommentRow = ({
   children,
   onMore,
-  useLongPress: _useLongPress = false,
 }: {
   children: ReactNode;
   onMore: () => void;
-  useLongPress?: boolean;
 }) => {
   const [offset, setOffset] = useState(0);
   const offsetRef = useRef(0);
