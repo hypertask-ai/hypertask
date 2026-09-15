@@ -34,28 +34,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [scopesEnabled, viewsEnabled, liveUpdatesEnabled] = await Promise.all([
+    const [scopesEnabled, viewsEnabled] = await Promise.all([
       isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
       isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
-      isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId),
     ]);
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
     const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
 
-    const myTasksPromise = getMyTasks(userId, viewsEnabled, scopes, {
+    const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
       throwOnError: true,
     });
-    const projectsPromise = liveUpdatesEnabled
-      ? getAllMinimal(userId, "Calendar", false)
-      : Promise.resolve({ json: [] as { id: number }[] });
-    const [myTasks, { json: projects }] = await Promise.all([
-      myTasksPromise,
-      projectsPromise,
-    ]);
-    const accessibleProjectIds = liveUpdatesEnabled
-      ? projects.map((project) => project.id)
-      : [];
-    return NextResponse.json({ ...myTasks, accessibleProjectIds }, {
+    const liveUpdatesEnabled = await isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, userId);
+    let accessibleProjectIds: number[] = [];
+    if (liveUpdatesEnabled) {
+      const { json: projects } = await getAllMinimal(userId, "Calendar", false);
+      accessibleProjectIds = projects.map((project) => project.id);
+    }
+    Object.assign(myTasks, { accessibleProjectIds });
+    return NextResponse.json(myTasks, {
       headers: {
         "Cache-Control": "private, no-store",
       },

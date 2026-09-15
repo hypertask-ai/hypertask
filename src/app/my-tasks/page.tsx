@@ -50,16 +50,20 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [viewsEnabled, scopesEnabled, liveUpdatesEnabled] = await Promise.all([
+  const [viewsEnabled, scopesEnabled] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_LIVE_UPDATES_FLAG, sessionUser.userId),
   ]);
+  const liveUpdatesEnabled = await isFeatureEnabled(
+    MY_TASKS_LIVE_UPDATES_FLAG,
+    sessionUser.userId,
+  );
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
 
   let views: Awaited<ReturnType<typeof getMyTasksViews>> = [];
-  let myTasks: Awaited<ReturnType<typeof getMyTasks>> | undefined;
+  let myTasks: Awaited<ReturnType<typeof getMyTasks>>;
+  myTasks = undefined as unknown as Awaited<ReturnType<typeof getMyTasks>>;
 
   if (!scopesEnabled) {
     // Assigned-only query does not need saved view config; load in parallel.
@@ -91,10 +95,6 @@ export default async function Page({
       true,
     );
     myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes);
-  }
-
-  if (!myTasks) {
-    throw new Error("My Tasks payload was not loaded");
   }
 
   let accessibleProjectIds: number[] = [];
