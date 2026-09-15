@@ -262,6 +262,7 @@ export {
     customFieldIdFromColumnKey,
     normalizeTableVisibleColumns,
     normalizeMyTasksTableVisibleColumns,
+    withForcedStatusWhileSorted,
     setTableStalenessColumns,
     seedMissingCustomFieldColumns,
     LOCKED_TABLE_COLUMNS,

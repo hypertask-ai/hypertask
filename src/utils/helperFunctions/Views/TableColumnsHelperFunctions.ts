@@ -127,6 +127,19 @@ export const normalizeMyTasksTableVisibleColumns = (value: unknown): string[] =>
     return normalizeLockedFrontColumns(value, isValidKey, DEFAULT_MY_TASKS_TABLE_COLUMNS);
 };
 
+/** Board table injects status while sorted; My Tasks picker must not. */
+export const withForcedStatusWhileSorted = (
+    normalized: string[],
+    sortActive: boolean,
+    forceStatusWhileSorted: boolean,
+): string[] => {
+    if (!forceStatusWhileSorted || !sortActive || normalized.includes("status")) {
+        return normalized;
+    }
+    if (normalized.length < 2) return normalized;
+    return [normalized[0], normalized[1], "status", ...normalized.slice(2)];
+};
+
 export const setTableStalenessColumns = (visible: string[], enabled: boolean): string[] => {
     const normalized = normalizeTableVisibleColumns(visible);
     const stalenessColumns = new Set<string>(TABLE_STALENESS_COLUMNS);
