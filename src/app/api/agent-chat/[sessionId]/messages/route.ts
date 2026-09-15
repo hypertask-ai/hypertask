@@ -9,6 +9,7 @@ import {
   ensureChatParticipant,
   loadUserAgentChatSession,
 } from "@/lib/agents/chatAccess";
+import { isAgentChatPollingActive } from "@/lib/agents/chatPolling";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
 import type { AgentWebhookChatBrief } from "@/lib/agentWebhooks/events";
@@ -57,7 +58,7 @@ export async function POST(
       sessionId,
       userId,
       select: {
-        agent: { select: { runtimeType: true } },
+        agent: { select: { runtimeType: true, heartbeatAt: true } },
       },
     });
     if (!access.ok) {
@@ -68,6 +69,7 @@ export async function POST(
     }
     const session = access.session;
     const agentId = access.agentId;
+    const pollingRuntime = isAgentChatPollingActive(session.agent?.heartbeatAt);
     if (session.agent?.runtimeType === "NATIVE") {
       return NextResponse.json(
         { success: false, error: "Native agents use the AI chat" },
@@ -166,7 +168,7 @@ export async function POST(
       // runtime that reconnects later cannot append an answer below a notice
       // that already told the reader it was parked.
       const notice =
-        deliveryIds.length === 0 && parkedReplyEnabled
+        deliveryIds.length === 0 && !pollingRuntime && parkedReplyEnabled
           ? await tx.chatMessage.create({
               data: {
                 sessionId: session.id,
@@ -196,7 +198,7 @@ export async function POST(
         content: message.content,
         createdAt: message.createdAt,
       },
-      delivered: deliveryIds.length > 0,
+      delivered: deliveryIds.length > 0 || pollingRuntime,
       // The sender's own tab can miss the broadcast while its POST is still in
       // flight, so the notice rides back on the response instead.
       notice: notice

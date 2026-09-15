@@ -6,6 +6,7 @@ import {
   ensureChatParticipant,
   loadUserAgentChatSession,
 } from "@/lib/agents/chatAccess";
+import { isAgentChatPollingActive } from "@/lib/agents/chatPolling";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from "@/lib/flags";
@@ -79,7 +80,7 @@ export async function GET(
     const access = await loadUserAgentChatSession({
       sessionId,
       userId,
-      select: {},
+      select: { agent: { select: { heartbeatAt: true } } },
     });
     if (!access.ok) {
       return NextResponse.json(
@@ -209,7 +210,8 @@ export async function GET(
       ? { draft: participant.draft, unreadCount: unreadCount ?? 0 }
       : null;
     const chatEnabled = Boolean(
-      subscription?.active && subscription.events.includes("chat.message")
+      (subscription?.active && subscription.events.includes("chat.message")) ||
+        isAgentChatPollingActive(session.agent?.heartbeatAt)
     );
 
     return NextResponse.json({
