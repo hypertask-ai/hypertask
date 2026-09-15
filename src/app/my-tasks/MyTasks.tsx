@@ -370,6 +370,7 @@ const MyTasks = ({
           tabs?: string[];
           boards?: MyTasksBoardMetadata[];
           accessibleProjectIds?: number[];
+          nearestSnoozeUntil?: string | null;
         };
         if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
@@ -381,6 +382,9 @@ const MyTasks = ({
           setAccessibleProjectIds(
             body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
           );
+        }
+        if (body.nearestSnoozeUntil !== undefined) {
+          setNearestSnoozeUntil(body.nearestSnoozeUntil ?? null);
         }
       } catch {
         if (token === scopesFetchToken.current) {
@@ -398,6 +402,7 @@ const MyTasks = ({
     reconcileRunner,
     scopesEnabled,
     scopesKey,
+    showSnoozed,
     viewConfig.scopes,
   ]);
 
@@ -1057,6 +1062,24 @@ const boardTabCounts = useMemo(() => {
             }}
           />
         )}
+        {myTasksSnoozeEnabled && !viewsFeatureEnabled ? (
+          <label className="ml-auto flex items-center gap-2 self-center text-content text-text-light-gray">
+            <input
+              type="checkbox"
+              checked={showSnoozed}
+              onChange={() =>
+                updateViewConfig((current) => ({
+                  ...current,
+                  filters: {
+                    ...current.filters,
+                    showSnoozed: !current.filters.showSnoozed,
+                  },
+                }))
+              }
+            />
+            Show snoozed
+          </label>
+        ) : null}
         {filterEnabled && (
           !viewsFeatureEnabled ? (
           <div ref={filterRef} className="relative ml-auto self-center">
@@ -1131,6 +1154,7 @@ const boardTabCounts = useMemo(() => {
           currentUser={currentUser}
           myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
           myTasksSortKey={activeViewId}
+          myTasksSnoozeActive={myTasksSnoozeEnabled}
           onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
           myTasksVisibleColumns={myTasksVisibleColumns}
           onMyTasksVisibleColumnsChange={

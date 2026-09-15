@@ -2475,9 +2475,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                   typeof showCommands.payload?.assignmentId === "number"
                     ? showCommands.payload.assignmentId
                     : undefined;
-                const taskId = assignmentId ? undefined : inViewObject.taskId;
-                if (!assignmentId && !taskId) {
-                  toast.error("Select a My Tasks row first.");
+                if (!assignmentId) {
+                  toast.error("Only tasks assigned to you can be snoozed.");
                   return;
                 }
                 const response = await fetch(myTasksSnoozeAPIRoute, {
@@ -2486,7 +2485,6 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                   credentials: "same-origin",
                   body: JSON.stringify({
                     assignmentId,
-                    taskId,
                     snoozeUntil: date,
                   }),
                 });

@@ -123,7 +123,7 @@ const MyTasksSnoozeModal = ({ closeHandler, onPickDate }: Props) => {
       }`}
     >
       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-label-span text-text-light-gray">
-        <Clock size={16} strokeWidth={1.75} aria-hidden />
+        <Clock size={16} strokeWidth={1.5} aria-hidden />
       </span>
       <span className="min-w-0 flex-1 truncate text-white-black">{option.display}</span>
       {option.date ? (
@@ -135,8 +135,8 @@ const MyTasksSnoozeModal = ({ closeHandler, onPickDate }: Props) => {
   );
 
   const searchField = (
-    <div className="flex items-center gap-2.5 border-light-black-border-1 px-4">
-      <Search strokeWidth={1.75} size={_mbl ? 16 : 13} className="shrink-0 text-text-light-gray" />
+    <div className="flex items-center gap-2 border-light-black-border-1 px-4">
+      <Search strokeWidth={1.5} size={16} className="shrink-0 text-text-light-gray" />
       <ModalInput
         autoFocus
         onChange={handleInputChange}
@@ -183,7 +183,7 @@ const MyTasksSnoozeModal = ({ closeHandler, onPickDate }: Props) => {
       <ModalBody className="p-0 rounded-[5px]">
         <div className="border-b border-light-black-border-1">{searchField}</div>
         <div className="max-h-[364px] overflow-y-scroll bg-inherit pb-1.5 no-scrollbar">
-          <h3 className="px-4 pb-1 pt-2.5 text-micro font-semibold uppercase tracking-wider text-text-light-gray">
+          <h3 className="px-4 pb-1 pt-2 text-micro font-semibold uppercase tracking-wider text-text-light-gray">
             Snooze until
           </h3>
           <div role="listbox">{filteredOptions.map(optionButton)}</div>

@@ -109,6 +109,8 @@ type TableViewProps = {
   handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void;
   myTasksSort?: MyTasksViewConfig["sort"];
   myTasksSortKey?: number | null;
+  /** HTPR-6461: My Tasks snooze surface, independent of Views/sort. */
+  myTasksSnoozeActive?: boolean;
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
   /** Controlled My Tasks columns. When set, never reads/writes the board localStorage atom. */
   myTasksVisibleColumns?: string[];
@@ -427,13 +429,15 @@ const TableView = ({
   handleBoardChange,
   myTasksSort,
   myTasksSortKey,
+  myTasksSnoozeActive = false,
   onMyTasksSortChange,
   myTasksVisibleColumns,
   onMyTasksVisibleColumnsChange,
 }: TableViewProps) => {
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG) && Boolean(myTasksSort);
+  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
@@ -1217,9 +1221,12 @@ const TableView = ({
 
   const runTaskShortcut = useCallback(
     (event: KeyboardEvent, row: Row | undefined, index: number) => {
-      if (!rowShortcutsEnabled || !row || !isTaskRow(row)) return false;
+      if (!row || !isTaskRow(row)) return false;
+      const assignmentId = row.task.currentUserAssignmentId;
       if (
         myTasksSnoozeEnabled &&
+        typeof assignmentId === "number" &&
+        assignmentId > 0 &&
         event.keyCode === KeyCodes.H &&
         !event.shiftKey &&
         !event.altKey &&
@@ -1232,10 +1239,11 @@ const TableView = ({
         setShowCommands({
           show: true,
           mode: CommandMode.MyTasksSnooze,
-          payload: { assignmentId: row.task.currentUserAssignmentId ?? null },
+          payload: { assignmentId },
         });
         return true;
       }
+      if (!rowShortcutsEnabled) return false;
       const action = getTaskShortcutAction(event, isApple);
       if (!action) return false;
 
