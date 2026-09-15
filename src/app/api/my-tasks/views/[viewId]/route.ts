@@ -49,22 +49,50 @@ export async function PATCH(
     if (hasOwn(body, "config")) {
       data.config = parseMyTasksViewConfig(body.config) as unknown as Prisma.InputJsonValue;
     }
+    let configPatch: Record<string, unknown> | null = null;
+    // Merge defaultBoardId into the saved row so concurrent full saves cannot
+    // wipe it, and quick-add cannot wipe unrelated draft fields.
+    if (hasOwn(body, "configPatch")) {
+      if (hasOwn(body, "config")) {
+        return NextResponse.json(
+          { error: "Send config or configPatch, not both" },
+          { status: 400 },
+        );
+      }
+      const patch = body.configPatch;
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        return NextResponse.json(
+          { error: "configPatch must be an object" },
+          { status: 400 },
+        );
+      }
+      configPatch = patch as Record<string, unknown>;
+    }
     if (hasOwn(body, "isDefault")) {
       if (typeof body.isDefault !== "boolean") {
         return NextResponse.json({ error: "isDefault must be boolean" }, { status: 400 });
       }
       data.isDefault = body.isDefault;
     }
-    if (Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0 && !configPatch) {
       return NextResponse.json({ error: "No supported fields supplied" }, { status: 400 });
     }
 
     const updated = await prisma.$transaction(async (tx) => {
       const existing = await tx.myTasksView.findFirst({
         where: { id: viewId, userId: auth.userId },
-        select: { id: true },
+        select: { id: true, config: true },
       });
       if (!existing) return null;
+      if (configPatch) {
+        const merged = parseMyTasksViewConfig({
+          ...parseMyTasksViewConfig(existing.config),
+          ...(hasOwn(configPatch, "defaultBoardId")
+            ? { defaultBoardId: configPatch.defaultBoardId }
+            : {}),
+        });
+        data.config = merged as unknown as Prisma.InputJsonValue;
+      }
       if (data.isDefault === true) {
         await tx.myTasksView.updateMany({
           where: { userId: auth.userId, isDefault: true, id: { not: viewId } },

@@ -203,6 +203,8 @@ const MyTasks = ({
   );
   const scopesRef = useRef(reconcileScopes);
   scopesRef.current = reconcileScopes;
+  const activeViewIdRef = useRef(activeViewId);
+  activeViewIdRef.current = activeViewId;
   const reconcileRunner = useMemo(
     () =>
       createMyTasksReconcileRunner({
@@ -712,7 +714,7 @@ const MyTasks = ({
       if (viewId === null) {
         try {
           localStorage.setItem(
-            MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY,
+            `${MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY}:${currentUser.id}`,
             String(defaultBoardId),
           );
         } catch {
@@ -721,28 +723,27 @@ const MyTasks = ({
         updateViewConfig((current) => ({ ...current, defaultBoardId }));
         return;
       }
-      const target = views.find((view) => view.id === viewId);
-      // Always patch from the last saved view, never the unsaved draft.
-      const baseConfig = parseMyTasksViewConfig(
-        target?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
-      );
-      const nextConfig = parseMyTasksViewConfig({
-        ...baseConfig,
-        defaultBoardId,
+      const response = await fetch(myTasksViewAPIRoute(viewId), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configPatch: { defaultBoardId } }),
       });
-      const saved = await patchView(viewId, { config: nextConfig });
+      if (!response.ok) {
+        throw new Error(await readError(response, "Unable to update view"));
+      }
+      const body = (await response.json()) as { view: MyTasksSavedView };
+      const saved = {
+        ...body.view,
+        config: parseMyTasksViewConfig(body.view.config),
+      };
       setViews((current) =>
-        current.map((view) => {
-          if (view.id === saved.id) return saved;
-          if (view.id === viewId) return { ...view, config: nextConfig };
-          return view;
-        }),
+        current.map((view) => (view.id === saved.id ? saved : view)),
       );
-      if (viewId === activeViewId) {
+      if (activeViewIdRef.current === viewId) {
         updateViewConfig((current) => ({ ...current, defaultBoardId }));
       }
     },
-    [activeViewId, updateViewConfig, views],
+    [currentUser.id, updateViewConfig],
   );
 
   const refreshMyTasksAfterQuickAdd = useCallback(

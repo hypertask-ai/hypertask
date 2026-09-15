@@ -51,7 +51,9 @@ const MyTasksQuickAdd = ({
     if (activeViewId !== null) return null;
     if (viewConfig.defaultBoardId != null) return null;
     try {
-      const raw = localStorage.getItem(MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY);
+      const raw = localStorage.getItem(
+        `${MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY}:${currentUser.id}`,
+      );
       const parsed = Number(raw);
       return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
     } catch {
