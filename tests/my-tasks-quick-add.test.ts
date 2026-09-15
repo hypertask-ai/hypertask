@@ -42,8 +42,9 @@ test("parseMyTasksViewConfig round-trips defaultBoardId and rejects junk", () =>
   assert.deepEqual(withExtra.scopes, ["assigned"]);
 });
 
-test("resolveMyTasksQuickAddBoardId trusts saved id until access list loads", () => {
-  assert.equal(resolveMyTasksQuickAddBoardId(9, []), 9);
+test("resolveMyTasksQuickAddBoardId distinguishes unloaded vs empty access", () => {
+  assert.equal(resolveMyTasksQuickAddBoardId(9, undefined), 9);
+  assert.equal(resolveMyTasksQuickAddBoardId(9, []), null);
   assert.equal(resolveMyTasksQuickAddBoardId(9, [9, 12]), 9);
   assert.equal(resolveMyTasksQuickAddBoardId(9, [12]), null);
   assert.equal(resolveMyTasksQuickAddBoardId(null, [9]), null);

@@ -4,16 +4,17 @@ import { parseMyTasksDefaultBoardId } from "@/models/MyTasksView";
 /** Prefer a saved default board that is still in the writable board list. */
 export function resolveMyTasksQuickAddBoardId(
   defaultBoardId: unknown,
-  writableBoardIds: ReadonlySet<number> | readonly number[],
+  writableBoardIds: ReadonlySet<number> | readonly number[] | undefined,
 ): number | null {
   const parsed = parseMyTasksDefaultBoardId(defaultBoardId);
-  if (parsed == null) return null;
+  if (parsed === null) return null;
+  // undefined = access list not loaded yet; keep the saved id for create to authorize.
+  if (writableBoardIds === undefined) return parsed;
   const writable =
     writableBoardIds instanceof Set
       ? writableBoardIds
       : new Set(writableBoardIds);
-  // Empty list means we have not loaded access yet; keep the saved id and let create authorize.
-  if (writable.size === 0) return parsed;
+  if (writable.size === 0) return null;
   return writable.has(parsed) ? parsed : null;
 }
 

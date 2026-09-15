@@ -43,15 +43,12 @@ const MyTasksQuickAdd = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pendingTitleRef = useRef<string | null>(null);
   const pendingViewIdRef = useRef<number | null>(null);
-  const { data: projects = [] } = useGetAllProjectsMinimal(
-    ["my-tasks-quick-add-projects"],
-    [],
-  );
+  const { data: projects = [], isFetched: projectsFetched } =
+    useGetAllProjectsMinimal(["my-tasks-quick-add-projects"], []);
 
-  const writableBoardIds = accessibleProjectIds;
   const resolvedBoardId = resolveMyTasksQuickAddBoardId(
     viewConfig.defaultBoardId,
-    writableBoardIds,
+    accessibleProjectIds,
   );
 
   const createOnBoard = useCallback(
@@ -64,11 +61,18 @@ const MyTasksQuickAdd = ({
         section,
       });
       if (
-        viewId != null &&
-        resolveMyTasksQuickAddBoardId(viewConfig.defaultBoardId, writableBoardIds) !==
-          project.id
+        viewId !== null &&
+        resolveMyTasksQuickAddBoardId(
+          viewConfig.defaultBoardId,
+          accessibleProjectIds,
+        ) !== project.id
       ) {
-        await onPersistDefaultBoard(viewId, project.id);
+        try {
+          await onPersistDefaultBoard(viewId, project.id);
+        } catch (error) {
+          console.error(error);
+          toast.error("Task created, but the default board was not saved");
+        }
       }
       const found = await onRefresh(created.id);
       if (!found && !myTasksQuickAddLikelyVisible(scopes)) {
@@ -79,46 +83,69 @@ const MyTasksQuickAdd = ({
       return true;
     },
     [
+      accessibleProjectIds,
       currentUser,
       onPersistDefaultBoard,
       onRefresh,
       scopes,
       viewConfig.defaultBoardId,
-      writableBoardIds,
     ],
   );
+
+  const openBoardPicker = (taskTitle: string) => {
+    pendingTitleRef.current = taskTitle;
+    pendingViewIdRef.current = activeViewId;
+    setBoardPickerOpen(true);
+  };
 
   const invokeCreateItem = useCallback(
     async (nextTitle: string) => {
       const trimmed = nextTitle.trim();
       if (!trimmed) return false;
 
-      if (resolvedBoardId == null) {
-        pendingTitleRef.current = trimmed;
-        pendingViewIdRef.current = activeViewId;
-        setBoardPickerOpen(true);
+      if (resolvedBoardId === null) {
+        openBoardPicker(trimmed);
         return true;
       }
 
-      const project =
-        (projects as IProject[]).find((entry) => entry.id === resolvedBoardId) ??
-        ({
-          id: resolvedBoardId,
-          uniqueIdentifier: "TASK",
-        } as IProject);
+      if (!projectsFetched) {
+        toast("Loading boards…");
+        return false;
+      }
+
+      const project = (projects as IProject[]).find(
+        (entry) => entry.id === resolvedBoardId,
+      );
+      if (!project) {
+        openBoardPicker(trimmed);
+        return true;
+      }
 
       try {
         return await createOnBoard(project, trimmed, activeViewId);
       } catch (error) {
         console.error(error);
-        // Stale default board (left board / no write access): ask again.
-        pendingTitleRef.current = trimmed;
-        pendingViewIdRef.current = activeViewId;
-        setBoardPickerOpen(true);
-        return true;
+        const message =
+          error instanceof Error ? error.message : "Could not create the task";
+        const needsNewBoard =
+          /forbidden|403|no active section|could not load a column/i.test(
+            message,
+          );
+        if (needsNewBoard) {
+          openBoardPicker(trimmed);
+          return true;
+        }
+        toast.error(message);
+        return false;
       }
     },
-    [activeViewId, createOnBoard, projects, resolvedBoardId],
+    [
+      activeViewId,
+      createOnBoard,
+      projects,
+      projectsFetched,
+      resolvedBoardId,
+    ],
   );
 
   const onPickBoard = async (project?: IProject) => {
@@ -155,10 +182,7 @@ const MyTasksQuickAdd = ({
         invokeCreateItem={invokeCreateItem}
       />
       {boardPickerOpen ? (
-        <SetProjectsModal
-          toggle={onPickBoard}
-          allProjects={pickerProjects}
-        />
+        <SetProjectsModal toggle={onPickBoard} allProjects={pickerProjects} />
       ) : null}
     </div>
   );
