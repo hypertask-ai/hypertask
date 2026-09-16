@@ -1166,48 +1166,31 @@ const boardTabCounts = useMemo(() => {
             onRefresh={refreshMyTasksAfterQuickAdd}
           />
         ) : null}
-        {myTasksBulkSelectionEnabled ? (
-          <MyTasksBulkSelectionProvider
-            resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
-              .map((priority) => priority.priority_index)
-              .join(",")}`}
-            onAfterMutation={() => router.refresh()}
-          >
-            <TableView
-              filteredSections={visibleSections}
-              _sections={visibleSections}
-              _currentProject={null}
-              _activeSortingMode={MY_TASKS_SORTING_MODE}
-              currentUser={currentUser}
-              myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
-              myTasksSortKey={activeViewId}
-              myTasksSnoozeActive={myTasksSnoozeEnabled}
-              onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
-              myTasksVisibleColumns={myTasksVisibleColumns}
-              onMyTasksVisibleColumnsChange={
-                tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
-              }
-              enableMyTasksBulkSelection
-            />
-            <MyTasksBulkActionBar />
-          </MyTasksBulkSelectionProvider>
-        ) : (
-          <TableView
-            filteredSections={visibleSections}
-            _sections={visibleSections}
-            _currentProject={null}
-            _activeSortingMode={MY_TASKS_SORTING_MODE}
-            currentUser={currentUser}
-            myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
-            myTasksSortKey={activeViewId}
-            myTasksSnoozeActive={myTasksSnoozeEnabled}
-            onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
-            myTasksVisibleColumns={myTasksVisibleColumns}
-            onMyTasksVisibleColumnsChange={
-              tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
-            }
-          />
-        )}
+        <MyTasksBulkSelectionProvider
+          enabled={myTasksBulkSelectionEnabled}
+          resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
+            .map((priority) => priority.priority_index)
+            .join(",")}`}
+          onAfterMutation={() => router.refresh()}
+        >
+        <TableView
+          filteredSections={visibleSections}
+          _sections={visibleSections}
+          _currentProject={null}
+          _activeSortingMode={MY_TASKS_SORTING_MODE}
+          currentUser={currentUser}
+          myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
+          myTasksSortKey={activeViewId}
+          myTasksSnoozeActive={myTasksSnoozeEnabled}
+          onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
+          myTasksVisibleColumns={myTasksVisibleColumns}
+          onMyTasksVisibleColumnsChange={
+            tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
+          }
+          enableMyTasksBulkSelection={myTasksBulkSelectionEnabled}
+        />
+        {myTasksBulkSelectionEnabled ? <MyTasksBulkActionBar /> : null}
+        </MyTasksBulkSelectionProvider>
       </div>
 
       <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">

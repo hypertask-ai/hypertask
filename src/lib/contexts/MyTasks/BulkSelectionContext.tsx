@@ -55,6 +55,7 @@ interface MyTasksBulkSelectionContextValue {
 
 interface MyTasksBulkSelectionProviderProps {
   children: ReactNode;
+  enabled?: boolean;
   resetSelectionKey?: string;
   onAfterMutation: () => void;
 }
@@ -64,6 +65,7 @@ const MyTasksBulkSelectionContext =
 
 export const MyTasksBulkSelectionProvider = ({
   children,
+  enabled = true,
   resetSelectionKey,
   onAfterMutation,
 }: MyTasksBulkSelectionProviderProps) => {
@@ -155,6 +157,13 @@ export const MyTasksBulkSelectionProvider = ({
     setFailedIds(new Set());
     anchorTaskIdRef.current = null;
   }, [resetSelectionKey]);
+
+  useEffect(() => {
+    if (enabled) return;
+    setSelectedIds(new Set());
+    setFailedIds(new Set());
+    anchorTaskIdRef.current = null;
+  }, [enabled]);
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
@@ -426,6 +435,7 @@ export const MyTasksBulkSelectionProvider = ({
   );
 
   useEffect(() => {
+    if (!enabled) return;
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || returnIfModalOrInputActive()) return;
       const activeElement = document.activeElement;
@@ -491,6 +501,7 @@ export const MyTasksBulkSelectionProvider = ({
     return () => document.removeEventListener("keydown", onDocumentKeyDown, true);
   }, [
     clearSelection,
+    enabled,
     items.length,
     openBulkCommand,
     selectAllVisible,
