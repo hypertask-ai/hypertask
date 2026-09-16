@@ -92,6 +92,18 @@ function loadRoute(comments) {
       commentReactionInclude: {},
       mapMcpCommentReaction: (r) => r,
     },
+    "@/lib/flags": {
+      HTPR_6530_MCP_LIST_QUERY_FLAG: "htpr-6530-mcp-list-query",
+      isFeatureEnabled: async () => false,
+    },
+    "@/lib/mcp/listQuery": {
+      parseNumericCursor: () => null,
+      parseUpdatedSince: () => null,
+      projectRows: (rows) => rows,
+    },
+    "@/lib/mcp/readListQuery": {
+      readEnabledListQuery: () => ({ listQuery: null }),
+    },
   };
   const loaded = new Module(routePath);
   loaded.filename = routePath;

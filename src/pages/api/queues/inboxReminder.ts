@@ -12,8 +12,12 @@ import { subMinutes } from "date-fns"
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
+import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
+import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
 
 const REMINDER_LOCK_CLASS = 1_446_420_610
 
@@ -22,13 +26,25 @@ export default  async function handler(
   res: NextApiResponse
 ) {
   console.log("🚀 ~ inboxReminder", req.body)
-  const {taskId, userId, projectId, remindAt, reminderOption, remindTask } = req.body;
-  
-  if (!taskId || ! userId || !projectId || !remindAt) return res.status(400).json({message:"Missing Required Information"})
+  const session = await getSessionUser(
+    new Headers(req.headers as Record<string, string>)
+  );
+  if (!session) return res.status(401).json({ message: "Unauthorized" });
+
+  const {taskId, userId: bodyUserId, projectId, remindAt, reminderOption, remindTask } = req.body;
+  if (!taskId || !projectId || !remindAt) return res.status(400).json({message:"Missing Required Information"})
+  if (bodyUserId != null && Number(bodyUserId) !== session.userId) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
+  const userId = session.userId;
+  if (!(await userCanAccessTask(userId, Number(taskId)))) {
+    return res.status(403).json({ message: "Forbidden" });
+  }
 
   const remindAtDate = new Date(remindAt);
   const defaultInvoke = reminderOption ?? "DurationComplete"
   try {
+      const hideOnMyTasks = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId)
       const reminder = await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${Number(taskId)}::int)`
         const existing = await tx.reminder.findMany({
@@ -68,6 +84,14 @@ export default  async function handler(
           where: { userId, taskId, status: "Normal" },
           data: { status: "Archive", archivedAt: new Date() },
         })
+        if (hideOnMyTasks) {
+          await syncMyTasksSnoozeFromReminder({
+            userId,
+            taskId,
+            snoozeUntil: remindAtDate,
+            client: tx,
+          })
+        }
         return { reminder: saved, previous }
       })
 

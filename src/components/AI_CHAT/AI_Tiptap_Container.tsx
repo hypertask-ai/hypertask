@@ -2,7 +2,9 @@ import AIModelDropDownButton from "../Global/ModelSelectorDropdown";
 import Tooltip from "../Common/Tooltip";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { EditorContent, useEditorState } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import styles from "@/styles/tiptap.module.scss";
+import { ControlledComposerEditor } from "@/lib/controlledComposerEditor";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   ArrowDown,
@@ -27,6 +29,8 @@ import { usePathname } from "next/navigation";
 import {
   type ChangeEvent,
   type ClipboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type RefObject,
   useContext,
   useEffect,
   useMemo,
@@ -61,9 +65,35 @@ const SCREENSHOT_MIME_TYPES = new Set([
   "image/webp",
 ]);
 
-export function AI_Tiptap_Container() {
+type ControlledComposer = {
+  value: string;
+  inputRef: RefObject<HTMLTextAreaElement | null>;
+  editorRef?: RefObject<Editor | null>;
+  useTiptapEditor?: boolean;
+  onChange: (value: string, cursor: number) => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+  isRecording: boolean;
+  isProcessing: boolean;
+  onRecordingChange: (recording: boolean) => void;
+  onProcessingChange: (processing: boolean) => void;
+  onDictation: (transcript: string) => void;
+  dictationDisabled: boolean;
+  projectId?: number | null;
+  sendDisabled: boolean;
+  queueMode: boolean;
+  onSend: () => void;
+};
+
+export function AI_Tiptap_Container({
+  controlledComposer,
+}: {
+  controlledComposer?: ControlledComposer;
+} = {}) {
   const pathname = usePathname();
   const isMbl = useContext(MobileViewContext);
+  const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
     tiptapKeydown,
     editor,
@@ -93,7 +123,12 @@ export function AI_Tiptap_Container() {
   } = useAiChatContext();
   const [audioProcessing, setAudioProcessing] = useState(false);
   const screenshotInputRef = useRef<HTMLInputElement>(null);
-  const mobileDictating = Boolean(isMbl && (isRecording || audioProcessing));
+  const mobileDictating = Boolean(
+    isMbl &&
+      (controlledComposer
+        ? controlledComposer.isRecording || controlledComposer.isProcessing
+        : isRecording || audioProcessing),
+  );
   const handleScreenshotUpload = async (
     event: ChangeEvent<HTMLInputElement>
   ) => {
@@ -207,27 +242,30 @@ export function AI_Tiptap_Container() {
       editor,
       selector: ({ editor }) => editor?.isEmpty ?? true,
     }) ?? true;
+  const hasComposerText = controlledComposer
+    ? controlledComposer.value.trim().length > 0
+    : !isEditorEmpty;
   let recorderWrapperClassName: string | undefined;
   if (mobileDictating) {
     recorderWrapperClassName = "order-2 min-w-0 flex-1";
   } else if (isMbl) {
-    recorderWrapperClassName = isEditorEmpty
-      ? "order-4 ml-auto"
-      : "order-3 ml-auto";
+    recorderWrapperClassName = hasComposerText
+      ? "order-3 ml-auto"
+      : "order-4 ml-auto";
   }
 
   return (
     <div className={`p-2 relative`} ref={focusRootRef}>
-      {showScrollUpIndicator && !isTyping && (
+      {!controlledComposer && showScrollUpIndicator && !isTyping && (
         <ScrollToTopButton onClick={scrollMessagesToBottom} />
       )}
-      {queuedMessages.length > 0 && (
+      {!controlledComposer && queuedMessages.length > 0 && (
         <QueuedMessagesStrip
           items={queuedMessages}
           onRemove={removeQueuedMessage}
         />
       )}
-      {isMbl && (
+      {!controlledComposer && isMbl && (
         <div
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
@@ -255,9 +293,10 @@ export function AI_Tiptap_Container() {
               ${styles.aiChatInput} outline-none border-0
               ${isMbl ? "!rounded-[5px] px-3 pb-2 pt-3" : "!rounded-lg p-2"}
             `}
-        onKeyDown={tiptapKeydown}
+        onKeyDown={controlledComposer ? undefined : tiptapKeydown}
+        data-agent-chat-ai-composer={controlledComposer ? true : undefined}
       >
-        {fileItems.length > 0 && (
+        {!controlledComposer && fileItems.length > 0 && (
           <div className="flex flex-wrap items-start justify-start w-full">
             <ImageGallery
               files={fileItems}
@@ -270,7 +309,7 @@ export function AI_Tiptap_Container() {
             />
           </div>
         )}
-        {!isMbl && contextList.length > 0 && (
+        {!controlledComposer && !isMbl && contextList.length > 0 && (
           <ContextList items={contextList} onClick={handleRemoveContext} />
         )}
         <div
@@ -284,10 +323,42 @@ export function AI_Tiptap_Container() {
                  overflow-y-auto
                 ${styles.editorContainer}
                 `}
-          id="ai-chat-tiptap-editor"
-          onPaste={handleEditorPaste}
+          id={
+            controlledComposer
+              ? "agent-chat-composer-editor"
+              : "ai-chat-tiptap-editor"
+          }
+          onPaste={controlledComposer ? undefined : handleEditorPaste}
         >
-          {editor ? (
+          {controlledComposer ? (
+            controlledComposer.useTiptapEditor ? (
+              <ControlledComposerEditor
+                value={controlledComposer.value}
+                onChange={controlledComposer.onChange}
+                onKeyDown={controlledComposer.onKeyDown}
+                placeholder={controlledComposer.placeholder}
+                ariaLabel={controlledComposer.ariaLabel}
+                editorRef={controlledComposer.editorRef}
+                onEditor={setControlledEditor}
+              />
+            ) : (
+            <textarea
+              ref={controlledComposer.inputRef}
+              value={controlledComposer.value}
+              onChange={(event) =>
+                controlledComposer.onChange(
+                  event.target.value,
+                  event.target.selectionStart ?? event.target.value.length,
+                )
+              }
+              onKeyDown={controlledComposer.onKeyDown}
+              rows={1}
+              placeholder={controlledComposer.placeholder}
+              aria-label={controlledComposer.ariaLabel}
+              className="block w-full resize-none bg-transparent py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
+            />
+            )
+          ) : editor ? (
             <EditorContent editor={editor} />
           ) : (
             <div className="h-[21px]" />
@@ -296,69 +367,122 @@ export function AI_Tiptap_Container() {
         <AiChatComposerActionRow
           mobile={Boolean(isMbl)}
           mobileDictating={mobileDictating}
-          hasText={!isEditorEmpty}
+          hasText={hasComposerText}
           leadingControls={
-            <>
+            controlledComposer ? null : (
+              <>
+                <AIModelDropDownButton
+                  optionCallback={dropDownButtonAICallback}
+                  aiSelected={currentAiOption}
+                  currentOptions={displayAiOptions}
+                  className={"bottom-[110%] top-auto"}
+                  stackSubmenus
+                  effortLabelClassName={
+                    pathname?.startsWith("/chat") ? undefined : "hidden"
+                  }
+                />
+                {!pathname?.startsWith("/chat") && <ChatScopeDropdown />}
+              </>
+            )
+          }
+          mobileModelControl={
+            controlledComposer ? null : (
               <AIModelDropDownButton
                 optionCallback={dropDownButtonAICallback}
                 aiSelected={currentAiOption}
                 currentOptions={displayAiOptions}
-                className={"bottom-[110%] top-auto"}
-                stackSubmenus
-                // Docked rail is narrow: drop the effort word so the model +
-                // board chips fit without colliding (effort still set in-menu).
-                // Fullscreen /chat is wide, keep it. HTPR-4548.
-                effortLabelClassName={
-                  pathname?.startsWith("/chat") ? undefined : "hidden"
-                }
-                // dropDownClassName={"bg-transparent hover:bg-active-modal-element"}
+                mobileQuickPicker
               />
-              {!pathname?.startsWith("/chat") && <ChatScopeDropdown />}
-            </>
-          }
-          mobileModelControl={
-            <AIModelDropDownButton
-              optionCallback={dropDownButtonAICallback}
-              aiSelected={currentAiOption}
-              currentOptions={displayAiOptions}
-              mobileQuickPicker
-            />
+            )
           }
           attachmentControl={
-            <AttachmentButton
-              disabled={false}
-              onClick={handleAttachmentClick}
-            />
+            controlledComposer ? null : (
+              <AttachmentButton
+                disabled={false}
+                onClick={handleAttachmentClick}
+              />
+            )
           }
-          contextControl={<AddContextButton onClick={handleAddContext} />}
+          contextControl={
+            controlledComposer ? null : (
+              <AddContextButton onClick={handleAddContext} />
+            )
+          }
           screenshotControl={
-            <ScreenshotButton
-              onClick={() => screenshotInputRef.current?.click()}
-            />
+            controlledComposer ? null : (
+              <ScreenshotButton
+                onClick={() => screenshotInputRef.current?.click()}
+              />
+            )
           }
           recorder={
-            <AudioButton
-              callbackHandler={audioTiptapCallback}
-              editor={editor}
-              id={"ai-chat-audio-button"}
-              toggleRecording={toggleRecording!}
-              globalRecording={isRecording}
-              hasText={!isEditorEmpty}
-              onProcessingChange={setAudioProcessing}
-              ariaLabel="Start dictation"
-              wrapperClassName={recorderWrapperClassName}
-              visualizerClassName={
-                mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
-              }
-            />
+            controlledComposer ? (
+              controlledComposer.useTiptapEditor ? (
+                <AudioButton
+                  callbackHandler={controlledComposer.onDictation}
+                  editor={controlledEditor}
+                  id="ai-chat-audio-button"
+                  toggleRecording={controlledComposer.onRecordingChange}
+                  globalRecording={controlledComposer.isRecording}
+                  hasText={hasComposerText}
+                  onProcessingChange={controlledComposer.onProcessingChange}
+                  ariaLabel="Dictate message"
+                  wrapperClassName={recorderWrapperClassName}
+                  visualizerClassName={
+                    mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
+                  }
+                  disabled={controlledComposer.dictationDisabled}
+                  projectId={controlledComposer.projectId}
+                />
+              ) : (
+              <AudioButton
+                callbackHandler={controlledComposer.onDictation}
+                editor={null}
+                id="ai-chat-audio-button"
+                toggleRecording={controlledComposer.onRecordingChange}
+                globalRecording={controlledComposer.isRecording}
+                hasText={hasComposerText}
+                onProcessingChange={controlledComposer.onProcessingChange}
+                ariaLabel="Dictate message"
+                wrapperClassName={recorderWrapperClassName}
+                visualizerClassName={
+                  mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
+                }
+                disabled={controlledComposer.dictationDisabled}
+                projectId={controlledComposer.projectId}
+              />
+              )
+            ) : (
+              <AudioButton
+                callbackHandler={audioTiptapCallback}
+                editor={editor}
+                id="ai-chat-audio-button"
+                toggleRecording={toggleRecording!}
+                globalRecording={isRecording}
+                hasText={hasComposerText}
+                onProcessingChange={setAudioProcessing}
+                ariaLabel="Start dictation"
+                wrapperClassName={recorderWrapperClassName}
+                visualizerClassName={
+                  mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
+                }
+              />
+            )
           }
           streamControl={
-            isTyping ? (
+            controlledComposer ? null : isTyping ? (
               <CancelStreamButton onClick={handleCancelStream} />
             ) : null
           }
           sendControl={
-            !isTyping || !isEditorEmpty ? (
+            controlledComposer ? (
+              <SendMessageButton
+                disabled={controlledComposer.sendDisabled}
+                queueMode={controlledComposer.queueMode}
+                mobile={Boolean(isMbl)}
+                onClick={controlledComposer.onSend}
+              />
+            ) : !isTyping || !isEditorEmpty ? (
               <SendMessageButton
                 disabled={isEditorEmpty || isByokBlocked}
                 isByokBlocked={isByokBlocked}
@@ -369,16 +493,18 @@ export function AI_Tiptap_Container() {
             ) : null
           }
         />
-        <input
-          id="ai-chat-attachment-upload"
-          type="file"
-          multiple
-          onChange={handleFileUpload}
-          className="hidden"
-          aria-hidden
-          ref={fileInputRef}
-        />
-        {isMbl && (
+        {!controlledComposer && (
+          <input
+            id="ai-chat-attachment-upload"
+            type="file"
+            multiple
+            onChange={handleFileUpload}
+            className="hidden"
+            aria-hidden
+            ref={fileInputRef}
+          />
+        )}
+        {!controlledComposer && isMbl && (
           <input
             id="ai-chat-screenshot-upload"
             type="file"

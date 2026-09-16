@@ -36,6 +36,7 @@ import {
   MANAGER_LOOP_ACTIVITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+  HTPR_4857_ADD_TO_SLACK_FLAG,
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
@@ -47,6 +48,7 @@ import {
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
@@ -56,6 +58,11 @@ import {
   MY_TASKS_SNOOZE_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6512_SEED_TEAM_AGENT_FLAG,
+  HTPR_6532_STATELESS_MCP_FLAG,
+  HTPR_6530_MCP_LIST_QUERY_FLAG,
+  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+  HTPR_6473_GET_AGENT_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -80,6 +87,36 @@ const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
   {
+    key: HTPR_6530_MCP_LIST_QUERY_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Lets MCP list and search tools take query, filter, sort, fields, limit, and cursor so one call can return only the rows and columns the client asked for.",
+  },
+  {
+    key: HTPR_6473_GET_AGENT_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Lets hypertask agents get load one owned agent's mission text, boards, created time, and revoked state.",
+  },
+  {
+    key: HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "MCP tools/list sends one short line per tool on connect. Full schemas load through hypertask_describe_tool, and hypertask_search_tools finds a tool by name.",
+  },
+  {
+    key: HTPR_6532_STATELESS_MCP_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Serves MCP over stateless Streamable HTTP: each request carries its own bearer token, session ids are ignored, and any server instance can answer any call.",
+  },
+  {
+    key: HTPR_6512_SEED_TEAM_AGENT_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "When Owner or QA opens Agent Chat or lists a team that has no live agent they can see, seed a Hyper AI agent on a board of that team so the roster is not empty.",
+  },
+  {
     key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
     shippedOn: "2026-09-15",
     description:
@@ -102,6 +139,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-09",
     description:
       "In time reports, plain board members see only their own logged time; board owners and admins still see everyone's entries and keep the user filter.",
+  },
+  {
+    key: HTPR_4857_ADD_TO_SLACK_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Enables the public /add-to-slack page and the Slack Marketplace install resume path (callback without signed state sends visitors to login, then Settings completes the link). Flip to Everyone before the Slack Marketplace submission.",
   },
   {
     key: LOCAL_WRITING_ASSISTANCE_FLAG,
@@ -240,7 +283,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
     shippedOn: "2026-09-14",
     description:
-      "On mobile Agent Chat with an agent open: hide the app top bar and bottom nav, slim the header to back plus name, and reuse the AI chat mic and send controls.",
+      "On mobile Agent Chat with an agent open: hide the app top bar and bottom nav, slim the header to back plus name, and reuse the AI chat TipTap composer, mic, and send.",
   },
   {
     key: "htpr-6287-agent-chat-roster-status",
@@ -415,6 +458,12 @@ const FEATURE_FLAG_DEFINITIONS = [
       "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
   },
   {
+    key: MY_TASKS_BULK_SELECTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Adds Inbox-style multi-select on My Tasks with bulk archive, assign, label, and move to column.",
+  },
+  {
     key: MY_TASKS_FILTER_PARITY_FLAG,
     shippedOn: "2026-09-14",
     description:
@@ -454,7 +503,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: MY_TASKS_SNOOZE_FLAG,
     shippedOn: "2026-09-15",
     description:
-      "Lets you snooze a My Tasks row until a date so it leaves the list and comes back on that day. Same date presets as Inbox Remind Me.",
+      "On My Tasks, H opens the existing Remind Me picker. The chosen date hides the row here and in Inbox until it returns to both.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

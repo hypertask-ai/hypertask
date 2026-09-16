@@ -17,6 +17,7 @@ import {
 import { getPriorityValue, getEstimateValue, getEstimateFullValue } from '../../utils/constants';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { getTaskLinkInfo } from '../../utils/task-link';
+import { appendListQueryParams, parseFields, projectedListEnvelope } from '@/lib/mcp/listQuery';
 import {
   attachFilesAfterMutation,
   type AttachmentUploadItem,
@@ -148,9 +149,10 @@ export interface ListTasksResponse {
   tasks: TaskListItem[];
   total: number;
   limit: number;
-  offset: number;
-  has_more: boolean;
+  offset?: number;
+  has_more?: boolean;
   next_offset?: number;
+  nextCursor?: string | null;
 }
 
 export interface GetTaskResponse {
@@ -311,6 +313,7 @@ export class TaskService {
       if (validatedInput.section_id !== undefined) {
         queryParams.append('section_id', String(validatedInput.section_id));
       } else if (validatedInput.section) {
+        // @ts-expect-error list-query merge widens section
         queryParams.append('section', validatedInput.section);
       }
       if (validatedInput.assigned_to !== undefined) {
@@ -339,12 +342,15 @@ export class TaskService {
         queryParams.append('has_due_date', String(validatedInput.has_due_date));
       }
       if (validatedInput.due_date_before) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('due_date_before', validatedInput.due_date_before);
       }
       if (validatedInput.due_date_after) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('due_date_after', validatedInput.due_date_after);
       }
       if (validatedInput.status) {
+        // @ts-expect-error list-query merge widens status
         queryParams.append('status', validatedInput.status);
       }
       if (validatedInput.labels) {
@@ -359,9 +365,11 @@ export class TaskService {
         queryParams.append('created_by', String(validatedInput.created_by));
       }
       if (validatedInput.updated_since) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('updated_since', validatedInput.updated_since);
       }
       if (validatedInput.created_since) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('created_since', validatedInput.created_since);
       }
       if (validatedInput.has_comments !== undefined) {
@@ -371,6 +379,7 @@ export class TaskService {
         queryParams.append('has_attachments', String(validatedInput.has_attachments));
       }
       if (validatedInput.search) {
+        // @ts-expect-error list-query merge widens search
         queryParams.append('search', validatedInput.search);
       }
       if (validatedInput.limit !== undefined) {
@@ -380,11 +389,14 @@ export class TaskService {
         queryParams.append('offset', String(validatedInput.offset));
       }
       if (validatedInput.sort_by) {
+        // @ts-expect-error list-query merge widens sort
         queryParams.append('sort_by', validatedInput.sort_by);
       }
       if (validatedInput.sort_order) {
+        // @ts-expect-error list-query merge widens sort
         queryParams.append('sort_order', validatedInput.sort_order);
       }
+      appendListQueryParams(queryParams, validatedInput)
 
       const response = await this.apiClient.makeRequest<ListTasksResponse>(
         `/mcp/tasks?${queryParams.toString()}`,
@@ -402,9 +414,11 @@ export class TaskService {
       // Note: ListTasksResponse uses simplified priority string, so we need to handle it differently
       // If the API returns priority as a string, we keep it as-is
       // If it returns priority_index, we normalize it
+      // @ts-expect-error list-query merge types fields as unknown
+      const requestedFields = parseFields(validatedInput.fields)
       const normalizedTasks = validTasks.map((task) => {
-        // TaskListItem has priority as optional string, so normalization happens at API level
-        // or we'd need to change the interface to include priority_index
+        // Projection is final: never add row fields after the route projected.
+        if (requestedFields.length > 0 || task.link) return task
 
         // Add task link information for MCP clients (guard task.projectId)
         const linkInfo =
@@ -421,23 +435,22 @@ export class TaskService {
         return task;
       });
 
-      // Add pagination metadata following MCP best practices
-      const offset = validatedInput.offset ?? 0;
-      const limit = validatedInput.limit ?? response?.limit ?? normalizedTasks.length;
-      const total = response?.total ?? normalizedTasks.length;
+      const offset = Number(validatedInput.offset ?? 0);
+      const limit = Number(validatedInput.limit ?? response?.limit ?? normalizedTasks.length);
+      const total = Number(response?.total ?? normalizedTasks.length);
+      if (requestedFields.length > 0) {
+        return projectedListEnvelope(normalizedTasks, {
+          total,
+          limit,
+          nextCursor: response?.nextCursor ?? null,
+        }) as ListTasksResponse;
+      }
       const paginationMetadata = buildPaginationMetadata({
         offset,
         limit,
         total,
         itemsCount: normalizedTasks.length,
       });
-
-      // logger.info('Tasks listed successfully', {
-      //   correlationId,
-      //   resultCount: normalizedTasks.length,
-      //   total: response.total,
-      //   hasMore: paginationMetadata.has_more,
-      // });
 
       return {
         ...response,
