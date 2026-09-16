@@ -5,7 +5,7 @@ import { EnhancedSearchTasksInputSchema } from '../../validations/task.validatio
 import { getConfig } from '../../config/index';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { getTaskLinkInfo } from '../../utils/task-link';
-import { appendListQueryParams, parseFields } from '@/lib/mcp/listQuery';
+import { appendListQueryParams, parseFields, projectedListEnvelope } from '@/lib/mcp/listQuery';
 
 export interface TaskSearchResult {
   id: number;
@@ -30,9 +30,10 @@ export interface SearchTasksResponse {
   total: number;
   boardId?: number;
   limit: number;
-  offset: number;
-  has_more: boolean;
+  offset?: number;
+  has_more?: boolean;
   next_offset?: number;
+  nextCursor?: string | null;
 }
 
 /**
@@ -130,22 +131,21 @@ export class SearchService {
         return task;
       });
 
-      // Add pagination metadata following MCP best practices
       const limit = validatedInput.limit ?? config.limits.searchLimitDefault;
-      const offset = 0; // Search doesn't support offset yet, but we include it for consistency
+      const offset = 0;
+      if (requestedFields.length > 0) {
+        return projectedListEnvelope(normalizedTasks, {
+          total: response.total,
+          limit,
+          nextCursor: response.nextCursor ?? null,
+        }) as SearchTasksResponse;
+      }
       const paginationMetadata = buildPaginationMetadata({
         offset,
         limit,
         total: response.total,
         itemsCount: normalizedTasks.length,
       });
-
-      // logger.info('Tasks search completed', {
-      //   correlationId,
-      //   resultCount: normalizedTasks.length,
-      //   total: response.total,
-      //   hasMore: paginationMetadata.has_more,
-      // });
 
       return {
         ...response,

@@ -11,9 +11,13 @@ import {
   getEnhancedSearchTasksInputSchema,
   getListTasksInputSchema,
 } from './validations/task.validation'
+import { withListQueryDescription } from './listQueryDescriptions'
 
-export const LIST_TASKS_LEGACY_DESCRIPTION =
-  'Lists tasks with comprehensive filtering options. Filter by project, section (column title or section_id), assignee, priority, due date, status, labels, and more. Supports pagination and sorting. Results are automatically limited to boards/projects the user has access to. Prefer section_id (positive integer) when known; otherwise use section with the exact section_title from hypertask_section action=list. The CLI resolves section names to section_id per project. Each task includes a "link" field with the task URL: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex} where uniqueIndex is extracted from the ticket number.'
+export {
+  LIST_QUERY_DESCRIPTION_SUFFIX,
+  LIST_TASKS_LEGACY_DESCRIPTION,
+  withListQueryDescription,
+} from './listQueryDescriptions'
 
 const LIST_QUERY_PARAMETER_FACTORIES: Record<
   string,
@@ -38,10 +42,7 @@ export function resolvePortableTools(
     return {
       ...tool,
       parameters: parametersFactory ? parametersFactory(listQueryEnabled) : tool.parameters,
-      description:
-        tool.name === TOOL_METADATA.LIST_TASKS.name && !listQueryEnabled
-          ? LIST_TASKS_LEGACY_DESCRIPTION
-          : tool.description,
+      description: withListQueryDescription(tool.name, tool.description, listQueryEnabled),
     }
   })
 }

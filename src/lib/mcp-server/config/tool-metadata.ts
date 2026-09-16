@@ -104,7 +104,7 @@ const RAW_TOOL_METADATA = {
   LIST_TASKS: {
     name: buildToolName('list_tasks'),
     description:
-      'Lists tasks with comprehensive filtering options. Use the shared list params query, filter, sort, fields, limit, and cursor so one call returns only the rows and columns you need. filter.section, filter.label, filter.assignee, filter.status (open maps to Normal), filter.updated_since, and filter.has_pr (red/true/false/open/green/merged) work here. Example: filter.section=AI Review, filter.has_pr=red, filter.status=open, fields=title,url. Prefer section_id when known. Each task includes url and a link object: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}.',
+      'Lists tasks with comprehensive filtering options. Use the shared list params query, filter, sort, fields, limit, and cursor so one call returns only the rows and columns you need. filter.section, filter.label, filter.assignee, filter.status (open maps to Normal), filter.updated_since, and filter.has_pr (red/true/false/open/green/merged) work here. filter.has_pr=red matches a red PR badge: failing checks or a closed PR. Example: filter.section=AI Review, filter.has_pr=red, filter.status=open, fields=title,url. Prefer section_id when known. Each task includes url and a link object: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}.',
   },
 
   GET_TASKS: {

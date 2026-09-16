@@ -17,7 +17,7 @@ import {
 import { getPriorityValue, getEstimateValue, getEstimateFullValue } from '../../utils/constants';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { getTaskLinkInfo } from '../../utils/task-link';
-import { appendListQueryParams, parseFields } from '@/lib/mcp/listQuery';
+import { appendListQueryParams, parseFields, projectedListEnvelope } from '@/lib/mcp/listQuery';
 import {
   attachFilesAfterMutation,
   type AttachmentUploadItem,
@@ -149,9 +149,10 @@ export interface ListTasksResponse {
   tasks: TaskListItem[];
   total: number;
   limit: number;
-  offset: number;
-  has_more: boolean;
+  offset?: number;
+  has_more?: boolean;
   next_offset?: number;
+  nextCursor?: string | null;
 }
 
 export interface GetTaskResponse {
@@ -434,10 +435,16 @@ export class TaskService {
         return task;
       });
 
-      // Add pagination metadata following MCP best practices
       const offset = validatedInput.offset ?? 0;
       const limit = validatedInput.limit ?? response?.limit ?? normalizedTasks.length;
       const total = response?.total ?? normalizedTasks.length;
+      if (requestedFields.length > 0) {
+        return projectedListEnvelope(normalizedTasks, {
+          total,
+          limit,
+          nextCursor: response?.nextCursor ?? null,
+        }) as ListTasksResponse;
+      }
       const paginationMetadata = buildPaginationMetadata({
         // @ts-expect-error list-query merge widens pagination
         offset,
@@ -446,13 +453,6 @@ export class TaskService {
         total,
         itemsCount: normalizedTasks.length,
       });
-
-      // logger.info('Tasks listed successfully', {
-      //   correlationId,
-      //   resultCount: normalizedTasks.length,
-      //   total: response.total,
-      //   hasMore: paginationMetadata.has_more,
-      // });
 
       return {
         ...response,
