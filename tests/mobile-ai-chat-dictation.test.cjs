@@ -36,9 +36,27 @@ const stubModule = (filename, exports) => {
 const stubSourceModule = (relativePath, exports) =>
   stubModule(path.join(root, relativePath), exports);
 
+const stubEditor = {
+  isEmpty: false,
+  getText: () => "Reply",
+  isFocused: false,
+  commands: {
+    focus: () => {},
+    setContent: () => {},
+    clearContent: () => {},
+  },
+  state: { selection: { from: 1 }, doc: { textBetween: () => "Reply" } },
+};
 stubModule(require.resolve("@tiptap/react"), {
   EditorContent: () => React.createElement("div", { "data-editor": true }),
+  useEditor: () => stubEditor,
   useEditorState: ({ editor, selector }) => selector({ editor }),
+});
+stubModule(require.resolve("@tiptap/starter-kit"), {
+  default: { configure: () => ({}) },
+});
+stubModule(require.resolve("@tiptap/extension-placeholder"), {
+  default: { configure: () => ({}) },
 });
 stubModule(require.resolve("next/navigation"), {
   usePathname: () => pathname,
@@ -609,7 +627,8 @@ test("controlled Agent Chat mode uses the real mobile AI composer frame", async 
     );
 
     assert.ok(container.querySelector("[data-agent-chat-ai-composer]"));
-    assert.equal(container.querySelector("textarea").value, "Reply");
+    assert.ok(container.querySelector("[data-editor]"));
+    assert.equal(container.querySelector("textarea"), null);
     assert.equal(
       container.querySelector('[data-control="recorder"]').dataset.recorderId,
       "ai-chat-audio-button",

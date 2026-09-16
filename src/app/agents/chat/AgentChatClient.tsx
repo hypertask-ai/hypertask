@@ -14,8 +14,8 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
 } from "react";
+import type { Editor } from "@tiptap/react";
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -670,8 +670,8 @@ const AgentChatClient = (props: IProp) => {
   const [feedFilter, setFeedFilter] = useState<AgentChatFilter>("all");
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  // Mic dictation (AudioButton), same component and editor={null} pattern as
-  // the plain-text title field in TaskTitleModal.tsx.
+  // Mic dictation (AudioButton). The flagged composer passes the TipTap
+  // editor; the flag-off textarea still uses editor={null}.
   const [isRecording, setIsRecording] = useState(false);
   const [isDictationProcessing, setIsDictationProcessing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -758,6 +758,14 @@ const AgentChatClient = (props: IProp) => {
   // the tap's event handler, so selectAgent needs the composer's DOM node
   // before that handler returns (see the flushSync call there).
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerEditorRef = useRef<Editor | null>(null);
+  const focusComposer = () => {
+    if (composerEditorRef.current) {
+      composerEditorRef.current.commands.focus();
+      return;
+    }
+    composerRef.current?.focus();
+  };
   // Same pattern as loadGenRef: the mount-time roster fetch and the
   // post-create-agent refresh both call loadAgents/setAgents, so a slower
   // mount fetch resolving after a refresh must not clobber it.
@@ -1076,7 +1084,7 @@ const AgentChatClient = (props: IProp) => {
         setQueuedMessages([]);
       });
       dismissMention();
-      if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
+      if (isMbl && agent.runtimeType === "EXTERNAL") focusComposer();
       // The selection lives in the URL so a reload keeps the chat open.
       router.replace(
         `/agents/chat?agent=${encodeURIComponent(agent.slug ?? agent.id)}`,
@@ -1607,7 +1615,8 @@ const AgentChatClient = (props: IProp) => {
     }
     setDraft("");
     dismissMention();
-    composerRef.current?.focus();
+    composerEditorRef.current?.commands.clearContent();
+    focusComposer();
     if (composerLocked) {
       // Same rationale as the optimistic message id above: this only runs
       // from an event handler, never during render.
@@ -1664,10 +1673,15 @@ const AgentChatClient = (props: IProp) => {
     setMentionLoadError(false);
   };
 
-  // AudioButton's dictation callback. There is no Tiptap editor here, so this
-  // mirrors appendDictationToTitle (TaskTitleModal.tsx): append transcript
-  // text to the plain-string draft, same append helper.
+  // AudioButton's dictation callback. TipTap path inserts into the editor.
+  // Flag-off textarea still appends to the plain-string draft.
   const insertDictation = useCallback((transcript: string) => {
+    const editor = composerEditorRef.current;
+    if (editor) {
+      const prefix = editor.getText().trim() ? " " : "";
+      editor.chain().focus("end").insertContent(prefix + transcript).run();
+      return;
+    }
     setDraft((current) => appendTitleDictation(current, transcript));
     composerRef.current?.focus();
   }, []);
@@ -1758,6 +1772,17 @@ const AgentChatClient = (props: IProp) => {
     setDraft(inserted);
     dismissMention();
     requestAnimationFrame(() => {
+      const editor = composerEditorRef.current;
+      if (editor) {
+        editor.commands.setContent(inserted, { emitUpdate: false });
+        editor.commands.focus();
+        const pos = Math.min(
+          before.length + ticket.length + 2,
+          editor.state.doc.content.size,
+        );
+        editor.commands.setTextSelection(pos);
+        return;
+      }
       const el = composerRef.current;
       if (!el) return;
       el.focus();
@@ -1766,7 +1791,11 @@ const AgentChatClient = (props: IProp) => {
     });
   };
 
-  const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleComposerKeyDown = (e: {
+    key: string;
+    shiftKey: boolean;
+    preventDefault: () => void;
+  }) => {
     if (mentionOpen) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -1938,7 +1967,8 @@ const AgentChatClient = (props: IProp) => {
         // `draft` directly) so this effect doesn't need to re-run, and re-add
         // the window listener, on every keystroke.
         if (
-          document.activeElement === composerRef.current &&
+          (composerEditorRef.current?.isFocused ||
+            document.activeElement === composerRef.current) &&
           draftRef.current.trim() !== "" &&
           draftRef.current !== restoredDraftRef.current
         ) {
@@ -1998,7 +2028,7 @@ const AgentChatClient = (props: IProp) => {
   // load (deep link or roster click) and again after a message sends, so
   // typing can continue without reaching for the mouse.
   useEffect(() => {
-    if (isExternal && session && !composerLocked) composerRef.current?.focus();
+    if (isExternal && session && !composerLocked) focusComposer();
   }, [isExternal, session, composerLocked, selectedId]);
 
   const rosterPane = (
@@ -2294,6 +2324,7 @@ const AgentChatClient = (props: IProp) => {
                   controlledComposer={{
                     value: draft,
                     inputRef: composerRef,
+                    editorRef: composerEditorRef,
                     onChange: handleComposerChange,
                     onKeyDown: handleComposerKeyDown,
                     placeholder: composerLocked
