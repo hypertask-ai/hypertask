@@ -1248,7 +1248,11 @@ const TableView = ({
         setShowCommands({
           show: true,
           mode: CommandMode.RemindMe,
-          payload: { returnsToMyTasks: true },
+          payload: {
+            returnsToMyTasks:
+              typeof row.task.currentUserAssignmentId === "number" &&
+              row.task.currentUserAssignmentId > 0,
+          },
         });
         return true;
       }

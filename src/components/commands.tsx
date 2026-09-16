@@ -2488,12 +2488,17 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             (myTasksSnoozeEnabled && commandMode === CommandMode.MyTasksSnooze)) && (
             <RemindMeComponent
               closeHandler={togglRemindMeModal}
+              remindTask={
+                contextOptions?.taskOptions?.isMyTasks ||
+                showCommands.payload?.returnsToMyTasks
+                  ? false
+                  : undefined
+              }
               returnsToMyTasks={
                 myTasksSnoozeEnabled &&
-                Boolean(
-                  contextOptions?.taskOptions?.isMyTasks ||
-                    showCommands.payload?.returnsToMyTasks
-                )
+                (typeof showCommands.payload?.returnsToMyTasks === "boolean"
+                  ? showCommands.payload.returnsToMyTasks
+                  : Boolean(contextOptions?.taskOptions?.isMyTasks))
               }
             />
           )}
