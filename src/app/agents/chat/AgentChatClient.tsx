@@ -633,9 +633,7 @@ const AgentChatClient = (props: IProp) => {
     "htpr-6129-mobile-agent-chat-viewport",
   );
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
-  const mobileFullscreenFlag = useFlag(
-    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
-  );
+  const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   // Idle durations and the idle-to-inactive flip have to move while the chat
