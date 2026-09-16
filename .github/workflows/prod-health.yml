@@ -890,7 +890,23 @@ jobs:
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${repo}/commits/${sha}/status?per_page=100" \
                 | jq -r '[.statuses[] | select(.context=="prod-health-gate")][0].state // empty') || state=""
-              [ "$state" = "success" ]
+              if [ "$state" != "success" ]; then
+                echo "Skip $sha: prod-health-gate is '${state:-missing}'"
+                return 1
+              fi
+              # A later job in the same workflow can fail after health posted
+              # success (core-actions). Fail closed on that later conclusion
+              # rather than trusting a stale success status.
+              local conclusion
+              conclusion=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${repo}/actions/workflows/prod-health.yml/runs?head_sha=${sha}&event=push&per_page=10" \
+                | jq -r '[.workflow_runs[] | select(.status=="completed")] | sort_by(.updated_at) | reverse | .[0].conclusion // empty') || conclusion=""
+              if [ "$conclusion" = "failure" ] || [ "$conclusion" = "cancelled" ] || [ -z "$conclusion" ]; then
+                echo "Skip $sha: latest prod-health run concluded '${conclusion:-missing}'"
+                return 1
+              fi
+              return 0
             }
 
             ignored_only_to_tip() {
@@ -1094,20 +1110,36 @@ jobs:
             echo "CORE_SMOKE_ROLLBACK=not requested for this result" >> "$GITHUB_ENV"
             exit 0
           fi
+          if [ -z "${GITHUB_TOKEN:-}" ] || [ -z "${GITHUB_REPOSITORY:-}" ]; then
+            echo "::error::Cannot invalidate prod-health-gate; missing GITHUB_TOKEN or repository"
+            exit 1
+          fi
+          posted=no
+          for i in 1 2 3; do
+            code=$(curl -sS -o /tmp/core-gate.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+              -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed core-actions"}') || code=000
+            state=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status?per_page=100" \
+              | jq -r '[.statuses[] | select(.context=="prod-health-gate")][0].state // empty') || state=""
+            echo "invalidate prod-health-gate try $i -> http $code state ${state:-missing}"
+            if { [ "$code" = "201" ] || [ "$code" = "200" ]; } && [ "$state" = "failure" ]; then
+              posted=yes
+              break
+            fi
+            [ "$i" -lt 3 ] && sleep 2
+          done
+          if [ "$posted" != "yes" ]; then
+            echo "::error::Failed to invalidate prod-health-gate for $GITHUB_SHA"
+            exit 1
+          fi
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA")
           echo "$RESULT"
           SUMMARY=$(echo "$RESULT" | jq -r '[.action // "failed", .reason // "no reason returned"] | map(tostring | gsub("[\\r\\n]+"; " ")) | join(": ")')
           echo "CORE_SMOKE_ROLLBACK=$SUMMARY" >> "$GITHUB_ENV"
-          ACTION=$(echo "$RESULT" | jq -r '.action // "failed"')
-          if [ "$ACTION" = "requested" ] || [ "$ACTION" = "skip" ]; then
-            if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
-              curl -sS -o /dev/null -X POST \
-                -H "Authorization: Bearer $GITHUB_TOKEN" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-                -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed core-actions"}' || true
-            fi
-          fi
 
       - name: Report a failed or unrunnable check
         if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}

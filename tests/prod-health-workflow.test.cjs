@@ -467,6 +467,9 @@ case "$url" in
   https://api.github.com/repos/*/commits/*/status*)
     body=$(printf '{"statuses":[{"context":"prod-health-gate","state":"%s"}]}' "\${DRIFT_HEALTH_GATE:-success}")
     ;;
+  https://api.github.com/repos/*/actions/workflows/prod-health.yml/runs*)
+    body=$(printf '{"workflow_runs":[{"status":"completed","conclusion":"%s","updated_at":"2026-09-16T00:00:00Z"}]}' "\${DRIFT_HEALTH_CONCLUSION:-success}")
+    ;;
   https://api.telegram.org/*)
     body='{"ok":true}'
     ;;
@@ -507,6 +510,7 @@ async function runDriftCheck({
   freshTip = false,
   liveIsTip = false,
   healthGate = "success",
+  healthConclusion = "success",
   ignoredTipAfterApp = false,
 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "prod-health-drift-"));
@@ -567,6 +571,7 @@ async function runDriftCheck({
         DRIFT_TIP_SHA: ignoredTipAfterApp ? appSha : tipSha,
         DRIFT_LIVE_SHA: liveIsTip ? tipSha : liveSha,
         DRIFT_HEALTH_GATE: healthGate,
+        DRIFT_HEALTH_CONCLUSION: healthConclusion,
       },
     });
     const promoted = await readFile(join(runnerTemp, "promoted"), "utf8").catch(
@@ -613,6 +618,17 @@ test("drift does not promote a SHA whose prod-health run failed", async () => {
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /no green prod-health gate|No READY deploy with a green health gate/);
+  assert.equal(promoted, null);
+});
+
+test("drift does not promote a SHA whose later prod-health job failed", async () => {
+  const { result, promoted } = await runDriftCheck({
+    healthGate: "success",
+    healthConclusion: "failure",
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /latest prod-health run concluded|No READY deploy with a green health gate/);
   assert.equal(promoted, null);
 });
 
@@ -731,4 +747,10 @@ test("core-actions rollback invalidates the health gate", async () => {
   assert.match(block, /statuses: write/);
   assert.match(block, /prod-health-gate/);
   assert.match(block, /Rolled back after failed core-actions/);
+  assert.match(block, /SHOULD_ROLLBACK/);
+  const rollbackAt = block.indexOf("SHOULD_ROLLBACK");
+  const invalidateAt = block.indexOf("invalidate prod-health-gate");
+  const emergencyAt = block.indexOf("emergency-rollback.mjs");
+  assert.ok(rollbackAt !== -1 && invalidateAt !== -1 && emergencyAt !== -1);
+  assert.ok(invalidateAt < emergencyAt, "gate must be invalidated before rollback");
 });
