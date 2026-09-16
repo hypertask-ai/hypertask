@@ -1,0 +1,41 @@
+name: MCP client eval
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths:
+      - "evals/mcp-client/**"
+      - "src/lib/mcp-server/**"
+      - "src/lib/mcp/**"
+      - "src/app/api/mcp/**"
+      - "src/app/mcp/**"
+      - "src/lib/mcpClientEval/**"
+      - ".github/workflows/mcp-client-eval.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mcp-client-eval:
+    name: mcp-client-eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 20
+
+      - name: Grade the 20-task catalog
+        run: node --test tests/mcp-client-eval.test.cjs
+
+      - name: Write the replay report
+        run: node evals/mcp-client/run.mjs --mode replay --label pre-6478
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mcp-client-eval-report
+          path: src/lib/mcpClientEval/latest.json

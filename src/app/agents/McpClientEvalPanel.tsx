@@ -1,0 +1,137 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6533_MCP_CLIENT_EVAL_FLAG } from "@/lib/flags/keys";
+import type {
+  McpClientEvalClient,
+  McpClientEvalReport,
+  McpClientEvalTransport,
+} from "@/lib/mcpClientEval/types";
+
+const CLIENTS: McpClientEvalClient[] = ["claude", "cursor", "codex"];
+const TRANSPORTS: McpClientEvalTransport[] = ["mcp", "cli"];
+
+function rate(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function McpClientEvalPanel() {
+  const enabled = useFlag(HTPR_6533_MCP_CLIENT_EVAL_FLAG);
+  const [report, setReport] = useState<McpClientEvalReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    fetch("/api/agents/mcp-client-eval")
+      .then(async (response) => {
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error("Could not load the eval report");
+        const body = (await response.json()) as {
+          success: boolean;
+          report?: McpClientEvalReport;
+        };
+        return body.report ?? null;
+      })
+      .then((next) => {
+        if (!cancelled) setReport(next);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  if (!enabled || (!report && !error)) return null;
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-[13px] font-medium text-text-light-gray mb-3">
+        MCP client eval
+      </h2>
+      {error && <p className="text-[13px] text-red-500">{error}</p>}
+      {report && (
+        <>
+          <p className="mb-3 text-[13px] text-text-light-gray">
+            {report.label} · {new Date(report.generatedAt).toLocaleString()} ·{" "}
+            {rate(report.summary.successRate)} pass
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="text-text-light-gray">
+                  <th className="py-1.5 pr-3 font-medium">Client</th>
+                  <th className="py-1.5 pr-3 font-medium">Path</th>
+                  <th className="py-1.5 pr-3 font-medium">Pass</th>
+                  <th className="py-1.5 pr-3 font-medium">Tokens in</th>
+                  <th className="py-1.5 pr-3 font-medium">Tokens out</th>
+                  <th className="py-1.5 pr-3 font-medium">Time</th>
+                  <th className="py-1.5 font-medium">Tool calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CLIENTS.flatMap((client) =>
+                  TRANSPORTS.map((transport) => {
+                    const slice = report.summary.byClient[client][transport];
+                    return (
+                      <tr
+                        key={`${client}-${transport}`}
+                        className="border-t border-white/10"
+                      >
+                        <td className="py-1.5 pr-3 capitalize">{client}</td>
+                        <td className="py-1.5 pr-3 uppercase">{transport}</td>
+                        <td className="py-1.5 pr-3">{rate(slice.successRate)}</td>
+                        <td className="py-1.5 pr-3">{slice.tokensIn}</td>
+                        <td className="py-1.5 pr-3">{slice.tokensOut}</td>
+                        <td className="py-1.5 pr-3">{slice.wallMs} ms</td>
+                        <td className="py-1.5">{slice.toolCalls}</td>
+                      </tr>
+                    );
+                  }),
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-[13px]">
+              <thead>
+                <tr className="text-text-light-gray">
+                  <th className="py-1.5 pr-3 font-medium">Task</th>
+                  <th className="py-1.5 pr-3 font-medium">Client</th>
+                  <th className="py-1.5 pr-3 font-medium">Path</th>
+                  <th className="py-1.5 pr-3 font-medium">Result</th>
+                  <th className="py-1.5 pr-3 font-medium">In</th>
+                  <th className="py-1.5 pr-3 font-medium">Out</th>
+                  <th className="py-1.5 pr-3 font-medium">Time</th>
+                  <th className="py-1.5 font-medium">Calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((row) => (
+                  <tr
+                    key={`${row.taskId}-${row.client}-${row.transport}`}
+                    className="border-t border-white/10"
+                  >
+                    <td className="py-1.5 pr-3">{row.taskId}</td>
+                    <td className="py-1.5 pr-3 capitalize">{row.client}</td>
+                    <td className="py-1.5 pr-3 uppercase">{row.transport}</td>
+                    <td className="py-1.5 pr-3">{row.pass ? "pass" : "fail"}</td>
+                    <td className="py-1.5 pr-3">{row.tokensIn}</td>
+                    <td className="py-1.5 pr-3">{row.tokensOut}</td>
+                    <td className="py-1.5 pr-3">{row.wallMs} ms</td>
+                    <td className="py-1.5">{row.toolCalls}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+export default McpClientEvalPanel;

@@ -1,0 +1,546 @@
+{
+  "version": 1,
+  "projectId": 15,
+  "ticketPrefix": "HTPR",
+  "fixtureTicket": "HTPR-6533",
+  "tasks": [
+    {
+      "id": "find-overdue",
+      "prompt": "Find my overdue tickets on project 15.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_tasks",
+            "args": {
+              "project_id": 15,
+              "assignee": "me"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "list",
+              "--project",
+              "15",
+              "--assigned-to",
+              "me",
+              "--has-due-date"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "comment-ticket",
+      "prompt": "Comment on HTPR-6533 with a short status note.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_add_comment_to_task",
+            "args": {
+              "ticket_number": "HTPR-6533",
+              "text": "eval status"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "comment",
+              "add",
+              "HTPR-6533",
+              "--text",
+              "<p>eval status</p>"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "move-to-qa",
+      "prompt": "Move HTPR-6533 to QA.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_update_task",
+            "args": {
+              "ticket_number": "HTPR-6533",
+              "status": "QA"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "move",
+              "HTPR-6533",
+              "--section",
+              "QA"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "get-ticket",
+      "prompt": "Get HTPR-6533 and tell me its section and assignees.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_get_tasks",
+            "args": {
+              "ticket_number": [
+                "HTPR-6533"
+              ]
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "get",
+              "HTPR-6533"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "search-tickets",
+      "prompt": "Search project 15 for MCP eval harness tickets.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_search_tasks",
+            "args": {
+              "query": "MCP eval harness",
+              "project_id": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "search",
+              "MCP eval harness",
+              "--project",
+              "15"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "list-board-tasks",
+      "prompt": "List open tasks on project 15.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_tasks",
+            "args": {
+              "project_id": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "list",
+              "--project",
+              "15"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "list-comments",
+      "prompt": "List comments on HTPR-6533.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_get_comments_for_task",
+            "args": {
+              "ticket_number": "HTPR-6533"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "comment",
+              "list",
+              "HTPR-6533"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "list-sections",
+      "prompt": "List the columns on project 15.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_section",
+            "args": {
+              "action": "list",
+              "project_id": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "section",
+              "list",
+              "--project",
+              "15"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "list-projects",
+      "prompt": "List the boards I can see.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_projects",
+            "args": {}
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "project",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "hello-context",
+      "prompt": "Who am I, and what can I do in Hypertask right now?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_hello",
+            "args": {}
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "status"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "assign-self",
+      "prompt": "Assign HTPR-6533 to me.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_assign_user",
+            "args": {
+              "ticket_number": "HTPR-6533",
+              "assign_self": true
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "assign",
+              "HTPR-6533",
+              "--self"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "create-task",
+      "prompt": "Create a task titled Eval fixture note on project 15.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_create_task",
+            "args": {
+              "project_id": 15,
+              "title": "Eval fixture note"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "create",
+              "--project",
+              "15",
+              "--title",
+              "Eval fixture note"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "update-title",
+      "prompt": "Update the title of HTPR-6533.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_update_task",
+            "args": {
+              "ticket_number": "HTPR-6533"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "update",
+              "HTPR-6533"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "list-labels",
+      "prompt": "List labels on project 15.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_labels",
+            "args": {
+              "project_id": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "labels",
+              "list",
+              "--project",
+              "15"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "list-inbox",
+      "prompt": "Show my inbox.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_inbox_list",
+            "args": {}
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "inbox",
+              "list"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "log-time",
+      "prompt": "Log 15 minutes on HTPR-6533.",
+      "mutating": true,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_time",
+            "args": {
+              "action": "log",
+              "ticket_number": "HTPR-6533",
+              "minutes": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "time",
+              "log",
+              "HTPR-6533",
+              "15"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "next-tasks",
+      "prompt": "What should I work on next on project 15?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_next_tasks",
+            "args": {
+              "project_id": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "next",
+              "--project",
+              "15"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "task-context",
+      "prompt": "Give me the context pack for HTPR-6533.",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_task_context",
+            "args": {
+              "ticket_number": "HTPR-6533",
+              "project_id": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "task",
+              "context",
+              "HTPR-6533"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "list-members",
+      "prompt": "Who is on project 15?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_list_project_members",
+            "args": {
+              "project_id": 15
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "project",
+              "members",
+              "15"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "search-help",
+      "prompt": "How do I connect Claude to the Hypertask MCP server?",
+      "mutating": false,
+      "mcp": {
+        "tools": [
+          {
+            "name": "hypertask_search_help_docs",
+            "args": {
+              "query": "connect Claude MCP"
+            }
+          }
+        ]
+      },
+      "cli": {
+        "commands": [
+          {
+            "argv": [
+              "capabilities"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
