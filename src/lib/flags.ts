@@ -108,7 +108,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6532_STATELESS_MCP_FLAG,
     shippedOn: "2026-09-16",
     description:
-      "Serves MCP over stateless Streamable HTTP: each request carries its own bearer token, session ids are ignored, and any server instance can answer any call.",
+      "GET and DELETE on /mcp skip the old session resume path. POST already answers from the bearer token on that request, on any instance.",
   },
   {
     key: HTPR_6512_SEED_TEAM_AGENT_FLAG,

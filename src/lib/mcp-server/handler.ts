@@ -181,24 +181,16 @@ export async function mcpHandler(request: Request): Promise<Response> {
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
 
-  // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
-  // OPTIONS has no session. Everyone else keeps the existing session handler.
+  // POST is always request-scoped so a second instance and the connector
+  // transport check can continue an interleaved conversation. GET/DELETE
+  // still follow htpr-6532-stateless-mcp so the old session resume path
+  // stays until that flag is on. Deferred tools no longer skip that gate.
   if (usesStatelessMcpTransport(working.method, stateless)) {
     return handleMcpHttp(working, {
       authenticate: async () => authInfo,
       tools: portableTools,
       deferredEnabled: async () => deferred,
     })
-  }
-
-  if (stateless) {
-    if (deferred) {
-      return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
-    }
-    return handleStatelessMcpRequest(working, authInfo, portableTools)
-  }
-  if (deferred) {
-    return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
   }
 
   return listQueryEnabled

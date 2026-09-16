@@ -197,8 +197,8 @@ function publicHandler(options: { deferred?: boolean } = {}) {
     })
 }
 
-test('POST follows the feature flag; OPTIONS stays stateless', () => {
-  assert.equal(usesStatelessMcpTransport('POST', false), false)
+test('POST and OPTIONS stay stateless with the flag off; GET and DELETE follow the flag', () => {
+  assert.equal(usesStatelessMcpTransport('POST', false), true)
   assert.equal(usesStatelessMcpTransport('OPTIONS', false), true)
   assert.equal(usesStatelessMcpTransport('GET', false), false)
   assert.equal(usesStatelessMcpTransport('DELETE', false), false)

@@ -13,7 +13,7 @@ Every endpoint a directory reviewer will probe was verified live on
 
 | What | URL | Status |
 | --- | --- | --- |
-| MCP server (Streamable HTTP) | `https://mcp.hypertask.ai/mcp` | live (401 without token; stateless no-session path is Owner + QA only until flag release) |
+| MCP server (Streamable HTTP) | `https://mcp.hypertask.ai/mcp` | live (401 without token; POST is request-scoped on every instance; GET/DELETE session resume stays behind `htpr-6532-stateless-mcp`) |
 | MCP server (SSE fallback) | `https://mcp.hypertask.ai/sse` | live |
 | Protected-resource metadata | `https://mcp.hypertask.ai/.well-known/oauth-protected-resource` | live (200) |
 | Same metadata, app host | `https://app.hypertask.ai/.well-known/oauth-protected-resource` | live (200) |
