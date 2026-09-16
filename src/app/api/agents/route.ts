@@ -11,6 +11,11 @@ import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMember
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isFeatureEnabled, HTPR_6512_SEED_TEAM_AGENT_FLAG } from "@/lib/flags";
+import {
+  ensureDefaultTeamAgent,
+  lockTeamAgentSeed,
+} from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
 async function getCurrentUser(request: NextRequest) {
   const session = await getSessionUser(request.headers);
@@ -40,6 +45,10 @@ export async function GET(request: NextRequest) {
       { success: false, error: "Team access denied" },
       { status: 403 },
     );
+  }
+
+  if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, currentUserId)) {
+    await ensureDefaultTeamAgent(currentUserId, teamId, prisma);
   }
 
   const agents = await prisma.agent.findMany({
@@ -243,7 +252,8 @@ export async function POST(request: NextRequest) {
       { status: 404 },
     );
   }
-  if (!project.teamId) {
+  const teamId = project.teamId;
+  if (!teamId) {
     return NextResponse.json(
       { success: false, error: "Agents require a team board" },
       { status: 400 },
@@ -262,6 +272,7 @@ export async function POST(request: NextRequest) {
   }
 
   const agent = await prisma.$transaction(async (tx) => {
+    await lockTeamAgentSeed(tx, currentUserId, teamId);
     const createdAgent = await tx.agent.create({
       data: {
         displayName,

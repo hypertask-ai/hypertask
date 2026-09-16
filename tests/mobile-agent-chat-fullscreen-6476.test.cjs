@@ -12,6 +12,10 @@ const chat = fs.readFileSync(
 const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
 const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
 const store = fs.readFileSync(path.join(root, "src/store/index.ts"), "utf8");
+const shell = fs.readFileSync(
+  path.join(root, "src/components/Global/mobileShellVisibility.ts"),
+  "utf8",
+);
 const providers = fs.readFileSync(
   path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"),
   "utf8",
@@ -26,6 +30,10 @@ const actionRow = fs.readFileSync(
 );
 const tipTap = fs.readFileSync(
   path.join(root, "src/components/AI_CHAT/AI_Tiptap_Container.tsx"),
+  "utf8",
+);
+const controlledEditor = fs.readFileSync(
+  path.join(root, "src/lib/controlledComposerEditor.tsx"),
   "utf8",
 );
 const viewport = fs.readFileSync(
@@ -53,6 +61,15 @@ test("HTPR-6476 flag is registered and defaults with Owner+QA mode", () => {
 test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   assert.match(store, /agentChatMobileFullscreenAtom/);
   assert.match(providers, /agentChatMobileFullscreenAtom/);
+  assert.match(providers, /isAgentChatPage/);
+  assert.match(
+    providers,
+    /shouldMountAgentChatRuntime\s*=\s*isAgentChatPage && mbl && agentChatMobileFullscreenFlag/,
+  );
+  assert.match(
+    providers,
+    /isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage/,
+  );
   assert.match(providers, /agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn/);
   assert.match(chat, /setAgentChatMobileFullscreen\(mobileFullscreenChrome\)/);
   assert.match(
@@ -65,24 +82,40 @@ test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   );
 });
 
-test("mobile fullscreen reuses AI send button and action row, not a new send control", () => {
+test("flagged Agent Chat also hides the mobile shell by path", () => {
+  assert.match(shell, /export const isAgentChatPath/);
+  assert.match(
+    shell,
+    /pathname === "\/agents\/chat" \|\| pathname\?\.startsWith\("\/agents\/chat\/"\)/,
+  );
+  assert.match(
+    providers,
+    /agentChatMobileFullscreenFlag && isAgentChatPath\(pathname\)/,
+  );
+});
+
+test("mobile fullscreen renders the AI chat composer component itself", () => {
   assert.match(sendButton, /export function SendMessageButton/);
   assert.match(tipTap, /from "\.\/SendMessageButton"/);
-  assert.match(chat, /from "@\/components\/AI_CHAT\/AI_Tiptap_Container"/);
-  assert.match(chat, /from "@\/components\/AI_CHAT\/AiChatComposerActionRow"/);
-  assert.match(chat, /data-agent-chat-ai-composer/);
+  assert.match(
+    chat,
+    /import \{ AI_Tiptap_Container \} from "@\/components\/AI_CHAT\/AI_Tiptap_Container"/,
+  );
 
   const flaggedStart = chat.indexOf("reuseAiComposer ? (");
   const flaggedEnd = chat.indexOf(") : (", flaggedStart);
   assert.ok(flaggedStart > 0 && flaggedEnd > flaggedStart);
   const flaggedComposer = chat.slice(flaggedStart, flaggedEnd);
-  assert.match(flaggedComposer, /AiChatComposerActionRow/);
-  assert.match(flaggedComposer, /SendMessageButton/);
-  assert.match(flaggedComposer, /data-agent-chat-ai-composer/);
-  assert.doesNotMatch(
-    flaggedComposer,
-    /\{composerLocked \? "Queue" : "Send"\}/,
-  );
+  assert.match(flaggedComposer, /<AI_Tiptap_Container/);
+  assert.doesNotMatch(flaggedComposer, /<textarea/);
+  assert.doesNotMatch(flaggedComposer, /<AiChatComposerActionRow/);
+  assert.doesNotMatch(flaggedComposer, /<AudioButton/);
+  assert.doesNotMatch(flaggedComposer, /<SendMessageButton/);
+  assert.match(tipTap, /<ControlledComposerEditor/);
+  assert.match(tipTap, /from "@\/lib\/controlledComposerEditor"/);
+  assert.match(controlledEditor, /<EditorContent editor=\{editor\}/);
+  assert.match(tipTap, /useTiptapEditor/);
+  assert.match(chat, /useTiptapEditor: true/);
 });
 
 test("action row skips empty mobile overflow menus", () => {

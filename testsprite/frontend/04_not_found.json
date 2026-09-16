@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.11.0/schemas/plan.schema.json",
+  "projectId": "411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9",
+  "type": "frontend",
+  "name": "Missing public asset renders the 404 page",
+  "planSteps": [
+    {"type": "action", "description": "Navigate to https://app.hypertask.ai/favicon-does-not-exist-testsprite.svg"},
+    {"type": "assertion", "description": "The page displays the status heading '404' and the exact message 'This page could not be found.'"}
+  ]
+}

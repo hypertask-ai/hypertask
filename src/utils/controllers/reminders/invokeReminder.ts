@@ -5,6 +5,7 @@ import {
   TASK_INBOX_REMINDER_LOCK_CLASS,
   withTaskInboxWriteLock,
 } from "@/lib/taskCardActions/writeLocks";
+import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
 
 
 type ClaimedReminderRow = {
@@ -152,6 +153,13 @@ const restoreReminderNotifications = async (
       }
     })
   }
+
+  await syncMyTasksSnoozeFromReminder({
+    userId: reminder.userId,
+    taskId: reminder.taskId,
+    snoozeUntil: null,
+    client,
+  });
 };
 
 export default invokeReminder

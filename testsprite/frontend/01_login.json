@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.11.0/schemas/plan.schema.json",
+  "projectId": "411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9",
+  "type": "frontend",
+  "name": "Login page exposes logged-out authentication choices",
+  "planSteps": [
+    {"type": "action", "description": "Navigate directly to https://app.hypertask.ai/login without signing in"},
+    {"type": "assertion", "description": "The final URL path is /login and the page displays the heading 'Free collaborative project boards for the agent era'"},
+    {"type": "assertion", "description": "A visible 'Continue with Google' control, an email input labelled 'Email address', and a visible 'Continue with email' button are present"}
+  ]
+}

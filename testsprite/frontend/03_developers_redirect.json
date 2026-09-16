@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/TestSprite/testsprite-cli/v0.11.0/schemas/plan.schema.json",
+  "projectId": "411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9",
+  "type": "frontend",
+  "name": "Developers route opens the REST API documentation",
+  "planSteps": [
+    {"type": "action", "description": "Navigate to https://app.hypertask.ai/developers"},
+    {"type": "assertion", "description": "The browser redirects to a URL beginning https://docs.hypertask.ai/api/rest-api/"},
+    {"type": "assertion", "description": "The documentation page visibly identifies the REST API documentation and does not show a Hypertask application error"}
+  ]
+}

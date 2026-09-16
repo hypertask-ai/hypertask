@@ -46,6 +46,17 @@ database**, so click around freely but do not test destructively.
 | **Email** | Resend | |
 | **Payments** | Stripe | |
 
+### Redis speaks RESP2 on purpose (HTPR-6518, 2026-09-16)
+
+`src/lib/redis.ts` builds the one ioredis client with `protocol: 2`. ioredis 6 defaults to
+RESP3 and opens each connection with `HELLO 3`; a proxy that rejects `HELLO` with anything
+other than `NOPROTO` or an unknown-command error fails the connection instead of downgrading,
+and Upstash serves Redis through its own TCP proxy. The pin also keeps connection setup at
+three commands instead of six, which matters on a per-command bill. Reply shapes are the same
+either way, because ioredis 6 keeps RESP2 shapes unless you also pass `replyMapping: "resp3"`.
+To lift the pin, prove `HELLO 3` against the production Upstash endpoint first, in its own
+ticket. `tests/redis-client-protocol.test.cjs` watches the wire and fails if the pin is dropped.
+
 ### R2 URL gotcha
 
 R2's public domain **percent-decodes `%xx` in the path but does not decode `+`**. An object
