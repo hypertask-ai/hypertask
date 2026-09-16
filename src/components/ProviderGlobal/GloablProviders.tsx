@@ -1442,7 +1442,7 @@ export default function GlobalProvider({
         {shouldMountChatRuntime ? (
           <Suspense
             fallback={
-              isFullScreenChat || isTaskDetailPage ? (
+              isFullScreenChat || isAgentChatPage || isTaskDetailPage ? (
                 <FullScreenChatLoading />
               ) : (
                 <AIChatClosedLayout
