@@ -19,7 +19,7 @@ import { inViewObjectAtom, showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
-import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection";
+import { MIXED_BOARD_MESSAGE, sharedProjectId, taskBoardId } from "@/lib/myTasksBulkSelection";
 import { useUndoContext } from "@/hooks/General/useUndo";
 import globalAPIHandlers from "@/utils/api/global";
 import { useAssignTaskUser } from "@/hooks/Task Detail/useAssignTaskUser";
@@ -69,6 +69,23 @@ export const MyTasksBulkSelectionProvider = ({
   resetSelectionKey,
   onAfterMutation,
 }: MyTasksBulkSelectionProviderProps) => {
+  if (!enabled) return children;
+
+  return (
+    <MyTasksBulkSelectionProviderInner
+      resetSelectionKey={resetSelectionKey}
+      onAfterMutation={onAfterMutation}
+    >
+      {children}
+    </MyTasksBulkSelectionProviderInner>
+  );
+};
+
+const MyTasksBulkSelectionProviderInner = ({
+  children,
+  resetSelectionKey,
+  onAfterMutation,
+}: Omit<MyTasksBulkSelectionProviderProps, "enabled">) => {
   const [items, setItems] = useState<ITask[]>([]);
   const itemsRef = useRef<ITask[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -158,13 +175,6 @@ export const MyTasksBulkSelectionProvider = ({
     anchorTaskIdRef.current = null;
   }, [resetSelectionKey]);
 
-  useEffect(() => {
-    if (enabled) return;
-    setSelectedIds(new Set());
-    setFailedIds(new Set());
-    anchorTaskIdRef.current = null;
-  }, [enabled]);
-
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
     setFailedIds(new Set());
@@ -225,7 +235,7 @@ export const MyTasksBulkSelectionProvider = ({
     if (!task) return;
     setInViewObject({
       taskId: task.id,
-      taskProjectId: task.projectId,
+      taskProjectId: taskBoardId(task) ?? task.projectId,
       sectionId: task.sectionId ?? undefined,
       sectionTitle: task.section ?? undefined,
       taskTitle: task.title ?? undefined,
@@ -396,7 +406,7 @@ export const MyTasksBulkSelectionProvider = ({
         }
         if (sourceSectionId === destinationSectionId) return;
         await moveTaskToSection.mutateAsync({
-          projectId: task.projectId,
+          projectId: taskBoardId(task) ?? task.projectId,
           taskId: task.id,
           ticketNumber: task.ticketNumber,
           sourceSectionId,
@@ -435,7 +445,6 @@ export const MyTasksBulkSelectionProvider = ({
   );
 
   useEffect(() => {
-    if (!enabled) return;
     const onDocumentKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || returnIfModalOrInputActive()) return;
       const activeElement = document.activeElement;
@@ -501,7 +510,6 @@ export const MyTasksBulkSelectionProvider = ({
     return () => document.removeEventListener("keydown", onDocumentKeyDown, true);
   }, [
     clearSelection,
-    enabled,
     items.length,
     openBulkCommand,
     selectAllVisible,

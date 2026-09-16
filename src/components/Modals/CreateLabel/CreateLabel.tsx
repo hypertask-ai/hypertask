@@ -121,8 +121,9 @@ const CreateLabel: React.FC<Props> = ({
     isRefetching,
     refetch,
   } = useGetAllProjectLabels(
-    currentProject?.id ??
-      (mode === "CreateTaskGlobally" ? undefined : inViewObject.taskProjectId)
+    taskIds?.length || mode === "CreateTaskGlobally"
+      ? currentProject?.id
+      : inViewObject.taskProjectId
   );
 
   // Add loading state and optimistic updates state

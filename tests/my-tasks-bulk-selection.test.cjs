@@ -39,6 +39,13 @@ test("sharedProjectId accepts one board and rejects mixed boards", () => {
     null,
   );
   assert.equal(sharedProjectId([{ id: 1, projectId: null }]), null);
+  assert.equal(
+    sharedProjectId([
+      { id: 1, project: { id: 15 } },
+      { id: 2, projectId: 15 },
+    ]),
+    15,
+  );
 });
 
 test("visibleTasksFromRows keeps only task rows in render order", () => {

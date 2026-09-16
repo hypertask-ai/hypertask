@@ -1171,7 +1171,7 @@ const boardTabCounts = useMemo(() => {
           resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
             .map((priority) => priority.priority_index)
             .join(",")}`}
-          onAfterMutation={() => router.refresh()}
+          onAfterMutation={() => reconcileRunner.request()}
         >
         <TableView
           filteredSections={visibleSections}

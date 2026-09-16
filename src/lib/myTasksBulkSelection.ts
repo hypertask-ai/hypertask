@@ -5,17 +5,23 @@
 
 export type TaskProjectRef = {
   id: number;
-  projectId: number | null | undefined;
+  projectId?: number | null;
+  project?: { id?: number | null } | null;
 };
+
+export function taskBoardId(task: TaskProjectRef): number | null {
+  const projectId = task.projectId ?? task.project?.id;
+  return projectId == null ? null : projectId;
+}
 
 export function sharedProjectId(
   tasks: readonly TaskProjectRef[],
 ): number | null {
   if (tasks.length === 0) return null;
-  const first = tasks[0]?.projectId;
-  if (first === null || first === undefined) return null;
+  const first = taskBoardId(tasks[0]);
+  if (first == null) return null;
   for (const task of tasks) {
-    if (task.projectId !== first) return null;
+    if (taskBoardId(task) !== first) return null;
   }
   return first;
 }
