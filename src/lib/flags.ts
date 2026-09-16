@@ -36,6 +36,7 @@ import {
   MANAGER_LOOP_ACTIVITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
+  HTPR_4857_ADD_TO_SLACK_FLAG,
   HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
@@ -131,6 +132,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-09",
     description:
       "In time reports, plain board members see only their own logged time; board owners and admins still see everyone's entries and keep the user filter.",
+  },
+  {
+    key: HTPR_4857_ADD_TO_SLACK_FLAG,
+    shippedOn: "2026-09-09",
+    description:
+      "Enables the public /add-to-slack page and the Slack Marketplace install resume path (callback without signed state sends visitors to login, then Settings completes the link). Flip to Everyone before the Slack Marketplace submission.",
   },
   {
     key: LOCAL_WRITING_ASSISTANCE_FLAG,
