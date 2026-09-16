@@ -392,10 +392,17 @@ test("agent list routes seed behind the HTPR-6512 flag", () => {
     flags,
     /key:\s*HTPR_6512_SEED_TEAM_AGENT_FLAG[\s\S]*?seed a Hyper AI agent/,
   );
+  const mcpCreate = readFileSync(
+    path.join(root, "src/lib/mcp/agents/create.ts"),
+    "utf8",
+  );
+
   assert.match(teamRoute, /ensureDefaultTeamAgent\(/);
   assert.match(ownedRoute, /ensureDefaultAgentsOnAccessibleTeams\(/);
   assert.match(teamRoute, /HTPR_6512_SEED_TEAM_AGENT_FLAG/);
   assert.match(ownedRoute, /HTPR_6512_SEED_TEAM_AGENT_FLAG/);
+  assert.match(teamRoute, /lockTeamAgentSeed\(/);
+  assert.match(mcpCreate, /lockTeamAgentSeed\(/);
   assert.doesNotMatch(teamRoute, /as unknown as TeamAgentStore/);
   assert.doesNotMatch(ownedRoute, /as unknown as TeamAgentStore/);
 });

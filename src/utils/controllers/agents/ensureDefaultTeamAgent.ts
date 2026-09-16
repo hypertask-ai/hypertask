@@ -42,7 +42,7 @@ async function findActiveOwnedAgentOnTeam(
   });
 }
 
-async function lockTeamAgentSeed(
+export async function lockTeamAgentSeed(
   tx: Pick<Prisma.TransactionClient, "$queryRaw">,
   userId: number,
   teamId: string,
