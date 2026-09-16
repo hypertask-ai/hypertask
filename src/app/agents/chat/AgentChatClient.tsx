@@ -19,7 +19,7 @@ import {
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { appShellRailAtom, agentChatTeamCycleAtom, mobileTopBarTitleAtom } from "@/store";
+import { appShellRailAtom, agentChatTeamCycleAtom, agentChatMobileFullscreenAtom, mobileTopBarTitleAtom } from "@/store";
 import { IUser, IProject, ITask } from "@/models/model";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
@@ -77,13 +77,16 @@ import {
   AGENT_CHAT_PARKED_MESSAGE,
   AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
 } from "@/lib/agentRuns/model";
-import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { CONFIRMED_PROPOSAL_HEADING_FLAG, HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
+import { AiChatComposerActionRow } from "@/components/AI_CHAT/AiChatComposerActionRow";
+import { SendMessageButton } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
+import styles from "@/styles/tiptap.module.scss";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -103,8 +106,11 @@ import {
   type AgentChatActivityGroup,
   type AgentChatFilter,
 } from "@/lib/agents/chatActivityFeed";
-import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketProposal";
-
+import {
+  PROPOSAL_HEADING_CREATED,
+  PROPOSAL_HEADING_PENDING,
+  type SerializedChatTicketProposal,
+} from "@/lib/agents/chatTicketProposal";
 
 // While we are waiting for an external agent to answer, the only way to see
 // the reply arrive is to keep asking.
@@ -235,8 +241,8 @@ function ProposalCard({
           {confirmedHeadingEnabled &&
           proposal.status === "CONFIRMED" &&
           proposal.task
-            ? "Ticket created"
-            : "Ticket proposed, nothing done yet"}
+            ? PROPOSAL_HEADING_CREATED
+            : PROPOSAL_HEADING_PENDING}
         </span>
       </div>
       <p className="text-white-black">{proposal.ticketTitle}</p>
@@ -629,6 +635,9 @@ const AgentChatClient = (props: IProp) => {
     "htpr-6129-mobile-agent-chat-viewport",
   );
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
+  const mobileFullscreenFlag = useFlag(
+    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+  );
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   // Idle durations and the idle-to-inactive flip have to move while the chat
@@ -641,17 +650,23 @@ const AgentChatClient = (props: IProp) => {
   }, [rosterStatusEnabled]);
   const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
-  const mobileAgentChatViewport = useMobileVisualViewport(
-    isMbl && (mobileAgentChatViewportEnabled || mobileLayoutEnabled),
-  );
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
+  const setAgentChatMobileFullscreen = useSetRecoilState(
+    agentChatMobileFullscreenAtom,
+  );
 
   const [agents, setAgents] = useState<TAgent[] | null>(null);
   const [rosterError, setRosterError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [teamId, setTeamId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const mobileAgentChatViewport = useMobileVisualViewport(
+    isMbl &&
+      (mobileAgentChatViewportEnabled ||
+        mobileLayoutEnabled ||
+        (mobileFullscreenFlag && Boolean(selectedId))),
+  );
   const [session, setSession] = useState<TAgentChatSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [messages, setMessages] = useState<TChatMessage[] | null>(null);
@@ -1344,21 +1359,32 @@ const AgentChatClient = (props: IProp) => {
     [agents, selectedId],
   );
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
+  // Flag + phone + a real agent open: hide app chrome and use AI chat controls.
+  const mobileFullscreenChrome = Boolean(
+    mobileFullscreenFlag && isMbl && selectedAgent,
+  );
+  const reuseAiComposer = Boolean(mobileFullscreenFlag && isMbl);
   const dictationProjectId = useMemo(
     () =>
-      isMbl && mobileLayoutEnabled
+      isMbl && (mobileLayoutEnabled || mobileFullscreenFlag)
         ? agentDictationProjectId(selectedAgent, teamId)
         : null,
-    [isMbl, mobileLayoutEnabled, selectedAgent, teamId],
+    [isMbl, mobileLayoutEnabled, mobileFullscreenFlag, selectedAgent, teamId],
   );
 
   useEffect(() => {
-    if (!mobileLayoutEnabled || !isMbl) return;
+    setAgentChatMobileFullscreen(mobileFullscreenChrome);
+    return () => setAgentChatMobileFullscreen(false);
+  }, [mobileFullscreenChrome, setAgentChatMobileFullscreen]);
+
+  useEffect(() => {
+    if (!mobileLayoutEnabled || !isMbl || mobileFullscreenChrome) return;
     setMobileTopBarTitle(selectedAgent?.displayName ?? "Agents");
     return () => setMobileTopBarTitle(null);
   }, [
     mobileLayoutEnabled,
     isMbl,
+    mobileFullscreenChrome,
     selectedAgent?.displayName,
     setMobileTopBarTitle,
   ]);
@@ -2072,14 +2098,18 @@ const AgentChatClient = (props: IProp) => {
             <ArrowLeft size={16} />
           </button>
         )}
-        <AgentAvatar agentId={selectedAgent.id} name={selectedAgent.displayName} photoURL={selectedAgent.photoURL} size={28} className="text-[11px]" />
+        {!mobileFullscreenChrome && (
+          <AgentAvatar agentId={selectedAgent.id} name={selectedAgent.displayName} photoURL={selectedAgent.photoURL} size={28} className="text-[11px]" />
+        )}
         <div className="min-w-0">
           <p className="truncate text-[14px] font-semibold">
             {selectedAgent.displayName}
           </p>
-          <p className="truncate text-meta text-text-light-gray">
-            {chatStatusText(selectedAgent)}
-          </p>
+          {!mobileFullscreenChrome && (
+            <p className="truncate text-meta text-text-light-gray">
+              {chatStatusText(selectedAgent)}
+            </p>
+          )}
         </div>
         <span className="flex-1" />
         {!isNarrow && (
@@ -2092,7 +2122,7 @@ const AgentChatClient = (props: IProp) => {
             {detailsCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
           </button>
         )}
-        {isNarrow && (
+        {isNarrow && !mobileFullscreenChrome && (
           <button
             type="button"
             onClick={() => setDetailsSheetOpen(true)}
@@ -2222,7 +2252,7 @@ const AgentChatClient = (props: IProp) => {
                 onRemove={removeQueuedMessage}
               />
             )}
-            <div className="relative flex items-end gap-2">
+            <div className="relative">
               {mentionOpen && (
                 <div className="absolute bottom-full left-0 mb-1 max-h-[220px] w-[320px] overflow-y-auto rounded-[4px] bg-modalBackground py-1 shadow-md">
                   {mentionLoading ? (
@@ -2258,50 +2288,137 @@ const AgentChatClient = (props: IProp) => {
                   )}
                 </div>
               )}
-              <textarea
-                ref={composerRef}
-                value={draft}
-                onChange={(e) => handleComposerChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
-                onKeyDown={handleComposerKeyDown}
-                rows={2}
-                placeholder={
-                  composerLocked
-                    ? `${selectedAgent.displayName} is working -- this will queue`
-                    : `Message ${selectedAgent.displayName}`
-                }
-                aria-label={`Message ${selectedAgent.displayName}`}
-                className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
-              />
-              <AudioButton
-                id="agent-chat-audio-button"
-                editor={null}
-                callbackHandler={insertDictation}
-                toggleRecording={setIsRecording}
-                globalRecording={isRecording}
-                hasText={draft.trim().length > 0}
-                onProcessingChange={setIsDictationProcessing}
-                disabled={
-                  sending ||
-                  (isMbl && mobileLayoutEnabled && dictationProjectId === null)
-                }
-                projectId={
-                  isMbl && mobileLayoutEnabled ? dictationProjectId : undefined
-                }
-                ariaLabel="Dictate message"
-                className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"
-              />
-              <button
-                type="button"
-                onClick={() => void handleSend()}
-                disabled={!draft.trim() || sending || isRecording || isDictationProcessing}
-                aria-label={composerLocked ? "Queue message" : "Send message"}
-                className={cn(
-                  MOBILE_TARGET,
-                  "rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 text-dense font-medium",
-                )}
-              >
-                {composerLocked ? "Queue" : "Send"}
-              </button>
+              {reuseAiComposer ? (
+                <div
+                  data-ai-chat-composer
+                  data-agent-chat-ai-composer
+                  className={cn(
+                    "flex w-full flex-col items-center bg-ai-tiptap outline-none border-0 scrollbar-none",
+                    styles.aiChatInput,
+                    "!rounded-[5px] px-3 pb-2 pt-3",
+                  )}
+                >
+                  <textarea
+                    ref={composerRef}
+                    value={draft}
+                    onChange={(e) =>
+                      handleComposerChange(
+                        e.target.value,
+                        e.target.selectionStart ?? e.target.value.length,
+                      )
+                    }
+                    onKeyDown={handleComposerKeyDown}
+                    rows={2}
+                    placeholder={
+                      composerLocked
+                        ? `${selectedAgent.displayName} is working -- this will queue`
+                        : `Message ${selectedAgent.displayName}`
+                    }
+                    aria-label={`Message ${selectedAgent.displayName}`}
+                    className="w-full resize-none bg-transparent text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
+                  />
+                  <AiChatComposerActionRow
+                    mobile
+                    mobileDictating={Boolean(isRecording || isDictationProcessing)}
+                    hasText={draft.trim().length > 0}
+                    leadingControls={null}
+                    mobileModelControl={null}
+                    attachmentControl={null}
+                    contextControl={null}
+                    screenshotControl={null}
+                    recorder={
+                      <AudioButton
+                        id="agent-chat-audio-button"
+                        editor={null}
+                        callbackHandler={insertDictation}
+                        toggleRecording={setIsRecording}
+                        globalRecording={isRecording}
+                        hasText={draft.trim().length > 0}
+                        onProcessingChange={setIsDictationProcessing}
+                        disabled={
+                          sending ||
+                          ((mobileLayoutEnabled || mobileFullscreenFlag) &&
+                            dictationProjectId === null)
+                        }
+                        projectId={
+                          mobileLayoutEnabled || mobileFullscreenFlag
+                            ? dictationProjectId
+                            : undefined
+                        }
+                        ariaLabel="Dictate message"
+                      />
+                    }
+                    streamControl={null}
+                    sendControl={
+                      <SendMessageButton
+                        disabled={
+                          !draft.trim() ||
+                          sending ||
+                          isRecording ||
+                          isDictationProcessing
+                        }
+                        queueMode={composerLocked}
+                        mobile
+                        onClick={() => void handleSend()}
+                      />
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="relative flex items-end gap-2">
+                  <textarea
+                    ref={composerRef}
+                    value={draft}
+                    onChange={(e) =>
+                      handleComposerChange(
+                        e.target.value,
+                        e.target.selectionStart ?? e.target.value.length,
+                      )
+                    }
+                    onKeyDown={handleComposerKeyDown}
+                    rows={2}
+                    placeholder={
+                      composerLocked
+                        ? `${selectedAgent.displayName} is working -- this will queue`
+                        : `Message ${selectedAgent.displayName}`
+                    }
+                    aria-label={`Message ${selectedAgent.displayName}`}
+                    className="flex-1 resize-none rounded-[4px] bg-newcomment-well px-3 py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
+                  />
+                  <AudioButton
+                    id="agent-chat-audio-button"
+                    editor={null}
+                    callbackHandler={insertDictation}
+                    toggleRecording={setIsRecording}
+                    globalRecording={isRecording}
+                    hasText={draft.trim().length > 0}
+                    onProcessingChange={setIsDictationProcessing}
+                    disabled={
+                      sending ||
+                      (isMbl && mobileLayoutEnabled && dictationProjectId === null)
+                    }
+                    projectId={
+                      isMbl && mobileLayoutEnabled ? dictationProjectId : undefined
+                    }
+                    ariaLabel="Dictate message"
+                    className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSend()}
+                    disabled={
+                      !draft.trim() || sending || isRecording || isDictationProcessing
+                    }
+                    aria-label={composerLocked ? "Queue message" : "Send message"}
+                    className={cn(
+                      MOBILE_TARGET,
+                      "rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 px-3 text-dense font-medium",
+                    )}
+                  >
+                    {composerLocked ? "Queue" : "Send"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </>
@@ -2470,47 +2587,62 @@ const AgentChatClient = (props: IProp) => {
   ) : null;
 
   let mobileAgentChatHeight: string | undefined;
-  if (
+  // 6407 keeps chrome-aware height for the whole mobile Agent Chat page.
+  // 6476 only needs it while an agent thread is open (roster keeps normal shell).
+  const mobileChromeAwareHeight = Boolean(
     isMbl &&
-    (mobileLayoutEnabled || mobileAgentChatViewportEnabled)
-  ) {
+      (mobileLayoutEnabled ||
+        mobileAgentChatViewportEnabled ||
+        mobileFullscreenChrome),
+  );
+  if (mobileChromeAwareHeight) {
     // Full visible viewport with top/dock padding inside the same border-box
     // (AI chat pattern). Avoids h-screen oversizing and mid-screen composer gap.
     mobileAgentChatHeight = mobileAgentChatViewport
       ? `${mobileAgentChatViewport.visibleHeight}px`
       : "100dvh";
   }
+  const hideDockInset = mobileFullscreenChrome;
   const mobileComposerBottomInset = isMbl
     ? getAgentChatMobileBottomInset({
         dockHeight: mobileAgentChatViewport?.dockHeight ?? 0,
         keyboardInset: mobileAgentChatViewport?.bottomInset ?? 0,
+        hideDock: hideDockInset,
       })
     : 0;
+  const keyboardOpen =
+    isMbl && (mobileAgentChatViewport?.bottomInset ?? 0) > 0;
+
+  let mobileShellPaddingStyle: { paddingBottom?: number } | undefined;
+  if (isMbl && hideDockInset && keyboardOpen) {
+    mobileShellPaddingStyle = { paddingBottom: 0 };
+  } else if (isMbl && !hideDockInset) {
+    mobileShellPaddingStyle = { paddingBottom: mobileComposerBottomInset };
+  }
 
   if (isNarrow) {
     return (
       <div
         className={cn(
           "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
-          !(isMbl && mobileLayoutEnabled) && "h-screen",
-          // The app shell reserves a fixed top bar and bottom tab bar (see
-          // globals.scss .mobile-tab-bar-content). AI_Chat_Layout and
-          // AI_Chat_Closed_Layout bail out for /agents/chat, so we add the
-          // inset ourselves or the composer lands under the tab bar
-          // (HTPR-6041 / HTPR-6407).
-          // isMbl-gated: a merely-narrow desktop window has neither bar.
-          // max() keeps a 0px --mobile-dock-h from collapsing the fallback
-          // (reload / direct-open QA fail). Inline paddingBottom wins when
-          // the keyboard is open so the composer sits on the keyboard.
+          !(isMbl && (mobileLayoutEnabled || mobileFullscreenChrome)) &&
+            "h-screen",
+          // Flag-off: reserve app top bar + dock. Flag-on with an agent open:
+          // no shell chrome; keep safe-area only when the keyboard is closed.
           isMbl &&
+            !hideDockInset &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[max(var(--mobile-dock-h,64px),64px)]",
           isMbl &&
-            mobileLayoutEnabled &&
+            hideDockInset &&
+            !keyboardOpen &&
+            "pb-[env(safe-area-inset-bottom)]",
+          isMbl &&
+            (mobileLayoutEnabled || mobileFullscreenChrome) &&
             "mobile-agent-chat min-h-0 overscroll-y-none",
         )}
         style={{
           height: mobileAgentChatHeight,
-          ...(isMbl ? { paddingBottom: mobileComposerBottomInset } : {}),
+          ...mobileShellPaddingStyle,
         }}
       >
         {selectedAgent ? chatPane : rosterPane}

@@ -308,6 +308,61 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
+      {
+        key: "htpr-6422-my-tasks-views",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6427-row-shortcuts",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6447-my-tasks-filter-parity",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6455-my-tasks-time-group",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6456-my-tasks-table-columns",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6457-my-tasks-scopes",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6458-my-tasks-live-updates",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6460-my-tasks-quick-add",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6461-my-tasks-snooze",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6476-mobile-agent-chat-fullscreen",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6514-comment-long-press",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

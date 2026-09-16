@@ -1,0 +1,336 @@
+import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
+import {
+  DEFAULT_MY_TASKS_SCOPES,
+  normalizeMyTasksScopes,
+  type MyTasksScope,
+} from "@/lib/myTasksScopes";
+import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import {
+  DEFAULT_MY_TASKS_TABLE_COLUMNS,
+  normalizeMyTasksTableVisibleColumns,
+} from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
+
+export type { MyTasksScope };
+
+export type MyTasksDueDatePreset =
+  | "overdue"
+  | "today"
+  | "this_week"
+  | "next_7_days"
+  | "no_due_date";
+
+export type MyTasksDateRange = {
+  from: string;
+  to: string;
+};
+
+export type MyTasksSortField =
+  | "dueDate"
+  | "priority"
+  | "createdAt"
+  | "updatedAt"
+  | "title"
+  | "board";
+
+export type MyTasksGroupBy = "time" | "board";
+
+export type MyTasksViewConfig = {
+  boardIds: number[] | null;
+  filters: {
+    priorityIds: number[];
+    // Label.id is a UUID in this schema; numeric ids remain accepted for old/test data.
+    labelIds: Array<string | number>;
+    sizeIds: number[];
+    sectionIds: number[];
+    starred: boolean | null;
+    dueDate: MyTasksDueDatePreset | MyTasksDateRange | null;
+    createdRange: MyTasksDateRange | null;
+    updatedRange: MyTasksDateRange | null;
+    showDone: boolean;
+    /** HTPR-6461: when true, include tasks snoozed past now. Default false. */
+    showSnoozed?: boolean;
+  };
+  /** Kanban-parity filters (HTPR-6447). Absent on older saved views. */
+  filterSettings?: SerializableFilterSettings | null;
+  sort: {
+    field: MyTasksSortField;
+    direction: "asc" | "desc";
+  };
+  /** Optional so older saved views keep working. Flag-off UI ignores this and stays on board. */
+  groupBy?: MyTasksGroupBy;
+  /**
+   * Visible My Tasks table columns, in display order. Optional so older views
+   * keep working; parse always recognizes the field even when the UI flag is off.
+   */
+  tableVisibleColumns?: string[];
+  /**
+   * Relationship scopes for the My Tasks query (HTPR-6457). Always parsed so
+   * flag-off saves do not wipe a stored choice.
+   */
+  scopes?: MyTasksScope[];
+  /**
+   * Board used by My Tasks quick-add (HTPR-6460). Optional so older views keep
+   * working; null means unset and the UI asks once.
+   */
+  defaultBoardId?: number | null;
+};
+
+export type MyTasksSavedView = {
+  id: number;
+  name: string;
+  position: number;
+  isDefault: boolean;
+  config: MyTasksViewConfig;
+};
+
+export type MyTasksBoardMember = {
+  id: number;
+  displayName: string;
+  photoURL: string | null;
+};
+
+export type MyTasksBoardMetadata = {
+  id: number;
+  title: string;
+  sections: Array<{
+    id: number;
+    title: string;
+    isDone: boolean | null;
+  }>;
+  labels: Array<{
+    id: string;
+    name: string;
+  }>;
+  members?: MyTasksBoardMember[];
+};
+
+export const DEFAULT_MY_TASKS_VIEW_CONFIG: MyTasksViewConfig = {
+  boardIds: null,
+  filters: {
+    priorityIds: [],
+    labelIds: [],
+    sizeIds: [],
+    sectionIds: [],
+    starred: null,
+    dueDate: null,
+    createdRange: null,
+    updatedRange: null,
+    showDone: false,
+    showSnoozed: false,
+  },
+  filterSettings: null,
+  sort: {
+    field: "dueDate",
+    direction: "asc",
+  },
+  scopes: [...DEFAULT_MY_TASKS_SCOPES],
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const numberIds = (value: unknown, allowZero = true): number[] => {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (id): id is number =>
+          Number.isSafeInteger(id) && (allowZero ? id >= 0 : id > 0),
+      ),
+    ),
+  ];
+};
+
+const labelIds = (value: unknown): Array<string | number> => {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(
+      value.filter(
+        (id): id is string | number =>
+          (typeof id === "string" && id.length > 0 && id.length <= 100) ||
+          (typeof id === "number" && Number.isSafeInteger(id) && id >= 0),
+      ),
+    ),
+  ];
+};
+
+const dateRange = (value: unknown): MyTasksDateRange | null => {
+  if (!isRecord(value) || typeof value.from !== "string" || typeof value.to !== "string") {
+    return null;
+  }
+  const from = new Date(value.from).getTime();
+  const to = new Date(value.to).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) return null;
+  return { from: value.from, to: value.to };
+};
+
+const DUE_DATE_PRESETS = new Set<MyTasksDueDatePreset>([
+  "overdue",
+  "today",
+  "this_week",
+  "next_7_days",
+  "no_due_date",
+]);
+
+const dueDateFilter = (
+  value: unknown,
+): MyTasksDueDatePreset | MyTasksDateRange | null => {
+  if (typeof value === "string" && DUE_DATE_PRESETS.has(value as MyTasksDueDatePreset)) {
+    return value as MyTasksDueDatePreset;
+  }
+  return dateRange(value);
+};
+
+const SORT_FIELDS = new Set<MyTasksSortField>([
+  "dueDate",
+  "priority",
+  "createdAt",
+  "updatedAt",
+  "title",
+  "board",
+]);
+
+const GROUP_BY_VALUES = new Set<MyTasksGroupBy>(["time", "board"]);
+
+const groupByValue = (value: unknown): MyTasksGroupBy | undefined =>
+  typeof value === "string" && GROUP_BY_VALUES.has(value as MyTasksGroupBy)
+    ? (value as MyTasksGroupBy)
+    : undefined;
+
+/**
+ * Flag-off always returns board. Flag-on uses the saved value, or time when
+ * the field is missing so My Tasks defaults to a personal to-do layout.
+ * This does not depend on the saved-views flag: 6455 is enough.
+ */
+export function effectiveMyTasksGroupBy(
+  config: Pick<MyTasksViewConfig, "groupBy">,
+  flagEnabled: boolean,
+): MyTasksGroupBy {
+  if (!flagEnabled) return "board";
+  return config.groupBy ?? "time";
+}
+
+/**
+ * Server `isFeatureEnabled` covers the first paint. Client `useFlag` is false
+ * until /api/flags loads, which is why QA still photographed board groups.
+ */
+export function myTasksTimeGroupOn(
+  serverEnabled: boolean,
+  clientEnabled: boolean,
+): boolean {
+  return Boolean(serverEnabled || clientEnabled);
+}
+
+const KNOWN_CONFIG_KEYS = new Set([
+  "boardIds",
+  "filters",
+  "filterSettings",
+  "sort",
+  "groupBy",
+  "tableVisibleColumns",
+  "scopes",
+  "defaultBoardId",
+]);
+
+/** Positive board id, or null when unset / invalid. */
+export function parseMyTasksDefaultBoardId(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
+
+const parseFilterSettings = (
+  value: unknown,
+): SerializableFilterSettings | null => {
+  if (value == null) return null;
+  if (!isRecord(value)) return null;
+  const sanitized = sanitizeBoardFilters(value) as Record<string, unknown>;
+  if (!Array.isArray(sanitized.addedFilters)) return null;
+  return {
+    matchFilters: sanitized.matchFilters === "ALL" ? "ALL" : "ANY",
+    addedFilters: sanitized.addedFilters
+      .filter(isRecord)
+      .filter((entry) => typeof entry.type === "string")
+      .map((entry) => ({
+        type: entry.type as SerializableFilterSettings["addedFilters"][number]["type"],
+        searchPayload: Array.isArray(entry.searchPayload)
+          ? entry.searchPayload
+          : [],
+        ...(entry.match === "ALL" || entry.match === "ANY"
+          ? { match: entry.match }
+          : {}),
+      })),
+  };
+};
+
+
+/** Visible columns for My Tasks. Missing field uses today's default snapshot. */
+export function effectiveMyTasksTableVisibleColumns(
+  config: Pick<MyTasksViewConfig, "tableVisibleColumns">,
+): string[] {
+  if (config.tableVisibleColumns === undefined) {
+    return [...DEFAULT_MY_TASKS_TABLE_COLUMNS];
+  }
+  return normalizeMyTasksTableVisibleColumns(config.tableVisibleColumns);
+}
+
+const tableVisibleColumnsValue = (value: unknown): string[] | undefined => {
+  if (value === undefined) return undefined;
+  return normalizeMyTasksTableVisibleColumns(value);
+};
+
+/** Returns a complete, safe config for persisted JSON or untrusted API input. */
+export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
+  const value = isRecord(json) ? json : {};
+  const filters = isRecord(value.filters) ? value.filters : {};
+  const sort = isRecord(value.sort) ? value.sort : {};
+  const boardIds = Array.isArray(value.boardIds)
+    ? numberIds(value.boardIds, false)
+    : null;
+  const sortField =
+    typeof sort.field === "string" && SORT_FIELDS.has(sort.field as MyTasksSortField)
+      ? (sort.field as MyTasksSortField)
+      : DEFAULT_MY_TASKS_VIEW_CONFIG.sort.field;
+  const groupBy = groupByValue(value.groupBy);
+  const tableVisibleColumns = tableVisibleColumnsValue(value.tableVisibleColumns);
+  const scopes = normalizeMyTasksScopes(
+    value.scopes === undefined ? DEFAULT_MY_TASKS_SCOPES : value.scopes,
+  );
+  const defaultBoardId =
+    value.defaultBoardId === undefined
+      ? undefined
+      : parseMyTasksDefaultBoardId(value.defaultBoardId);
+
+  const extras: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!KNOWN_CONFIG_KEYS.has(key)) extras[key] = entry;
+  }
+
+  return {
+    ...extras,
+    boardIds: value.boardIds === undefined ? null : boardIds,
+    filters: {
+      priorityIds: numberIds(filters.priorityIds),
+      labelIds: labelIds(filters.labelIds),
+      sizeIds: numberIds(filters.sizeIds ?? filters.estimateIds),
+      sectionIds: numberIds(filters.sectionIds),
+      starred: typeof filters.starred === "boolean" ? filters.starred : null,
+      dueDate: dueDateFilter(filters.dueDate),
+      createdRange: dateRange(filters.createdRange),
+      updatedRange: dateRange(filters.updatedRange),
+      showDone: filters.showDone === true,
+      showSnoozed: filters.showSnoozed === true,
+    },
+    filterSettings: parseFilterSettings(value.filterSettings),
+    sort: {
+      field: sortField,
+      direction: sort.direction === "desc" ? "desc" : "asc",
+    },
+    ...(groupBy ? { groupBy } : {}),
+    ...(tableVisibleColumns ? { tableVisibleColumns } : {}),
+    scopes,
+    ...(defaultBoardId !== undefined ? { defaultBoardId } : {}),
+  };
+}

@@ -40,11 +40,22 @@ import {
   HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
   HTPR_6320_AI_OBSERVABILITY_FLAG,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+  HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   POSTHOG_ERROR_ALERT_FLAG,
   SCOPED_BOARD_REFETCH_FLAG,
   MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   HTPR_6372_SEARCH_RANKING_FLAG,
+  MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_FILTER_PARITY_FLAG,
+  MY_TASKS_TIME_GROUP_FLAG,
+  MY_TASKS_TABLE_COLUMNS_FLAG,
+  MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_LIVE_UPDATES_FLAG,
+  MY_TASKS_QUICK_ADD_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
+  HTPR_6427_ROW_SHORTCUTS_FLAG,
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -68,6 +79,18 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "On a phone, press and hold a comment to open the Command Center with comment actions at the top and Edit first. Swipe on a comment is off so it does not fight the task swipe.",
+  },
+  {
+    key: HTPR_6427_ROW_SHORTCUTS_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Lets the selected table or My Tasks row use the same task property shortcuts as a Kanban card without opening the task.",
+  },
   {
     key: HTPR_6320_AI_OBSERVABILITY_FLAG,
     shippedOn: "2026-09-09",
@@ -212,6 +235,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-11",
     description:
       "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",
+  },
+  {
+    key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "On mobile Agent Chat with an agent open: hide the app top bar and bottom nav, slim the header to back plus name, and reuse the AI chat mic and send controls.",
   },
   {
     key: "htpr-6287-agent-chat-roster-status",
@@ -378,6 +407,54 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-14",
     description:
       "Hides search results that do not contain every word you typed, and when you open search from a board, shows that board's matches first.",
+  },
+  {
+    key: MY_TASKS_VIEWS_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Adds personal saved views to My Tasks with board, column, task filters, done visibility, and sorting.",
+  },
+  {
+    key: MY_TASKS_FILTER_PARITY_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Opens the same Kanban filter menu on My Tasks, including match all/any, clear all, and the filters that were still missing.",
+  },
+  {
+    key: MY_TASKS_TIME_GROUP_FLAG,
+    shippedOn: "2026-09-14",
+    description:
+      "Groups My Tasks by due time (Overdue, Today, This week, Later, No due date) by default, with board grouping still available per saved view.",
+  },
+  {
+    key: MY_TASKS_TABLE_COLUMNS_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Lets you choose which My Tasks table columns show, and saves that choice in the active My Tasks view.",
+  },
+  {
+    key: MY_TASKS_SCOPES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Lets My Tasks show tasks you created, were mentioned in, or watch, not only tasks assigned to you. Multi-select, saved per view.",
+  },
+  {
+    key: MY_TASKS_LIVE_UPDATES_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Updates My Tasks rows live when another tab, the CLI, or an agent changes a task, without reloading the page.",
+  },
+  {
+    key: MY_TASKS_QUICK_ADD_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Adds a quick-add row at the top of My Tasks that creates a task on the view's default board, assigned to you.",
+  },
+  {
+    key: MY_TASKS_SNOOZE_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Lets you snooze a My Tasks row until a date so it leaves the list and comes back on that day. Same date presets as Inbox Remind Me.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

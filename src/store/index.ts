@@ -254,15 +254,23 @@ export const boardLayoutAtom = atom<BoardLayout>({
 export {
     TABLE_COLUMN_KEYS,
     DEFAULT_TABLE_COLUMNS,
+    MY_TASKS_TABLE_COLUMN_KEYS,
+    DEFAULT_MY_TASKS_TABLE_COLUMNS,
+    MY_TASKS_TABLE_COLUMN_LABELS,
     customFieldColumnKey,
     isCustomFieldColumnKey,
     customFieldIdFromColumnKey,
     normalizeTableVisibleColumns,
+    normalizeMyTasksTableVisibleColumns,
+    withForcedStatusWhileSorted,
     setTableStalenessColumns,
     seedMissingCustomFieldColumns,
     LOCKED_TABLE_COLUMNS,
 } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
-export type { TableColumnKey } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
+export type {
+    TableColumnKey,
+    MyTasksTableColumnKey,
+} from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 import { DEFAULT_TABLE_COLUMNS } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 
 // Key is live in localStorage once table column configuration ships; do not rename.
@@ -270,6 +278,12 @@ export const tableVisibleColumnsAtom = atom<string[]>({
     key: "tableVisibleColumnsAtom",
     default: [...DEFAULT_TABLE_COLUMNS],
     effects_UNSTABLE: [persistAtom],
+});
+// Bumped by the command palette so My Tasks can open its controlled columns
+// picker without mounting the board's uncontrolled picker on the shared atom.
+export const myTasksTableColumnsPickerRequestAtom = atom<number>({
+    key: "myTasksTableColumnsPickerRequestAtom",
+    default: 0,
 });
 // A board-level time-total setting introduces the optional Time column once per
 // browser. Keeping the one-time marker separate lets a later manual hide stay
@@ -794,6 +808,12 @@ export const lastUsedBoardsAtom = atom<{ [projectId: number]: number }>({
 export const agentChatTeamCycleAtom = atom<{ direction: 1 | -1; seq: number } | null>({
     key: "agentChatTeamCycle",
     default: null,
+});
+
+/** Mobile Agent Chat owns the viewport: hide app top bar + bottom nav (HTPR-6476). */
+export const agentChatMobileFullscreenAtom = atom<boolean>({
+    key: "agentChatMobileFullscreen",
+    default: false,
 });
 
 export const calendarCheckedProjectsAtom = atom<Record<number, boolean>>({

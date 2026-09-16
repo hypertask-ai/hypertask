@@ -49,10 +49,23 @@ export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
   "htpr-6215-my-tasks-cross-board-priority-sort";
 export const HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG =
   "htpr-6407-mobile-agent-chat-layout";
+export const HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG =
+  "htpr-6476-mobile-agent-chat-fullscreen";
 export const SCOPED_BOARD_REFETCH_FLAG = "htpr-6166-scoped-board-refetch";
 export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
   "htpr-6421-my-tasks-shortcuts-width";
 export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
+export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
+export const MY_TASKS_FILTER_PARITY_FLAG = "htpr-6447-my-tasks-filter-parity";
+export const MY_TASKS_TIME_GROUP_FLAG = "htpr-6455-my-tasks-time-group";
+export const MY_TASKS_TABLE_COLUMNS_FLAG = "htpr-6456-my-tasks-table-columns";
+export const MY_TASKS_SCOPES_FLAG = "htpr-6457-my-tasks-scopes";
+export const MY_TASKS_LIVE_UPDATES_FLAG = "htpr-6458-my-tasks-live-updates";
+export const MY_TASKS_QUICK_ADD_FLAG = "htpr-6460-my-tasks-quick-add";
+export const MY_TASKS_SNOOZE_FLAG = "htpr-6461-my-tasks-snooze";
+export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
+export const HTPR_6514_COMMENT_LONG_PRESS_FLAG =
+  "htpr-6514-comment-long-press";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

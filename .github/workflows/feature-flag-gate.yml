@@ -269,6 +269,26 @@ jobs:
           fresh_heads_json="$gate_tmp/fresh-heads.json"
           failures=0
 
+          publish_status_if_changed() {
+            local head_sha="$1"
+            local payload="$2"
+            local latest state description
+            if ! latest=$(gh api "repos/$REPO/commits/$head_sha/statuses?per_page=100"); then
+              echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; publishing without deduplication."
+              gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null
+              return
+            fi
+            state=$(jq -r '.state' "$payload") || return 1
+            description=$(jq -r '.description' "$payload") || return 1
+            if jq -e --arg state "$state" --arg description "$description" '
+              map(select(.context == "feature-flag-gate"))[0] as $current |
+              $current.state == $state and $current.description == $description
+            ' <<<"$latest" >/dev/null; then
+              return 0
+            fi
+            gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null
+          }
+
           publish_reconciliation_error() {
             jq -n --arg description "$3" --arg target_url "$RUN_URL" '{
               state: "error",
@@ -276,7 +296,7 @@ jobs:
               description: $description,
               target_url: $target_url
             }' >"$2"
-            gh api -X POST "repos/$REPO/statuses/$1" --input "$2" >/dev/null
+            publish_status_if_changed "$1" "$2"
           }
 
           parser_dir="$gate_tmp/parser"
@@ -293,26 +313,15 @@ jobs:
             exit 2
           fi
 
-          pending_heads="$gate_tmp/pending-heads.txt"
-          : >"$pending_heads"
+          open_heads="$gate_tmp/open-heads.txt"
+          : >"$open_heads"
           while IFS= read -r pull; do
             if ! jq -e '(.head.sha | test("^[0-9a-f]{40}$"))' <<<"$pull" >/dev/null; then
               continue
             fi
             head_sha=$(jq -r '.head.sha' <<<"$pull")
-            if grep -Fxq "$head_sha" "$pending_heads"; then
-              continue
-            fi
-            echo "$head_sha" >>"$pending_heads"
-            jq -n --arg target_url "$RUN_URL" '{
-              state: "pending",
-              context: "feature-flag-gate",
-              description: "feature-flag-gate is reconciling this pull request",
-              target_url: $target_url
-            }' >"$gate_tmp/pending-$head_sha.json"
-            if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$gate_tmp/pending-$head_sha.json" >/dev/null; then
-              echo "::error::Cannot mark feature-flag-gate pending for head $head_sha."
-              failures=$((failures + 1))
+            if ! grep -Fxq "$head_sha" "$open_heads"; then
+              echo "$head_sha" >>"$open_heads"
             fi
           done <"$rows"
 
@@ -322,7 +331,7 @@ jobs:
             while IFS= read -r head_sha; do
               publish_reconciliation_error "$head_sha" "$gate_tmp/error-$head_sha.json" \
                 "feature-flag-gate could not install its parser" || true
-            done <"$pending_heads"
+            done <"$open_heads"
             exit 2
           fi
           export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
@@ -379,7 +388,7 @@ jobs:
             current=$(gh api "repos/$REPO/pulls/$number") || {
               echo "::error::Cannot re-read pull request #$number before publishing its result."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull request #$number" ||
-                echo "::error::Cannot replace the pending feature-flag-gate status for #$number."
+                echo "::error::Cannot publish the feature-flag-gate error for #$number."
               failures=$((failures + 1))
               continue
             }
@@ -391,14 +400,14 @@ jobs:
                ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
               echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" ||
-                echo "::error::Cannot replace the pending feature-flag-gate status for #$number."
+                echo "::error::Cannot publish the feature-flag-gate error for #$number."
               continue
             fi
             if ! gh api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
                ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
               echo "::error::Cannot re-check whether pull request #$number shares its head commit."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" ||
-                echo "::error::Cannot replace the pending feature-flag-gate status for #$number."
+                echo "::error::Cannot publish the feature-flag-gate error for #$number."
               failures=$((failures + 1))
               continue
             fi
@@ -426,7 +435,7 @@ jobs:
               description: $description,
               target_url: $target_url
             }' >"$payload"
-            if ! gh api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null; then
+            if ! publish_status_if_changed "$head_sha" "$payload"; then
               echo "::error::Cannot publish feature-flag-gate for pull request #$number."
               failures=$((failures + 1))
             fi

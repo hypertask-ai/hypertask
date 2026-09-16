@@ -1,32 +1,40 @@
 "use client";
 
-import { ReactNode, useRef, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
 const ENGAGE_PX = 10;
 const COMMIT_PX = 72;
+const LONG_PRESS_MS = 500;
+const MOVE_CANCEL_PX = 10;
 
 /**
- * Swipe a comment left to reveal a "More" panel; releasing past the commit
- * threshold opens the comment's Ctrl+K action menu (the same one the desktop
- * hover ⋯ opens). Touch-only: the desktop comment renders without this wrapper.
+ * Mobile comment gesture wrapper.
  *
- * Mirrors the inbox SwipeableNotificationRow gesture model. The swipe engages
- * only once horizontal travel beats vertical, so vertical list scrolling always
- * wins the ambiguous case; `touch-action: pan-y` tells the browser the same.
+ * Default: swipe left to reveal "More" and open the comment's Command Center
+ * menu (same as the desktop hover ⋯).
+ *
+ * HTPR-6514 (`useLongPress`): press and hold instead. Swipe already moves the
+ * whole task, so a comment swipe fights that gesture.
  */
 const SwipeableCommentRow = ({
   children,
   onMore,
+  useLongPress = false,
 }: {
   children: ReactNode;
   onMore: () => void;
+  useLongPress?: boolean;
 }) => {
   const [offset, setOffset] = useState(0);
-  const offsetRef = useRef(0); // synchronous mirror of offset for the release decision
+  const offsetRef = useRef(0);
   const start = useRef<{ x: number; y: number } | null>(null);
   const engaged = useRef(false);
-  const blockClick = useRef(false); // suppress the click a committed drag would synthesise
+  const blockClick = useRef(false);
+  const longPressTimer = useRef<number | null>(null);
+  const longPressStart = useRef<{ x: number; y: number; id: number } | null>(
+    null,
+  );
 
   const setOffsetSynced = (value: number) => {
     offsetRef.current = value;
@@ -38,6 +46,70 @@ const SwipeableCommentRow = ({
     engaged.current = false;
     setOffsetSynced(0);
   };
+
+  const clearLongPress = () => {
+    if (longPressTimer.current != null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    longPressStart.current = null;
+  };
+
+  useEffect(() => () => clearLongPress(), []);
+
+  if (useLongPress) {
+    return (
+      <div
+        className="relative"
+        style={{
+          touchAction: "pan-y",
+          WebkitTouchCallout: "none",
+          WebkitUserSelect: "none",
+          userSelect: "none",
+        }}
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          longPressStart.current = {
+            x: event.clientX,
+            y: event.clientY,
+            id: event.pointerId,
+          };
+          blockClick.current = false;
+          if (longPressTimer.current != null) {
+            window.clearTimeout(longPressTimer.current);
+          }
+          longPressTimer.current = window.setTimeout(() => {
+            longPressTimer.current = null;
+            longPressStart.current = null;
+            blockClick.current = true;
+            onMore();
+          }, LONG_PRESS_MS);
+        }}
+        onPointerMove={(event) => {
+          const origin = longPressStart.current;
+          if (!origin || event.pointerId !== origin.id) return;
+          const dx = event.clientX - origin.x;
+          const dy = event.clientY - origin.y;
+          if (dx * dx + dy * dy > MOVE_CANCEL_PX * MOVE_CANCEL_PX) {
+            clearLongPress();
+          }
+        }}
+        onPointerUp={clearLongPress}
+        onPointerCancel={clearLongPress}
+        onContextMenu={(event) => {
+          event.preventDefault();
+        }}
+        onClickCapture={(event) => {
+          if (!blockClick.current) return;
+          blockClick.current = false;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden" style={{ touchAction: "pan-y" }}>

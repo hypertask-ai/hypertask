@@ -44,6 +44,12 @@ cp env.example .env
 # fill OPENAI_API_KEY with the Vercel AI Gateway key (see below)
 ```
 
+`@midscene/web` must stay on 1.x: every 0.x release pulls in
+`@xmldom/xmldom`, which carries a security advisory (HTPR-6289). CI never
+installs this package, so `tests/midscene-dependency-guard.test.cjs` in the
+repo root is what enforces the floor — a downgrade or a lockfile that
+resolves `@xmldom/xmldom` at any depth fails `ci-tests`.
+
 ## Run
 
 ```bash

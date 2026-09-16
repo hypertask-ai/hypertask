@@ -7,7 +7,7 @@ import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
 interface IProps {
   createdByHandler: (param?: IUser | CalendarUserSummary) => Promise<void>;
   calendarMembers?: CalendarUserSummary[];
-  view: "Kanban" | "Calendar";
+  view: "Kanban" | "Calendar" | "MyTasks";
 }
 const CreatedByFilterModal: FC<IProps> = ({
   createdByHandler,

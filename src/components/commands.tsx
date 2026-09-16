@@ -21,6 +21,7 @@ import {
   boardLayoutAtom,
   boardZoomedOutAtom,
   tableVisibleColumnsAtom,
+  myTasksTableColumnsPickerRequestAtom,
   setTableStalenessColumns,
   appShellRailAtom,
   appShellRailExpandedAtom,
@@ -47,12 +48,15 @@ import axios from "axios";
 import { useRouter, usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { parseCookies } from "nookies";
+import formatDateDifference from "@/utils/generateTime";
 import { useQueryClient } from "@tanstack/react-query";
 import { createTeam } from "@/utils/api/Homepage";
 import { markAsUnseen } from "@/utils/api/Inbox";
 import { setRecurrenceApiHandler } from "@/utils/api/Task Detail";
 import type { PickerOption } from "./Modals/OptionPicker";
 import { RECURRENCE_LABELS, RECURRENCE_RULES } from "@/lib/recurrence";
+import { myTasksSnoozeAPIRoute } from "@/lib/constants/APIRouteConstants";
+import MyTasksSnoozeModal from "@/app/my-tasks/MyTasksSnoozeModal";
 import {
   LEARN_TUTORIAL_COLUMN_CREATED_EVENT,
   type LearnTutorialColumnCreatedDetail,
@@ -212,6 +216,8 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
 interface IHTCProps {
@@ -222,6 +228,10 @@ interface IHTCProps {
 const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const queryClient = useQueryClient();
   const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
+  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
+  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -304,13 +314,28 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const currentUser: IUser = JSON.parse(cookies.nookies_user);
   const router = useRouter();
   const pathname = usePathname();
+  const onMyTasks = !!pathname?.startsWith(globalConstants.myTasksRoute);
   const { startTour, setSelectedTourId, endTour } = useTourContext();
   const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
   const boardLayout = useRecoilValue(boardLayoutAtom);
   const [, setTableVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
+  const [, setMyTasksColumnsPickerRequest] = useRecoilState(
+    myTasksTableColumnsPickerRequestAtom,
+  );
   const [_activeItem, setActiveItem] = useRecoilState(activeItemAtom);
   const [callbackProjectId, setCallbackProjectId] = useState<number | null>(null);
   const [inViewObject, __] = useRecoilState(inViewObjectAtom);
+  const taskProjectId =
+    paletteContextOptions?.task?.projectId ?? inViewObject.taskProjectId;
+  const isRowTaskProjectFallback =
+    rowShortcutsEnabled && Boolean(paletteContextOptions?.task) && !_currentProject;
+  const { project: taskProject, isLoading: isTaskProjectLoading, isError: isTaskProjectError } =
+    useTaskProjectFallback(
+      _currentProject,
+      taskProjectId,
+      currentUser.id,
+      isRowTaskProjectFallback,
+    );
   const activeTaskId =
     paletteContextOptions?.task?.taskId ??
     inViewObject.taskId;
@@ -336,6 +361,19 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const [, setCalendarSettings] = useRecoilState(calendarSettingsAtom);
 
   useGetBoardInviteURL(_currentProject?.id!, currentUser?.id);
+  useEffect(() => {
+    if (!isRowTaskProjectFallback || isTaskProjectLoading) return;
+    if (isTaskProjectError || !taskProject?.name) {
+      resetShowCommands();
+      toast.error("Unable to open command for this task's board");
+    }
+  }, [
+    isRowTaskProjectFallback,
+    isTaskProjectError,
+    isTaskProjectLoading,
+    resetShowCommands,
+    taskProject?.name,
+  ]);
   const { data: _activeTask } = useGetSingleTask(inViewObject.taskId);
   const _activeTaskAssignees: (IUser | IAgent)[] = (() => {
     if (!_activeTask?.assignees) return [];
@@ -374,7 +412,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     callbackHandler,
     inViewObject,
     boardCloseHandler,
-    _currentProject,
+    _currentProject: taskProject,
     currentUser,
     _activeItem,
     toggleCreateTaskGlobally,
@@ -385,6 +423,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       setCommandMode(0);
       resetShowCommands();
     }, 1);
+  }
+
+  function refreshRowTaskList() {
+    if (rowShortcutsEnabled && isRowTaskProjectFallback) router.refresh();
   }
 
   useEffect(() => {
@@ -921,6 +963,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         boardCloseHandler();
         break;
       case CommandMode.ConfigureTableColumns:
+        if (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) {
+          setMyTasksColumnsPickerRequest((current) => current + 1);
+          boardCloseHandler();
+        }
         break;
       case CommandMode.ManageCustomFields:
         break;
@@ -1332,6 +1378,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         return;
       case CommandMode.SetReminder:
         setReminderHandler();
+        return;
+      case CommandMode.MyTasksSnooze:
+        // Modal opens via commandMode === MyTasksSnooze below.
         return;
       case CommandMode.RemoveParent:
         removeParentHandler();
@@ -1851,9 +1900,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       inViewObject.taskId,
       inViewObject.taskProjectId,
       inViewObject.sectionId,
-      _currentProject
+      taskProject
     );
     boardCloseHandler();
+    refreshRowTaskList();
   }
 
   // ============ [A] sync assignees into the kanban card after assigning via HTC
@@ -1867,8 +1917,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         inViewObject.taskId,
         inViewObject.taskProjectId,
         inViewObject.sectionId,
-        _currentProject
+        taskProject
       );
+      refreshRowTaskList();
       // The open task detail view holds its own currentTask copy that the board
       // cache update above doesn't touch, so bridge the fresh assignees to it.
       if (pathname?.startsWith("/detail") && callbackHandler)
@@ -1896,9 +1947,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       inViewObject.taskId,
       inViewObject.taskProjectId,
       inViewObject.sectionId,
-      _currentProject
+      taskProject
     );
     boardCloseHandler();
+    if (refresh) refreshRowTaskList();
   }
 
   // ============ [S] toggle priority modal
@@ -1918,10 +1970,11 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       inViewObject.taskId,
       inViewObject.taskProjectId,
       inViewObject.sectionId,
-      _currentProject
+      taskProject
     );
 
     boardCloseHandler();
+    if (refresh) refreshRowTaskList();
   }
 
   // ============ toggle estimate modal
@@ -1945,8 +1998,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
         inViewObject.taskId,
         inViewObject.taskProjectId,
         inViewObject.sectionId,
-        _currentProject
+        taskProject
       );
+      refreshRowTaskList();
       queryClient.refetchQueries({
         queryKey: [globalConstants.CommentsTQPrefixKey, inViewObject.taskId],
       });
@@ -2049,6 +2103,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   }, [commandMode, resetShowCommands, showCommands.show]);
 
   if (!showCommands.show) return null;
+  if (rowShortcutsEnabled && isRowTaskProjectFallback && isTaskProjectLoading)
+    return <span className="hidden" />;
 
   return (
     <>
@@ -2094,7 +2150,12 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             <TrialModal closeCallback={boardCloseHandler} />
           )}
           {commandMode === CommandMode.MoveTaskToBoard && (
-            <MoveTaskGlobal closeHTC={boardCloseHandler} />
+            <MoveTaskGlobal
+              closeHTC={() => {
+                boardCloseHandler();
+                refreshRowTaskList();
+              }}
+            />
           )}
           {relationPicker && activeTaskId && (
             <TaskRelationPicker
@@ -2122,7 +2183,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
           {commandMode === CommandMode.DeleteTask && (
             <ConfirmTaskDelete
-              confirmDelete={confirmDelete}
+              confirmDelete={async (response) => {
+                await confirmDelete(response);
+                if (response) refreshRowTaskList();
+              }}
               content="Clicking confirm will delete this task! Task can be recovered within 30 days."
             />
           )}
@@ -2147,6 +2211,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
                 boardCloseHandler();
                 if (callback) setDueDateCallback(callback);
                 else if (reset) setDueDateCallback(undefined);
+                if (callback || reset) refreshRowTaskList();
               }}
             />
           )}
@@ -2214,6 +2279,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             ) : inViewObject.taskId ? (
             <AssignModal
               onClose={toggleAssignModal}
+              project={taskProject ?? undefined}
               task={{
                 id: inViewObject.taskId,
                 title: inViewObject.taskTitle ?? "",
@@ -2296,7 +2362,10 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
               <MoveToColumn
                 projectId={contextOptions.task.projectId}
                 task={contextOptions.task}
-                moveTaskToColumnHandler={boardCloseHandler}
+                moveTaskToColumnHandler={() => {
+                  boardCloseHandler();
+                  refreshRowTaskList();
+                }}
               />
             )
             )
@@ -2384,6 +2453,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             ) : (
             <CreateLabel
               closeHandler={toggleLabelModal}
+              currentProject={taskProject ?? undefined}
               onManageTags={() => {
                 setShowCommands({
                   show: true,
@@ -2396,6 +2466,43 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
           {commandMode === CommandMode.RemindMe && (
             <RemindMeComponent closeHandler={togglRemindMeModal} />
+          )}
+          {commandMode === CommandMode.MyTasksSnooze && myTasksSnoozeEnabled && (
+            <MyTasksSnoozeModal
+              closeHandler={togglRemindMeModal}
+              onPickDate={async (date) => {
+                const assignmentId =
+                  typeof showCommands.payload?.assignmentId === "number"
+                    ? showCommands.payload.assignmentId
+                    : undefined;
+                if (!assignmentId) {
+                  toast.error("Only tasks assigned to you can be snoozed.");
+                  return;
+                }
+                const response = await fetch(myTasksSnoozeAPIRoute, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "same-origin",
+                  body: JSON.stringify({
+                    assignmentId,
+                    snoozeUntil: date,
+                  }),
+                });
+                if (!response.ok) {
+                  const body = await response.json().catch(() => null);
+                  throw new Error(
+                    typeof body?.error === "string"
+                      ? body.error
+                      : "Unable to snooze task",
+                  );
+                }
+                toast(
+                  "Hidden from My Tasks until " +
+                    formatDateDifference(date, true),
+                );
+                window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
+              }}
+            />
           )}
           {commandMode === CommandMode.SubtaskSettings && (
             <SubtaskSettings toggle={toggleSubTaskSettingsHandler} />
@@ -2454,7 +2561,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
               onOpenCli={() => handleAction(CommandMode.CliInstall)}
             />
           )}
-          {commandMode === CommandMode.ConfigureTableColumns && (
+          {commandMode === CommandMode.ConfigureTableColumns &&
+            !(onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) && (
             <TableColumnsPicker closeHandler={boardCloseHandler} projectId={_currentProject?.id} />
           )}
           {commandMode === CommandMode.ManageCustomFields && (

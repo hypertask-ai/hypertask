@@ -111,6 +111,14 @@ test("app smoke validates the head before isolated build and route checks", asyn
     workflow,
     /cancel-in-progress: \$\{\{ github\.event_name == 'push' \}\}/,
   );
+  assert.equal(
+    parsedWorkflow.jobs.validate.if,
+    "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+  );
+  assert.equal(
+    parsedWorkflow.jobs.report.if,
+    "always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+  );
   assert.match(
     workflow,
     /name: warm app-smoke dependencies\s+if: github\.event_name == 'push'/,

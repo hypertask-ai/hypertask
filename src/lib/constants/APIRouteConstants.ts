@@ -41,6 +41,11 @@ export const resetToDefaultAPIRoute = "/api/projects/views/reset-to-default";
 export const updateViewAPIRoute = "/api/projects/views/update-view";
 export const deleteRenameViewAPIRoute =
   "/api/projects/views/delete-rename-view";
+export const myTasksViewsAPIRoute = "/api/my-tasks/views";
+export const myTasksViewAPIRoute = (viewId: number) =>
+  `${myTasksViewsAPIRoute}/${viewId}`;
+export const myTasksAPIRoute = "/api/my-tasks";
+export const myTasksSnoozeAPIRoute = "/api/my-tasks/snooze";
 
 // ----------------------- Custom Instruction Update
 export const UpdateAICustomInstructionRoute = "/ai/project/customInstruction";

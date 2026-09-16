@@ -3,10 +3,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { DragEvent as ReactDragEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { IProject, ISection, ITask } from "@/models/model";
+import { IAssignees, IProject, ISection, ITask } from "@/models/model";
+import type { MyTasksSortField, MyTasksViewConfig } from "@/models/MyTasksView";
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useShowArchivedOnBoard } from "@/hooks/Homepage/useShowArchivedOnBoard";
-import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
+import { activeItemAtom, showCommandsAtom, tasksPlayListAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTimeColumnSeededBoardsAtom, normalizeTableVisibleColumns, normalizeMyTasksTableVisibleColumns, withForcedStatusWhileSorted, seedMissingCustomFieldColumns, customFieldColumnKey, isCustomFieldColumnKey, customFieldIdFromColumnKey, LOCKED_TABLE_COLUMNS } from "@/store";
 import type { SortingOrder } from "@prisma/client";
 import type { CustomFieldType } from "@prisma/client";
 import {
@@ -27,9 +28,16 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
+import {
+  getTaskShortcutAction,
+  shouldIgnoreTaskShortcutTarget,
+  type TaskShortcutAction,
+} from "@/lib/keyboard/taskShortcuts";
 import type { IAllCommands } from "@/models/model";
+import { CommandMode } from "@/models/enums";
 import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
 import EstimateLabelComponent from "@/components/Modals/TaskEstimate/EstimateLabelComponent";
+import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelComponent";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import formatDateDifference, { formatDateWithYearIfPast } from "@/utils/generateTime";
 import { daysSince, stalenessLevel } from "@/lib/staleness";
@@ -65,11 +73,21 @@ import {
 } from "./TableCreateTaskControl";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6427_ROW_SHORTCUTS_FLAG,
+  MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_TABLE_COLUMNS_FLAG,
+} from "@/lib/flags/keys";
+import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
+import { splitAssignees } from "@/lib/assignees";
+import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
+import { taskBaseUri } from "@/utils";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
-
-type TableViewProps = { filteredSections?: ISection[]; _sections: ISection[]; _currentProject: IProject | null; _activeSortingMode: TBoardSortingViewMode; currentUser: any; handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void };
+const AssignModal = lazy(
+  () => import("@/components/Modals/AssignToUser/AssignToUser"),
+);
 
 const SECTION_CAP = 20;
 const TABLE_GRID_CLASS = "grid";
@@ -77,11 +95,40 @@ const LABEL_CLASS = "border-border-labelComponent text-label-component";
 const MIN_COLUMN_WIDTH_PX = 60;
 type TaskRow = { type: "task"; task: ITask; sid: string | number };
 type Row = TaskRow | { type: "more"; sid: string | number; hidden: number };
-type StaticSortColumn = "ticket" | "title" | "status" | "assignee" | "priority" | "size" | "due" | "inColumn" | "noComment" | "onBoard" | "time" | "created" | "updated";
+type StaticSortColumn = "ticket" | "title" | "board" | "status" | "assignee" | "priority" | "size" | "labels" | "due" | "inColumn" | "noComment" | "onBoard" | "time" | "created" | "updated";
 type CustomFieldSortColumn = `customField:${string}`;
 type SortColumn = StaticSortColumn | CustomFieldSortColumn;
 type SortDirection = "asc" | "desc";
 type SortState = { column: SortColumn; direction: SortDirection }[];
+type TableViewProps = {
+  filteredSections?: ISection[];
+  _sections: ISection[];
+  _currentProject: IProject | null;
+  _activeSortingMode: TBoardSortingViewMode;
+  currentUser: any;
+  handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void;
+  myTasksSort?: MyTasksViewConfig["sort"];
+  myTasksSortKey?: number | null;
+  /** HTPR-6461: My Tasks snooze surface, independent of Views/sort. */
+  myTasksSnoozeActive?: boolean;
+  onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
+  /** Controlled My Tasks columns. When set, never reads/writes the board localStorage atom. */
+  myTasksVisibleColumns?: string[];
+  onMyTasksVisibleColumnsChange?: (columns: string[]) => void;
+};
+const TASK_SHORTCUT_COMMAND_MODES: Partial<
+  Record<TaskShortcutAction, CommandMode>
+> = {
+  delete: CommandMode.DeleteTask,
+  size: CommandMode.EstimateModal,
+  priority: CommandMode.PriorityModal,
+  dueDate: CommandMode.SetDueDate,
+  label: CommandMode.LabelModal,
+  share: CommandMode.ShareTaskPublic,
+  moveColumn: CommandMode.MoveToColumn,
+  moveBoard: CommandMode.MoveTaskToBoard,
+  rename: CommandMode.RenameTask,
+};
 type CustomField = { id: string; name: string; type: CustomFieldType; showInTable?: boolean | null };
 type CustomFieldValue = { fieldId: string; value: string; numericValue: number | null };
 type TableColumn = { key: SortColumn; label: string; width: string; className?: string };
@@ -96,10 +143,12 @@ const isTaskRow = (row: Row): row is TaskRow => row.type === "task";
 const tableColumns: TableColumn[] = [
   { key: "ticket", label: "Ticket", width: "90px" },
   { key: "title", label: "Title", width: "minmax(200px,1fr)" },
+  { key: "board", label: "Board", width: "120px" },
   { key: "status", label: "Status", width: "110px" },
   { key: "assignee", label: "Assignee", width: "64px" },
   { key: "priority", label: "Priority", width: "100px" },
   { key: "size", label: "Size", width: "80px" },
+  { key: "labels", label: "Labels", width: "140px" },
   { key: "due", label: "Due", width: "104px" },
   { key: "inColumn", label: "In column", width: "84px" },
   { key: "noComment", label: "No comment", width: "92px" },
@@ -137,6 +186,33 @@ const resolveSortState = (project?: IProject | null): SortState => {
   if (!tableColumnByKey.has(active.column as SortColumn) && !isCustomFieldSortColumn(active.column)) return [];
   if (active.direction !== "asc" && active.direction !== "desc") return [];
   return [{ column: active.column as SortColumn, direction: active.direction }];
+};
+
+const resolveMyTasksSortState = (sort: MyTasksViewConfig["sort"]): SortState => {
+  const columns: Partial<Record<MyTasksSortField, SortColumn>> = {
+    dueDate: "due",
+    priority: "priority",
+    createdAt: "created",
+    updatedAt: "updated",
+    title: "title",
+  };
+  const column = columns[sort.field];
+  return column ? [{ column, direction: sort.direction }] : [];
+};
+
+const myTasksSortFromTable = (
+  sort: SortState[number] | undefined,
+): MyTasksViewConfig["sort"] | null => {
+  if (!sort) return null;
+  const fields: Partial<Record<SortColumn, MyTasksSortField>> = {
+    due: "dueDate",
+    priority: "priority",
+    created: "createdAt",
+    updated: "updatedAt",
+    title: "title",
+  };
+  const field = fields[sort.column];
+  return field ? { field, direction: sort.direction } : null;
 };
 
 const taskInColumnDays = (t: ITask) => daysSince(t.sectionChangedAt ?? t.createdAt);
@@ -209,7 +285,7 @@ const getSortComparator = (
   return sortByUpdatedAtOrder(order);
 };
 
-export const renderAssigneeAvatars = (task: ITask) => {
+const renderAssigneeAvatarsContent = (task: ITask) => {
   const assignees = task.assignees || [];
   if (!assignees.length) return null;
 
@@ -248,6 +324,9 @@ export const renderAssigneeAvatars = (task: ITask) => {
     </div>
   );
 };
+
+export const renderAssigneeAvatars = (task: ITask) =>
+  renderAssigneeAvatarsContent(task);
 
 // Right-edge drag handle for a header cell (feature 3: Excel-style column resize).
 // A thin pointer-event hit strip, sibling to the sort <button> (not a child of
@@ -342,19 +421,61 @@ const ColumnResizeHandle = ({
   );
 };
 
-const TableView = ({ filteredSections, _sections, _currentProject, handleBoardChange }: TableViewProps) => {
+const TableView = ({
+  filteredSections,
+  _sections,
+  _currentProject,
+  currentUser,
+  handleBoardChange,
+  myTasksSort,
+  myTasksSortKey,
+  myTasksSnoozeActive = false,
+  onMyTasksSortChange,
+  myTasksVisibleColumns,
+  onMyTasksVisibleColumnsChange,
+}: TableViewProps) => {
   const queryClient = useQueryClient();
+  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
+  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
+  const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
   const { updateActiveItemAndItemInView } = useProjectQuery();
-  const { removeFromListWithStatus } = UpdateKanban();
+  const { removeFromListWithStatus, updateTaskInCache } = UpdateKanban();
+  const { starTask } = useStarAndPin();
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const persistedActiveItem = useRecoilValue(activeItemAtom);
   const showArchivedOnBoard = useShowArchivedOnBoard(_currentProject);
   const isApple = useDeviceContext();
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
-  const [storedVisibleColumns, setStoredVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
+  const myTasksColumnsControlled =
+    myTasksTableColumnsFlag && myTasksVisibleColumns !== undefined;
+  const [atomVisibleColumns, setAtomVisibleColumns] = useRecoilState(tableVisibleColumnsAtom);
+  const storedVisibleColumns = myTasksColumnsControlled
+    ? myTasksVisibleColumns
+    : atomVisibleColumns;
+  const normalizeVisibleColumns = myTasksColumnsControlled
+    ? normalizeMyTasksTableVisibleColumns
+    : normalizeTableVisibleColumns;
+  const setStoredVisibleColumns = useCallback(
+    (next: string[] | ((current: string[]) => string[])) => {
+      if (myTasksColumnsControlled) {
+        if (!onMyTasksVisibleColumnsChange) return;
+        const current = normalizeMyTasksTableVisibleColumns(myTasksVisibleColumns);
+        onMyTasksVisibleColumnsChange(typeof next === "function" ? next(current) : next);
+        return;
+      }
+      setAtomVisibleColumns(next);
+    },
+    [
+      myTasksColumnsControlled,
+      myTasksVisibleColumns,
+      onMyTasksVisibleColumnsChange,
+      setAtomVisibleColumns,
+    ],
+  );
   const [timeColumnSeededBoards, setTimeColumnSeededBoards] = useRecoilState(
     tableTimeColumnSeededBoardsAtom,
   );
@@ -391,11 +512,33 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     queryFn: async () => (await axios.get(`/api/customFields?projectId=${_currentProject!.id}`)).data,
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [assignTask, setAssignTask] = useState<ITask | null>(null);
+  const {
+    project: assignProject,
+    isLoading: assignProjectLoading,
+    isError: assignProjectError,
+  } = useTaskProjectFallback(
+    _currentProject,
+    assignTask?.projectId,
+    currentUser?.id,
+    rowShortcutsEnabled && Boolean(assignTask),
+  );
+  // If My Tasks cannot load the row's board, drop the pending assign target
+  // so other shortcuts are not blocked with no modal on screen (OCR).
+  useEffect(() => {
+    if (!assignTask || assignProjectLoading) return;
+    if (assignProjectError || !assignProject?.name) {
+      setAssignTask(null);
+      toast.error("Unable to open assign for this task's board");
+    }
+  }, [assignProject?.name, assignProjectError, assignProjectLoading, assignTask]);
   const [expanded, setExpanded] = useState<Set<string | number>>(new Set());
   // My Tasks has no board cache to mutate, so Ctrl+E hides the row locally
   // until router.refresh() returns the server list without it (HTPR-6445).
   const [excludedTaskIds, setExcludedTaskIds] = useState<Set<number>>(() => new Set());
-  const [sortState, setSortState] = useState<SortState>(() => resolveSortState(_currentProject));
+  const [sortState, setSortState] = useState<SortState>(() =>
+    myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
+  );
   const { setTableSortViewAndReturn, changeBoardLayout } = useKanbanViews(_currentProject);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
@@ -406,9 +549,17 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
     _currentProject?.project_view?.default_view?.id;
   useEffect(() => {
-    setSortState(resolveSortState(_currentProject));
+    setSortState(
+      myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSortViewId, _currentProject?.showTimeTotals]);
+  }, [
+    activeSortViewId,
+    myTasksSort?.direction,
+    myTasksSort?.field,
+    myTasksSortKey,
+    _currentProject?.showTimeTotals,
+  ]);
   const sections = useMemo(() => {
     // An active filter may intentionally produce zero visible sections. Only
     // fall back when no filtered value was supplied, not when it is empty.
@@ -495,6 +646,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     (key: string): TableColumn | undefined => {
       if (key === "time" && !_currentProject?.showTimeTotals) return undefined;
       if (isCustomFieldColumnKey(key)) {
+        if (myTasksColumnsControlled) return undefined;
         const field = customFieldById.get(customFieldIdFromColumnKey(key));
         if (!field) return undefined; // stored id for a field that's since been deleted
         if (field.showInTable === false) return undefined; // hidden board-wide via manage-custom-fields
@@ -505,9 +657,14 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
           className: field.type === "Number" ? "text-right" : undefined,
         };
       }
-      return tableColumnByKey.get(key as StaticSortColumn);
+      const column = tableColumnByKey.get(key as StaticSortColumn);
+      if (!column) return undefined;
+      if (myTasksColumnsControlled && key === "status") {
+        return { ...column, label: "Column" };
+      }
+      return column;
     },
-    [customFieldById, _currentProject?.showTimeTotals]
+    [customFieldById, _currentProject?.showTimeTotals, myTasksColumnsControlled]
   );
   // Custom fields, unlike the fixed built-in columns, are created at runtime and
   // need seeding into the stored order once (like DEFAULT_TABLE_COLUMNS seeds the
@@ -515,7 +672,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   // presence/absence is the user's own toggle choice via TableColumnsPicker,
   // same as any built-in column.
   useEffect(() => {
-    if (!customFields.length) return;
+    if (myTasksColumnsControlled || !customFields.length) return;
     // Fields hidden board-wide (showInTable: false) never get seeded as a
     // visible column — same rule toTableColumn enforces at render time.
     const customFieldKeys = customFields
@@ -525,8 +682,9 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       const seeded = seedMissingCustomFieldColumns(normalizeTableVisibleColumns(current), customFieldKeys);
       return seeded.length === current.length ? current : seeded;
     });
-  }, [customFields, setStoredVisibleColumns]);
+  }, [customFields, myTasksColumnsControlled, setStoredVisibleColumns]);
   useEffect(() => {
+    if (myTasksColumnsControlled) return;
     const projectId = _currentProject?.id;
     if (
       !projectId ||
@@ -545,19 +703,28 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   }, [
     _currentProject?.id,
     _currentProject?.showTimeTotals,
+    myTasksColumnsControlled,
     setStoredVisibleColumns,
     setTimeColumnSeededBoards,
     timeColumnSeededBoards,
   ]);
   const visibleColumns = useMemo(() => {
-    const normalized = normalizeTableVisibleColumns(storedVisibleColumns);
-    // While sorted, 'status' shows regardless of the picker so the sorted-by
-    // column is always visible; it disappears again once the sort clears.
-    const keys = sortState.length > 0 && !normalized.includes("status")
-      ? [normalized[0], normalized[1], "status", ...normalized.slice(2)]
-      : normalized;
+    const normalized = normalizeVisibleColumns(storedVisibleColumns);
+    // Board table: while sorted, force 'status' visible so the sorted-by
+    // column stays on screen. My Tasks controlled picker must win (HTPR-6456).
+    const keys = withForcedStatusWhileSorted(
+      normalized,
+      sortState.length > 0,
+      !myTasksColumnsControlled,
+    );
     return keys.map(toTableColumn).filter((column): column is TableColumn => Boolean(column));
-  }, [storedVisibleColumns, sortState, toTableColumn]);
+  }, [
+    myTasksColumnsControlled,
+    normalizeVisibleColumns,
+    storedVisibleColumns,
+    sortState,
+    toTableColumn,
+  ]);
   // A drag-resized column (feature 3) overrides its default base width; that
   // override becomes the column's minimum, same as the unresized default did.
   const getColumnWidth = useCallback(
@@ -633,7 +800,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     (fromKey: string, toKey: string) => {
       if (fromKey === toKey || LOCKED_TABLE_COLUMNS.has(fromKey) || LOCKED_TABLE_COLUMNS.has(toKey)) return;
       setStoredVisibleColumns((current) => {
-        const normalized = normalizeTableVisibleColumns(current);
+        const normalized = normalizeVisibleColumns(current);
         const from = normalized.indexOf(fromKey);
         const to = normalized.indexOf(toKey);
         if (from < 0 || to < 0) return current;
@@ -643,12 +810,15 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
         return next;
       });
     },
-    [setStoredVisibleColumns]
+    [normalizeVisibleColumns, setStoredVisibleColumns]
   );
   // The 'status' column can appear in visibleColumns while sorted without being
   // in storedVisibleColumns (forced-visible injection above) — only columns
   // actually in the stored order are valid drag sources/targets.
-  const normalizedColumnOrder = useMemo(() => normalizeTableVisibleColumns(storedVisibleColumns), [storedVisibleColumns]);
+  const normalizedColumnOrder = useMemo(
+    () => normalizeVisibleColumns(storedVisibleColumns),
+    [normalizeVisibleColumns, storedVisibleColumns],
+  );
   const storedColumnKeys = useMemo(() => new Set(normalizedColumnOrder), [normalizedColumnOrder]);
 
   // HTPR-6215: sorting My Tasks by priority interleaves every board's tasks by
@@ -656,6 +826,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
   // comparable across boards. Limited to Owner + QA by default; see tableSortFlatten.ts.
   const crossBoardPrioritySortEnabled = useFlag(MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG);
   const isPrioritySort = sortState[0]?.column === "priority";
+  const savedViewPrioritySort = myTasksSort?.field === "priority";
 
   const rows = useMemo(() => {
     if (sortState.length > 0) {
@@ -664,7 +835,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
         true,
         isPrioritySort,
         crossBoardPrioritySortEnabled
-      );
+      ) || savedViewPrioritySort;
       // sectionId and sid share a numeric namespace only when there's a current
       // project (real sections); on /my-tasks, sid is the boardId (see
       // myTasksGrouping.ts), so sectionOrder would compare unrelated ids (HTPR-4887).
@@ -733,6 +904,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     timeTotals,
     isPrioritySort,
     crossBoardPrioritySortEnabled,
+    savedViewPrioritySort,
   ]);
 
   // HTPR-4876: table view rendered <HypertasksCommands /> with no context, so
@@ -774,6 +946,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
               currentTask._count.notifications > 0
             ),
             isKanban: true,
+            isMyTasks: myTasksSnoozeEnabled,
             hasSubtasks: !!currentTask.subTasks?.length,
             hasParent: !!currentTask.parentTaskId,
             isStarred: !!currentTask.savedContent?.length,
@@ -782,7 +955,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
         : undefined,
       commentOptions: undefined,
     };
-  }, [_currentProject, isApple, persistedActiveItem, rows, showArchivedOnBoard]);
+  }, [_currentProject, isApple, myTasksSnoozeEnabled, persistedActiveItem, rows, showArchivedOnBoard]);
 
 
   const scrollToRow = useCallback((row: Row) => {
@@ -827,7 +1000,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       const initial = initialDirection(column, customFieldBySortColumn);
       const existingIndex = sortState.findIndex((level) => level.column === column);
       let next: SortState;
-      if (shiftKey) {
+      if (shiftKey && !myTasksSort) {
         if (existingIndex >= 0) {
           next = sortState.map((level, index) =>
             index === existingIndex
@@ -846,10 +1019,24 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       } else {
         next = [];
       }
+      if (myTasksSort && onMyTasksSortChange) {
+        const controlledSort = myTasksSortFromTable(
+          next[0] ?? { column, direction: initial },
+        );
+        if (controlledSort) onMyTasksSortChange(controlledSort);
+        return;
+      }
       setSortState(next);
       if (_currentProject) setTableSortViewAndReturn(_currentProject, next[0] ?? null);
     },
-    [sortState, _currentProject, setTableSortViewAndReturn, customFieldBySortColumn]
+    [
+      sortState,
+      _currentProject,
+      setTableSortViewAndReturn,
+      customFieldBySortColumn,
+      myTasksSort,
+      onMyTasksSortChange,
+    ]
   );
 
   const getTicketText = useCallback(
@@ -965,6 +1152,142 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     }
   }, [_currentProject, removeFromListWithStatus, router]);
 
+  const updateTaskAfterRowMutation = useCallback(
+    (task: ITask, update: Partial<ITask>) => {
+      if (_currentProject) {
+        updateTaskInCache(
+          update,
+          task.id,
+          task.projectId,
+          task.sectionId,
+          _currentProject,
+        );
+      } else {
+        router.refresh();
+      }
+    },
+    [_currentProject, router, updateTaskInCache],
+  );
+
+  const starTaskFromTable = useCallback(
+    async (task: ITask) => {
+      try {
+        const response = await starTask(task.id, task.projectId!);
+        const starred = response.status === 200;
+        updateTaskAfterRowMutation(task, {
+          savedContent: starred ? [{ ...response.data }] : [],
+        });
+        toast(`${starred ? "Starred" : "Unstarred"} Task ${task.ticketNumber?.toUpperCase()}`);
+      } catch {
+        toast.error("Unable to update starred task");
+      }
+    },
+    [starTask, updateTaskAfterRowMutation],
+  );
+
+  const archiveNotificationFromTable = useCallback(
+    async (task: ITask) => {
+      if (
+        task._count?.notifications ||
+        task._count?.notifications === 0
+      ) {
+        toast("This task is not in inbox");
+        return;
+      }
+      try {
+        await globalAPIHandlers.archiveTaskNotification(task.id, currentUser?.id);
+        updateTaskAfterRowMutation(task, {
+          notifications: [],
+          _count: { ...task._count, notifications: 0 },
+        });
+        toast("Notifications archived");
+      } catch {
+        toast.error("Unable to archive notifications");
+      }
+    },
+    [currentUser?.id, updateTaskAfterRowMutation],
+  );
+
+  const closeAssignModal = useCallback(
+    (assignees?: IAssignees[], keepOpen?: boolean) => {
+      if (assignTask && Array.isArray(assignees)) {
+        updateTaskAfterRowMutation(assignTask, { assignees });
+        setAssignTask((task) => (task ? { ...task, assignees } : null));
+      }
+      if (!keepOpen) setAssignTask(null);
+    },
+    [assignTask, updateTaskAfterRowMutation],
+  );
+
+  const runTaskShortcut = useCallback(
+    (event: KeyboardEvent, row: Row | undefined, index: number) => {
+      if (!row || !isTaskRow(row)) return false;
+      const assignmentId = row.task.currentUserAssignmentId;
+      if (
+        myTasksSnoozeEnabled &&
+        typeof assignmentId === "number" &&
+        assignmentId > 0 &&
+        event.keyCode === KeyCodes.H &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.repeat
+      ) {
+        event.preventDefault();
+        updateActiveItemAndItemInView(row.task);
+        setShowCommands({
+          show: true,
+          mode: CommandMode.MyTasksSnooze,
+          payload: { assignmentId },
+        });
+        return true;
+      }
+      if (!rowShortcutsEnabled) return false;
+      const action = getTaskShortcutAction(event, isApple);
+      if (!action) return false;
+
+      event.preventDefault();
+      updateActiveItemAndItemInView(row.task);
+      if (action === "select") return true;
+      if (action === "archive") {
+        if (shouldRunArchiveShortcut(event)) void archiveTaskFromTable(row.task);
+        return true;
+      }
+      if (action === "star") {
+        void starTaskFromTable(row.task);
+        return true;
+      }
+      if (action === "edit") {
+        void archiveNotificationFromTable(row.task);
+        return true;
+      }
+      if (action === "assignee") {
+        setAssignTask(row.task);
+        return true;
+      }
+      if (action === "open") {
+        void openTask(row.task, index);
+        return true;
+      }
+
+      const mode = TASK_SHORTCUT_COMMAND_MODES[action];
+      if (mode !== undefined) setShowCommands({ show: true, mode });
+      return true;
+    },
+    [
+      archiveNotificationFromTable,
+      archiveTaskFromTable,
+      isApple,
+      myTasksSnoozeEnabled,
+      openTask,
+      rowShortcutsEnabled,
+      setShowCommands,
+      starTaskFromTable,
+      updateActiveItemAndItemInView,
+    ],
+  );
+
   useEffect(() => {
     if (didRestore.current || !rows.length) return;
     didRestore.current = true;
@@ -1031,7 +1354,16 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
         handleBoardChange(Number(e.code.replace("Digit", "")), _sections);
         return;
       }
-      if (returnIfModalOrInputActive() || showCommands.show) return;
+      if (
+        (rowShortcutsEnabled &&
+          shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null)) ||
+        returnIfModalOrInputActive() ||
+        showCommands.show ||
+        assignTask
+      )
+        return;
+      const selectedRow = rows[selectedIndex];
+      if (runTaskShortcut(e, selectedRow, selectedIndex)) return;
       // [ctrl/cmd]+[e] archives the selected task. This component also powers
       // My Tasks, so archiveTaskFromTable handles both board cache updates and
       // the cross-board server-data refresh used there.
@@ -1087,7 +1419,7 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [_currentProject, _sections, archiveTaskFromTable, changeBoardLayout, createTaskInCurrentTableContext, expandSection, focusTo, handleBoardChange, openTask, rows, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
+  }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, expandSection, focusTo, handleBoardChange, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
 
   const renderTaskRow = (task: ITask, flatIndex: number) => {
     const selected = selectedIndex === flatIndex;
@@ -1146,6 +1478,29 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
               {_currentProject
                 ? sectionTitleBySid.get(task.sectionId ?? "") ?? task.section
                 : task.section}
+            </span>
+          );
+        case "board":
+          return (
+            <span key="board" className="min-w-0 flex items-center text-micro text-text-light-gray truncate">
+              {task.project?.title ?? task.project?.name ?? ""}
+            </span>
+          );
+        case "labels":
+          return (
+            <span key="labels" className="min-w-0 flex items-center gap-1 overflow-hidden">
+              {task.taskLabels?.slice(0, 3).map((taskLabel) => (
+                <TaskLabelComponent
+                  key={`table-label-${taskLabel.id}`}
+                  stopPropogation={true}
+                  fontWeight={500}
+                  fontSize={11}
+                  onClick={openCurrentTask}
+                  flexBasis={false}
+                  labelValue={taskLabel.label?.value ?? ""}
+                  className={LABEL_CLASS}
+                />
+              ))}
             </span>
           );
         case "assignee":
@@ -1304,11 +1659,16 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
     );
   };
 
+  const selectedAssignees = splitAssignees(assignTask?.assignees);
   let cursor = -1;
   return (
     // h-full fills the flex-sized board column (rail shell), so the horizontal
     // scrollbar sits at the bottom of the viewport instead of under the last row.
-    <div className="w-full h-full min-h-0 bg-taskDetailPage overflow-x-auto overflow-y-auto table-hscroll" style={{ maxHeight: "calc(100vh - 64px)" }}>
+    <div
+      data-task-shortcuts={rowShortcutsEnabled ? "enabled" : undefined}
+      className="w-full h-full min-h-0 bg-taskDetailPage overflow-x-auto overflow-y-auto table-hscroll"
+      style={{ maxHeight: "calc(100vh - 64px)" }}
+    >
       <div className="w-full px-4 pb-6 pt-3">
         <TableCreateTaskControl
           {...getTableCreateTaskControlProps({
@@ -1418,12 +1778,12 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
               );
             })}
           </div>
-          {shouldFlattenSortedRows(
+          {(shouldFlattenSortedRows(
             Boolean(_currentProject),
             sortState.length > 0,
             isPrioritySort,
             crossBoardPrioritySortEnabled
-          ) ? (
+          ) || savedViewPrioritySort) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
                 {rows.filter(isTaskRow).map(({ task }, index) => renderTaskRow(task, index))}
@@ -1497,6 +1857,23 @@ const TableView = ({ filteredSections, _sections, _currentProject, handleBoardCh
       {showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands contextOptions={buildCommandContext()} />
+        </Suspense>
+      )}
+      {rowShortcutsEnabled && assignTask && assignProject?.name && (
+        <Suspense fallback={null}>
+          <AssignModal
+            onClose={closeAssignModal}
+            project={assignProject}
+            task={{
+              id: assignTask.id,
+              title: assignTask.title ?? "",
+              link: `${taskBaseUri}${assignProject.name}/${assignTask.uniqueIndex}`,
+            }}
+            assignees={[
+              ...selectedAssignees.humanAssignees,
+              ...selectedAssignees.agentAssignees,
+            ]}
+          />
         </Suspense>
       )}
     </div>
