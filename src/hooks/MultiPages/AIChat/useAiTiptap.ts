@@ -3,6 +3,7 @@ import OrderedList from "@tiptap/extension-ordered-list";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import { Extension, useEditor } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import styles from "@/styles/tiptap.module.scss";
@@ -12,6 +13,7 @@ import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionDa
 import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
 import SlashCommands from "@/components/RTE/Extensions/SlashCommands/SlashCommands";
 import { useContext, useRef } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { writingAssistanceEditorProps } from "@/components/RTE/writingAssistance";
 import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
@@ -30,12 +32,28 @@ const DisableEnter = Extension.create({
 const useTiptapForAI = ({
   contextCallback,
   projectId,
+  skipChatCommands = false,
+  placeholder,
+  ariaLabel,
+  onUpdate,
+  onKeyDown,
 }: {
   contextCallback: (node: any) => void;
   projectId?: number;
+  skipChatCommands?: boolean;
+  placeholder?: string;
+  ariaLabel?: string;
+  onUpdate?: (text: string, cursor: number) => void;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
 }) => {
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
+  const placeholderRef = useRef(placeholder);
+  placeholderRef.current = placeholder;
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+  const onKeyDownRef = useRef(onKeyDown);
+  onKeyDownRef.current = onKeyDown;
   const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
   const localWritingAssistanceRef = useRef(localWritingAssistance);
   localWritingAssistanceRef.current = localWritingAssistance;
@@ -45,72 +63,88 @@ const useTiptapForAI = ({
   const isMobileRef = useRef(false);
   isMobileRef.current = useContext(MobileViewContext);
 
-  const editor = useEditor({
-    extensions: [
-      Gapcursor,
-      StarterKit.configure({
-        gapcursor: false,
-        link: { autolink: false },
-        orderedList: false,
-        underline: false,
-      }),
-      TaskList.configure({
-        HTMLAttributes: {
-          class: "taskList",
-        },
-      }),
-      TaskItem,
-      OrderedList.configure({
-        itemTypeName: "listItem",
-        HTMLAttributes: {
-          class: "numbered-list",
-        },
-      }),
-      Highlight.configure({ multicolor: true }),
-      Placeholder.configure({
-        // Use a placeholder:
+  const extensions = [
+    Gapcursor,
+    StarterKit.configure({
+      gapcursor: false,
+      link: { autolink: false },
+      orderedList: false,
+      underline: false,
+    }),
+    TaskList.configure({
+      HTMLAttributes: {
+        class: "taskList",
+      },
+    }),
+    TaskItem,
+    OrderedList.configure({
+      itemTypeName: "listItem",
+      HTMLAttributes: {
+        class: "numbered-list",
+      },
+    }),
+    Highlight.configure({ multicolor: true }),
+    Placeholder.configure({
+      placeholder: () =>
+        placeholderRef.current ??
+        (isMobileRef.current
+          ? `@ for context`
+          : `Focus with CTRL + Q, @ for context`),
+      emptyEditorClass: `${styles.is_editor_empty}`,
+      emptyNodeClass: "New Comment",
+    }),
+    Underline.extend({ inclusive: false }),
+    ...(skipChatCommands
+      ? []
+      : [
+          LinkableMention.configure({
+            HTMLAttributes: {
+              class: "mention",
+            },
+            suggestion: createMentionData(
+              contextCallback,
+              () => projectIdRef.current
+            ),
+          }),
+          SlashCommands("ai-chat"),
+        ]),
+    DisableEnter,
+    LocalWritingAssistance.configure({
+      localCapitalizationEnabled: () => localWritingAssistanceRef.current,
+    }),
+  ];
 
-        placeholder: () =>
-          isMobileRef.current
-            ? `@ for context`
-            : `Focus with CTRL + Q, @ for context`,
-        emptyEditorClass: `${styles.is_editor_empty}`,
-        emptyNodeClass: "New Comment",
-      }),
-      Underline.extend({ inclusive: false }),
-      //   Link.configure({
-      //     openOnClick: true,
-      //     autolink: false,
-      //     linkOnPaste: true,
-      //     HTMLAttributes: {
-      //       // Change rel to different value
-      //       // Allow search engines to follow links(remove nofollow)
-      //       // rel: 'noopener noreferrer',
-      //       // Remove target entirely so links open in current tab
-      //       target: "_blank",
-      //     },
-      //     // validate: href => /^https?:\/\//.test(href),
-      //   }),
-      LinkableMention.configure({
-        HTMLAttributes: {
-          class: "mention",
-        },
-        suggestion: createMentionData(
-          contextCallback,
-          () => projectIdRef.current
-        ),
-      }),
-      // "/" opens a skills picker (board + personal). Selecting one inserts
-      // "/slug ", which the chat stream route resolves server-side.
-      SlashCommands("ai-chat"),
-      DisableEnter,
-      LocalWritingAssistance.configure({
-        localCapitalizationEnabled: () => localWritingAssistanceRef.current,
-      }),
-    ],
-    // content: defaultContent,
-    editorProps: writingAssistanceEditorProps,
+  const editor = useEditor({
+    extensions,
+    editorProps: {
+      ...writingAssistanceEditorProps,
+      attributes: {
+        ...writingAssistanceEditorProps.attributes,
+        ...(ariaLabel
+          ? {
+              "aria-label": ariaLabel,
+              "aria-multiline": "true",
+              role: "textbox",
+            }
+          : {}),
+      },
+      handleKeyDown: onKeyDown
+        ? (_view, event) => {
+            onKeyDownRef.current?.(
+              event as unknown as ReactKeyboardEvent<HTMLTextAreaElement>,
+            );
+            return event.defaultPrevented;
+          }
+        : undefined,
+    },
     immediatelyRender: false,
+    onUpdate: onUpdate
+      ? ({ editor: next }: { editor: Editor }) => {
+          const text = next.getText();
+          const before = next.state.doc.textBetween(0, next.state.selection.from);
+          onUpdateRef.current?.(text, before.length);
+        }
+      : undefined,
   });
   return {
     editor,

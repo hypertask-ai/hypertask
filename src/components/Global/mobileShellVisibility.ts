@@ -10,6 +10,9 @@ const hiddenShellPaths = [
   "/trial-plan-confirmation",
 ];
 
+export const isAgentChatPath = (pathname: string | null) =>
+  Boolean(pathname?.startsWith("/agents/chat"));
+
 export const shouldShowMobileTabBar = (pathname: string | null) =>
   Boolean(
     pathname &&

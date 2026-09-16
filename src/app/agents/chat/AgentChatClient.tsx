@@ -20,7 +20,7 @@ import type { Editor } from "@tiptap/react";
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { appShellRailAtom, agentChatTeamCycleAtom, agentChatMobileFullscreenAtom, mobileTopBarTitleAtom } from "@/store";
+import { appShellRailAtom, agentChatTeamCycleAtom, mobileTopBarTitleAtom } from "@/store";
 import { IUser, IProject, ITask } from "@/models/model";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
@@ -649,9 +649,6 @@ const AgentChatClient = (props: IProp) => {
   const chatStopAndTimeoutEnabled = useFlag(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
-  const setAgentChatMobileFullscreen = useSetRecoilState(
-    agentChatMobileFullscreenAtom,
-  );
 
   const [agents, setAgents] = useState<TAgent[] | null>(null);
   const [rosterError, setRosterError] = useState<string | null>(null);
@@ -662,7 +659,7 @@ const AgentChatClient = (props: IProp) => {
     isMbl &&
       (mobileAgentChatViewportEnabled ||
         mobileLayoutEnabled ||
-        (mobileFullscreenFlag && Boolean(selectedId))),
+        mobileFullscreenFlag),
   );
   const [session, setSession] = useState<TAgentChatSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -1365,10 +1362,8 @@ const AgentChatClient = (props: IProp) => {
     [agents, selectedId],
   );
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
-  // Flag + phone + a real agent open: hide app chrome and use AI chat controls.
-  const mobileFullscreenChrome = Boolean(
-    mobileFullscreenFlag && isMbl && selectedAgent,
-  );
+  // Flag + phone: hide app chrome for the whole Agent Chat page, same as /chat.
+  const mobileFullscreenChrome = Boolean(mobileFullscreenFlag && isMbl);
   const reuseAiComposer = Boolean(mobileFullscreenFlag && isMbl);
   const dictationProjectId = useMemo(
     () =>
@@ -1377,11 +1372,6 @@ const AgentChatClient = (props: IProp) => {
         : null,
     [isMbl, mobileLayoutEnabled, mobileFullscreenFlag, selectedAgent, teamId],
   );
-
-  useEffect(() => {
-    setAgentChatMobileFullscreen(mobileFullscreenChrome);
-    return () => setAgentChatMobileFullscreen(false);
-  }, [mobileFullscreenChrome, setAgentChatMobileFullscreen]);
 
   useEffect(() => {
     if (!mobileLayoutEnabled || !isMbl || mobileFullscreenChrome) return;
@@ -2584,8 +2574,7 @@ const AgentChatClient = (props: IProp) => {
   ) : null;
 
   let mobileAgentChatHeight: string | undefined;
-  // 6407 keeps chrome-aware height for the whole mobile Agent Chat page.
-  // 6476 only needs it while an agent thread is open (roster keeps normal shell).
+  // 6407 and 6476 both keep chrome-aware height for the whole mobile page.
   const mobileChromeAwareHeight = Boolean(
     isMbl &&
       (mobileLayoutEnabled ||
@@ -2624,8 +2613,8 @@ const AgentChatClient = (props: IProp) => {
           "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
           !(isMbl && (mobileLayoutEnabled || mobileFullscreenChrome)) &&
             "h-screen",
-          // Flag-off: reserve app top bar + dock. Flag-on with an agent open:
-          // no shell chrome; keep safe-area only when the keyboard is closed.
+          // Flag-off: reserve app top bar + dock. Flag-on: no shell chrome;
+          // keep safe-area only when the keyboard is closed.
           isMbl &&
             !hideDockInset &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[max(var(--mobile-dock-h,64px),64px)]",
