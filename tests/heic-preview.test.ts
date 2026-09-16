@@ -13,7 +13,7 @@ import {
   DIRECT_UPLOAD_MAX_FILES,
 } from "../src/lib/storage/directUpload";
 import {
-  extractEmbeddableMediaFiles,
+  extractEmbeddableClipboardFiles,
   isEmbeddableMediaFile,
 } from "../src/components/RTE/Extensions/resizableMedia/mediaPasteDropPlugin/mediaPasteDropPlugin";
 
@@ -144,7 +144,7 @@ test("clipboard files are used when the item list has no media", () => {
     files: [example] as unknown as FileList,
   };
 
-  assert.deepEqual(extractEmbeddableMediaFiles(clipboardData), [example]);
+  assert.deepEqual(extractEmbeddableClipboardFiles(clipboardData), [example]);
 });
 
 test("the paste filter still accepts ordinary media and still rejects documents", () => {

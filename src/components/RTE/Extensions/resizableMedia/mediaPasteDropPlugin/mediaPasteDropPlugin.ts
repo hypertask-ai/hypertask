@@ -33,17 +33,9 @@ export function isEmbeddableMediaFile(file: File | null): boolean {
   return isHeicByMetadata(file.type, file.name);
 }
 
-export function extractEmbeddableMediaFiles(
-  clipboardData: Pick<DataTransfer, "items" | "files"> | null | undefined,
+export function extractEmbeddableClipboardFiles(
+  clipboardData: Pick<DataTransfer, "files"> | null | undefined,
 ): File[] {
-  const itemFiles = Array.from(clipboardData?.items ?? [])
-    .filter((item) => item.kind === "file")
-    .map((item) => item.getAsFile())
-    .filter((file): file is File => isEmbeddableMediaFile(file));
-
-  if (itemFiles.length > 0) return itemFiles;
-
-  // Edge can expose a file paste here without a matching file entry in items.
   return Array.from(clipboardData?.files ?? []).filter(isEmbeddableMediaFile);
 }
 
@@ -57,13 +49,33 @@ export const getMediaPasteDropPlugin = (options:any) => {
         return false;
       },
       handlePaste(view, event) {
+        const items = Array.from(event.clipboardData?.items || []);
         const { schema } = view.state;
-        const mediaFiles = extractEmbeddableMediaFiles(event.clipboardData);
+        
+        // checking if there are any image/video files in the clipboard data
+        const mediaItems = items.filter(
+          (item) => item.kind === "file" && isEmbeddableMediaFile(item.getAsFile())
+        );
         
         // If we have at least one media file, only process that and prevent default
-        if (mediaFiles.length > 0) {
+        if (mediaItems.length > 0) {
           event.preventDefault();
-          handleFileUpload(mediaFiles[0], view, schema, options);
+          
+          // Just process the first media item if multiple exist
+          const item = mediaItems[0];
+          const file = item.getAsFile();
+          
+          if (!file) return false;
+          
+          handleFileUpload(file, view, schema, options);
+          return true;
+        }
+
+        // Edge can expose a file paste here without a matching file item.
+        const clipboardFiles = extractEmbeddableClipboardFiles(event.clipboardData);
+        if (clipboardFiles.length > 0) {
+          event.preventDefault();
+          handleFileUpload(clipboardFiles[0], view, schema, options);
           return true;
         }
         
