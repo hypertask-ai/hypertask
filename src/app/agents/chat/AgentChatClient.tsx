@@ -14,6 +14,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
 } from "react";
 import type { Editor } from "@tiptap/react";
 import { flushSync } from "react-dom";
@@ -670,8 +671,8 @@ const AgentChatClient = (props: IProp) => {
   const [feedFilter, setFeedFilter] = useState<AgentChatFilter>("all");
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  // Mic dictation (AudioButton). The flagged composer passes the TipTap
-  // editor; the flag-off textarea still uses editor={null}.
+  // Mic dictation (AudioButton), same component and editor={null} pattern as
+  // the plain-text title field in TaskTitleModal.tsx.
   const [isRecording, setIsRecording] = useState(false);
   const [isDictationProcessing, setIsDictationProcessing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -1084,6 +1085,7 @@ const AgentChatClient = (props: IProp) => {
         setQueuedMessages([]);
       });
       dismissMention();
+      if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
       if (isMbl && agent.runtimeType === "EXTERNAL") focusComposer();
       // The selection lives in the URL so a reload keeps the chat open.
       router.replace(
@@ -1616,6 +1618,7 @@ const AgentChatClient = (props: IProp) => {
     setDraft("");
     dismissMention();
     composerEditorRef.current?.commands.clearContent();
+    composerRef.current?.focus();
     focusComposer();
     if (composerLocked) {
       // Same rationale as the optimistic message id above: this only runs
@@ -1673,8 +1676,9 @@ const AgentChatClient = (props: IProp) => {
     setMentionLoadError(false);
   };
 
-  // AudioButton's dictation callback. TipTap path inserts into the editor.
-  // Flag-off textarea still appends to the plain-string draft.
+  // AudioButton's dictation callback. There is no Tiptap editor here, so this
+  // mirrors appendDictationToTitle (TaskTitleModal.tsx): append transcript
+  // text to the plain-string draft, same append helper.
   const insertDictation = useCallback((transcript: string) => {
     const editor = composerEditorRef.current;
     if (editor) {
@@ -1791,11 +1795,7 @@ const AgentChatClient = (props: IProp) => {
     });
   };
 
-  const handleComposerKeyDown = (e: {
-    key: string;
-    shiftKey: boolean;
-    preventDefault: () => void;
-  }) => {
+  const handleComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (mentionOpen) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -1967,8 +1967,14 @@ const AgentChatClient = (props: IProp) => {
         // `draft` directly) so this effect doesn't need to re-run, and re-add
         // the window listener, on every keystroke.
         if (
-          (composerEditorRef.current?.isFocused ||
-            document.activeElement === composerRef.current) &&
+          document.activeElement === composerRef.current &&
+          draftRef.current.trim() !== "" &&
+          draftRef.current !== restoredDraftRef.current
+        ) {
+          return;
+        }
+        if (
+          composerEditorRef.current?.isFocused &&
           draftRef.current.trim() !== "" &&
           draftRef.current !== restoredDraftRef.current
         ) {
@@ -2028,6 +2034,7 @@ const AgentChatClient = (props: IProp) => {
   // load (deep link or roster click) and again after a message sends, so
   // typing can continue without reaching for the mouse.
   useEffect(() => {
+    if (isExternal && session && !composerLocked) composerRef.current?.focus();
     if (isExternal && session && !composerLocked) focusComposer();
   }, [isExternal, session, composerLocked, selectedId]);
 
@@ -2325,6 +2332,7 @@ const AgentChatClient = (props: IProp) => {
                     value: draft,
                     inputRef: composerRef,
                     editorRef: composerEditorRef,
+                    useTiptapEditor: true,
                     onChange: handleComposerChange,
                     onKeyDown: handleComposerKeyDown,
                     placeholder: composerLocked

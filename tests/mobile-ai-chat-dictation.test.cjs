@@ -627,8 +627,7 @@ test("controlled Agent Chat mode uses the real mobile AI composer frame", async 
     );
 
     assert.ok(container.querySelector("[data-agent-chat-ai-composer]"));
-    assert.ok(container.querySelector("[data-editor]"));
-    assert.equal(container.querySelector("textarea"), null);
+    assert.equal(container.querySelector("textarea").value, "Reply");
     assert.equal(
       container.querySelector('[data-control="recorder"]').dataset.recorderId,
       "ai-chat-audio-button",
@@ -638,6 +637,78 @@ test("controlled Agent Chat mode uses the real mobile AI composer frame", async 
       container.querySelector('button[aria-label="Send message"]').click(),
     );
     assert.equal(sent, true);
+  } finally {
+    pathname = "/project";
+    await act(async () => reactRoot.unmount());
+    dom.window.close();
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+    if (previousReact === undefined) delete global.React;
+    else global.React = previousReact;
+    if (previousActEnvironment === undefined) {
+      delete global.IS_REACT_ACT_ENVIRONMENT;
+    } else {
+      global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  }
+});
+
+test("controlled Agent Chat TipTap mode uses EditorContent instead of a textarea", async () => {
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
+    url: "https://app.hypertask.ai/agents/chat?agent=cursor-dev",
+  });
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const previousReact = global.React;
+  const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.React = React;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+
+  const container = document.getElementById("root");
+  const reactRoot = createRoot(container);
+  const controlledComposer = {
+    value: "Reply",
+    inputRef: React.createRef(),
+    useTiptapEditor: true,
+    onChange: () => {},
+    onKeyDown: () => {},
+    placeholder: "Message Cursor Dev",
+    ariaLabel: "Message Cursor Dev",
+    isRecording: false,
+    isProcessing: false,
+    onRecordingChange: () => {},
+    onProcessingChange: () => {},
+    onDictation: () => {},
+    dictationDisabled: false,
+    projectId: 15,
+    sendDisabled: false,
+    queueMode: false,
+    onSend: () => {},
+  };
+
+  try {
+    pathname = "/agents/chat";
+    await act(async () =>
+      reactRoot.render(
+        React.createElement(
+          MobileViewContext.Provider,
+          { value: true },
+          React.createElement(
+            TestChatContext.Provider,
+            { value: chatContextValue(false) },
+            React.createElement(AI_Tiptap_Container, { controlledComposer }),
+          ),
+        ),
+      ),
+    );
+
+    assert.ok(container.querySelector("[data-agent-chat-ai-composer]"));
+    assert.ok(container.querySelector("[data-editor]"));
+    assert.equal(container.querySelector("textarea"), null);
   } finally {
     pathname = "/project";
     await act(async () => reactRoot.unmount());

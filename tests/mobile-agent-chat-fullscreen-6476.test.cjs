@@ -93,7 +93,8 @@ test("mobile fullscreen renders the AI chat composer component itself", () => {
   assert.doesNotMatch(flaggedComposer, /<SendMessageButton/);
   assert.match(tipTap, /<ControlledComposerEditor/);
   assert.match(tipTap, /<EditorContent editor=\{editor\}/);
-  assert.doesNotMatch(tipTap, /<textarea/);
+  assert.match(tipTap, /useTiptapEditor/);
+  assert.match(chat, /useTiptapEditor: true/);
 });
 
 test("action row skips empty mobile overflow menus", () => {
