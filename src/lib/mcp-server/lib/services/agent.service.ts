@@ -1,6 +1,7 @@
 import type { IApiClient } from '../../types/index'
 import { ListAgentsInputSchema } from '../../validations/agent.validation'
 import { generateCorrelationId } from '../../utils/correlation'
+import { appendListQueryParams } from '@/lib/mcp/listQuery'
 
 export interface OwnedAgentListItem {
   id: string
@@ -19,10 +20,13 @@ export class AgentService {
   constructor(private readonly apiClient: IApiClient) {}
 
   async listAgents(params: unknown): Promise<ListAgentsResponse> {
-    ListAgentsInputSchema.parse(params)
+    const validatedInput = ListAgentsInputSchema.parse(params)
+    const queryParams = new URLSearchParams()
+    appendListQueryParams(queryParams, validatedInput)
+    const query = queryParams.toString()
 
     return this.apiClient.makeRequest<ListAgentsResponse>(
-      '/mcp/agents',
+      query ? `/mcp/agents?${query}` : '/mcp/agents',
       { method: 'GET' },
       generateCorrelationId()
     )

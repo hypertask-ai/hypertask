@@ -16,6 +16,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import type { Editor } from "@tiptap/react";
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -82,11 +83,9 @@ import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport
 import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
-import { AiChatComposerActionRow } from "@/components/AI_CHAT/AiChatComposerActionRow";
-import { SendMessageButton } from "@/components/AI_CHAT/AI_Tiptap_Container";
+import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
-import styles from "@/styles/tiptap.module.scss";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -106,8 +105,11 @@ import {
   type AgentChatActivityGroup,
   type AgentChatFilter,
 } from "@/lib/agents/chatActivityFeed";
-import type { SerializedChatTicketProposal } from "@/lib/agents/chatTicketProposal";
-
+import {
+  PROPOSAL_HEADING_CREATED,
+  PROPOSAL_HEADING_PENDING,
+  type SerializedChatTicketProposal,
+} from "@/lib/agents/chatTicketProposal";
 
 // While we are waiting for an external agent to answer, the only way to see
 // the reply arrive is to keep asking.
@@ -238,8 +240,8 @@ function ProposalCard({
           {confirmedHeadingEnabled &&
           proposal.status === "CONFIRMED" &&
           proposal.task
-            ? "Ticket created"
-            : "Ticket proposed, nothing done yet"}
+            ? PROPOSAL_HEADING_CREATED
+            : PROPOSAL_HEADING_PENDING}
         </span>
       </div>
       <p className="text-white-black">{proposal.ticketTitle}</p>
@@ -632,9 +634,7 @@ const AgentChatClient = (props: IProp) => {
     "htpr-6129-mobile-agent-chat-viewport",
   );
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
-  const mobileFullscreenFlag = useFlag(
-    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
-  );
+  const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   // Idle durations and the idle-to-inactive flip have to move while the chat
@@ -759,6 +759,14 @@ const AgentChatClient = (props: IProp) => {
   // the tap's event handler, so selectAgent needs the composer's DOM node
   // before that handler returns (see the flushSync call there).
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerEditorRef = useRef<Editor | null>(null);
+  const focusComposer = () => {
+    if (composerEditorRef.current) {
+      composerEditorRef.current.commands.focus();
+      return;
+    }
+    composerRef.current?.focus();
+  };
   // Same pattern as loadGenRef: the mount-time roster fetch and the
   // post-create-agent refresh both call loadAgents/setAgents, so a slower
   // mount fetch resolving after a refresh must not clobber it.
@@ -1078,6 +1086,7 @@ const AgentChatClient = (props: IProp) => {
       });
       dismissMention();
       if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
+      if (isMbl && agent.runtimeType === "EXTERNAL") focusComposer();
       // The selection lives in the URL so a reload keeps the chat open.
       router.replace(
         `/agents/chat?agent=${encodeURIComponent(agent.slug ?? agent.id)}`,
@@ -1608,7 +1617,9 @@ const AgentChatClient = (props: IProp) => {
     }
     setDraft("");
     dismissMention();
+    composerEditorRef.current?.commands.clearContent();
     composerRef.current?.focus();
+    focusComposer();
     if (composerLocked) {
       // Same rationale as the optimistic message id above: this only runs
       // from an event handler, never during render.
@@ -1669,6 +1680,12 @@ const AgentChatClient = (props: IProp) => {
   // mirrors appendDictationToTitle (TaskTitleModal.tsx): append transcript
   // text to the plain-string draft, same append helper.
   const insertDictation = useCallback((transcript: string) => {
+    const editor = composerEditorRef.current;
+    if (editor) {
+      const prefix = editor.getText().trim() ? " " : "";
+      editor.chain().focus("end").insertContent(prefix + transcript).run();
+      return;
+    }
     setDraft((current) => appendTitleDictation(current, transcript));
     composerRef.current?.focus();
   }, []);
@@ -1759,6 +1776,17 @@ const AgentChatClient = (props: IProp) => {
     setDraft(inserted);
     dismissMention();
     requestAnimationFrame(() => {
+      const editor = composerEditorRef.current;
+      if (editor) {
+        editor.commands.setContent(inserted, { emitUpdate: false });
+        editor.commands.focus();
+        const pos = Math.min(
+          before.length + ticket.length + 2,
+          editor.state.doc.content.size,
+        );
+        editor.commands.setTextSelection(pos);
+        return;
+      }
       const el = composerRef.current;
       if (!el) return;
       el.focus();
@@ -1945,6 +1973,13 @@ const AgentChatClient = (props: IProp) => {
         ) {
           return;
         }
+        if (
+          composerEditorRef.current?.isFocused &&
+          draftRef.current.trim() !== "" &&
+          draftRef.current !== restoredDraftRef.current
+        ) {
+          return;
+        }
         e.preventDefault();
         const direction = e.key === "Tab" ? (e.shiftKey ? -1 : 1) : e.key === "ArrowDown" ? 1 : -1;
         cycleAgent(direction);
@@ -2000,6 +2035,7 @@ const AgentChatClient = (props: IProp) => {
   // typing can continue without reaching for the mouse.
   useEffect(() => {
     if (isExternal && session && !composerLocked) composerRef.current?.focus();
+    if (isExternal && session && !composerLocked) focusComposer();
   }, [isExternal, session, composerLocked, selectedId]);
 
   const rosterPane = (
@@ -2231,7 +2267,12 @@ const AgentChatClient = (props: IProp) => {
             )}
           </div>
           </div>
-          <div className="relative shrink-0 bg-cardBackground px-4 pb-4 pt-1">
+          <div
+            className={cn(
+              "relative shrink-0",
+              !reuseAiComposer && "bg-cardBackground px-4 pb-4 pt-1",
+            )}
+          >
             {showScrollToBottom && isMbl && mobileLayoutEnabled && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
@@ -2286,81 +2327,40 @@ const AgentChatClient = (props: IProp) => {
                 </div>
               )}
               {reuseAiComposer ? (
-                <div
-                  data-ai-chat-composer
-                  data-agent-chat-ai-composer
-                  className={cn(
-                    "flex w-full flex-col items-center bg-ai-tiptap outline-none border-0 scrollbar-none",
-                    styles.aiChatInput,
-                    "!rounded-[5px] px-3 pb-2 pt-3",
-                  )}
-                >
-                  <textarea
-                    ref={composerRef}
-                    value={draft}
-                    onChange={(e) =>
-                      handleComposerChange(
-                        e.target.value,
-                        e.target.selectionStart ?? e.target.value.length,
-                      )
-                    }
-                    onKeyDown={handleComposerKeyDown}
-                    rows={2}
-                    placeholder={
-                      composerLocked
-                        ? `${selectedAgent.displayName} is working -- this will queue`
-                        : `Message ${selectedAgent.displayName}`
-                    }
-                    aria-label={`Message ${selectedAgent.displayName}`}
-                    className="w-full resize-none bg-transparent text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
-                  />
-                  <AiChatComposerActionRow
-                    mobile
-                    mobileDictating={Boolean(isRecording || isDictationProcessing)}
-                    hasText={draft.trim().length > 0}
-                    leadingControls={null}
-                    mobileModelControl={null}
-                    attachmentControl={null}
-                    contextControl={null}
-                    screenshotControl={null}
-                    recorder={
-                      <AudioButton
-                        id="agent-chat-audio-button"
-                        editor={null}
-                        callbackHandler={insertDictation}
-                        toggleRecording={setIsRecording}
-                        globalRecording={isRecording}
-                        hasText={draft.trim().length > 0}
-                        onProcessingChange={setIsDictationProcessing}
-                        disabled={
-                          sending ||
-                          ((mobileLayoutEnabled || mobileFullscreenFlag) &&
-                            dictationProjectId === null)
-                        }
-                        projectId={
-                          mobileLayoutEnabled || mobileFullscreenFlag
-                            ? dictationProjectId
-                            : undefined
-                        }
-                        ariaLabel="Dictate message"
-                      />
-                    }
-                    streamControl={null}
-                    sendControl={
-                      <SendMessageButton
-                        disabled={
-                          !draft.trim() ||
-                          sending ||
-                          isRecording ||
-                          isDictationProcessing
-                        }
-                        queueMode={composerLocked}
-                        mobile
-                        onClick={() => void handleSend()}
-                      />
-                    }
-                  />
-                </div>
+                <AI_Tiptap_Container
+                  controlledComposer={{
+                    value: draft,
+                    inputRef: composerRef,
+                    editorRef: composerEditorRef,
+                    useTiptapEditor: true,
+                    onChange: handleComposerChange,
+                    onKeyDown: handleComposerKeyDown,
+                    placeholder: composerLocked
+                      ? `${selectedAgent.displayName} is working -- this will queue`
+                      : `Message ${selectedAgent.displayName}`,
+                    ariaLabel: `Message ${selectedAgent.displayName}`,
+                    isRecording,
+                    isProcessing: isDictationProcessing,
+                    onRecordingChange: setIsRecording,
+                    onProcessingChange: setIsDictationProcessing,
+                    onDictation: insertDictation,
+                    dictationDisabled:
+                      sending ||
+                      ((mobileLayoutEnabled || mobileFullscreenFlag) &&
+                        dictationProjectId === null),
+                    projectId:
+                      mobileLayoutEnabled || mobileFullscreenFlag
+                        ? dictationProjectId
+                        : undefined,
+                    sendDisabled:
+                      !draft.trim() ||
+                      sending ||
+                      isRecording ||
+                      isDictationProcessing,
+                    queueMode: composerLocked,
+                    onSend: () => void handleSend(),
+                  }}
+                />
               ) : (
                 <div className="relative flex items-end gap-2">
                   <textarea

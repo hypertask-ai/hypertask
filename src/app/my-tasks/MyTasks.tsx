@@ -18,6 +18,7 @@ import {
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_VIEWS_FLAG,
+  MY_TASKS_BULK_SELECTION_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -29,6 +30,8 @@ import {
   myTasksQuickAddTaskVisibleInPayload,
 } from "@/lib/myTasks/quickAddHelpers";
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
+import { MyTasksBulkSelectionProvider } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import MyTasksBulkActionBar from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
@@ -58,6 +61,7 @@ import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
   effectiveMyTasksTableVisibleColumns,
+  myTasksTimeGroupOn,
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
@@ -111,6 +115,8 @@ interface IProps {
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
   viewsEnabled: boolean;
+  /** Server 6455 check so the first paint is already time-grouped. */
+  timeGroupEnabled?: boolean;
   scopesEnabled?: boolean;
 }
 
@@ -134,6 +140,7 @@ const MyTasks = ({
   initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
   viewsEnabled = false,
+  timeGroupEnabled = false,
   scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
@@ -160,7 +167,11 @@ const MyTasks = ({
   );
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
+  const myTasksTimeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
+  const myTasksTimeGroupEnabled = myTasksTimeGroupOn(
+    timeGroupEnabled,
+    Boolean(myTasksTimeGroupFlag),
+  );
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -187,6 +198,7 @@ const MyTasks = ({
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
+  const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   // My Tasks spans every board, so unlike board filters (which persist to a
   // saved view) this selection lives in state only and resets on reload.
   const [prioritySelection, setPrioritySelection] = useState<
@@ -427,10 +439,7 @@ const MyTasks = ({
     [sections, selectedPriorities]
   );
 
-  const groupBy = effectiveMyTasksGroupBy(
-    viewConfig,
-    Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled),
-  );
+  const groupBy = effectiveMyTasksGroupBy(viewConfig, myTasksTimeGroupEnabled);
 
   const availableBoards = useMemo(() => {
     if (!viewConfig.boardIds) return boards;
@@ -451,7 +460,12 @@ const MyTasks = ({
   }, [runningTimerEntries]);
 
   const allTasksForBoardTabs = useMemo(() => {
-    if (!viewsFeatureEnabled || groupBy !== "time") return [];
+    if (groupBy !== "time") return [];
+    if (!viewsFeatureEnabled) {
+      return priorityFilteredSections.flatMap(
+        (section) => section.items as MyTasksTask[],
+      );
+    }
     const now = new Date();
     const selectedBoards = viewConfig.boardIds
       ? new Set(viewConfig.boardIds)
@@ -471,6 +485,7 @@ const MyTasks = ({
     dateFilterVersion,
     filterParityEnabled,
     groupBy,
+    priorityFilteredSections,
     runtimeContext,
     sections,
     viewConfig,
@@ -525,15 +540,16 @@ const MyTasks = ({
     sections,
     viewConfig,
   ]);
-  const filteredSections = viewsFeatureEnabled
-    ? viewFilteredSections
-    : priorityFilteredSections;
+  const filteredSections =
+    viewsFeatureEnabled || groupBy === "time"
+      ? viewFilteredSections
+      : priorityFilteredSections;
 
   const activeTabs = useMemo(() => {
-    if (!viewsFeatureEnabled) return tabs;
     if (groupBy === "time") {
       return ["All", ...availableBoards.map((board) => board.title)];
     }
+    if (!viewsFeatureEnabled) return tabs;
     return ["All", ...filteredSections.map((section) => section.section_title)];
   }, [availableBoards, filteredSections, groupBy, tabs, viewsFeatureEnabled]);
   const activeBoardId = useRef<number | null>(
@@ -543,14 +559,14 @@ const MyTasks = ({
   );
 
   const totalCount = useMemo(() => {
-    if (viewsFeatureEnabled && groupBy === "time") {
+    if (groupBy === "time") {
       return allTasksForBoardTabs.length;
     }
     return filteredSections.reduce(
       (total, section) => total + section.items.length,
       0,
     );
-  }, [allTasksForBoardTabs.length, filteredSections, groupBy, viewsFeatureEnabled]);
+  }, [allTasksForBoardTabs.length, filteredSections, groupBy]);
   const visibleSections = useMemo(() => {
     if (groupBy === "time") return filteredSections;
     if (activeSplit === 0) return filteredSections;
@@ -594,7 +610,7 @@ const MyTasks = ({
 
   const updateSplit = useCallback(
     (index: number) => {
-      if (!viewsFeatureEnabled) {
+      if (groupBy !== "time" && !viewsFeatureEnabled) {
         updateLegacySplit(index);
         return;
       }
@@ -633,7 +649,6 @@ const MyTasks = ({
   }, [boardParam, boardSplitSources, groupBy, myTasksShortcutsWidthEnabled, sections]);
 
   useEffect(() => {
-    if (!viewsFeatureEnabled) return;
     if (groupBy === "time") {
       if (!myTasksShortcutsWidthEnabled) {
         const split = getMyTasksSplitIndex(
@@ -650,6 +665,7 @@ const MyTasks = ({
       if (boardParam && split === 0) replaceBoardParam(null);
       return;
     }
+    if (!viewsFeatureEnabled) return;
     if (!myTasksShortcutsWidthEnabled) {
       const split = getMyTasksSplitIndex(
         filteredSections,
@@ -696,6 +712,7 @@ const MyTasks = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (
         event.key === "Escape" &&
         !showCommands.show &&
@@ -974,7 +991,7 @@ const boardTabCounts = useMemo(() => {
   }, [allTasksForBoardTabs]);
 
   const tabLength = (index: number) => {
-    if (viewsFeatureEnabled && groupBy === "time") {
+    if (groupBy === "time") {
       if (index === 0) return allTasksForBoardTabs.length;
       const boardId = availableBoards[index - 1]?.id;
       if (boardId === undefined) return 0;
@@ -1036,13 +1053,16 @@ const boardTabCounts = useMemo(() => {
           {liveUpdatesEnabled ? (
             <span className="sr-only">Live list updates on</span>
           ) : null}
+          {myTasksTimeGroupFlag ? (
+            <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
+          ) : null}
         </span>
-        {viewsEnabled && myTasksViewsEnabled && (
+        {((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
           <MyTasksViewControls
             boards={boards}
             config={viewConfig}
             onChange={updateViewConfig}
-            timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
+            timeGroupEnabled={myTasksTimeGroupEnabled}
             tableColumnsEnabled={tableColumnsFeatureEnabled}
             scopesEnabled={scopesEnabled}
             snoozeEnabled={myTasksSnoozeEnabled}
@@ -1146,6 +1166,13 @@ const boardTabCounts = useMemo(() => {
             onRefresh={refreshMyTasksAfterQuickAdd}
           />
         ) : null}
+        <MyTasksBulkSelectionProvider
+          enabled={myTasksBulkSelectionEnabled}
+          resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
+            .map((priority) => priority.priority_index)
+            .join(",")}`}
+          onAfterMutation={() => reconcileRunner.request()}
+        >
         <TableView
           filteredSections={visibleSections}
           _sections={visibleSections}
@@ -1160,7 +1187,10 @@ const boardTabCounts = useMemo(() => {
           onMyTasksVisibleColumnsChange={
             tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
           }
+          enableMyTasksBulkSelection={myTasksBulkSelectionEnabled}
         />
+        {myTasksBulkSelectionEnabled ? <MyTasksBulkActionBar /> : null}
+        </MyTasksBulkSelectionProvider>
       </div>
 
       <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">

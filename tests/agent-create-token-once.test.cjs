@@ -69,6 +69,9 @@ function loadCreateModule({
         getAgentTeamId: () => null,
       };
     }
+    if (request === "@/utils/controllers/agents/ensureDefaultTeamAgent") {
+      return { lockTeamAgentSeed: async () => {} };
+    }
     return require(request);
   };
   new Function("module", "exports", "require", javascript)(

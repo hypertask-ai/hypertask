@@ -114,10 +114,11 @@ const MyTasksViewControls = ({
 }: Props) => {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
-  const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const timeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
+  const timeGroupOn = Boolean(timeGroupEnabled || timeGroupFlag);
   const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
   const myTasksScopesEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -154,10 +155,7 @@ const MyTasksViewControls = ({
     });
   };
 
-  const groupBy = effectiveMyTasksGroupBy(
-    config,
-    Boolean(myTasksTimeGroupEnabled && timeGroupEnabled),
-  );
+  const groupBy = effectiveMyTasksGroupBy(config, timeGroupOn);
 
   const selectedBoardIds = config.boardIds ?? boards.map((board) => board.id);
   const selectedBoards = useMemo(
@@ -319,7 +317,7 @@ const MyTasksViewControls = ({
     </div>
   );
 
-  if (!myTasksViewsEnabled) return null;
+  if (!myTasksViewsEnabled && !timeGroupOn) return null;
 
   const closeOtherMenus = () => {
     setScopeOpen(false);
@@ -337,6 +335,9 @@ const MyTasksViewControls = ({
           : "ml-auto flex shrink-0 items-center gap-1"
       }
     >
+      {timeGroupFlag ? (
+        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
+      ) : null}
       {myTasksScopesEnabled ? (
         <div ref={involvementRef} className="relative">
           <button
@@ -392,7 +393,7 @@ const MyTasksViewControls = ({
           <span className="hidden @md:inline">Columns</span>
         </button>
       ) : null}
-      {filterParityEnabled ? (
+      {myTasksViewsEnabled && filterParityEnabled ? (
         <>
           <div ref={scopeRef} className="relative">
             <button
@@ -443,7 +444,7 @@ const MyTasksViewControls = ({
             )}
           </button>
         </>
-      ) : (
+      ) : myTasksViewsEnabled ? (
         <div ref={filterRef} className="relative">
           <button
             type="button"
@@ -720,8 +721,9 @@ const MyTasksViewControls = ({
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
+      {myTasksViewsEnabled ? (
       <div ref={sortRef} className="relative">
         <button
           type="button"
@@ -784,8 +786,9 @@ const MyTasksViewControls = ({
           </div>
         )}
       </div>
+      ) : null}
 
-      {myTasksTimeGroupEnabled && timeGroupEnabled && (
+      {timeGroupOn && (
         <div ref={groupRef} className="relative">
           <button
             type="button"

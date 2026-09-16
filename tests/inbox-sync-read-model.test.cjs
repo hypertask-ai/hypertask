@@ -39,6 +39,9 @@ const {
 const { restoreInboxAfterUndo, updateInboxOptimistically } = jiti(
   path.join(root, "src/lib/inboxSync/optimistic.ts"),
 );
+const { buildInboxQueryCache, getInboxTabs } = jiti(
+  path.join(root, "src/utils/helperFunctions/helperFunctions.ts"),
+);
 const {
   createInboxReadinessLatch,
   requiresPersistentInboxFence,
@@ -903,6 +906,74 @@ test("undo restores an archived notification to its post-removal cache position"
       fallback.expected,
     );
   }
+});
+
+test("inbox tab rebuild skips missing rows instead of reading waitingOnSynthetic on them", () => {
+  const rows = [notification(9), undefined, notification(11)];
+
+  assert.doesNotThrow(() => getInboxTabs(rows));
+  const cache = buildInboxQueryCache(rows);
+  assert.deepEqual(
+    cache.notifications.map(({ id }) => id),
+    ["9", "11"],
+  );
+  assert.equal(
+    cache.structuredData.data.every((split) =>
+      split.every((row) => row != null),
+    ),
+    true,
+  );
+});
+
+test("undo restore ignores a missing notification instead of inserting a hole", async () => {
+  const queryKey = ["inbox", "data", accountId];
+  const remaining = notification(11);
+  let cached = {
+    revision: revision(7_250),
+    notifications: [remaining],
+    splitsNoImportant: [],
+    showImportantSplit: false,
+  };
+  const queryClient = {
+    getQueryData: () => cached,
+    setQueryData: (_queryKey, payload) => {
+      cached = payload;
+    },
+    refetchQueries: async () => undefined,
+  };
+
+  const restored = applyInboxReadModelMutation(
+    {
+      revision: revision(7_250),
+      notifications: [remaining],
+      splitsNoImportant: [],
+      showImportantSplit: false,
+    },
+    {
+      type: "restore",
+      notification: undefined,
+      beforeNotificationId: "11",
+      afterNotificationId: null,
+    },
+  );
+  assert.deepEqual(
+    restored.notifications.map(({ id }) => id),
+    ["11"],
+  );
+
+  await restoreInboxAfterUndo({
+    queryClient,
+    queryKey,
+    accountId,
+    notification: undefined,
+    beforeNotificationId: "11",
+    afterNotificationId: null,
+  });
+
+  assert.deepEqual(
+    cached.notifications.map(({ id }) => id),
+    ["11"],
+  );
 });
 
 test("undo reconciliation restores the cache and refetches its exact query", async () => {

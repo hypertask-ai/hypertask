@@ -1,3 +1,5 @@
+import type { PrismaClient } from '@prisma/client'
+
 export type OwnedAgentRow = {
   id: string
   displayName: string
@@ -174,6 +176,10 @@ export type OwnedAgent = {
   boards: Array<{ id: number; name: string }>
 }
 
+export type OwnedAgentDetail = OwnedAgent & {
+  prompt: string | null
+}
+
 export type DeleteOwnedAgentResult = {
   id: string
   deleted_board_memberships: number
@@ -205,7 +211,11 @@ export async function listOwnedAgents(
     },
   })
 
-  return agents.map((agent) => ({
+  return agents.map(toOwnedAgent)
+}
+
+function toOwnedAgent(agent: OwnedAgentRow): OwnedAgent {
+  return {
     id: agent.id,
     display_name: agent.displayName,
     revoked: agent.revokedAt !== null,
@@ -219,7 +229,35 @@ export async function listOwnedAgents(
         ])
       ).values()
     ),
-  }))
+  }
+}
+
+export async function getOwnedAgent(
+  database: Pick<PrismaClient, 'agent'>,
+  userId: number,
+  agentId: string
+): Promise<OwnedAgentDetail | null> {
+  const agent = await database.agent.findFirst({
+    where: { id: agentId, userId, archivedAt: null },
+    select: {
+      id: true,
+      displayName: true,
+      revokedAt: true,
+      createdAt: true,
+      visibility: true,
+      prompt: true,
+      members: {
+        orderBy: { id: 'asc' },
+        select: {
+          project: {
+            select: { id: true, name: true, title: true },
+          },
+        },
+      },
+    },
+  })
+  if (!agent) return null
+  return { ...toOwnedAgent(agent), prompt: agent.prompt }
 }
 
 function isSerializationConflict(error: unknown): boolean {
