@@ -10,7 +10,7 @@ function extractBearerToken(authHeader: string | null): string | null {
   return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
 }
 
-export type McpHttpAuth = StatelessMcpAuth | AuthInfo
+type McpHttpAuth = StatelessMcpAuth | AuthInfo
 
 export type McpHttpDeps = {
   authenticate: (

@@ -11,7 +11,7 @@ import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { NextRequest } from 'next/server'
 import { handleMcpHttp } from './mcp-http'
-import { type PortableTool } from './stateless-http'
+import type { PortableTool } from './stateless-http'
 
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
