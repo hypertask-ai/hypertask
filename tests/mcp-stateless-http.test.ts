@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { z } from 'zod'
+import { handleMcpHttp } from '../src/lib/mcp-server/mcp-http'
 import {
   handleStatelessMcpRequest,
   type PortableTool,
@@ -184,6 +185,74 @@ test('stateless tools/call omits client Mcp-Session-Id from the tool invocation'
   assert.equal(invocation?.sessionId, undefined)
   assert.ok(invocation?.requestId)
   assert.ok(invocation?.clientFingerprint)
+})
+
+function publicHandler(options: { deferred?: boolean } = {}) {
+  return (request: Request) =>
+    handleMcpHttp(request, {
+      authenticate: async (_request, token) =>
+        token ? { token, clientId: '985' } : null,
+      tools: [echoTool],
+      deferredEnabled: async () => options.deferred === true,
+    })
+}
+
+test('flagged stateless HTTP wrapper interleaves two isolated instances', async () => {
+  const instanceA = publicHandler()
+  const instanceB = publicHandler()
+
+  const initialize = await instanceA(
+    rpc('initialize', {
+      protocolVersion: '2025-03-26',
+      capabilities: {},
+      clientInfo: { name: 'connector-check', version: '1' },
+    })
+  )
+  assert.equal(initialize.status, 200)
+  assert.equal(initialize.headers.get('mcp-session-id'), null)
+
+  const listed = await instanceB(
+    rpc('tools/list', {}, { id: 2, sessionId: 'session-from-another-host' })
+  )
+  assert.equal(listed.status, 200)
+  assert.equal(listed.headers.get('mcp-session-id'), null)
+  assert.equal((await json(listed)).result.tools[0].name, 'echo')
+
+  const callOnA = await instanceA(
+    rpc('tools/call', { name: 'echo', arguments: { text: 'alpha' } }, { id: 3 })
+  )
+  const callOnB = await instanceB(
+    rpc('tools/call', { name: 'echo', arguments: { text: 'beta' } }, { id: 4 })
+  )
+  assert.equal(callOnA.status, 200)
+  assert.equal(callOnB.status, 200)
+  assert.match((await json(callOnA)).result.content[0].text, /alpha/)
+  assert.match((await json(callOnB)).result.content[0].text, /beta/)
+})
+
+test('public /mcp connector probe: no token is 401 with WWW-Authenticate and no session cookie', async () => {
+  const response = await handleMcpHttp(
+    rpc(
+      'initialize',
+      {
+        protocolVersion: '2025-03-26',
+        capabilities: {},
+        clientInfo: { name: 'directory', version: '1' },
+      },
+      { token: null }
+    ),
+    {
+      authenticate: async () => null,
+      tools: [echoTool],
+      deferredEnabled: async () => false,
+    }
+  )
+  assert.equal(response.status, 401)
+  assert.equal(response.headers.get('mcp-session-id'), null)
+  assert.equal(response.headers.get('set-cookie'), null)
+  const challenge = response.headers.get('www-authenticate') ?? ''
+  assert.match(challenge, /Bearer/)
+  assert.match(challenge, /resource_metadata=/)
 })
 
 test('a notification returns 202 and a long-call client that only accepts SSE still gets the JSON-RPC payload', async () => {
