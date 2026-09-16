@@ -23,11 +23,9 @@ const MyTasksBulkActionBar = () => {
     clearSelection,
   } = useMyTasksBulkSelection();
 
-  if (!bulkSelectionEnabled || selectedCount === 0) return null;
-
   const sameBoard = sharedProjectId(selectedTasks) !== null;
 
-  return (
+  return bulkSelectionEnabled && selectedCount > 0 ? (
     <div
       className="fixed bottom-5 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-2 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4"
       role="status"
@@ -84,7 +82,7 @@ const MyTasksBulkActionBar = () => {
         Esc
       </button>
     </div>
-  );
+  ) : null;
 };
 
 export default MyTasksBulkActionBar;

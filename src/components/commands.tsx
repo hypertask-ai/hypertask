@@ -2310,7 +2310,24 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             />
           )}
           {commandMode === CommandMode.OpenAssignModal && (
-            hasBulkSelection ? (
+            myTasksBulkSelectionEnabled && hasBulkSelection && !kanbanBulkSelection ? (
+              bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
+              <AssignModal
+                onClose={boardCloseHandler}
+                project={{ id: bulkActionProjectId } as IProject}
+                task={{
+                  id: bulkTasks[0].id,
+                  title: bulkTasks[0].title,
+                  link: "",
+                }}
+                assignees={_activeTaskAssignees}
+                bulkTaskIds={bulkTasks.map((task) => task.id)}
+                onBulkAssign={(assignee) =>
+                  bulkSelection.assignSelected(assignee, "assign")
+                }
+              />
+              ) : null
+            ) : hasBulkSelection ? (
               bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
               <AssignModal
                 onClose={boardCloseHandler}
