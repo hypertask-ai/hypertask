@@ -33,6 +33,20 @@ export function isEmbeddableMediaFile(file: File | null): boolean {
   return isHeicByMetadata(file.type, file.name);
 }
 
+export function extractEmbeddableMediaFiles(
+  clipboardData: Pick<DataTransfer, "items" | "files"> | null | undefined,
+): File[] {
+  const itemFiles = Array.from(clipboardData?.items ?? [])
+    .filter((item) => item.kind === "file")
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => isEmbeddableMediaFile(file));
+
+  if (itemFiles.length > 0) return itemFiles;
+
+  // Edge can expose a file paste here without a matching file entry in items.
+  return Array.from(clipboardData?.files ?? []).filter(isEmbeddableMediaFile);
+}
+
 export const getMediaPasteDropPlugin = (options:any) => {
   let isShiftPressed = false; // Shift+paste opts out of the URL unfurl, as in the Loom/Figma extensions
   return new Plugin({
@@ -43,25 +57,13 @@ export const getMediaPasteDropPlugin = (options:any) => {
         return false;
       },
       handlePaste(view, event) {
-        const items = Array.from(event.clipboardData?.items || []);
         const { schema } = view.state;
-        
-        // checking if there are any image/video files in the clipboard data
-        const mediaItems = items.filter(
-          (item) => item.kind === "file" && isEmbeddableMediaFile(item.getAsFile())
-        );
+        const mediaFiles = extractEmbeddableMediaFiles(event.clipboardData);
         
         // If we have at least one media file, only process that and prevent default
-        if (mediaItems.length > 0) {
+        if (mediaFiles.length > 0) {
           event.preventDefault();
-          
-          // Just process the first media item if multiple exist
-          const item = mediaItems[0];
-          const file = item.getAsFile();
-          
-          if (!file) return false;
-          
-          handleFileUpload(file, view, schema, options);
+          handleFileUpload(mediaFiles[0], view, schema, options);
           return true;
         }
         
