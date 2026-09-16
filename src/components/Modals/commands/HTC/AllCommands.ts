@@ -1,15 +1,7 @@
 import { CommandMode } from "@/models/enums";
 import { IAllCommands } from "@/models/model";
 import { RAIL_TOGGLE_KEY } from "@/lib/constants/railToggleKey";
-import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { CommandGroup, ICommandList } from "./HTCTypes";
-
-export function useMyTasksRemindMeInPalette() {
-  const enabled = useFlag(MY_TASKS_SNOOZE_FLAG);
-  if (!enabled) return false;
-  return true;
-}
 
 const mobileAppCommands: CommandGroup = {
   group: "App",

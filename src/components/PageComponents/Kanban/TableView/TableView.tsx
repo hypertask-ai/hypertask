@@ -84,7 +84,6 @@ import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { splitAssignees } from "@/lib/assignees";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { taskBaseUri } from "@/utils";
-import { useMyTasksRemindMeInPalette } from "@/components/Modals/commands/HTC/AllCommands";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 const AssignModal = lazy(
@@ -439,9 +438,7 @@ const TableView = ({
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: H opens Remind Me
-  const myTasksRemindMeInPalette = useMyTasksRemindMeInPalette();
-  const myTasksSnoozeEnabled =
-    myTasksSnoozeFlag && myTasksRemindMeInPalette && Boolean(myTasksSnoozeActive);
+  const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();

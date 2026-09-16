@@ -164,6 +164,7 @@ import useInviteCallbackHandlers from "@/hooks/MultiPages/useInviteCallbackHandl
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
 import { useGetBoardInviteURL } from "@/hooks/Homepage/Invites/useGetBoardInviteURL";
 import Commands from "./Modals/commands/HTC/commands";
+import "./Modals/commands/HTC/AllCommands";
 import RemindMeComponent from "./Modals/RemindMe/RemindMeComponent";
 import { useGetSingleTask } from "@/hooks/MultiPages/Tasks/useGetTask";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
