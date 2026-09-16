@@ -12,10 +12,7 @@ import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled, HTPR_6512_SEED_TEAM_AGENT_FLAG } from "@/lib/flags";
-import {
-  ensureDefaultTeamAgent,
-  type TeamAgentStore,
-} from "@/utils/controllers/agents/ensureDefaultTeamAgent";
+import { ensureDefaultTeamAgent } from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
 async function getCurrentUser(request: NextRequest) {
   const session = await getSessionUser(request.headers);
@@ -48,11 +45,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, currentUserId)) {
-    await ensureDefaultTeamAgent(
-      currentUserId,
-      teamId,
-      prisma as unknown as TeamAgentStore,
-    );
+    await ensureDefaultTeamAgent(currentUserId, teamId, prisma);
   }
 
   const agents = await prisma.agent.findMany({

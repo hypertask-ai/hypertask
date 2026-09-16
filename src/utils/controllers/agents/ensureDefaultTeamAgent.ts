@@ -1,50 +1,33 @@
+import { Prisma, type PrismaClient } from "@prisma/client";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+
 export const DEFAULT_SEEDED_AGENT_NAME = "Hyper AI";
 
-export type TeamAgentStore = {
-  agent: {
-    findFirst: (args: {
-      where: Record<string, unknown>;
-      select: { id: true };
-    }) => Promise<{ id: string } | null>;
-    create: (args: {
-      data: {
-        displayName: string;
-        userId: number;
-        runtimeType: "NATIVE";
-      };
-      select: { id: true };
-    }) => Promise<{ id: string }>;
-  };
-  project: {
-    findFirst: (args: {
-      where: Record<string, unknown>;
-      select: { id: true };
-      orderBy: { id: "desc" };
-    }) => Promise<{ id: number } | null>;
-    findMany: (args: {
-      where: Record<string, unknown>;
-      select: { teamId: true };
-    }) => Promise<Array<{ teamId: string | null }>>;
-  };
-  member: {
-    create: (args: {
-      data: { projectId: number; userId: number; agentId: string };
-    }) => Promise<unknown>;
-  };
-  $transaction: <T>(
-    fn: (tx: Omit<TeamAgentStore, "$transaction">) => Promise<T>,
-  ) => Promise<T>;
-};
+const TEAM_AGENT_SEED_LOCK_NAMESPACE = 6_512;
 
-function humanBoardAccess(userId: number) {
-  return [
-    { ownerId: userId },
-    { members: { some: { userId, agentId: null } } },
-  ];
+type AgentLookupClient = Pick<PrismaClient, "agent">;
+
+function acceptedHumanBoardWhere(userId: number): Prisma.ProjectWhereInput {
+  return {
+    status: "Normal",
+    AND: [
+      getProjectWhere(userId),
+      {
+        OR: [
+          { ownerId: userId },
+          {
+            members: {
+              some: { userId, agentId: null, status: "Accepted" },
+            },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 async function findActiveOwnedAgentOnTeam(
-  database: Omit<TeamAgentStore, "$transaction">,
+  database: AgentLookupClient,
   userId: number,
   teamId: string,
 ) {
@@ -59,6 +42,16 @@ async function findActiveOwnedAgentOnTeam(
   });
 }
 
+async function lockTeamAgentSeed(
+  tx: Pick<Prisma.TransactionClient, "$queryRaw">,
+  userId: number,
+  teamId: string,
+) {
+  await tx.$queryRaw(
+    Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`htpr-6512:${userId}:${teamId}`}, ${TEAM_AGENT_SEED_LOCK_NAMESPACE}))::text AS lock_result`,
+  );
+}
+
 /**
  * If this person can use a team board but owns no live agent there, create
  * one native agent on that board so Agent Chat and GET /api/agents are not
@@ -67,23 +60,20 @@ async function findActiveOwnedAgentOnTeam(
 export async function ensureDefaultTeamAgent(
   userId: number,
   teamId: string,
-  database: TeamAgentStore,
+  database: PrismaClient,
 ): Promise<{ id: string; created: boolean } | null> {
   const existing = await findActiveOwnedAgentOnTeam(database, userId, teamId);
   if (existing) return { id: existing.id, created: false };
 
   const board = await database.project.findFirst({
-    where: {
-      status: "Normal",
-      teamId,
-      OR: humanBoardAccess(userId),
-    },
+    where: { teamId, ...acceptedHumanBoardWhere(userId) },
     select: { id: true },
     orderBy: { id: "desc" },
   });
   if (!board) return null;
 
   return database.$transaction(async (tx) => {
+    await lockTeamAgentSeed(tx, userId, teamId);
     const raced = await findActiveOwnedAgentOnTeam(tx, userId, teamId);
     if (raced) return { id: raced.id, created: false };
 
@@ -108,13 +98,12 @@ export async function ensureDefaultTeamAgent(
 
 export async function ensureDefaultAgentsOnAccessibleTeams(
   userId: number,
-  database: TeamAgentStore,
+  database: PrismaClient,
 ): Promise<number> {
   const boards = await database.project.findMany({
     where: {
-      status: "Normal",
       teamId: { not: null },
-      OR: humanBoardAccess(userId),
+      ...acceptedHumanBoardWhere(userId),
     },
     select: { teamId: true },
   });
