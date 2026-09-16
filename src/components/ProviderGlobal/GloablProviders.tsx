@@ -252,6 +252,7 @@ import {
   shouldShowMobilePrimaryDock,
   shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
+  isAgentChatPath,
 } from "../Global/mobileShellVisibility";
 import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
 import {
@@ -587,7 +588,8 @@ export default function GlobalProvider({
   const showMobileShellPath =
     mbl && Boolean(currentUser?.id) && shouldShowMobileTabBar(pathname);
   const agentChatHidesMobileShell =
-    agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn;
+    (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
+    (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
   const showMobileTabBar = showMobileShellPath && !agentChatHidesMobileShell;
   // Entering the mobile comment composer hides the bottom nav so the sheet
   // sits directly on the keyboard (the top bar stays for the back button).
@@ -1408,7 +1410,8 @@ export default function GlobalProvider({
         />
       )}
 
-      {agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn ? null : (
+      {(agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
+      (agentChatMobileFullscreenFlag && isAgentChatPath(pathname)) ? null : (
         showMobileShellPath && (
         <>
           <MobileTopBar

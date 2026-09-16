@@ -12,6 +12,10 @@ const chat = fs.readFileSync(
 const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
 const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
 const store = fs.readFileSync(path.join(root, "src/store/index.ts"), "utf8");
+const shell = fs.readFileSync(
+  path.join(root, "src/components/Global/mobileShellVisibility.ts"),
+  "utf8",
+);
 const providers = fs.readFileSync(
   path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"),
   "utf8",
@@ -75,6 +79,18 @@ test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   assert.match(
     chat,
     /mobileFullscreenFlag && isMbl && selectedAgent/,
+  );
+});
+
+test("flagged Agent Chat also hides the mobile shell by path", () => {
+  assert.match(shell, /export const isAgentChatPath/);
+  assert.match(
+    shell,
+    /pathname === "\/agents\/chat" \|\| pathname\?\.startsWith\("\/agents\/chat\/"\)/,
+  );
+  assert.match(
+    providers,
+    /agentChatMobileFullscreenFlag && isAgentChatPath\(pathname\)/,
   );
 });
 
