@@ -15,17 +15,15 @@ const { pinCommentGroupFirst } = jiti(
   path.join(root, "src/lib/htc/pinCommentGroupFirst.ts")
 );
 
-const commentOptions = {
-  isApple: false,
-  isCurrentUserCreator: true,
-  isPinned: false,
-  isStarred: false,
-};
-
 test("comment commands already list Edit comment first", () => {
   const groups = getAllCommands({
     context: "Task",
-    commentOptions,
+    commentOptions: {
+      isApple: false,
+      isCurrentUserCreator: true,
+      isPinned: false,
+      isStarred: false,
+    },
   });
   assert.equal(groups[0].group, "Comment");
   assert.equal(groups[0].commandLists[0].key, "editcomment");
