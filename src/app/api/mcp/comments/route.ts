@@ -340,7 +340,6 @@ export async function GET(request: NextRequest) {
     const response: ListCommentsResponse = {
       success: true,
       comments: (listQuery?.fields.length
-        // @ts-expect-error CommentItem has no string index signature
         ? projectRows(commentList as Array<Record<string, unknown>>, listQuery.fields)
         : commentList) as CommentItem[],
       total,

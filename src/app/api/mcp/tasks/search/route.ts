@@ -391,7 +391,6 @@ export async function GET(request: NextRequest) {
     const response: SearchTasksResponse = {
       success: true,
       tasks: (listQuery?.fields.length
-        // @ts-expect-error TaskSearchItem has no string index signature
         ? projectRows(taskList as Array<Record<string, unknown>>, listQuery.fields)
         : taskList) as TaskSearchItem[],
       total,
