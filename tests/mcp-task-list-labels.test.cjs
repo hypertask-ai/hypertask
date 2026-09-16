@@ -244,7 +244,7 @@ test("the paginated task list selects and serializes the permanent-delete deadli
     listQueryEnd,
   );
   const listResponseEnd = routeSource.indexOf(
-    "// A full page in cursor mode",
+    "// A full page implies there may be more rows",
     listResponseStart,
   );
   assert.notEqual(listQueryStart, -1);

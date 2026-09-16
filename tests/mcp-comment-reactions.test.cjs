@@ -137,7 +137,10 @@ function loadCommentsRoute({
           return query.where.activity === undefined || comment.activity === null
         })
         const orderedComments = [...matchingComments].sort((left, right) => {
-          const direction = query.orderBy.createdAt === 'asc' ? 1 : -1
+          const createdAtOrder = Array.isArray(query.orderBy)
+            ? query.orderBy.find((entry) => entry.createdAt)?.createdAt
+            : query.orderBy?.createdAt
+          const direction = createdAtOrder === 'asc' ? 1 : -1
           return (left.createdAt - right.createdAt) * direction
         })
         return orderedComments.slice(query.skip, query.skip + query.take).map((comment) => ({
@@ -228,6 +231,18 @@ function loadCommentsRoute({
     },
     '@/lib/mcp/readJsonBody': {
       readJsonBody: async (request) => ({ ok: true, body: request.body }),
+    },
+    '@/lib/flags': {
+      HTPR_6530_MCP_LIST_QUERY_FLAG: 'htpr-6530-mcp-list-query',
+      isFeatureEnabled: async () => false,
+    },
+    '@/lib/mcp/listQuery': {
+      parseNumericCursor: () => null,
+      parseUpdatedSince: () => null,
+      projectRows: (rows) => rows,
+    },
+    '@/lib/mcp/readListQuery': {
+      readEnabledListQuery: () => ({ listQuery: null }),
     },
   }
   const mockRequire = (request) => {

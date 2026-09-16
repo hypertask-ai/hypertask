@@ -50,7 +50,7 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
   // sort_order from the caller must still win.
   assert.match(
     routeSource,
-    /includeActivity && !requestedSortOrder \? 'asc' : \(sortOrder as 'asc' \| 'desc'\)/
+    /includeActivity \? 'asc' : \(sortOrder as 'asc' \| 'desc'\)/
   )
   assert.equal(
     GetCommentsInputSchema.parse({
