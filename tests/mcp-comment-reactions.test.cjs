@@ -343,7 +343,11 @@ test('MCP comments response includes mapped active reactions', async () => {
   )
   assert.equal(route.queryCalls[0].where.taskId, 42)
   assert.ok('equals' in route.queryCalls[0].where.activity)
-  assert.equal(route.queryCalls[0].orderBy.createdAt, 'desc')
+  const orderBy = route.queryCalls[0].orderBy
+  const createdAtOrder = Array.isArray(orderBy)
+    ? orderBy.find((entry) => entry.createdAt)?.createdAt
+    : orderBy.createdAt
+  assert.equal(createdAtOrder, 'desc')
   assert.equal(route.queryCalls[0].take, 50)
   assert.equal(route.queryCalls[0].skip, 0)
 })
