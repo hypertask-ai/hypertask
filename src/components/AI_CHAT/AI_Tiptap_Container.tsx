@@ -2,7 +2,9 @@ import AIModelDropDownButton from "../Global/ModelSelectorDropdown";
 import Tooltip from "../Common/Tooltip";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { EditorContent, useEditorState } from "@tiptap/react";
+import type { Editor } from "@tiptap/react";
 import styles from "@/styles/tiptap.module.scss";
+import { ControlledComposerEditor } from "@/lib/controlledComposerEditor";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   ArrowDown,
@@ -66,6 +68,8 @@ const SCREENSHOT_MIME_TYPES = new Set([
 type ControlledComposer = {
   value: string;
   inputRef: RefObject<HTMLTextAreaElement | null>;
+  editorRef?: RefObject<Editor | null>;
+  useTiptapEditor?: boolean;
   onChange: (value: string, cursor: number) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
   placeholder: string;
@@ -89,6 +93,7 @@ export function AI_Tiptap_Container({
 } = {}) {
   const pathname = usePathname();
   const isMbl = useContext(MobileViewContext);
+  const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
     tiptapKeydown,
     editor,
@@ -326,6 +331,17 @@ export function AI_Tiptap_Container({
           onPaste={controlledComposer ? undefined : handleEditorPaste}
         >
           {controlledComposer ? (
+            controlledComposer.useTiptapEditor ? (
+              <ControlledComposerEditor
+                value={controlledComposer.value}
+                onChange={controlledComposer.onChange}
+                onKeyDown={controlledComposer.onKeyDown}
+                placeholder={controlledComposer.placeholder}
+                ariaLabel={controlledComposer.ariaLabel}
+                editorRef={controlledComposer.editorRef}
+                onEditor={setControlledEditor}
+              />
+            ) : (
             <textarea
               ref={controlledComposer.inputRef}
               value={controlledComposer.value}
@@ -341,6 +357,7 @@ export function AI_Tiptap_Container({
               aria-label={controlledComposer.ariaLabel}
               className="block w-full resize-none bg-transparent py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
             />
+            )
           ) : editor ? (
             <EditorContent editor={editor} />
           ) : (
@@ -400,6 +417,24 @@ export function AI_Tiptap_Container({
           }
           recorder={
             controlledComposer ? (
+              controlledComposer.useTiptapEditor ? (
+                <AudioButton
+                  callbackHandler={controlledComposer.onDictation}
+                  editor={controlledEditor}
+                  id="ai-chat-audio-button"
+                  toggleRecording={controlledComposer.onRecordingChange}
+                  globalRecording={controlledComposer.isRecording}
+                  hasText={hasComposerText}
+                  onProcessingChange={controlledComposer.onProcessingChange}
+                  ariaLabel="Dictate message"
+                  wrapperClassName={recorderWrapperClassName}
+                  visualizerClassName={
+                    mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
+                  }
+                  disabled={controlledComposer.dictationDisabled}
+                  projectId={controlledComposer.projectId}
+                />
+              ) : (
               <AudioButton
                 callbackHandler={controlledComposer.onDictation}
                 editor={null}
@@ -416,6 +451,7 @@ export function AI_Tiptap_Container({
                 disabled={controlledComposer.dictationDisabled}
                 projectId={controlledComposer.projectId}
               />
+              )
             ) : (
               <AudioButton
                 callbackHandler={audioTiptapCallback}

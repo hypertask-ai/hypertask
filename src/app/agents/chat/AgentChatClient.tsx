@@ -16,6 +16,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import type { Editor } from "@tiptap/react";
 import { flushSync } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -758,6 +759,14 @@ const AgentChatClient = (props: IProp) => {
   // the tap's event handler, so selectAgent needs the composer's DOM node
   // before that handler returns (see the flushSync call there).
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerEditorRef = useRef<Editor | null>(null);
+  const focusComposer = () => {
+    if (composerEditorRef.current) {
+      composerEditorRef.current.commands.focus();
+      return;
+    }
+    composerRef.current?.focus();
+  };
   // Same pattern as loadGenRef: the mount-time roster fetch and the
   // post-create-agent refresh both call loadAgents/setAgents, so a slower
   // mount fetch resolving after a refresh must not clobber it.
@@ -1077,6 +1086,7 @@ const AgentChatClient = (props: IProp) => {
       });
       dismissMention();
       if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
+      if (isMbl && agent.runtimeType === "EXTERNAL") focusComposer();
       // The selection lives in the URL so a reload keeps the chat open.
       router.replace(
         `/agents/chat?agent=${encodeURIComponent(agent.slug ?? agent.id)}`,
@@ -1607,7 +1617,9 @@ const AgentChatClient = (props: IProp) => {
     }
     setDraft("");
     dismissMention();
+    composerEditorRef.current?.commands.clearContent();
     composerRef.current?.focus();
+    focusComposer();
     if (composerLocked) {
       // Same rationale as the optimistic message id above: this only runs
       // from an event handler, never during render.
@@ -1668,6 +1680,12 @@ const AgentChatClient = (props: IProp) => {
   // mirrors appendDictationToTitle (TaskTitleModal.tsx): append transcript
   // text to the plain-string draft, same append helper.
   const insertDictation = useCallback((transcript: string) => {
+    const editor = composerEditorRef.current;
+    if (editor) {
+      const prefix = editor.getText().trim() ? " " : "";
+      editor.chain().focus("end").insertContent(prefix + transcript).run();
+      return;
+    }
     setDraft((current) => appendTitleDictation(current, transcript));
     composerRef.current?.focus();
   }, []);
@@ -1758,6 +1776,17 @@ const AgentChatClient = (props: IProp) => {
     setDraft(inserted);
     dismissMention();
     requestAnimationFrame(() => {
+      const editor = composerEditorRef.current;
+      if (editor) {
+        editor.commands.setContent(inserted, { emitUpdate: false });
+        editor.commands.focus();
+        const pos = Math.min(
+          before.length + ticket.length + 2,
+          editor.state.doc.content.size,
+        );
+        editor.commands.setTextSelection(pos);
+        return;
+      }
       const el = composerRef.current;
       if (!el) return;
       el.focus();
@@ -1944,6 +1973,13 @@ const AgentChatClient = (props: IProp) => {
         ) {
           return;
         }
+        if (
+          composerEditorRef.current?.isFocused &&
+          draftRef.current.trim() !== "" &&
+          draftRef.current !== restoredDraftRef.current
+        ) {
+          return;
+        }
         e.preventDefault();
         const direction = e.key === "Tab" ? (e.shiftKey ? -1 : 1) : e.key === "ArrowDown" ? 1 : -1;
         cycleAgent(direction);
@@ -1999,6 +2035,7 @@ const AgentChatClient = (props: IProp) => {
   // typing can continue without reaching for the mouse.
   useEffect(() => {
     if (isExternal && session && !composerLocked) composerRef.current?.focus();
+    if (isExternal && session && !composerLocked) focusComposer();
   }, [isExternal, session, composerLocked, selectedId]);
 
   const rosterPane = (
@@ -2294,6 +2331,8 @@ const AgentChatClient = (props: IProp) => {
                   controlledComposer={{
                     value: draft,
                     inputRef: composerRef,
+                    editorRef: composerEditorRef,
+                    useTiptapEditor: true,
                     onChange: handleComposerChange,
                     onKeyDown: handleComposerKeyDown,
                     placeholder: composerLocked

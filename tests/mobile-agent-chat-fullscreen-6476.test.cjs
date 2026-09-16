@@ -28,6 +28,10 @@ const tipTap = fs.readFileSync(
   path.join(root, "src/components/AI_CHAT/AI_Tiptap_Container.tsx"),
   "utf8",
 );
+const controlledEditor = fs.readFileSync(
+  path.join(root, "src/lib/controlledComposerEditor.tsx"),
+  "utf8",
+);
 const viewport = fs.readFileSync(
   path.join(root, "src/lib/mobileCommentViewport.ts"),
   "utf8",
@@ -91,6 +95,11 @@ test("mobile fullscreen renders the AI chat composer component itself", () => {
   assert.doesNotMatch(flaggedComposer, /<AiChatComposerActionRow/);
   assert.doesNotMatch(flaggedComposer, /<AudioButton/);
   assert.doesNotMatch(flaggedComposer, /<SendMessageButton/);
+  assert.match(tipTap, /<ControlledComposerEditor/);
+  assert.match(tipTap, /from "@\/lib\/controlledComposerEditor"/);
+  assert.match(controlledEditor, /<EditorContent editor=\{editor\}/);
+  assert.match(tipTap, /useTiptapEditor/);
+  assert.match(chat, /useTiptapEditor: true/);
 });
 
 test("action row skips empty mobile overflow menus", () => {

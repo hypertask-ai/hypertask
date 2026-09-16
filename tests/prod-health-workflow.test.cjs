@@ -698,7 +698,16 @@ function makeCommitChild(parent, { appChange = false, message = "htpr-6511-child
   const child = spawnSync(
     "git",
     ["commit-tree", tree, "-p", parent, "-m", message],
-    { encoding: "utf8" },
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "drift-test",
+        GIT_AUTHOR_EMAIL: "drift-test@example.com",
+        GIT_COMMITTER_NAME: "drift-test",
+        GIT_COMMITTER_EMAIL: "drift-test@example.com",
+      },
+    },
   );
   assert.equal(child.status, 0, child.stderr);
   return child.stdout.trim();
