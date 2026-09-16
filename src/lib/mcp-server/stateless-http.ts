@@ -1,7 +1,6 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
@@ -96,12 +95,6 @@ function jsonSchemaFor(parameters: z.ZodType): Record<string, unknown> {
   }
 }
 
-export type StatelessMcpOptions = {
-  deferred?: boolean
-}
-
-const deferredByRequest = new WeakMap<Request, true>()
-
 function jsonRpcError(id: JsonRpcId, code: number, message: string, data?: unknown) {
   return {
     jsonrpc: '2.0' as const,
@@ -188,7 +181,6 @@ async function dispatchMethod(
   const id = (message.id ?? null) as JsonRpcId
   const method = typeof message.method === 'string' ? message.method : ''
   const params = objectParams(message.params)
-  const deferred = deferredByRequest.has(request)
 
   switch (method) {
     case 'initialize': {
@@ -204,11 +196,6 @@ async function dispatchMethod(
     case 'ping':
       return jsonRpcResult(id, {})
     case 'tools/list':
-      if (deferred) {
-        return jsonRpcResult(id, {
-          tools: listToolsDeferred(tools),
-        })
-      }
       return jsonRpcResult(id, {
         tools: tools.map((tool) => ({
           name: tool.name,
@@ -233,15 +220,6 @@ async function dispatchMethod(
           requestId,
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
         })
-        if (deferred) {
-          const structured = parseStructuredContent(text)
-          if (structured) {
-            return jsonRpcResult(id, {
-              content: [{ type: 'text', text }],
-              structuredContent: structured,
-            })
-          }
-        }
         return jsonRpcResult(id, {
           content: [{ type: 'text', text }],
         })
@@ -271,13 +249,8 @@ async function dispatchMethod(
 export async function handleStatelessMcpRequest(
   request: Request,
   auth: StatelessMcpAuth | AuthInfo | null,
-  tools: readonly PortableTool[],
-  options: StatelessMcpOptions = {}
+  tools: readonly PortableTool[]
 ): Promise<Response> {
-  if (options.deferred) {
-    deferredByRequest.set(request, true)
-    tools = toolsForConnect(tools, true)
-  }
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }
