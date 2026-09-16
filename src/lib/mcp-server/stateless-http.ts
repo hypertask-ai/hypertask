@@ -1,12 +1,7 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
-import {
-  listToolsDeferred,
-  listToolsFull,
-  parseStructuredContent,
-  toolsForConnect,
-} from './deferred-tools'
+import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
@@ -91,9 +86,21 @@ function protocolVersionFrom(request: Request, requested?: unknown): string {
   return DEFAULT_PROTOCOL_VERSION
 }
 
+function jsonSchemaFor(parameters: z.ZodType): Record<string, unknown> {
+  try {
+    const schema = z.toJSONSchema(parameters, { target: 'draft-7' }) as Record<string, unknown>
+    delete schema.$schema
+    return schema
+  } catch {
+    return { type: 'object', additionalProperties: true }
+  }
+}
+
 export type StatelessMcpOptions = {
   deferred?: boolean
 }
+
+const deferredByRequest = new WeakMap<Request, true>()
 
 function jsonRpcError(id: JsonRpcId, code: number, message: string, data?: unknown) {
   return {
@@ -176,14 +183,12 @@ async function dispatchMethod(
   message: JsonRpcMessage,
   request: Request,
   auth: StatelessMcpAuth,
-  tools: readonly PortableTool[],
-  options: StatelessMcpOptions = {}
+  tools: readonly PortableTool[]
 ): Promise<unknown> {
   const id = (message.id ?? null) as JsonRpcId
   const method = typeof message.method === 'string' ? message.method : ''
   const params = objectParams(message.params)
-  const deferred = options.deferred === true
-  const catalog = toolsForConnect(tools, deferred)
+  const deferred = deferredByRequest.has(request)
 
   switch (method) {
     case 'initialize': {
@@ -199,12 +204,21 @@ async function dispatchMethod(
     case 'ping':
       return jsonRpcResult(id, {})
     case 'tools/list':
+      if (deferred) {
+        return jsonRpcResult(id, {
+          tools: listToolsDeferred(tools),
+        })
+      }
       return jsonRpcResult(id, {
-        tools: deferred ? listToolsDeferred(catalog) : listToolsFull(catalog),
+        tools: tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: jsonSchemaFor(tool.parameters),
+        })),
       })
     case 'tools/call': {
       const name = typeof params.name === 'string' ? params.name : ''
-      const tool = catalog.find((candidate) => candidate.name === name)
+      const tool = tools.find((candidate) => candidate.name === name)
       if (!tool) {
         return jsonRpcError(id, -32602, `Unknown tool: ${name || '(missing)'}`)
       }
@@ -219,14 +233,18 @@ async function dispatchMethod(
           requestId,
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
         })
-        const result: Record<string, unknown> = {
-          content: [{ type: 'text', text }],
-        }
         if (deferred) {
           const structured = parseStructuredContent(text)
-          if (structured) result.structuredContent = structured
+          if (structured) {
+            return jsonRpcResult(id, {
+              content: [{ type: 'text', text }],
+              structuredContent: structured,
+            })
+          }
         }
-        return jsonRpcResult(id, result)
+        return jsonRpcResult(id, {
+          content: [{ type: 'text', text }],
+        })
       } catch (error) {
         const messageText = error instanceof Error ? error.message : 'Tool failed'
         return jsonRpcResult(id, {
@@ -256,6 +274,10 @@ export async function handleStatelessMcpRequest(
   tools: readonly PortableTool[],
   options: StatelessMcpOptions = {}
 ): Promise<Response> {
+  if (options.deferred) {
+    deferredByRequest.set(request, true)
+    tools = toolsForConnect(tools, true)
+  }
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }
@@ -318,10 +340,10 @@ export async function handleStatelessMcpRequest(
       continue
     }
     if (isNotification(candidate)) {
-      await dispatchMethod(candidate, request, caller, tools, options)
+      await dispatchMethod(candidate, request, caller, tools)
       continue
     }
-    const result = await dispatchMethod(candidate, request, caller, tools, options)
+    const result = await dispatchMethod(candidate, request, caller, tools)
     if (result !== null) responses.push(result)
   }
 
