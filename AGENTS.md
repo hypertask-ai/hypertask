@@ -6,7 +6,7 @@ All agents follow the same operating contract, regardless of whether they run th
 
 - Use an individual Hypertask agent identity. Never copy another agent's token or credentials.
 - For board work, use the approved `hypertask` CLI, MCP surface, or product UI. Never use Prisma, SQL, or a database client for ticket content.
-- Before coding on a ticket, assign it to Valentin, move it to **In Progress**, and leave a short working-session comment.
+- Before coding on a ticket, claim it as Product Bot (`htbot comment add`), move it to **In Progress**, and never write in Valentin's name.
 - Read [the CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runners, rulesets, previews, or deploy checks. Lower-confidence producers must also read [`openwiki/low-trust-agents.md`](openwiki/low-trust-agents.md) before opening a PR.
 - If the `/hypertask-agent` skill is available, use it as the Claude adapter. Other providers must follow the same board protocol directly.
 
@@ -56,6 +56,7 @@ hypertask capabilities --json
 
 The CLI binaries currently available on the dev machine are:
 - `hypertask` — native Hypertask CLI (Zig, `hypertask 0.2.0 (zig)`); talks to `/api/mcp/*` and reads `~/.hypertask/config.json`.
+- `htbot` — Product Bot wrapper around that CLI (`~/.local/bin/htbot`). It loads the Product Bot token and runs `hypertask --token "$HT_AGENT_TOKEN" ...`. Use it for claim comments and In Progress moves so the write is not in Valentin's name. A session with its own agent token can use `hypertask --token "$AGENT_TOKEN"` the same way.
 - `ht` — low-level MCP helper (`ht METHOD /mcp/path [json-body]`).
 - `openwiki` — repo documentation CLI; use headless `openwiki -p "..."` / `openwiki --update -p "..."`.
 - `zsb` — browser automation/debugging CLI for the active remote browser/tab.
@@ -79,11 +80,10 @@ When referencing a Hypertask ticket in conversation, write the full clickable ap
 
 The moment you actually start working a ticket (writing code / doing the fix, not just reading or triaging), make it visible on the board so no one else picks up the same work:
 
-1. Assign Valentin (userId 6): `hypertask tasks assign <PREFIX-NNN> --assignee 6` (additive, do not replace existing assignees).
-2. Move it to In Progress: `hypertask tasks move <PREFIX-NNN> --section "In Progress"`.
-3. Leave a short comment saying a session is actively working it now.
+1. Claim as Product Bot: `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. **No agent or session ever writes in Valentin's name (Valentin, 2026-09-15): no ticket, comment, assignment or move goes through his user token. Board writes use an agent identity (Product Bot via `htbot`, or the agent's own). Only Valentin assigns himself.**
+2. Move it to In Progress: `htbot task move <PREFIX-NNN> --section "In Progress"`.
 
-Signal: **assigned to Valentin + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** — leave it and pick another.
+Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** — leave it and pick another.
 
 ## Repository Workflow
 
@@ -101,7 +101,7 @@ Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
 
 ## CI contract
 
-Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free); the only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Vercel previews are used only when requested or justified by runtime risk. Do not add a VPN runner or another host implicitly.
+Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free); the only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
 
 ## Stack Orientation
 
