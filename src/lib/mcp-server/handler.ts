@@ -163,9 +163,8 @@ export async function mcpHandler(request: Request): Promise<Response> {
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
 
-  // POST is always stateless so a second instance and the connector listing
-  // can continue initialize / tools/list / tools/call without the Owner+QA flag.
-  // GET/DELETE still follow the flag so the session transport stays in this file.
+  // Stateless POST/GET/DELETE stay behind htpr-6532-stateless-mcp (Owner+QA).
+  // OPTIONS has no session. Everyone else keeps the existing session handler.
   if (usesStatelessMcpTransport(working.method, stateless)) {
     return handleMcpHttp(working, {
       authenticate: async () => authInfo,

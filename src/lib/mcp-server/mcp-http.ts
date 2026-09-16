@@ -9,9 +9,9 @@ import {
 
 type McpHttpAuth = StatelessMcpAuth | AuthInfo
 
-/** POST and OPTIONS never need a sticky session. GET/DELETE still follow the flag. */
+/** OPTIONS is CORS and has no session. POST/GET/DELETE follow htpr-6532-stateless-mcp. */
 export function usesStatelessMcpTransport(method: string, flagOn: boolean): boolean {
-  return method === 'POST' || method === 'OPTIONS' || flagOn
+  return method === 'OPTIONS' || flagOn
 }
 
 export type McpHttpDeps = {
