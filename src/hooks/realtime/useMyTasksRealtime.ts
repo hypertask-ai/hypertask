@@ -51,18 +51,21 @@ export function useMyTasksRealtime(
       if (fallbackTimer !== null) clearInterval(fallbackTimer);
       fallbackTimer = null;
     };
-    const startFallback = () => {
-      if (cancelled || fallbackTimer !== null) return;
-      fallbackTimer = setInterval(
-        runFallback,
-        MY_TASKS_RECONCILE_INTERVAL_MS,
-      );
-      runFallback();
+    const startFallback = (reconcileNow = true) => {
+      if (cancelled) return;
+      if (fallbackTimer === null) {
+        fallbackTimer = setInterval(
+          runFallback,
+          MY_TASKS_RECONCILE_INTERVAL_MS,
+        );
+      }
+      if (reconcileNow) runFallback();
     };
     const onVisibilityChange = () => runFallback();
     const onOnline = () => runFallback();
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("online", onOnline);
+    startFallback(false);
 
     void (async () => {
       try {

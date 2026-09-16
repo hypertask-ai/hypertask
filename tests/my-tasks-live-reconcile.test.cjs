@@ -121,11 +121,15 @@ async function settle() {
   await new Promise((resolve) => setImmediate(resolve));
 }
 
-test("my-tasks reconciles while realtime is unavailable", async () => {
+test("my-tasks reconciles while realtime is pending or unavailable", async () => {
   const cleanups = [];
   const intervals = new Map();
   const reconciliations = [];
   let nextIntervalId = 1;
+  let resolveClient;
+  const clientPromise = new Promise((resolve) => {
+    resolveClient = resolve;
+  });
   const original = {
     clearInterval: global.clearInterval,
     document: global.document,
@@ -161,7 +165,7 @@ test("my-tasks reconciles while realtime is unavailable", async () => {
           },
         },
         "@/lib/realtime/client": {
-          connectRealtimeClient: async () => null,
+          connectRealtimeClient: () => clientPromise,
           releaseRealtimeClientIfIdle() {},
         },
         "@/lib/realtime/shared": {
@@ -176,10 +180,16 @@ test("my-tasks reconciles while realtime is unavailable", async () => {
     });
     await settle();
 
-    assert.deepEqual(reconciliations, ["realtime"]);
+    assert.deepEqual(reconciliations, []);
     assert.equal(intervals.size, 1);
     for (const callback of intervals.values()) callback();
+    assert.deepEqual(reconciliations, ["realtime"]);
+
+    resolveClient(null);
+    await settle();
     assert.deepEqual(reconciliations, ["realtime", "realtime"]);
+    for (const callback of intervals.values()) callback();
+    assert.deepEqual(reconciliations, ["realtime", "realtime", "realtime"]);
   } finally {
     cleanups.reverse().forEach((cleanup) => cleanup());
     global.clearInterval = original.clearInterval;
