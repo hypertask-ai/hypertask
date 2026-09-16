@@ -62,10 +62,12 @@ export class SearchService {
 
       // Build query string
       const config = getConfig();
-      const queryParams = new URLSearchParams({
-        q: validatedInput.query,
-        limit: String(validatedInput.limit ?? config.limits.searchLimitDefault),
-      });
+      const queryParams = new URLSearchParams()
+      if (validatedInput.query) queryParams.set('q', validatedInput.query)
+      queryParams.set(
+        'limit',
+        String(validatedInput.limit ?? config.limits.searchLimitDefault),
+      )
 
       if (validatedInput.board_id) {
         queryParams.append('board_id', String(validatedInput.board_id));

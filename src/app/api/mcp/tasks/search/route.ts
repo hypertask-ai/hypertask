@@ -236,7 +236,7 @@ export async function GET(request: NextRequest) {
           where.assignees = { some: { userId: user.id } }
         } else if (assignee.kind === 'unassigned') {
           where.assignees = { none: {} }
-        } else {
+        } else if (assignee.kind === 'ids') {
           where.assignees = { some: { userId: { in: assignee.userIds } } }
         }
       } else if (assignedTo === 'me') {

@@ -35,8 +35,8 @@ export function readEnabledListQuery(
   }
 }
 
-export function tryApplyCollectionQuery<T extends Record<string, unknown>>(
-  items: T[],
+export function tryApplyCollectionQuery(
+  items: object[],
   listQuery: ParsedListQuery,
   options: { searchFields: string[]; idField?: string } = { searchFields: [] },
 ):
