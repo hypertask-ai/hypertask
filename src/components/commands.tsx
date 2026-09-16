@@ -81,9 +81,6 @@ const ConfirmDeleteBoard = dynamic(
 );
 const ManageLabels = dynamic(() => import("./Modals/ManageLabels"));
 const CreateLabel = dynamic(() => import("./Modals/CreateLabel/CreateLabel"));
-const RemindMeComponent = dynamic(
-  () => import("./Modals/RemindMe/RemindMeComponent")
-);
 const TrialModal = dynamic(() => import("./Modals/TrialPlan/TrialModal"));
 const SubtaskLinkingModal = dynamic(
   () => import("./Modals/SubtaskLinkingModal/SubtaskLinking")
@@ -167,6 +164,7 @@ import useInviteCallbackHandlers from "@/hooks/MultiPages/useInviteCallbackHandl
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
 import { useGetBoardInviteURL } from "@/hooks/Homepage/Invites/useGetBoardInviteURL";
 import Commands from "./Modals/commands/HTC/commands";
+import RemindMeComponent from "./Modals/RemindMe/RemindMeComponent";
 import { useGetSingleTask } from "@/hooks/MultiPages/Tasks/useGetTask";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { constructPricingPageUrl } from "@/utils/helperFunctions/helperFunctions";

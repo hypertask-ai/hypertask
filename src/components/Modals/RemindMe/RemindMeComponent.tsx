@@ -72,9 +72,6 @@ const RemindMeComponent = (props: Props) => {
   const returnCopy = hideOnMyTasks
     ? "inbox and My Tasks at "
     : "inbox at ";
-  const snoozeGateMark = myTasksSnoozeEnabled ? (
-    <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
-  ) : null;
   
   const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.target.value;
@@ -272,7 +269,7 @@ const RemindMeComponent = (props: Props) => {
         bottomSafeAreaFloor={mobileSafeAreaEnabled}
         bottomSlot={mobileSearchInput}
       >
-        {snoozeGateMark}
+        {myTasksSnoozeEnabled ? <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden /> : null}
         <h3 className="px-4 pb-1 pt-2 text-micro font-semibold uppercase tracking-wider text-text-light-gray">
           {getHeaderText()}
         </h3>
@@ -321,7 +318,7 @@ const RemindMeComponent = (props: Props) => {
       contentClassName="rounded-[5px] overflow-hidden"
     >
       <ModalBody className="p-0 rounded-[5px]">
-        {snoozeGateMark}
+        {myTasksSnoozeEnabled ? <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden /> : null}
         <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">
           <Search strokeWidth={1.75} size={13} className="shrink-0 text-text-light-gray" />
           <ModalInput
