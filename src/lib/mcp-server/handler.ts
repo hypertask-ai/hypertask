@@ -12,6 +12,8 @@ import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG } from '@/lib/flags'
+import { resolvePortableTools } from './listQueryContract'
 import { NextRequest } from 'next/server'
 import {
   handleStatelessMcpRequest,
@@ -26,45 +28,50 @@ function tokenFrom(extra: { authInfo?: AuthInfo }): string {
   return token
 }
 
-const handler = createMcpHandler(
-  (server) => {
-    for (const tool of MCP_TOOLS as PortableTool[]) {
-      server.tool(tool.name, tool.description, tool.parameters.shape, async (args, extra) => {
-        const token = tokenFrom(extra)
-        return {
-          content: [
-            {
-              type: 'text',
-              text: await tool.execute(
-                args,
-                token,
-                extra.requestId === undefined || extra.requestId === null
-                  ? undefined
-                  : {
-                      requestId: String(extra.requestId),
-                      sessionId: extra.sessionId,
-                      clientFingerprint: crypto
-                        .createHash('sha256')
-                        .update(token)
-                        .digest('hex'),
-                    }
-              ),
-            },
-          ],
-        }
-      })
+function bindMcpTools(tools: readonly PortableTool[]) {
+  return createMcpHandler(
+    (server) => {
+      for (const tool of tools) {
+        server.tool(tool.name, tool.description, tool.parameters.shape, async (args, extra) => {
+          const token = tokenFrom(extra)
+          return {
+            content: [
+              {
+                type: 'text',
+                text: await tool.execute(
+                  args,
+                  token,
+                  extra.requestId === undefined || extra.requestId === null
+                    ? undefined
+                    : {
+                        requestId: String(extra.requestId),
+                        sessionId: extra.sessionId,
+                        clientFingerprint: crypto
+                          .createHash('sha256')
+                          .update(token)
+                          .digest('hex'),
+                      }
+                ),
+              },
+            ],
+          }
+        })
+      }
+    },
+    {
+      serverInfo: MCP_SERVER_INFO,
+    },
+    {
+      basePath: '',
+      redisUrl: process.env.REDIS_URL,
+      maxDuration: 800,
+      verboseLogs: false,
     }
-  },
-  {
-    serverInfo: MCP_SERVER_INFO,
-  },
-  {
-    basePath: '',
-    redisUrl: process.env.REDIS_URL,
-    maxDuration: 800,
-    verboseLogs: false,
-  }
-)
+  )
+}
+
+const handler = bindMcpTools(MCP_TOOLS as PortableTool[])
+const listQueryHandler = bindMcpTools(resolvePortableTools(MCP_TOOLS as PortableTool[], true))
 
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
@@ -103,6 +110,10 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
 }
 
 const authenticatedMcpHandler = withMcpAuth(handler, verifyToken, {
+  required: true,
+  resourceMetadataPath: '/.well-known/oauth-protected-resource',
+})
+const authenticatedListQueryHandler = withMcpAuth(listQueryHandler, verifyToken, {
   required: true,
   resourceMetadataPath: '/.well-known/oauth-protected-resource',
 })
@@ -155,6 +166,10 @@ export async function mcpHandler(request: Request): Promise<Response> {
   }
 
   const userId = Number(authInfo.clientId)
+  const listQueryEnabled =
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
+  const portableTools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
   const stateless =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
@@ -172,5 +187,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
     return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
   }
 
-  return authenticatedMcpHandler(working)
+  return listQueryEnabled
+    ? authenticatedListQueryHandler(working)
+    : authenticatedMcpHandler(working)
 }

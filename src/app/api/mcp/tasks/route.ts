@@ -16,6 +16,17 @@ import {
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  hasPrWhere,
+  normalizeTaskStatus,
+  parseAssigneeFilter,
+  parseNumericCursor,
+  projectRows,
+  resolveListLimit,
+  withTaskPresentation,
+} from '@/lib/mcp/listQuery'
+import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
 
 /** Minimal parent task info for MCP responses (when this task is a subtask). */
 export interface ParentTaskSummary {
@@ -54,6 +65,13 @@ export interface TaskListItem {
   updatedAt?: string
   permanentlyDeleteAt: string | null
   agent?: McpAgentSummary
+  uniqueIndex?: number
+  url?: string
+  link?: {
+    url: string
+    format: string
+    example: string
+  }
 }
 
 export interface ListTasksResponse {
@@ -64,7 +82,7 @@ export interface ListTasksResponse {
   offset: number
   /**
    * Opaque cursor for the next page, or null when there are no more rows.
-   * Only meaningful when the request passed `cursor=`; null otherwise.
+   * When htpr-6530-mcp-list-query is on, a full first page also returns this.
    */
   nextCursor: string | null
   metadata?: {
@@ -174,11 +192,13 @@ export async function GET(request: NextRequest) {
     const offsetResult = parseNonNegativeIntegerParam(searchParams, 'offset', 0)
     if (!offsetResult.ok) return offsetResult.response
 
-    // Opt-in cursor pagination. When `cursor=` is present it overrides `offset`
-    // and `sort_by/order` (cursor mode always walks id-ascending). Absent =
-    // existing offset behaviour, unchanged.
+    // Opt-in cursor pagination. When `cursor=` is present it overrides `offset`.
+    // Legacy (flag off) walks id-ascending. Flag on keeps the requested sort
+    // and still returns nextCursor on a full first page.
     const cursorParam = searchParams.get('cursor')
-    const cursorId = cursorParam ? decodeCursor(cursorParam) : null
+    const cursorId = cursorParam
+      ? decodeCursor(cursorParam) ?? parseNumericCursor(cursorParam)
+      : null
     if (cursorParam && cursorId === null) {
       return NextResponse.json(
         { success: false, error: 'cursor must be a valid task cursor' },
@@ -313,24 +333,79 @@ export async function GET(request: NextRequest) {
     // Continue with list tasks logic
     const projectId = projectIdForLookup
     const boardId = boardIdResult.value
-    const section = searchParams.get('section') || undefined
-    const assignedTo = searchParams.get('assigned_to') || undefined
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
+    const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
+    if (!sectionIdParam.ok) return sectionIdParam.response
+    let section = searchParams.get('section') || undefined
+    let assignedTo = searchParams.get('assigned_to') || undefined
     const priorityParam = searchParams.get('priority')
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
     const dueDateBefore = searchParams.get('due_date_before') || undefined
     const dueDateAfter = searchParams.get('due_date_after') || undefined
-    const status = (searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted') || 'Normal'
-    const labelsParam = searchParams.getAll('labels')
+    let status = (searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted') || 'Normal'
+    let labelsParam = searchParams.getAll('labels')
     const createdBy = searchParams.get('created_by') ? parseInt(searchParams.get('created_by')!) : null
-    const updatedSince = searchParams.get('updated_since') || undefined
+    let updatedSince = searchParams.get('updated_since') || undefined
     const createdSince = searchParams.get('created_since') || undefined
     const hasComments = searchParams.get('has_comments') ? searchParams.get('has_comments') === 'true' : undefined
     const hasAttachments = searchParams.get('has_attachments') ? searchParams.get('has_attachments') === 'true' : undefined
-    const search = searchParams.get('search') || undefined
-    const limit = Math.min(limitResult.value ?? 50, 100)
+    let search = searchParams.get('search') || undefined
+    let limit = Math.min(limitResult.value ?? 50, 100)
     const offset = offsetResult.value
-    const sortBy = searchParams.get('sort_by') || 'updatedAt'
-    const sortOrder = searchParams.get('sort_order') || 'desc'
+    let sortBy = searchParams.get('sort_by') || 'updatedAt'
+    let sortOrder = searchParams.get('sort_order') || 'desc'
+    let sectionId = sectionIdParam.value
+    if (listQuery) {
+      if (listQuery.query) search = listQuery.query
+      if (listQuery.filter.section) {
+        if (/^\d+$/.test(listQuery.filter.section)) {
+          sectionId = Number(listQuery.filter.section)
+        } else {
+          section = listQuery.filter.section
+        }
+      }
+      if (listQuery.filter.assignee !== undefined) {
+        const assignee = parseAssigneeFilter(listQuery.filter.assignee)
+        if (!assignee.ok) {
+          return NextResponse.json(
+            { success: false, error: 'Validation error', message: assignee.error },
+            { status: 400 },
+          )
+        }
+        assignedTo = String(listQuery.filter.assignee)
+      }
+      if (listQuery.filter.status) {
+        const normalizedStatus = normalizeTaskStatus(listQuery.filter.status)
+        if (!normalizedStatus) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Validation error',
+              message: 'filter.status must be open, Normal, Archive, or Deleted',
+            },
+            { status: 400 },
+          )
+        }
+        status = normalizedStatus
+      }
+      if (listQuery.filter.label) {
+        labelsParam = Array.isArray(listQuery.filter.label)
+          ? listQuery.filter.label
+          : [listQuery.filter.label]
+      }
+      if (listQuery.filter.updated_since) updatedSince = listQuery.filter.updated_since
+      if (listQuery.sortBy) sortBy = listQuery.sortBy
+      if (listQuery.sortOrder) sortOrder = listQuery.sortOrder
+      limit = resolveListLimit(listQuery, limit)
+    }
+
+    const TASK_SORT_FIELDS = ['createdAt', 'updatedAt', 'dueDate', 'priority', 'title', 'id'] as const
+    if (listQuery?.sortBy && !TASK_SORT_FIELDS.includes(listQuery.sortBy as (typeof TASK_SORT_FIELDS)[number])) {
+      return validationError(`sort must be one of ${TASK_SORT_FIELDS.join(', ')}`)
+    }
 
     // Get user's accessible projects
     const accessibleProjects = await prisma.project.findMany({
@@ -379,7 +454,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter by section
-    if (section) {
+    if (sectionId) {
+      where.sectionId = sectionId
+    } else if (section) {
       where.section = section
     }
 
@@ -478,31 +555,50 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Build orderBy. Cursor mode forces a stable id-ascending walk so the
-    // cursor (last seen id) yields a deterministic next page.
-    const orderBy: any = {}
-    if (usesCursor) {
-      orderBy.id = 'asc'
+    if (listQuery?.filter.has_pr) {
+      const prWhere = hasPrWhere(listQuery.filter.has_pr)
+      if (!prWhere) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.has_pr must be red, failing, true, false, open, green, or merged',
+          },
+          { status: 400 },
+        )
+      }
+      Object.assign(where, prWhere)
+    }
+
+    // Flag-off cursor mode still walks id-ascending. Flag-on keeps the
+    // requested sort and uses a stable id tie-breaker so nextCursor can
+    // continue that same order.
+    const preserveRequestedSort = listQueryEnabled || !usesCursor
+    const orderBy: any[] = []
+    if (!preserveRequestedSort) {
+      orderBy.push({ id: 'asc' })
     } else if (sortBy === 'createdAt') {
-      orderBy.createdAt = sortOrder
+      orderBy.push({ createdAt: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'updatedAt') {
-      orderBy.updatedAt = sortOrder
+      orderBy.push({ updatedAt: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'dueDate') {
-      orderBy.dueDate = sortOrder
+      orderBy.push({ dueDate: sortOrder }, { id: 'asc' })
     } else if (sortBy === 'priority') {
-      orderBy.priority = { Priority_Value: sortOrder }
+      orderBy.push({ priority: { Priority_Value: sortOrder } }, { id: 'asc' })
     } else if (sortBy === 'title') {
-      orderBy.title = sortOrder
+      orderBy.push({ title: sortOrder }, { id: 'asc' })
+    } else if (sortBy === 'id') {
+      orderBy.push({ id: sortOrder })
     } else {
-      orderBy.updatedAt = 'desc'
+      orderBy.push({ updatedAt: 'desc' }, { id: 'asc' })
     }
 
     // total is the full match set — counted BEFORE the cursor window so it stays
     // constant across a cursor walk. The cursor `gt` filter applies only to the
-    // page fetch below.
+    // legacy flag-off walk below.
     const total = await prisma.task.count({ where })
     const listWhere =
-      usesCursor && cursorId !== null
+      !listQueryEnabled && usesCursor && cursorId !== null
         ? { ...where, id: { ...(where.id ?? {}), gt: cursorId } }
         : where
 
@@ -512,6 +608,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         ticketNumber: true,
+        uniqueIndex: true,
         title: true,
         section: true,
         description_:true,
@@ -604,8 +701,11 @@ export async function GET(request: NextRequest) {
       },
       orderBy,
       take: limit,
-      // Cursor mode pages via the id filter, not an offset window.
-      skip: usesCursor ? 0 : offset
+      // Flag-off cursor mode pages via the id filter. Flag-on uses Prisma
+      // cursor+skip so the requested sort is preserved across pages.
+      ...(listQueryEnabled && cursorId
+        ? { cursor: { id: cursorId }, skip: 1 }
+        : { skip: usesCursor ? 0 : offset }),
     })
 
     // Get metadata counts
@@ -621,6 +721,7 @@ export async function GET(request: NextRequest) {
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
+        uniqueIndex: task.uniqueIndex,
         title: task.title,
         description: mapTaskDescriptionContent(task),
         section: task.section,
@@ -659,26 +760,37 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    // A full page in cursor mode implies there may be more rows; hand back the
-    // cursor for the last id so the caller can fetch the next page.
+    const presentedTasks = listQueryEnabled
+      ? taskList.map((task) => withTaskPresentation(task))
+      : taskList
+    const projectedTasks = listQuery?.fields.length
+      ? projectRows(presentedTasks as Array<Record<string, unknown>>, listQuery.fields)
+      : presentedTasks
+
+    // A full page implies there may be more rows. Flag-on also returns
+    // nextCursor on the first page so clients can start paging.
     const nextCursor =
-      usesCursor && tasks.length === limit
+      tasks.length === limit && (listQueryEnabled || usesCursor)
         ? encodeCursor(tasks[tasks.length - 1].id)
         : null
 
     const response: ListTasksResponse = {
       success: true,
-      tasks: taskList,
+      tasks: projectedTasks as TaskListItem[],
       total,
       limit,
       // Cursor mode ignores offset entirely, so report 0 rather than echoing a
       // value that was never applied.
       offset: usesCursor ? 0 : offset,
       nextCursor,
-      metadata: {
-        projectCount: uniqueProjects.size,
-        sectionCount: uniqueSections.size
-      }
+      ...(listQuery?.fields.length
+        ? {}
+        : {
+            metadata: {
+              projectCount: uniqueProjects.size,
+              sectionCount: uniqueSections.size,
+            },
+          }),
     }
 
     return NextResponse.json(response)

@@ -5,6 +5,7 @@ import { EnhancedSearchTasksInputSchema } from '../../validations/task.validatio
 import { getConfig } from '../../config/index';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { getTaskLinkInfo } from '../../utils/task-link';
+import { appendListQueryParams, parseFields } from '@/lib/mcp/listQuery';
 
 export interface TaskSearchResult {
   id: number;
@@ -105,6 +106,7 @@ export class SearchService {
       if (validatedInput.status) {
         queryParams.append('status', validatedInput.status);
       }
+      appendListQueryParams(queryParams, validatedInput)
 
       const response = await this.apiClient.makeRequest<SearchTasksResponse>(
         `/mcp/tasks/search?${queryParams.toString()}`,
@@ -114,8 +116,9 @@ export class SearchService {
         correlationId
       );
 
-      // Add task link information for MCP clients
+      const requestedFields = parseFields(validatedInput.fields)
       const normalizedTasks = response.tasks.map((task) => {
+        if (requestedFields.length > 0 || task.link) return task
         const linkInfo = getTaskLinkInfo({
           ticketNumber: task.ticketNumber,
           projectId: task.projectId,
