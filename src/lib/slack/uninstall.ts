@@ -8,6 +8,7 @@ import { decryptSecret } from "@/lib/crypto/byokCipher";
 // Minimal DB surface so tests can run without Prisma.
 export type SlackInstallRow = {
   id: string;
+  botUserId: string;
   encryptedBotToken: string;
   updatedAt: Date;
 };
@@ -18,6 +19,7 @@ export type SlackInstallDb = {
       where: { slackTeamId: string };
       select: {
         id: true;
+        botUserId: true;
         encryptedBotToken: true;
         updatedAt: true;
       };
@@ -33,7 +35,7 @@ export type SlackInstallDb = {
 
 export type SlackRevocationEvent = {
   type?: string;
-  // tokens_revoked payload: the actual revoked token strings, split by kind.
+  // tokens_revoked payload: Slack sends user IDs, not secret token strings.
   tokens?: {
     oauth?: string[];
     bot?: string[];
@@ -52,19 +54,22 @@ export type SlackRevocationResult =
   | "unknown_workspace"
   | "skipped_not_bot"
   | "skipped_reinstalled"
+  | "skipped_missing_timestamp"
   | "skipped_undecryptable";
 
 type BotTokenMatch = boolean | "undecryptable";
 
-// Returns true when one of the revoked tokens is this install's bot token.
+// Slack documents tokens.bot as bot user IDs. Accept those, and still accept
+// a leaked xoxb string if one ever appears.
 function botTokenRevoked(
-  revokedBotTokens: string[],
-  encryptedBotToken: string,
+  revokedBotIds: string[],
+  install: SlackInstallRow,
 ): BotTokenMatch {
-  if (revokedBotTokens.length === 0) return false;
+  if (revokedBotIds.length === 0) return false;
+  if (revokedBotIds.includes(install.botUserId)) return true;
   try {
-    const decrypted = decryptSecret(encryptedBotToken);
-    return revokedBotTokens.includes(decrypted);
+    const decrypted = decryptSecret(install.encryptedBotToken);
+    return revokedBotIds.includes(decrypted);
   } catch (error) {
     // Indeterminate: do not delete, and do not pretend this was a foreign
     // token. The events route returns 500 so Slack retries.
@@ -86,6 +91,7 @@ export async function deleteSlackInstallForRevocation(
     where: { slackTeamId: teamId },
     select: {
       id: true,
+      botUserId: true,
       encryptedBotToken: true,
       updatedAt: true,
     },
@@ -95,10 +101,7 @@ export async function deleteSlackInstallForRevocation(
   if (event.type === "tokens_revoked") {
     // Only the bot's own revocation ends the install; a member's user OAuth
     // token being revoked does not invalidate it.
-    const botMatch = botTokenRevoked(
-      event.tokens?.bot ?? [],
-      install.encryptedBotToken,
-    );
+    const botMatch = botTokenRevoked(event.tokens?.bot ?? [], install);
     if (botMatch === "undecryptable") return "skipped_undecryptable";
     if (!botMatch) return "skipped_not_bot";
   } else if (event.type !== "app_uninstalled") {
@@ -115,7 +118,7 @@ export async function deleteSlackInstallForRevocation(
   const eventTsSeconds = Number(
     event.event_ts ?? envelope.event_time ?? Number.NaN,
   );
-  if (!Number.isFinite(eventTsSeconds)) return "skipped_reinstalled";
+  if (!Number.isFinite(eventTsSeconds)) return "skipped_missing_timestamp";
   const deleted = await db.slackInstall.deleteMany({
     where: {
       id: install.id,

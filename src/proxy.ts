@@ -428,6 +428,7 @@ async function authMiddleware(request: NextRequest) {
   if (
     !checkIfOnboarded(user) &&
     currentPath !== onboarding &&
+    currentPath !== '/add-to-slack' &&
     !currentPath.startsWith(share) &&
     !currentPath.startsWith('/cli-auth')
   ) {

@@ -62,6 +62,19 @@ test("app_uninstalled deletes the install and cascades", async () => {
   assert.deepEqual(deleted, [{ id: "install-1", updatedAt: { lte: new Date(1789100000 * 1000) } }]);
 });
 
+test("tokens_revoked with the Slack bot user id deletes the install", async () => {
+  const { db, deleted } = fakeDb(INSTALL);
+  const result = await deleteSlackInstallForRevocation(
+    db,
+    envelope({
+      type: "tokens_revoked",
+      tokens: { oauth: [MEMBER_TOKEN], bot: [INSTALL.botUserId] },
+    }),
+  );
+  assert.equal(result, "deleted");
+  assert.deepEqual(deleted, [{ id: "install-1", updatedAt: { lte: new Date(1789100000 * 1000) } }]);
+});
+
 test("tokens_revoked with the bot token deletes the install", async () => {
   const { db, deleted } = fakeDb(INSTALL);
   const result = await deleteSlackInstallForRevocation(
@@ -161,7 +174,7 @@ test("an event without any timestamp skips deletion", async () => {
     team_id: "T1",
     event: { type: "app_uninstalled" },
   });
-  assert.equal(result, "skipped_reinstalled");
+  assert.equal(result, "skipped_missing_timestamp");
   assert.deepEqual(deleted, []);
 });
 

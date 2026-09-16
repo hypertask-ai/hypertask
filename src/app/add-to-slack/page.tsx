@@ -48,7 +48,7 @@ export default async function AddToSlackPage() {
         <h1 className="text-heading font-semibold text-white-black">
           Hypertask for Slack
         </h1>
-        <p className="text-dense font-medium leading-relaxed text-text-light-gray">
+        <p className="text-dense leading-relaxed text-text-light-gray">
           Turn Slack conversations into tracked tasks. Mention the bot to create
           a task from any message, ask it to watch a thread and post a summary,
           and chat with it in Slack&apos;s assistant sidebar.
@@ -61,7 +61,7 @@ export default async function AddToSlackPage() {
             Add to Slack
           </a>
         ) : (
-          <p className="text-dense font-medium text-text-light-gray">
+          <p className="text-dense text-text-light-gray">
             Slack installation is not configured yet. Please try again later.
           </p>
         )}
@@ -73,7 +73,7 @@ export default async function AddToSlackPage() {
             {SLACK_BOT_SCOPES.map((scope) => (
               <li
                 key={scope}
-                className="text-dense font-medium text-text-light-gray"
+                className="text-dense text-text-light-gray"
               >
                 <code className="bg-pageBackground px-1">{scope}</code> —{" "}
                 {SCOPE_PURPOSES[scope] ?? scope}
@@ -81,7 +81,7 @@ export default async function AddToSlackPage() {
             ))}
           </ul>
         </div>
-        <p className="text-dense font-medium leading-relaxed text-text-light-gray">
+        <p className="text-dense leading-relaxed text-text-light-gray">
           After Slack adds the bot, sign in to Hypertask to connect it to your
           team. When you remove the app from your workspace, we delete the bot
           token and everything stored for it.

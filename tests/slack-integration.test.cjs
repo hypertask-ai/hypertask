@@ -381,6 +381,7 @@ test("Add to Slack page uses the card surface and 12-16px padding", () => {
   assert.match(page, /px-4/);
   assert.doesNotMatch(page, /bg-containerBackground/);
   assert.doesNotMatch(page, /\bp-8\b/);
+  assert.doesNotMatch(page, /font-medium/);
   assert.match(page, /bg-shadcn-primary/);
   assert.match(page, /rounded-\[5px\]/);
 });
@@ -401,6 +402,7 @@ test("Slack writes require a linked actor and authorized project", () => {
 
   assert.match(eventsRoute, /slackUserId: event\.user/);
   assert.match(eventsRoute, /skipped_undecryptable/);
+  assert.match(eventsRoute, /skipped_missing_timestamp/);
   assert.match(eventsRoute, /status: 500/);
   assert.match(taskCreate, /resolveSlackActor\(event\.slackTeamId, event\.slackUserId\)/);
   assert.match(taskCreate, /getProjectWhere\(actor\.user\.id\)/);
