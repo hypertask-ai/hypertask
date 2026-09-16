@@ -100,7 +100,13 @@ case "$url" in
     body='{"ok":true}'
     ;;
   https://app.hypertask.ai/api/version*)
-    body=\$(printf '{"buildId":"%s"}' "\$SHA")
+    # After an alias repair promote, subsequent reads must see the SHA the
+    # job is checking (HTPR-6511). Until then, HC_VERSION_SHA can lie.
+    if [ -f "\$RUNNER_TEMP/promoted" ]; then
+      body=\$(printf '{"buildId":"%s"}' "\$SHA")
+    else
+      body=\$(printf '{"buildId":"%s"}' "\${HC_VERSION_SHA:-\$SHA}")
+    fi
     ;;
   https://app.hypertask.ai/api/ops/task-write-probe*|https://app.hypertask.ai/api/mcp/projects*|https://app.hypertask.ai/)
     count_file="\$RUNNER_TEMP/hc-count"
@@ -139,7 +145,7 @@ elif [ -z "\$out" ] || [ "\$out" = "/dev/stdout" ]; then
 fi
 `;
 
-async function runHealthCheck(hcSequence) {
+async function runHealthCheck(hcSequence, extraEnv = {}) {
   const directory = await mkdtemp(join(tmpdir(), "prod-health-workflow-"));
   const bin = join(directory, "bin");
   const runnerTemp = join(directory, "runner-temp");
@@ -168,6 +174,7 @@ async function runHealthCheck(hcSequence) {
         RUNNER_TEMP: runnerTemp,
         GITHUB_OUTPUT: join(runnerTemp, "github-output"),
         HC_SEQUENCE: hcSequence,
+        ...extraEnv,
       },
     });
     const promoted = await readFile(join(runnerTemp, "promoted"), "utf8").catch(
@@ -358,4 +365,215 @@ test("a persistent unchallenged broken probe across all attempts still rolls bac
   assert.match(result.stdout, /rolled back to deploy-prev/);
   assert.ok(promoted, "rollback promote call was never made");
   assert.match(promoted, /\/promote\/deploy-prev/);
+});
+
+// HTPR-6511: a READY production deploy can miss the alias. /api/version keeps
+// serving the previous commit. The health job used to error and stop; it must
+// promote that READY deploy so the merge actually ships.
+test("a READY deploy that missed the alias is promoted onto production", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_VERSION_SHA: "a".repeat(40),
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Production healthy/);
+  assert.ok(promoted, "alias-repair promote was never made");
+  assert.match(promoted, /\/promote\/deploy-current/);
+});
+
+async function driftScript() {
+  const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
+  const heading = workflow.indexOf(
+    "Compare the live production deployment against the production tip",
+  );
+  assert.notEqual(heading, -1, "drift job heading not found");
+  const marker = "        run: |\n";
+  const start = workflow.indexOf(marker, heading);
+  assert.notEqual(start, -1, "drift job run block not found");
+  const lines = workflow.slice(start + marker.length).split("\n");
+  const block = [];
+  for (const line of lines) {
+    if (line === "") {
+      block.push("");
+      continue;
+    }
+    const indent = (line.match(/^ */) || [""])[0].length;
+    if (indent <= 8) break;
+    block.push(line.slice(10));
+  }
+  return block.join("\n");
+}
+
+const DRIFT_CURL_STUB = `#!/usr/bin/env bash
+set -u
+out=""
+hdrs=""
+want=""
+url=""
+method="GET"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|-L) shift ;;
+    -o) out="$2"; shift 2 ;;
+    -D) hdrs="$2"; shift 2 ;;
+    -w) want="$2"; shift 2 ;;
+    -X) method="$2"; shift 2 ;;
+    -H) shift 2 ;;
+    --max-time) shift 2 ;;
+    -d) shift 2 ;;
+    --data-urlencode) shift 2 ;;
+    *)
+      case "$1" in
+        https://*) url="$1" ;;
+      esac
+      shift
+      ;;
+  esac
+done
+
+body=""
+status="200"
+headers=""
+
+case "$url" in
+  https://app.hypertask.ai/api/version*)
+    if [ -f "$RUNNER_TEMP/promoted" ]; then
+      body=$(printf '{"buildId":"%s"}' "$DRIFT_TIP_SHA")
+    else
+      body=$(printf '{"buildId":"%s"}' "$DRIFT_LIVE_SHA")
+    fi
+    ;;
+  https://api.vercel.com/v6/deployments*)
+    # Latest READY can already be the tip while /api/version is stale
+    # (HTPR-6511). The list still includes the tip so promote can find it.
+    body=$(printf '{"deployments":[{"uid":"deploy-tip","state":"READY","meta":{"githubCommitSha":"%s"}},{"uid":"deploy-old","state":"READY","meta":{"githubCommitSha":"%s"}}]}' "$DRIFT_TIP_SHA" "$DRIFT_LIVE_SHA")
+    ;;
+  https://api.vercel.com/v9/projects*)
+    body=$(printf '{"id":"prj_stub","targets":{"production":{"id":"deploy-old","meta":{"githubCommitSha":"%s"}}}}' "$DRIFT_LIVE_SHA")
+    ;;
+  https://api.vercel.com/v10/projects/*/promote/*)
+    printf '%s' "$url" > "$RUNNER_TEMP/promoted"
+    body='{"ok":true}'
+    ;;
+  https://api.telegram.org/*)
+    body='{"ok":true}'
+    ;;
+esac
+
+if [ -n "$out" ] && [ "$out" != "/dev/null" ]; then
+  printf '%s' "$body" > "$out"
+fi
+if [ -n "$hdrs" ]; then
+  printf '%s\\n' "$headers" > "$hdrs"
+fi
+if [ -n "$want" ]; then
+  printf '%s' "$status"
+elif [ -z "$out" ] || [ "$out" = "/dev/stdout" ]; then
+  printf '%s' "$body"
+fi
+`;
+
+function git(cwd, args, extraEnv = {}) {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "drift-test",
+      GIT_AUTHOR_EMAIL: "drift-test@example.com",
+      GIT_COMMITTER_NAME: "drift-test",
+      GIT_COMMITTER_EMAIL: "drift-test@example.com",
+      ...extraEnv,
+    },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+}
+
+async function runDriftCheck({ docsOnly = false, freshTip = false, liveIsTip = false } = {}) {
+  const directory = await mkdtemp(join(tmpdir(), "prod-health-drift-"));
+  const bin = join(directory, "bin");
+  const repo = join(directory, "repo");
+  const runnerTemp = join(directory, "runner-temp");
+  await mkdir(bin);
+  await mkdir(repo);
+  await mkdir(runnerTemp);
+  await writeFile(join(bin, "curl"), DRIFT_CURL_STUB);
+  await writeFile(join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
+  await chmod(join(bin, "curl"), 0o755);
+  await chmod(join(bin, "sleep"), 0o755);
+
+  const staleDate = "2026-09-15T05:29:20 +0000";
+  const dateEnv = freshTip
+    ? {}
+    : { GIT_AUTHOR_DATE: staleDate, GIT_COMMITTER_DATE: staleDate };
+
+  git(repo, ["init"]);
+  await writeFile(join(repo, "app.js"), "v1\n");
+  git(repo, ["add", "app.js"]);
+  git(repo, ["commit", "-m", "old"], dateEnv);
+  const liveSha = git(repo, ["rev-parse", "HEAD"]);
+
+  if (docsOnly) {
+    await writeFile(join(repo, "README.md"), "docs only\n");
+    git(repo, ["add", "README.md"]);
+  } else {
+    await writeFile(join(repo, "app.js"), "v2\n");
+    git(repo, ["add", "app.js"]);
+  }
+  git(repo, ["commit", "-m", "tip"], dateEnv);
+  const tipSha = git(repo, ["rev-parse", "HEAD"]);
+
+  try {
+    const result = spawnSync("bash", ["-c", await driftScript()], {
+      cwd: repo,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        VERCEL_TOKEN: "stub-vercel-token",
+        TG_TOKEN: "stub-tg-token",
+        TG_CHAT: "stub-tg-chat",
+        PROJECT_ID: "prj_stub",
+        TEAM_ID: "team_stub",
+        RUNNER_TEMP: runnerTemp,
+        DRIFT_TIP_SHA: tipSha,
+        DRIFT_LIVE_SHA: liveIsTip ? tipSha : liveSha,
+      },
+    });
+    const promoted = await readFile(join(runnerTemp, "promoted"), "utf8").catch(
+      () => null,
+    );
+    return { result, promoted, tipSha, liveSha };
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+// HTPR-6511: Vercel already had a READY deploy for 95f3471, and the newest
+// READY SHA matched the production tip, but /api/version still served 058a6cf.
+// Drift trusted the newest READY row and stayed green for hours.
+test("drift promotes when /api/version lags a READY production tip", async () => {
+  const { result, promoted } = await runDriftCheck();
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Promoted deploy-tip|production now serves the tip/i);
+  assert.ok(promoted, "drift must promote the tip deploy when /api/version is stale");
+  assert.match(promoted, /\/promote\/deploy-tip/);
+});
+
+test("drift does not promote when /api/version already matches the tip", async () => {
+  const { result, promoted } = await runDriftCheck({ liveIsTip: true });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Production is on the production tip/);
+  assert.equal(promoted, null);
+});
+
+test("drift does not promote a docs-only gap", async () => {
+  const { result, promoted } = await runDriftCheck({ docsOnly: true });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /non-building commits/);
+  assert.equal(promoted, null);
 });

@@ -170,9 +170,33 @@ jobs:
           fi
 
           if [ "$LIVE_BUILD" != "$SHA" ]; then
-            notify "🔴 hypertasks: production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back, investigate Vercel aliasing"
-            echo "::error::Production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back"
-            exit 1
+            # READY is not the same as live. An older deploy can keep the
+            # production alias (HTPR-6511). Promote this deploy instead of
+            # only alerting.
+            CURRENT_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
+            echo "READY deploy $CURRENT_UID missed the production alias (live=$LIVE_BUILD); promoting it (HTPR-6511)"
+            code=$(curl -s -o /tmp/promote.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$CURRENT_UID?teamId=$TEAM_ID")
+            echo "promote -> $code"; cat /tmp/promote.json
+            if [ "$code" != "200" ] && [ "$code" != "201" ] && [ "$code" != "202" ]; then
+              notify "🔴 hypertasks: production still serves $LIVE_BUILD, expected $SHA after READY; promote of $CURRENT_UID failed (HTTP $code)"
+              echo "::error::Production still serves $LIVE_BUILD, expected $SHA after READY; alias repair failed"
+              exit 1
+            fi
+            for i in 1 2 3 4 5 6; do
+              fetch_live_build
+              echo "[repair $i] live build: ${LIVE_BUILD:-none} (status $version_code)"
+              if [ "$version_code" = "200" ] && [ "$version_challenged" = "no" ] && [ "$LIVE_BUILD" = "$SHA" ]; then
+                break
+              fi
+              [ "$i" -lt 6 ] && sleep 10
+            done
+            if [ "$LIVE_BUILD" != "$SHA" ]; then
+              notify "🔴 hypertasks: promoted $CURRENT_UID for $SHA but production still serves ${LIVE_BUILD:-none}"
+              echo "::error::Promoted $CURRENT_UID but production still serves ${LIVE_BUILD:-none}"
+              exit 1
+            fi
           fi
 
           # Production is confirmed serving this exact commit right now. The
@@ -700,13 +724,35 @@ jobs:
         run: |
           set -uo pipefail
 
+          api() { curl -s -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
+
           TIP=$(git rev-parse HEAD)
-          LIVE=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=1" \
-            | jq -r '.deployments[0].meta.githubCommitSha // empty')
+          DRIFT_DIR="${RUNNER_TEMP:-/tmp}/drift-$$"
+          mkdir -p "$DRIFT_DIR"
+
+          # What users hit. The newest READY row is only a guess at live
+          # (HTPR-6511).
+          fetch_live_version() {
+            rm -f "$DRIFT_DIR/version.json" "$DRIFT_DIR/version.h"
+            version_code=$(curl -s -o "$DRIFT_DIR/version.json" -D "$DRIFT_DIR/version.h" -w '%{http_code}' --max-time 30 \
+              "https://app.hypertask.ai/api/version") || version_code=000
+            version_challenged=no
+            if grep -qi '^x-vercel-mitigated: *challenge' "$DRIFT_DIR/version.h" 2>/dev/null; then
+              version_challenged=yes
+            fi
+            LIVE=$(jq -r '.buildId // empty' "$DRIFT_DIR/version.json" 2>/dev/null) || LIVE=""
+          }
+
+          fetch_live_version
+
+          if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ -z "$LIVE" ]; then
+            echo "/api/version unverifiable (status $version_code, challenged=$version_challenged); falling back to Vercel production target"
+            LIVE=$(api "/v9/projects/$PROJECT_ID?teamId=$TEAM_ID" \
+              | jq -r '.targets.production.meta.githubCommitSha // empty')
+          fi
 
           if [ -z "$LIVE" ]; then
-            echo "No READY production deployment reported; nothing to compare."
+            echo "No live production SHA from /api/version or Vercel target; nothing to compare."
             exit 0
           fi
 
@@ -729,7 +775,28 @@ jobs:
               exit 0
             fi
             BEHIND=$(git rev-list --count "$LIVE..$TIP" 2>/dev/null || echo "?")
-            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Shipped work is silently missing from the live app. Promote the newest deployment in Vercel."
+            TIP_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
+              | jq -r --arg sha "$TIP" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')
+            if [ -n "$TIP_UID" ]; then
+              echo "Promoting $TIP_UID so production serves the tip (HTPR-6511)"
+              code=$(curl -s -o "$DRIFT_DIR/promote.json" -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$TIP_UID?teamId=$TEAM_ID")
+              echo "promote -> $code"; cat "$DRIFT_DIR/promote.json"
+              if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
+                sleep 10
+                fetch_live_version
+                if [ "$LIVE" = "$TIP" ]; then
+                  echo "Promoted $TIP_UID; production now serves the tip."
+                  exit 0
+                fi
+                MSG="🔴 hypertasks: promoted $TIP_UID for ${TIP:0:9} but /api/version still reports ${LIVE:-none}. $BEHIND commit(s) still missing from the live app."
+              else
+                MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Promote of $TIP_UID failed (HTTP $code)."
+              fi
+            else
+              MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. No READY deploy for the tip to promote."
+            fi
           else
             MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the production tip ${TIP:0:9}. The live app is on a commit that is not on production at all."
           fi
