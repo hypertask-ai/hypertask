@@ -58,6 +58,7 @@ import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
+  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -81,6 +82,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "MCP tools/list sends one short line per tool on connect. Full schemas load through hypertask_describe_tool, and hypertask_search_tools finds a tool by name.",
+  },
   {
     key: HTPR_6532_STATELESS_MCP_FLAG,
     shippedOn: "2026-09-16",
