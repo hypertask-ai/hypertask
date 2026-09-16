@@ -2,6 +2,8 @@
  * First-line tool blurbs for progressive disclosure.
  * Each line states what the tool returns and stays under 100 characters.
  */
+import { buildToolName } from './mcp-standards'
+
 export const TOOL_SUMMARIES: Record<string, string> = {
   HELLO: 'Returns a welcome map.',
   AGENT_PRESENCE: 'Returns live agent status.',
@@ -82,3 +84,23 @@ export const TOOL_SUMMARIES: Record<string, string> = {
 
 export const SEARCH_TOOLS_NAME = 'hypertask_search_tools'
 export const DESCRIBE_TOOL_NAME = 'hypertask_describe_tool'
+
+const TOOL_NAME_BASE_OVERRIDES: Record<string, string> = {
+  SECTION_CRUD: 'section',
+  GET_COMMENTS: 'get_comments_for_task',
+  ADD_COMMENT: 'add_comment_to_task',
+  REPORT_CRUD: 'report',
+  DRAFT_CRUD: 'draft',
+}
+
+const TOOL_SUMMARY_BY_NAME: Record<string, string> = Object.fromEntries(
+  Object.entries(TOOL_SUMMARIES).map(([key, summary]) => {
+    if (key === 'SEARCH_TOOLS') return [SEARCH_TOOLS_NAME, summary]
+    if (key === 'DESCRIBE_TOOL') return [DESCRIBE_TOOL_NAME, summary]
+    return [buildToolName(TOOL_NAME_BASE_OVERRIDES[key] ?? key.toLowerCase()), summary]
+  })
+)
+
+export function summaryForToolName(name: string, fallback: string): string {
+  return TOOL_SUMMARY_BY_NAME[name] ?? fallback
+}

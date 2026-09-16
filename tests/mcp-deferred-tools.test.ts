@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { z } from 'zod'
-import { TOOL_SUMMARIES } from '../src/lib/mcp-server/config/tool-summaries'
+import { readFileSync } from 'node:fs'
+import { TOOL_SUMMARIES, summaryForToolName } from '../src/lib/mcp-server/config/tool-summaries'
 import {
   describeToolCatalog,
   estimateTokens,
@@ -60,7 +61,27 @@ test('every tool summary is under 100 characters and states what it returns', ()
   }
 })
 
-test('deferred tools/list stays under 1500 tokens for the full catalog', () => {
+test('summary lookup uses the real MCP tool names, including overrides', () => {
+  assert.equal(summaryForToolName('hypertask_list_tasks', 'x'), TOOL_SUMMARIES.LIST_TASKS)
+  assert.equal(summaryForToolName('hypertask_section', 'x'), TOOL_SUMMARIES.SECTION_CRUD)
+  assert.equal(summaryForToolName('hypertask_get_comments_for_task', 'x'), TOOL_SUMMARIES.GET_COMMENTS)
+  assert.equal(summaryForToolName('hypertask_add_comment_to_task', 'x'), TOOL_SUMMARIES.ADD_COMMENT)
+  assert.equal(summaryForToolName('hypertask_report', 'x'), TOOL_SUMMARIES.REPORT_CRUD)
+  assert.equal(summaryForToolName('hypertask_draft', 'x'), TOOL_SUMMARIES.DRAFT_CRUD)
+  assert.equal(summaryForToolName('hypertask_search_tools', 'x'), TOOL_SUMMARIES.SEARCH_TOOLS)
+})
+
+test('TOOL_METADATA descriptions stay unprefixed when the flag is off', () => {
+  const source = readFileSync(
+    new URL('../src/lib/mcp-server/config/tool-metadata.ts', import.meta.url),
+    'utf8'
+  )
+  assert.match(source, /export const TOOL_METADATA = RAW_TOOL_METADATA/)
+  assert.doesNotMatch(source, /function withSummaries/)
+  assert.doesNotMatch(source, /\$\{summary\}\\n\\n\$\{meta\.description\}/)
+})
+
+test('deferred tools/list stays far cheaper than the full catalog', () => {
   const catalog = Object.entries(TOOL_SUMMARIES)
     .filter(([key]) => key !== 'SEARCH_TOOLS' && key !== 'DESCRIBE_TOOL')
     .map(([key, summary]) => ({
@@ -75,8 +96,11 @@ test('deferred tools/list stays under 1500 tokens for the full catalog', () => {
   assert.ok(listed.length >= catalog.length)
   assert.ok(listed.some((tool) => tool.name === 'hypertask_search_tools'))
   assert.ok(listed.some((tool) => tool.name === 'hypertask_describe_tool'))
-  assert.ok(tokens < 1500, `deferred list used ${tokens} tokens`)
-  assert.ok(fullTokens > tokens, `full list ${fullTokens} should exceed deferred ${tokens}`)
+  for (const tool of listed) {
+    assert.equal(tool.inputSchema?.type, 'object', `${tool.name} is missing a protocol inputSchema`)
+  }
+  assert.ok(tokens < 2100, `deferred list used ${tokens} tokens`)
+  assert.ok(tokens * 2 < fullTokens, `full list ${fullTokens} should be more than twice deferred ${tokens}`)
 })
 
 test('search_tools matches names first and describe_tool returns shared $defs', () => {
@@ -125,9 +149,9 @@ test('stateless tools/list and describe_tool honor the deferred flag', async () 
     listed.find((tool) => tool.name === 'hypertask_list_tasks')?.description,
     TOOL_SUMMARIES.LIST_TASKS
   )
-  assert.equal(
+  assert.deepEqual(
     listed.find((tool) => tool.name === 'hypertask_list_tasks')?.inputSchema,
-    undefined
+    { type: 'object' }
   )
 
   const described = await handleStatelessMcpRequest(

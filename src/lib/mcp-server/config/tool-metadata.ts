@@ -470,24 +470,16 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   },
 } as const;
 
-function withSummaries<T extends Record<string, ToolMetadata>>(tools: T): T {
-  const next = { ...tools }
-  const missing = Object.keys(next).filter((key) => !TOOL_SUMMARIES[key])
+function assertToolSummaries(tools: Record<string, ToolMetadata>): void {
+  const missing = Object.keys(tools).filter((key) => !TOOL_SUMMARIES[key])
   if (missing.length > 0) {
     throw new Error(`TOOL_SUMMARIES is missing: ${missing.join(', ')}`)
   }
-  for (const key of Object.keys(next)) {
-    const summary = TOOL_SUMMARIES[key]
-    const meta = next[key]
-    if (!summary || !meta || meta.description.startsWith(summary)) continue
-    next[key] = { ...meta, description: `${summary}\n\n${meta.description}` }
-  }
-  return next
 }
 
-export const TOOL_METADATA = withSummaries(
-  RAW_TOOL_METADATA as Record<string, ToolMetadata>
-) as typeof RAW_TOOL_METADATA;
+assertToolSummaries(RAW_TOOL_METADATA as Record<string, ToolMetadata>)
+
+export const TOOL_METADATA = RAW_TOOL_METADATA;
 
 /**
  * Extract just the names for easy iteration

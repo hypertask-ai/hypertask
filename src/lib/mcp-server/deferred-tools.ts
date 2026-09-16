@@ -3,6 +3,7 @@ import {
   DESCRIBE_TOOL_NAME,
   SEARCH_TOOLS_NAME,
   TOOL_SUMMARIES,
+  summaryForToolName,
 } from './config/tool-summaries'
 import { TOOL_OUTPUT_SCHEMA, withSharedDefs } from './schema-defs'
 
@@ -40,9 +41,11 @@ export function jsonSchemaFor(parameters: z.ZodType): Record<string, unknown> {
 export type ListedTool = {
   name: string
   description: string
-  inputSchema?: Record<string, unknown>
+  inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
 }
+
+const MINIMAL_INPUT_SCHEMA: Record<string, unknown> = { type: 'object' }
 
 const META_LIST_SCHEMAS: Record<string, Record<string, unknown>> = {
   [SEARCH_TOOLS_NAME]: {
@@ -57,16 +60,16 @@ const META_LIST_SCHEMAS: Record<string, Record<string, unknown>> = {
   },
 }
 
+function deferredDescription(tool: { name: string; description: string }): string {
+  return summaryForToolName(tool.name, firstSentence(tool.description))
+}
+
 export function listToolsDeferred(tools: readonly CatalogTool[]): ListedTool[] {
-  return tools.map((tool) => {
-    const listed: ListedTool = {
-      name: tool.name,
-      description: firstSentence(tool.description),
-    }
-    const metaSchema = META_LIST_SCHEMAS[tool.name]
-    if (metaSchema) listed.inputSchema = metaSchema
-    return listed
-  })
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: deferredDescription(tool),
+    inputSchema: META_LIST_SCHEMAS[tool.name] ?? MINIMAL_INPUT_SCHEMA,
+  }))
 }
 
 export function listToolsFull(tools: readonly CatalogTool[]): ListedTool[] {
@@ -91,7 +94,7 @@ export function searchToolCatalog(
       const descHit = needle.length > 0 && description.includes(needle)
       if (!nameHit && !descHit) return null
       const score = nameHit && needle.length > 0 ? 0 : 1
-      return { name: tool.name, description: firstSentence(tool.description), score }
+      return { name: tool.name, description: deferredDescription(tool), score }
     })
     .filter((row): row is { name: string; description: string; score: number } => row !== null)
     .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
