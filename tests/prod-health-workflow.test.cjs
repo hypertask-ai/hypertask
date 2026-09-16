@@ -625,24 +625,60 @@ test("drift promotes the READY app ancestor when the tip is a docs commit", asyn
   assert.match(promoted, /\/promote\/deploy-tip/);
 });
 
-test("health skips alias repair when origin/production already moved on", async () => {
-  const refs = ["origin/production", "hypertask-ai/production", "pub/production"];
-  let older = "";
-  for (const ref of refs) {
-    const tip = spawnSync("git", ["rev-parse", ref], { encoding: "utf8" });
-    if (tip.status !== 0) continue;
-    const parent = spawnSync("git", ["rev-parse", `${tip.stdout.trim()}~3`], {
+function makeCommitChild(parent, { appChange = false, message = "htpr-6511-child" } = {}) {
+  let tree;
+  if (appChange) {
+    const tmpIndex = join(tmpdir(), `htpr-6511-idx-${process.pid}-${Date.now()}`);
+    const env = { ...process.env, GIT_INDEX_FILE: tmpIndex };
+    const read = spawnSync("git", ["read-tree", parent], { encoding: "utf8", env });
+    assert.equal(read.status, 0, read.stderr);
+    const blob = spawnSync("git", ["hash-object", "-w", "--stdin"], {
+      input: "htpr-6511-app-change\n",
       encoding: "utf8",
     });
-    if (parent.status === 0 && parent.stdout.trim()) {
-      older = parent.stdout.trim();
-      break;
-    }
+    assert.equal(blob.status, 0, blob.stderr);
+    const upd = spawnSync(
+      "git",
+      [
+        "update-index",
+        "--add",
+        "--cacheinfo",
+        `100644,${blob.stdout.trim()},htpr-6511-app-file.txt`,
+      ],
+      { encoding: "utf8", env },
+    );
+    assert.equal(upd.status, 0, upd.stderr);
+    const written = spawnSync("git", ["write-tree"], { encoding: "utf8", env });
+    assert.equal(written.status, 0, written.stderr);
+    tree = written.stdout.trim();
+    rm(tmpIndex, { force: true }).catch(() => {});
+  } else {
+    const parsed = spawnSync("git", ["rev-parse", `${parent}^{tree}`], {
+      encoding: "utf8",
+    });
+    assert.equal(parsed.status, 0, parsed.stderr);
+    tree = parsed.stdout.trim();
   }
-  assert.ok(older, "need a production-tracking ref for the superseded test");
+  const child = spawnSync(
+    "git",
+    ["commit-tree", tree, "-p", parent, "-m", message],
+    { encoding: "utf8" },
+  );
+  assert.equal(child.status, 0, child.stderr);
+  return child.stdout.trim();
+}
+
+test("health skips alias repair when origin/production already moved on", async () => {
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+  assert.equal(head.status, 0, head.stderr);
+  const newer = makeCommitChild(head.stdout.trim(), {
+    appChange: true,
+    message: "htpr-6511-app-head",
+  });
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
-    SHA: older,
+    SHA: head.stdout.trim(),
     HC_VERSION_SHA: "a".repeat(40),
+    PROD_HEAD_OVERRIDE: newer,
   });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -650,31 +686,49 @@ test("health skips alias repair when origin/production already moved on", async 
   assert.equal(promoted, null);
 });
 
-test("health skips alias repair when a later version read is a newer descendant", async () => {
+test("health still repairs when origin/production only moved by ignored files", async () => {
   const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
-  const tree = spawnSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" });
   assert.equal(head.status, 0, head.stderr);
-  assert.equal(tree.status, 0, tree.stderr);
-  const child = spawnSync(
-    "git",
-    [
-      "commit-tree",
-      tree.stdout.trim(),
-      "-p",
-      head.stdout.trim(),
-      "-m",
-      "htpr-6511-test-descendant",
-    ],
-    { encoding: "utf8" },
-  );
-  assert.equal(child.status, 0, child.stderr);
+  const docs = makeCommitChild(head.stdout.trim(), {
+    message: "htpr-6511-docs-only",
+  });
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
     SHA: head.stdout.trim(),
     HC_VERSION_SHA: "a".repeat(40),
-    HC_VERSION_RECHECK_SHA: child.stdout.trim(),
+    PROD_HEAD_OVERRIDE: docs,
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /ignored files only|Alias repair landed|Production healthy/);
+  assert.ok(promoted, "docs-only tip must not block alias repair of the app SHA");
+  assert.match(promoted, /\/promote\/deploy-current/);
+});
+
+test("health skips alias repair when a later version read is a newer descendant", async () => {
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+  assert.equal(head.status, 0, head.stderr);
+  const child = makeCommitChild(head.stdout.trim(), {
+    appChange: true,
+    message: "htpr-6511-app-descendant",
+  });
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    SHA: head.stdout.trim(),
+    HC_VERSION_SHA: "a".repeat(40),
+    HC_VERSION_RECHECK_SHA: child,
   });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /already serves newer build|Superseded/);
   assert.equal(promoted, null);
+});
+
+test("core-actions rollback invalidates the health gate", async () => {
+  const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
+  const start = workflow.indexOf("\n  core-actions:");
+  const next = workflow.indexOf("\n  provision-core-actions:", start);
+  assert.ok(start !== -1 && next !== -1);
+  const block = workflow.slice(start, next);
+  assert.match(block, /statuses: write/);
+  assert.match(block, /prod-health-gate/);
+  assert.match(block, /Rolled back after failed core-actions/);
 });

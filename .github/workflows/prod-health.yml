@@ -113,6 +113,18 @@ jobs:
               -d "$(jq -n --arg state "$state" --arg desc "$desc" \
                 '{state:$state,context:"prod-health-gate",description:$desc}')" || true
           }
+          ignored_only_between() {
+            local from="$1" to="$2"
+            [ -z "$(git diff --name-only "$from..$to" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | head -1)" ]
+          }
+          current_prod_head() {
+            if [ -n "${PROD_HEAD_OVERRIDE:-}" ]; then
+              printf '%s' "$PROD_HEAD_OVERRIDE"
+              return 0
+            fi
+            git fetch --depth=50 origin production || true
+            git rev-parse origin/production 2>/dev/null || true
+          }
 
           # ── 1. Find the production deployment for this commit ──────────────
           DEPLOY_JSON=""
@@ -177,8 +189,12 @@ jobs:
                 git fetch --depth=50 origin "$LIVE_BUILD" || true
               fi
               if git merge-base --is-ancestor "$SHA" "$LIVE_BUILD" 2>/dev/null; then
-                echo "Superseded: production already serves newer build $LIVE_BUILD; nothing to check for $SHA"
-                exit 0
+                if ignored_only_between "$SHA" "$LIVE_BUILD"; then
+                  echo "Live SHA $LIVE_BUILD is only ignored files ahead of $SHA; continue"
+                else
+                  echo "Superseded: production already serves newer build $LIVE_BUILD; nothing to check for $SHA"
+                  exit 0
+                fi
               fi
             fi
             [ "$i" -lt 6 ] && sleep 10
@@ -196,12 +212,15 @@ jobs:
             # only alerting, but never overwrite a newer live SHA or a newer
             # origin/production tip that landed while we were waiting.
             CURRENT_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
-            git fetch --depth=50 origin production || true
-            PROD_HEAD=$(git rev-parse origin/production 2>/dev/null || true)
+            PROD_HEAD=$(current_prod_head)
             skip_promote=no
             if [ -n "$PROD_HEAD" ] && [ "$PROD_HEAD" != "$SHA" ] && git merge-base --is-ancestor "$SHA" "$PROD_HEAD" 2>/dev/null; then
-              echo "Skip alias repair: origin/production already moved to $PROD_HEAD"
-              skip_promote=yes
+              if ignored_only_between "$SHA" "$PROD_HEAD"; then
+                echo "origin/production moved to $PROD_HEAD by ignored files only; keep repairing $SHA"
+              else
+                echo "Skip alias repair: origin/production already moved to $PROD_HEAD"
+                skip_promote=yes
+              fi
             fi
             fetch_live_build
             if [ "$skip_promote" = "no" ] && [ -n "$LIVE_BUILD" ] && [ "$LIVE_BUILD" != "$SHA" ]; then
@@ -209,8 +228,12 @@ jobs:
                 git fetch --depth=50 origin "$LIVE_BUILD" || true
               fi
               if git merge-base --is-ancestor "$SHA" "$LIVE_BUILD" 2>/dev/null; then
-                echo "Skip alias repair: production already serves newer build $LIVE_BUILD"
-                skip_promote=yes
+                if ignored_only_between "$SHA" "$LIVE_BUILD"; then
+                  echo "Live SHA $LIVE_BUILD is only ignored files ahead of $SHA; keep repairing $SHA"
+                else
+                  echo "Skip alias repair: production already serves newer build $LIVE_BUILD"
+                  skip_promote=yes
+                fi
               fi
             fi
             if [ "$skip_promote" = "yes" ]; then
@@ -232,39 +255,14 @@ jobs:
                 [ "$i" -lt 6 ] && sleep 10
               done
             fi
-            git fetch --depth=50 origin production || true
-            PROD_HEAD=$(git rev-parse origin/production 2>/dev/null || true)
+            PROD_HEAD=$(current_prod_head)
             if [ -n "$PROD_HEAD" ] && [ "$PROD_HEAD" != "$SHA" ] && git merge-base --is-ancestor "$SHA" "$PROD_HEAD" 2>/dev/null; then
-              echo "Production advanced to $PROD_HEAD during promote; correcting if a READY deploy exists"
-              AFTER_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
-                | jq -r --arg sha "$PROD_HEAD" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')
-              if [ -z "$AFTER_UID" ]; then
-                notify "🔴 hypertasks: promoted $CURRENT_UID for $SHA but origin/production moved to $PROD_HEAD and no READY deploy exists to correct"
-                echo "::error::Corrective promote skipped: no READY deploy for $PROD_HEAD"
-                exit 1
+              if ignored_only_between "$SHA" "$PROD_HEAD"; then
+                echo "Production advanced to $PROD_HEAD by ignored files only; keep $SHA"
+              else
+                echo "Production advanced to app-changing $PROD_HEAD; leaving alias repair to that SHA's health run"
+                exit 0
               fi
-              echo "Promoting $AFTER_UID for the newer production tip"
-              correct_code=$(curl -s -o /tmp/promote-correct.json -w '%{http_code}' -X POST \
-                -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$AFTER_UID?teamId=$TEAM_ID")
-              echo "correct -> $correct_code"; cat /tmp/promote-correct.json
-              if [ "$correct_code" != "200" ] && [ "$correct_code" != "201" ] && [ "$correct_code" != "202" ]; then
-                notify "🔴 hypertasks: production advanced to $PROD_HEAD during promote of $SHA; corrective promote of $AFTER_UID failed (HTTP $correct_code)"
-                echo "::error::Corrective promote of $AFTER_UID failed (HTTP $correct_code)"
-                exit 1
-              fi
-              for i in 1 2 3 4 5 6; do
-                fetch_live_build
-                echo "[correct $i] live build: ${LIVE_BUILD:-none} (status $version_code)"
-                if [ "$version_code" = "200" ] && [ "$version_challenged" = "no" ] && [ "$LIVE_BUILD" = "$PROD_HEAD" ]; then
-                  echo "Superseded: production now serves newer build $PROD_HEAD"
-                  exit 0
-                fi
-                [ "$i" -lt 6 ] && sleep 10
-              done
-              notify "🔴 hypertasks: production advanced to $PROD_HEAD during promote of $SHA; corrective promote of $AFTER_UID did not land (live=${LIVE_BUILD:-none})"
-              echo "::error::Corrective promote of $AFTER_UID did not land; live is ${LIVE_BUILD:-none}"
-              exit 1
             fi
             if [ "$LIVE_BUILD" = "$SHA" ]; then
               echo "Alias repair landed; production now serves $SHA"
@@ -676,8 +674,16 @@ jobs:
               ;;
             skip)
               # Production moved on before the rollback landed, so this SHA is
-              # not live either; suppress GLM QA the same way.
+              # not live either; suppress GLM QA the same way. Still mark the
+              # gate failed so drift never promotes this SHA later.
               echo "rolledback=true" >> "$GITHUB_OUTPUT"
+              if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+                curl -sS -o /dev/null -X POST \
+                  -H "Authorization: Bearer $GITHUB_TOKEN" \
+                  -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+                  -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed smoke"}' || true
+              fi
               notify "⚠️ hypertasks: smoke QA failed for $SHA but production already moved on ($(echo "$RESULT" | jq -r '.reason // "unknown"')); not rolling back. Verify manually."
               ;;
             *)
@@ -891,6 +897,10 @@ jobs:
               local sha="$1"
               [ -z "$(git diff --name-only "$sha..$TIP" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | head -1)" ]
             }
+            ignored_only_between() {
+              local from="$1" to="$2"
+              [ -z "$(git diff --name-only "$from..$to" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | head -1)" ]
+            }
 
             CANDIDATE_UID=""
             CANDIDATE_SHA=""
@@ -923,18 +933,27 @@ jobs:
                   git fetch --depth=50 origin "$LIVE" || true
                 fi
                 if git merge-base --is-ancestor "$CANDIDATE_SHA" "$LIVE" 2>/dev/null; then
-                  echo "Skip promote: production already serves newer descendant $LIVE"
-                  exit 0
+                  if ignored_only_between "$CANDIDATE_SHA" "$LIVE"; then
+                    echo "Live SHA $LIVE is only ignored files ahead of $CANDIDATE_SHA; keep promoting"
+                  else
+                    echo "Skip promote: production already serves newer descendant $LIVE"
+                    exit 0
+                  fi
                 fi
               fi
               if [ "$FRESH_HEAD" != "$TIP" ] && [ "$FRESH_HEAD" != "$CANDIDATE_SHA" ] && git merge-base --is-ancestor "$CANDIDATE_SHA" "$FRESH_HEAD" 2>/dev/null; then
-                echo "Skip promote: origin/production moved to $FRESH_HEAD"
-                if [ "$LIVE" = "$FRESH_HEAD" ]; then
-                  echo "Live already matches the new production head."
+                if ignored_only_between "$CANDIDATE_SHA" "$FRESH_HEAD"; then
+                  echo "origin/production moved to $FRESH_HEAD by ignored files only; keep $CANDIDATE_SHA"
+                else
+                  echo "Skip promote: origin/production moved to app-changing $FRESH_HEAD"
+                  if [ "$LIVE" = "$FRESH_HEAD" ]; then
+                    echo "Live already matches the new production head."
+                    exit 0
+                  fi
+                  echo "Leaving promotion to that SHA's health run."
                   exit 0
                 fi
-                MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Skipped promote of $CANDIDATE_UID because origin/production moved to ${FRESH_HEAD:0:9}."
-              else
+              fi
               echo "Promoting $CANDIDATE_UID ($CANDIDATE_SHA) so production serves the tip (HTPR-6511)"
               code=$(curl -s -o "$DRIFT_DIR/promote.json" -w '%{http_code}' -X POST \
                 -H "Authorization: Bearer $VERCEL_TOKEN" \
@@ -948,32 +967,12 @@ jobs:
                     git fetch --depth=50 origin production || true
                     FRESH_HEAD=$(git rev-parse origin/production 2>/dev/null || git rev-parse HEAD)
                     if [ "$FRESH_HEAD" != "$TIP" ] && [ "$FRESH_HEAD" != "$CANDIDATE_SHA" ] && git merge-base --is-ancestor "$CANDIDATE_SHA" "$FRESH_HEAD" 2>/dev/null; then
-                      AFTER_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
-                        | jq -r --arg sha "$FRESH_HEAD" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')
-                      if [ -z "$AFTER_UID" ]; then
-                        MSG="🔴 hypertasks: promoted $CANDIDATE_UID for ${CANDIDATE_SHA:0:9} but origin/production moved to ${FRESH_HEAD:0:9} and no READY deploy exists to correct."
-                        break
+                      if ignored_only_between "$CANDIDATE_SHA" "$FRESH_HEAD"; then
+                        echo "Production advanced to $FRESH_HEAD by ignored files only; keep $CANDIDATE_SHA"
+                      else
+                        echo "Production advanced to app-changing $FRESH_HEAD; leaving alias repair to that SHA's health run"
+                        exit 0
                       fi
-                      echo "Production advanced to $FRESH_HEAD during promote; correcting with $AFTER_UID"
-                      correct_code=$(curl -s -o "$DRIFT_DIR/promote-correct.json" -w '%{http_code}' -X POST \
-                        -H "Authorization: Bearer $VERCEL_TOKEN" \
-                        "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$AFTER_UID?teamId=$TEAM_ID")
-                      echo "correct -> $correct_code"; cat "$DRIFT_DIR/promote-correct.json"
-                      if [ "$correct_code" != "200" ] && [ "$correct_code" != "201" ] && [ "$correct_code" != "202" ]; then
-                        MSG="🔴 hypertasks: production advanced to ${FRESH_HEAD:0:9} during promote; corrective promote of $AFTER_UID failed (HTTP $correct_code)."
-                        break
-                      fi
-                      for j in 1 2 3 4 5 6; do
-                        fetch_live_version
-                        echo "[correct $j] live build: ${LIVE:-none} (status $version_code)"
-                        if [ "$LIVE" = "$FRESH_HEAD" ]; then
-                          echo "Corrected; production now serves $FRESH_HEAD."
-                          exit 0
-                        fi
-                        [ "$j" -lt 6 ] && sleep 10
-                      done
-                      MSG="🔴 hypertasks: production advanced to ${FRESH_HEAD:0:9} during promote; corrective promote of $AFTER_UID did not land (live=${LIVE:-none})."
-                      break
                     fi
                     echo "Promoted $CANDIDATE_UID; production now serves the tip."
                     exit 0
@@ -983,7 +982,6 @@ jobs:
                 MSG="🔴 hypertasks: promoted $CANDIDATE_UID for ${CANDIDATE_SHA:0:9} but /api/version still reports ${LIVE:-none}. $BEHIND commit(s) still missing from the live app."
               else
                 MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Promote of $CANDIDATE_UID failed (HTTP $code)."
-              fi
               fi
             else
               MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. No READY deploy with a green health gate to promote."
@@ -1066,6 +1064,7 @@ jobs:
     timeout-minutes: 8
     permissions:
       contents: read
+      statuses: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -1087,6 +1086,8 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           SHOULD_ROLLBACK=$(node .github/scripts/core-actions-smoke.mjs rollback-decision)
           if [ "$SHOULD_ROLLBACK" != "true" ]; then
@@ -1097,6 +1098,16 @@ jobs:
           echo "$RESULT"
           SUMMARY=$(echo "$RESULT" | jq -r '[.action // "failed", .reason // "no reason returned"] | map(tostring | gsub("[\\r\\n]+"; " ")) | join(": ")')
           echo "CORE_SMOKE_ROLLBACK=$SUMMARY" >> "$GITHUB_ENV"
+          ACTION=$(echo "$RESULT" | jq -r '.action // "failed"')
+          if [ "$ACTION" = "requested" ] || [ "$ACTION" = "skip" ]; then
+            if [ -n "${GITHUB_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+              curl -sS -o /dev/null -X POST \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+                -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed core-actions"}' || true
+            fi
+          fi
 
       - name: Report a failed or unrunnable check
         if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}
