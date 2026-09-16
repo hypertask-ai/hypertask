@@ -1,0 +1,361 @@
+/**
+ * Shared list/search query contract for MCP tools and the REST routes
+ * that back them (HTPR-6530). Same names everywhere: query, filter, sort,
+ * fields, limit, cursor.
+ */
+
+export const LIST_FILTER_KEYS = [
+  'section',
+  'label',
+  'assignee',
+  'status',
+  'updated_since',
+  'has_pr',
+] as const
+
+export type ListFilterKey = (typeof LIST_FILTER_KEYS)[number]
+
+export type ListFilter = {
+  section?: string
+  label?: string | string[]
+  assignee?: string | number
+  status?: string
+  updated_since?: string
+  has_pr?: string
+}
+
+export type ParsedListQuery = {
+  query?: string
+  filter: ListFilter
+  sort?: string
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+  fields: string[]
+  limit?: number
+  cursor?: string
+}
+
+export const HAS_PR_VALUES = [
+  'red',
+  'failing',
+  'checks_red',
+  'true',
+  'yes',
+  'false',
+  'no',
+  'none',
+  'open',
+  'green',
+  'passing',
+  'merged',
+] as const
+
+export type HasPrValue = (typeof HAS_PR_VALUES)[number]
+
+export function parseSort(
+  sort?: string | null,
+): { sortBy?: string; sortOrder?: 'asc' | 'desc' } {
+  if (!sort) return {}
+  const trimmed = sort.trim()
+  if (!trimmed) return {}
+  if (trimmed.startsWith('-')) {
+    return { sortBy: trimmed.slice(1), sortOrder: 'desc' }
+  }
+  const colon = trimmed.lastIndexOf(':')
+  if (colon > 0) {
+    const field = trimmed.slice(0, colon)
+    const dir = trimmed.slice(colon + 1).toLowerCase()
+    if (dir === 'asc' || dir === 'desc') {
+      return { sortBy: field, sortOrder: dir }
+    }
+  }
+  return { sortBy: trimmed, sortOrder: 'asc' }
+}
+
+export function parseFields(raw?: string | string[] | null): string[] {
+  if (!raw) return []
+  const parts = Array.isArray(raw) ? raw.flatMap((item) => item.split(',')) : raw.split(',')
+  return parts.map((part) => part.trim()).filter(Boolean)
+}
+
+function asStringArray(value: unknown): string[] {
+  if (value == null) return []
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+  return String(value)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function parseFilterValue(raw: unknown): ListFilter {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const input = raw as Record<string, unknown>
+  const filter: ListFilter = {}
+  if (typeof input.section === 'string' && input.section.trim()) {
+    filter.section = input.section.trim()
+  }
+  const labels = asStringArray(input.label)
+  if (labels.length === 1) filter.label = labels[0]
+  else if (labels.length > 1) filter.label = labels
+  if (input.assignee !== undefined && input.assignee !== null && input.assignee !== '') {
+    filter.assignee = typeof input.assignee === 'number' ? input.assignee : String(input.assignee)
+  }
+  if (typeof input.status === 'string' && input.status.trim()) {
+    filter.status = input.status.trim()
+  }
+  if (typeof input.updated_since === 'string' && input.updated_since.trim()) {
+    filter.updated_since = input.updated_since.trim()
+  }
+  if (typeof input.has_pr === 'string' && input.has_pr.trim()) {
+    filter.has_pr = input.has_pr.trim()
+  } else if (typeof input.has_pr === 'boolean') {
+    filter.has_pr = input.has_pr ? 'true' : 'false'
+  }
+  return filter
+}
+
+function parseFilterParam(raw: string | null): ListFilter {
+  if (!raw) return {}
+  const trimmed = raw.trim()
+  if (!trimmed) return {}
+  if (trimmed.startsWith('{')) {
+    try {
+      return parseFilterValue(JSON.parse(trimmed))
+    } catch {
+      return {}
+    }
+  }
+  return {}
+}
+
+export function parseListQueryFromSearchParams(searchParams: URLSearchParams): ParsedListQuery {
+  const filter = {
+    ...parseFilterParam(searchParams.get('filter')),
+  }
+  for (const key of LIST_FILTER_KEYS) {
+    const dotted = searchParams.getAll(`filter.${key}`)
+    if (dotted.length === 0) continue
+    if (key === 'label') {
+      filter.label = dotted.length === 1 ? dotted[0] : dotted
+    } else if (key === 'assignee') {
+      filter.assignee = dotted[dotted.length - 1]
+    } else {
+      filter[key] = dotted[dotted.length - 1]
+    }
+  }
+
+  const mergedFields = parseFields(searchParams.getAll('fields'))
+
+  const sort = searchParams.get('sort') ?? undefined
+  const parsedSort = parseSort(sort)
+  const limitRaw = searchParams.get('limit')
+  const limit = limitRaw && /^\d+$/.test(limitRaw) ? Number(limitRaw) : undefined
+
+  return {
+    query: searchParams.get('query')?.trim() || undefined,
+    filter,
+    sort: sort || undefined,
+    sortBy: parsedSort.sortBy,
+    sortOrder: parsedSort.sortOrder,
+    fields: mergedFields,
+    limit: limit && limit > 0 ? Math.min(limit, 100) : undefined,
+    cursor: searchParams.get('cursor')?.trim() || undefined,
+  }
+}
+
+export function parseListQueryFromArgs(args: Record<string, unknown> | null | undefined): ParsedListQuery {
+  const input = args ?? {}
+  const sort = typeof input.sort === 'string' ? input.sort : undefined
+  const parsedSort = parseSort(sort)
+  const limit = typeof input.limit === 'number' && Number.isFinite(input.limit) ? input.limit : undefined
+  return {
+    query: typeof input.query === 'string' && input.query.trim() ? input.query.trim() : undefined,
+    filter: parseFilterValue(input.filter),
+    sort,
+    sortBy: parsedSort.sortBy,
+    sortOrder: parsedSort.sortOrder,
+    fields: parseFields(input.fields as string | string[] | undefined),
+    limit: limit && limit > 0 ? Math.min(limit, 100) : undefined,
+    cursor: typeof input.cursor === 'string' && input.cursor.trim() ? input.cursor.trim() : undefined,
+  }
+}
+
+export function appendListQueryParams(
+  params: URLSearchParams,
+  input: {
+    query?: string
+    filter?: ListFilter
+    sort?: string
+    fields?: string | string[]
+    limit?: number
+    cursor?: string
+  },
+): void {
+  if (input.query) params.set('query', input.query)
+  if (input.filter && Object.keys(input.filter).length > 0) {
+    params.set('filter', JSON.stringify(input.filter))
+  }
+  if (input.sort) params.set('sort', input.sort)
+  const fields = parseFields(input.fields)
+  if (fields.length > 0) params.set('fields', fields.join(','))
+  if (input.limit !== undefined) params.set('limit', String(input.limit))
+  if (input.cursor) params.set('cursor', input.cursor)
+}
+
+export function normalizeHasPr(value?: string | null): HasPrValue | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  return (HAS_PR_VALUES as readonly string[]).includes(normalized)
+    ? (normalized as HasPrValue)
+    : null
+}
+
+export function hasPrWhere(hasPr?: string | null): Record<string, unknown> | null {
+  const value = normalizeHasPr(hasPr)
+  if (!value) return null
+  if (value === 'true' || value === 'yes') return { pullRequests: { some: {} } }
+  if (value === 'false' || value === 'no' || value === 'none') {
+    return { pullRequests: { none: {} } }
+  }
+  if (value === 'red' || value === 'failing' || value === 'checks_red') {
+    return { pullRequests: { some: { checkState: 'failing' } } }
+  }
+  if (value === 'green' || value === 'passing') {
+    return { pullRequests: { some: { checkState: 'passing' } } }
+  }
+  if (value === 'open') return { pullRequests: { some: { lifecycle: 'open' } } }
+  if (value === 'merged') return { pullRequests: { some: { lifecycle: 'merged' } } }
+  return null
+}
+
+function pickPath(row: Record<string, unknown>, field: string): unknown {
+  if (field === 'url') {
+    if (typeof row.url === 'string') return row.url
+    const link = row.link
+    if (link && typeof link === 'object' && 'url' in link) {
+      return (link as { url?: unknown }).url
+    }
+    return undefined
+  }
+  if (field.includes('.')) {
+    return field.split('.').reduce<unknown>((current, part) => {
+      if (!current || typeof current !== 'object') return undefined
+      return (current as Record<string, unknown>)[part]
+    }, row)
+  }
+  return row[field]
+}
+
+export function projectRows<T extends Record<string, unknown>>(
+  rows: T[],
+  fields: string[],
+): Array<Record<string, unknown>> {
+  if (fields.length === 0) return rows
+  return rows.map((row) => {
+    const projected: Record<string, unknown> = {}
+    for (const field of fields) {
+      const value = pickPath(row as Record<string, unknown>, field)
+      if (value !== undefined) projected[field] = value
+    }
+    return projected
+  })
+}
+
+function stringifySearchable(value: unknown): string {
+  if (value == null) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
+}
+
+export function applyCollectionQuery<T extends Record<string, unknown>>(
+  items: T[],
+  listQuery: ParsedListQuery,
+  options: { searchFields: string[]; idField?: string } = { searchFields: [] },
+): { items: Array<Record<string, unknown>>; total: number; nextCursor: string | null } {
+  const idField = options.idField ?? 'id'
+  let filtered = items.slice()
+
+  if (listQuery.query) {
+    const needle = listQuery.query.toLowerCase()
+    filtered = filtered.filter((item) =>
+      options.searchFields.some((field) =>
+        stringifySearchable((item as Record<string, unknown>)[field]).toLowerCase().includes(needle),
+      ),
+    )
+  }
+
+  if (listQuery.filter.status) {
+    const status = listQuery.filter.status
+    filtered = filtered.filter((item) => String((item as Record<string, unknown>).status ?? '') === status)
+  }
+  if (listQuery.filter.section) {
+    const section = listQuery.filter.section.toLowerCase()
+    filtered = filtered.filter((item) => {
+      const value = (item as Record<string, unknown>).section
+        ?? (item as Record<string, unknown>).section_title
+        ?? (item as Record<string, unknown>).title
+      return String(value ?? '').toLowerCase() === section
+    })
+  }
+  if (listQuery.filter.updated_since) {
+    const since = Date.parse(listQuery.filter.updated_since)
+    if (!Number.isNaN(since)) {
+      filtered = filtered.filter((item) => {
+        const raw = (item as Record<string, unknown>).updatedAt
+          ?? (item as Record<string, unknown>).createdAt
+        const time = typeof raw === 'string' || raw instanceof Date ? Date.parse(String(raw)) : NaN
+        return !Number.isNaN(time) && time >= since
+      })
+    }
+  }
+
+  if (listQuery.sortBy) {
+    const dir = listQuery.sortOrder === 'desc' ? -1 : 1
+    const key = listQuery.sortBy
+    filtered.sort((left, right) => {
+      const a = stringifySearchable((left as Record<string, unknown>)[key])
+      const b = stringifySearchable((right as Record<string, unknown>)[key])
+      return a < b ? -dir : a > b ? dir : 0
+    })
+  }
+
+  const total = filtered.length
+  if (listQuery.cursor) {
+    const index = filtered.findIndex(
+      (item) => String((item as Record<string, unknown>)[idField]) === listQuery.cursor,
+    )
+    if (index >= 0) filtered = filtered.slice(index + 1)
+  }
+
+  const limit = listQuery.limit ?? filtered.length
+  const page = filtered.slice(0, limit)
+  const nextCursor =
+    page.length === limit && filtered.length > limit
+      ? String((page[page.length - 1] as Record<string, unknown>)[idField] ?? '')
+      : null
+
+  return {
+    items: projectRows(page as Array<Record<string, unknown>>, listQuery.fields),
+    total,
+    nextCursor: nextCursor || null,
+  }
+}
+
+export function taskUrlFromListItem(task: {
+  ticketNumber?: string | null
+  projectId?: number | null
+  uniqueIndex?: number | null
+  url?: string
+}): string | undefined {
+  if (task.url) return task.url
+  const uniqueIndex =
+    task.uniqueIndex ??
+    (task.ticketNumber ? Number(String(task.ticketNumber).split('-').pop()) : NaN)
+  if (!task.projectId || !Number.isFinite(uniqueIndex) || uniqueIndex <= 0) return undefined
+  return `https://app.hypertask.ai/detail/project-${task.projectId}/${uniqueIndex}`
+}

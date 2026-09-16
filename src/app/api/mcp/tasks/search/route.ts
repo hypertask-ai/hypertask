@@ -5,10 +5,18 @@ import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  hasPrWhere,
+  parseListQueryFromSearchParams,
+  projectRows,
+  taskUrlFromListItem,
+} from '@/lib/mcp/listQuery'
 
 export interface TaskSearchItem {
   id: number
   ticketNumber?: string
+  uniqueIndex?: number
   title: string
   description: string
   boardId: number
@@ -52,15 +60,27 @@ export async function GET(request: NextRequest) {
     const user = ctx.user;
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    const query = searchParams.get('q') ?? searchParams.get('query')
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
+    const query = searchParams.get('q') ?? searchParams.get('query') ?? listQuery?.query
     const boardId = searchParams.get('board_id') ? parseInt(searchParams.get('board_id')!) : null
     const projectId = searchParams.get('project_id') ? parseInt(searchParams.get('project_id')!) : null
-    const assignedTo = searchParams.get('assigned_to') || undefined
+    let assignedTo = searchParams.get('assigned_to') || undefined
     const priorityParam = searchParams.get('priority')
-    const section = searchParams.get('section') || undefined
+    let section = searchParams.get('section') || undefined
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
-    const status = (searchParams.get('status') as 'Normal' | 'Archive') || 'Normal'
-    const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
+    let status = (searchParams.get('status') as 'Normal' | 'Archive') || 'Normal'
+    let limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
+    if (listQuery?.filter.section) section = listQuery.filter.section
+    if (listQuery?.filter.assignee !== undefined) assignedTo = String(listQuery.filter.assignee)
+    if (listQuery?.filter.status) status = listQuery.filter.status as typeof status
+    if (listQuery?.limit) limit = listQuery.limit
+    const labelsParam = listQuery?.filter.label
+      ? Array.isArray(listQuery.filter.label)
+        ? listQuery.filter.label
+        : [listQuery.filter.label]
+      : []
+    const updatedSince = listQuery?.filter.updated_since
 
     if (!query || query.length > 200) {
       return NextResponse.json(
@@ -112,6 +132,23 @@ export async function GET(request: NextRequest) {
     // Filter by section
     if (section) {
       where.section = section
+    }
+    if (labelsParam.length > 0) {
+      where.taskLabels = {
+        some: {
+          label: { value: { in: labelsParam } },
+        },
+      }
+    }
+    if (updatedSince) {
+      const since = new Date(updatedSince)
+      if (!Number.isNaN(since.getTime())) {
+        where.updatedAt = { gte: since }
+      }
+    }
+    if (listQuery?.filter.has_pr) {
+      const prWhere = hasPrWhere(listQuery.filter.has_pr)
+      if (prWhere) Object.assign(where, prWhere)
     }
 
     // Filter by assignee
@@ -174,6 +211,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         ticketNumber: true,
+        uniqueIndex: true,
         title: true,
         description: true,
         section: true,
@@ -209,6 +247,7 @@ export async function GET(request: NextRequest) {
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
+        uniqueIndex: task.uniqueIndex,
         title: task.title,
         description: task.description,
         boardId: task.projectId,
@@ -221,9 +260,18 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    if (listQueryEnabled) {
+      for (const task of taskList) {
+        const url = taskUrlFromListItem(task)
+        if (url) (task as TaskSearchItem & { url?: string }).url = url
+      }
+    }
+
     const response: SearchTasksResponse = {
       success: true,
-      tasks: taskList,
+      tasks: (listQuery?.fields.length
+        ? projectRows(taskList as Array<Record<string, unknown>>, listQuery.fields)
+        : taskList) as TaskSearchItem[],
       total,
       boardId: boardId || projectId || undefined
     }

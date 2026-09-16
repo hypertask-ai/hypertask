@@ -38,6 +38,11 @@ import {
   mapMcpCommentReaction,
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  parseListQueryFromSearchParams,
+  projectRows,
+} from '@/lib/mcp/listQuery'
 
 export interface CommentItem {
   id: number
@@ -219,6 +224,8 @@ export async function GET(request: NextRequest) {
     const requestedSortOrder = searchParams.get('sort_order')
     const sortOrder = requestedSortOrder || 'desc'
     const includeActivity = searchParams.get('include_activity') === 'true'
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
 
     // Validate task identifier
     const validation = validateTaskIdentifier({ task_id: taskId, ticket_number: ticketNumber, unique_index: uniqueIndex, project_id: projectId })
@@ -258,6 +265,15 @@ export async function GET(request: NextRequest) {
     const commentWhere: Prisma.CommentWhereInput = includeActivity
       ? { taskId: task.id }
       : { taskId: task.id, activity: { equals: Prisma.DbNull } }
+    if (listQuery?.query) {
+      commentWhere.text = { contains: listQuery.query, mode: 'insensitive' }
+    }
+    if (listQuery?.filter.updated_since) {
+      const since = new Date(listQuery.filter.updated_since)
+      if (!Number.isNaN(since.getTime())) {
+        commentWhere.createdAt = { gte: since }
+      }
+    }
 
     // Count the same row set returned below so pagination metadata stays accurate.
     const total = await prisma.comment.count({
@@ -272,9 +288,9 @@ export async function GET(request: NextRequest) {
       where: commentWhere,
       include: commentInclude(user.id, task.projectId),
       orderBy: {
-        createdAt: effectiveSortOrder
+        createdAt: (listQuery?.sortOrder ?? effectiveSortOrder) as 'asc' | 'desc'
       },
-      take: limit,
+      take: listQuery?.limit ?? limit,
       skip: offset
     })
 
@@ -285,9 +301,11 @@ export async function GET(request: NextRequest) {
 
     const response: ListCommentsResponse = {
       success: true,
-      comments: commentList,
+      comments: (listQuery?.fields.length
+        ? projectRows(commentList as Array<Record<string, unknown>>, listQuery.fields)
+        : commentList) as CommentItem[],
       total,
-      limit,
+      limit: listQuery?.limit ?? limit,
       offset
     }
 

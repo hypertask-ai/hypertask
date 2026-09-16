@@ -5,6 +5,7 @@ import { EnhancedSearchTasksInputSchema } from '../../validations/task.validatio
 import { getConfig } from '../../config/index';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { getTaskLinkInfo } from '../../utils/task-link';
+import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
 export interface TaskSearchResult {
   id: number;
@@ -105,6 +106,7 @@ export class SearchService {
       if (validatedInput.status) {
         queryParams.append('status', validatedInput.status);
       }
+      appendListQueryParams(queryParams, validatedInput)
 
       const response = await this.apiClient.makeRequest<SearchTasksResponse>(
         `/mcp/tasks/search?${queryParams.toString()}`,

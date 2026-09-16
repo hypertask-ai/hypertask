@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { parseListQueryFromSearchParams, projectRows } from '@/lib/mcp/listQuery'
 
 export interface ProjectLabel {
   id: string
@@ -71,12 +73,14 @@ export async function GET(request: NextRequest) {
     const user = ctx.user;
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
-    const status = searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted' | null
-    const search = searchParams.get('search') || undefined
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100) // Max 100
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
+    const status = (listQuery?.filter.status ?? searchParams.get('status')) as 'Normal' | 'Archive' | 'Deleted' | null
+    const search = listQuery?.query || searchParams.get('search') || undefined
+    const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100) // Max 100
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
-    const sortBy = searchParams.get('sort_by') || 'title'
-    const sortOrder = searchParams.get('sort_order') || 'asc'
+    const sortBy = listQuery?.sortBy || searchParams.get('sort_by') || 'title'
+    const sortOrder = listQuery?.sortOrder || searchParams.get('sort_order') || 'asc'
 
     const where: any = {
       status: status ?? 'Normal',
@@ -187,7 +191,9 @@ export async function GET(request: NextRequest) {
 
     const response: ListProjectsResponse = {
       success: true,
-      projects: projectList,
+      projects: (listQuery?.fields.length
+        ? projectRows(projectList as Array<Record<string, unknown>>, listQuery.fields)
+        : projectList) as ProjectListItem[],
       total,
       limit,
       offset

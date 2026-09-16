@@ -4,6 +4,8 @@ import prisma from '@/lib/prisma'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { applyCollectionQuery, parseListQueryFromSearchParams } from '@/lib/mcp/listQuery'
 
 /**
  * GET /api/mcp/projects/:projectId/labels
@@ -51,11 +53,19 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       select: { id: true, value: true },
       orderBy: { value: 'asc' },
     })
+    const mapped = labels.map((label) => ({ id: label.id, name: label.value || '' }))
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const listQuery = listQueryEnabled
+      ? parseListQueryFromSearchParams(request.nextUrl.searchParams)
+      : null
+    const projected = listQuery
+      ? applyCollectionQuery(mapped, listQuery, { searchFields: ['name'] })
+      : null
 
     return NextResponse.json({
       success: true,
       projectId,
-      labels: labels.map((label) => ({ id: label.id, name: label.value || '' })),
+      labels: projected?.items ?? mapped,
     })
   } catch (error) {
     return NextResponse.json(

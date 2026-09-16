@@ -10,6 +10,7 @@ import {
   createTaskIdentificationBaseSchema,
 } from './common/task-identification';
 import { paginationSchema, sortOrderSchema } from './common/pagination';
+import { listQueryToolSchema } from './common/listQuery';
 import { inlineAttachmentsSchema } from './attachment.validation';
 import { hasMarkdownStructure } from '../../../utils/helperFunctions/markdownToHtml';
 
@@ -247,6 +248,7 @@ export function validateAndSanitizeAddCommentInput(input: unknown): AddCommentIn
 export function getGetCommentsBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .merge(paginationSchema)
+    .merge(listQueryToolSchema)
     .extend({
       sort_order: sortOrderSchema,
       include_activity: z
@@ -264,6 +266,7 @@ export function getGetCommentsBaseSchema() {
 export function getGetCommentsInputSchema() {
   const baseSchema = createTaskIdentificationBaseSchema()
     .merge(paginationSchema)
+    .merge(listQueryToolSchema)
     .extend({
       sort_order: sortOrderSchema,
       include_activity: z

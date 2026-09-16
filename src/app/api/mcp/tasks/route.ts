@@ -16,6 +16,13 @@ import {
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  hasPrWhere,
+  parseListQueryFromSearchParams,
+  projectRows,
+  taskUrlFromListItem,
+} from '@/lib/mcp/listQuery'
 
 /** Minimal parent task info for MCP responses (when this task is a subtask). */
 export interface ParentTaskSummary {
@@ -54,6 +61,8 @@ export interface TaskListItem {
   updatedAt?: string
   permanentlyDeleteAt: string | null
   agent?: McpAgentSummary
+  uniqueIndex?: number
+  url?: string
 }
 
 export interface ListTasksResponse {
@@ -313,24 +322,54 @@ export async function GET(request: NextRequest) {
     // Continue with list tasks logic
     const projectId = projectIdForLookup
     const boardId = boardIdResult.value
-    const section = searchParams.get('section') || undefined
-    const assignedTo = searchParams.get('assigned_to') || undefined
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
+    const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
+    if (!sectionIdParam.ok) return sectionIdParam.response
+    let section = searchParams.get('section') || undefined
+    let assignedTo = searchParams.get('assigned_to') || undefined
     const priorityParam = searchParams.get('priority')
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
     const dueDateBefore = searchParams.get('due_date_before') || undefined
     const dueDateAfter = searchParams.get('due_date_after') || undefined
-    const status = (searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted') || 'Normal'
-    const labelsParam = searchParams.getAll('labels')
+    let status = (searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted') || 'Normal'
+    let labelsParam = searchParams.getAll('labels')
     const createdBy = searchParams.get('created_by') ? parseInt(searchParams.get('created_by')!) : null
-    const updatedSince = searchParams.get('updated_since') || undefined
+    let updatedSince = searchParams.get('updated_since') || undefined
     const createdSince = searchParams.get('created_since') || undefined
     const hasComments = searchParams.get('has_comments') ? searchParams.get('has_comments') === 'true' : undefined
     const hasAttachments = searchParams.get('has_attachments') ? searchParams.get('has_attachments') === 'true' : undefined
-    const search = searchParams.get('search') || undefined
-    const limit = Math.min(limitResult.value ?? 50, 100)
+    let search = searchParams.get('search') || undefined
+    let limit = Math.min(limitResult.value ?? 50, 100)
     const offset = offsetResult.value
-    const sortBy = searchParams.get('sort_by') || 'updatedAt'
-    const sortOrder = searchParams.get('sort_order') || 'desc'
+    let sortBy = searchParams.get('sort_by') || 'updatedAt'
+    let sortOrder = searchParams.get('sort_order') || 'desc'
+    let sectionId = sectionIdParam.value
+    if (listQuery) {
+      if (listQuery.query) search = listQuery.query
+      if (listQuery.filter.section) {
+        if (/^\d+$/.test(listQuery.filter.section)) {
+          sectionId = Number(listQuery.filter.section)
+        } else {
+          section = listQuery.filter.section
+        }
+      }
+      if (listQuery.filter.assignee !== undefined) {
+        assignedTo = String(listQuery.filter.assignee)
+      }
+      if (listQuery.filter.status) {
+        status = listQuery.filter.status as typeof status
+      }
+      if (listQuery.filter.label) {
+        labelsParam = Array.isArray(listQuery.filter.label)
+          ? listQuery.filter.label
+          : [listQuery.filter.label]
+      }
+      if (listQuery.filter.updated_since) updatedSince = listQuery.filter.updated_since
+      if (listQuery.sortBy) sortBy = listQuery.sortBy
+      if (listQuery.sortOrder) sortOrder = listQuery.sortOrder
+      if (listQuery.limit) limit = listQuery.limit
+    }
 
     // Get user's accessible projects
     const accessibleProjects = await prisma.project.findMany({
@@ -379,7 +418,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Filter by section
-    if (section) {
+    if (sectionId) {
+      where.sectionId = sectionId
+    } else if (section) {
       where.section = section
     }
 
@@ -478,6 +519,21 @@ export async function GET(request: NextRequest) {
       ]
     }
 
+    if (listQuery?.filter.has_pr) {
+      const prWhere = hasPrWhere(listQuery.filter.has_pr)
+      if (!prWhere) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.has_pr must be red, failing, true, false, open, green, or merged',
+          },
+          { status: 400 },
+        )
+      }
+      Object.assign(where, prWhere)
+    }
+
     // Build orderBy. Cursor mode forces a stable id-ascending walk so the
     // cursor (last seen id) yields a deterministic next page.
     const orderBy: any = {}
@@ -512,6 +568,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         ticketNumber: true,
+        uniqueIndex: true,
         title: true,
         section: true,
         description_:true,
@@ -621,6 +678,7 @@ export async function GET(request: NextRequest) {
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
+        uniqueIndex: task.uniqueIndex,
         title: task.title,
         description: mapTaskDescriptionContent(task),
         section: task.section,
@@ -659,6 +717,16 @@ export async function GET(request: NextRequest) {
       }
     })
 
+    if (listQueryEnabled) {
+      for (const task of taskList) {
+        const url = taskUrlFromListItem(task)
+        if (url) task.url = url
+      }
+    }
+    const projectedTasks = listQuery?.fields.length
+      ? projectRows(taskList as Array<Record<string, unknown>>, listQuery.fields)
+      : taskList
+
     // A full page in cursor mode implies there may be more rows; hand back the
     // cursor for the last id so the caller can fetch the next page.
     const nextCursor =
@@ -668,7 +736,7 @@ export async function GET(request: NextRequest) {
 
     const response: ListTasksResponse = {
       success: true,
-      tasks: taskList,
+      tasks: projectedTasks as TaskListItem[],
       total,
       limit,
       // Cursor mode ignores offset entirely, so report 0 rather than echoing a

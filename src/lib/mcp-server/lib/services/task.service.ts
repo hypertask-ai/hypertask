@@ -17,6 +17,7 @@ import {
 import { getPriorityValue, getEstimateValue, getEstimateFullValue } from '../../utils/constants';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { getTaskLinkInfo } from '../../utils/task-link';
+import { appendListQueryParams } from '@/lib/mcp/listQuery';
 import {
   attachFilesAfterMutation,
   type AttachmentUploadItem,
@@ -385,6 +386,7 @@ export class TaskService {
       if (validatedInput.sort_order) {
         queryParams.append('sort_order', validatedInput.sort_order);
       }
+      appendListQueryParams(queryParams, validatedInput)
 
       const response = await this.apiClient.makeRequest<ListTasksResponse>(
         `/mcp/tasks?${queryParams.toString()}`,

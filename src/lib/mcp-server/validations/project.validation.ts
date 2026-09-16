@@ -6,6 +6,7 @@
 
 import { z } from 'zod';
 import { paginationSchema, sortBySchema, sortOrderSchema } from './common/pagination';
+import { listQueryToolSchema } from './common/listQuery';
 import { estimateIndexOptionalSchema, statusFilterSchema } from './common/filters';
 
 /**
@@ -18,6 +19,7 @@ export function getListProjectsInputSchema() {
       search: z.string().min(1).optional(),
     })
     .merge(paginationSchema)
+    .merge(listQueryToolSchema)
     .extend({
       sort_by: sortBySchema,
       sort_order: sortOrderSchema,
@@ -158,6 +160,8 @@ export function getListSectionsBaseSchema() {
       board_id: z.number().int().positive().optional(),
       include_hidden: z.boolean().optional(),
     })
+    .merge(listQueryToolSchema)
+    .merge(paginationSchema)
     .strict();
 }
 
@@ -245,6 +249,8 @@ export function getListLabelsBaseSchema() {
         .int()
         .positive('project_id must be a positive integer'),
     })
+    .merge(listQueryToolSchema)
+    .merge(paginationSchema)
     .strict();
 }
 
@@ -412,6 +418,7 @@ export function getSectionCrudBaseSchema() {
       limit: z.number().int().positive().optional().describe('For get: max tasks to return. Default 50.'),
       offset: z.number().int().nonnegative().optional().describe('For get: pagination offset.'),
     })
+    .merge(listQueryToolSchema)
     .strict();
 }
 

@@ -16,6 +16,7 @@ import {
   sortOrderSchema,
   createSearchPaginationSchema,
 } from './common/pagination';
+import { listQueryToolSchema } from './common/listQuery';
 import {
   priorityFilterNoNoneSchema,
   priorityFilterSchema,
@@ -301,6 +302,7 @@ export function getListTasksInputSchema() {
       search: z.string().min(1).optional(),
     })
     .merge(paginationSchema)
+    .merge(listQueryToolSchema)
     .extend({
       sort_by: sortBySchema,
       sort_order: sortOrderSchema,
@@ -324,6 +326,7 @@ export function getSearchTasksInputSchema() {
       project_id: z.number().int().positive().optional(),
     })
     .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
+    .merge(listQueryToolSchema.omit({ query: true }))
     .strict();
 }
 
@@ -348,6 +351,7 @@ export function getEnhancedSearchTasksInputSchema() {
       status: statusFilterSchema,
     })
     .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
+    .merge(listQueryToolSchema.omit({ query: true }))
     .strict();
 }
 

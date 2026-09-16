@@ -4,6 +4,8 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import { createSection } from '@/lib/mcp/sections/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
+import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { applyCollectionQuery, parseListQueryFromSearchParams } from '@/lib/mcp/listQuery'
 
 export interface SectionListItem {
   id: number
@@ -258,6 +260,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const includeHidden = searchParams.get('include_hidden') === 'true'
+    const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
+    const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
 
     // Build where clause
     const where: any = {
@@ -314,9 +318,14 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       })
     )
 
+    const projected = listQuery
+      ? applyCollectionQuery(sectionList as Array<Record<string, unknown>>, listQuery, {
+          searchFields: ['section_title'],
+        })
+      : null
     const response: ListSectionsResponse = {
       success: true,
-      sections: sectionList,
+      sections: (projected?.items ?? sectionList) as SectionListItem[],
       projectId
     }
 

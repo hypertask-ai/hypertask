@@ -58,6 +58,7 @@ import {
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
+  HTPR_6530_MCP_LIST_QUERY_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -81,6 +82,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6530_MCP_LIST_QUERY_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Lets MCP list and search tools take query, filter, sort, fields, limit, and cursor so one call can return only the rows and columns the client asked for.",
+  },
   {
     key: HTPR_6532_STATELESS_MCP_FLAG,
     shippedOn: "2026-09-16",
