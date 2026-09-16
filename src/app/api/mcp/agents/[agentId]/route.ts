@@ -1,6 +1,15 @@
 import { handleDeleteAgentRequest } from '@/lib/mcp/agents/delete'
+import { handleGetAgentRequest } from '@/lib/mcp/agents/get'
 import { handlePatchAgentRequest } from '@/lib/mcp/agents/lifecycleRequests'
 import type { NextRequest } from 'next/server'
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ agentId: string }> }
+) {
+  const { agentId } = await context.params
+  return handleGetAgentRequest(request, agentId)
+}
 
 export async function DELETE(
   request: NextRequest,
