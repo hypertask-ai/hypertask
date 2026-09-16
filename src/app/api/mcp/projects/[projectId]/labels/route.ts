@@ -5,7 +5,8 @@ import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { applyCollectionQuery, parseListQueryFromSearchParams } from '@/lib/mcp/listQuery'
+import { applyCollectionQuery } from '@/lib/mcp/listQuery'
+import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
 
 /**
  * GET /api/mcp/projects/:projectId/labels
@@ -55,9 +56,12 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     })
     const mapped = labels.map((label) => ({ id: label.id, name: label.value || '' }))
     const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const listQuery = listQueryEnabled
-      ? parseListQueryFromSearchParams(request.nextUrl.searchParams)
-      : null
+    const parsedListQuery = readEnabledListQuery(
+      listQueryEnabled,
+      request.nextUrl.searchParams,
+    )
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
     const projected = listQuery
       ? applyCollectionQuery(mapped, listQuery, { searchFields: ['name'] })
       : null
@@ -66,6 +70,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       success: true,
       projectId,
       labels: projected?.items ?? mapped,
+      ...(listQueryEnabled ? { nextCursor: projected?.nextCursor ?? null } : {}),
     })
   } catch (error) {
     return NextResponse.json(

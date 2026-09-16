@@ -54,6 +54,18 @@ export type HasPrValue = (typeof HAS_PR_VALUES)[number]
 
 export type TaskStatusValue = 'Normal' | 'Archive' | 'Deleted'
 
+export type AssigneeFilter =
+  | { ok: true; kind: 'me' | 'unassigned' }
+  | { ok: true; kind: 'ids'; userIds: number[] }
+  | { ok: false; error: string }
+
+export class ListQueryParseError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ListQueryParseError'
+  }
+}
+
 /** When the client asked for a projection and no limit, keep the page small enough for a 2 KB payload. */
 export const FIELDS_DEFAULT_LIMIT = 20
 
@@ -142,10 +154,64 @@ function parseFilterParam(raw: string | null): ListFilter {
     try {
       return parseFilterValue(JSON.parse(trimmed))
     } catch {
-      return {}
+      throw new ListQueryParseError('filter must be valid JSON')
     }
   }
   return {}
+}
+
+export function parseAssigneeFilter(value: string | number | undefined): AssigneeFilter {
+  if (value === undefined || value === '') {
+    return { ok: false, error: 'filter.assignee must be me, unassigned, or a positive user id' }
+  }
+  if (typeof value === 'number') {
+    if (Number.isSafeInteger(value) && value > 0) {
+      return { ok: true, kind: 'ids', userIds: [value] }
+    }
+    return { ok: false, error: 'filter.assignee must be me, unassigned, or a positive user id' }
+  }
+  const trimmed = value.trim()
+  const keyword = trimmed.toLowerCase()
+  if (keyword === 'me' || keyword === 'unassigned') {
+    return { ok: true, kind: keyword }
+  }
+  const userIds = trimmed.split(',').map((part) => Number(part.trim()))
+  if (userIds.length === 0 || userIds.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    return {
+      ok: false,
+      error: 'filter.assignee must be me, unassigned, or a comma-separated list of user ids',
+    }
+  }
+  return { ok: true, kind: 'ids', userIds }
+}
+
+export function parseUpdatedSince(value?: string | null): Date | null {
+  if (!value?.trim()) return null
+  const time = Date.parse(value.trim())
+  return Number.isNaN(time) ? null : new Date(time)
+}
+
+export function parseNumericCursor(cursor?: string | null): number | null {
+  if (!cursor?.trim()) return null
+  const trimmed = cursor.trim()
+  if (!/^\d+$/.test(trimmed)) return null
+  const id = Number(trimmed)
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
+function assertKnownFilters(filter: ListFilter): void {
+  if (filter.assignee !== undefined) {
+    const parsed = parseAssigneeFilter(filter.assignee)
+    if (!parsed.ok) throw new ListQueryParseError(parsed.error)
+  }
+  if (filter.updated_since && !parseUpdatedSince(filter.updated_since)) {
+    throw new ListQueryParseError('filter.updated_since must be an ISO datetime')
+  }
+  if (filter.has_pr && !normalizeHasPr(filter.has_pr)) {
+    throw new ListQueryParseError(
+      'filter.has_pr must be red, failing, true, false, open, green, or merged',
+    )
+  }
 }
 
 export function parseListQueryFromSearchParams(searchParams: URLSearchParams): ParsedListQuery {
@@ -170,6 +236,7 @@ export function parseListQueryFromSearchParams(searchParams: URLSearchParams): P
   const parsedSort = parseSort(sort)
   const limitRaw = searchParams.get('limit')
   const limit = limitRaw && /^\d+$/.test(limitRaw) ? Number(limitRaw) : undefined
+  assertKnownFilters(filter)
 
   return {
     query: searchParams.get('query')?.trim() || undefined,
@@ -188,9 +255,11 @@ export function parseListQueryFromArgs(args: Record<string, unknown> | null | un
   const sort = typeof input.sort === 'string' ? input.sort : undefined
   const parsedSort = parseSort(sort)
   const limit = typeof input.limit === 'number' && Number.isFinite(input.limit) ? input.limit : undefined
+  const filter = parseFilterValue(input.filter)
+  assertKnownFilters(filter)
   return {
     query: typeof input.query === 'string' && input.query.trim() ? input.query.trim() : undefined,
-    filter: parseFilterValue(input.filter),
+    filter,
     sort,
     sortBy: parsedSort.sortBy,
     sortOrder: parsedSort.sortOrder,
@@ -292,6 +361,24 @@ function stringifySearchable(value: unknown): string {
   }
 }
 
+function asFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function compareSortValues(left: unknown, right: unknown): number {
+  const leftNumber = asFiniteNumber(left)
+  const rightNumber = asFiniteNumber(right)
+  if (leftNumber !== null && rightNumber !== null) return leftNumber - rightNumber
+  const a = stringifySearchable(left)
+  const b = stringifySearchable(right)
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
 export function applyCollectionQuery<T extends Record<string, unknown>>(
   items: T[],
   listQuery: ParsedListQuery,
@@ -342,9 +429,12 @@ export function applyCollectionQuery<T extends Record<string, unknown>>(
     const dir = listQuery.sortOrder === 'desc' ? -1 : 1
     const key = listQuery.sortBy
     filtered.sort((left, right) => {
-      const a = stringifySearchable((left as Record<string, unknown>)[key])
-      const b = stringifySearchable((right as Record<string, unknown>)[key])
-      return a < b ? -dir : a > b ? dir : 0
+      return (
+        compareSortValues(
+          (left as Record<string, unknown>)[key],
+          (right as Record<string, unknown>)[key],
+        ) * dir
+      )
     })
   }
 
@@ -382,4 +472,40 @@ export function taskUrlFromListItem(task: {
     (task.ticketNumber ? Number(String(task.ticketNumber).split('-').pop()) : NaN)
   if (!task.projectId || !Number.isFinite(uniqueIndex) || uniqueIndex <= 0) return undefined
   return `https://app.hypertask.ai/detail/project-${task.projectId}/${uniqueIndex}`
+}
+
+export type TaskLinkInfo = {
+  url: string
+  format: string
+  example: string
+}
+
+export function taskLinkFromListItem(task: {
+  ticketNumber?: string | null
+  projectId?: number | null
+  uniqueIndex?: number | null
+}): TaskLinkInfo | undefined {
+  const url = taskUrlFromListItem(task)
+  if (!url || !task.projectId) return undefined
+  return {
+    url,
+    format: 'https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex}',
+    example: url,
+  }
+}
+
+export function withTaskPresentation<T extends {
+  ticketNumber?: string | null
+  projectId?: number | null
+  uniqueIndex?: number | null
+  url?: string
+  link?: TaskLinkInfo
+}>(task: T): T & { url?: string; link?: TaskLinkInfo } {
+  const url = taskUrlFromListItem(task)
+  const link = taskLinkFromListItem(task)
+  return {
+    ...task,
+    ...(url ? { url } : {}),
+    ...(link ? { link } : {}),
+  }
 }

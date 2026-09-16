@@ -56,11 +56,11 @@ function loadMappers() {
 }
 
 test("the MCP task list applies the shared query, filter, fields contract", () => {
-  assert.match(routeSource, /parseListQueryFromSearchParams/);
+  assert.match(routeSource, /readEnabledListQuery/);
   assert.match(routeSource, /hasPrWhere/);
   assert.match(routeSource, /HTPR_6530_MCP_LIST_QUERY_FLAG/);
   assert.match(routeSource, /projectRows/);
-  assert.match(routeSource, /taskUrlFromListItem/);
+  assert.match(routeSource, /withTaskPresentation/);
 });
 
 test("the MCP task list selects labels in the paginated task query", () => {

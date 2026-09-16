@@ -16,7 +16,7 @@ import {
   sortOrderSchema,
   createSearchPaginationSchema,
 } from './common/pagination';
-import { listQueryToolSchema } from './common/listQuery';
+import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
 import {
   priorityFilterNoNoneSchema,
   priorityFilterSchema,
@@ -280,29 +280,31 @@ export function getGetTasksBaseSchema() {
 /**
  * Schema for list_tasks tool input
  */
-export function getListTasksInputSchema() {
-  return z
-    .object({
-      project_id: z.number().int().positive().optional(),
-      /** Prefer this for filtering; aligns with GET /mcp/tasks?section_id= when the API expects a column id. */
-      section_id: z.coerce.number().int().positive().optional(),
-      section: z.string().min(1).optional(),
-      assigned_to: assignedToFilterSchema,
-      priority: priorityFilterNoNoneSchema,
-      has_due_date: z.boolean().optional(),
-      due_date_before: z.string().datetime().optional(),
-      due_date_after: z.string().datetime().optional(),
-      status: statusFilterSchema,
-      labels: labelsFilterSchema,
-      created_by: z.number().int().positive().optional(),
-      updated_since: z.string().datetime().optional(),
-      created_since: z.string().datetime().optional(),
-      has_comments: z.boolean().optional(),
-      has_attachments: z.boolean().optional(),
-      search: z.string().min(1).optional(),
-    })
-    .merge(paginationSchema)
-    .merge(listQueryToolSchema)
+export function getListTasksInputSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(
+    z
+      .object({
+        project_id: z.number().int().positive().optional(),
+        /** Prefer this for filtering; aligns with GET /mcp/tasks?section_id= when the API expects a column id. */
+        section_id: z.coerce.number().int().positive().optional(),
+        section: z.string().min(1).optional(),
+        assigned_to: assignedToFilterSchema,
+        priority: priorityFilterNoNoneSchema,
+        has_due_date: z.boolean().optional(),
+        due_date_before: z.string().datetime().optional(),
+        due_date_after: z.string().datetime().optional(),
+        status: statusFilterSchema,
+        labels: labelsFilterSchema,
+        created_by: z.number().int().positive().optional(),
+        updated_since: z.string().datetime().optional(),
+        created_since: z.string().datetime().optional(),
+        has_comments: z.boolean().optional(),
+        has_attachments: z.boolean().optional(),
+        search: z.string().min(1).optional(),
+      })
+      .merge(paginationSchema),
+    options,
+  )
     .extend({
       sort_by: sortBySchema,
       sort_order: sortOrderSchema,
@@ -310,52 +312,56 @@ export function getListTasksInputSchema() {
     .strict();
 }
 
-export const ListTasksInputSchema = getListTasksInputSchema();
+export const ListTasksInputSchema = getListTasksInputSchema({ listQuery: true });
 export type ListTasksInput = z.infer<typeof ListTasksInputSchema>;
 
 /**
  * Schema for search_tasks tool input (basic)
  */
-export function getSearchTasksInputSchema() {
-  return z
-    .object({
-      query: z
-        .string()
-        .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
-      board_id: z.number().int().positive().optional(),
-      project_id: z.number().int().positive().optional(),
-    })
-    .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
-    .merge(listQueryToolSchema.omit({ query: true }))
-    .strict();
+export function getSearchTasksInputSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(
+    z
+      .object({
+        query: z
+          .string()
+          .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
+        board_id: z.number().int().positive().optional(),
+        project_id: z.number().int().positive().optional(),
+      })
+      .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault)),
+    options,
+    { omitQuery: true },
+  ).strict();
 }
 
-export const SearchTasksInputSchema = getSearchTasksInputSchema();
+export const SearchTasksInputSchema = getSearchTasksInputSchema({ listQuery: true });
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
 /**
  * Enhanced schema for search_tasks tool input with additional filters
  */
-export function getEnhancedSearchTasksInputSchema() {
-  return z
-    .object({
-      query: z
-        .string()
-        .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
-      board_id: z.number().int().positive().optional(),
-      project_id: z.number().int().positive().optional(),
-      assigned_to: assignedToSearchFilterSchema,
-      priority: priorityFilterSchema,
-      section: z.string().min(1).optional(),
-      has_due_date: z.boolean().optional(),
-      status: statusFilterSchema,
-    })
-    .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
-    .merge(listQueryToolSchema.omit({ query: true }))
-    .strict();
+export function getEnhancedSearchTasksInputSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(
+    z
+      .object({
+        query: z
+          .string()
+          .max(config.limits.searchQueryMaxLength, `Search query cannot exceed ${config.limits.searchQueryMaxLength} characters`),
+        board_id: z.number().int().positive().optional(),
+        project_id: z.number().int().positive().optional(),
+        assigned_to: assignedToSearchFilterSchema,
+        priority: priorityFilterSchema,
+        section: z.string().min(1).optional(),
+        has_due_date: z.boolean().optional(),
+        status: statusFilterSchema,
+      })
+      .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault)),
+    options,
+    { omitQuery: true },
+  ).strict();
 }
 
-export const EnhancedSearchTasksInputSchema = getEnhancedSearchTasksInputSchema();
+export const EnhancedSearchTasksInputSchema = getEnhancedSearchTasksInputSchema({ listQuery: true });
 export type EnhancedSearchTasksInput = z.infer<typeof EnhancedSearchTasksInputSchema>;
 
 /**

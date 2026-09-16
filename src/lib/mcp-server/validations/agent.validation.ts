@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { paginationSchema } from './common/pagination'
-import { listQueryToolSchema } from './common/listQuery'
+import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery'
 
-export function getListAgentsInputSchema() {
-  return z.object({}).merge(listQueryToolSchema).merge(paginationSchema).strict()
+export function getListAgentsInputSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(z.object({}), options).merge(paginationSchema).strict()
 }
 
-export const ListAgentsInputSchema = getListAgentsInputSchema()
+export const ListAgentsInputSchema = getListAgentsInputSchema({ listQuery: true })
 export type ListAgentsInput = z.infer<typeof ListAgentsInputSchema>

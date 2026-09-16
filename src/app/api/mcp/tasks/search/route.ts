@@ -9,11 +9,17 @@ import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   hasPrWhere,
   normalizeTaskStatus,
-  parseListQueryFromSearchParams,
+  parseAssigneeFilter,
+  parseNumericCursor,
+  parseUpdatedSince,
   projectRows,
   resolveListLimit,
-  taskUrlFromListItem,
+  withTaskPresentation,
 } from '@/lib/mcp/listQuery'
+import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+
+const SEARCH_SORT_FIELDS = ['id', 'createdAt', 'updatedAt', 'title', 'dueDate', 'ticketNumber'] as const
+type SearchSortField = (typeof SEARCH_SORT_FIELDS)[number]
 
 export interface TaskSearchItem {
   id: number
@@ -28,6 +34,12 @@ export interface TaskSearchItem {
   dueDate?: string
   createdAt: string
   agent?: McpAgentSummary
+  url?: string
+  link?: {
+    url: string
+    format: string
+    example: string
+  }
 }
 
 export interface SearchTasksResponse {
@@ -35,6 +47,7 @@ export interface SearchTasksResponse {
   tasks: TaskSearchItem[]
   total: number
   boardId?: number
+  nextCursor?: string | null
 }
 
 /**
@@ -63,7 +76,9 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
+    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
     const query = searchParams.get('q') ?? searchParams.get('query') ?? listQuery?.query
     const boardId = searchParams.get('board_id') ? parseInt(searchParams.get('board_id')!) : null
     const projectId = searchParams.get('project_id') ? parseInt(searchParams.get('project_id')!) : null
@@ -96,6 +111,29 @@ export async function GET(request: NextRequest) {
         : [listQuery.filter.label]
       : []
     const updatedSince = listQuery?.filter.updated_since
+    const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
+    if (listQuery?.cursor && cursorId === null) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'cursor must be a previous nextCursor value',
+        },
+        { status: 400 },
+      )
+    }
+    const sortField = listQuery?.sortBy
+    if (sortField && !SEARCH_SORT_FIELDS.includes(sortField as SearchSortField)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: `sort must be one of ${SEARCH_SORT_FIELDS.join(', ')}`,
+        },
+        { status: 400 },
+      )
+    }
+    const sortOrder = listQuery?.sortOrder ?? 'asc'
 
     if (!query || query.length > 200) {
       return NextResponse.json(
@@ -156,19 +194,52 @@ export async function GET(request: NextRequest) {
       }
     }
     if (updatedSince) {
-      const since = new Date(updatedSince)
-      if (!Number.isNaN(since.getTime())) {
-        where.updatedAt = { gte: since }
+      const since = parseUpdatedSince(updatedSince)
+      if (!since) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.updated_since must be an ISO datetime',
+          },
+          { status: 400 },
+        )
       }
+      where.updatedAt = { gte: since }
     }
     if (listQuery?.filter.has_pr) {
       const prWhere = hasPrWhere(listQuery.filter.has_pr)
-      if (prWhere) Object.assign(where, prWhere)
+      if (!prWhere) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.has_pr must be red, failing, true, false, open, green, or merged',
+          },
+          { status: 400 },
+        )
+      }
+      Object.assign(where, prWhere)
     }
 
     // Filter by assignee
     if (assignedTo) {
-      if (assignedTo === 'me') {
+      if (listQuery) {
+        const assignee = parseAssigneeFilter(assignedTo)
+        if (!assignee.ok) {
+          return NextResponse.json(
+            { success: false, error: 'Validation error', message: assignee.error },
+            { status: 400 },
+          )
+        }
+        if (assignee.kind === 'me') {
+          where.assignees = { some: { userId: user.id } }
+        } else if (assignee.kind === 'unassigned') {
+          where.assignees = { none: {} }
+        } else {
+          where.assignees = { some: { userId: { in: assignee.userIds } } }
+        }
+      } else if (assignedTo === 'me') {
         where.assignees = { some: { userId: user.id } }
       } else if (assignedTo === 'unassigned') {
         where.assignees = { none: {} }
@@ -197,7 +268,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Prefer Turbopuffer for full-text search (relevance, description)
+    // Prefer Turbopuffer for full-text ranking. Extra filters and explicit
+    // sort must run in Prisma so matching rows outside the candidate window
+    // are not dropped, and requested order is honored.
+    const extraFilters = Boolean(
+      labelsParam.length > 0 ||
+        updatedSince ||
+        listQuery?.filter.has_pr ||
+        listQuery?.filter.assignee !== undefined,
+    )
     const turbopufferIds = await turbopufferSearchTaskIds({
       searchQuery: query,
       projectIds: accessibleProjectIds,
@@ -205,11 +284,13 @@ export async function GET(request: NextRequest) {
       projectId: targetProjectId ?? undefined,
       perPage: Math.min(limit * 5, 100),
     })
+    const useTurbopufferWindow =
+      turbopufferIds.length > 0 && !extraFilters && !sortField
 
-    if (turbopufferIds.length > 0) {
-      where.id = { in: turbopufferIds }
+    if (useTurbopufferWindow) {
+      const start = cursorId ? turbopufferIds.indexOf(cursorId) + 1 : 0
+      where.id = { in: turbopufferIds.slice(Math.max(start, 0)) }
     } else {
-      // Fallback: Prisma-only text search when Turbopuffer is unavailable or returns nothing
       where.OR = [
         { title: { contains: query, mode: 'insensitive' } },
         { description: { contains: query, mode: 'insensitive' } },
@@ -220,7 +301,12 @@ export async function GET(request: NextRequest) {
     // Get total count
     const total = await prisma.task.count({ where })
 
-    // Get tasks (preserve Turbopuffer order when applicable)
+    const orderBy = sortField
+      ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
+      : useTurbopufferWindow
+        ? undefined
+        : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }]
+
     const tasks = await prisma.task.findMany({
       where,
       select: {
@@ -239,27 +325,37 @@ export async function GET(request: NextRequest) {
         },
         dueDate: true,
         createdAt: true,
+        updatedAt: true,
         agent: {
           select: mcpVisibleAgentSelect(user.id),
         },
       },
-      ...(turbopufferIds.length > 0
+      ...(orderBy ? { orderBy } : {}),
+      ...(useTurbopufferWindow
         ? {}
-        : { orderBy: { updatedAt: 'desc' as const }, take: limit }),
+        : {
+            take: limit,
+            skip: cursorId ? 1 : 0,
+            ...(cursorId ? { cursor: { id: cursorId } } : {}),
+          }),
     })
 
-    const orderedTasks =
-      turbopufferIds.length > 0
-        ? turbopufferIds
-            .map((id) => tasks.find((t) => t.id === id))
-            .filter((t): t is NonNullable<typeof t> => t != null)
-            .slice(0, limit)
-        : tasks
+    const orderedTasks = useTurbopufferWindow
+      ? turbopufferIds
+          .map((id) => tasks.find((task) => task.id === id))
+          .filter((task): task is NonNullable<typeof task> => task != null)
+          .slice(0, limit)
+      : tasks
+
+    const nextCursor =
+      orderedTasks.length === limit
+        ? String(orderedTasks[orderedTasks.length - 1]?.id ?? '')
+        : null
 
     // Transform to response format
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
-      return {
+      const presented = withTaskPresentation({
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         uniqueIndex: task.uniqueIndex,
@@ -272,15 +368,9 @@ export async function GET(request: NextRequest) {
         dueDate: task.dueDate?.toISOString() || undefined,
         createdAt: task.createdAt.toISOString(),
         ...(agent ? { agent } : {}),
-      }
+      })
+      return presented
     })
-
-    if (listQueryEnabled) {
-      for (const task of taskList) {
-        const url = taskUrlFromListItem(task)
-        if (url) (task as TaskSearchItem & { url?: string }).url = url
-      }
-    }
 
     const response: SearchTasksResponse = {
       success: true,
@@ -288,7 +378,8 @@ export async function GET(request: NextRequest) {
         ? projectRows(taskList as Array<Record<string, unknown>>, listQuery.fields)
         : taskList) as TaskSearchItem[],
       total,
-      boardId: boardId || projectId || undefined
+      boardId: boardId || projectId || undefined,
+      ...(listQueryEnabled ? { nextCursor: nextCursor || null } : {}),
     }
 
     return NextResponse.json(response)

@@ -5,13 +5,17 @@ import {
   appendListQueryParams,
   FIELDS_DEFAULT_LIMIT,
   hasPrWhere,
+  ListQueryParseError,
   normalizeTaskStatus,
+  parseAssigneeFilter,
   parseListQueryFromArgs,
   parseListQueryFromSearchParams,
   parseSort,
+  parseUpdatedSince,
   projectRows,
   resolveListLimit,
   taskUrlFromListItem,
+  withTaskPresentation,
 } from './listQuery'
 
 function demo() {
@@ -125,6 +129,48 @@ function demo() {
   )
   assert.equal(paged.total, 1)
   assert.deepEqual(paged.items, [{ name: 'Beta review' }])
+
+  const numeric = applyCollectionQuery(
+    [
+      { id: 1, ranking: 10 },
+      { id: 2, ranking: 2 },
+    ],
+    parseListQueryFromArgs({ sort: 'ranking:asc' }),
+  )
+  assert.deepEqual(numeric.items.map((item) => item.ranking), [2, 10])
+
+  assert.throws(
+    () => parseListQueryFromSearchParams(new URLSearchParams({ filter: '{not-json' })),
+    ListQueryParseError,
+  )
+  assert.throws(
+    () => parseListQueryFromArgs({ filter: { has_pr: 'nope' } }),
+    ListQueryParseError,
+  )
+  assert.throws(
+    () => parseListQueryFromArgs({ filter: { assignee: 'nobody' } }),
+    ListQueryParseError,
+  )
+  assert.throws(
+    () => parseListQueryFromArgs({ filter: { updated_since: 'last-week' } }),
+    ListQueryParseError,
+  )
+  assert.equal(parseAssigneeFilter('me').ok, true)
+  assert.ok(parseUpdatedSince('2026-09-01T00:00:00.000Z'))
+  assert.equal(parseUpdatedSince('last-week'), null)
+
+  const presented = withTaskPresentation({
+    title: 'Ticket',
+    projectId: 15,
+    ticketNumber: 'HTPR-4000',
+    uniqueIndex: 4000,
+  })
+  assert.equal(presented.url, 'https://app.hypertask.ai/detail/project-15/4000')
+  assert.equal(presented.link?.url, presented.url)
+  const projectedLink = projectRows([presented], ['title', 'projectId', 'ticketNumber'])
+  assert.deepEqual(Object.keys(projectedLink[0]).sort(), ['projectId', 'ticketNumber', 'title'])
+  const onlyLink = projectRows([presented], ['link'])
+  assert.equal((onlyLink[0].link as { url?: string }).url, presented.url)
 }
 
 demo()

@@ -10,7 +10,12 @@ import {
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constants'
 import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
-import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  HTPR_6530_MCP_LIST_QUERY_FLAG,
+  HTPR_6532_STATELESS_MCP_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
+import { resolvePortableTools } from './listQueryContract'
 import { NextRequest } from 'next/server'
 import {
   handleStatelessMcpRequest,
@@ -25,45 +30,50 @@ function tokenFrom(extra: { authInfo?: AuthInfo }): string {
   return token
 }
 
-const handler = createMcpHandler(
-  (server) => {
-    for (const tool of MCP_TOOLS as PortableTool[]) {
-      server.tool(tool.name, tool.description, tool.parameters.shape, async (args, extra) => {
-        const token = tokenFrom(extra)
-        return {
-          content: [
-            {
-              type: 'text',
-              text: await tool.execute(
-                args,
-                token,
-                extra.requestId === undefined || extra.requestId === null
-                  ? undefined
-                  : {
-                      requestId: String(extra.requestId),
-                      sessionId: extra.sessionId,
-                      clientFingerprint: crypto
-                        .createHash('sha256')
-                        .update(token)
-                        .digest('hex'),
-                    }
-              ),
-            },
-          ],
-        }
-      })
+function registerMcpTools(listQueryEnabled: boolean) {
+  return createMcpHandler(
+    (server) => {
+      for (const tool of resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)) {
+        server.tool(tool.name, tool.description, tool.parameters.shape, async (args, extra) => {
+          const token = tokenFrom(extra)
+          return {
+            content: [
+              {
+                type: 'text',
+                text: await tool.execute(
+                  args,
+                  token,
+                  extra.requestId === undefined || extra.requestId === null
+                    ? undefined
+                    : {
+                        requestId: String(extra.requestId),
+                        sessionId: extra.sessionId,
+                        clientFingerprint: crypto
+                          .createHash('sha256')
+                          .update(token)
+                          .digest('hex'),
+                      }
+                ),
+              },
+            ],
+          }
+        })
+      }
+    },
+    {
+      serverInfo: MCP_SERVER_INFO,
+    },
+    {
+      basePath: '',
+      redisUrl: process.env.REDIS_URL,
+      maxDuration: 800,
+      verboseLogs: false,
     }
-  },
-  {
-    serverInfo: MCP_SERVER_INFO,
-  },
-  {
-    basePath: '',
-    redisUrl: process.env.REDIS_URL,
-    maxDuration: 800,
-    verboseLogs: false,
-  }
-)
+  )
+}
+
+const legacyHandler = registerMcpTools(false)
+const listQueryHandler = registerMcpTools(true)
 
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
@@ -101,10 +111,15 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
   }
 }
 
-const authenticatedMcpHandler = withMcpAuth(handler, verifyToken, {
-  required: true,
-  resourceMetadataPath: '/.well-known/oauth-protected-resource',
-})
+function authenticateMcpHandler(handler: ReturnType<typeof registerMcpTools>) {
+  return withMcpAuth(handler, verifyToken, {
+    required: true,
+    resourceMetadataPath: '/.well-known/oauth-protected-resource',
+  })
+}
+
+const authenticatedLegacyHandler = authenticateMcpHandler(legacyHandler)
+const authenticatedListQueryHandler = authenticateMcpHandler(listQueryHandler)
 
 async function boundMcpRequest(request: Request): Promise<Request> {
   if (request.method !== 'POST' || !request.body) return request
@@ -124,8 +139,6 @@ async function boundMcpRequest(request: Request): Promise<Request> {
   } as RequestInit & { duplex: 'half' })
 }
 
-const portableTools = MCP_TOOLS as PortableTool[]
-
 /** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
 export async function mcpHandler(request: Request): Promise<Response> {
   let working = request
@@ -144,7 +157,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
   }
 
   if (working.method === 'OPTIONS') {
-    return handleStatelessMcpRequest(working, null, portableTools)
+    return handleStatelessMcpRequest(working, null, MCP_TOOLS as PortableTool[])
   }
 
   const bearer = extractBearerToken(working.headers.get('Authorization'))
@@ -154,13 +167,19 @@ export async function mcpHandler(request: Request): Promise<Response> {
   }
 
   const userId = Number(authInfo.clientId)
+  const listQueryEnabled =
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, userId).catch(() => false))
+  const tools = resolvePortableTools(MCP_TOOLS as PortableTool[], listQueryEnabled)
   const stateless =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
 
   if (stateless) {
-    return handleStatelessMcpRequest(working, authInfo, portableTools)
+    return handleStatelessMcpRequest(working, authInfo, tools)
   }
 
-  return authenticatedMcpHandler(working)
+  return listQueryEnabled
+    ? authenticatedListQueryHandler(working)
+    : authenticatedLegacyHandler(working)
 }

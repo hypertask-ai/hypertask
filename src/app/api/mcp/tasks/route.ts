@@ -20,11 +20,12 @@ import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   hasPrWhere,
   normalizeTaskStatus,
-  parseListQueryFromSearchParams,
+  parseAssigneeFilter,
   projectRows,
   resolveListLimit,
-  taskUrlFromListItem,
+  withTaskPresentation,
 } from '@/lib/mcp/listQuery'
+import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
 
 /** Minimal parent task info for MCP responses (when this task is a subtask). */
 export interface ParentTaskSummary {
@@ -65,6 +66,11 @@ export interface TaskListItem {
   agent?: McpAgentSummary
   uniqueIndex?: number
   url?: string
+  link?: {
+    url: string
+    format: string
+    example: string
+  }
 }
 
 export interface ListTasksResponse {
@@ -325,7 +331,9 @@ export async function GET(request: NextRequest) {
     const projectId = projectIdForLookup
     const boardId = boardIdResult.value
     const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
-    const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
+    const parsedListQuery = readEnabledListQuery(listQueryEnabled, searchParams)
+    if (parsedListQuery.error) return parsedListQuery.error
+    const listQuery = parsedListQuery.listQuery
     const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
     if (!sectionIdParam.ok) return sectionIdParam.response
     let section = searchParams.get('section') || undefined
@@ -357,6 +365,13 @@ export async function GET(request: NextRequest) {
         }
       }
       if (listQuery.filter.assignee !== undefined) {
+        const assignee = parseAssigneeFilter(listQuery.filter.assignee)
+        if (!assignee.ok) {
+          return NextResponse.json(
+            { success: false, error: 'Validation error', message: assignee.error },
+            { status: 400 },
+          )
+        }
         assignedTo = String(listQuery.filter.assignee)
       }
       if (listQuery.filter.status) {
@@ -730,15 +745,12 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    if (listQueryEnabled) {
-      for (const task of taskList) {
-        const url = taskUrlFromListItem(task)
-        if (url) task.url = url
-      }
-    }
-    const projectedTasks = listQuery?.fields.length
-      ? projectRows(taskList as Array<Record<string, unknown>>, listQuery.fields)
+    const presentedTasks = listQueryEnabled
+      ? taskList.map((task) => withTaskPresentation(task))
       : taskList
+    const projectedTasks = listQuery?.fields.length
+      ? projectRows(presentedTasks as Array<Record<string, unknown>>, listQuery.fields)
+      : presentedTasks
 
     // A full page in cursor mode implies there may be more rows; hand back the
     // cursor for the last id so the caller can fetch the next page.

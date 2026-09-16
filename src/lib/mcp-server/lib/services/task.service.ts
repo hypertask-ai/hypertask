@@ -17,7 +17,7 @@ import {
 import { getPriorityValue, getEstimateValue, getEstimateFullValue } from '../../utils/constants';
 import { buildPaginationMetadata } from '../../utils/pagination';
 import { getTaskLinkInfo } from '../../utils/task-link';
-import { appendListQueryParams } from '@/lib/mcp/listQuery';
+import { appendListQueryParams, parseFields } from '@/lib/mcp/listQuery';
 import {
   attachFilesAfterMutation,
   type AttachmentUploadItem,
@@ -404,9 +404,10 @@ export class TaskService {
       // Note: ListTasksResponse uses simplified priority string, so we need to handle it differently
       // If the API returns priority as a string, we keep it as-is
       // If it returns priority_index, we normalize it
+      const requestedFields = parseFields(validatedInput.fields)
       const normalizedTasks = validTasks.map((task) => {
-        // TaskListItem has priority as optional string, so normalization happens at API level
-        // or we'd need to change the interface to include priority_index
+        // Projection is final: never add row fields after the route projected.
+        if (requestedFields.length > 0 || task.link) return task
 
         // Add task link information for MCP clients (guard task.projectId)
         const linkInfo =

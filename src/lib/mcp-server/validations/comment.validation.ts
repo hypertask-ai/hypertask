@@ -10,7 +10,7 @@ import {
   createTaskIdentificationBaseSchema,
 } from './common/task-identification';
 import { paginationSchema, sortOrderSchema } from './common/pagination';
-import { listQueryToolSchema } from './common/listQuery';
+import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery';
 import { inlineAttachmentsSchema } from './attachment.validation';
 import { hasMarkdownStructure } from '../../../utils/helperFunctions/markdownToHtml';
 
@@ -245,10 +245,11 @@ export function validateAndSanitizeAddCommentInput(input: unknown): AddCommentIn
  * Base schema for get_comments tool (without refine validation)
  * Used for FastMCP parameter validation
  */
-export function getGetCommentsBaseSchema() {
-  return createTaskIdentificationBaseSchema()
-    .merge(paginationSchema)
-    .merge(listQueryToolSchema)
+export function getGetCommentsBaseSchema(options?: ListQuerySchemaOptions) {
+  return withListQuerySchema(
+    createTaskIdentificationBaseSchema().merge(paginationSchema),
+    options,
+  )
     .extend({
       sort_order: sortOrderSchema,
       include_activity: z
@@ -263,18 +264,8 @@ export function getGetCommentsBaseSchema() {
  * Schema for get_comments tool input (with refine validation)
  * Either task_id or ticket_number must be provided
  */
-export function getGetCommentsInputSchema() {
-  const baseSchema = createTaskIdentificationBaseSchema()
-    .merge(paginationSchema)
-    .merge(listQueryToolSchema)
-    .extend({
-      sort_order: sortOrderSchema,
-      include_activity: z
-        .boolean()
-        .default(false)
-        .describe('Include task activity history such as label, move, assignment, and priority changes. Defaults to false.'),
-    })
-    .strict();
+export function getGetCommentsInputSchema(options?: ListQuerySchemaOptions) {
+  const baseSchema = getGetCommentsBaseSchema(options);
 
   return baseSchema
     .refine(
@@ -316,7 +307,7 @@ export function getGetCommentsInputSchema() {
     );
 }
 
-export const GetCommentsInputSchema = getGetCommentsInputSchema();
+export const GetCommentsInputSchema = getGetCommentsInputSchema({ listQuery: true });
 export type GetCommentsInput = z.infer<typeof GetCommentsInputSchema>;
 
 /**
