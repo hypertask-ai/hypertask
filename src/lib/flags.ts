@@ -56,6 +56,7 @@ import {
   MY_TASKS_SNOOZE_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6512_SEED_TEAM_AGENT_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -79,6 +80,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6512_SEED_TEAM_AGENT_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "When Owner or QA opens Agent Chat or lists a team that has no live agent they can see, seed a Hyper AI agent on a board of that team so the roster is not empty.",
+  },
   {
     key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
     shippedOn: "2026-09-15",

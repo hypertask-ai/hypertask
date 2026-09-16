@@ -66,6 +66,7 @@ export const MY_TASKS_SNOOZE_FLAG = "htpr-6461-my-tasks-snooze";
 export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
 export const HTPR_6514_COMMENT_LONG_PRESS_FLAG =
   "htpr-6514-comment-long-press";
+export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
 /** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
 export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
   "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";
