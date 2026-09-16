@@ -24,7 +24,6 @@ function rpc(
     token?: string | null
     sessionId?: string
     accept?: string
-    instance?: 'a' | 'b'
   } = {}
 ): Request {
   const headers = new Headers({
@@ -35,7 +34,6 @@ function rpc(
     headers.set('Authorization', `Bearer ${options.token ?? 'test-token'}`)
   }
   if (options.sessionId) headers.set('Mcp-Session-Id', options.sessionId)
-  if (options.instance) headers.set('X-Test-Instance', options.instance)
   return new Request('https://mcp.hypertask.ai/mcp', {
     method: 'POST',
     headers,
@@ -48,13 +46,9 @@ function rpc(
   })
 }
 
-function handler(instance: 'a' | 'b') {
-  const auth = { token: 'test-token', clientId: '6' }
+function instance() {
   return (request: Request) =>
-    handleStatelessMcpRequest(request, auth, [echoTool]).then((response) => {
-      response.headers.set('X-Test-Instance', instance)
-      return response
-    })
+    handleStatelessMcpRequest(request, { token: 'test-token', clientId: '6' }, [echoTool])
 }
 
 async function json(response: Response) {
@@ -62,8 +56,8 @@ async function json(response: Response) {
 }
 
 test('two isolated instances interleave initialize, tools/list, and tools/call without session state', async () => {
-  const instanceA = handler('a')
-  const instanceB = handler('b')
+  const instanceA = instance()
+  const instanceB = instance()
 
   const initialize = await instanceA(
     rpc('initialize', {

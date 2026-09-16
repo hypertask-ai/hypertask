@@ -124,27 +124,27 @@ async function boundMcpRequest(request: Request): Promise<Request> {
   } as RequestInit & { duplex: 'half' })
 }
 
+const portableTools = MCP_TOOLS as PortableTool[]
+
 /** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
 export async function mcpHandler(request: Request): Promise<Response> {
   let working = request
-  if (request.method === 'POST' && request.body) {
-    try {
-      working = await boundMcpRequest(request)
-    } catch (error) {
-      if (!(error instanceof McpAttachmentRequestBodyError)) throw error
-      return Response.json(
-        {
-          jsonrpc: '2.0',
-          error: { code: -32600, message: error.message },
-          id: null,
-        },
-        { status: error.status }
-      )
-    }
+  try {
+    working = await boundMcpRequest(request)
+  } catch (error) {
+    if (!(error instanceof McpAttachmentRequestBodyError)) throw error
+    return Response.json(
+      {
+        jsonrpc: '2.0',
+        error: { code: -32600, message: error.message },
+        id: null,
+      },
+      { status: error.status }
+    )
   }
 
   if (working.method === 'OPTIONS') {
-    return handleStatelessMcpRequest(working, null, MCP_TOOLS as PortableTool[])
+    return handleStatelessMcpRequest(working, null, portableTools)
   }
 
   const bearer = extractBearerToken(working.headers.get('Authorization'))
@@ -159,7 +159,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
     (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
 
   if (stateless) {
-    return handleStatelessMcpRequest(working, authInfo, MCP_TOOLS as PortableTool[])
+    return handleStatelessMcpRequest(working, authInfo, portableTools)
   }
 
   return authenticatedMcpHandler(working)

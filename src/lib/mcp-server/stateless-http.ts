@@ -111,6 +111,23 @@ function isNotification(message: JsonRpcMessage): boolean {
   return message.id === undefined && typeof message.method === 'string'
 }
 
+function objectParams(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
+}
+
+function methodNotAllowed(): Response {
+  return new Response('Method not allowed. This MCP server is stateless.', {
+    status: 405,
+    headers: {
+      ...CORS_HEADERS,
+      Allow: 'POST, OPTIONS',
+      'Content-Type': 'text/plain; charset=utf-8',
+    },
+  })
+}
+
 function acceptsSseOnly(accept: string | null): boolean {
   if (!accept) return false
   const wantsSse = accept.includes('text/event-stream')
@@ -159,10 +176,7 @@ async function dispatchMethod(
 ): Promise<unknown> {
   const id = (message.id ?? null) as JsonRpcId
   const method = typeof message.method === 'string' ? message.method : ''
-  const params =
-    message.params && typeof message.params === 'object' && !Array.isArray(message.params)
-      ? (message.params as Record<string, unknown>)
-      : {}
+  const params = objectParams(message.params)
 
   switch (method) {
     case 'initialize': {
@@ -239,29 +253,18 @@ export async function handleStatelessMcpRequest(
     return new Response(null, { status: 204, headers: CORS_HEADERS })
   }
 
-  if (request.method === 'GET' || request.method === 'DELETE') {
-    if (!auth?.token) return mcpUnauthorizedResponse(request)
-    return new Response('Method not allowed. This MCP server is stateless.', {
-      status: 405,
-      headers: {
-        ...CORS_HEADERS,
-        Allow: 'POST, OPTIONS',
-        'Content-Type': 'text/plain; charset=utf-8',
-      },
-    })
-  }
-
   if (request.method !== 'POST') {
-    return new Response('Method not allowed. This MCP server is stateless.', {
-      status: 405,
-      headers: {
-        ...CORS_HEADERS,
-        Allow: 'POST, OPTIONS',
-      },
-    })
+    if ((request.method === 'GET' || request.method === 'DELETE') && !auth?.token) {
+      return mcpUnauthorizedResponse(request)
+    }
+    return methodNotAllowed()
   }
 
   if (!auth?.token) return mcpUnauthorizedResponse(request)
+  const caller: StatelessMcpAuth = {
+    token: auth.token,
+    clientId: String(auth.clientId ?? ''),
+  }
 
   const protocolVersion = protocolVersionFrom(request)
   let parsed: unknown
@@ -295,15 +298,10 @@ export async function handleStatelessMcpRequest(
       continue
     }
     if (isNotification(message)) {
-      await dispatchMethod(message, request, { token: auth.token, clientId: String(auth.clientId ?? '') }, tools)
+      await dispatchMethod(message, request, caller, tools)
       continue
     }
-    const result = await dispatchMethod(
-      message,
-      request,
-      { token: auth.token, clientId: String(auth.clientId ?? '') },
-      tools
-    )
+    const result = await dispatchMethod(message, request, caller, tools)
     if (result !== null) responses.push(result)
   }
 
@@ -311,15 +309,10 @@ export async function handleStatelessMcpRequest(
     return respond(request, null, 202, protocolVersion)
   }
 
-  const first = messages[0] as JsonRpcMessage
-  const firstParams =
-    first.params && typeof first.params === 'object' && !Array.isArray(first.params)
-      ? (first.params as Record<string, unknown>)
-      : {}
   return respond(
     request,
     Array.isArray(parsed) ? responses : responses[0],
     200,
-    protocolVersionFrom(request, firstParams.protocolVersion)
+    protocolVersionFrom(request, objectParams((messages[0] as JsonRpcMessage).params).protocolVersion)
   )
 }
