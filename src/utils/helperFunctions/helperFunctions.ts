@@ -833,14 +833,17 @@ export function buildInboxQueryCache(
     "accountId" | "dataOrigin" | "readModelRevision"
   >
 ): InboxQueryPayload {
+  const rows = notifications.filter(
+    (notification): notification is INotification => notification != null
+  );
   const compact = getInboxTabs(
-    notifications,
+    rows,
     splitsNoImportant,
     showImportantSplit
   );
   return {
-    notifications,
-    structuredData: resolveInboxStructuredData(notifications, compact),
+    notifications: rows,
+    structuredData: resolveInboxStructuredData(rows, compact),
     splitsNoImportant: [...splitsNoImportant],
     showImportantSplit,
     ...metadata,
@@ -904,6 +907,7 @@ export const getInboxTabs = (
 
   for (let i = 0; i < notifications.length; i++) {
     const notification = notifications[i];
+    if (!notification) continue;
     if (notification.waitingOnSynthetic) {
       blockedByYouIndices.push(i);
       continue;
@@ -1155,7 +1159,7 @@ export const getInboxTabs = (
     .sort((a, b) => a.splitName.localeCompare(b.splitName));
 
   const allIndices = notifications.flatMap((notification, i) =>
-    notification.waitingOnSynthetic ? [] : [i]
+    !notification || notification.waitingOnSynthetic ? [] : [i]
   );
   const AllSplit: NotificationSplit = {
     splitName: "All",

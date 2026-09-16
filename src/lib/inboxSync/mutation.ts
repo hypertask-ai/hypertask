@@ -102,6 +102,7 @@ const notificationMatchesRemoval = (
   notificationIds: ReadonlySet<string>,
   taskIds: ReadonlySet<number>,
 ): boolean => {
+  if (!notification) return false;
   if (notificationIds.has(String(notification.id ?? ""))) return true;
   // Synthetic "waiting on you" rows (id "-<taskId>") aren't real DB
   // notifications -- getAll.ts recomputes them fresh from the task's current
@@ -134,6 +135,9 @@ export const applyInboxReadModelMutation = <
       } as Payload;
     }
     case "restore": {
+      if (!mutation.notification) {
+        return payload;
+      }
       const notificationId = persistentInboxNotificationId(
         mutation.notification,
       );
