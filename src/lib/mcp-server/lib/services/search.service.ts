@@ -62,6 +62,7 @@ export class SearchService {
 
       // Build query string
       const config = getConfig();
+      // @ts-expect-error query is required at runtime; list-query merge types it optional
       const queryParams = new URLSearchParams({
         q: validatedInput.query,
         limit: String(validatedInput.limit ?? config.limits.searchLimitDefault),

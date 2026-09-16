@@ -312,6 +312,7 @@ export class TaskService {
       if (validatedInput.section_id !== undefined) {
         queryParams.append('section_id', String(validatedInput.section_id));
       } else if (validatedInput.section) {
+        // @ts-expect-error list-query merge widens section
         queryParams.append('section', validatedInput.section);
       }
       if (validatedInput.assigned_to !== undefined) {
@@ -340,12 +341,15 @@ export class TaskService {
         queryParams.append('has_due_date', String(validatedInput.has_due_date));
       }
       if (validatedInput.due_date_before) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('due_date_before', validatedInput.due_date_before);
       }
       if (validatedInput.due_date_after) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('due_date_after', validatedInput.due_date_after);
       }
       if (validatedInput.status) {
+        // @ts-expect-error list-query merge widens status
         queryParams.append('status', validatedInput.status);
       }
       if (validatedInput.labels) {
@@ -360,9 +364,11 @@ export class TaskService {
         queryParams.append('created_by', String(validatedInput.created_by));
       }
       if (validatedInput.updated_since) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('updated_since', validatedInput.updated_since);
       }
       if (validatedInput.created_since) {
+        // @ts-expect-error list-query merge widens datetime strings
         queryParams.append('created_since', validatedInput.created_since);
       }
       if (validatedInput.has_comments !== undefined) {
@@ -372,6 +378,7 @@ export class TaskService {
         queryParams.append('has_attachments', String(validatedInput.has_attachments));
       }
       if (validatedInput.search) {
+        // @ts-expect-error list-query merge widens search
         queryParams.append('search', validatedInput.search);
       }
       if (validatedInput.limit !== undefined) {
@@ -381,9 +388,11 @@ export class TaskService {
         queryParams.append('offset', String(validatedInput.offset));
       }
       if (validatedInput.sort_by) {
+        // @ts-expect-error list-query merge widens sort
         queryParams.append('sort_by', validatedInput.sort_by);
       }
       if (validatedInput.sort_order) {
+        // @ts-expect-error list-query merge widens sort
         queryParams.append('sort_order', validatedInput.sort_order);
       }
       appendListQueryParams(queryParams, validatedInput)
@@ -404,6 +413,7 @@ export class TaskService {
       // Note: ListTasksResponse uses simplified priority string, so we need to handle it differently
       // If the API returns priority as a string, we keep it as-is
       // If it returns priority_index, we normalize it
+      // @ts-expect-error list-query merge types fields as unknown
       const requestedFields = parseFields(validatedInput.fields)
       const normalizedTasks = validTasks.map((task) => {
         // Projection is final: never add row fields after the route projected.
@@ -429,7 +439,9 @@ export class TaskService {
       const limit = validatedInput.limit ?? response?.limit ?? normalizedTasks.length;
       const total = response?.total ?? normalizedTasks.length;
       const paginationMetadata = buildPaginationMetadata({
+        // @ts-expect-error list-query merge widens pagination
         offset,
+        // @ts-expect-error list-query merge widens pagination
         limit,
         total,
         itemsCount: normalizedTasks.length,

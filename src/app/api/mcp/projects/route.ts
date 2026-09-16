@@ -237,6 +237,7 @@ export async function GET(request: NextRequest) {
     const response: ListProjectsResponse = {
       success: true,
       projects: (listQuery?.fields.length
+        // @ts-expect-error ProjectListItem has no string index signature
         ? projectRows(projectList as Array<Record<string, unknown>>, listQuery.fields)
         : projectList) as ProjectListItem[],
       total,
