@@ -45,6 +45,7 @@ export const myTasksViewsAPIRoute = "/api/my-tasks/views";
 export const myTasksViewAPIRoute = (viewId: number) =>
   `${myTasksViewsAPIRoute}/${viewId}`;
 export const myTasksAPIRoute = "/api/my-tasks";
+export const myTasksSnoozeAPIRoute = "/api/my-tasks/snooze";
 
 // ----------------------- Custom Instruction Update
 export const UpdateAICustomInstructionRoute = "/ai/project/customInstruction";

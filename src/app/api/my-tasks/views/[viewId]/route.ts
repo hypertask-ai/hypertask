@@ -1,7 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { parseMyTasksViewConfig } from "@/models/MyTasksView";
+import { isFeatureEnabled, MY_TASKS_QUICK_ADD_FLAG } from "@/lib/flags";
+import { mergeMyTasksViewConfigUpdate } from "@/lib/myTasks/viewConfigMerge";
 import {
   myTasksViewSelect,
   serializeMyTasksView,
@@ -46,8 +47,31 @@ export async function PATCH(
       }
       data.name = name;
     }
+    let fullConfig: unknown | undefined;
     if (hasOwn(body, "config")) {
-      data.config = parseMyTasksViewConfig(body.config) as unknown as Prisma.InputJsonValue;
+      fullConfig = body.config;
+    }
+    let configPatch: Record<string, unknown> | null = null;
+    // Merge defaultBoardId into the saved row so concurrent full saves cannot
+    // wipe it, and quick-add cannot wipe unrelated draft fields.
+    if (hasOwn(body, "configPatch")) {
+      if (hasOwn(body, "config")) {
+        return NextResponse.json(
+          { error: "Send config or configPatch, not both" },
+          { status: 400 },
+        );
+      }
+      const patch = body.configPatch;
+      if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+        return NextResponse.json(
+          { error: "configPatch must be an object" },
+          { status: 400 },
+        );
+      }
+      if (!(await isFeatureEnabled(MY_TASKS_QUICK_ADD_FLAG, auth.userId))) {
+        return NextResponse.json({ error: "Feature disabled" }, { status: 403 });
+      }
+      configPatch = patch as Record<string, unknown>;
     }
     if (hasOwn(body, "isDefault")) {
       if (typeof body.isDefault !== "boolean") {
@@ -55,16 +79,27 @@ export async function PATCH(
       }
       data.isDefault = body.isDefault;
     }
-    if (Object.keys(data).length === 0) {
+    if (Object.keys(data).length === 0 && fullConfig === undefined && !configPatch) {
       return NextResponse.json({ error: "No supported fields supplied" }, { status: 400 });
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      const existing = await tx.myTasksView.findFirst({
-        where: { id: viewId, userId: auth.userId },
-        select: { id: true },
-      });
+      const locked = await tx.$queryRaw<
+        Array<{ id: number; config: Prisma.JsonValue }>
+      >`
+        SELECT id, config FROM "MyTasksView"
+        WHERE id = ${viewId} AND "userId" = ${auth.userId}
+        FOR UPDATE
+      `;
+      const existing = locked[0];
       if (!existing) return null;
+      if (configPatch || fullConfig !== undefined) {
+        data.config = mergeMyTasksViewConfigUpdate({
+          existingConfig: existing.config,
+          fullConfig,
+          configPatch,
+        }) as unknown as Prisma.InputJsonValue;
+      }
       if (data.isDefault === true) {
         await tx.myTasksView.updateMany({
           where: { userId: auth.userId, isDefault: true, id: { not: viewId } },

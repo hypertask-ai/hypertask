@@ -12,9 +12,11 @@ import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_SHORTCUTS_WIDTH_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
+  MY_TASKS_QUICK_ADD_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -22,6 +24,10 @@ import {
   createMyTasksReconcileRunner,
   parseMyTasksListPayload,
 } from "@/lib/myTasks/reconcileMyTasks";
+import {
+  MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY,
+  myTasksQuickAddTaskVisibleInPayload,
+} from "@/lib/myTasks/quickAddHelpers";
 import { useMyTasksRealtime } from "@/hooks/realtime/useMyTasksRealtime";
 import { PriorityConstants, type IPrioritiesConstants } from "@/lib/constants/constants";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -52,6 +58,7 @@ import {
   DEFAULT_MY_TASKS_VIEW_CONFIG,
   effectiveMyTasksGroupBy,
   effectiveMyTasksTableVisibleColumns,
+  myTasksTimeGroupOn,
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
@@ -79,6 +86,7 @@ import {
   normalizeMyTasksTableVisibleColumns,
 } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 import TableColumnsPicker from "@/components/PageComponents/Kanban/TableView/TableColumnsPicker";
+import MyTasksQuickAdd from "./MyTasksQuickAdd";
 import MyTasksViewControls from "./MyTasksViewControls";
 import MyTasksViewTabs from "./MyTasksViewTabs";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
@@ -98,10 +106,14 @@ interface IProps {
   boards: MyTasksBoardMetadata[];
   /** Boards the session can open, including ones with zero My Tasks rows. */
   accessibleProjectIds?: number[];
+  /** Soonest future snooze among hidden rows; client refreshes when it elapses. */
+  nearestSnoozeUntil?: string | null;
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
   viewsEnabled: boolean;
+  /** Server 6455 check so the first paint is already time-grouped. */
+  timeGroupEnabled?: boolean;
   scopesEnabled?: boolean;
 }
 
@@ -120,10 +132,12 @@ const MyTasks = ({
   tabs: initialTabs,
   boards: initialBoards = EMPTY_MY_TASKS_BOARDS,
   accessibleProjectIds: initialAccessibleProjectIds = EMPTY_ACCESSIBLE_PROJECT_IDS,
+  nearestSnoozeUntil: initialNearestSnoozeUntil = null,
   currentUser,
   initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
   viewsEnabled = false,
+  timeGroupEnabled = false,
   scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
@@ -139,6 +153,9 @@ const MyTasks = ({
   const [accessibleProjectIds, setAccessibleProjectIds] = useState(
     initialAccessibleProjectIds,
   );
+  const [nearestSnoozeUntil, setNearestSnoozeUntil] = useState<string | null>(
+    initialNearestSnoozeUntil,
+  );
   const liveUpdatesEnabled = useFlag(MY_TASKS_LIVE_UPDATES_FLAG);
   const [activeSplit, setActiveSplit] = useState(() =>
     myTasksShortcutsWidthEnabled
@@ -147,9 +164,15 @@ const MyTasks = ({
   );
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
+  const myTasksTimeGroupFlag = useFlag(MY_TASKS_TIME_GROUP_FLAG);
+  const myTasksTimeGroupEnabled = myTasksTimeGroupOn(
+    timeGroupEnabled,
+    Boolean(myTasksTimeGroupFlag),
+  );
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksQuickAddEnabled = useFlag(MY_TASKS_QUICK_ADD_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
@@ -199,6 +222,19 @@ const MyTasks = ({
   );
   const scopesRef = useRef(reconcileScopes);
   scopesRef.current = reconcileScopes;
+  const showSnoozed = Boolean(
+    myTasksSnoozeEnabled && viewConfig.filters.showSnoozed,
+  );
+  const showSnoozedRef = useRef(showSnoozed);
+  showSnoozedRef.current = showSnoozed;
+  if (showSnoozedRef.current) {
+    scopesRef.current = [
+      ...reconcileScopes,
+      "__showSnoozed" as (typeof reconcileScopes)[number],
+    ];
+  }
+  const activeViewIdRef = useRef(activeViewId);
+  activeViewIdRef.current = activeViewId;
   const reconcileRunner = useMemo(
     () =>
       createMyTasksReconcileRunner({
@@ -222,6 +258,9 @@ const MyTasks = ({
           setTabs(payload.tabs);
           setBoards(payload.boards);
           setAccessibleProjectIds(payload.accessibleProjectIds);
+          if (payload.nearestSnoozeUntil !== undefined) {
+            setNearestSnoozeUntil(payload.nearestSnoozeUntil ?? null);
+          }
         },
         onError: () => {
           toast.error("Unable to refresh My Tasks");
@@ -243,6 +282,47 @@ const MyTasks = ({
     if (!liveUpdatesEnabled) return;
     reconcileRunner.request();
   }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
+
+  useEffect(() => {
+    const onSnoozeChanged = () => reconcileRunner.request();
+    window.addEventListener("my-tasks-snooze-changed", onSnoozeChanged);
+    return () =>
+      window.removeEventListener("my-tasks-snooze-changed", onSnoozeChanged);
+  }, [reconcileRunner]);
+
+  useEffect(() => {
+    if (!myTasksSnoozeEnabled) return;
+    reconcileRunner.request();
+  }, [myTasksSnoozeEnabled, reconcileRunner, showSnoozed]);
+
+  useEffect(() => {
+    if (!myTasksSnoozeEnabled || !nearestSnoozeUntil) return;
+    const targetMs = new Date(nearestSnoozeUntil).getTime();
+    if (!Number.isFinite(targetMs)) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    const schedule = () => {
+      if (cancelled) return;
+      const remaining = targetMs - Date.now();
+      if (remaining <= 0) {
+        reconcileRunner.request();
+        return;
+      }
+      const delay = Math.max(250, Math.min(remaining + 50, 2147483647));
+      timer = window.setTimeout(() => {
+        if (remaining + 50 > 2147483647) {
+          schedule();
+          return;
+        }
+        reconcileRunner.request();
+      }, delay);
+    };
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
 
   const scopesKey = JSON.stringify(
     effectiveMyTasksScopes(viewConfig.scopes, Boolean(myTasksScopesFlag && scopesEnabled)),
@@ -280,6 +360,9 @@ const MyTasks = ({
     }
     if (lastFetchedScopesKey.current === scopesKey) return;
     const scopes = effectiveMyTasksScopes(viewConfig.scopes, true);
+    if (showSnoozed) {
+      scopes.push("__showSnoozed" as (typeof scopes)[number]);
+    }
     void (async () => {
       try {
         const response = await fetch(
@@ -295,6 +378,7 @@ const MyTasks = ({
           tabs?: string[];
           boards?: MyTasksBoardMetadata[];
           accessibleProjectIds?: number[];
+          nearestSnoozeUntil?: string | null;
         };
         if (token !== scopesFetchToken.current) return;
         if (!Array.isArray(body.sections)) return;
@@ -306,6 +390,9 @@ const MyTasks = ({
           setAccessibleProjectIds(
             body.accessibleProjectIds.filter((id): id is number => typeof id === "number"),
           );
+        }
+        if (body.nearestSnoozeUntil !== undefined) {
+          setNearestSnoozeUntil(body.nearestSnoozeUntil ?? null);
         }
       } catch {
         if (token === scopesFetchToken.current) {
@@ -323,6 +410,7 @@ const MyTasks = ({
     reconcileRunner,
     scopesEnabled,
     scopesKey,
+    showSnoozed,
     viewConfig.scopes,
   ]);
 
@@ -347,10 +435,7 @@ const MyTasks = ({
     [sections, selectedPriorities]
   );
 
-  const groupBy = effectiveMyTasksGroupBy(
-    viewConfig,
-    Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled),
-  );
+  const groupBy = effectiveMyTasksGroupBy(viewConfig, myTasksTimeGroupEnabled);
 
   const availableBoards = useMemo(() => {
     if (!viewConfig.boardIds) return boards;
@@ -371,7 +456,12 @@ const MyTasks = ({
   }, [runningTimerEntries]);
 
   const allTasksForBoardTabs = useMemo(() => {
-    if (!viewsFeatureEnabled || groupBy !== "time") return [];
+    if (groupBy !== "time") return [];
+    if (!viewsFeatureEnabled) {
+      return priorityFilteredSections.flatMap(
+        (section) => section.items as MyTasksTask[],
+      );
+    }
     const now = new Date();
     const selectedBoards = viewConfig.boardIds
       ? new Set(viewConfig.boardIds)
@@ -391,6 +481,7 @@ const MyTasks = ({
     dateFilterVersion,
     filterParityEnabled,
     groupBy,
+    priorityFilteredSections,
     runtimeContext,
     sections,
     viewConfig,
@@ -445,15 +536,16 @@ const MyTasks = ({
     sections,
     viewConfig,
   ]);
-  const filteredSections = viewsFeatureEnabled
-    ? viewFilteredSections
-    : priorityFilteredSections;
+  const filteredSections =
+    viewsFeatureEnabled || groupBy === "time"
+      ? viewFilteredSections
+      : priorityFilteredSections;
 
   const activeTabs = useMemo(() => {
-    if (!viewsFeatureEnabled) return tabs;
     if (groupBy === "time") {
       return ["All", ...availableBoards.map((board) => board.title)];
     }
+    if (!viewsFeatureEnabled) return tabs;
     return ["All", ...filteredSections.map((section) => section.section_title)];
   }, [availableBoards, filteredSections, groupBy, tabs, viewsFeatureEnabled]);
   const activeBoardId = useRef<number | null>(
@@ -463,14 +555,14 @@ const MyTasks = ({
   );
 
   const totalCount = useMemo(() => {
-    if (viewsFeatureEnabled && groupBy === "time") {
+    if (groupBy === "time") {
       return allTasksForBoardTabs.length;
     }
     return filteredSections.reduce(
       (total, section) => total + section.items.length,
       0,
     );
-  }, [allTasksForBoardTabs.length, filteredSections, groupBy, viewsFeatureEnabled]);
+  }, [allTasksForBoardTabs.length, filteredSections, groupBy]);
   const visibleSections = useMemo(() => {
     if (groupBy === "time") return filteredSections;
     if (activeSplit === 0) return filteredSections;
@@ -514,7 +606,7 @@ const MyTasks = ({
 
   const updateSplit = useCallback(
     (index: number) => {
-      if (!viewsFeatureEnabled) {
+      if (groupBy !== "time" && !viewsFeatureEnabled) {
         updateLegacySplit(index);
         return;
       }
@@ -553,7 +645,6 @@ const MyTasks = ({
   }, [boardParam, boardSplitSources, groupBy, myTasksShortcutsWidthEnabled, sections]);
 
   useEffect(() => {
-    if (!viewsFeatureEnabled) return;
     if (groupBy === "time") {
       if (!myTasksShortcutsWidthEnabled) {
         const split = getMyTasksSplitIndex(
@@ -570,6 +661,7 @@ const MyTasks = ({
       if (boardParam && split === 0) replaceBoardParam(null);
       return;
     }
+    if (!viewsFeatureEnabled) return;
     if (!myTasksShortcutsWidthEnabled) {
       const split = getMyTasksSplitIndex(
         filteredSections,
@@ -703,6 +795,77 @@ const MyTasks = ({
     return { ...body.view, config: parseMyTasksViewConfig(body.view.config) };
   };
 
+  const persistQuickAddDefaultBoard = useCallback(
+    async (viewId: number | null, defaultBoardId: number) => {
+      if (viewId === null) {
+        try {
+          localStorage.setItem(
+            `${MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY}:${currentUser.id}`,
+            String(defaultBoardId),
+          );
+        } catch {
+          // Ignore quota / private-mode failures; in-memory config still updates.
+        }
+        updateViewConfig((current) => ({ ...current, defaultBoardId }));
+        return;
+      }
+      const response = await fetch(myTasksViewAPIRoute(viewId), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configPatch: { defaultBoardId } }),
+      });
+      if (!response.ok) {
+        throw new Error(await readError(response, "Unable to update view"));
+      }
+      const body = (await response.json()) as { view: MyTasksSavedView };
+      const saved = {
+        ...body.view,
+        config: parseMyTasksViewConfig(body.view.config),
+      };
+      setViews((current) =>
+        current.map((view) => (view.id === saved.id ? saved : view)),
+      );
+      if (activeViewIdRef.current === viewId) {
+        updateViewConfig((current) => ({ ...current, defaultBoardId }));
+      }
+    },
+    [currentUser.id, updateViewConfig],
+  );
+
+  const quickAddVisibilityRef = useRef({
+    viewConfig,
+    viewsFeatureEnabled,
+    filterParityEnabled,
+    groupBy,
+    activeSplit,
+    prioritySelection,
+    filterEnabled,
+    runtimeContext,
+  });
+  quickAddVisibilityRef.current = {
+    viewConfig,
+    viewsFeatureEnabled,
+    filterParityEnabled,
+    groupBy,
+    activeSplit,
+    prioritySelection,
+    filterEnabled,
+    runtimeContext,
+  };
+
+  const refreshMyTasksAfterQuickAdd = useCallback(
+    async (taskId: number) => {
+      const payload = await reconcileRunner.flush();
+      if (!payload) return false;
+      return myTasksQuickAddTaskVisibleInPayload(
+        payload,
+        taskId,
+        quickAddVisibilityRef.current,
+      );
+    },
+    [reconcileRunner],
+  );
+
   const saveView = async () => {
     if (!activeView) return;
     const requestToken = ++saveRequestToken.current;
@@ -823,7 +986,7 @@ const boardTabCounts = useMemo(() => {
   }, [allTasksForBoardTabs]);
 
   const tabLength = (index: number) => {
-    if (viewsFeatureEnabled && groupBy === "time") {
+    if (groupBy === "time") {
       if (index === 0) return allTasksForBoardTabs.length;
       const boardId = availableBoards[index - 1]?.id;
       if (boardId === undefined) return 0;
@@ -885,15 +1048,19 @@ const boardTabCounts = useMemo(() => {
           {liveUpdatesEnabled ? (
             <span className="sr-only">Live list updates on</span>
           ) : null}
+          {myTasksTimeGroupFlag ? (
+            <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
+          ) : null}
         </span>
-        {viewsEnabled && myTasksViewsEnabled && (
+        {((viewsEnabled && myTasksViewsEnabled) || myTasksTimeGroupEnabled) && (
           <MyTasksViewControls
             boards={boards}
             config={viewConfig}
             onChange={updateViewConfig}
-            timeGroupEnabled={Boolean(myTasksTimeGroupEnabled && viewsFeatureEnabled)}
+            timeGroupEnabled={myTasksTimeGroupEnabled}
             tableColumnsEnabled={tableColumnsFeatureEnabled}
             scopesEnabled={scopesEnabled}
+            snoozeEnabled={myTasksSnoozeEnabled}
             onOpenTableColumns={openTableColumnsPicker}
             onOpenKanbanFilters={() => {
               updateViewConfig((current) =>
@@ -910,6 +1077,24 @@ const boardTabCounts = useMemo(() => {
             }}
           />
         )}
+        {myTasksSnoozeEnabled && !viewsFeatureEnabled ? (
+          <label className="ml-auto flex items-center gap-2 self-center text-content text-text-light-gray">
+            <input
+              type="checkbox"
+              checked={showSnoozed}
+              onChange={() =>
+                updateViewConfig((current) => ({
+                  ...current,
+                  filters: {
+                    ...current.filters,
+                    showSnoozed: !current.filters.showSnoozed,
+                  },
+                }))
+              }
+            />
+            Show snoozed
+          </label>
+        ) : null}
         {filterEnabled && (
           !viewsFeatureEnabled ? (
           <div ref={filterRef} className="relative ml-auto self-center">
@@ -965,6 +1150,17 @@ const boardTabCounts = useMemo(() => {
       </div>
 
       <div className="mt-3 flex-1 min-h-0 w-full">
+        {myTasksQuickAddEnabled ? (
+          <MyTasksQuickAdd
+            currentUser={currentUser}
+            activeViewId={activeViewId}
+            viewConfig={viewConfig}
+            scopes={reconcileScopes}
+            accessibleProjectIds={accessibleProjectIds}
+            onPersistDefaultBoard={persistQuickAddDefaultBoard}
+            onRefresh={refreshMyTasksAfterQuickAdd}
+          />
+        ) : null}
         <TableView
           filteredSections={visibleSections}
           _sections={visibleSections}
@@ -973,6 +1169,7 @@ const boardTabCounts = useMemo(() => {
           currentUser={currentUser}
           myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
           myTasksSortKey={activeViewId}
+          myTasksSnoozeActive={myTasksSnoozeEnabled}
           onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
           myTasksVisibleColumns={myTasksVisibleColumns}
           onMyTasksVisibleColumnsChange={

@@ -9,9 +9,10 @@
 # auto-merges them; `dependabot-major-ticket.yml` opens a board-15 ticket so a
 # dev picks it up within the week.
 #
-# This file only takes effect from the repository's DEFAULT branch (`main`).
-# The copy on `production` is the source of truth that `main` is synced from.
-# `target-branch` sends the PRs at `production`, which is what actually deploys.
+# This file only takes effect from the repository's DEFAULT branch, which is
+# `production` (checked 2026-09-15), so editing it here is what changes
+# Dependabot's behaviour. The copy on `main` is stale and inert.
+# `target-branch` sends the PRs at `production` too, which is what deploys.
 # Caveat: Dependabot SECURITY updates ignore `target-branch` and always open
 # against the default branch, so those still need re-targeting by hand.
 version: 2
@@ -32,7 +33,28 @@ updates:
     # One grouped small PR plus headroom for a few individual majors. Higher
     # just queues PRs against a CI host with bounded concurrency.
     open-pull-requests-limit: 6
-    # Nothing is ignored: every package is in scope, by decision.
+    # Every package is in scope by decision, with one exception: the Better Auth
+    # family moves by hand, not by robot. The 1.7 family shipped in #508 broke
+    # live get-session/auth/ok on production with missing Better Auth tables, so
+    # #512 (HTPR-6390) pinned it back to `~1.6.26`/`1.6.23` explicitly so "a
+    # future lock refresh cannot reintroduce the 1.7 family".
+    #
+    # A narrow range stops a lock refresh but NOT Dependabot, which proposes the
+    # range change itself. That is the gap these entries close: the grouped PR
+    # kept rebuilding the 1.7 bump every morning, and one member the repo has
+    # already rejected fails the group's CI for all the healthy updates riding
+    # with it. #493 was closed over it and #575 still carries it.
+    #
+    # Only 1.7.0 and up is ignored, so 1.6.x patches, security ones included,
+    # still arrive. Delete these three entries in the same change that upgrades
+    # the family on purpose.
+    ignore:
+      - dependency-name: "better-auth"
+        versions: [">= 1.7.0"]
+      - dependency-name: "@better-auth/api-key"
+        versions: [">= 1.7.0"]
+      - dependency-name: "@better-auth/passkey"
+        versions: [">= 1.7.0"]
     groups:
       stack-minor:
         applies-to: version-updates

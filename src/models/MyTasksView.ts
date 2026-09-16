@@ -47,6 +47,8 @@ export type MyTasksViewConfig = {
     createdRange: MyTasksDateRange | null;
     updatedRange: MyTasksDateRange | null;
     showDone: boolean;
+    /** HTPR-6461: when true, include tasks snoozed past now. Default false. */
+    showSnoozed?: boolean;
   };
   /** Kanban-parity filters (HTPR-6447). Absent on older saved views. */
   filterSettings?: SerializableFilterSettings | null;
@@ -66,6 +68,11 @@ export type MyTasksViewConfig = {
    * flag-off saves do not wipe a stored choice.
    */
   scopes?: MyTasksScope[];
+  /**
+   * Board used by My Tasks quick-add (HTPR-6460). Optional so older views keep
+   * working; null means unset and the UI asks once.
+   */
+  defaultBoardId?: number | null;
 };
 
 export type MyTasksSavedView = {
@@ -109,6 +116,7 @@ export const DEFAULT_MY_TASKS_VIEW_CONFIG: MyTasksViewConfig = {
     createdRange: null,
     updatedRange: null,
     showDone: false,
+    showSnoozed: false,
   },
   filterSettings: null,
   sort: {
@@ -192,6 +200,7 @@ const groupByValue = (value: unknown): MyTasksGroupBy | undefined =>
 /**
  * Flag-off always returns board. Flag-on uses the saved value, or time when
  * the field is missing so My Tasks defaults to a personal to-do layout.
+ * This does not depend on the saved-views flag: 6455 is enough.
  */
 export function effectiveMyTasksGroupBy(
   config: Pick<MyTasksViewConfig, "groupBy">,
@@ -199,6 +208,17 @@ export function effectiveMyTasksGroupBy(
 ): MyTasksGroupBy {
   if (!flagEnabled) return "board";
   return config.groupBy ?? "time";
+}
+
+/**
+ * Server `isFeatureEnabled` covers the first paint. Client `useFlag` is false
+ * until /api/flags loads, which is why QA still photographed board groups.
+ */
+export function myTasksTimeGroupOn(
+  serverEnabled: boolean,
+  clientEnabled: boolean,
+): boolean {
+  return Boolean(serverEnabled || clientEnabled);
 }
 
 const KNOWN_CONFIG_KEYS = new Set([
@@ -209,7 +229,17 @@ const KNOWN_CONFIG_KEYS = new Set([
   "groupBy",
   "tableVisibleColumns",
   "scopes",
+  "defaultBoardId",
 ]);
+
+/** Positive board id, or null when unset / invalid. */
+export function parseMyTasksDefaultBoardId(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    return null;
+  }
+  return value;
+}
 
 const parseFilterSettings = (
   value: unknown,
@@ -268,6 +298,10 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
   const scopes = normalizeMyTasksScopes(
     value.scopes === undefined ? DEFAULT_MY_TASKS_SCOPES : value.scopes,
   );
+  const defaultBoardId =
+    value.defaultBoardId === undefined
+      ? undefined
+      : parseMyTasksDefaultBoardId(value.defaultBoardId);
 
   const extras: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -287,6 +321,7 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
       createdRange: dateRange(filters.createdRange),
       updatedRange: dateRange(filters.updatedRange),
       showDone: filters.showDone === true,
+      showSnoozed: filters.showSnoozed === true,
     },
     filterSettings: parseFilterSettings(value.filterSettings),
     sort: {
@@ -296,5 +331,6 @@ export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
     ...(groupBy ? { groupBy } : {}),
     ...(tableVisibleColumns ? { tableVisibleColumns } : {}),
     scopes,
+    ...(defaultBoardId !== undefined ? { defaultBoardId } : {}),
   };
 }

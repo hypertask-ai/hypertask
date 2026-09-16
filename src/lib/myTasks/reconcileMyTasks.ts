@@ -8,6 +8,7 @@ export type MyTasksListPayload = {
   tabs: string[];
   boards: MyTasksBoardMetadata[];
   accessibleProjectIds: number[];
+  nearestSnoozeUntil?: string | null;
 };
 
 export const buildMyTasksListUrl = (scopes?: MyTasksScope[]): string => {
@@ -24,6 +25,15 @@ export const createMyTasksReconcileRunner = (options: {
   let activeRuns = 0;
   let dirty = false;
   let controller: AbortController | null = null;
+  let waiters: Array<(payload: MyTasksListPayload | null) => void> = [];
+  let lastApplied: MyTasksListPayload | null = null;
+
+  const resolveWaiters = (payload: MyTasksListPayload | null) => {
+    if (waiters.length === 0) return;
+    const pending = waiters;
+    waiters = [];
+    for (const resolve of pending) resolve(payload);
+  };
 
   const run = async () => {
     if (activeRuns > 0) {
@@ -41,14 +51,21 @@ export const createMyTasksReconcileRunner = (options: {
         try {
           const payload = await options.fetchList(next.signal);
           if (gen !== generation) continue;
+          lastApplied = payload;
           options.apply(payload);
+          if (!dirty) resolveWaiters(payload);
         } catch (error) {
           if (next.signal.aborted || gen !== generation) continue;
           options.onError?.(error);
+          if (!dirty) resolveWaiters(null);
         }
       } while (dirty);
     } finally {
       activeRuns = Math.max(0, activeRuns - 1);
+      if (activeRuns === 0 && waiters.length > 0 && !dirty) {
+        // A waiter arrived after the last apply resolved earlier waiters.
+        resolveWaiters(lastApplied);
+      }
     }
   };
 
@@ -61,11 +78,23 @@ export const createMyTasksReconcileRunner = (options: {
       }
       void run();
     },
+    /** Fetch once (or finish the dirty cycle) and resolve with the applied payload. */
+    flush: (): Promise<MyTasksListPayload | null> => {
+      return new Promise((resolve) => {
+        waiters.push(resolve);
+        if (activeRuns > 0) {
+          dirty = true;
+          return;
+        }
+        void run();
+      });
+    },
     cancel: () => {
       generation += 1;
       dirty = false;
       controller?.abort();
       controller = null;
+      resolveWaiters(null);
     },
   };
 };
@@ -85,10 +114,17 @@ export const parseMyTasksListPayload = (body: unknown): MyTasksListPayload | nul
   const accessibleProjectIds = Array.isArray(record.accessibleProjectIds)
     ? record.accessibleProjectIds.filter((id): id is number => typeof id === "number")
     : [];
+  let nearestSnoozeUntil: string | null | undefined;
+  if (typeof record.nearestSnoozeUntil === "string") {
+    nearestSnoozeUntil = record.nearestSnoozeUntil;
+  } else if (record.nearestSnoozeUntil === null) {
+    nearestSnoozeUntil = null;
+  }
   return {
     sections: record.sections as ISection[],
     tabs: record.tabs as string[],
     boards,
     accessibleProjectIds,
+    nearestSnoozeUntil,
   };
 };

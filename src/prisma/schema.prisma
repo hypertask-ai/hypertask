@@ -1590,9 +1590,12 @@ model Assignees {
   agentId         String?
   agent           Agent?         @relation(name: "agentAssignees", fields: [agentId], references: [id])
   assignedAt      DateTime       @default(now())
+  // HTPR-6461: per-person hide-until for My Tasks. Null means not snoozed.
+  snoozeUntil     DateTime?
   notifications   Notification[]
 
   @@index([taskId]) // Already good for task assignees
+  @@index([userId, snoozeUntil])
 }
 
 model Follower {

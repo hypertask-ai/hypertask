@@ -52,7 +52,10 @@ import {
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
+  MY_TASKS_QUICK_ADD_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
+  HTPR_6514_COMMENT_LONG_PRESS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -76,6 +79,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "On a phone, press and hold a comment to open the Command Center with comment actions at the top and Edit first. Swipe on a comment is off so it does not fight the task swipe.",
+  },
   {
     key: HTPR_6427_ROW_SHORTCUTS_FLAG,
     shippedOn: "2026-09-14",
@@ -434,6 +443,18 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-15",
     description:
       "Updates My Tasks rows live when another tab, the CLI, or an agent changes a task, without reloading the page.",
+  },
+  {
+    key: MY_TASKS_QUICK_ADD_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Adds a quick-add row at the top of My Tasks that creates a task on the view's default board, assigned to you.",
+  },
+  {
+    key: MY_TASKS_SNOOZE_FLAG,
+    shippedOn: "2026-09-15",
+    description:
+      "Lets you snooze a My Tasks row until a date so it leaves the list and comes back on that day. Same date presets as Inbox Remind Me.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with

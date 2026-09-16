@@ -88,9 +88,13 @@ stubSourceModule("src/lib/myTasks/reconcileMyTasks.ts", {
   buildMyTasksListUrl: () => "/api/my-tasks",
   createMyTasksReconcileRunner: () => ({
     request: () => {},
+    flush: async () => null,
     cancel: () => {},
   }),
   parseMyTasksListPayload: () => null,
+});
+stubSourceModule("src/app/my-tasks/MyTasksQuickAdd.tsx", {
+  default: () => null,
 });
 stubSourceModule("src/components/Common/TaskRowComponents/TaskListRow.tsx", {
   SplitTitle: () => null,
@@ -223,6 +227,44 @@ test("flag turning off mid-session stops filtering and hides the control", () =>
   });
   assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "control hidden after flag off");
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4], "filtering stops when the flag goes off");
+
+  act(() => { reactRoot.unmount(); });
+  delete global.window;
+  delete global.document;
+  delete global.IS_REACT_ACT_ENVIRONMENT;
+});
+
+test("time group flag groups by due time without saved views", () => {
+  const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  const dated = [
+    {
+      id: 100,
+      section_title: "MyBoard",
+      projectId: 10,
+      items: [
+        { id: 1, projectId: 10, dueDate: new Date(2020, 0, 1) },
+        { id: 2, projectId: 10, dueDate: new Date() },
+      ],
+    },
+  ];
+  const rootEl = dom.window.document.getElementById("root");
+  const reactRoot = createRoot(rootEl);
+  act(() => {
+    reactRoot.render(React.createElement(MyTasks, {
+      sections: dated,
+      tabs: ["All", "MyBoard"],
+      currentUser: { id: 6 },
+      timeGroupEnabled: true,
+    }));
+  });
+  const titles = tableViewProps[tableViewProps.length - 1].filteredSections.map(
+    (section) => section.section_title,
+  );
+  assert.deepEqual(titles, ["Overdue", "Today"]);
+  assert.ok(!titles.includes("MyBoard"), "board titles must not be the group headers");
 
   act(() => { reactRoot.unmount(); });
   delete global.window;

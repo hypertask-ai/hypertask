@@ -8,6 +8,8 @@ import { isFeatureEnabled } from "@/lib/flags";
 import {
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_SCOPES_FLAG,
+  MY_TASKS_SNOOZE_FLAG,
+  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
@@ -50,10 +52,15 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [viewsEnabled, scopesEnabled] = await Promise.all([
+  const [viewsEnabled, scopesEnabled, timeGroupEnabled] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
+    isFeatureEnabled(MY_TASKS_TIME_GROUP_FLAG, sessionUser.userId),
   ]);
+  const snoozeEnabled = await isFeatureEnabled(
+    MY_TASKS_SNOOZE_FLAG,
+    sessionUser.userId,
+  );
   const liveUpdatesEnabled = await isFeatureEnabled(
     MY_TASKS_LIVE_UPDATES_FLAG,
     sessionUser.userId,
@@ -97,6 +104,32 @@ export default async function Page({
     myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes);
   }
 
+  if (snoozeEnabled) {
+    const showSnoozed =
+      parseMyTasksViewConfig(
+        views.find((view) => view.id === initialViewId)?.config ??
+          DEFAULT_MY_TASKS_VIEW_CONFIG,
+      ).filters.showSnoozed === true;
+    if (scopesEnabled) {
+      const scopes = effectiveMyTasksScopes(
+        parseMyTasksViewConfig(
+          views.find((view) => view.id === initialViewId)?.config ??
+            DEFAULT_MY_TASKS_VIEW_CONFIG,
+        ).scopes,
+        true,
+      );
+      myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes, {
+        snoozeEnabled: true,
+        showSnoozed,
+      });
+    } else {
+      myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, undefined, {
+        snoozeEnabled: true,
+        showSnoozed,
+      });
+    }
+  }
+
   let accessibleProjectIds: number[] = [];
   if (liveUpdatesEnabled) {
     const { json: projects } = await getAllMinimal(
@@ -109,16 +142,26 @@ export default async function Page({
 
   return (
     <Suspense fallback={<>Loading...</>}>
+      {snoozeEnabled ? (
+        <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
+      ) : null}
+      {timeGroupEnabled ? (
+        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
+      ) : null}
       {scopesEnabled ? (
         <MyTasks
           sections={myTasks.sections}
           tabs={myTasks.tabs}
           boards={myTasks.boards}
           accessibleProjectIds={accessibleProjectIds}
+          nearestSnoozeUntil={
+            snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
+          }
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
+          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled
         />
       ) : (
@@ -127,10 +170,14 @@ export default async function Page({
           tabs={myTasks.tabs}
           boards={myTasks.boards}
           accessibleProjectIds={accessibleProjectIds}
+          nearestSnoozeUntil={
+            snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
+          }
           currentUser={userObj}
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
+          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled={false}
         />
       )}

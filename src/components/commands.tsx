@@ -48,12 +48,15 @@ import axios from "axios";
 import { useRouter, usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import { parseCookies } from "nookies";
+import formatDateDifference from "@/utils/generateTime";
 import { useQueryClient } from "@tanstack/react-query";
 import { createTeam } from "@/utils/api/Homepage";
 import { markAsUnseen } from "@/utils/api/Inbox";
 import { setRecurrenceApiHandler } from "@/utils/api/Task Detail";
 import type { PickerOption } from "./Modals/OptionPicker";
 import { RECURRENCE_LABELS, RECURRENCE_RULES } from "@/lib/recurrence";
+import { myTasksSnoozeAPIRoute } from "@/lib/constants/APIRouteConstants";
+import MyTasksSnoozeModal from "@/app/my-tasks/MyTasksSnoozeModal";
 import {
   LEARN_TUTORIAL_COLUMN_CREATED_EVENT,
   type LearnTutorialColumnCreatedDetail,
@@ -213,7 +216,7 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -228,6 +231,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -1375,6 +1379,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       case CommandMode.SetReminder:
         setReminderHandler();
         return;
+      case CommandMode.MyTasksSnooze:
+        // Modal opens via commandMode === MyTasksSnooze below.
+        return;
       case CommandMode.RemoveParent:
         removeParentHandler();
         return;
@@ -2459,6 +2466,43 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
           )}
           {commandMode === CommandMode.RemindMe && (
             <RemindMeComponent closeHandler={togglRemindMeModal} />
+          )}
+          {commandMode === CommandMode.MyTasksSnooze && myTasksSnoozeEnabled && (
+            <MyTasksSnoozeModal
+              closeHandler={togglRemindMeModal}
+              onPickDate={async (date) => {
+                const assignmentId =
+                  typeof showCommands.payload?.assignmentId === "number"
+                    ? showCommands.payload.assignmentId
+                    : undefined;
+                if (!assignmentId) {
+                  toast.error("Only tasks assigned to you can be snoozed.");
+                  return;
+                }
+                const response = await fetch(myTasksSnoozeAPIRoute, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "same-origin",
+                  body: JSON.stringify({
+                    assignmentId,
+                    snoozeUntil: date,
+                  }),
+                });
+                if (!response.ok) {
+                  const body = await response.json().catch(() => null);
+                  throw new Error(
+                    typeof body?.error === "string"
+                      ? body.error
+                      : "Unable to snooze task",
+                  );
+                }
+                toast(
+                  "Hidden from My Tasks until " +
+                    formatDateDifference(date, true),
+                );
+                window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
+              }}
+            />
           )}
           {commandMode === CommandMode.SubtaskSettings && (
             <SubtaskSettings toggle={toggleSubTaskSettingsHandler} />
