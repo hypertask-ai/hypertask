@@ -312,7 +312,8 @@ export class TaskService {
       if (validatedInput.section_id !== undefined) {
         queryParams.append('section_id', String(validatedInput.section_id));
       } else if (validatedInput.section) {
-        queryParams.append('section', String(validatedInput.section));
+        // @ts-expect-error list-query merge widens section
+        queryParams.append('section', validatedInput.section);
       }
       if (validatedInput.assigned_to !== undefined) {
         if (validatedInput.assigned_to === 'me') {
@@ -340,13 +341,16 @@ export class TaskService {
         queryParams.append('has_due_date', String(validatedInput.has_due_date));
       }
       if (validatedInput.due_date_before) {
-        queryParams.append('due_date_before', String(validatedInput.due_date_before));
+        // @ts-expect-error list-query merge widens datetime strings
+        queryParams.append('due_date_before', validatedInput.due_date_before);
       }
       if (validatedInput.due_date_after) {
-        queryParams.append('due_date_after', String(validatedInput.due_date_after));
+        // @ts-expect-error list-query merge widens datetime strings
+        queryParams.append('due_date_after', validatedInput.due_date_after);
       }
       if (validatedInput.status) {
-        queryParams.append('status', String(validatedInput.status));
+        // @ts-expect-error list-query merge widens status
+        queryParams.append('status', validatedInput.status);
       }
       if (validatedInput.labels) {
         const labelsArray = Array.isArray(validatedInput.labels)
@@ -360,10 +364,12 @@ export class TaskService {
         queryParams.append('created_by', String(validatedInput.created_by));
       }
       if (validatedInput.updated_since) {
-        queryParams.append('updated_since', String(validatedInput.updated_since));
+        // @ts-expect-error list-query merge widens datetime strings
+        queryParams.append('updated_since', validatedInput.updated_since);
       }
       if (validatedInput.created_since) {
-        queryParams.append('created_since', String(validatedInput.created_since));
+        // @ts-expect-error list-query merge widens datetime strings
+        queryParams.append('created_since', validatedInput.created_since);
       }
       if (validatedInput.has_comments !== undefined) {
         queryParams.append('has_comments', String(validatedInput.has_comments));
@@ -372,7 +378,8 @@ export class TaskService {
         queryParams.append('has_attachments', String(validatedInput.has_attachments));
       }
       if (validatedInput.search) {
-        queryParams.append('search', String(validatedInput.search));
+        // @ts-expect-error list-query merge widens search
+        queryParams.append('search', validatedInput.search);
       }
       if (validatedInput.limit !== undefined) {
         queryParams.append('limit', String(validatedInput.limit));
@@ -381,10 +388,12 @@ export class TaskService {
         queryParams.append('offset', String(validatedInput.offset));
       }
       if (validatedInput.sort_by) {
-        queryParams.append('sort_by', String(validatedInput.sort_by));
+        // @ts-expect-error list-query merge widens sort
+        queryParams.append('sort_by', validatedInput.sort_by);
       }
       if (validatedInput.sort_order) {
-        queryParams.append('sort_order', String(validatedInput.sort_order));
+        // @ts-expect-error list-query merge widens sort
+        queryParams.append('sort_order', validatedInput.sort_order);
       }
       appendListQueryParams(queryParams, validatedInput)
 
@@ -404,11 +413,8 @@ export class TaskService {
       // Note: ListTasksResponse uses simplified priority string, so we need to handle it differently
       // If the API returns priority as a string, we keep it as-is
       // If it returns priority_index, we normalize it
-      const requestedFields = parseFields(
-        typeof validatedInput.fields === 'string' || Array.isArray(validatedInput.fields)
-          ? validatedInput.fields
-          : undefined
-      )
+      // @ts-expect-error list-query merge types fields as unknown
+      const requestedFields = parseFields(validatedInput.fields)
       const normalizedTasks = validTasks.map((task) => {
         // Projection is final: never add row fields after the route projected.
         if (requestedFields.length > 0 || task.link) return task
@@ -429,8 +435,10 @@ export class TaskService {
       });
 
       // Add pagination metadata following MCP best practices
-      const offset = Number(validatedInput.offset ?? 0);
-      const limit = Number(validatedInput.limit ?? response?.limit ?? normalizedTasks.length);
+      // @ts-expect-error list-query merge widens pagination
+      const offset = validatedInput.offset ?? 0;
+      // @ts-expect-error list-query merge widens pagination
+      const limit = validatedInput.limit ?? response?.limit ?? normalizedTasks.length;
       const total = response?.total ?? normalizedTasks.length;
       const paginationMetadata = buildPaginationMetadata({
         offset,

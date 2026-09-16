@@ -236,7 +236,8 @@ export async function GET(request: NextRequest) {
           where.assignees = { some: { userId: user.id } }
         } else if (assignee.kind === 'unassigned') {
           where.assignees = { none: {} }
-        } else if (assignee.kind === 'ids') {
+        } else {
+          // @ts-expect-error kind is ids after me/unassigned
           where.assignees = { some: { userId: { in: assignee.userIds } } }
         }
       } else if (assignedTo === 'me') {

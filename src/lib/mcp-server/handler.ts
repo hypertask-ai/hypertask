@@ -137,7 +137,10 @@ async function boundMcpRequest(request: Request): Promise<Request> {
   } as RequestInit & { duplex: 'half' })
 }
 
-const fallbackTools = MCP_TOOLS as PortableTool[]
+const portableTools = MCP_TOOLS as PortableTool[]
+function optionsPortableTools() {
+  return portableTools
+}
 
 /** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
 export async function mcpHandler(request: Request): Promise<Response> {
@@ -157,7 +160,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
   }
 
   if (working.method === 'OPTIONS') {
-    return handleStatelessMcpRequest(working, null, fallbackTools)
+    return handleStatelessMcpRequest(working, null, optionsPortableTools())
   }
 
   const bearer = extractBearerToken(working.headers.get('Authorization'))

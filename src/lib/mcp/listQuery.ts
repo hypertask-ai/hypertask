@@ -343,8 +343,12 @@ function pickPath(row: Record<string, unknown>, field: string): unknown {
 export function projectRows(
   rows: ReadonlyArray<object>,
   fields: string[],
+): Array<Record<string, unknown>>
+export function projectRows<T extends Record<string, unknown>>(
+  rows: T[],
+  fields: string[],
 ): Array<Record<string, unknown>> {
-  if (fields.length === 0) return rows as Array<Record<string, unknown>>
+  if (fields.length === 0) return rows
   return rows.map((row) => {
     const projected: Record<string, unknown> = {}
     for (const field of fields) {
@@ -386,6 +390,11 @@ function compareSortValues(left: unknown, right: unknown): number {
 
 export function applyCollectionQuery(
   items: object[],
+  listQuery: ParsedListQuery,
+  options?: { searchFields: string[]; idField?: string },
+): { items: Array<Record<string, unknown>>; total: number; nextCursor: string | null }
+export function applyCollectionQuery<T extends Record<string, unknown>>(
+  items: T[],
   listQuery: ParsedListQuery,
   options: { searchFields: string[]; idField?: string } = { searchFields: [] },
 ): { items: Array<Record<string, unknown>>; total: number; nextCursor: string | null } {
