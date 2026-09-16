@@ -9,9 +9,10 @@ import {
 
 type McpHttpAuth = StatelessMcpAuth | AuthInfo
 
-/** OPTIONS and POST have no session. GET/DELETE follow htpr-6532-stateless-mcp. */
+/** OPTIONS is CORS and has no session. POST/GET/DELETE follow htpr-6532-stateless-mcp. */
 export function usesStatelessMcpTransport(method: string, flagOn: boolean): boolean {
-  return method === 'OPTIONS' || method === 'POST' || flagOn
+  if (method === 'POST') return true
+  return method === 'OPTIONS' || flagOn
 }
 
 export type McpHttpDeps = {
