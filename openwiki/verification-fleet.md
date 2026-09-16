@@ -71,14 +71,14 @@ Bugs it found, all confirmed by hand before filing:
 
 ## TestSprite
 
-Status as of 2026-09-16. TestSprite provides a small production API contract suite and logged-out browser smoke suite. Tests must not use Valentin's account or mutate any board except the dedicated **TestSprite QA** board owned by QA userId 985.
+Status as of 2026-09-16. TestSprite provides a small production API contract suite, logged-out browser smoke suite, and a QA password login so the web suite can also open the real app signed in. Tests must not use Valentin's account or mutate any board except the dedicated **TestSprite QA** board owned by QA userId 985.
 
 | Project | ID | Tests | Dashboard |
 |---|---|---:|---|
 | `Hypertask MCP API` | `64648e88-03a4-4355-9e14-dc28f4e8cc7e` | 8 backend contracts | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/64648e88-03a4-4355-9e14-dc28f4e8cc7e) |
-| `Hypertask Web` | `411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9` | 4 logged-out browser checks | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9) |
+| `Hypertask Web` | `411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9` | 4 logged-out browser checks plus a QA-login signed-in board check | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9) |
 
-The backend suite covers MCP identity/context, immutable QA-board validation, projects and sections, task create/read/update/move/search/archive, labels, and HTML comment create/list. The label-filter contract guards the regression tracked at https://app.hypertask.ai/detail/project-15/6475. The frontend suite covers `/login`, the logged-out `/pricing` redirect, `/developers`, and a public 404. Its project URL is deliberately `/login`: booting a browser at `/` provisions a guest demo board and violates the suite's isolation rule.
+The backend suite covers MCP identity/context, immutable QA-board validation, projects and sections, task create/read/update/move/search/archive, labels, and HTML comment create/list. The label-filter contract guards the regression tracked at https://app.hypertask.ai/detail/project-15/6475. The frontend suite covers `/login`, the logged-out `/pricing` redirect, `/developers`, a public 404, and a signed-in visit that starts at `/qa/login`. That page and `POST /api/auth/qa-login` exist only when `QA_LOGIN_EMAIL` and `QA_LOGIN_PASSWORD` are set on the server. They sign in only the QA user (userId 985). Any other email is refused. Rotate the password env value if it leaks. Its project URL is deliberately `/login`: booting a browser at `/` provisions a guest demo board and violates the suite's isolation rule.
 
 Credentials are local only. Source `/home/valentin/.config/testsprite/credentials.env` for the TestSprite key. The backend project's Bearer credential is the account-scoped MCP token for QA userId 985, sourced from `/home/valentin/.config/hypertask-videos/storageState-qa.warmed.json`; rotate the project credential when that QA session token expires. Never copy either value into a test or this repository.
 
