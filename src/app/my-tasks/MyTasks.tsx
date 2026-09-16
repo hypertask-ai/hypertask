@@ -712,6 +712,7 @@ const MyTasks = ({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (
         event.key === "Escape" &&
         !showCommands.show &&

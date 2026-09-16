@@ -20,14 +20,17 @@ export function sharedProjectId(
   return first;
 }
 
-export function visibleTaskIdsFromRows(
-  rows: readonly { type: string; task?: { id: number } }[],
-): number[] {
-  const ids: number[] = [];
+export const MIXED_BOARD_MESSAGE =
+  "Select tasks from one board for assign, label, or move";
+
+export function visibleTasksFromRows<T extends { id: number }>(
+  rows: readonly { type: string; task?: T }[],
+): T[] {
+  const tasks: T[] = [];
   for (const row of rows) {
     if (row.type === "task" && row.task && typeof row.task.id === "number") {
-      ids.push(row.task.id);
+      tasks.push(row.task);
     }
   }
-  return ids;
+  return tasks;
 }

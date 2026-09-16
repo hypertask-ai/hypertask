@@ -86,6 +86,7 @@ import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { taskBaseUri } from "@/utils";
 import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
+import { visibleTasksFromRows } from "@/lib/myTasksBulkSelection";
 
 const HypertasksCommands = lazy(() => import("@/components/commands"));
 const AssignModal = lazy(
@@ -924,9 +925,7 @@ const TableView = ({
 
   useEffect(() => {
     if (!enableMyTasksBulkSelection || !myTasksBulk) return;
-    myTasksBulk.setVisibleItems(
-      rows.filter(isTaskRow).map((row) => row.task),
-    );
+    myTasksBulk.setVisibleItems(visibleTasksFromRows(rows));
   }, [enableMyTasksBulkSelection, myTasksBulk, rows]);
 
   // HTPR-4876: table view rendered <HypertasksCommands /> with no context, so

@@ -19,7 +19,7 @@ import { inViewObjectAtom, showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
-import { sharedProjectId } from "@/lib/myTasksBulkSelection";
+import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection";
 import { useUndoContext } from "@/hooks/General/useUndo";
 import globalAPIHandlers from "@/utils/api/global";
 import { useAssignTaskUser } from "@/hooks/Task Detail/useAssignTaskUser";
@@ -61,9 +61,6 @@ interface MyTasksBulkSelectionProviderProps {
 
 const MyTasksBulkSelectionContext =
   createContext<MyTasksBulkSelectionContextValue | null>(null);
-
-const MIXED_BOARD_TOAST =
-  "Select tasks from one board for assign, label, or move";
 
 export const MyTasksBulkSelectionProvider = ({
   children,
@@ -143,6 +140,16 @@ export const MyTasksBulkSelectionProvider = ({
   }, [visibleIdSet]);
 
   useEffect(() => {
+    setFailedIds((current) => {
+      const next = new Set(
+        [...current].filter((taskId) => selectedIds.has(taskId)),
+      );
+      if (next.size === current.size) return current;
+      return next;
+    });
+  }, [selectedIds]);
+
+  useEffect(() => {
     if (resetSelectionKey == null) return;
     setSelectedIds(new Set());
     setFailedIds(new Set());
@@ -198,7 +205,7 @@ export const MyTasksBulkSelectionProvider = ({
   const requireSameBoard = useCallback(() => {
     const projectId = sharedProjectId(selectedTasksSnapshot());
     if (projectId == null) {
-      toast.error(MIXED_BOARD_TOAST);
+      toast.error(MIXED_BOARD_MESSAGE);
       return null;
     }
     return projectId;
@@ -331,7 +338,7 @@ export const MyTasksBulkSelectionProvider = ({
       const snapshot = selectedTasksSnapshot();
       if (snapshot.length === 0) return;
       if (sharedProjectId(snapshot) == null) {
-        toast.error(MIXED_BOARD_TOAST);
+        toast.error(MIXED_BOARD_MESSAGE);
         return;
       }
 
@@ -480,8 +487,8 @@ export const MyTasksBulkSelectionProvider = ({
       }
     };
 
-    document.addEventListener("keydown", onDocumentKeyDown);
-    return () => document.removeEventListener("keydown", onDocumentKeyDown);
+    document.addEventListener("keydown", onDocumentKeyDown, true);
+    return () => document.removeEventListener("keydown", onDocumentKeyDown, true);
   }, [
     clearSelection,
     items.length,

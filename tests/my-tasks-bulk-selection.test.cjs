@@ -19,7 +19,7 @@ execFileSync(
   ],
   { stdio: "pipe" },
 );
-const { sharedProjectId, visibleTaskIdsFromRows } = require(outfile);
+const { sharedProjectId, visibleTasksFromRows } = require(outfile);
 fs.unlinkSync(outfile);
 
 test("sharedProjectId accepts one board and rejects mixed boards", () => {
@@ -41,14 +41,14 @@ test("sharedProjectId accepts one board and rejects mixed boards", () => {
   assert.equal(sharedProjectId([{ id: 1, projectId: null }]), null);
 });
 
-test("visibleTaskIdsFromRows keeps only task rows in render order", () => {
+test("visibleTasksFromRows keeps only task rows in render order", () => {
   assert.deepEqual(
-    visibleTaskIdsFromRows([
+    visibleTasksFromRows([
       { type: "task", task: { id: 10 } },
       { type: "more" },
       { type: "task", task: { id: 11 } },
     ]),
-    [10, 11],
+    [{ id: 10 }, { id: 11 }],
   );
   console.log("my-tasks bulk selection helpers passed");
 });
