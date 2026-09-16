@@ -166,7 +166,6 @@ export async function POST(request: NextRequest) {
               taskId: item.taskId!,
               snoozeUntil: remindAt,
               client: tx,
-              requireFlag: false,
             })
           }
         }

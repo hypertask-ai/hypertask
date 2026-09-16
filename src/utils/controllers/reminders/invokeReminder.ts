@@ -159,7 +159,6 @@ const restoreReminderNotifications = async (
     taskId: reminder.taskId,
     snoozeUntil: null,
     client,
-    requireFlag: false,
   });
 };
 

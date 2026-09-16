@@ -213,7 +213,7 @@ import {
   type TaskTemplatePickerState,
 } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { writeTextToClipboard } from "@/lib/utils/clipboard";
 
@@ -228,6 +228,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -437,6 +438,23 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
     openSettings("appearance");
     boardCloseHandler();
   }, [showCommands.mode, showCommands.show]);
+
+  useEffect(() => {
+    if (
+      commandMode !== CommandMode.MyTasksSnooze &&
+      showCommands.mode !== CommandMode.MyTasksSnooze
+    ) {
+      return;
+    }
+    if (myTasksSnoozeEnabled) {
+      if (commandMode !== CommandMode.RemindMe) setCommandMode(CommandMode.RemindMe);
+      if (showCommands.mode !== CommandMode.RemindMe) {
+        setShowCommands((prev) => ({ ...prev, mode: CommandMode.RemindMe }));
+      }
+      return;
+    }
+    boardCloseHandler();
+  }, [commandMode, myTasksSnoozeEnabled, showCommands.mode]);
 
   // ---- HTPR-4885/4886/4888: repeat rules, task templates, status updates ----
   const [taskTemplatePicker, setTaskTemplatePicker] =
@@ -1375,6 +1393,14 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
       case CommandMode.SetReminder:
         setReminderHandler();
         return;
+      case CommandMode.MyTasksSnooze:
+        if (myTasksSnoozeEnabled) {
+          setCommandMode(CommandMode.RemindMe);
+          setShowCommands((prev) => ({ ...prev, mode: CommandMode.RemindMe }));
+        } else {
+          boardCloseHandler();
+        }
+        return;
       case CommandMode.RemoveParent:
         removeParentHandler();
         return;
@@ -1973,7 +1999,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   // ============ toggle estimate modal
   const togglRemindMeModal = async (refresh?: boolean) => {
     boardCloseHandler();
-    if (refresh) {
+    if (refresh && myTasksSnoozeEnabled) {
       window.dispatchEvent(new CustomEvent("my-tasks-snooze-changed"));
     }
   };
@@ -2460,8 +2486,18 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
             />
             )
           )}
-          {commandMode === CommandMode.RemindMe && (
-            <RemindMeComponent closeHandler={togglRemindMeModal} />
+          {(commandMode === CommandMode.RemindMe ||
+            (myTasksSnoozeEnabled && commandMode === CommandMode.MyTasksSnooze)) && (
+            <RemindMeComponent
+              closeHandler={togglRemindMeModal}
+              returnsToMyTasks={
+                myTasksSnoozeEnabled &&
+                Boolean(
+                  contextOptions?.taskOptions?.isMyTasks ||
+                    showCommands.payload?.returnsToMyTasks
+                )
+              }
+            />
           )}
           {commandMode === CommandMode.SubtaskSettings && (
             <SubtaskSettings toggle={toggleSubTaskSettingsHandler} />
