@@ -75,6 +75,12 @@ export async function POST(request: NextRequest) {
       payload.event.type,
       result,
     );
+    if (result === "skipped_undecryptable") {
+      return NextResponse.json(
+        { error: "undecryptable_token" },
+        { status: 500 },
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 

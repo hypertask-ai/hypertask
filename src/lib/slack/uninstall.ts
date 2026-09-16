@@ -51,22 +51,25 @@ export type SlackRevocationResult =
   | "deleted"
   | "unknown_workspace"
   | "skipped_not_bot"
-  | "skipped_reinstalled";
+  | "skipped_reinstalled"
+  | "skipped_undecryptable";
+
+type BotTokenMatch = boolean | "undecryptable";
 
 // Returns true when one of the revoked tokens is this install's bot token.
 function botTokenRevoked(
   revokedBotTokens: string[],
   encryptedBotToken: string,
-): boolean {
+): BotTokenMatch {
   if (revokedBotTokens.length === 0) return false;
   try {
     const decrypted = decryptSecret(encryptedBotToken);
     return revokedBotTokens.includes(decrypted);
   } catch (error) {
-    // Indeterminate, not a match: an undecryptable token must not widen the
-    // deletion trigger. Surface it so the row can be inspected.
+    // Indeterminate: do not delete, and do not pretend this was a foreign
+    // token. The events route returns 500 so Slack retries.
     console.error("Slack install token could not be decrypted", error);
-    return false;
+    return "undecryptable";
   }
 }
 
@@ -92,9 +95,12 @@ export async function deleteSlackInstallForRevocation(
   if (event.type === "tokens_revoked") {
     // Only the bot's own revocation ends the install; a member's user OAuth
     // token being revoked does not invalidate it.
-    if (!botTokenRevoked(event.tokens?.bot ?? [], install.encryptedBotToken)) {
-      return "skipped_not_bot";
-    }
+    const botMatch = botTokenRevoked(
+      event.tokens?.bot ?? [],
+      install.encryptedBotToken,
+    );
+    if (botMatch === "undecryptable") return "skipped_undecryptable";
+    if (!botMatch) return "skipped_not_bot";
   } else if (event.type !== "app_uninstalled") {
     return "skipped_not_bot";
   }

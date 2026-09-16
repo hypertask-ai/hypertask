@@ -85,6 +85,19 @@ test("tokens_revoked listing only member tokens keeps the install", async () => 
   assert.deepEqual(deleted, []);
 });
 
+test("tokens_revoked with an undecryptable stored token skips without deleting", async () => {
+  const { db, deleted } = fakeDb({
+    ...INSTALL,
+    encryptedBotToken: "not-valid-ciphertext",
+  });
+  const result = await deleteSlackInstallForRevocation(
+    db,
+    envelope({ type: "tokens_revoked", tokens: { bot: [BOT_TOKEN] } }),
+  );
+  assert.equal(result, "skipped_undecryptable");
+  assert.deepEqual(deleted, []);
+});
+
 test("tokens_revoked with a foreign bot token keeps the install", async () => {
   const { db, deleted } = fakeDb(INSTALL);
   const result = await deleteSlackInstallForRevocation(

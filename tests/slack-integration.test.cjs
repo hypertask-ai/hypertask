@@ -355,6 +355,36 @@ test("Slack link state and two-party confirmation are signed, expiring, and sing
   );
 });
 
+test("Marketplace OAuth errors are not swallowed by the no-state resume", () => {
+  const oauthRoute = fs.readFileSync(
+    path.join(root, "src/app/api/slack/oauth_redirect/route.ts"),
+    "utf8",
+  );
+  const errorCheck = oauthRoute.indexOf(
+    'searchParams.get("error")',
+  );
+  const missingCode = oauthRoute.indexOf("missing_code");
+  const noState = oauthRoute.indexOf('searchParams.get("state")');
+  assert.ok(errorCheck !== -1 && missingCode !== -1 && noState !== -1);
+  assert.ok(
+    errorCheck < noState && missingCode < noState,
+    "slackError and missing code must run before the no-state resume",
+  );
+});
+
+test("Add to Slack page uses the card surface and 12-16px padding", () => {
+  const page = fs.readFileSync(
+    path.join(root, "src/app/add-to-slack/page.tsx"),
+    "utf8",
+  );
+  assert.match(page, /bg-cardBackground/);
+  assert.match(page, /px-4/);
+  assert.doesNotMatch(page, /bg-containerBackground/);
+  assert.doesNotMatch(page, /\bp-8\b/);
+  assert.match(page, /bg-shadcn-primary/);
+  assert.match(page, /rounded-\[5px\]/);
+});
+
 test("Slack writes require a linked actor and authorized project", () => {
   const eventsRoute = fs.readFileSync(
     path.join(root, "src/app/api/slack/events/route.ts"),
@@ -370,6 +400,8 @@ test("Slack writes require a linked actor and authorized project", () => {
   );
 
   assert.match(eventsRoute, /slackUserId: event\.user/);
+  assert.match(eventsRoute, /skipped_undecryptable/);
+  assert.match(eventsRoute, /status: 500/);
   assert.match(taskCreate, /resolveSlackActor\(event\.slackTeamId, event\.slackUserId\)/);
   assert.match(taskCreate, /getProjectWhere\(actor\.user\.id\)/);
   assert.match(taskCreate, /userId: actor\.user\.id/);

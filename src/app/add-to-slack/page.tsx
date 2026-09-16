@@ -44,7 +44,7 @@ export default async function AddToSlackPage() {
 
   return (
     <main className="flex min-h-SVH-full items-center justify-center bg-pageBackground px-4">
-      <section className="flex w-full max-w-[520px] flex-col gap-5 rounded-[5px] bg-containerBackground p-8 shadow-md">
+      <section className="flex w-full max-w-[520px] flex-col gap-5 rounded-[5px] bg-cardBackground px-4 py-4 shadow-md">
         <h1 className="text-heading font-semibold text-white-black">
           Hypertask for Slack
         </h1>

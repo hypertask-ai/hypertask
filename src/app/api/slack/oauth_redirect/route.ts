@@ -27,13 +27,20 @@ export async function GET(request: NextRequest) {
     return redirectWithError(request, "not_configured");
   }
 
+  const slackError = request.nextUrl.searchParams.get("error");
+  if (slackError) return redirectWithError(request, slackError);
+
+  const code = request.nextUrl.searchParams.get("code");
+  if (!code) return redirectWithError(request, "missing_code");
+
   const rawState = request.nextUrl.searchParams.get("state");
   if (!rawState) {
     // HTPR-4857: Slack Marketplace "Add to Slack" lands here with a code and no
     // state. Slack has already added the bot; we store nothing and send the
     // visitor through login, then Settings completes the link (the second
     // authorize is instant — Slack skips consent for an already-authorized app).
-    // Never claim success: the code was not exchanged by us.
+    // Never claim success: the code was not exchanged by us. Denied or
+    // malformed callbacks already returned above.
     const user = await getServerCookieUser();
     // Anonymous visitors pass -1: only an EVERYONE flag passes the mode check.
     if (await isFeatureEnabled(HTPR_4857_ADD_TO_SLACK_FLAG, user?.id ?? -1)) {
@@ -58,12 +65,6 @@ export async function GET(request: NextRequest) {
   if (!(await hasTeamMembershipAccess(state.userId, state.teamId))) {
     return redirectWithError(request, "team_access_denied");
   }
-
-  const slackError = request.nextUrl.searchParams.get("error");
-  if (slackError) return redirectWithError(request, slackError);
-
-  const code = request.nextUrl.searchParams.get("code");
-  if (!code) return redirectWithError(request, "missing_code");
 
   try {
     const redirectUri = new URL("/api/slack/oauth_redirect", request.url);
