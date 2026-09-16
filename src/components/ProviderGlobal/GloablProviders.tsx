@@ -421,6 +421,11 @@ export default function GlobalProvider({
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const isAgentChatPage = pathname?.startsWith("/agents/chat") ?? false;
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
+  const agentChatMobileFullscreenFlag = useFlag(
+    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
+  );
+  const shouldMountAgentChatRuntime =
+    isAgentChatPage && mbl && agentChatMobileFullscreenFlag;
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
     isFullScreenChat || showAiChatInterface,
   );
@@ -428,7 +433,7 @@ export default function GlobalProvider({
   const shouldMountChatRuntime =
     chatRuntimeMounted ||
     isFullScreenChat ||
-    isAgentChatPage ||
+    shouldMountAgentChatRuntime ||
     isTaskDetailPage ||
     showAiChatInterface;
   useEffect(() => {
@@ -574,7 +579,6 @@ export default function GlobalProvider({
   // including task detail. The bottom dock is the exception: hidden on detail
   // (shouldShowMobileDock) so the composer owns the bottom edge.
   // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
-  const agentChatMobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const agentChatMobileFullscreenAtomOn = useRecoilValue(
     agentChatMobileFullscreenAtom,
   );
@@ -1442,7 +1446,9 @@ export default function GlobalProvider({
         {shouldMountChatRuntime ? (
           <Suspense
             fallback={
-              isFullScreenChat || isAgentChatPage || isTaskDetailPage ? (
+              isFullScreenChat ||
+              shouldMountAgentChatRuntime ||
+              isTaskDetailPage ? (
                 <FullScreenChatLoading />
               ) : (
                 <AIChatClosedLayout

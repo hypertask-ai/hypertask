@@ -56,7 +56,11 @@ test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   assert.match(providers, /isAgentChatPage/);
   assert.match(
     providers,
-    /isFullScreenChat \|\|\s*isAgentChatPage \|\|\s*isTaskDetailPage/,
+    /shouldMountAgentChatRuntime\s*=\s*isAgentChatPage && mbl && agentChatMobileFullscreenFlag/,
+  );
+  assert.match(
+    providers,
+    /isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage/,
   );
   assert.match(providers, /agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn/);
   assert.match(chat, /setAgentChatMobileFullscreen\(mobileFullscreenChrome\)/);

@@ -63,8 +63,13 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   );
   assert.match(
     globalProvider,
-    /const shouldMountChatRuntime\s*=\s*chatRuntimeMounted \|\|\s*isFullScreenChat \|\|\s*isAgentChatPage \|\|\s*isTaskDetailPage \|\|\s*showAiChatInterface/,
-    "task detail and Agent Chat hooks require ChatProvider even while the chat panel is closed",
+    /const shouldMountAgentChatRuntime\s*=\s*isAgentChatPage && mbl && agentChatMobileFullscreenFlag/,
+    "Agent Chat must not change provider startup for desktop or flag-off users",
+  );
+  assert.match(
+    globalProvider,
+    /const shouldMountChatRuntime\s*=\s*chatRuntimeMounted \|\|\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage \|\|\s*showAiChatInterface/,
+    "task detail and flagged mobile Agent Chat hooks require ChatProvider even while the chat panel is closed",
   );
   assert.match(
     globalProvider,
@@ -83,8 +88,8 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   assert.match(globalProvider, /openChatFromFocusShortcut/);
   assert.match(
     globalProvider,
-    /isFullScreenChat \|\| isAgentChatPage \|\| isTaskDetailPage \? \(\s*<FullScreenChatLoading \/>/,
-    "cold /chat, /agents/chat, and /detail navigation must not render provider consumers outside ChatProvider",
+    /isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage \? \(\s*<FullScreenChatLoading \/>/,
+    "cold /chat, flagged mobile /agents/chat, and /detail navigation must not render provider consumers outside ChatProvider",
   );
   assert.match(chatClient, /loading: \(\) => <FullScreenChatLoading \/>/);
   assert.match(fullScreenLoading, /role="status"[\s\S]*Loading AI chat/);
