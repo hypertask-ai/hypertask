@@ -228,7 +228,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions }: IHTCProps) => {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: Remind Me also hides My Tasks
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
