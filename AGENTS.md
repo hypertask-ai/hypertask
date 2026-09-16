@@ -6,7 +6,7 @@ All agents follow the same operating contract, regardless of whether they run th
 
 - Use an individual Hypertask agent identity. Never copy another agent's token or credentials.
 - For board work, use the approved `hypertask` CLI, MCP surface, or product UI. Never use Prisma, SQL, or a database client for ticket content.
-- Before coding on a ticket, assign it to Valentin, move it to **In Progress**, and leave a short working-session comment.
+- Before coding on a ticket, claim it as Product Bot (`htbot comment add`), move it to **In Progress**, and never write in Valentin's name.
 - Read [the CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runners, rulesets, previews, or deploy checks. Lower-confidence producers must also read [`openwiki/low-trust-agents.md`](openwiki/low-trust-agents.md) before opening a PR.
 - If the `/hypertask-agent` skill is available, use it as the Claude adapter. Other providers must follow the same board protocol directly.
 
@@ -80,10 +80,9 @@ When referencing a Hypertask ticket in conversation, write the full clickable ap
 The moment you actually start working a ticket (writing code / doing the fix, not just reading or triaging), make it visible on the board so no one else picks up the same work:
 
 1. Claim as Product Bot: `htbot comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. **No agent or session ever writes in Valentin's name (Valentin, 2026-09-15): no ticket, comment, assignment or move goes through his user token. Board writes use an agent identity (Product Bot via `htbot`, or the agent's own). Only Valentin assigns himself.**
-2. Move it to In Progress: `hypertask tasks move <PREFIX-NNN> --section "In Progress"`.
-3. Leave a short comment saying a session is actively working it now.
+2. Move it to In Progress: `htbot task move <PREFIX-NNN> --section "In Progress"`.
 
-Signal: **assigned to Valentin + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** — leave it and pick another.
+Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** — leave it and pick another.
 
 ## Repository Workflow
 
