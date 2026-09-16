@@ -12,10 +12,7 @@ import {
   getDirectUploadSizeError,
   DIRECT_UPLOAD_MAX_FILES,
 } from "../src/lib/storage/directUpload";
-import {
-  extractEmbeddableClipboardFiles,
-  isEmbeddableMediaFile,
-} from "../src/components/RTE/Extensions/resizableMedia/mediaPasteDropPlugin/mediaPasteDropPlugin";
+import { isEmbeddableMediaFile } from "../src/components/RTE/Extensions/resizableMedia/mediaPasteDropPlugin/mediaPasteDropPlugin";
 
 const STORAGE = "https://files.example.com/attachments/1700_abc_IMG_4821.HEIC";
 
@@ -137,7 +134,10 @@ test("a pasted HEIC with no MIME type is embedded rather than dropped", () => {
   );
 });
 
-test("clipboard files are used when the item list has no media", () => {
+test("clipboard files are used when the item list has no media", async () => {
+  const { extractEmbeddableClipboardFiles } = await import(
+    "../src/components/RTE/Extensions/resizableMedia/mediaPasteDropPlugin/mediaPasteDropPlugin"
+  );
   const example = new File([new Uint8Array(1)], "example.heic", { type: "" });
   const clipboardData = {
     items: [] as unknown as DataTransferItemList,
