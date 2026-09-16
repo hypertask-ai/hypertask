@@ -130,6 +130,62 @@ test('GET and DELETE are 405 once authenticated because there is no session to r
   assert.equal(del.status, 405)
 })
 
+test('null bodies and null batch entries return JSON-RPC -32600 without dropping valid siblings', async () => {
+  const auth = { token: 'test-token', clientId: '6' }
+  const headers = {
+    Authorization: 'Bearer test-token',
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  }
+
+  const topLevelNull = await handleStatelessMcpRequest(
+    new Request('https://mcp.hypertask.ai/mcp', { method: 'POST', headers, body: 'null' }),
+    auth,
+    [echoTool]
+  )
+  assert.equal(topLevelNull.status, 400)
+  assert.equal((await json(topLevelNull)).error.code, -32600)
+
+  const batch = await handleStatelessMcpRequest(
+    new Request('https://mcp.hypertask.ai/mcp', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify([null, { jsonrpc: '2.0', id: 1, method: 'ping' }]),
+    }),
+    auth,
+    [echoTool]
+  )
+  assert.equal(batch.status, 200)
+  const batchBody = (await batch.json()) as Array<Record<string, any>>
+  assert.equal(batchBody.length, 2)
+  assert.equal(batchBody[0].error.code, -32600)
+  assert.deepEqual(batchBody[1].result, {})
+})
+
+test('stateless tools/call omits client Mcp-Session-Id from the tool invocation', async () => {
+  let invocation:
+    | { requestId: string; clientFingerprint: string; sessionId?: string }
+    | undefined
+  const probe: PortableTool = {
+    name: 'probe',
+    description: 'Capture invocation',
+    parameters: z.object({}),
+    execute: async (_args, _token, next) => {
+      invocation = next
+      return 'ok'
+    },
+  }
+  const response = await handleStatelessMcpRequest(
+    rpc('tools/call', { name: 'probe', arguments: {} }, { sessionId: 'legacy-session' }),
+    { token: 'test-token', clientId: '6' },
+    [probe]
+  )
+  assert.equal(response.status, 200)
+  assert.equal(invocation?.sessionId, undefined)
+  assert.ok(invocation?.requestId)
+  assert.ok(invocation?.clientFingerprint)
+})
+
 test('a notification returns 202 and a long-call client that only accepts SSE still gets the JSON-RPC payload', async () => {
   const auth = { token: 'test-token', clientId: '6' }
   const notified = await handleStatelessMcpRequest(

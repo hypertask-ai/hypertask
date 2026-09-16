@@ -107,6 +107,10 @@ function jsonRpcResult(id: JsonRpcId, result: unknown) {
   return { jsonrpc: '2.0' as const, id, result }
 }
 
+function isJsonRpcMessage(value: unknown): value is JsonRpcMessage {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 function isNotification(message: JsonRpcMessage): boolean {
   return message.id === undefined && typeof message.method === 'string'
 }
@@ -211,12 +215,10 @@ async function dispatchMethod(
         return jsonRpcError(id, -32602, 'Invalid tool arguments', parsed.error.flatten())
       }
       const requestId = id === null ? crypto.randomUUID() : String(id)
-      const sessionHeader = request.headers.get('mcp-session-id') ?? undefined
       try {
         const text = await tool.execute(parsed.data, auth.token, {
           requestId,
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
-          sessionId: sessionHeader,
         })
         return jsonRpcResult(id, {
           content: [{ type: 'text', text }],
@@ -279,8 +281,16 @@ export async function handleStatelessMcpRequest(
     )
   }
 
-  const messages = Array.isArray(parsed) ? parsed : [parsed]
-  if (messages.length === 0) {
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) {
+      return respond(
+        request,
+        jsonRpcError(null, -32600, 'Invalid Request'),
+        400,
+        protocolVersion
+      )
+    }
+  } else if (!isJsonRpcMessage(parsed)) {
     return respond(
       request,
       jsonRpcError(null, -32600, 'Invalid Request'),
@@ -289,19 +299,24 @@ export async function handleStatelessMcpRequest(
     )
   }
 
+  const messages = Array.isArray(parsed) ? parsed : [parsed]
   const responses: unknown[] = []
-  for (const message of messages as JsonRpcMessage[]) {
-    if (message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
-      if (!isNotification(message)) {
-        responses.push(jsonRpcError((message.id ?? null) as JsonRpcId, -32600, 'Invalid Request'))
+  for (const candidate of messages) {
+    if (!isJsonRpcMessage(candidate)) {
+      responses.push(jsonRpcError(null, -32600, 'Invalid Request'))
+      continue
+    }
+    if (candidate.jsonrpc !== '2.0' || typeof candidate.method !== 'string') {
+      if (!isNotification(candidate)) {
+        responses.push(jsonRpcError((candidate.id ?? null) as JsonRpcId, -32600, 'Invalid Request'))
       }
       continue
     }
-    if (isNotification(message)) {
-      await dispatchMethod(message, request, caller, tools)
+    if (isNotification(candidate)) {
+      await dispatchMethod(candidate, request, caller, tools)
       continue
     }
-    const result = await dispatchMethod(message, request, caller, tools)
+    const result = await dispatchMethod(candidate, request, caller, tools)
     if (result !== null) responses.push(result)
   }
 
@@ -309,10 +324,11 @@ export async function handleStatelessMcpRequest(
     return respond(request, null, 202, protocolVersion)
   }
 
+  const firstMessage = messages.find(isJsonRpcMessage)
   return respond(
     request,
     Array.isArray(parsed) ? responses : responses[0],
     200,
-    protocolVersionFrom(request, objectParams((messages[0] as JsonRpcMessage).params).protocolVersion)
+    protocolVersionFrom(request, objectParams(firstMessage?.params).protocolVersion)
   )
 }
