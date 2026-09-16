@@ -26,6 +26,11 @@ This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, res
 9. **Run `update-docs`** if a user-visible behaviour changed.
 10. **Run `simplify-before-pr`.** The change works and the tests pass — now simplify the diff before anyone reviews it.
 11. **Run `design-compliance`.** The diff is final. Now prove the UI matches the style guide and that `node scripts/design-lint.mjs` is clean, before `design-gate` says so on the PR.
+
+**Keep the ticket in a review lane only while a PR is still open.** Never move it to AI Review, HT Manager Review, or Valentin Review unless that ticket has an open, unmerged pull request. After the PR merges, move it to QA. A review column with nothing to review is how a ticket sits for hours and then gets sent back.
+
+**Verify the exact command the ticket names.** For a CLI ticket that is `ht-product-bot …` or `hypertask …`, that means the binary `command -v hypertask` resolves to (PATH), not only `~/.local/bin/hypertask`. Wrappers exec `hypertask` from PATH. A destination-only install can leave the reported command broken.
+
 12. **Open the PR:**
    ```
    .claude/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> BUGFIX "<short title>" \
@@ -40,7 +45,7 @@ This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, res
 
 ## Conventions (from `~/projects/hypertasks/AGENTS.md` and `~/.claude/CLAUDE.md`)
 
-- **A ticket labeled `cli` is fixed in `~/projects/hypertask-cli-zig` (remote `hypertask-ai/cli`, PRs base `main`), not in this app worktree.** This is the live native CLI: `~/.local/bin/hypertask` is built from it, and it is what `ticket-lifecycle` rule 4/RULE-MAP #63 already points at. `~/projects/hypertask-mcp` also contains a folder called `CLI/`, but that is the **retired Node package** (`@hypertask/hypertask_cli`) — AGENTS.md says explicitly not to extend it. Fixing a `cli`-labeled ticket there ships a change nobody runs. See RULE-MAP #99 for how this got checked.
+- **A ticket labeled `cli` is fixed in `~/projects/hypertask-cli-zig` (remote `hypertask-ai/cli`, PRs base `main`), not in this app worktree.** This is the live native CLI: `~/.local/bin/hypertask` is the fleet destination, and it is what `ticket-lifecycle` rule 4/RULE-MAP #63 already points at. Agent wrappers still run `hypertask` from PATH, so reproduce and verify with that PATH binary (or the wrapper on the ticket), not only the destination. `~/projects/hypertask-mcp` also contains a folder called `CLI/`, but that is the **retired Node package** (`@hypertask/hypertask_cli`) — AGENTS.md says explicitly not to extend it. Fixing a `cli`-labeled ticket there ships a change nobody runs. See RULE-MAP #99 for how this got checked.
 - Branch off `<remote>/production` of `hypertask-ai/hypertask`. Never base work on the legacy `valentinyeo/hypertasks` repo, which is what `origin` points at in some older checkouts. The script uses `$HT_GIT_REMOTE` (falling back to `origin`); check `git remote -v` if you are unsure which is which.
 - PR base is `production`, never `main`. `main` is frozen legacy. Title format is `HTPR-NNNN [TYPE] ...`.
 - Merging to `production` deploys `app.hypertask.ai` in about three minutes. **Bug fixes may deploy directly**, severe ones especially, and QA checks them on production afterwards. Features do not get this: they stay behind the Owner+QA flag.
