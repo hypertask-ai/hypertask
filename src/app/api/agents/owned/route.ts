@@ -12,8 +12,12 @@ import {
 } from "@/lib/aiAllowancePolicy";
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
-import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6512_SEED_TEAM_AGENT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
+import {
+  ensureDefaultAgentsOnAccessibleTeams,
+  type TeamAgentStore,
+} from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
@@ -76,6 +80,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
       { status: 401 },
+    );
+  }
+  if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, userId)) {
+    await ensureDefaultAgentsOnAccessibleTeams(
+      userId,
+      prisma as unknown as TeamAgentStore,
     );
   }
   const agents = await prisma.agent.findMany({
