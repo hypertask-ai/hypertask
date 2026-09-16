@@ -1,55 +1,71 @@
 #!/bin/bash
-# Weekly Strix pentest of the Hypertask dev env. Cron: Sun 03:00.
-# Boots hypertasks-dev, runs Strix against it, files each finding as a
-# ticket on board 15, tears the dev server down.
-# ponytail: one script, no orchestration layer. Add retries when a run
-# actually fails for a reason other than budget exhaustion.
+# Weekly white-box Strix scan of local Hypertask source via the ChatGPT subscription.
+# Cron: Sun 03:00. Findings are filed as tickets after the scan.
 set -uo pipefail
 
-DEV=/home/valentin/projects/hypertasks-dev
-LOG=/home/valentin/logs/strix-weekly-$(date +%F).log
-BUDGET=${STRIX_BUDGET:-50}
-mkdir -p /home/valentin/logs
+APP=${STRIX_APP:-/home/valentin/projects/hypertasks}
+LOG=${STRIX_LOG:-/home/valentin/logs/strix-weekly-$(date +%F).log}
+LOCK=${STRIX_LOCK:-/tmp/strix-weekly.lock}
+SANDBOX_IMAGE=${STRIX_IMAGE:-ghcr.io/usestrix/strix-sandbox:1.1.0}
+BUDGET=${STRIX_BUDGET:-10}
+mkdir -p "$(dirname "$LOG")"
 exec >>"$LOG" 2>&1
-echo "=== strix-weekly $(date -Is) budget=\$$BUDGET ==="
+echo "=== strix-weekly $(date -Is) subscription=chatgpt budget=\$$BUDGET ==="
 
-cd "$DEV" || exit 1
+cd "$APP" || exit 1
 
-# --- boot dev server on :3000 if not already up -------------------------
-STARTED_SERVER=0
-if ! curl -sf -o /dev/null --max-time 5 http://127.0.0.1:3000/api/health 2>/dev/null \
-   && ! curl -sf -o /dev/null --max-time 5 http://127.0.0.1:3000/ 2>/dev/null; then
-  echo "starting dev server..."
-  nohup npm run dev >/tmp/strix-devserver.log 2>&1 &
-  STARTED_SERVER=$!
-  for _ in $(seq 1 60); do
-    curl -sf -o /dev/null --max-time 5 http://127.0.0.1:3000/ && break
-    sleep 5
-  done
-fi
-curl -sf -o /dev/null --max-time 10 http://127.0.0.1:3000/ || { echo "dev server never came up, aborting"; exit 1; }
+exec 9>"$LOCK"
+flock -n 9 || {
+  echo "Another weekly Strix scan is already running"
+  exit 0
+}
 
-# --- run strix ----------------------------------------------------------
-export STRIX_LLM="openai/gpt-5.4"
-export LLM_API_KEY=$(grep -oE "AI_GATEWAY_API_KEY=\S+" /home/valentin/projects/hypertasks/.env.local | head -1 | cut -d= -f2)
-export LLM_API_BASE="https://ai-gateway.vercel.sh/v1"
+systemctl --user start strix-chatgpt-proxy.service
+for _ in $(seq 1 30); do
+  curl -sf -o /dev/null --connect-timeout 2 --max-time 2 http://127.0.0.1:48100/health && break
+  sleep 1
+done
+curl -sf -o /dev/null --connect-timeout 2 --max-time 2 http://127.0.0.1:48100/health || {
+  echo "ChatGPT proxy did not become healthy"
+  exit 1
+}
 
-BEFORE=$(ls -d "$DEV"/strix_runs/*/ 2>/dev/null | wc -l)
+SANDBOX_NETWORK="strix-weekly-$(date +%s)-$$"
+docker network create "$SANDBOX_NETWORK" >/dev/null || exit 1
+cleanup() {
+  status=$?
+  cleanup_failed=0
+  trap - EXIT
+  docker ps -aq --filter "network=$SANDBOX_NETWORK" --filter "ancestor=$SANDBOX_IMAGE" \
+    | xargs -r docker rm -f || cleanup_failed=1
+  docker network rm "$SANDBOX_NETWORK" >/dev/null 2>&1 || {
+    echo "Failed to remove sandbox network $SANDBOX_NETWORK" >&2
+    cleanup_failed=1
+  }
+  if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then
+    status=1
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-strix -n \
-  --target http://172.17.0.1:3000 \
+# The unique network is both the sandbox's port namespace and its cleanup ownership marker.
+export STRIX_DOCKER_SANDBOX_NETWORK="$SANDBOX_NETWORK"
+export STRIX_IMAGE="$SANDBOX_IMAGE"
+export STRIX_LLM="openai/gpt-5.6-sol"
+export LLM_API_KEY="chatgpt-oauth"
+export LLM_API_BASE="http://127.0.0.1:48100/v1"
+export STRIX_REASONING_EFFORT="medium"
+
+strix -n -m standard \
+  --scope-mode full \
+  --target ./src \
   --max-budget-usd "$BUDGET" \
-  --instruction "Grey-box test of a Next.js task-management app on the DEV environment (isolated branch database, throwaway data, safe to mutate). Prioritise: broken access control and IDOR on /api routes (BOTH src/app/api and the legacy src/pages/api router, which is the weaker surface), unauthenticated endpoints that read or mutate data, auth and session weaknesses (forgeable cookies, JWT audience confusion, session fixation), privilege escalation across board membership boundaries, and SSRF in any server-side URL fetch. Enumerate every route file under src/pages/api and src/app/api and check each one for a session gate and a membership check. Report each finding with a concrete curl reproduction. Do not attempt destructive DoS."
+  --instruction "Authorized white-box security review of our local Next.js source only. Prioritize JWT and Firebase authentication, MCP bearer-token scoping, IDOR and broken authorization on API routes, secret exposure, injection, SSRF, and unsafe deserialization. Report concrete file:line findings. Do not access any live or remote application URL."
 
-# --- collect findings ---------------------------------------------------
-RUN=$(ls -dt "$DEV"/strix_runs/*/ 2>/dev/null | head -1)
+RUN=$(ls -dt "$APP"/strix_runs/*/ 2>/dev/null | head -1)
 echo "run dir: $RUN"
-
-python3 /home/valentin/projects/hypertasks/scripts/strix-file-tickets.py "$RUN"
-
-# --- teardown -----------------------------------------------------------
-if [ "$STARTED_SERVER" != "0" ]; then
-  pkill -f "next-server.*3000" 2>/dev/null
-  kill "$STARTED_SERVER" 2>/dev/null
-fi
+python3 "$APP/scripts/strix-file-tickets.py" "$RUN"
 echo "=== done $(date -Is) ==="
