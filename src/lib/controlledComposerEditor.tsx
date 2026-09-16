@@ -55,6 +55,7 @@ export function ControlledComposerEditor({
     editorProps: {
       attributes: {
         "aria-label": ariaLabel,
+        "aria-multiline": "true",
         role: "textbox",
         class: "outline-none py-2 text-dense",
       },
