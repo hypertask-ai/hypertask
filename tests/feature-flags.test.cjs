@@ -354,6 +354,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6473-get-agent",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6476-mobile-agent-chat-fullscreen",
         mode: "OWNER_AND_QA",
         updatedAt: null,
@@ -365,6 +370,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6514-comment-long-press",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6531-deferred-mcp-tools",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },

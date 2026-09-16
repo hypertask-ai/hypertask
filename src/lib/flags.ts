@@ -59,6 +59,8 @@ import {
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
+  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+  HTPR_6473_GET_AGENT_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -87,6 +89,18 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-16",
     description:
       "Lets MCP list and search tools take query, filter, sort, fields, limit, and cursor so one call can return only the rows and columns the client asked for.",
+  },
+  {
+    key: HTPR_6473_GET_AGENT_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Lets hypertask agents get load one owned agent's mission text, boards, created time, and revoked state.",
+  },
+  {
+    key: HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "MCP tools/list sends one short line per tool on connect. Full schemas load through hypertask_describe_tool, and hypertask_search_tools finds a tool by name.",
   },
   {
     key: HTPR_6532_STATELESS_MCP_FLAG,

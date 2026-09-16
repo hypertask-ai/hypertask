@@ -12,6 +12,7 @@ import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import {
   HTPR_6530_MCP_LIST_QUERY_FLAG,
+  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
@@ -174,9 +175,18 @@ export async function mcpHandler(request: Request): Promise<Response> {
   const stateless =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
+  const deferred =
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
 
   if (stateless) {
+    if (deferred) {
+      return handleStatelessMcpRequest(working, authInfo, tools, { deferred: true })
+    }
     return handleStatelessMcpRequest(working, authInfo, tools)
+  }
+  if (deferred) {
+    return handleStatelessMcpRequest(working, authInfo, tools, { deferred: true })
   }
 
   return listQueryEnabled
