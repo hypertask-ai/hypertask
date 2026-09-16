@@ -10,6 +10,7 @@ import type {
 import type { ListTasksResponse } from './task.service';
 import type { TaskListItem } from './task.service';
 import { buildPaginationMetadata } from '../../utils/pagination';
+import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
 export interface GetSectionResponse {
   success: boolean;
@@ -52,7 +53,7 @@ export class SectionService {
 
     switch (validatedInput.action) {
       case 'list':
-        return this.listSections({ project_id: validatedInput.project_id!, include_hidden: validatedInput.include_hidden });
+        return this.listSections(validatedInput);
       case 'get':
         return this.getSectionWithTasks({
           project_id: validatedInput.project_id!,
@@ -89,14 +90,21 @@ export class SectionService {
   }
 
   private async listSections(params: {
-    project_id: number;
+    project_id?: number;
     include_hidden?: boolean;
+    query?: string;
+    filter?: { section?: string; label?: string | string[]; assignee?: string | number; status?: string; updated_since?: string; has_pr?: string };
+    sort?: string;
+    fields?: string | string[];
+    limit?: number;
+    cursor?: string;
   }): Promise<ListSectionsResponse> {
     const correlationId = generateCorrelationId();
     const queryParams = new URLSearchParams();
     if (params.include_hidden !== undefined) {
       queryParams.append('include_hidden', String(params.include_hidden));
     }
+    appendListQueryParams(queryParams, params)
 
     const response = await this.apiClient.makeRequest<ListSectionsResponse>(
       `/mcp/projects/${params.project_id}/sections?${queryParams.toString()}`,
