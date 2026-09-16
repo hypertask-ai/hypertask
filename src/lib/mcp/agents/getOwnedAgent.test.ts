@@ -27,7 +27,7 @@ async function demo() {
         return row
       },
     },
-  } as Pick<PrismaClient, 'agent'>
+  } as unknown as Pick<PrismaClient, 'agent'>
 
   const found = await getOwnedAgent(database, 6, row.id)
   assert.deepEqual(seenWhere, {
