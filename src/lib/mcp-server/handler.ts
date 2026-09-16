@@ -13,6 +13,7 @@ import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
 import { NextRequest } from 'next/server'
+import { handleMcpHttp, usesStatelessMcpTransport } from './mcp-http'
 import {
   handleStatelessMcpRequest,
   mcpUnauthorizedResponse,
@@ -161,6 +162,17 @@ export async function mcpHandler(request: Request): Promise<Response> {
   const deferred =
     Number.isFinite(userId) &&
     (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
+
+  // POST is always stateless so a second instance and the connector listing
+  // can continue initialize / tools/list / tools/call without the Owner+QA flag.
+  // GET/DELETE still follow the flag so the session transport stays in this file.
+  if (usesStatelessMcpTransport(working.method, stateless)) {
+    return handleMcpHttp(working, {
+      authenticate: async () => authInfo,
+      tools: portableTools,
+      deferredEnabled: async () => deferred,
+    })
+  }
 
   if (stateless) {
     if (deferred) {

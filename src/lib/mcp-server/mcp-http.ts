@@ -9,6 +9,11 @@ import {
 
 type McpHttpAuth = StatelessMcpAuth | AuthInfo
 
+/** POST and OPTIONS never need a sticky session. GET/DELETE still follow the flag. */
+export function usesStatelessMcpTransport(method: string, flagOn: boolean): boolean {
+  return method === 'POST' || method === 'OPTIONS' || flagOn
+}
+
 export type McpHttpDeps = {
   authenticate: (
     request: Request,
