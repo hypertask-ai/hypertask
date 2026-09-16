@@ -26,6 +26,52 @@ function acceptedHumanBoardWhere(userId: number): Prisma.ProjectWhereInput {
   };
 }
 
+/** Same access GET /api/agents already granted before it calls seed. */
+function accessibleTeamWhere(userId: number): Prisma.TeamWhereInput {
+  return {
+    OR: [
+      { googleAccount: { is: { userId } } },
+      { members: { some: { userId, status: "Accepted" } } },
+      {
+        projects: {
+          some: {
+            status: "Normal",
+            OR: [
+              { ownerId: userId },
+              { members: { some: { userId, agentId: null } } },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+
+async function findSeedBoard(
+  database: Pick<PrismaClient, "project" | "team">,
+  userId: number,
+  teamId: string,
+) {
+  const accepted = await database.project.findFirst({
+    where: { teamId, ...acceptedHumanBoardWhere(userId) },
+    select: { id: true },
+    orderBy: { id: "desc" },
+  });
+  if (accepted) return accepted;
+
+  const canUseTeam = await database.team.findFirst({
+    where: { id: teamId, ...accessibleTeamWhere(userId) },
+    select: { id: true },
+  });
+  if (!canUseTeam) return null;
+
+  return database.project.findFirst({
+    where: { teamId, status: "Normal" },
+    select: { id: true },
+    orderBy: { id: "desc" },
+  });
+}
+
 async function findActiveOwnedAgentOnTeam(
   database: AgentLookupClient,
   userId: number,
@@ -65,11 +111,7 @@ export async function ensureDefaultTeamAgent(
   const existing = await findActiveOwnedAgentOnTeam(database, userId, teamId);
   if (existing) return { id: existing.id, created: false };
 
-  const board = await database.project.findFirst({
-    where: { teamId, ...acceptedHumanBoardWhere(userId) },
-    select: { id: true },
-    orderBy: { id: "desc" },
-  });
+  const board = await findSeedBoard(database, userId, teamId);
   if (!board) return null;
 
   return database.$transaction(async (tx) => {
@@ -100,20 +142,11 @@ export async function ensureDefaultAgentsOnAccessibleTeams(
   userId: number,
   database: PrismaClient,
 ): Promise<number> {
-  const boards = await database.project.findMany({
-    where: {
-      teamId: { not: null },
-      ...acceptedHumanBoardWhere(userId),
-    },
-    select: { teamId: true },
+  const teams = await database.team.findMany({
+    where: accessibleTeamWhere(userId),
+    select: { id: true },
   });
-  const teamIds = [
-    ...new Set(
-      boards
-        .map((board) => board.teamId)
-        .filter((teamId): teamId is string => Boolean(teamId)),
-    ),
-  ];
+  const teamIds = [...new Set(teams.map((team) => team.id))];
 
   let created = 0;
   for (const teamId of teamIds) {

@@ -36,6 +36,11 @@ type FakeState = {
     ownerId: number;
     members: FakeMember[];
   }>;
+  teams: Array<{
+    id: string;
+    ownerUserId?: number;
+    acceptedMemberIds: number[];
+  }>;
   members: Array<{ projectId: number; userId: number; agentId: string }>;
   creates: number;
   locks: string[];
@@ -81,6 +86,8 @@ function accessUserId(where: Where): number | null {
     if (typeof branch.ownerId === "number") return branch.ownerId;
     const memberFilter = asRecord(asRecord(branch.members)?.some);
     if (typeof memberFilter?.userId === "number") return memberFilter.userId;
+    const google = asRecord(asRecord(branch.googleAccount)?.is);
+    if (typeof google?.userId === "number") return google.userId;
   }
   return null;
 }
@@ -145,7 +152,13 @@ function fakeDatabase(state: FakeState) {
   const project = {
     findFirst: async ({ where }: { where: Where }) => {
       const userId = accessUserId(where);
-      if (userId == null) return null;
+      if (userId == null) {
+        const teamId = requestedTeamId(where);
+        const board = state.boards.find(
+          (row) => !teamId || row.teamId === teamId,
+        );
+        return board ? { id: board.id } : null;
+      }
       const board = state.boards.find((row) =>
         boardMatchesAccess(row, where, userId),
       );
@@ -157,6 +170,34 @@ function fakeDatabase(state: FakeState) {
       return state.boards
         .filter((row) => boardMatchesAccess(row, where, userId))
         .map((board) => ({ teamId: board.teamId }));
+    },
+  };
+  const teamCanAccess = (teamId: string, userId: number) => {
+    const team = state.teams.find((row) => row.id === teamId);
+    if (team?.ownerUserId === userId) return true;
+    if (team?.acceptedMemberIds.includes(userId)) return true;
+    return state.boards.some(
+      (board) =>
+        board.teamId === teamId &&
+        (board.ownerId === userId ||
+          board.members.some(
+            (member) => member.userId === userId && member.agentId === null,
+          )),
+    );
+  };
+  const team = {
+    findFirst: async ({ where }: { where: Where }) => {
+      const teamId = typeof where.id === "string" ? where.id : null;
+      const userId = accessUserId(where);
+      if (!teamId || userId == null) return null;
+      return teamCanAccess(teamId, userId) ? { id: teamId } : null;
+    },
+    findMany: async ({ where }: { where: Where }) => {
+      const userId = accessUserId(where);
+      if (userId == null) return [];
+      return state.teams
+        .filter((row) => teamCanAccess(row.id, userId))
+        .map((row) => ({ id: row.id }));
     },
   };
   const member = {
@@ -181,6 +222,7 @@ function fakeDatabase(state: FakeState) {
   const store = {
     agent,
     project,
+    team,
     member,
     $queryRaw: queryRaw,
     $transaction: async <T>(fn: (client: typeof tx) => Promise<T>) => fn(tx),
@@ -197,14 +239,24 @@ function ownedBoard(): FakeState["boards"][number] {
   };
 }
 
-test("seeds a native Hyper AI agent on an empty team board", async () => {
-  const state: FakeState = {
+function ownedTeam(): FakeState["teams"][number] {
+  return { id: TEAM, ownerUserId: OWNER, acceptedMemberIds: [] };
+}
+
+function emptyState(overrides: Partial<FakeState> = {}): FakeState {
+  return {
     agents: [],
     boards: [ownedBoard()],
+    teams: [ownedTeam()],
     members: [],
     creates: 0,
     locks: [],
+    ...overrides,
   };
+}
+
+test("seeds a native Hyper AI agent on an empty team board", async () => {
+  const state = emptyState();
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -220,7 +272,7 @@ test("seeds a native Hyper AI agent on an empty team board", async () => {
 });
 
 test("does not create a second agent when one is already live on the team", async () => {
-  const state: FakeState = {
+  const state = emptyState({
     agents: [
       {
         id: "existing",
@@ -230,11 +282,7 @@ test("does not create a second agent when one is already live on the team", asyn
         teamId: TEAM,
       },
     ],
-    boards: [ownedBoard()],
-    members: [],
-    creates: 0,
-    locks: [],
-  };
+  });
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -246,8 +294,7 @@ test("does not create a second agent when one is already live on the team", asyn
 });
 
 test("does not seed when the user has no board on that team", async () => {
-  const state: FakeState = {
-    agents: [],
+  const state = emptyState({
     boards: [
       {
         id: 99,
@@ -256,10 +303,8 @@ test("does not seed when the user has no board on that team", async () => {
         members: [],
       },
     ],
-    members: [],
-    creates: 0,
-    locks: [],
-  };
+    teams: [{ id: "other-team", ownerUserId: OWNER, acceptedMemberIds: [] }],
+  });
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -269,9 +314,8 @@ test("does not seed when the user has no board on that team", async () => {
   assert.equal(state.creates, 0);
 });
 
-test("does not treat an unaccepted board membership as access", async () => {
-  const state: FakeState = {
-    agents: [],
+test("seeds when the caller can open the board but is still Invited", async () => {
+  const state = emptyState({
     boards: [
       {
         id: BOARD_ID,
@@ -287,22 +331,43 @@ test("does not treat an unaccepted board membership as access", async () => {
         ],
       },
     ],
-    members: [],
-    creates: 0,
-    locks: [],
-  };
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
+  });
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
     fakeDatabase(state) as unknown as PrismaClient,
   );
-  assert.equal(result, null);
-  assert.equal(state.creates, 0);
+  assert.deepEqual(result, { id: "agent-1", created: true });
+  assert.equal(state.creates, 1);
+});
+
+test("seeds when the caller is an accepted team member with no board row", async () => {
+  const state = emptyState({
+    boards: [
+      {
+        id: BOARD_ID,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [],
+      },
+    ],
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [OWNER] }],
+  });
+  const result = await ensureDefaultTeamAgent(
+    OWNER,
+    TEAM,
+    fakeDatabase(state) as unknown as PrismaClient,
+  );
+  assert.deepEqual(result, { id: "agent-1", created: true });
+  assert.equal(state.creates, 1);
+  assert.deepEqual(state.members, [
+    { projectId: BOARD_ID, userId: OWNER, agentId: "agent-1" },
+  ]);
 });
 
 test("seeds when the caller is an accepted board member, not the owner", async () => {
-  const state: FakeState = {
-    agents: [],
+  const state = emptyState({
     boards: [
       {
         id: BOARD_ID,
@@ -318,10 +383,8 @@ test("seeds when the caller is an accepted board member, not the owner", async (
         ],
       },
     ],
-    members: [],
-    creates: 0,
-    locks: [],
-  };
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
+  });
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -332,12 +395,7 @@ test("seeds when the caller is an accepted board member, not the owner", async (
 });
 
 test("rechecks after the seed lock so a concurrent create wins", async () => {
-  const state: FakeState = {
-    agents: [],
-    boards: [ownedBoard()],
-    members: [],
-    creates: 0,
-    locks: [],
+  const state = emptyState({
     onLock: () => {
       state.agents.push({
         id: "winner",
@@ -347,7 +405,7 @@ test("rechecks after the seed lock so a concurrent create wins", async () => {
         teamId: TEAM,
       });
     },
-  };
+  });
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -359,13 +417,26 @@ test("rechecks after the seed lock so a concurrent create wins", async () => {
 });
 
 test("covers every accessible team that still has no live agent", async () => {
-  const state: FakeState = {
-    agents: [],
-    boards: [ownedBoard()],
-    members: [],
-    creates: 0,
-    locks: [],
-  };
+  const state = emptyState();
+  const created = await ensureDefaultAgentsOnAccessibleTeams(
+    OWNER,
+    fakeDatabase(state) as unknown as PrismaClient,
+  );
+  assert.equal(created, 1);
+});
+
+test("covers a team the caller can use without an accepted board row", async () => {
+  const state = emptyState({
+    boards: [
+      {
+        id: BOARD_ID,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [],
+      },
+    ],
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [OWNER] }],
+  });
   const created = await ensureDefaultAgentsOnAccessibleTeams(
     OWNER,
     fakeDatabase(state) as unknown as PrismaClient,
