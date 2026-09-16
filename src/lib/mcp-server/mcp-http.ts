@@ -1,14 +1,11 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
+import { extractBearerToken } from '@/lib/mcp/auth'
 import {
   handleStatelessMcpRequest,
   mcpUnauthorizedResponse,
   type PortableTool,
   type StatelessMcpAuth,
 } from './stateless-http'
-
-function extractBearerToken(authHeader: string | null): string | null {
-  return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
-}
 
 type McpHttpAuth = StatelessMcpAuth | AuthInfo
 

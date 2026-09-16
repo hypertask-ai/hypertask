@@ -1,17 +1,70 @@
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
+import { createMcpHandler, withMcpAuth } from 'mcp-handler'
 import jwt from 'jsonwebtoken'
+import crypto from 'node:crypto'
 import { MCP_TOOLS } from './tools'
 import {
   McpAttachmentRequestBodyError,
   readRequestBytesWithCap,
 } from '@/lib/mcp/attachments/readRequestBody'
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constants'
-import { validateMcpAuth } from '@/lib/mcp/auth'
+import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
-import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
 import { NextRequest } from 'next/server'
-import { handleMcpHttp } from './mcp-http'
-import type { PortableTool } from './stateless-http'
+import {
+  handleStatelessMcpRequest,
+  mcpUnauthorizedResponse,
+  MCP_SERVER_INFO,
+  type PortableTool,
+} from './stateless-http'
+
+function tokenFrom(extra: { authInfo?: AuthInfo }): string {
+  const token = extra.authInfo?.token
+  if (!token) throw new Error('Missing MCP bearer token')
+  return token
+}
+
+const handler = createMcpHandler(
+  (server) => {
+    for (const tool of MCP_TOOLS as PortableTool[]) {
+      server.tool(tool.name, tool.description, tool.parameters.shape, async (args, extra) => {
+        const token = tokenFrom(extra)
+        return {
+          content: [
+            {
+              type: 'text',
+              text: await tool.execute(
+                args,
+                token,
+                extra.requestId === undefined || extra.requestId === null
+                  ? undefined
+                  : {
+                      requestId: String(extra.requestId),
+                      sessionId: extra.sessionId,
+                      clientFingerprint: crypto
+                        .createHash('sha256')
+                        .update(token)
+                        .digest('hex'),
+                    }
+              ),
+            },
+          ],
+        }
+      })
+    }
+  },
+  {
+    serverInfo: MCP_SERVER_INFO,
+  },
+  {
+    basePath: '',
+    redisUrl: process.env.REDIS_URL,
+    maxDuration: 800,
+    verboseLogs: false,
+  }
+)
 
 async function verifyToken(_request: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
   if (!bearerToken) return undefined
@@ -49,6 +102,11 @@ async function verifyToken(_request: Request, bearerToken?: string): Promise<Aut
   }
 }
 
+const authenticatedMcpHandler = withMcpAuth(handler, verifyToken, {
+  required: true,
+  resourceMetadataPath: '/.well-known/oauth-protected-resource',
+})
+
 async function boundMcpRequest(request: Request): Promise<Request> {
   if (request.method !== 'POST' || !request.body) return request
   const body = await readRequestBytesWithCap(
@@ -69,7 +127,7 @@ async function boundMcpRequest(request: Request): Promise<Request> {
 
 const portableTools = MCP_TOOLS as PortableTool[]
 
-/** Bound JSON-RPC transport bytes, then a stateless Streamable HTTP reply. */
+/** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
 export async function mcpHandler(request: Request): Promise<Response> {
   let working = request
   try {
@@ -86,9 +144,33 @@ export async function mcpHandler(request: Request): Promise<Response> {
     )
   }
 
-  return handleMcpHttp(working, {
-    authenticate: verifyToken,
-    tools: portableTools,
-    deferredEnabled: (userId) => isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId),
-  })
+  if (working.method === 'OPTIONS') {
+    return handleStatelessMcpRequest(working, null, portableTools)
+  }
+
+  const bearer = extractBearerToken(working.headers.get('Authorization'))
+  const authInfo = await verifyToken(working, bearer ?? undefined)
+  if (!authInfo) {
+    return mcpUnauthorizedResponse(working)
+  }
+
+  const userId = Number(authInfo.clientId)
+  const stateless =
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
+  const deferred =
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
+
+  if (stateless) {
+    if (deferred) {
+      return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
+    }
+    return handleStatelessMcpRequest(working, authInfo, portableTools)
+  }
+  if (deferred) {
+    return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
+  }
+
+  return authenticatedMcpHandler(working)
 }

@@ -197,7 +197,7 @@ function publicHandler(options: { deferred?: boolean } = {}) {
     })
 }
 
-test('public /mcp path with the 6532 flag off still interleaves two isolated instances', async () => {
+test('flagged stateless HTTP wrapper interleaves two isolated instances', async () => {
   const instanceA = publicHandler()
   const instanceB = publicHandler()
 
