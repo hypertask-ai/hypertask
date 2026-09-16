@@ -464,8 +464,8 @@ case "$url" in
     printf '%s' "$url" > "$RUNNER_TEMP/promoted"
     body='{"ok":true}'
     ;;
-  https://api.github.com/repos/*/actions/workflows/prod-health.yml/runs*)
-    body=$(printf '{"workflow_runs":[{"conclusion":"%s","status":"completed","created_at":"2026-09-15T00:00:00Z"}]}' "\${DRIFT_HEALTH_CONCLUSION:-success}")
+  https://api.github.com/repos/*/commits/*/status*)
+    body=$(printf '{"statuses":[{"context":"prod-health-gate","state":"%s"}]}' "\${DRIFT_HEALTH_GATE:-success}")
     ;;
   https://api.telegram.org/*)
     body='{"ok":true}'
@@ -506,7 +506,7 @@ async function runDriftCheck({
   docsOnly = false,
   freshTip = false,
   liveIsTip = false,
-  healthConclusion = "success",
+  healthGate = "success",
   ignoredTipAfterApp = false,
 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "prod-health-drift-"));
@@ -566,7 +566,7 @@ async function runDriftCheck({
         GITHUB_REPOSITORY: "hypertask-ai/hypertask",
         DRIFT_TIP_SHA: ignoredTipAfterApp ? appSha : tipSha,
         DRIFT_LIVE_SHA: liveIsTip ? tipSha : liveSha,
-        DRIFT_HEALTH_CONCLUSION: healthConclusion,
+        DRIFT_HEALTH_GATE: healthGate,
       },
     });
     const promoted = await readFile(join(runnerTemp, "promoted"), "utf8").catch(
@@ -608,7 +608,7 @@ test("drift does not promote a docs-only gap", async () => {
 
 test("drift does not promote a SHA whose prod-health run failed", async () => {
   const { result, promoted } = await runDriftCheck({
-    healthConclusion: "failure",
+    healthGate: "failure",
   });
 
   assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -626,14 +626,22 @@ test("drift promotes the READY app ancestor when the tip is a docs commit", asyn
 });
 
 test("health skips alias repair when origin/production already moved on", async () => {
-  const older = spawnSync(
-    "git",
-    ["merge-base", "HEAD", "hypertask-ai/production"],
-    { encoding: "utf8" },
-  );
-  assert.equal(older.status, 0, older.stderr);
+  const refs = ["origin/production", "hypertask-ai/production", "pub/production"];
+  let older = "";
+  for (const ref of refs) {
+    const tip = spawnSync("git", ["rev-parse", ref], { encoding: "utf8" });
+    if (tip.status !== 0) continue;
+    const parent = spawnSync("git", ["rev-parse", `${tip.stdout.trim()}~3`], {
+      encoding: "utf8",
+    });
+    if (parent.status === 0 && parent.stdout.trim()) {
+      older = parent.stdout.trim();
+      break;
+    }
+  }
+  assert.ok(older, "need a production-tracking ref for the superseded test");
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
-    SHA: older.stdout.trim(),
+    SHA: older,
     HC_VERSION_SHA: "a".repeat(40),
   });
 
