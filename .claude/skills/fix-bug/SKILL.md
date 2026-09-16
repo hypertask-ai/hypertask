@@ -38,6 +38,8 @@ This skill covers the flag-exempt fixes: a crash, a 500, wrong or lost data, res
 13. **Re-read the ticket's latest comments before merging.** A green CI run does not override a correction posted after it. Don't restart a full review cycle for a small follow-up fix; a fresh look at the delta on top of the already-reviewed diff is enough.
 14. **Hand to QA** with a ticket comment naming the PR, what to check, and any access QA needs to reach it (login, feature flag, URL) so it isn't blocked chasing that itself.
 
+**Never leave a ticket in a review lane unless a pull request is still open.** If the PR already merged, move the ticket to QA in the same turn. A review column with nothing to review gets the ticket sent back to Bugs.
+
 ## Conventions (from `~/projects/hypertasks/AGENTS.md` and `~/.claude/CLAUDE.md`)
 
 - **A ticket labeled `cli` is fixed in `~/projects/hypertask-cli-zig` (remote `hypertask-ai/cli`, PRs base `main`), not in this app worktree.** This is the live native CLI: `~/.local/bin/hypertask` is built from it, and it is what `ticket-lifecycle` rule 4/RULE-MAP #63 already points at. `~/projects/hypertask-mcp` also contains a folder called `CLI/`, but that is the **retired Node package** (`@hypertask/hypertask_cli`) — AGENTS.md says explicitly not to extend it. Fixing a `cli`-labeled ticket there ships a change nobody runs. See RULE-MAP #99 for how this got checked.
