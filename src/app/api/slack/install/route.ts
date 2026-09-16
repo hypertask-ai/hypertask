@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { createSlackOAuthState } from "@/lib/slack/oauthState";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
   }
 
   const clientSecret = process.env.SLACK_CLIENT_SECRET?.trim();
-  const authorizeUrl = buildSlackAuthorizeUrl(new URL(request.url).origin);
+  const authorizeUrl = buildSlackAuthorizeUrl(getRequestBaseUrl(request));
   if (!clientSecret || !authorizeUrl) {
     console.error("Slack OAuth is not configured: SLACK_CLIENT_ID or SLACK_CLIENT_SECRET is missing");
     return NextResponse.redirect(

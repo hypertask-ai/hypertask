@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
+import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { SLACK_SETTINGS_PATH } from "@/lib/auth/safeReturnTo";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -67,7 +68,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const redirectUri = new URL("/api/slack/oauth_redirect", request.url);
+    const redirectUri = new URL(
+      "/api/slack/oauth_redirect",
+      getRequestBaseUrl(request),
+    );
     const response = await fetch("https://slack.com/api/oauth.v2.access", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },

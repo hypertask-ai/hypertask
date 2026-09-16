@@ -382,8 +382,47 @@ test("Add to Slack page uses the card surface and 12-16px padding", () => {
   assert.doesNotMatch(page, /bg-containerBackground/);
   assert.doesNotMatch(page, /\bp-8\b/);
   assert.doesNotMatch(page, /font-medium/);
+  assert.match(page, /text-content/);
   assert.match(page, /bg-shadcn-primary/);
   assert.match(page, /rounded-\[5px\]/);
+  const scopesHeading = page.indexOf("What the bot can read");
+  const cta = page.indexOf("Add to Slack");
+  assert.ok(scopesHeading !== -1 && cta !== -1);
+  assert.ok(
+    scopesHeading < cta,
+    "the primary Add to Slack action must come last",
+  );
+});
+
+test("Slack authorize URLs use the allowlisted request origin", () => {
+  const installRoute = fs.readFileSync(
+    path.join(root, "src/app/api/slack/install/route.ts"),
+    "utf8",
+  );
+  const oauthRoute = fs.readFileSync(
+    path.join(root, "src/app/api/slack/oauth_redirect/route.ts"),
+    "utf8",
+  );
+  const page = fs.readFileSync(
+    path.join(root, "src/app/add-to-slack/page.tsx"),
+    "utf8",
+  );
+  assert.match(installRoute, /getRequestBaseUrl\(request\)/);
+  assert.doesNotMatch(installRoute, /new URL\(request\.url\)\.origin/);
+  assert.match(oauthRoute, /getRequestBaseUrl\(request\)/);
+  assert.match(page, /getRequestBaseUrl\(/);
+});
+
+test("the public Add to Slack page is open during incomplete onboarding", () => {
+  const proxy = fs.readFileSync(path.join(root, "src/proxy.ts"), "utf8");
+  const unauthenticatedAllow = proxy.indexOf("currentPath === '/add-to-slack'");
+  const onboardingExempt = proxy.indexOf("currentPath !== '/add-to-slack'");
+  assert.notEqual(unauthenticatedAllow, -1);
+  assert.notEqual(onboardingExempt, -1);
+  assert.ok(
+    unauthenticatedAllow < onboardingExempt,
+    "the public path must be allowed before the authenticated onboarding redirect",
+  );
 });
 
 test("Slack writes require a linked actor and authorized project", () => {

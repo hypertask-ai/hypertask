@@ -48,23 +48,11 @@ export default async function AddToSlackPage() {
         <h1 className="text-heading font-semibold text-white-black">
           Hypertask for Slack
         </h1>
-        <p className="text-dense leading-relaxed text-text-light-gray">
+        <p className="text-content leading-relaxed text-text-light-gray">
           Turn Slack conversations into tracked tasks. Mention the bot to create
           a task from any message, ask it to watch a thread and post a summary,
           and chat with it in Slack&apos;s assistant sidebar.
         </p>
-        {authorizeUrl ? (
-          <a
-            href={authorizeUrl.toString()}
-            className="rounded-[5px] bg-shadcn-primary px-6 py-3 text-center font-semibold text-primary-foreground transition hover:bg-shadcn-primary/90"
-          >
-            Add to Slack
-          </a>
-        ) : (
-          <p className="text-dense text-text-light-gray">
-            Slack installation is not configured yet. Please try again later.
-          </p>
-        )}
         <div>
           <h2 className="text-dense font-semibold text-white-black">
             What the bot can read
@@ -75,17 +63,30 @@ export default async function AddToSlackPage() {
                 key={scope}
                 className="text-dense text-text-light-gray"
               >
-                <code className="bg-pageBackground px-1">{scope}</code> —{" "}
+                <code className="bg-pageBackground px-1">{scope}</code>
+                {": "}
                 {SCOPE_PURPOSES[scope] ?? scope}
               </li>
             ))}
           </ul>
         </div>
-        <p className="text-dense leading-relaxed text-text-light-gray">
+        <p className="text-content leading-relaxed text-text-light-gray">
           After Slack adds the bot, sign in to Hypertask to connect it to your
           team. When you remove the app from your workspace, we delete the bot
           token and everything stored for it.
         </p>
+        {authorizeUrl ? (
+          <a
+            href={authorizeUrl.toString()}
+            className="rounded-[5px] bg-shadcn-primary px-4 py-2 text-center text-dense font-semibold text-primary-foreground transition hover:bg-shadcn-primary/90"
+          >
+            Add to Slack
+          </a>
+        ) : (
+          <p className="text-content text-text-light-gray">
+            Slack installation is not configured yet. Please try again later.
+          </p>
+        )}
       </section>
     </main>
   );
