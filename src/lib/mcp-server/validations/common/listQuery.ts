@@ -56,14 +56,30 @@ export const listQueryToolSchema = z.object({
     .describe('Opaque cursor from the previous page. Prefer this over offset.'),
 })
 
+type ListQueryFieldShape = typeof listQueryToolSchema.shape
+
+export type SchemaWithListQuery<T extends z.ZodObject<z.ZodRawShape>> = z.ZodObject<
+  T['shape'] & ListQueryFieldShape
+>
+
+export function withListQuerySchema<T extends z.ZodObject<z.ZodRawShape>>(
+  schema: T,
+  options: { listQuery: true },
+  extras?: { omitQuery?: boolean },
+): SchemaWithListQuery<T>
+export function withListQuerySchema<T extends z.ZodObject<z.ZodRawShape>>(
+  schema: T,
+  options?: ListQuerySchemaOptions,
+  extras?: { omitQuery?: boolean },
+): T
 export function withListQuerySchema<T extends z.ZodObject<z.ZodRawShape>>(
   schema: T,
   options?: ListQuerySchemaOptions,
   extras: { omitQuery?: boolean } = {},
-): T {
+): T | SchemaWithListQuery<T> {
   if (!options?.listQuery) return schema
   const extra = extras.omitQuery
     ? listQueryToolSchema.omit({ query: true })
     : listQueryToolSchema
-  return schema.merge(extra) as T
+  return schema.merge(extra) as SchemaWithListQuery<T>
 }

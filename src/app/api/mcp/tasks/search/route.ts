@@ -272,7 +272,8 @@ export async function GET(request: NextRequest) {
     // sort must run in Prisma so matching rows outside the candidate window
     // are not dropped, and requested order is honored.
     const extraFilters = Boolean(
-      labelsParam.length > 0 ||
+      section ||
+        labelsParam.length > 0 ||
         updatedSince ||
         listQuery?.filter.has_pr ||
         listQuery?.filter.assignee !== undefined,
@@ -288,8 +289,7 @@ export async function GET(request: NextRequest) {
       turbopufferIds.length > 0 && !extraFilters && !sortField
 
     if (useTurbopufferWindow) {
-      const start = cursorId ? turbopufferIds.indexOf(cursorId) + 1 : 0
-      where.id = { in: turbopufferIds.slice(Math.max(start, 0)) }
+      where.id = { in: turbopufferIds }
     } else {
       where.OR = [
         { title: { contains: query, mode: 'insensitive' } },
@@ -298,8 +298,22 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Get total count
+    // Count the complete filtered candidate set before applying a cursor window.
     const total = await prisma.task.count({ where })
+    if (useTurbopufferWindow && cursorId) {
+      const start = turbopufferIds.indexOf(cursorId)
+      if (start < 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'cursor must be a previous nextCursor value',
+          },
+          { status: 400 },
+        )
+      }
+      where.id = { in: turbopufferIds.slice(start + 1) }
+    }
 
     const orderBy = sortField
       ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
@@ -355,10 +369,9 @@ export async function GET(request: NextRequest) {
     // Transform to response format
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
-      const presented = withTaskPresentation({
+      const item: TaskSearchItem = {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
-        uniqueIndex: task.uniqueIndex,
         title: task.title,
         description: task.description,
         boardId: task.projectId,
@@ -368,8 +381,10 @@ export async function GET(request: NextRequest) {
         dueDate: task.dueDate?.toISOString() || undefined,
         createdAt: task.createdAt.toISOString(),
         ...(agent ? { agent } : {}),
-      })
-      return presented
+      }
+      return listQueryEnabled
+        ? withTaskPresentation({ ...item, uniqueIndex: task.uniqueIndex })
+        : item
     })
 
     const response: SearchTasksResponse = {

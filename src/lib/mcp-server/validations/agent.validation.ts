@@ -3,7 +3,8 @@ import { paginationSchema } from './common/pagination'
 import { type ListQuerySchemaOptions, withListQuerySchema } from './common/listQuery'
 
 export function getListAgentsInputSchema(options?: ListQuerySchemaOptions) {
-  return withListQuerySchema(z.object({}), options).merge(paginationSchema).strict()
+  if (!options?.listQuery) return z.object({}).strict()
+  return withListQuerySchema(z.object({}), { listQuery: true }).merge(paginationSchema).strict()
 }
 
 export const ListAgentsInputSchema = getListAgentsInputSchema({ listQuery: true })

@@ -144,6 +144,18 @@ function demo() {
     ListQueryParseError,
   )
   assert.throws(
+    () => parseListQueryFromSearchParams(new URLSearchParams({ filter: 'invalid' })),
+    ListQueryParseError,
+  )
+  assert.throws(
+    () =>
+      applyCollectionQuery(
+        [{ id: 'a', name: 'Alpha' }],
+        parseListQueryFromArgs({ cursor: 'missing' }),
+      ),
+    ListQueryParseError,
+  )
+  assert.throws(
     () => parseListQueryFromArgs({ filter: { has_pr: 'nope' } }),
     ListQueryParseError,
   )

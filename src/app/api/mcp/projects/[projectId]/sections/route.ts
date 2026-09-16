@@ -5,8 +5,7 @@ import prisma from '@/lib/prisma'
 import { createSection } from '@/lib/mcp/sections/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { applyCollectionQuery } from '@/lib/mcp/listQuery'
-import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 export interface SectionListItem {
   id: number
@@ -323,15 +322,16 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     )
 
     const projected = listQuery
-      ? applyCollectionQuery(sectionList as Array<Record<string, unknown>>, listQuery, {
+      ? tryApplyCollectionQuery(sectionList as Array<Record<string, unknown>>, listQuery, {
           searchFields: ['section_title'],
         })
       : null
+    if (projected && !projected.ok) return projected.error
     const response: ListSectionsResponse = {
       success: true,
-      sections: (projected?.items ?? sectionList) as SectionListItem[],
+      sections: (projected?.value.items ?? sectionList) as SectionListItem[],
       projectId,
-      ...(listQueryEnabled ? { nextCursor: projected?.nextCursor ?? null } : {}),
+      ...(listQueryEnabled ? { nextCursor: projected?.value.nextCursor ?? null } : {}),
     }
 
     return NextResponse.json(response)

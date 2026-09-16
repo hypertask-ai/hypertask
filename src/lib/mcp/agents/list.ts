@@ -11,8 +11,7 @@ import {
   type AgentManagementDatabase,
 } from './ownedAgents'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { applyCollectionQuery } from '@/lib/mcp/listQuery'
-import { readEnabledListQuery } from '@/lib/mcp/readListQuery'
+import { readEnabledListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
 export async function handleListAgentsRequest(
   request: NextRequest,
@@ -66,15 +65,16 @@ export async function handleListAgentsRequest(
   if (!listQuery) {
     return NextResponse.json({ success: true, agents })
   }
-  const projected = applyCollectionQuery(
+  const projected = tryApplyCollectionQuery(
     agents as unknown as Array<Record<string, unknown>>,
     listQuery,
     { searchFields: ['display_name', 'id'] },
   )
+  if (!projected.ok) return projected.error
   return NextResponse.json({
     success: true,
-    agents: projected.items,
-    total: projected.total,
-    nextCursor: projected.nextCursor,
+    agents: projected.value.items,
+    total: projected.value.total,
+    nextCursor: projected.value.nextCursor,
   })
 }

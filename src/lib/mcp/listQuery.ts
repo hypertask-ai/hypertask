@@ -150,14 +150,19 @@ function parseFilterParam(raw: string | null): ListFilter {
   if (!raw) return {}
   const trimmed = raw.trim()
   if (!trimmed) return {}
-  if (trimmed.startsWith('{')) {
-    try {
-      return parseFilterValue(JSON.parse(trimmed))
-    } catch {
-      throw new ListQueryParseError('filter must be valid JSON')
-    }
+  if (!trimmed.startsWith('{')) {
+    throw new ListQueryParseError('filter must be a JSON object')
   }
-  return {}
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new ListQueryParseError('filter must be a JSON object')
+    }
+    return parseFilterValue(parsed)
+  } catch (error) {
+    if (error instanceof ListQueryParseError) throw error
+    throw new ListQueryParseError('filter must be valid JSON')
+  }
 }
 
 export function parseAssigneeFilter(value: string | number | undefined): AssigneeFilter {
@@ -443,7 +448,10 @@ export function applyCollectionQuery<T extends Record<string, unknown>>(
     const index = filtered.findIndex(
       (item) => String((item as Record<string, unknown>)[idField]) === listQuery.cursor,
     )
-    if (index >= 0) filtered = filtered.slice(index + 1)
+    if (index < 0) {
+      throw new ListQueryParseError('cursor must be a previous nextCursor value')
+    }
+    filtered = filtered.slice(index + 1)
   }
 
   const limit = listQuery.limit ?? filtered.length

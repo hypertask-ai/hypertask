@@ -258,7 +258,7 @@ export function getListLabelsBaseSchema(options?: ListQuerySchemaOptions) {
     .strict();
 }
 
-export const ListLabelsInputSchema = getListLabelsBaseSchema();
+export const ListLabelsInputSchema = getListLabelsBaseSchema({ listQuery: true });
 export type ListLabelsInput = z.infer<typeof ListLabelsInputSchema>;
 
 /**
