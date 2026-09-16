@@ -1,3 +1,4 @@
+import { HTPR_6473_GET_AGENT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   checkMcpRateLimit,
   validateMcpAuth,
@@ -6,10 +7,7 @@ import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementReadPermission } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
-import {
-  getOwnedAgent,
-  type AgentGetDatabase,
-} from './ownedAgents'
+import { getOwnedAgent } from './ownedAgents'
 
 export async function handleGetAgentRequest(
   request: NextRequest,
@@ -49,6 +47,19 @@ export async function handleGetAgentRequest(
     )
   }
 
+  let featureEnabled = false
+  try {
+    featureEnabled = await isFeatureEnabled(HTPR_6473_GET_AGENT_FLAG, ctx.user.id)
+  } catch (error) {
+    console.error('[get-agent] feature flag check failed', error)
+  }
+  if (!featureEnabled) {
+    return NextResponse.json(
+      { success: false, error: 'Not found.' },
+      { status: 404 }
+    )
+  }
+
   const agentId = rawAgentId.trim()
   if (!agentId) {
     return NextResponse.json(
@@ -61,11 +72,7 @@ export async function handleGetAgentRequest(
     )
   }
 
-  const agent = await getOwnedAgent(
-    prisma as unknown as AgentGetDatabase,
-    ctx.user.id,
-    agentId
-  )
+  const agent = await getOwnedAgent(prisma, ctx.user.id, agentId)
   if (!agent) {
     return NextResponse.json(
       { success: false, error: 'Agent not found' },

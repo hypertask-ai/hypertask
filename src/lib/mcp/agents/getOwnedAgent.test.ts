@@ -1,7 +1,8 @@
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx src/lib/mcp/agents/getOwnedAgent.test.ts
+import type { PrismaClient } from '@prisma/client'
 import assert from 'node:assert/strict'
-import { getOwnedAgent, type AgentGetDatabase } from './ownedAgents'
+import { getOwnedAgent } from './ownedAgents'
 
 async function demo() {
   const row = {
@@ -18,15 +19,15 @@ async function demo() {
   }
 
   let seenWhere: unknown
-  const database: AgentGetDatabase = {
+  const database = {
     agent: {
-      async findFirst(args) {
+      async findFirst(args: { where: { id: string; userId: number } }) {
         seenWhere = args.where
         if (args.where.id !== row.id || args.where.userId !== 6) return null
         return row
       },
     },
-  }
+  } as Pick<PrismaClient, 'agent'>
 
   const found = await getOwnedAgent(database, 6, row.id)
   assert.deepEqual(seenWhere, {

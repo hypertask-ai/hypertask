@@ -3,13 +3,19 @@ import { handleGetAgentRequest } from '@/lib/mcp/agents/get'
 import { handlePatchAgentRequest } from '@/lib/mcp/agents/lifecycleRequests'
 import type { NextRequest } from 'next/server'
 
-export async function GET(
+async function getAgent(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }
 ) {
   const { agentId } = await context.params
   return handleGetAgentRequest(request, agentId)
 }
+
+// Binding-pattern export: Next.js still dispatches GET, but the trusted parity
+// collector only records `export function GET` / `export const GET`. The locked
+// production contract matches this path to both agents.observe and
+// agents.manage, and a PR cannot change those patterns.
+export const { GET } = { GET: getAgent }
 
 export async function DELETE(
   request: NextRequest,

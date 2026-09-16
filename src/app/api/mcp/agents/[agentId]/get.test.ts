@@ -31,6 +31,7 @@ async function demo() {
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst = prismaMock.revokedToken.findFirst
   const originalLogsCreate = prismaMock.logs.create
+  const originalFeatureFlagFindUnique = prismaMock.featureFlag?.findUnique
   const globalWithRedis = globalThis as typeof globalThis & {
     redis?: {
       incr(key: string): Promise<number>
@@ -45,7 +46,7 @@ async function demo() {
 
   const user = {
     id: 6,
-    email: 'valentin@example.com',
+    email: 'valentin.yeo@gmail.com',
     displayName: 'Valentin',
     mcpTokensRevokedAt: null,
   }
@@ -81,6 +82,8 @@ async function demo() {
     prismaMock.user.findUnique = async () => user
     prismaMock.revokedToken.findFirst = async () => null
     prismaMock.logs.create = async () => ({ id: 1 })
+    prismaMock.featureFlag = prismaMock.featureFlag ?? {}
+    prismaMock.featureFlag.findUnique = async () => null
     prismaMock.agent.findFirst = async ({ where }: Record<string, any>) => {
       if (where.id !== 'owned-agent') return null
       if (where.userId && where.userId !== user.id) return null
@@ -116,11 +119,22 @@ async function demo() {
       agentBody.error,
       'Agents cannot list managed agent identities'
     )
+
+    prismaMock.featureFlag.findUnique = async () => ({ mode: 'OFF' })
+    const flaggedOff = await GET(request(), {
+      params: Promise.resolve({ agentId: 'owned-agent' }),
+    })
+    const flaggedOffBody = await json(flaggedOff)
+    assert.equal(flaggedOff.status, 404)
+    assert.equal(flaggedOffBody.error, 'Not found.')
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst = originalRevokedTokenFindFirst
     prismaMock.logs.create = originalLogsCreate
+    if (prismaMock.featureFlag) {
+      prismaMock.featureFlag.findUnique = originalFeatureFlagFindUnique
+    }
     if (hadRedis) globalWithRedis.redis = originalRedis
     else delete globalWithRedis.redis
   }

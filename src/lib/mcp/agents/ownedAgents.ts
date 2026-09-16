@@ -1,3 +1,5 @@
+import type { PrismaClient } from '@prisma/client'
+
 export type OwnedAgentRow = {
   id: string
   displayName: string
@@ -178,34 +180,6 @@ export type OwnedAgentDetail = OwnedAgent & {
   prompt: string | null
 }
 
-export type OwnedAgentDetailRow = OwnedAgentRow & {
-  prompt: string | null
-}
-
-export type AgentGetDatabase = {
-  agent: {
-    findFirst(args: {
-      where: { id: string; userId: number; archivedAt: null }
-      select: {
-        id: true
-        displayName: true
-        revokedAt: true
-        createdAt: true
-        visibility: true
-        prompt: true
-        members: {
-          orderBy: { id: 'asc' }
-          select: {
-            project: {
-              select: { id: true; name: true; title: true }
-            }
-          }
-        }
-      }
-    }): Promise<OwnedAgentDetailRow | null>
-  }
-}
-
 export type DeleteOwnedAgentResult = {
   id: string
   deleted_board_memberships: number
@@ -259,7 +233,7 @@ function toOwnedAgent(agent: OwnedAgentRow): OwnedAgent {
 }
 
 export async function getOwnedAgent(
-  database: AgentGetDatabase,
+  database: Pick<PrismaClient, 'agent'>,
   userId: number,
   agentId: string
 ): Promise<OwnedAgentDetail | null> {
