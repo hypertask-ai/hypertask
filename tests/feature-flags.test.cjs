@@ -162,6 +162,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       { key: "htpr-5992-mobile-all-tasks", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6002-shared-agent-chat", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6035-agent-chat-skills", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6059-lazy-emoji-list", mode: "OWNER_AND_QA", updatedAt: null },
@@ -189,7 +190,17 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6155-chat-agent-brief", mode: "OWNER_AND_QA", updatedAt: null },
+      {
+        key: "htpr-6157-new-task-auto-description",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
       { key: "htpr-6160-inbox-archive-cluster", mode: "OWNER_AND_QA", updatedAt: null },
+      {
+        key: "htpr-6166-scoped-board-refetch",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
       { key: "htpr-6175-quick-entry-cards", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6176-flag-ticket-title", mode: "OWNER_AND_QA", updatedAt: null },
       {
@@ -210,6 +221,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       },
       {
         key: "htpr-6197-confirmed-proposal-heading",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6215-my-tasks-cross-board-priority-sort",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -244,6 +260,11 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6283-agent-chat-live-sort",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6284-agent-mention-routing",
         mode: "OWNER_AND_QA",
         updatedAt: null,
@@ -259,7 +280,107 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
+        key: "htpr-6320-ai-observability",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
         key: "htpr-6322-agent-chat-parked-reply",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6363-task-writer-research",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6372-search-ranking",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6407-mobile-agent-chat-layout",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6421-my-tasks-shortcuts-width",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6422-my-tasks-views",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6427-row-shortcuts",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6447-my-tasks-filter-parity",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6455-my-tasks-time-group",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6456-my-tasks-table-columns",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6457-my-tasks-scopes",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6458-my-tasks-live-updates",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6460-my-tasks-quick-add",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6461-my-tasks-snooze",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6473-get-agent",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6476-mobile-agent-chat-fullscreen",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6512-seed-team-agent",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6514-comment-long-press",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6531-deferred-mcp-tools",
+        mode: "OWNER_AND_QA",
+        updatedAt: null,
+      },
+      {
+        key: "htpr-6532-stateless-mcp",
         mode: "OWNER_AND_QA",
         updatedAt: null,
       },
@@ -335,6 +456,29 @@ test("legacy database flags stay visible, safe, and updateable", async () => {
   const changed = await flags.setFeatureFlagMode("htpr-1111-aaa", "OWNER_ONLY");
   assert.equal(changed.mode, "OWNER_ONLY");
   assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/1111");
+});
+
+test("the retired factory flag remains off for old deployments but disappears from this app", async () => {
+  listedRows = [
+    {
+      key: "hyfa-43-factory-owner-preview",
+      mode: "OFF",
+      updatedAt: new Date("2026-09-11T09:10:03.975Z"),
+    },
+  ];
+  row = { mode: "EVERYONE", updatedAt: new Date() };
+
+  assert.equal(await flags.isFeatureEnabled("hyfa-43-factory-owner-preview", 6), false);
+  assert.equal(
+    (await flags.listFeatureFlagModes()).some(
+      ({ key }) => key === "hyfa-43-factory-owner-preview",
+    ),
+    false,
+  );
+  await assert.rejects(
+    flags.setFeatureFlagMode("hyfa-43-factory-owner-preview", "EVERYONE"),
+    /Unknown feature flag/,
+  );
 });
 
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {

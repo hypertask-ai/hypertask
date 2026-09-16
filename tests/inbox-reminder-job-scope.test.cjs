@@ -47,6 +47,13 @@ test('Every Inbox reminder writer shares the advisory lock and deduplication pro
   assert.doesNotMatch(writer, /reminder\.deleteMany/)
 })
 
+test('Inbox reminder writes bind userId to the session and check task access', () => {
+  assert.match(writer, /getSessionUser/)
+  assert.match(writer, /userCanAccessTask\(userId, Number\(taskId\)\)/)
+  assert.match(writer, /Number\(bodyUserId\) !== session\.userId/)
+  assert.match(writer, /const userId = session\.userId/)
+})
+
 test('Reminder delivery shares the writer lock and restores inside its claim transaction', () => {
   assert.match(cardActionLocks, /TASK_INBOX_REMINDER_LOCK_CLASS = 1_446_420_610/)
   assert.match(delivery, /TASK_INBOX_REMINDER_LOCK_CLASS/)

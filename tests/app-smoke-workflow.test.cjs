@@ -111,6 +111,14 @@ test("app smoke validates the head before isolated build and route checks", asyn
     workflow,
     /cancel-in-progress: \$\{\{ github\.event_name == 'push' \}\}/,
   );
+  assert.equal(
+    parsedWorkflow.jobs.validate.if,
+    "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+  );
+  assert.equal(
+    parsedWorkflow.jobs.report.if,
+    "always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+  );
   assert.match(
     workflow,
     /name: warm app-smoke dependencies\s+if: github\.event_name == 'push'/,
@@ -215,9 +223,13 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(isolated, /SMOKE_PROXY_TOKEN="\$proxy_token"/);
   assert.match(isolated, /docker network connect --alias registry-proxy/);
   assert.match(isolated, /node \/trusted\/fetch-prisma-smoke-engine\.mjs/);
-  assert.match(isolated, /--name "\$rebuild" --network "\$network"/);
-  assert.match(isolated, /npm rebuild/);
-  assert.match(isolated, /timeout --signal=KILL 5m npm rebuild/);
+  assert.match(isolated, /node \/trusted\/fetch-posthog-smoke-binary\.mjs/);
+  assert.match(isolated, /--name "\$generate" --network "\$network"/);
+  assert.doesNotMatch(isolated, /npm rebuild/);
+  assert.match(
+    isolated,
+    /timeout --signal=KILL 2m env DATABASE_URL=.*prisma generate/,
+  );
   assert.match(
     isolated,
     /diff -qr -- "\$candidate_root\/\$trusted_input" "\$trusted_root\/\$trusted_input"/,
@@ -305,12 +317,17 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
     workflow,
     /REQUIRED="app-smoke ci-tests claude-review next-public-secrets revert-guard pr-title"/,
   );
+  assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
   assert.match(ciWorkflow, /name == "production-required-checks"/);
   assert.match(ciWorkflow, /\.target == "branch"/);
   assert.match(ciWorkflow, /index\("refs\/heads\/production"\)/);
   assert.match(ciWorkflow, /Live required checks do not match docs\/ci-policy\.yml/);
+  assert.match(
+    ciWorkflow,
+    /expected=\$\(printf '%s\\n' app-smoke ci-tests claude-review feature-flag-gate next-public-secrets pr-title revert-guard secret-scan \| sort\)/,
+  );
 });
 
 test("CI policy keeps the protected smoke producer live and required", async () => {
@@ -319,6 +336,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "app-smoke",
     "ci-tests",
     "claude-review",
+    "feature-flag-gate",
     "pr-title",
     "revert-guard",
     "next-public-secrets",
@@ -330,6 +348,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   assert.deepEqual(policy.required_checks.automerge_also_requires, [
     "app-smoke",
     "ci-tests",
+    "feature-flag-gate",
   ]);
   assert.deepEqual(
     policy.policies.production_ruleset.required_status_checks,

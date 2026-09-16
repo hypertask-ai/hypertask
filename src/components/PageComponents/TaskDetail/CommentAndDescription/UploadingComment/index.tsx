@@ -4,7 +4,7 @@ import styles from '@/styles/tiptap.module.scss'
 import React,{useState, useEffect, useRef, useMemo} from 'react'
 import InnerHTMLComment from '../CommentContainer/InnerHTMLComment';
 import useArchiveAndNavigate from '@/hooks/Task Detail/useArchiveAndNavigate';
-import { NavigateToNextTaskParams } from '@/models/model';
+import { ITeamByokApiKey, NavigateToNextTaskParams } from '@/models/model';
 
 interface IProps{
     id:number,
@@ -16,6 +16,12 @@ interface IProps{
     // written for even if the user has navigated away since (HTPR-3175).
     taskId?: number
     ownerId?: number
+    projectId?: number
+    modelSource?: string
+    modelOptionId?: string
+    byokProviderFlags?: ITeamByokApiKey[]
+    taskTitle?: string
+    taskDescription?: string
 }
 // 1: process html
 // 2: setInlineImagesUploadedTotal pass this callback. 
@@ -25,7 +31,7 @@ interface IProps{
 const startedUploads = new Set<number>();
 const createdUploads = new Set<number>();
 
-const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,totalAttachments, navigateToNextParams, taskId, ownerId}) => {
+const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,totalAttachments, navigateToNextParams, taskId, ownerId, projectId, modelSource, modelOptionId, byokProviderFlags, taskTitle, taskDescription}) => {
     const hasRun = useRef(false);
     const hasCreated = useRef(false);
 
@@ -79,7 +85,13 @@ const callbackAttachments = async(attachmentsReturned:any[]) => {
           id,
           attachments,
           taskId,
-          ownerId
+          ownerId,
+          projectId,
+          modelSource,
+          modelOptionId,
+          byokProviderFlags,
+          taskTitle,
+          taskDescription,
         )
       setTimeout(() => {
         if(navigateToNextParams.markAsDone) markAsDone(navigateToNextParams.taskStatus === "Archive"? true:undefined)

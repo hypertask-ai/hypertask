@@ -50,6 +50,7 @@ export interface UpdateTaskResponse {
     /** MCP session agent that performed this action */
     agent?: McpAgentSummary;
     message?: string;
+    failed_tasks?: Array<{ taskId: number; error: string; status?: number; code?: string }>;
 }
 
 interface UpdateTaskErrorResponse {
@@ -713,7 +714,14 @@ export async function executeTaskUpdate({
         displayName: userObj.displayName,
         photoURL: userObj.photoURL ?? undefined
     }));
-    const sessionToken = signSession({ id: userObj.id, email: userObj.email });
+    // HTPR-6376: stamp the authenticated MCP agent on the internal session so
+    // legacy routes like (un)archive can attribute the actor without trusting
+    // a forgeable JSON body field alone.
+    const sessionToken = signSession({
+        id: userObj.id,
+        email: userObj.email,
+        ...(ctx.agentId ? { agentId: ctx.agentId } : {}),
+    });
     const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`;
 
     // Handle priority/estimate constants
@@ -990,9 +998,18 @@ export async function executeTaskUpdate({
 
             if (hasContractFieldUpdate) {
                 try {
-                    await prisma.task.update({
-                        where: { id: task.id },
-                        data: { ...contractFieldUpdates },
+                    await prisma.$transaction(async (tx) => {
+                        await assertAgentAssignmentChangeAllowed(
+                            tx,
+                            task.id,
+                            ctx.agentId,
+                            user.id,
+                            { allowHumanOverride: !ctx.agentId },
+                        );
+                        await tx.task.update({
+                            where: { id: task.id },
+                            data: { ...contractFieldUpdates, updatedAt: new Date() },
+                        });
                     });
                 } catch (contractFieldError) {
                     console.warn(`[MCP Update Task] Failed to update contract fields for task ${task.id}:`, contractFieldError);
@@ -1205,6 +1222,16 @@ export async function executeTaskUpdate({
         // Backward compatibility: include single task field when only one task is updated
         ...(mappedTasks.length === 1 ? { task: mappedTasks[0] } : {}),
         message,
+        ...(failedTasks.length
+            ? {
+                  failed_tasks: failedTasks.map(({ taskId, error, status, code }) => ({
+                      taskId,
+                      error,
+                      status,
+                      code,
+                  })),
+              }
+            : {}),
         ...(sessionAgent ? { agent: sessionAgent } : {}),
     }
 

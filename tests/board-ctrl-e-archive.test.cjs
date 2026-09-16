@@ -14,9 +14,7 @@ const taskCard = fs.readFileSync(
 test("board cards guard Ctrl/Cmd+E archive behind shared key state", () => {
   assert.match(taskCard, /from "@\/lib\/keyboard\/archiveShortcutGuard"/);
 
-  const branchStart = taskCard.indexOf(
-    "if (e.keyCode === KeyCodes.E && cmdControl)",
-  );
+  const branchStart = taskCard.indexOf('taskShortcutAction === "archive"');
   assert.notEqual(branchStart, -1, "the board archive shortcut must exist");
   const branch = taskCard.slice(branchStart, branchStart + 800);
 

@@ -41,6 +41,7 @@ import axios from "axios";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 
 import {
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -2351,11 +2352,18 @@ const TaskDetail: React.FC<TaskDetailProps> = ({
 
   const content = (
     <>
+      {/* HTPR-6277: command modals (ShareTaskModal, etc.) are next/dynamic and
+          suspend on first open. Without a local boundary that suspend bubbles
+          into page.tsx's Suspense, the whole task detail swaps to "Loading...",
+          document height collapses, and window scroll jumps to 0. Homepage and
+          TableView already isolate commands the same way. */}
       {!embedded && showCommands.show && (
-        <HypertasksCommands
-          callbackHandler={callback}
-          contextOptions={commandContextOptions}
-        />
+        <Suspense fallback={null}>
+          <HypertasksCommands
+            callbackHandler={callback}
+            contextOptions={commandContextOptions}
+          />
+        </Suspense>
       )}
       {showShortucts && <KeyboardShortcuts />}
       <>

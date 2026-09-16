@@ -62,7 +62,7 @@ test("mention and assignment outbox rows share their domain transactions", () =>
   );
   assert.equal(
     (assignments.match(/persistAgentWebhookEvent\(tx,/g) ?? []).length,
-    1,
+    2,
   );
 
   assert.match(

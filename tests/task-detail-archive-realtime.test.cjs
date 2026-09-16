@@ -38,10 +38,33 @@ function loadArchiveHandler() {
     "@/lib/prisma": {
       __esModule: true,
       default: {
+        user: {
+          findUnique: async () => ({
+            displayName: "Member",
+            photoURL: null,
+            email: "member@example.com",
+          }),
+        },
         agent: {
+          findFirst: async () => null,
           findUnique: async () => null,
         },
       },
+    },
+    "@/lib/auth/getSessionUser": {
+      getSessionUser: async () => ({
+        userId: MEMBER_USER_ID,
+        source: "legacy",
+        needsBridge: true,
+      }),
+    },
+    "@/lib/auth/session": {
+      SESSION_COOKIE: "ht_session",
+      verifySession: () => ({ id: MEMBER_USER_ID }),
+      signSession: () => "signed",
+    },
+    "@/lib/auth/resolveActingAgent": {
+      resolveActingAgent: () => ({ ok: true, agentId: null }),
     },
     "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove":
       {
@@ -184,6 +207,9 @@ test("refreshTaskDetailQueryCache cancels stale fetches before writing archived 
     setQueryData: (key, data) => {
       calls.push(["set", key, data]);
     },
+    invalidateQueries: async (opts) => {
+      calls.push(["invalidate", opts.queryKey]);
+    },
   };
 
   const task = await refreshTaskDetailQueryCache({
@@ -196,6 +222,10 @@ test("refreshTaskDetailQueryCache cancels stale fetches before writing archived 
   assert.deepEqual(calls, [
     ["cancel", ["task-", TASK_ID]],
     ["set", ["task-", TASK_ID], archivedTask],
+    ["cancel", ["priority", TASK_ID]],
+    ["cancel", ["estimate", TASK_ID]],
+    ["cancel", ["taskLabels", TASK_ID]],
+    ["invalidate", ["taskLabels", TASK_ID]],
   ]);
 });
 

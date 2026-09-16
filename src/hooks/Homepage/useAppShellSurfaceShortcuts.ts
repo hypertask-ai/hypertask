@@ -17,6 +17,7 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
 import { areGlobalShortcutsEnabled } from "@/lib/keyboard/globalShortcutRoutes";
+import { boardContextFromPath, buildSearchUrl } from "@/lib/searchArchive";
 
 // Re-exported for existing importers; the value lives in a leaf module so the
 // jiti-based tests can load AllCommands/shortcuts without this React graph.
@@ -68,8 +69,16 @@ const useAppShellSurfaceShortcuts = ({
   }, [changeBoardLayout, goToProjectShortcut, pathname, queryClient, router, setBoardLayoutForNavigation]);
 
   const navigateToSearch = useCallback(() => {
-    if (!pathname?.startsWith("/search")) router.push("/search?searchTerm=");
-  }, [pathname, router]);
+    if (pathname?.startsWith("/search")) return;
+    router.push(
+      buildSearchUrl(
+        "",
+        null,
+        false,
+        boardContextFromPath(pathname, currentProject?.id)
+      )
+    );
+  }, [currentProject?.id, pathname, router]);
 
   useEffect(() => {
     if (!listen || !areGlobalShortcutsEnabled(pathname)) return;

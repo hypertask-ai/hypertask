@@ -27,7 +27,7 @@ function requiredEnv(name: string) {
 }
 
 function verifyWebhook(rawBody: string, request: NextRequest) {
-  return new Webhook(requiredEnv("POSTHOG_ERROR_WEBHOOK_SECRET")).verify(
+  new Webhook(requiredEnv("POSTHOG_ERROR_WEBHOOK_SECRET")).verify(
     rawBody,
     {
       "webhook-id": request.headers.get("webhook-id") || "",
@@ -35,6 +35,7 @@ function verifyWebhook(rawBody: string, request: NextRequest) {
       "webhook-signature": request.headers.get("webhook-signature") || "",
     },
   );
+  return JSON.parse(rawBody);
 }
 
 function workflowRef() {

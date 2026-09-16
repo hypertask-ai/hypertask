@@ -25,9 +25,15 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
+function loadMessageRoute({
+  flagEnabled,
+  brief,
+  briefError = null,
+  adhdReplyEnabled = false,
+}) {
   const deliveries = [];
   let briefCalls = 0;
+  const participantUpdates = [];
   const prisma = {
     chatSession: {
       findFirst: async () => ({
@@ -53,7 +59,12 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
           }),
         },
         chatSession: { update: async () => ({}) },
-        chatSessionParticipant: { updateMany: async () => ({ count: 1 }) },
+        chatSessionParticipant: {
+          updateMany: async (args) => {
+            participantUpdates.push(args);
+            return { count: 1 };
+          },
+        },
       }),
   };
 
@@ -76,7 +87,11 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
   stubModule("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
   stubModule("src/lib/flags.ts", {
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
-    isFeatureEnabled: async () => flagEnabled,
+    isFeatureEnabled: async (key) => {
+      if (key === "htpr-6155-chat-agent-brief") return flagEnabled;
+      if (key === "htpr-6407-mobile-agent-chat-layout") return adhdReplyEnabled;
+      return false;
+    },
   });
   stubModule("src/lib/agents/chatBrief.ts", {
     buildAgentChatBrief: async (input) => {
@@ -103,6 +118,7 @@ function loadMessageRoute({ flagEnabled, brief, briefError = null }) {
     ...routeJiti(routePath),
     deliveries,
     briefCalls: () => briefCalls,
+    participantUpdates,
   };
 }
 
@@ -390,6 +406,16 @@ test("message send includes the brief only when its server flag is enabled", asy
   assert.equal((await sendMessage(disabled)).status, 200);
   assert.equal(disabled.briefCalls(), 0);
   assert.equal("agentBrief" in disabled.deliveries[0], false);
+  assert.deepEqual(disabled.participantUpdates[0].where, {
+    sessionId: "session-1",
+    userId: 6,
+  });
+  assert.equal(disabled.participantUpdates[0].data.draft, null);
+  assert.equal(
+    disabled.participantUpdates[0].data.lastReadAt.toISOString(),
+    "2026-09-05T12:00:00.000Z",
+    "turning sharing off cannot leave a sent draft or stale read marker",
+  );
 });
 
 test("message send keeps the exact legacy payload when enrichment fails", async () => {
@@ -414,4 +440,15 @@ test("message send keeps the exact legacy payload when enrichment fails", async 
     text: "What are you working on?",
     userName: "Valentin",
   });
+});
+
+test("message send adds ADHD reply guidance when the layout flag is on", async () => {
+  const route = loadMessageRoute({
+    flagEnabled: false,
+    brief: null,
+    adhdReplyEnabled: true,
+  });
+  assert.equal((await sendMessage(route)).status, 200);
+  assert.match(route.deliveries[0].chat.replyGuidance, /Lead with the next action/);
+  assert.equal(route.deliveries[0].chat.sessionId, "session-1");
 });

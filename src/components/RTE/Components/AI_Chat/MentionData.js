@@ -56,7 +56,7 @@ const createMentionData = (contextCallback, getProjectId) => ({
           trigger: "manual",
           placement: "bottom-start",
           flipBehavior: ["flip"],
-          zIndex: 9999,
+          zIndex: 10001,
         });
       },
 

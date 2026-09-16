@@ -338,6 +338,8 @@ const AgentDetail = (props: IProp) => {
     provider: string;
     maskedKey: string | null;
   } | null>(null);
+  const [providerKeyLoaded, setProviderKeyLoaded] = useState(false);
+  const [confirmTeamVisibility, setConfirmTeamVisibility] = useState(false);
   const [editingProviderKey, setEditingProviderKey] = useState(false);
   const [providerKeyDraft, setProviderKeyDraft] = useState("");
   const [savingProviderKey, setSavingProviderKey] = useState(false);
@@ -559,6 +561,8 @@ const AgentDetail = (props: IProp) => {
   useEffect(() => {
     if (!loadedAgentId) return;
     let cancelled = false;
+    setProviderKey(null);
+    setProviderKeyLoaded(false);
     fetch(`/api/agents/${loadedAgentId}/provider-key`)
       .then((res) => res.json())
       .then(
@@ -576,9 +580,10 @@ const AgentDetail = (props: IProp) => {
           (k) => k.provider === "openrouter" && k.enabled !== false,
         );
         setProviderKey(row ?? null);
+        setProviderKeyLoaded(true);
       })
       .catch(() => {
-        // the row falls back to "Team key", which is what an unset key means
+        if (!cancelled) setProviderKeyLoaded(true);
       });
     return () => {
       cancelled = true;
@@ -992,24 +997,17 @@ const AgentDetail = (props: IProp) => {
     }
   };
 
-  const handleVisibilityChange = async (value: string) => {
-    if (
-      !agent ||
-      savingVisibility ||
-      savingProviderKey ||
-      (value !== "PRIVATE" && value !== "TEAM") ||
-      value === agent.visibility
-    ) {
-      return;
-    }
+  const saveVisibility = async (visibility: "PRIVATE" | "TEAM") => {
+    if (!agent || savingVisibility || savingProviderKey) return;
 
     setSavingVisibility(true);
     setVisibilityNotice(null);
     try {
-      const updated = await patchAgent({ visibility: value });
-      const visibility = updated.visibility === "TEAM" ? "TEAM" : "PRIVATE";
+      const updated = await patchAgent({ visibility });
+      const savedVisibility =
+        updated.visibility === "TEAM" ? "TEAM" : "PRIVATE";
       setAgent((current) =>
-        current ? { ...current, visibility } : current,
+        current ? { ...current, visibility: savedVisibility } : current,
       );
     } catch (error) {
       setVisibilityNotice({
@@ -1022,6 +1020,23 @@ const AgentDetail = (props: IProp) => {
     } finally {
       setSavingVisibility(false);
     }
+  };
+
+  const handleVisibilityChange = (value: string) => {
+    if (
+      !agent ||
+      savingVisibility ||
+      savingProviderKey ||
+      (value !== "PRIVATE" && value !== "TEAM") ||
+      value === agent.visibility
+    ) {
+      return;
+    }
+    if (value === "TEAM" && agent.runtimeType === "NATIVE" && !providerKey) {
+      setConfirmTeamVisibility(true);
+      return;
+    }
+    void saveVisibility(value);
   };
 
   // The inbox-routing rule the create/edit modal has always carried. It is
@@ -1782,7 +1797,11 @@ const AgentDetail = (props: IProp) => {
                     <AgentSelect
                       value={agent.visibility}
                       onChange={handleVisibilityChange}
-                      disabled={savingVisibility || savingProviderKey}
+                      disabled={
+                        savingVisibility ||
+                        savingProviderKey ||
+                        (agent.runtimeType === "NATIVE" && !providerKeyLoaded)
+                      }
                       ariaLabel="Who can use this agent"
                     >
                       <AgentOption value="PRIVATE">Private</AgentOption>
@@ -1931,6 +1950,19 @@ const AgentDetail = (props: IProp) => {
                 </div>
               )}
             </div>
+
+            {confirmTeamVisibility && (
+              <ConfirmDialog
+                id="confirm-team-agent-owner-plan"
+                message="Team members will use your plan for this agent. Continue?"
+                confirmLabel="Continue"
+                onConfirm={() => {
+                  setConfirmTeamVisibility(false);
+                  void saveVisibility("TEAM");
+                }}
+                onCancel={() => setConfirmTeamVisibility(false)}
+              />
+            )}
 
             {boardToRemove && (
               <ConfirmDialog

@@ -1,5 +1,5 @@
 version: 4
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is https://hypertask.app/wiki/deployment; this file is the machine-readable companion."
 
 topology:
@@ -45,10 +45,25 @@ review_first_gate:
 required_checks:
   # An administrator applied these checks through GitHub's ruleset API on
   # 2026-09-08. ci-tests verifies this live ruleset before every build.
-  contexts: [app-smoke, ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
-  automerge_also_requires: [app-smoke, ci-tests]
+  contexts: [app-smoke, ci-tests, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
+  automerge_also_requires: [app-smoke, ci-tests, feature-flag-gate]
   # ci-tests normally reports after the full-ci label arrives (see
   # review_first_gate); automerge treats a missing result as not green.
+
+feature_flag_gate:
+  workflow: .github/workflows/feature-flag-gate.yml
+  decision_script: .github/scripts/feature-flag-gate.mjs
+  runs_on: ubuntu-latest
+  trusted_script_source: production_base_commit
+  parser_lock: .github/scripts/feature-flag-parser/package-lock.json
+  required_for_ui_changes: true
+  api_only_changes: outside_ui_gate_scope
+  owner_merge_for_flagged_ui: true
+  owner_merge_for_exempt_ui: true
+  exemptions: [BUGFIX, INFRA, AI_CHAT, verified_auto_revert]
+  exempt_ui_addition_limit: 150
+  default_mode_for_new_flags: OWNER_AND_QA
+  open_pull_request_reconciliation: production_push_and_all_pull_request_events
 
 policies:
   previews:
@@ -100,7 +115,7 @@ policies:
     production_health_check_after_deploy: true
     failed_build_keeps_previous_deployment_live: true
   production_ruleset:
-    required_status_checks: [app-smoke, ci-tests, claude-review, pr-title, revert-guard, next-public-secrets, secret-scan]
+    required_status_checks: [app-smoke, ci-tests, claude-review, feature-flag-gate, pr-title, revert-guard, next-public-secrets, secret-scan]
 
 ci_tests:
   # .github/workflows/ci-tests.yml; the file remains the implementation source.

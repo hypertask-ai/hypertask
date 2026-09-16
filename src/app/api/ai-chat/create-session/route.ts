@@ -9,6 +9,7 @@ import {
   loadUserAgentChatSession,
   userTeamIds,
 } from "@/lib/agents/chatAccess";
+import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
 
 export const runtime = "nodejs";
 
@@ -59,17 +60,26 @@ export async function POST(request: NextRequest) {
       // existing `(userId, agentId)` unique still backs the upsert, so two
       // concurrent "open this agent's chat" requests converge on one row
       // instead of forking two.
-      const teamId = (await getAgentTeamIds([agent.id])).get(agent.id) ?? null;
+      const [agentTeamIds, sharedConversationEnabled] = await Promise.all([
+        getAgentTeamIds([agent.id]),
+        isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, agent.userId),
+      ]);
+      const teamId = agentTeamIds.get(agent.id) ?? null;
       // The same question the shared rule asks below, asked before anything is
       // written: a conversation with no team of its own belongs to whoever
       // opened it, and one with a team belongs to that team's members. Seeing
       // the agent across a shared board is not the same as being in its team.
       // Refused here, or this writes a session row and then 404s the caller who
       // asked for it.
-      const teamIds = await userTeamIds(userId);
+      const teamIds =
+        sharedConversationEnabled && agent.userId !== userId
+          ? await userTeamIds(userId)
+          : [];
       const mayOpen =
         agent.userId === userId ||
-        (teamId !== null && teamIds.includes(teamId));
+        (sharedConversationEnabled &&
+          teamId !== null &&
+          teamIds.includes(teamId));
       if (!mayOpen) {
         return NextResponse.json({ error: "Agent not found" }, { status: 404 });
       }

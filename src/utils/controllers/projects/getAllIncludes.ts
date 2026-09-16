@@ -2,6 +2,7 @@ import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { CYCLE_WINDOW_SIZE, utcDate } from "@/lib/cycles";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
+import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
 
 export type GetAllIncludesOptions = {
   userId: number;
@@ -128,14 +129,11 @@ export const getTaskWhere = (): Prisma.TaskWhereInput => ({
 });
 
 // Only notification count remains — comment count is read from Task.totalComments (scalar column).
+// Match Inbox visibility so board → task detail never inherits a false "in inbox" count (HTPR-6365).
 export const getTaskCountSelect = (userId: number) => ({
   select: {
     notifications: {
-      where: {
-        agentId: null,
-        status: Status.Normal,
-        userId,
-      },
+      where: visibleUserInboxWhere(userId),
     },
     relatedFromTasks: {
       where: {
@@ -151,18 +149,7 @@ export const getTaskCountSelect = (userId: number) => ({
 });
 
 const getTaskNotificationsArgs = (userId: number) => ({
-  where: {
-    status: Status.Normal,
-    userId,
-    agentId: null,
-    task: {
-      Reminders: {
-        every: {
-          status: { not: Status.Normal },
-        },
-      },
-    },
-  },
+  where: visibleUserInboxWhere(userId),
   take: 1,
   orderBy: {
     createdAt: "desc" as const,

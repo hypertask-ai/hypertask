@@ -437,6 +437,7 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       agent: { id: existing.id, visibility: result.visibility },
+      ...(result.warning ? { warning: result.warning } : {}),
     });
   }
 

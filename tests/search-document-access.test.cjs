@@ -32,6 +32,13 @@ const stubs = new Map([
       turbopufferGetDocuments: async (...args) => setup.onSearch(...args),
     },
   ],
+  [
+    "src/lib/flags.ts",
+    {
+      HTPR_6372_SEARCH_RANKING_FLAG: "htpr-6372-search-ranking",
+      isFeatureEnabled: async () => setup.rankingEnabled ?? false,
+    },
+  ],
 ]);
 for (const [relativePath, exports] of stubs) {
   const filename = path.join(root, relativePath);
@@ -67,8 +74,15 @@ async function call({
   body,
   onSearch = () => ({ status: 200 }),
   projectError,
+  rankingEnabled = false,
 }) {
-  setup = { session, projectIds: accessibleProjectIds, onSearch, projectError };
+  setup = {
+    session,
+    projectIds: accessibleProjectIds,
+    onSearch,
+    projectError,
+    rankingEnabled,
+  };
   const res = response();
   await handler({ method: "POST", body, headers: {} }, res);
   return res;
@@ -108,7 +122,48 @@ test("document search passes normalized accessible project ids", async () => {
     },
   });
   assert.equal(res.statusCode, 200);
-  assert.deepEqual(searchArgs, ["release", [15], "Normal"]);
+  assert.deepEqual(searchArgs.slice(0, 3), ["release", [15], "Normal"]);
+  assert.equal(searchArgs[3].contextProjectId, undefined);
+  assert.equal(typeof searchArgs[3].applyRelevanceCut, "boolean");
+});
+
+test("document search forwards a context board for the ranker to validate", async () => {
+  let searchArgs;
+  const res = await call({
+    session: { userId: 6 },
+    accessibleProjectIds: [15],
+    body: {
+      projectIds: [15],
+      searchQuery: "inbox icon",
+      contextProjectId: 339,
+    },
+    onSearch: (...args) => {
+      searchArgs = args;
+      return { status: 200 };
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(searchArgs[3].contextProjectId, 339);
+  assert.equal(searchArgs[3].applyRelevanceCut, false);
+});
+
+test("document search enables the relevance cut when the flag is on", async () => {
+  let searchArgs;
+  const res = await call({
+    session: { userId: 6 },
+    accessibleProjectIds: [15],
+    rankingEnabled: true,
+    body: {
+      projectIds: [15],
+      searchQuery: "inbox icon",
+    },
+    onSearch: (...args) => {
+      searchArgs = args;
+      return { status: 200 };
+    },
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(searchArgs[3].applyRelevanceCut, true);
 });
 
 test("document search reports access lookup failures as server errors", async () => {

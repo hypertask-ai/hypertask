@@ -1421,7 +1421,6 @@ useLayoutEffect(() => {
 
 const {data:favoritesTQ} = useGetAllFavorites(
   _currentUser.UserSettingId,
-  _currentUser.id,
   { enabled: secondaryStartupEnabled },
 )
 const { goToProjectShortcut } = useProjectQuery()

@@ -6,6 +6,10 @@ import globalConstants from "@/lib/constants";
 import { aiOptions } from "@/lib/constants/constants";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
+import {
+  focusAiChatEditorForRequest,
+  isEditableElement,
+} from "@/utils/aiChat/focusRequestWindow";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { SLASH_MENU_DOM_ID } from "@/lib/skills/slashSkills";
 import { useSessionAndChatHistory } from "@/hooks/MultiPages/AIChat/useSessionAndChatHistory";
@@ -38,6 +42,7 @@ import { usePathname } from "next/navigation";
 import toast from "react-hot-toast";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
+import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import {
   FileItem,
   useFileUpload,
@@ -121,6 +126,7 @@ export function useAiChat() {
   );
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
   const setAiChatExplicitOpenAt = useSetRecoilState(aiChatExplicitOpenAtAtom);
+  const aiChatExplicitOpenAt = useRecoilValue(aiChatExplicitOpenAtAtom);
   const [aiChatBoardSessionMap, setAiChatBoardSessionMap] = useRecoilState(
     aiChatBoardSessionMapAtom
   );
@@ -899,7 +905,7 @@ export function useAiChat() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...mcpAuthorizationHeaders(token),
           },
           body: JSON.stringify({
             session_id: sessionId,
@@ -1253,7 +1259,7 @@ export function useAiChat() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...mcpAuthorizationHeaders(token),
         },
         body: JSON.stringify(payload),
       });
@@ -1635,9 +1641,26 @@ export function useAiChat() {
   // on the first open of a page load the chat is shown before the editor chunk
   // has loaded, so focusing only on the flag would leave the caret on the board
   // and send the user's next keystroke to the page-level shortcut handler.
+  //
+  // Gated on an explicit open for the same reason the composer's own retry loop
+  // is (HTPR-6317): this is the call that actually claimed the caret at page
+  // load, and the board owns c, j, k, Tab and / until someone asks for the chat.
   useEffect(() => {
-    if (showAiChatInterface) editor?.commands.focus("end");
-  }, [showAiChatInterface, editor]);
+    if (!showAiChatInterface) return;
+    const active = document.activeElement as HTMLElement | null;
+    const focused = focusAiChatEditorForRequest(editor, aiChatExplicitOpenAt, active);
+    if (
+      aiChatExplicitOpenAt !== null &&
+      (focused || isEditableElement(active))
+    ) {
+      setAiChatExplicitOpenAt(null);
+    }
+  }, [
+    showAiChatInterface,
+    editor,
+    aiChatExplicitOpenAt,
+    setAiChatExplicitOpenAt,
+  ]);
 
   useEffect(() => {
     setChatMounted(showAiChatInterface);

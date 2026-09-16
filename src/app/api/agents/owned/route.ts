@@ -12,6 +12,9 @@ import {
 } from "@/lib/aiAllowancePolicy";
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
+import { HTPR_6512_SEED_TEAM_AGENT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
+import { ensureDefaultAgentsOnAccessibleTeams } from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
 // An owner can keep an agent on a board they themselves were removed from, so
 // board names are filtered by the caller's own access, not the agent's.
@@ -41,6 +44,25 @@ async function unreadChatCounts(userId: number): Promise<Map<string, number>> {
 }
 
 /**
+ * Most recent Agent Chat message timestamp per agent, for one person's own
+ * thread with that agent. Distinct from `lastCommentByAgent` below, which
+ * tracks board comments, not chat messages -- the Agent Chat list needs the
+ * latter to reorder on real chat activity (HTPR-6283).
+ */
+async function lastChatMessageAtByAgent(userId: number): Promise<Map<string, Date>> {
+  const rows = await prisma.$queryRaw<{ agentId: string; lastMessageAt: Date }[]>`
+    SELECT s."agentId" AS "agentId", MAX(m."createdAt") AS "lastMessageAt"
+    FROM "ChatSessionParticipant" p
+    JOIN "ChatSession" s ON s.id = p."sessionId"
+    JOIN "ChatMessage" m ON m."sessionId" = s.id
+    WHERE p."userId" = ${userId}
+      AND s."agentId" IS NOT NULL
+    GROUP BY s."agentId"
+  `;
+  return new Map(rows.map((row) => [row.agentId, row.lastMessageAt]));
+}
+
+/**
  * Every agent the signed-in user owns, across every team and board.
  *
  * The sibling routes answer different questions: `/api/agents` lists a single
@@ -57,7 +79,9 @@ export async function GET(request: NextRequest) {
       { status: 401 },
     );
   }
-
+  if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, userId)) {
+    await ensureDefaultAgentsOnAccessibleTeams(userId, prisma);
+  }
   const agents = await prisma.agent.findMany({
     where: { userId },
     orderBy: { createdAt: "desc" },
@@ -129,7 +153,20 @@ export async function GET(request: NextRequest) {
     userId,
   );
 
-  const unreadByAgent = await unreadChatCounts(userId);
+  // The chat-recency aggregate only feeds the live-sort flag. Skip it when
+  // the flag is off so every roster refresh does not pay for unused work
+  // (OCR advisory on HTPR-6283). Unread still runs for private owner chats
+  // even when shared mode is off.
+  const liveSortEnabled = await isFeatureEnabled(
+    HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
+    userId,
+  );
+  const [unreadByAgent, lastChatMessageByAgent] = await Promise.all([
+    unreadChatCounts(userId),
+    liveSortEnabled
+      ? lastChatMessageAtByAgent(userId)
+      : Promise.resolve(new Map<string, Date>()),
+  ]);
 
   // A spent shared AI allowance writes one durable stop notice per native
   // agent per period, the first time a turn of that agent ends on the stop.
@@ -189,6 +226,8 @@ export async function GET(request: NextRequest) {
       archivedAt: agent.archivedAt?.toISOString() ?? null,
       heartbeatAt: agent.heartbeatAt?.toISOString() ?? null,
       lastPostedAt: lastCommentByAgent.get(agent.id)?.toISOString() ?? null,
+      // Real Agent Chat activity, separate from lastPostedAt's board comments.
+      lastChatMessageAt: lastChatMessageByAgent.get(agent.id)?.toISOString() ?? null,
       // An unexpired task lease is the agent saying "I am on this right now",
       // which is what the card's spinner reports.
       working: workingByAgent.get(agent.id) ?? null,

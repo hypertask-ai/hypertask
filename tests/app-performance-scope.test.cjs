@@ -285,7 +285,7 @@ test("deferred web-vitals keeps the dependency's buffered-entry guarantee", () =
     readme,
     /library should be deferred until after other user-impacting code has loaded/,
   );
-  assert.match(observerSource, /type,\s*buffered: true/);
+  assert.match(observerSource, /type:\s*\w+,\s*buffered: true/);
 });
 
 test("authenticated analytics wait until product readiness has painted", () => {

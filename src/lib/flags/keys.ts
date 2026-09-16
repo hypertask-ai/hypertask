@@ -12,8 +12,11 @@ export const FEATURE_FLAG_DETAILS_FLAG = "htpr-6133-feature-flag-details";
 export const LOCAL_WRITING_ASSISTANCE_FLAG =
   "htpr-5908-local-writing-assistance";
 export const AGENT_CHAT_BRIEF_FLAG = "htpr-6155-chat-agent-brief";
+export const SHARED_AGENT_CHAT_FLAG = "htpr-6002-shared-agent-chat";
 export const AGENT_CHAT_SKILLS_FLAG = "htpr-6035-agent-chat-skills";
 export const AGENT_CHAT_TICKET_CONFIRM_FLAG = "htpr-6006-chat-confirm-ticket";
+export const HTPR_6157_AUTO_DESCRIPTION_FLAG =
+  "htpr-6157-new-task-auto-description";
 export const AUTO_TASK_DESCRIPTIONS_FLAG = "htpr-6177-auto-task-descriptions";
 export const FLAG_TICKET_TITLE_FLAG = "htpr-6176-flag-ticket-title";
 export const FLAG_SORT_FILTER_FLAG = "htpr-6179-flag-sort-filter";
@@ -33,6 +36,9 @@ export const HTPR_6278_CHAT_TURN_FAILURE_FLAG =
   "htpr-6278-chat-turn-failure-state";
 export const HTPR_6284_AGENT_MENTION_ROUTING_FLAG =
   "htpr-6284-agent-mention-routing";
+export const HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG =
+  "htpr-6283-agent-chat-live-sort";
+export const HTPR_6320_AI_OBSERVABILITY_FLAG = "htpr-6320-ai-observability";
 export const POSTHOG_ERROR_ALERT_FLAG = "htpr-6238-posthog-error-alert";
 export const MY_TASKS_PRIORITY_FILTER_FLAG =
   "htpr-6312-my-tasks-priority-filter";
@@ -40,3 +46,31 @@ export const AGENT_VISIBILITY_FLAG = "htpr-6268-agent-visibility";
 export const HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG =
   "htpr-4228-admin-only-time-reports";
 export const HTPR_4857_ADD_TO_SLACK_FLAG = "htpr-4857-add-to-slack";
+export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG =
+  "htpr-6215-my-tasks-cross-board-priority-sort";
+export const HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG =
+  "htpr-6407-mobile-agent-chat-layout";
+export const HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG =
+  "htpr-6476-mobile-agent-chat-fullscreen";
+export const SCOPED_BOARD_REFETCH_FLAG = "htpr-6166-scoped-board-refetch";
+export const MY_TASKS_SHORTCUTS_WIDTH_FLAG =
+  "htpr-6421-my-tasks-shortcuts-width";
+export const HTPR_6372_SEARCH_RANKING_FLAG = "htpr-6372-search-ranking";
+export const MY_TASKS_VIEWS_FLAG = "htpr-6422-my-tasks-views";
+export const MY_TASKS_FILTER_PARITY_FLAG = "htpr-6447-my-tasks-filter-parity";
+export const MY_TASKS_TIME_GROUP_FLAG = "htpr-6455-my-tasks-time-group";
+export const MY_TASKS_TABLE_COLUMNS_FLAG = "htpr-6456-my-tasks-table-columns";
+export const MY_TASKS_SCOPES_FLAG = "htpr-6457-my-tasks-scopes";
+export const MY_TASKS_LIVE_UPDATES_FLAG = "htpr-6458-my-tasks-live-updates";
+export const MY_TASKS_QUICK_ADD_FLAG = "htpr-6460-my-tasks-quick-add";
+export const MY_TASKS_SNOOZE_FLAG = "htpr-6461-my-tasks-snooze";
+export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
+export const HTPR_6514_COMMENT_LONG_PRESS_FLAG =
+  "htpr-6514-comment-long-press";
+export const HTPR_6512_SEED_TEAM_AGENT_FLAG = "htpr-6512-seed-team-agent";
+export const HTPR_6532_STATELESS_MCP_FLAG = "htpr-6532-stateless-mcp";
+export const HTPR_6531_DEFERRED_MCP_TOOLS_FLAG = "htpr-6531-deferred-mcp-tools";
+export const HTPR_6473_GET_AGENT_FLAG = "htpr-6473-get-agent";
+/** Sent on chat.message when HTPR-6407 is on so agent replies lead with the next action. */
+export const AGENT_CHAT_ADHD_REPLY_GUIDANCE =
+  "Lead with the next action. Keep replies short. Number steps. End with one concrete next action when something remains open.";

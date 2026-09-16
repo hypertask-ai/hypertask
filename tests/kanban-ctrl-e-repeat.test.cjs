@@ -26,8 +26,8 @@ test("Ctrl/Cmd+E archives only on the initial keydown", () => {
   assert.notEqual(shortcutStart, -1, "the kanban archive shortcut must exist");
   assert.match(
     ctrlEBranch,
-    /e\.keyCode === KeyCodes\.E && cmdControl/,
-    "the intended Ctrl/Cmd+E binding must remain available",
+    /taskShortcutAction === "archive"/,
+    "the intended Ctrl/Cmd+E action must remain available",
   );
 
   const preventDefaultAt = ctrlEBranch.indexOf("e.preventDefault()");

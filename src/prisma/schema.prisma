@@ -311,6 +311,7 @@ model User {
   userAnnouncements         UserAnnouncement[]
   project_views             View[]
   calendar_views            Calendar_View[]
+  myTasksViews              MyTasksView[]
   ViewLastUsed              View_Last_Used[]
   tasksSharing              TaskSharing[]
   savedContent              SavedContent[]
@@ -966,6 +967,20 @@ model Calendar_View {
   @@index([visibility])
 }
 
+model MyTasksView {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  position  Int
+  isDefault Boolean  @default(false)
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
 model Project_View {
   id                 String              @id @default(uuid())
   createdAt          DateTime            @default(now())
@@ -1578,9 +1593,12 @@ model Assignees {
   agentId         String?
   agent           Agent?         @relation(name: "agentAssignees", fields: [agentId], references: [id])
   assignedAt      DateTime       @default(now())
+  // HTPR-6461: per-person hide-until for My Tasks. Null means not snoozed.
+  snoozeUntil     DateTime?
   notifications   Notification[]
 
   @@index([taskId]) // Already good for task assignees
+  @@index([userId, snoozeUntil])
 }
 
 model Follower {

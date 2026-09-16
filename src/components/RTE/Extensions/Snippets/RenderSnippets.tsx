@@ -29,6 +29,8 @@ const renderItems = () => {
         interactive: true,
         trigger: "manual",
         placement: "bottom-start",
+        // Above #portal-root (z-index 5000) and the comment composer (HTPR-6404).
+        zIndex: 10001,
       });
     },
     onUpdate(props: any) {

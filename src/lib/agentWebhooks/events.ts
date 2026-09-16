@@ -215,6 +215,8 @@ export type AgentWebhookChat = {
   messageId: string;
   text: string;
   userName: string | null;
+  /** Optional reply-style hint for the agent runtime (HTPR-6407). */
+  replyGuidance?: string;
 };
 
 export type AgentWebhookRun = {

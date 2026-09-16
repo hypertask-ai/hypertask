@@ -174,7 +174,9 @@ export async function GET(
     // an unread marker and a draft slot. Skipped on a paged read: scrolling
     // back through history is not arriving. This one writes, and it has to
     // land before the list below, or a first-time reader gets a participant
-    // list without themselves in it.
+    // list without themselves in it. Private (flag-off) owner chats still get
+    // the viewer row so drafts and unread keep working across devices; only
+    // the shared participant roster stays behind the flag.
     const participant = before
       ? null
       : await ensureChatParticipant(session.id, userId);
@@ -187,7 +189,7 @@ export async function GET(
             parkedReplyEnabled ? undefined : PARKED_NOTICE_WHERE,
           )
         : null,
-      before
+      before || !access.sharedConversationEnabled
         ? null
         : prisma.chatSessionParticipant.findMany({
             where: { sessionId: session.id },
@@ -244,6 +246,7 @@ export async function GET(
             participant.user.displayName || participant.user.email,
           joinedAt: participant.joinedAt,
         })) ?? null,
+      sharedConversationEnabled: access.sharedConversationEnabled === true,
       chatEnabled,
     });
   } catch (error: any) {

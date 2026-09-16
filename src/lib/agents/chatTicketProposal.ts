@@ -131,6 +131,24 @@ export function serializeChatTicketProposal(
   };
 }
 
+export const PROPOSAL_HEADING_PENDING = "Ticket proposed, nothing done yet";
+export const PROPOSAL_HEADING_CREATED = "Ticket created";
+
+/**
+ * Heading on the Agent Chat proposal card. The ticket number can already be
+ * on the card while this line still claims nothing happened, so the wording
+ * follows the ticket, not the confirm click.
+ */
+export function proposalCardHeading(proposal: {
+  status: string;
+  task: { ticketNumber: string } | null;
+}): string {
+  if (proposal.status === "CONFIRMED" && proposal.task) {
+    return PROPOSAL_HEADING_CREATED;
+  }
+  return PROPOSAL_HEADING_PENDING;
+}
+
 /**
  * Description for the confirmed ticket. `outcome` is agent text, so it is escaped
  * and only ever wrapped in paragraphs; the link closes the conversation-to-ticket

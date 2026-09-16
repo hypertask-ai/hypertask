@@ -8,9 +8,12 @@ const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },
 });
-const { buildSearchUrl, defaultSearchArchiveStatus, SearchRequestGate } = jiti(
-  path.join(root, "src/lib/searchArchive.ts")
-);
+const {
+  boardContextFromPath,
+  buildSearchUrl,
+  defaultSearchArchiveStatus,
+  SearchRequestGate,
+} = jiti(path.join(root, "src/lib/searchArchive.ts"));
 const { getAllCommands } = jiti(
   path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts")
 );
@@ -32,6 +35,16 @@ test("search URLs preserve archived preference and resettable tabs", () => {
     buildSearchUrl("", null, true),
     "/search?searchTerm=&includeArchived=1",
   );
+  assert.equal(
+    buildSearchUrl("", null, false, 15),
+    "/search?searchTerm=&fromProject=15"
+  );
+  assert.equal(buildSearchUrl("", null, false, null), "/search?searchTerm=");
+  assert.equal(boardContextFromPath("/detail/project-15/6365"), 15);
+  assert.equal(boardContextFromPath("/detail/project-12-invalid"), null);
+  assert.equal(boardContextFromPath("/project", 15), 15);
+  assert.equal(boardContextFromPath("/projects", 15), null);
+  assert.equal(boardContextFromPath("/inbox", 15), null);
 });
 
 test("only the newest overlapping search request may apply results", () => {

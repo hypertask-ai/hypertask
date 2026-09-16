@@ -27,9 +27,11 @@ export function reportClientError(payload: ClientErrorPayload) {
   // equivalent missing-boundary race as safe to ignore; do not turn this
   // framework cleanup race into an auto-created product bug. Keep the match
   // tied to the exact runtime helper so real parentNode errors still report.
+  // Firefox 136 also reports the same $RS race as a bare "TypeError: b is
+  // null" without naming parentNode (HTPR-6423).
   if (
     payload.source === 'window.onerror' &&
-    /^(?:(?:Uncaught TypeError: )?Cannot read properties of null \(reading 'parentNode'\)|(?:TypeError: )?can't access property "parentNode", [A-Za-z_$][\w$]* is null)$/.test(
+    /^(?:(?:Uncaught TypeError: )?Cannot read properties of null \(reading 'parentNode'\)|(?:TypeError: )?can't access property "parentNode", [A-Za-z_$][\w$]* is null|(?:Uncaught )?(?:TypeError: )?[A-Za-z_$][\w$]* is null)$/.test(
       payload.message || ''
     ) &&
     /(?:\bat \$RS \(https:\/\/app\.hypertask\.ai\/|(?:^|\n)\$RS@https:\/\/app\.hypertask\.ai\/)/.test(

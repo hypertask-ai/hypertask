@@ -32,12 +32,21 @@ type UseTaskCommentsRealtimeOptions = {
   preserveEditorContent?: boolean;
 };
 
+/** Exported for the HTPR-6281 regression that asserts no-store on this path. */
+export const TASK_DETAIL_REALTIME_FETCH_CACHE = "no-store" as const;
+
 async function fetchTaskDetailForRealtime(
   projectId: number,
   uniqueIndex: number | string
 ): Promise<ITask | null> {
+  // cache: "no-store" is required: a default GET can reuse a pre-change
+  // response, so the side panel stays on the mount-time section/title/due
+  // date while comments (a different URL) still update (HTPR-6281 QA).
+  // `_=` busts intermediary caches that ignore request Cache-Control and
+  // key only on the URL (getTask used to answer `public` — HTPR-6281 QA #2).
   const response = await fetch(
-    `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}`
+    `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}&_=${Date.now()}`,
+    { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin" }
   );
   if (!response.ok) return null;
   return response.json();

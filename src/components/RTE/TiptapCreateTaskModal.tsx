@@ -69,6 +69,7 @@ import {
   AUTO_DESCRIPTION_SUGGESTION_DELAY_MS,
   canApplyCreateDescriptionSuggestion,
   canUndoDescriptionTakeover,
+  isNewTaskAutoDescriptionEnabled,
   shouldSuggestCreateDescription,
   type AutoDescriptionTakeover,
 } from "@/lib/ai/autoDescriptionSuggestion";
@@ -80,6 +81,7 @@ import {
   type TaskCreateTraceScope,
 } from "@/lib/analytics/productPerformance";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6157_AUTO_DESCRIPTION_FLAG } from "@/lib/flags/keys";
 import {
   createTaskUploadCount,
   discardUnboundCreateTaskUploads,
@@ -93,6 +95,9 @@ const TiptapCreateTaskModal = () => {
   const isApple = useDeviceContext();
   const backgroundTaskUploadsEnabled = useFlag(
     "htpr-5993-optimistic-task-uploads",
+  );
+  const newTaskAutoDescriptionEnabled = useFlag(
+    HTPR_6157_AUTO_DESCRIPTION_FLAG,
   );
   // HTPR-6177: automatic description drafting is owner-only until it is ready.
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
@@ -371,6 +376,8 @@ const TiptapCreateTaskModal = () => {
   // HTPR-6177: fold the flag in once so every eligibility check shares the same
   // switch, rather than relying on the effect below returning early to stay off.
   const autoDescriptionPreferenceEnabled =
+    isNewTaskAutoDescriptionEnabled() &&
+    newTaskAutoDescriptionEnabled &&
     autoTaskDescriptionsEnabled &&
     (userPreferences.autoDescriptionSuggestions ?? true);
   const autoDescriptionEligible = shouldSuggestCreateDescription({

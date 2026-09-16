@@ -52,3 +52,52 @@ test("HyperAI mention clients report every failed response and network error", (
   assert.equal((hook.match(/toast\.error\(DEFAULT_HYPERAI_ERROR\)/g) || []).length, 2);
   assert.doesNotMatch(hook, /if \(response\.status === 403\)/);
 });
+
+test("HyperAI mention clients never send the masked MCP token as Bearer", () => {
+  const hook = read("src/hooks/MultiPages/Tasks/useHyperMention.ts");
+  const utils = read("src/lib/mcp/bearerAuth.ts");
+
+  assert.match(utils, /export function mcpAuthorizationHeaders/);
+  assert.match(hook, /mcpAuthorizationHeaders\(token\)/);
+  assert.equal((hook.match(/mcpAuthorizationHeaders\(token\)/g) || []).length, 2);
+  assert.doesNotMatch(
+    hook,
+    /\.\.\.\(token \? \{ Authorization: `Bearer \$\{token\}` \} : \{\}\)/,
+  );
+  assert.doesNotMatch(hook, /isUsableMcpBearerToken\(token\)\s*\?/);
+});
+
+test("comment create routes HyperAI through the composed task and project", () => {
+  const save = read(
+    "src/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent.ts",
+  );
+  const helper = read(
+    "src/lib/ai/hyperMentionComposition.ts",
+  );
+  const uploading = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/index.tsx",
+  );
+  const queue = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/UploadingComment/UploadingCommentContainer.tsx",
+  );
+  const hook = read("src/hooks/MultiPages/Tasks/useHyperMention.ts");
+
+  assert.match(helper, /export function resolveHyperMentionComposition/);
+  assert.match(save, /resolveHyperMentionComposition\(/);
+  assert.match(save, /taskIds: mentionTaskIds/);
+  assert.match(save, /composedModelSource\?: string/);
+  assert.match(save, /modelSource: improveWritingSource/);
+  assert.match(save, /byokProviderFlags: currentBoardBilling/);
+  assert.match(save, /composedModelSource \?\?/);
+  assert.match(save, /taskTitle: currentTask\?\.title/);
+  assert.match(save, /composedTaskTitle \?\? currentTask\.title/);
+  assert.match(uploading, /modelSource\?: string/);
+  assert.match(uploading, /byokProviderFlags\?: ITeamByokApiKey\[\]/);
+  assert.match(queue, /modelSource=\{comment\.modelSource\}/);
+  assert.match(queue, /byokProviderFlags=\{comment\.byokProviderFlags\}/);
+  assert.match(queue, /taskTitle=\{comment\.taskTitle\}/);
+  assert.match(
+    hook,
+    /byokProviderFlags:\s*\n\s*byokProviderFlags \?\?/,
+  );
+});

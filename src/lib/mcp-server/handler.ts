@@ -2,27 +2,23 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { createMcpHandler, withMcpAuth } from 'mcp-handler'
 import jwt from 'jsonwebtoken'
 import crypto from 'node:crypto'
-import type { z } from 'zod'
 import { MCP_TOOLS } from './tools'
 import {
   McpAttachmentRequestBodyError,
   readRequestBytesWithCap,
 } from '@/lib/mcp/attachments/readRequestBody'
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constants'
-import { validateMcpAuth } from '@/lib/mcp/auth'
+import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
+import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6531_DEFERRED_MCP_TOOLS_FLAG } from '@/lib/flags'
 import { NextRequest } from 'next/server'
-
-type PortableTool = {
-  name: string
-  description: string
-  parameters: z.ZodObject<z.ZodRawShape>
-  execute: (
-    args: unknown,
-    token: string,
-    invocation?: { requestId: string; clientFingerprint: string; sessionId?: string }
-  ) => Promise<string>
-}
+import {
+  handleStatelessMcpRequest,
+  mcpUnauthorizedResponse,
+  MCP_SERVER_INFO,
+  type PortableTool,
+} from './stateless-http'
 
 function tokenFrom(extra: { authInfo?: AuthInfo }): string {
   const token = extra.authInfo?.token
@@ -60,10 +56,7 @@ const handler = createMcpHandler(
     }
   },
   {
-    serverInfo: {
-      name: 'hyperTask',
-      version: '1.0.0',
-    },
+    serverInfo: MCP_SERVER_INFO,
   },
   {
     basePath: '',
@@ -114,28 +107,31 @@ const authenticatedMcpHandler = withMcpAuth(handler, verifyToken, {
   resourceMetadataPath: '/.well-known/oauth-protected-resource',
 })
 
-/** Bound JSON-RPC transport bytes before mcp-handler parses tool arguments. */
-export async function mcpHandler(request: Request): Promise<Response> {
-  if (request.method !== 'POST' || !request.body) {
-    return authenticatedMcpHandler(request)
-  }
+async function boundMcpRequest(request: Request): Promise<Request> {
+  if (request.method !== 'POST' || !request.body) return request
+  const body = await readRequestBytesWithCap(
+    request,
+    MCP_ATTACHMENT_MAX_REQUEST_BYTES
+  )
+  // Rebuild from the URL instead of using the now-consumed request as the
+  // constructor input. The latter works in Undici locally but throws in the
+  // Vercel runtime after readRequestBytesWithCap has drained the body.
+  return new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body,
+    signal: request.signal,
+    duplex: 'half',
+  } as RequestInit & { duplex: 'half' })
+}
 
+const portableTools = MCP_TOOLS as PortableTool[]
+
+/** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
+export async function mcpHandler(request: Request): Promise<Response> {
+  let working = request
   try {
-    const body = await readRequestBytesWithCap(
-      request,
-      MCP_ATTACHMENT_MAX_REQUEST_BYTES
-    )
-    // Rebuild from the URL instead of using the now-consumed request as the
-    // constructor input. The latter works in Undici locally but throws in the
-    // Vercel runtime after readRequestBytesWithCap has drained the body.
-    const boundedRequest = new Request(request.url, {
-      method: request.method,
-      headers: request.headers,
-      body,
-      signal: request.signal,
-      duplex: 'half',
-    } as RequestInit & { duplex: 'half' })
-    return authenticatedMcpHandler(boundedRequest)
+    working = await boundMcpRequest(request)
   } catch (error) {
     if (!(error instanceof McpAttachmentRequestBodyError)) throw error
     return Response.json(
@@ -147,4 +143,34 @@ export async function mcpHandler(request: Request): Promise<Response> {
       { status: error.status }
     )
   }
+
+  if (working.method === 'OPTIONS') {
+    return handleStatelessMcpRequest(working, null, portableTools)
+  }
+
+  const bearer = extractBearerToken(working.headers.get('Authorization'))
+  const authInfo = await verifyToken(working, bearer ?? undefined)
+  if (!authInfo) {
+    return mcpUnauthorizedResponse(working)
+  }
+
+  const userId = Number(authInfo.clientId)
+  const stateless =
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
+  const deferred =
+    Number.isFinite(userId) &&
+    (await isFeatureEnabled(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG, userId).catch(() => false))
+
+  if (stateless) {
+    if (deferred) {
+      return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
+    }
+    return handleStatelessMcpRequest(working, authInfo, portableTools)
+  }
+  if (deferred) {
+    return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred: true })
+  }
+
+  return authenticatedMcpHandler(working)
 }

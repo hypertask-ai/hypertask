@@ -7,18 +7,31 @@ import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/Views
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { filterCommandLists } from "@/components/Modals/FilterModals/SelectFilters/FilterOptions";
+import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
 
-export const useFilterView = (view: "Kanban" | "Calendar") => {
+export const useFilterView = (view: "Kanban" | "Calendar" | "MyTasks") => {
   const [keyword, setKeyword] = useState("");
   const currentProject = useRecoilValue(currentProjectAtom);
   const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom);
+  const myTasksFilters = useMyTasksFilterController();
   const projectActiveFilters = getActiveFiltersFromProject(currentProject);
   const activeFilters = useMemo(() => {
     if (view === "Calendar") {
       return { ...projectActiveFilters, matchFilters: calendarTaskFilters.matchFilters };
     }
+    if (view === "MyTasks") {
+      return myTasksFilters?.activeFilters ?? {
+        matchFilters: "ANY" as const,
+        addedFilters: [],
+      };
+    }
     return projectActiveFilters;
-  }, [view, projectActiveFilters, calendarTaskFilters.matchFilters]);
+  }, [
+    view,
+    projectActiveFilters,
+    calendarTaskFilters.matchFilters,
+    myTasksFilters?.activeFilters,
+  ]);
   const addedFiltersFlat = activeFilters.addedFilters.flatMap((x) => x.type);
 
   const excludedCommandModes = [
@@ -29,8 +42,6 @@ export const useFilterView = (view: "Kanban" | "Calendar") => {
     FilterCommandMode.UpdatedRange,
     FilterCommandMode.ToggleMatchCriterai,
     FilterCommandMode.BlockedByPerson,
-    // The calendar filters through calendarTaskFiltersAtom, which carries neither
-    // live timer ids nor staleness fields, so these would silently match nothing there.
     FilterCommandMode.NoRecentComment,
     FilterCommandMode.StuckInColumn,
     FilterCommandMode.RunningTimer,
@@ -94,7 +105,7 @@ export const useFilterView = (view: "Kanban" | "Calendar") => {
       });
       return clearAll ? [clearAll, ...applied] : applied;
     },
-    [view, calendarFilterList, sourceList]
+    [view, calendarFilterList, sourceList, calendarTaskFilters]
   );
 
   const [filteredCommands, setFilteredCommands] = useState<IFilterCommandList[]>(

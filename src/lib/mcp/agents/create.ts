@@ -10,6 +10,7 @@ import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
 import { getAccessibleAgentBoard } from '@/utils/controllers/agents/boardMembers'
+import { lockTeamAgentSeed } from '@/utils/controllers/agents/ensureDefaultTeamAgent'
 import {
   canAttachAgentToTeam,
   getAgentTeamId,
@@ -207,6 +208,9 @@ export async function createAgentForUser(
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    if (targetTeamId) {
+      await lockTeamAgentSeed(tx, user.id, targetTeamId)
+    }
     const createdAgent = await tx.agent.create({
       data: {
         displayName,

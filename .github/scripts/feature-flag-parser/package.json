@@ -1,0 +1,7 @@
+{
+  "name": "hypertask-feature-flag-parser",
+  "private": true,
+  "dependencies": {
+    "typescript": "6.0.3"
+  }
+}

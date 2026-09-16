@@ -38,6 +38,8 @@ const prisma = {
       id: "session-1",
       agentId: "agent-1",
       userId: 6,
+      // chatAccess evaluates the shared-chat flag against the agent owner.
+      agent: { userId: 6 },
       ...(select.user ? { user: { displayName: "Valentin" } } : {}),
     }),
   },
@@ -65,6 +67,7 @@ stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
 stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaiting: true }) });
 stub("src/lib/flags.ts", {
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
+  SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
   isFeatureEnabled: async (key, userId) => {
     assert.equal(userId, 6);
     // The history route also reads the ticket-confirmation flag; only the
@@ -73,6 +76,9 @@ stub("src/lib/flags.ts", {
     // HTPR-6322: the history route also reads the parked-reply flag, which
     // decides whether a stored parked notice is visible to this reader.
     if (key === "htpr-6322-agent-chat-parked-reply") return false;
+    // Shared-chat rollout is evaluated against the agent owner before history
+    // loads. Keep it on here so this suite stays about activity rows.
+    if (key === "htpr-6002-shared-agent-chat") return true;
     assert.equal(key, "htpr-6094-agent-activity-rows");
     return flagEnabled;
   },

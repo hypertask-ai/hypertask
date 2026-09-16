@@ -68,8 +68,6 @@ function loadHandler({ user, visibilityResult, agentRow, flagEnabled } = {}) {
       return {
         __esModule: true,
         AGENT_VISIBILITIES: ["PRIVATE", "TEAM"],
-        TEAM_VISIBILITY_KEY_REQUIRED_ERROR:
-          "Enable a provider key before sharing this agent with the team",
         isAgentVisibility: (value) => value === "PRIVATE" || value === "TEAM",
         // Mirror the real composition in src/lib/agents/visibility.ts so the
         // enum rule is not silently duplicated or dropped here.
@@ -158,22 +156,23 @@ test("a visibility-only patch updates visibility and describes the agent", async
   assert.equal(body.agent.visibility, "TEAM");
 });
 
-test("the 409 that refuses team sharing passes through untouched", async () => {
+test("a team visibility warning passes through with the successful update", async () => {
   const { handlePatchAgentRequest } = loadHandler({
     visibilityResult: {
-      ok: false,
-      status: 409,
-      error: "Enable a provider key before sharing this agent with the team",
+      ok: true,
+      visibility: "TEAM",
+      warning: "team-uses-owner-plan",
     },
   });
   const response = await handlePatchAgentRequest(
     request({ visibility: "TEAM" }),
     "agent-1"
   );
-  assert.equal(response.status, 409);
+  assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.success, false);
-  assert.match(body.error, /provider key/);
+  assert.equal(body.success, true);
+  assert.equal(body.agent.visibility, "TEAM");
+  assert.equal(body.warning, "team-uses-owner-plan");
 });
 
 test("a visibility misspelling is a 400 field error", async () => {

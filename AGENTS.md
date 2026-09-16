@@ -120,5 +120,7 @@ Before changing a feature, trace the entry point through middleware, route handl
 - When in doubt, add the flag. Removing an unneeded flag costs one ticket; shipping a UX change without one costs a rollback.
 - The merge freeze for a required flag does not apply to tickets carrying the **AI CHAT 💬** label.
 - Reviewers must block feature or UI pull requests that omit the required flag.
+- The required `feature-flag-gate` check is a mechanical changed-UI check that supplements semantic review. API-only changes stay outside this mechanical check; reviewers still enforce the server-side flag rules above.
+- For this mechanical check only, a valid `[BUGFIX]` or `[INFRA]` title may pass without a flag when the diff adds at most 150 lines to UI files. A verified auto-revert has the same exemption. These results still require owner merge, and neither exemption waives semantic review or permits user-visible behavior to bypass the rules above.
 - After a flag has stayed on **Everyone** for 14 days, create a follow-up ticket to remove the flag and dead branch.
 - The moment a flagged feature is live on production, post a ticket comment that @mentions Valentin (`<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`) with the flag key, one line on what it does, and the link https://app.hypertask.ai/admin/flags. Without the mention he never learns the flag exists (Valentin, 2026-09-04, https://app.hypertask.ai/detail/project-15/6131).
