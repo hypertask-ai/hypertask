@@ -34,10 +34,17 @@ SANDBOX_NETWORK="strix-weekly-$(date +%s)-$$"
 docker network create "$SANDBOX_NETWORK" >/dev/null || exit 1
 cleanup() {
   status=$?
+  cleanup_failed=0
   trap - EXIT
   docker ps -aq --filter "network=$SANDBOX_NETWORK" --filter "ancestor=$SANDBOX_IMAGE" \
-    | xargs -r docker rm -f
-  docker network rm "$SANDBOX_NETWORK" >/dev/null 2>&1 || true
+    | xargs -r docker rm -f || cleanup_failed=1
+  docker network rm "$SANDBOX_NETWORK" >/dev/null 2>&1 || {
+    echo "Failed to remove sandbox network $SANDBOX_NETWORK" >&2
+    cleanup_failed=1
+  }
+  if [ "$status" -eq 0 ] && [ "$cleanup_failed" -ne 0 ]; then
+    status=1
+  fi
   exit "$status"
 }
 trap cleanup EXIT

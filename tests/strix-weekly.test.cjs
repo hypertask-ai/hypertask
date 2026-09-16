@@ -29,7 +29,9 @@ test('weekly Strix cleanup removes only its own sandbox', async (t) => {
     bin,
     'docker',
     `echo "docker $*" >> "$COMMAND_LOG"
-if [[ "$1" == "ps" && "$*" == *"network="* ]]; then
+if [[ "$1" == "rm" && "\${FAIL_DOCKER_RM:-0}" == "1" ]]; then
+  exit 1
+elif [[ "$1" == "ps" && "$*" == *"network="* ]]; then
   echo weekly-sandbox
 elif [[ "$1" == "ps" && "$*" == *"ancestor="* ]]; then
   echo unrelated-sandbox
@@ -42,16 +44,17 @@ fi`,
   )
   await mockCommand(bin, 'python3', 'echo "python3 $*" >> "$COMMAND_LOG"')
 
+  const env = {
+    ...process.env,
+    COMMAND_LOG: log,
+    PATH: `${bin}:${process.env.PATH}`,
+    STRIX_APP: app,
+    STRIX_LOCK: join(root, 'strix.lock'),
+    STRIX_LOG: join(root, 'strix.log'),
+  }
   await execFileAsync('/bin/bash', ['scripts/strix-weekly.sh'], {
     cwd: process.cwd(),
-    env: {
-      ...process.env,
-      COMMAND_LOG: log,
-      PATH: `${bin}:${process.env.PATH}`,
-      STRIX_APP: app,
-      STRIX_LOCK: join(root, 'strix.lock'),
-      STRIX_LOG: join(root, 'strix.log'),
-    },
+    env,
   })
 
   const commands = await readFile(log, 'utf8')
@@ -71,4 +74,11 @@ fi`,
     .filter((line) => line.startsWith('curl ') && line.includes('/health'))
   assert.ok(healthChecks.length >= 2)
   for (const command of healthChecks) assert.match(command, /--max-time 2/)
+
+  await assert.rejects(
+    execFileAsync('/bin/bash', ['scripts/strix-weekly.sh'], {
+      cwd: process.cwd(),
+      env: { ...env, FAIL_DOCKER_RM: '1' },
+    }),
+  )
 })
