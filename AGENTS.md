@@ -100,7 +100,7 @@ Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
 
 ## CI contract
 
-Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free); the only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Vercel previews are used only when requested or justified by runtime risk. Do not add a VPN runner or another host implicitly.
+Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free); the only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
 
 ## Stack Orientation
 

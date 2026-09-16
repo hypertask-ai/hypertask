@@ -41,7 +41,7 @@ The signal is: **Claimed. comment + In Progress = in flight, do not touch.** Abd
 
 - **Production deploys from branch `production` of `hypertask-ai/hypertask`.** Merging to `production` deploys app.hypertask.ai within ~3 minutes. There is no other prod gate.
 - **Never base work on the old `valentinyeo/hypertasks` `staging`/`main` branches.** They are legacy; the private repo stays private (its history holds a 2023 `.env` commit).
-- **Workflow for every session:** branch off `origin/production` -> push -> open PR with base `production` -> **enable auto-merge immediately** (`gh pr merge --auto --squash`). Repo `allow_auto_merge` only permits the feature; each PR still needs it flipped on or it sits green forever. Exception: low-trust producers must leave auto-merge off (see `openwiki/low-trust-agents.md`). Vercel previews are opt-in (see 'Preview builds and login' below), never a default gate.
+- **Workflow for every session:** branch off `origin/production` -> push -> open PR with base `production` -> **enable auto-merge immediately** (`gh pr merge --auto --squash`). Repo `allow_auto_merge` only permits the feature; each PR still needs it flipped on or it sits green forever. Exception: low-trust producers must leave auto-merge off (see `openwiki/low-trust-agents.md`). Every pushed branch already gets a Vercel preview from the GitHub integration. Preview verification is opt-in and is never a merge gate (see 'Preview builds and login' below).
 - **Previews share the LIVE database** (preview env DATABASE_URL = production Neon). Safe to click around, not safe for destructive testing.
 - Branches created before 2026-07-06 may fail preview builds (they reference removed tracker env vars). Fix: rebase onto `origin/production`.
 - Git stash is shared across all worktrees of this repo and multiple agent sessions run concurrently: NEVER `git stash` here.
@@ -56,7 +56,7 @@ Reason: an agent looped browser reloads against a still-building preview for sev
 
 ## CI contract — read before changing pipeline behavior
 
-The canonical CI contract is [https://hypertask.app/wiki/deployment](https://hypertask.app/wiki/deployment). The compact local policy is [docs/ci-policy.yml](docs/ci-policy.yml); [docs/ci.md](docs/ci.md) is only a pointer. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Vercel previews remain opt-in. Do not add a VPN runner, another host, or a default preview gate without a recorded decision.
+The canonical CI contract is [https://hypertask.app/wiki/deployment](https://hypertask.app/wiki/deployment). The compact local policy is [docs/ci-policy.yml](docs/ci-policy.yml); [docs/ci.md](docs/ci.md) is only a pointer. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. Preview verification stays opt-in. Do not add a VPN runner, another host, or a default preview gate without a recorded decision.
 
 ## Authentication Flow
 
@@ -76,7 +76,7 @@ The canonical CI contract is [https://hypertask.app/wiki/deployment](https://hyp
 
 - 9h. **Never mint, inject, or print authentication credentials for Valentin's account.** Preview and QA clicks use the session's own agent identity or a dedicated QA account. Do not log in as userId 6. If Valentin needs to see a preview, give him the URL and let him sign in himself.
 - 9i. **EVERY approved preview that finishes -> open it in zsb with the session's own identity, WITHOUT being asked, then VERIFY.** Confirm the session is IN THE APP, not on /login or Sign up. Do not print a magic link or bearer token.
-- 9j. **Vercel preview builds are OPT-IN — never trigger one without Valentin's explicit yes (HARD RULE, 2026-07-29).** Live cadence is everything: the default path is merge to `production` and verify on app.hypertask.ai. Never add `[preview]` to a commit message, never trigger the v13/deployments API, never `vercel deploy` without `--prod`. A preview needs a strong specific reason AND Valentin saying yes. A repo hook (`.claude/hooks/preview-guard.sh`) enforces this mechanically; on approval `touch /tmp/ht-preview-approved`, and remove the flag when done. Rules 9h/9i describe what to do WHEN an approved preview exists — they are not permission to create one.
+- 9j. **Every pushed branch already gets a Vercel preview from the GitHub integration.** Do not create an extra preview. Never add `[preview]` to a commit message, never call the v13/deployments API, and never run `vercel deploy` without `--prod` unless Valentin has said yes (HARD RULE, 2026-07-29). The default path is merge to `production` and verify on app.hypertask.ai. The automatic preview is for visual checks only and shares the live database. A repo hook (`.claude/hooks/preview-guard.sh`) blocks extra preview deploys; on approval `touch /tmp/ht-preview-approved`, then remove the flag when done. Rules 9h/9i cover how to open an existing preview, not how to create a new one.
 
 ## Dev agents and the CLI repo (moved from the global config, 2026-09-07)
 
