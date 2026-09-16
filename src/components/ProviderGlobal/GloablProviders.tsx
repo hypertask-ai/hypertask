@@ -419,6 +419,7 @@ export default function GlobalProvider({
     showMcpTokenModalAtom,
   );
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const isAgentChatPage = pathname?.startsWith("/agents/chat") ?? false;
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
     isFullScreenChat || showAiChatInterface,
@@ -427,6 +428,7 @@ export default function GlobalProvider({
   const shouldMountChatRuntime =
     chatRuntimeMounted ||
     isFullScreenChat ||
+    isAgentChatPage ||
     isTaskDetailPage ||
     showAiChatInterface;
   useEffect(() => {

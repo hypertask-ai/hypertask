@@ -82,11 +82,9 @@ import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport
 import { getAgentChatMobileBottomInset } from "@/lib/mobileCommentViewport";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
-import { AiChatComposerActionRow } from "@/components/AI_CHAT/AiChatComposerActionRow";
-import { SendMessageButton } from "@/components/AI_CHAT/AI_Tiptap_Container";
+import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
-import styles from "@/styles/tiptap.module.scss";
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -2234,7 +2232,12 @@ const AgentChatClient = (props: IProp) => {
             )}
           </div>
           </div>
-          <div className="relative shrink-0 bg-cardBackground px-4 pb-4 pt-1">
+          <div
+            className={cn(
+              "relative shrink-0",
+              !reuseAiComposer && "bg-cardBackground px-4 pb-4 pt-1",
+            )}
+          >
             {showScrollToBottom && isMbl && mobileLayoutEnabled && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
@@ -2289,81 +2292,38 @@ const AgentChatClient = (props: IProp) => {
                 </div>
               )}
               {reuseAiComposer ? (
-                <div
-                  data-ai-chat-composer
-                  data-agent-chat-ai-composer
-                  className={cn(
-                    "flex w-full flex-col items-center bg-ai-tiptap outline-none border-0 scrollbar-none",
-                    styles.aiChatInput,
-                    "!rounded-[5px] px-3 pb-2 pt-3",
-                  )}
-                >
-                  <textarea
-                    ref={composerRef}
-                    value={draft}
-                    onChange={(e) =>
-                      handleComposerChange(
-                        e.target.value,
-                        e.target.selectionStart ?? e.target.value.length,
-                      )
-                    }
-                    onKeyDown={handleComposerKeyDown}
-                    rows={2}
-                    placeholder={
-                      composerLocked
-                        ? `${selectedAgent.displayName} is working -- this will queue`
-                        : `Message ${selectedAgent.displayName}`
-                    }
-                    aria-label={`Message ${selectedAgent.displayName}`}
-                    className="w-full resize-none bg-transparent text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"
-                  />
-                  <AiChatComposerActionRow
-                    mobile
-                    mobileDictating={Boolean(isRecording || isDictationProcessing)}
-                    hasText={draft.trim().length > 0}
-                    leadingControls={null}
-                    mobileModelControl={null}
-                    attachmentControl={null}
-                    contextControl={null}
-                    screenshotControl={null}
-                    recorder={
-                      <AudioButton
-                        id="agent-chat-audio-button"
-                        editor={null}
-                        callbackHandler={insertDictation}
-                        toggleRecording={setIsRecording}
-                        globalRecording={isRecording}
-                        hasText={draft.trim().length > 0}
-                        onProcessingChange={setIsDictationProcessing}
-                        disabled={
-                          sending ||
-                          ((mobileLayoutEnabled || mobileFullscreenFlag) &&
-                            dictationProjectId === null)
-                        }
-                        projectId={
-                          mobileLayoutEnabled || mobileFullscreenFlag
-                            ? dictationProjectId
-                            : undefined
-                        }
-                        ariaLabel="Dictate message"
-                      />
-                    }
-                    streamControl={null}
-                    sendControl={
-                      <SendMessageButton
-                        disabled={
-                          !draft.trim() ||
-                          sending ||
-                          isRecording ||
-                          isDictationProcessing
-                        }
-                        queueMode={composerLocked}
-                        mobile
-                        onClick={() => void handleSend()}
-                      />
-                    }
-                  />
-                </div>
+                <AI_Tiptap_Container
+                  controlledComposer={{
+                    value: draft,
+                    inputRef: composerRef,
+                    onChange: handleComposerChange,
+                    onKeyDown: handleComposerKeyDown,
+                    placeholder: composerLocked
+                      ? `${selectedAgent.displayName} is working -- this will queue`
+                      : `Message ${selectedAgent.displayName}`,
+                    ariaLabel: `Message ${selectedAgent.displayName}`,
+                    isRecording,
+                    isProcessing: isDictationProcessing,
+                    onRecordingChange: setIsRecording,
+                    onProcessingChange: setIsDictationProcessing,
+                    onDictation: insertDictation,
+                    dictationDisabled:
+                      sending ||
+                      ((mobileLayoutEnabled || mobileFullscreenFlag) &&
+                        dictationProjectId === null),
+                    projectId:
+                      mobileLayoutEnabled || mobileFullscreenFlag
+                        ? dictationProjectId
+                        : undefined,
+                    sendDisabled:
+                      !draft.trim() ||
+                      sending ||
+                      isRecording ||
+                      isDictationProcessing,
+                    queueMode: composerLocked,
+                    onSend: () => void handleSend(),
+                  }}
+                />
               ) : (
                 <div className="relative flex items-end gap-2">
                   <textarea

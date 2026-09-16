@@ -53,6 +53,11 @@ test("HTPR-6476 flag is registered and defaults with Owner+QA mode", () => {
 test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   assert.match(store, /agentChatMobileFullscreenAtom/);
   assert.match(providers, /agentChatMobileFullscreenAtom/);
+  assert.match(providers, /isAgentChatPage/);
+  assert.match(
+    providers,
+    /isFullScreenChat \|\|\s*isAgentChatPage \|\|\s*isTaskDetailPage/,
+  );
   assert.match(providers, /agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn/);
   assert.match(chat, /setAgentChatMobileFullscreen\(mobileFullscreenChrome\)/);
   assert.match(
@@ -65,24 +70,23 @@ test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
   );
 });
 
-test("mobile fullscreen reuses AI send button and action row, not a new send control", () => {
+test("mobile fullscreen renders the AI chat composer component itself", () => {
   assert.match(sendButton, /export function SendMessageButton/);
   assert.match(tipTap, /from "\.\/SendMessageButton"/);
-  assert.match(chat, /from "@\/components\/AI_CHAT\/AI_Tiptap_Container"/);
-  assert.match(chat, /from "@\/components\/AI_CHAT\/AiChatComposerActionRow"/);
-  assert.match(chat, /data-agent-chat-ai-composer/);
+  assert.match(
+    chat,
+    /import \{ AI_Tiptap_Container \} from "@\/components\/AI_CHAT\/AI_Tiptap_Container"/,
+  );
 
   const flaggedStart = chat.indexOf("reuseAiComposer ? (");
   const flaggedEnd = chat.indexOf(") : (", flaggedStart);
   assert.ok(flaggedStart > 0 && flaggedEnd > flaggedStart);
   const flaggedComposer = chat.slice(flaggedStart, flaggedEnd);
-  assert.match(flaggedComposer, /AiChatComposerActionRow/);
-  assert.match(flaggedComposer, /SendMessageButton/);
-  assert.match(flaggedComposer, /data-agent-chat-ai-composer/);
-  assert.doesNotMatch(
-    flaggedComposer,
-    /\{composerLocked \? "Queue" : "Send"\}/,
-  );
+  assert.match(flaggedComposer, /<AI_Tiptap_Container/);
+  assert.doesNotMatch(flaggedComposer, /<textarea/);
+  assert.doesNotMatch(flaggedComposer, /<AiChatComposerActionRow/);
+  assert.doesNotMatch(flaggedComposer, /<AudioButton/);
+  assert.doesNotMatch(flaggedComposer, /<SendMessageButton/);
 });
 
 test("action row skips empty mobile overflow menus", () => {
