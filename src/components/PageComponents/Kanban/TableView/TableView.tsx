@@ -27,6 +27,7 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import globalConstants from "@/lib/constants";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import {
   getTaskShortcutAction,
@@ -109,7 +110,7 @@ type TableViewProps = {
   handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void;
   myTasksSort?: MyTasksViewConfig["sort"];
   myTasksSortKey?: number | null;
-  /** HTPR-6461: My Tasks snooze surface, independent of Views/sort. */
+  /** HTPR-6461: My Tasks Remind Me also hides the row until that date. */
   myTasksSnoozeActive?: boolean;
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
   /** Controlled My Tasks columns. When set, never reads/writes the board localStorage atom. */
@@ -436,7 +437,7 @@ const TableView = ({
 }: TableViewProps) => {
   const queryClient = useQueryClient();
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
-  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: H opens Remind Me
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const router = useRouter();
@@ -542,6 +543,7 @@ const TableView = ({
   const { setTableSortViewAndReturn, changeBoardLayout } = useKanbanViews(_currentProject);
   const didRestore = useRef(false);
   const timerToggling = useRef(false);
+  const lastGAt = useRef<number | null>(null);
   // View switch (or unsaved-view create/delete) changes which saved sort applies;
   // re-derive local state from the new active view rather than keeping the old one.
   const activeSortViewId =
@@ -1222,11 +1224,8 @@ const TableView = ({
   const runTaskShortcut = useCallback(
     (event: KeyboardEvent, row: Row | undefined, index: number) => {
       if (!row || !isTaskRow(row)) return false;
-      const assignmentId = row.task.currentUserAssignmentId;
       if (
         myTasksSnoozeEnabled &&
-        typeof assignmentId === "number" &&
-        assignmentId > 0 &&
         event.keyCode === KeyCodes.H &&
         !event.shiftKey &&
         !event.altKey &&
@@ -1234,12 +1233,23 @@ const TableView = ({
         !event.metaKey &&
         !event.repeat
       ) {
+        const now = Date.now();
+        if (
+          lastGAt.current &&
+          now - lastGAt.current < globalConstants.gThenKeyDelay
+        ) {
+          return false;
+        }
         event.preventDefault();
         updateActiveItemAndItemInView(row.task);
         setShowCommands({
           show: true,
-          mode: CommandMode.MyTasksSnooze,
-          payload: { assignmentId },
+          mode: CommandMode.RemindMe,
+          payload: {
+            returnsToMyTasks:
+              typeof row.task.currentUserAssignmentId === "number" &&
+              row.task.currentUserAssignmentId > 0,
+          },
         });
         return true;
       }
@@ -1353,6 +1363,15 @@ const TableView = ({
         e.preventDefault();
         handleBoardChange(Number(e.code.replace("Digit", "")), _sections);
         return;
+      }
+      if (
+        e.keyCode === KeyCodes.G &&
+        !e.shiftKey &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey
+      ) {
+        lastGAt.current = Date.now();
       }
       if (
         (rowShortcutsEnabled &&

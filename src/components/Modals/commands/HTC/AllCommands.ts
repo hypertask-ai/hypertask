@@ -1592,7 +1592,8 @@ const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => {
           (command.key === "openAiTaskWriter" && !taskProps?.isKanban) ||
           // Summarize ticket only works on the detail page (the AI chat sends
           // default_context.task_id there); hide it on a Kanban-focused task.
-          (command.key === "summarizeTicket" && !taskProps?.isKanban))
+          (command.key === "summarizeTicket" && !taskProps?.isKanban) ||
+          (command.key === "remindMe" && taskProps?.isMyTasks))
       )
     : baseTaskCommands.filter((command) => {
         return commandOptions?.context === "Inbox"

@@ -128,7 +128,7 @@
       "planned": {
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/5896",
-          "expires": "2026-09-15",
+          "expires": "2026-10-14",
           "entries": ["admin agents delete", "agents delete", "agents update"]
         }
       }
@@ -271,22 +271,22 @@
       "planned": {
         "mcp": {
           "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-09-15",
+          "expires": "2026-10-14",
           "entries": ["hypertask_update_label"]
         },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-09-15",
+          "expires": "2026-10-14",
           "entries": ["labels update", "project label update"]
         },
         "ai_chat": {
           "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-09-15",
+          "expires": "2026-10-14",
           "entries": ["hypertask_update_label"]
         },
         "hyperai": {
           "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-09-15",
+          "expires": "2026-10-14",
           "entries": ["hypertask_update_label"]
         }
       }
@@ -315,7 +315,7 @@
       "planned": {
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/5896",
-          "expires": "2026-09-15",
+          "expires": "2026-10-14",
           "entries": ["messages poll"]
         }
       }
@@ -399,7 +399,7 @@
       "planned": {
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/5896",
-          "expires": "2026-09-15",
+          "expires": "2026-10-14",
           "entries": ["time delete", "time update"]
         }
       }
