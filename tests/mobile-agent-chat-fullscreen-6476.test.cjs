@@ -11,16 +11,13 @@ const chat = fs.readFileSync(
 );
 const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
 const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+const store = fs.readFileSync(path.join(root, "src/store/index.ts"), "utf8");
 const shell = fs.readFileSync(
   path.join(root, "src/components/Global/mobileShellVisibility.ts"),
   "utf8",
 );
 const providers = fs.readFileSync(
   path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"),
-  "utf8",
-);
-const aiTiptap = fs.readFileSync(
-  path.join(root, "src/hooks/MultiPages/AIChat/useAiTiptap.ts"),
   "utf8",
 );
 const sendButton = fs.readFileSync(
@@ -61,10 +58,9 @@ test("HTPR-6476 flag is registered and defaults with Owner+QA mode", () => {
   );
 });
 
-test("flagged Agent Chat hides the mobile shell by path", () => {
-  assert.match(shell, /export const isAgentChatPath/);
-  assert.match(shell, /pathname\?\.startsWith\("\/agents\/chat"\)/);
-  assert.match(providers, /isAgentChatPath/);
+test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
+  assert.match(store, /agentChatMobileFullscreenAtom/);
+  assert.match(providers, /agentChatMobileFullscreenAtom/);
   assert.match(providers, /isAgentChatPage/);
   assert.match(
     providers,
@@ -74,16 +70,25 @@ test("flagged Agent Chat hides the mobile shell by path", () => {
     providers,
     /isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage/,
   );
+  assert.match(providers, /agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn/);
+  assert.match(chat, /setAgentChatMobileFullscreen\(mobileFullscreenChrome\)/);
+  assert.match(
+    chat,
+    /return \(\) => setAgentChatMobileFullscreen\(false\)/,
+  );
+  assert.match(
+    chat,
+    /mobileFullscreenFlag && isMbl && selectedAgent/,
+  );
+});
+
+test("flagged Agent Chat also hides the mobile shell by path", () => {
+  assert.match(shell, /export const isAgentChatPath/);
+  assert.match(shell, /pathname\?\.startsWith\("\/agents\/chat"\)/);
   assert.match(
     providers,
     /agentChatMobileFullscreenFlag && isAgentChatPath\(pathname\)/,
   );
-  assert.match(
-    chat,
-    /const mobileFullscreenChrome = Boolean\(mobileFullscreenFlag && isMbl\)/,
-  );
-  assert.doesNotMatch(chat, /agentChatMobileFullscreenAtom/);
-  assert.doesNotMatch(providers, /agentChatMobileFullscreenAtom/);
 });
 
 test("mobile fullscreen renders the AI chat composer component itself", () => {
@@ -105,10 +110,7 @@ test("mobile fullscreen renders the AI chat composer component itself", () => {
   assert.doesNotMatch(flaggedComposer, /<SendMessageButton/);
   assert.match(tipTap, /<ControlledComposerEditor/);
   assert.match(tipTap, /from "@\/lib\/controlledComposerEditor"/);
-  assert.match(controlledEditor, /useTiptapForAI/);
-  assert.match(controlledEditor, /skipChatCommands: true/);
   assert.match(controlledEditor, /<EditorContent editor=\{editor\}/);
-  assert.match(aiTiptap, /skipChatCommands/);
   assert.match(tipTap, /useTiptapEditor/);
   assert.match(chat, /useTiptapEditor: true/);
 });
@@ -127,7 +129,7 @@ test("hideDock drops tab-bar pad; keyboard still clears inset", () => {
   assert.match(chat, /hideDock:\s*hideDockInset/);
 });
 
-test("6476 chrome-aware height applies on the whole mobile Agent Chat page", () => {
+test("6476 chrome-aware height applies only while an agent is open", () => {
   assert.match(chat, /mobileFullscreenChrome/);
   assert.match(
     chat,

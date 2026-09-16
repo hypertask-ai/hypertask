@@ -247,7 +247,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
     shippedOn: "2026-09-14",
     description:
-      "On mobile Agent Chat: hide the app top bar and bottom nav for the whole page, slim an open thread to back plus name, and reuse the AI chat TipTap composer, mic, and send.",
+      "On mobile Agent Chat with an agent open: hide the app top bar and bottom nav, slim the header to back plus name, and reuse the AI chat TipTap composer, mic, and send.",
   },
   {
     key: "htpr-6287-agent-chat-roster-status",

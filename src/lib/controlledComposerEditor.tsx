@@ -1,5 +1,7 @@
-import { EditorContent, type Editor } from "@tiptap/react";
-import useTiptapForAI from "@/hooks/MultiPages/AIChat/useAiTiptap";
+import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Placeholder from "@tiptap/extension-placeholder";
+import styles from "@/styles/tiptap.module.scss";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
@@ -7,8 +9,8 @@ import {
   useRef,
 } from "react";
 
-// Same useTiptapForAI editor as AI chat. Mentions and slash commands stay
-// off because those post to the AI chat thread, not this agent.
+// Dedicated editor for Agent Chat. useTiptapForAI also mounts AI-chat
+// mentions and slash commands, which send to the AI chat thread, not this one.
 export function ControlledComposerEditor({
   value,
   onChange,
@@ -26,18 +28,49 @@ export function ControlledComposerEditor({
   editorRef?: RefObject<Editor | null>;
   onEditor: (editor: Editor | null) => void;
 }) {
+  const placeholderRef = useRef(placeholder);
+  placeholderRef.current = placeholder;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const onKeyDownRef = useRef(onKeyDown);
   onKeyDownRef.current = onKeyDown;
 
-  const { editor } = useTiptapForAI({
-    contextCallback: () => {},
-    skipChatCommands: true,
-    placeholder,
-    ariaLabel,
-    onUpdate: (text, cursor) => onChangeRef.current(text, cursor),
-    onKeyDown: (event) => onKeyDownRef.current(event),
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        blockquote: false,
+        horizontalRule: false,
+        gapcursor: false,
+        link: { autolink: false },
+      }),
+      Placeholder.configure({
+        placeholder: () => placeholderRef.current,
+        emptyEditorClass: `${styles.is_editor_empty}`,
+      }),
+    ],
+    content: value,
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        "aria-label": ariaLabel,
+        "aria-multiline": "true",
+        role: "textbox",
+        class: "outline-none py-2 text-dense",
+      },
+      handleKeyDown: (_view, event) => {
+        onKeyDownRef.current(
+          event as unknown as ReactKeyboardEvent<HTMLTextAreaElement>,
+        );
+        return event.defaultPrevented;
+      },
+    },
+    onUpdate: ({ editor: next }) => {
+      const text = next.getText();
+      const before = next.state.doc.textBetween(0, next.state.selection.from);
+      onChangeRef.current(text, before.length);
+    },
   });
 
   useEffect(() => {

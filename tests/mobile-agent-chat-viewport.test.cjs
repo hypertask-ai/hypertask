@@ -21,7 +21,7 @@ test("mobile Agent Chat follows the keyboard-visible viewport behind its ticket 
   );
   assert.match(
     chat,
-    /useMobileVisualViewport\(\s*isMbl\s*&&\s*\([\s\S]*mobileAgentChatViewportEnabled \|\|[\s\S]*mobileLayoutEnabled \|\|[\s\S]*mobileFullscreenFlag[\s\S]*\)\s*\)/,
+    /useMobileVisualViewport\(\s*isMbl\s*&&\s*\([\s\S]*mobileAgentChatViewportEnabled \|\|[\s\S]*mobileLayoutEnabled \|\|[\s\S]*mobileFullscreenFlag && Boolean\(selectedId\)[\s\S]*\)\s*\)/,
   );
   assert.match(
     narrowLayout,

@@ -37,6 +37,7 @@ import {
   currentProjectAtom,
   lastUsedBoardsAtom,
   agentChatTeamCycleAtom,
+  agentChatMobileFullscreenAtom,
 } from "@/store";
 import { orderTeamsForSwitcher } from "@/lib/teamSwitcherOrder";
 import { getLastBoardTeam, setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -578,13 +579,17 @@ export default function GlobalProvider({
   // The mobile shell (top bar + pull-to-command) is present on every root view
   // including task detail. The bottom dock is the exception: hidden on detail
   // (shouldShowMobileDock) so the composer owns the bottom edge.
-  // HTPR-6476: flagged mobile Agent Chat hides chrome by path, same as /chat.
+  // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
+  const agentChatMobileFullscreenAtomOn = useRecoilValue(
+    agentChatMobileFullscreenAtom,
+  );
   // Keep the path/auth shell check separate so the ticket flag can gate the
   // rendered chrome in JSX (feature-flag-gate requires that shape).
   const showMobileShellPath =
     mbl && Boolean(currentUser?.id) && shouldShowMobileTabBar(pathname);
   const agentChatHidesMobileShell =
-    agentChatMobileFullscreenFlag && isAgentChatPath(pathname);
+    (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
+    (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
   const showMobileTabBar = showMobileShellPath && !agentChatHidesMobileShell;
   // Entering the mobile comment composer hides the bottom nav so the sheet
   // sits directly on the keyboard (the top bar stays for the back button).
@@ -1405,7 +1410,8 @@ export default function GlobalProvider({
         />
       )}
 
-      {agentChatMobileFullscreenFlag && isAgentChatPath(pathname) ? null : (
+      {(agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
+      (agentChatMobileFullscreenFlag && isAgentChatPath(pathname)) ? null : (
         showMobileShellPath && (
         <>
           <MobileTopBar
