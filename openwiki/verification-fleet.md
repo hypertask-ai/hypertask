@@ -75,10 +75,10 @@ Status as of 2026-09-16. TestSprite provides a small production API contract sui
 
 | Project | ID | Tests | Dashboard |
 |---|---|---:|---|
-| `Hypertask MCP API` | `64648e88-03a4-4355-9e14-dc28f4e8cc7e` | 14 backend contracts | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/64648e88-03a4-4355-9e14-dc28f4e8cc7e) |
+| `Hypertask MCP API` | `64648e88-03a4-4355-9e14-dc28f4e8cc7e` | 8 backend contracts | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/64648e88-03a4-4355-9e14-dc28f4e8cc7e) |
 | `Hypertask Web` | `411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9` | 4 logged-out browser checks | [TestSprite](https://www.testsprite.com/dashboard-v3/o/ed490fba-6881-5950-a238-4bc8561b3b57/projects/411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9) |
 
-The backend suite covers MCP identity/context, isolated-board provisioning, projects and sections, task create/read/update/move/search/archive, labels, and HTML comment create/list. The label-filter contract guards the regression tracked at https://app.hypertask.ai/detail/project-15/6475. The frontend suite covers `/login`, the logged-out `/pricing` redirect, `/developers`, and a public 404. Its project URL is deliberately `/login`: booting a browser at `/` provisions a guest demo board and violates the suite's isolation rule.
+The backend suite covers MCP identity/context, immutable QA-board validation, projects and sections, task create/read/update/move/search/archive, labels, and HTML comment create/list. The label-filter contract guards the regression tracked at https://app.hypertask.ai/detail/project-15/6475. The frontend suite covers `/login`, the logged-out `/pricing` redirect, `/developers`, and a public 404. Its project URL is deliberately `/login`: booting a browser at `/` provisions a guest demo board and violates the suite's isolation rule.
 
 Credentials are local only. Source `/home/valentin/.config/testsprite/credentials.env` for the TestSprite key. The backend project's Bearer credential is the account-scoped MCP token for QA userId 985, sourced from `/home/valentin/.config/hypertask-videos/storageState-qa.warmed.json`; rotate the project credential when that QA session token expires. Never copy either value into a test or this repository.
 
@@ -88,6 +88,6 @@ testsprite test run --all --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e --wait 
 testsprite test run --all --project 411d64f3-c9ec-4032-a4e5-ad0e3f6f57d9 --wait --timeout 1200
 ```
 
-Backend test source lives in `testsprite/backend/`; add one with `testsprite test create --type backend --name "<contract>" --code-file testsprite/backend/<file>.py --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e`, using only injected `__AUTH_HEADERS__`. Frontend plans live in `testsprite/frontend/`; lint with `testsprite test lint --plan-from-dir testsprite/frontend`, then create a new plan with `testsprite test create --plan-from testsprite/frontend/<file>.json`. A full backend run costs about 2.8 credits and a full frontend run about 2 credits.
+Backend test source lives in `testsprite/backend/`; add one with `testsprite test create --type backend --name "<contract>" --code-file testsprite/backend/<file>.py --project 64648e88-03a4-4355-9e14-dc28f4e8cc7e`, using only injected `__AUTH_HEADERS__`. Bind every write to board `5592`, verify owner userId `985`, use a UUID-scoped fixture, and archive it in `finally`. Frontend plans live in `testsprite/frontend/`; lint with `testsprite test lint --plan-from-dir testsprite/frontend`, then create a new plan with `testsprite test create --plan-from testsprite/frontend/<file>.json`. A full backend run costs about 1.6 credits and a full frontend run about 2 credits.
 
 `testsprite ci init github` was assessed but not committed. Its generated workflow targets frozen `main`, uses mutable `TestSprite/testsprite-action@v1`, tests configured production rather than the pull-request build, and requires the missing repository secret `TESTSPRITE_API_KEY`; that conflicts with the pinned-action and review-first contract in `docs/ci-policy.yml`.
