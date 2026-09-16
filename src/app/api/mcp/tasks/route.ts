@@ -19,8 +19,10 @@ import prisma from '@/lib/prisma'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   hasPrWhere,
+  normalizeTaskStatus,
   parseListQueryFromSearchParams,
   projectRows,
+  resolveListLimit,
   taskUrlFromListItem,
 } from '@/lib/mcp/listQuery'
 
@@ -358,7 +360,18 @@ export async function GET(request: NextRequest) {
         assignedTo = String(listQuery.filter.assignee)
       }
       if (listQuery.filter.status) {
-        status = listQuery.filter.status as typeof status
+        const normalizedStatus = normalizeTaskStatus(listQuery.filter.status)
+        if (!normalizedStatus) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Validation error',
+              message: 'filter.status must be open, Normal, Archive, or Deleted',
+            },
+            { status: 400 },
+          )
+        }
+        status = normalizedStatus
       }
       if (listQuery.filter.label) {
         labelsParam = Array.isArray(listQuery.filter.label)
@@ -368,7 +381,7 @@ export async function GET(request: NextRequest) {
       if (listQuery.filter.updated_since) updatedSince = listQuery.filter.updated_since
       if (listQuery.sortBy) sortBy = listQuery.sortBy
       if (listQuery.sortOrder) sortOrder = listQuery.sortOrder
-      if (listQuery.limit) limit = listQuery.limit
+      limit = resolveListLimit(listQuery, limit)
     }
 
     // Get user's accessible projects
@@ -743,10 +756,14 @@ export async function GET(request: NextRequest) {
       // value that was never applied.
       offset: usesCursor ? 0 : offset,
       nextCursor,
-      metadata: {
-        projectCount: uniqueProjects.size,
-        sectionCount: uniqueSections.size
-      }
+      ...(listQuery?.fields.length
+        ? {}
+        : {
+            metadata: {
+              projectCount: uniqueProjects.size,
+              sectionCount: uniqueSections.size,
+            },
+          }),
     }
 
     return NextResponse.json(response)

@@ -52,6 +52,26 @@ export const HAS_PR_VALUES = [
 
 export type HasPrValue = (typeof HAS_PR_VALUES)[number]
 
+export type TaskStatusValue = 'Normal' | 'Archive' | 'Deleted'
+
+/** When the client asked for a projection and no limit, keep the page small enough for a 2 KB payload. */
+export const FIELDS_DEFAULT_LIMIT = 20
+
+export function normalizeTaskStatus(value?: string | null): TaskStatusValue | null {
+  if (!value) return null
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'open' || normalized === 'active' || normalized === 'normal') return 'Normal'
+  if (normalized === 'archive' || normalized === 'archived') return 'Archive'
+  if (normalized === 'deleted' || normalized === 'delete') return 'Deleted'
+  return null
+}
+
+export function resolveListLimit(listQuery: ParsedListQuery, fallback: number, max = 100): number {
+  if (listQuery.limit) return Math.min(listQuery.limit, max)
+  if (listQuery.fields.length > 0) return Math.min(FIELDS_DEFAULT_LIMIT, max)
+  return Math.min(fallback, max)
+}
+
 export function parseSort(
   sort?: string | null,
 ): { sortBy?: string; sortOrder?: 'asc' | 'desc' } {
@@ -101,7 +121,7 @@ function parseFilterValue(raw: unknown): ListFilter {
     filter.assignee = typeof input.assignee === 'number' ? input.assignee : String(input.assignee)
   }
   if (typeof input.status === 'string' && input.status.trim()) {
-    filter.status = input.status.trim()
+    filter.status = normalizeTaskStatus(input.status) ?? input.status.trim()
   }
   if (typeof input.updated_since === 'string' && input.updated_since.trim()) {
     filter.updated_since = input.updated_since.trim()
@@ -290,8 +310,12 @@ export function applyCollectionQuery<T extends Record<string, unknown>>(
   }
 
   if (listQuery.filter.status) {
-    const status = listQuery.filter.status
-    filtered = filtered.filter((item) => String((item as Record<string, unknown>).status ?? '') === status)
+    const status = normalizeTaskStatus(listQuery.filter.status) ?? listQuery.filter.status
+    filtered = filtered.filter((item) => {
+      const raw = String((item as Record<string, unknown>).status ?? '')
+      const itemStatus = normalizeTaskStatus(raw) ?? raw
+      return itemStatus === status
+    })
   }
   if (listQuery.filter.section) {
     const section = listQuery.filter.section.toLowerCase()

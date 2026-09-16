@@ -8,8 +8,10 @@ import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import {
   hasPrWhere,
+  normalizeTaskStatus,
   parseListQueryFromSearchParams,
   projectRows,
+  resolveListLimit,
   taskUrlFromListItem,
 } from '@/lib/mcp/listQuery'
 
@@ -73,8 +75,21 @@ export async function GET(request: NextRequest) {
     let limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
     if (listQuery?.filter.section) section = listQuery.filter.section
     if (listQuery?.filter.assignee !== undefined) assignedTo = String(listQuery.filter.assignee)
-    if (listQuery?.filter.status) status = listQuery.filter.status as typeof status
-    if (listQuery?.limit) limit = listQuery.limit
+    if (listQuery?.filter.status) {
+      const normalizedStatus = normalizeTaskStatus(listQuery.filter.status)
+      if (!normalizedStatus || normalizedStatus === 'Deleted') {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: 'filter.status must be open, Normal, or Archive',
+          },
+          { status: 400 },
+        )
+      }
+      status = normalizedStatus
+    }
+    if (listQuery) limit = resolveListLimit(listQuery, limit, 50)
     const labelsParam = listQuery?.filter.label
       ? Array.isArray(listQuery.filter.label)
         ? listQuery.filter.label

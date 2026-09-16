@@ -3,11 +3,14 @@ import assert from 'node:assert/strict'
 import {
   applyCollectionQuery,
   appendListQueryParams,
+  FIELDS_DEFAULT_LIMIT,
   hasPrWhere,
+  normalizeTaskStatus,
   parseListQueryFromArgs,
   parseListQueryFromSearchParams,
   parseSort,
   projectRows,
+  resolveListLimit,
   taskUrlFromListItem,
 } from './listQuery'
 
@@ -42,15 +45,26 @@ function demo() {
 
   const fromArgs = parseListQueryFromArgs({
     query: 'open tickets',
-    filter: { section: 'AI Review', has_pr: 'red', label: ['hard'] },
+    filter: { section: 'AI Review', has_pr: 'red', status: 'open', label: ['hard'] },
     fields: ['title', 'url'],
     sort: '-updatedAt',
     limit: 10,
   })
   assert.equal(fromArgs.filter.section, 'AI Review')
+  assert.equal(fromArgs.filter.status, 'Normal')
   assert.equal(fromArgs.filter.label, 'hard')
   assert.equal(fromArgs.sortOrder, 'desc')
   assert.equal(fromArgs.sortBy, 'updatedAt')
+
+  assert.equal(normalizeTaskStatus('open'), 'Normal')
+  assert.equal(normalizeTaskStatus('Active'), 'Normal')
+  assert.equal(normalizeTaskStatus('archived'), 'Archive')
+  assert.equal(normalizeTaskStatus('nope'), null)
+  assert.equal(resolveListLimit(fromArgs, 50), 10)
+  assert.equal(
+    resolveListLimit(parseListQueryFromArgs({ fields: ['title', 'url'] }), 50),
+    FIELDS_DEFAULT_LIMIT,
+  )
 
   assert.deepEqual(parseSort('title'), { sortBy: 'title', sortOrder: 'asc' })
   assert.deepEqual(hasPrWhere('red'), { pullRequests: { some: { checkState: 'failing' } } })
@@ -77,6 +91,7 @@ function demo() {
     tasks: projected,
     total: fatRows.length,
     limit: fatRows.length,
+    offset: 0,
     nextCursor: null,
   })
   assert.ok(
@@ -84,6 +99,8 @@ function demo() {
     `acceptance payload should stay under 2 KB, got ${Buffer.byteLength(payload)}`,
   )
   assert.deepEqual(Object.keys(projected[0]), ['title', 'url'])
+  assert.ok(!payload.includes('metadata'))
+  assert.ok(!payload.includes('description'))
 
   const queryParams = new URLSearchParams()
   appendListQueryParams(queryParams, {

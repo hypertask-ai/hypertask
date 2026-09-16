@@ -3,7 +3,7 @@ import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { parseListQueryFromSearchParams, projectRows } from '@/lib/mcp/listQuery'
+import { normalizeTaskStatus, parseListQueryFromSearchParams, projectRows } from '@/lib/mcp/listQuery'
 
 export interface ProjectLabel {
   id: string
@@ -75,7 +75,18 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const listQueryEnabled = await isFeatureEnabled(HTPR_6530_MCP_LIST_QUERY_FLAG, user.id)
     const listQuery = listQueryEnabled ? parseListQueryFromSearchParams(searchParams) : null
-    const status = (listQuery?.filter.status ?? searchParams.get('status')) as 'Normal' | 'Archive' | 'Deleted' | null
+    const rawStatus = listQuery?.filter.status ?? searchParams.get('status')
+    const status = rawStatus ? normalizeTaskStatus(rawStatus) : null
+    if (rawStatus && !status) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Validation error',
+          message: 'filter.status must be open, Normal, Archive, or Deleted',
+        },
+        { status: 400 },
+      )
+    }
     const search = listQuery?.query || searchParams.get('search') || undefined
     const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100) // Max 100
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
