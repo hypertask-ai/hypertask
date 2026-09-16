@@ -435,9 +435,9 @@ export class TaskService {
         return task;
       });
 
-      const offset = validatedInput.offset ?? 0;
-      const limit = validatedInput.limit ?? response?.limit ?? normalizedTasks.length;
-      const total = response?.total ?? normalizedTasks.length;
+      const offset = Number(validatedInput.offset ?? 0);
+      const limit = Number(validatedInput.limit ?? response?.limit ?? normalizedTasks.length);
+      const total = Number(response?.total ?? normalizedTasks.length);
       if (requestedFields.length > 0) {
         return projectedListEnvelope(normalizedTasks, {
           total,
@@ -446,9 +446,7 @@ export class TaskService {
         }) as ListTasksResponse;
       }
       const paginationMetadata = buildPaginationMetadata({
-        // @ts-expect-error list-query merge widens pagination
         offset,
-        // @ts-expect-error list-query merge widens pagination
         limit,
         total,
         itemsCount: normalizedTasks.length,
