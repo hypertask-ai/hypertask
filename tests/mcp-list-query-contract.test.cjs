@@ -23,7 +23,7 @@ test("list query fields are merged only when the flag is on", () => {
   assert.match(handler, /HTPR_6530_MCP_LIST_QUERY_FLAG/);
   assert.match(handler, /resolvePortableTools\(MCP_TOOLS as PortableTool\[\], listQueryEnabled\)/);
   assert.match(handler, /authenticatedListQueryHandler/);
-  assert.match(handler, /authenticatedLegacyHandler/);
+  assert.match(handler, /authenticatedMcpHandler/);
 });
 
 test("routes return nextCursor and project after building link", () => {
