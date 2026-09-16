@@ -47,18 +47,11 @@ function accessibleTeamWhere(userId: number): Prisma.TeamWhereInput {
   };
 }
 
-async function findSeedBoard(
+async function findTeamAccessBoard(
   database: Pick<PrismaClient, "project" | "team">,
   userId: number,
   teamId: string,
 ) {
-  const accepted = await database.project.findFirst({
-    where: { teamId, ...acceptedHumanBoardWhere(userId) },
-    select: { id: true },
-    orderBy: { id: "desc" },
-  });
-  if (accepted) return accepted;
-
   const canUseTeam = await database.team.findFirst({
     where: { id: teamId, ...accessibleTeamWhere(userId) },
     select: { id: true },
@@ -111,7 +104,38 @@ export async function ensureDefaultTeamAgent(
   const existing = await findActiveOwnedAgentOnTeam(database, userId, teamId);
   if (existing) return { id: existing.id, created: false };
 
-  const board = await findSeedBoard(database, userId, teamId);
+  const board = await database.project.findFirst({
+    where: { teamId, ...acceptedHumanBoardWhere(userId) },
+    select: { id: true },
+    orderBy: { id: "desc" },
+  });
+  if (!board) {
+    const teamBoard = await findTeamAccessBoard(database, userId, teamId);
+    if (teamBoard) {
+      return database.$transaction(async (tx) => {
+        await lockTeamAgentSeed(tx, userId, teamId);
+        const raced = await findActiveOwnedAgentOnTeam(tx, userId, teamId);
+        if (raced) return { id: raced.id, created: false };
+
+        const agent = await tx.agent.create({
+          data: {
+            displayName: DEFAULT_SEEDED_AGENT_NAME,
+            userId,
+            runtimeType: "NATIVE",
+          },
+          select: { id: true },
+        });
+        await tx.member.create({
+          data: {
+            projectId: teamBoard.id,
+            userId,
+            agentId: agent.id,
+          },
+        });
+        return { id: agent.id, created: true };
+      });
+    }
+  }
   if (!board) return null;
 
   return database.$transaction(async (tx) => {
@@ -142,11 +166,27 @@ export async function ensureDefaultAgentsOnAccessibleTeams(
   userId: number,
   database: PrismaClient,
 ): Promise<number> {
-  const teams = await database.team.findMany({
+  const boards = await database.project.findMany({
+    where: {
+      teamId: { not: null },
+      ...acceptedHumanBoardWhere(userId),
+    },
+    select: { teamId: true },
+  });
+  const teamIds = [
+    ...new Set(
+      boards
+        .map((board) => board.teamId)
+        .filter((teamId): teamId is string => Boolean(teamId)),
+    ),
+  ];
+  const extraTeams = await database.team.findMany({
     where: accessibleTeamWhere(userId),
     select: { id: true },
   });
-  const teamIds = [...new Set(teams.map((team) => team.id))];
+  for (const team of extraTeams) {
+    if (!teamIds.includes(team.id)) teamIds.push(team.id);
+  }
 
   let created = 0;
   for (const teamId of teamIds) {

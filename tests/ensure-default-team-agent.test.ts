@@ -36,7 +36,7 @@ type FakeState = {
     ownerId: number;
     members: FakeMember[];
   }>;
-  teams: Array<{
+  teams?: Array<{
     id: string;
     ownerUserId?: number;
     acceptedMemberIds: number[];
@@ -151,14 +151,13 @@ function fakeDatabase(state: FakeState) {
   };
   const project = {
     findFirst: async ({ where }: { where: Where }) => {
-      const userId = accessUserId(where);
-      if (userId == null) {
-        const teamId = requestedTeamId(where);
-        const board = state.boards.find(
-          (row) => !teamId || row.teamId === teamId,
-        );
+      const teamOnlyId = requestedTeamId(where);
+      if (accessUserId(where) == null && teamOnlyId) {
+        const board = state.boards.find((row) => row.teamId === teamOnlyId);
         return board ? { id: board.id } : null;
       }
+      const userId = accessUserId(where);
+      if (userId == null) return null;
       const board = state.boards.find((row) =>
         boardMatchesAccess(row, where, userId),
       );
@@ -173,7 +172,7 @@ function fakeDatabase(state: FakeState) {
     },
   };
   const teamCanAccess = (teamId: string, userId: number) => {
-    const team = state.teams.find((row) => row.id === teamId);
+    const team = (state.teams ?? []).find((row) => row.id === teamId);
     if (team?.ownerUserId === userId) return true;
     if (team?.acceptedMemberIds.includes(userId)) return true;
     return state.boards.some(
@@ -195,9 +194,15 @@ function fakeDatabase(state: FakeState) {
     findMany: async ({ where }: { where: Where }) => {
       const userId = accessUserId(where);
       if (userId == null) return [];
-      return state.teams
-        .filter((row) => teamCanAccess(row.id, userId))
-        .map((row) => ({ id: row.id }));
+      const knownIds = new Set([
+        ...(state.teams ?? []).map((row) => row.id),
+        ...state.boards
+          .map((board) => board.teamId)
+          .filter((id): id is string => Boolean(id)),
+      ]);
+      return [...knownIds]
+        .filter((id) => teamCanAccess(id, userId))
+        .map((id) => ({ id }));
     },
   };
   const member = {
@@ -239,24 +244,14 @@ function ownedBoard(): FakeState["boards"][number] {
   };
 }
 
-function ownedTeam(): FakeState["teams"][number] {
-  return { id: TEAM, ownerUserId: OWNER, acceptedMemberIds: [] };
-}
-
-function emptyState(overrides: Partial<FakeState> = {}): FakeState {
-  return {
+test("seeds a native Hyper AI agent on an empty team board", async () => {
+  const state: FakeState = {
     agents: [],
     boards: [ownedBoard()],
-    teams: [ownedTeam()],
     members: [],
     creates: 0,
     locks: [],
-    ...overrides,
   };
-}
-
-test("seeds a native Hyper AI agent on an empty team board", async () => {
-  const state = emptyState();
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -272,7 +267,7 @@ test("seeds a native Hyper AI agent on an empty team board", async () => {
 });
 
 test("does not create a second agent when one is already live on the team", async () => {
-  const state = emptyState({
+  const state: FakeState = {
     agents: [
       {
         id: "existing",
@@ -282,7 +277,11 @@ test("does not create a second agent when one is already live on the team", asyn
         teamId: TEAM,
       },
     ],
-  });
+    boards: [ownedBoard()],
+    members: [],
+    creates: 0,
+    locks: [],
+  };
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -294,7 +293,8 @@ test("does not create a second agent when one is already live on the team", asyn
 });
 
 test("does not seed when the user has no board on that team", async () => {
-  const state = emptyState({
+  const state: FakeState = {
+    agents: [],
     boards: [
       {
         id: 99,
@@ -303,8 +303,10 @@ test("does not seed when the user has no board on that team", async () => {
         members: [],
       },
     ],
-    teams: [{ id: "other-team", ownerUserId: OWNER, acceptedMemberIds: [] }],
-  });
+    members: [],
+    creates: 0,
+    locks: [],
+  };
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -314,8 +316,9 @@ test("does not seed when the user has no board on that team", async () => {
   assert.equal(state.creates, 0);
 });
 
-test("seeds when the caller can open the board but is still Invited", async () => {
-  const state = emptyState({
+test("does not treat an unaccepted board membership as access", async () => {
+  const state: FakeState = {
+    agents: [],
     boards: [
       {
         id: BOARD_ID,
@@ -331,8 +334,10 @@ test("seeds when the caller can open the board but is still Invited", async () =
         ],
       },
     ],
-    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
-  });
+    members: [],
+    creates: 0,
+    locks: [],
+  };
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -343,7 +348,8 @@ test("seeds when the caller can open the board but is still Invited", async () =
 });
 
 test("seeds when the caller is an accepted team member with no board row", async () => {
-  const state = emptyState({
+  const state: FakeState = {
+    agents: [],
     boards: [
       {
         id: BOARD_ID,
@@ -353,7 +359,10 @@ test("seeds when the caller is an accepted team member with no board row", async
       },
     ],
     teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [OWNER] }],
-  });
+    members: [],
+    creates: 0,
+    locks: [],
+  };
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -367,7 +376,8 @@ test("seeds when the caller is an accepted team member with no board row", async
 });
 
 test("seeds when the caller is an accepted board member, not the owner", async () => {
-  const state = emptyState({
+  const state: FakeState = {
+    agents: [],
     boards: [
       {
         id: BOARD_ID,
@@ -383,8 +393,10 @@ test("seeds when the caller is an accepted board member, not the owner", async (
         ],
       },
     ],
-    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
-  });
+    members: [],
+    creates: 0,
+    locks: [],
+  };
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -395,7 +407,12 @@ test("seeds when the caller is an accepted board member, not the owner", async (
 });
 
 test("rechecks after the seed lock so a concurrent create wins", async () => {
-  const state = emptyState({
+  const state: FakeState = {
+    agents: [],
+    boards: [ownedBoard()],
+    members: [],
+    creates: 0,
+    locks: [],
     onLock: () => {
       state.agents.push({
         id: "winner",
@@ -405,7 +422,7 @@ test("rechecks after the seed lock so a concurrent create wins", async () => {
         teamId: TEAM,
       });
     },
-  });
+  };
   const result = await ensureDefaultTeamAgent(
     OWNER,
     TEAM,
@@ -417,7 +434,13 @@ test("rechecks after the seed lock so a concurrent create wins", async () => {
 });
 
 test("covers every accessible team that still has no live agent", async () => {
-  const state = emptyState();
+  const state: FakeState = {
+    agents: [],
+    boards: [ownedBoard()],
+    members: [],
+    creates: 0,
+    locks: [],
+  };
   const created = await ensureDefaultAgentsOnAccessibleTeams(
     OWNER,
     fakeDatabase(state) as unknown as PrismaClient,
@@ -426,7 +449,8 @@ test("covers every accessible team that still has no live agent", async () => {
 });
 
 test("covers a team the caller can use without an accepted board row", async () => {
-  const state = emptyState({
+  const state: FakeState = {
+    agents: [],
     boards: [
       {
         id: BOARD_ID,
@@ -436,7 +460,10 @@ test("covers a team the caller can use without an accepted board row", async () 
       },
     ],
     teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [OWNER] }],
-  });
+    members: [],
+    creates: 0,
+    locks: [],
+  };
   const created = await ensureDefaultAgentsOnAccessibleTeams(
     OWNER,
     fakeDatabase(state) as unknown as PrismaClient,
