@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { parseMyTasksSnoozeUntil } from "@/lib/myTasksSnooze";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 
@@ -90,4 +91,27 @@ export async function setMyTasksSnooze(args: {
     console.error("[myTasksSnooze] set failed", error);
     return { ok: false, status: 500, error: "Unable to snooze task" };
   }
+}
+
+/**
+ * Hide or restore a My Tasks row when Remind Me is set or fires.
+ * No assignment (created/watching only) is a no-op.
+ */
+export async function syncMyTasksSnoozeFromReminder(args: {
+  userId: number;
+  taskId: number;
+  snoozeUntil: Date | string | null;
+  client?: Prisma.TransactionClient | typeof prisma;
+}): Promise<void> {
+  const client = args.client ?? prisma;
+  const parsed = parseMyTasksSnoozeUntil(args.snoozeUntil);
+  if (!parsed.ok) return;
+  await client.assignees.updateMany({
+    where: {
+      userId: args.userId,
+      taskId: args.taskId,
+      agentId: null,
+    },
+    data: { snoozeUntil: parsed.snoozeUntil },
+  });
 }

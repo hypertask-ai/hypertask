@@ -454,7 +454,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: MY_TASKS_SNOOZE_FLAG,
     shippedOn: "2026-09-15",
     description:
-      "Lets you snooze a My Tasks row until a date so it leaves the list and comes back on that day. Same date presets as Inbox Remind Me.",
+      "On My Tasks, H opens the existing Remind Me picker. The chosen date hides the row here and in Inbox until it returns to both.",
   },
   // ponytail: `shippedOn` is the calendar day the key first reached production, written by hand
   // because git history is not readable at runtime. Backfilled with
