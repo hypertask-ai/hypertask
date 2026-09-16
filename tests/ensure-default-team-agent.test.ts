@@ -36,6 +36,11 @@ type FakeState = {
     ownerId: number;
     members: FakeMember[];
   }>;
+  teams?: Array<{
+    id: string;
+    ownerUserId?: number;
+    acceptedMemberIds: number[];
+  }>;
   members: Array<{ projectId: number; userId: number; agentId: string }>;
   creates: number;
   locks: string[];
@@ -81,6 +86,8 @@ function accessUserId(where: Where): number | null {
     if (typeof branch.ownerId === "number") return branch.ownerId;
     const memberFilter = asRecord(asRecord(branch.members)?.some);
     if (typeof memberFilter?.userId === "number") return memberFilter.userId;
+    const google = asRecord(asRecord(branch.googleAccount)?.is);
+    if (typeof google?.userId === "number") return google.userId;
   }
   return null;
 }
@@ -144,6 +151,28 @@ function fakeDatabase(state: FakeState) {
   };
   const project = {
     findFirst: async ({ where }: { where: Where }) => {
+      const teamOnlyId = requestedTeamId(where);
+      if (accessUserId(where) == null && teamOnlyId) {
+        const board = state.boards.find((row) => row.teamId === teamOnlyId);
+        return board ? { id: board.id } : null;
+      }
+      const anyMemberUserId = accessUserId(where);
+      const requiresAccepted = collectOrBranches(where).some((branch) => {
+        const memberFilter = asRecord(asRecord(branch.members)?.some);
+        return memberFilter?.status === "Accepted";
+      });
+      if (anyMemberUserId != null && !requiresAccepted) {
+        const teamId = requestedTeamId(where);
+        const board = state.boards.find((row) => {
+          if (teamId && row.teamId !== teamId) return false;
+          if (row.ownerId === anyMemberUserId) return true;
+          return row.members.some(
+            (member) =>
+              member.userId === anyMemberUserId && member.agentId === null,
+          );
+        });
+        return board ? { id: board.id } : null;
+      }
       const userId = accessUserId(where);
       if (userId == null) return null;
       const board = state.boards.find((row) =>
@@ -157,6 +186,40 @@ function fakeDatabase(state: FakeState) {
       return state.boards
         .filter((row) => boardMatchesAccess(row, where, userId))
         .map((board) => ({ teamId: board.teamId }));
+    },
+  };
+  const teamCanAccess = (teamId: string, userId: number) => {
+    const team = (state.teams ?? []).find((row) => row.id === teamId);
+    if (team?.ownerUserId === userId) return true;
+    if (team?.acceptedMemberIds.includes(userId)) return true;
+    return state.boards.some(
+      (board) =>
+        board.teamId === teamId &&
+        (board.ownerId === userId ||
+          board.members.some(
+            (member) => member.userId === userId && member.agentId === null,
+          )),
+    );
+  };
+  const team = {
+    findFirst: async ({ where }: { where: Where }) => {
+      const teamId = typeof where.id === "string" ? where.id : null;
+      const userId = accessUserId(where);
+      if (!teamId || userId == null) return null;
+      return teamCanAccess(teamId, userId) ? { id: teamId } : null;
+    },
+    findMany: async ({ where }: { where: Where }) => {
+      const userId = accessUserId(where);
+      if (userId == null) return [];
+      const knownIds = new Set([
+        ...(state.teams ?? []).map((row) => row.id),
+        ...state.boards
+          .map((board) => board.teamId)
+          .filter((id): id is string => Boolean(id)),
+      ]);
+      return [...knownIds]
+        .filter((id) => teamCanAccess(id, userId))
+        .map((id) => ({ id }));
     },
   };
   const member = {
@@ -181,6 +244,7 @@ function fakeDatabase(state: FakeState) {
   const store = {
     agent,
     project,
+    team,
     member,
     $queryRaw: queryRaw,
     $transaction: async <T>(fn: (client: typeof tx) => Promise<T>) => fn(tx),
@@ -296,6 +360,71 @@ test("does not treat an unaccepted board membership as access", async () => {
     TEAM,
     fakeDatabase(state) as unknown as PrismaClient,
   );
+  assert.deepEqual(result, { id: "agent-1", created: true });
+  assert.equal(state.creates, 1);
+});
+
+test("attaches to the caller's invited board, not another team board", async () => {
+  const state: FakeState = {
+    agents: [],
+    boards: [
+      {
+        id: 99,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [],
+      },
+      {
+        id: BOARD_ID,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [
+          {
+            projectId: BOARD_ID,
+            userId: OWNER,
+            agentId: null,
+            status: "Invited",
+          },
+        ],
+      },
+    ],
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
+    members: [],
+    creates: 0,
+    locks: [],
+  };
+  const result = await ensureDefaultTeamAgent(
+    OWNER,
+    TEAM,
+    fakeDatabase(state) as unknown as PrismaClient,
+  );
+  assert.deepEqual(result, { id: "agent-1", created: true });
+  assert.deepEqual(state.members, [
+    { projectId: BOARD_ID, userId: OWNER, agentId: "agent-1" },
+  ]);
+});
+
+test("does not attach to a board the caller cannot open", async () => {
+  const state: FakeState = {
+    agents: [],
+    boards: [
+      {
+        id: BOARD_ID,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [],
+      },
+    ],
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [OWNER] }],
+    members: [],
+    creates: 0,
+    locks: [],
+  };
+  const result = await ensureDefaultTeamAgent(
+    OWNER,
+    TEAM,
+    fakeDatabase(state) as unknown as PrismaClient,
+  );
   assert.equal(result, null);
   assert.equal(state.creates, 0);
 });
@@ -362,6 +491,36 @@ test("covers every accessible team that still has no live agent", async () => {
   const state: FakeState = {
     agents: [],
     boards: [ownedBoard()],
+    members: [],
+    creates: 0,
+    locks: [],
+  };
+  const created = await ensureDefaultAgentsOnAccessibleTeams(
+    OWNER,
+    fakeDatabase(state) as unknown as PrismaClient,
+  );
+  assert.equal(created, 1);
+});
+
+test("covers a team the caller can use without an accepted board row", async () => {
+  const state: FakeState = {
+    agents: [],
+    boards: [
+      {
+        id: BOARD_ID,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [
+          {
+            projectId: BOARD_ID,
+            userId: OWNER,
+            agentId: null,
+            status: "Invited",
+          },
+        ],
+      },
+    ],
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
     members: [],
     creates: 0,
     locks: [],
