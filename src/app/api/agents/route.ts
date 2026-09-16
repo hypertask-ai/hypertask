@@ -252,7 +252,8 @@ export async function POST(request: NextRequest) {
       { status: 404 },
     );
   }
-  if (!project.teamId) {
+  const teamId = project.teamId;
+  if (!teamId) {
     return NextResponse.json(
       { success: false, error: "Agents require a team board" },
       { status: 400 },
@@ -271,7 +272,7 @@ export async function POST(request: NextRequest) {
   }
 
   const agent = await prisma.$transaction(async (tx) => {
-    await lockTeamAgentSeed(tx, currentUserId, project.teamId);
+    await lockTeamAgentSeed(tx, currentUserId, teamId);
     const createdAgent = await tx.agent.create({
       data: {
         displayName,
