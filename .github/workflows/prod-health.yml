@@ -172,30 +172,67 @@ jobs:
           if [ "$LIVE_BUILD" != "$SHA" ]; then
             # READY is not the same as live. An older deploy can keep the
             # production alias (HTPR-6511). Promote this deploy instead of
-            # only alerting.
+            # only alerting, but never overwrite a newer live SHA or a newer
+            # origin/production tip that landed while we were waiting.
             CURRENT_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
+            git fetch --depth=50 origin production || true
+            PROD_HEAD=$(git rev-parse origin/production 2>/dev/null || true)
+            skip_promote=no
+            if [ -n "$PROD_HEAD" ] && [ "$PROD_HEAD" != "$SHA" ] && git merge-base --is-ancestor "$SHA" "$PROD_HEAD" 2>/dev/null; then
+              echo "Skip alias repair: origin/production already moved to $PROD_HEAD"
+              skip_promote=yes
+            fi
+            fetch_live_build
+            if [ "$skip_promote" = "no" ] && [ -n "$LIVE_BUILD" ] && [ "$LIVE_BUILD" != "$SHA" ]; then
+              if ! git cat-file -e "$LIVE_BUILD^{commit}" 2>/dev/null; then
+                git fetch --depth=50 origin "$LIVE_BUILD" || true
+              fi
+              if git merge-base --is-ancestor "$SHA" "$LIVE_BUILD" 2>/dev/null; then
+                echo "Skip alias repair: production already serves newer build $LIVE_BUILD"
+                skip_promote=yes
+              fi
+            fi
+            if [ "$skip_promote" = "yes" ]; then
+              echo "Superseded: production already serves newer build ${LIVE_BUILD:-$PROD_HEAD}; nothing to check for $SHA"
+              exit 0
+            fi
             echo "READY deploy $CURRENT_UID missed the production alias (live=$LIVE_BUILD); promoting it (HTPR-6511)"
             code=$(curl -s -o /tmp/promote.json -w '%{http_code}' -X POST \
               -H "Authorization: Bearer $VERCEL_TOKEN" \
               "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$CURRENT_UID?teamId=$TEAM_ID")
             echo "promote -> $code"; cat /tmp/promote.json
-            if [ "$code" != "200" ] && [ "$code" != "201" ] && [ "$code" != "202" ]; then
-              notify "🔴 hypertasks: production still serves $LIVE_BUILD, expected $SHA after READY; promote of $CURRENT_UID failed (HTTP $code)"
-              echo "::error::Production still serves $LIVE_BUILD, expected $SHA after READY; alias repair failed"
-              exit 1
+            if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
+              for i in 1 2 3 4 5 6; do
+                fetch_live_build
+                echo "[repair $i] live build: ${LIVE_BUILD:-none} (status $version_code)"
+                if [ "$version_code" = "200" ] && [ "$version_challenged" = "no" ] && [ "$LIVE_BUILD" = "$SHA" ]; then
+                  break
+                fi
+                [ "$i" -lt 6 ] && sleep 10
+              done
             fi
-            for i in 1 2 3 4 5 6; do
-              fetch_live_build
-              echo "[repair $i] live build: ${LIVE_BUILD:-none} (status $version_code)"
-              if [ "$version_code" = "200" ] && [ "$version_challenged" = "no" ] && [ "$LIVE_BUILD" = "$SHA" ]; then
-                break
+            git fetch --depth=50 origin production || true
+            PROD_HEAD=$(git rev-parse origin/production 2>/dev/null || true)
+            if [ -n "$PROD_HEAD" ] && [ "$PROD_HEAD" != "$SHA" ] && git merge-base --is-ancestor "$SHA" "$PROD_HEAD" 2>/dev/null; then
+              echo "Production advanced to $PROD_HEAD during promote; correcting if a READY deploy exists"
+              AFTER_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
+                | jq -r --arg sha "$PROD_HEAD" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')
+              if [ -n "$AFTER_UID" ]; then
+                echo "Promoting $AFTER_UID for the newer production tip"
+                curl -s -o /tmp/promote-correct.json -w '%{http_code}' -X POST \
+                  -H "Authorization: Bearer $VERCEL_TOKEN" \
+                  "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$AFTER_UID?teamId=$TEAM_ID"
+                echo
               fi
-              [ "$i" -lt 6 ] && sleep 10
-            done
-            if [ "$LIVE_BUILD" != "$SHA" ]; then
-              notify "🔴 hypertasks: promoted $CURRENT_UID for $SHA but production still serves ${LIVE_BUILD:-none}"
-              echo "::error::Promoted $CURRENT_UID but production still serves ${LIVE_BUILD:-none}"
-              exit 1
+              echo "Superseded: production already serves newer build $PROD_HEAD; nothing to check for $SHA"
+              exit 0
+            fi
+            if [ "$LIVE_BUILD" = "$SHA" ]; then
+              echo "Alias repair landed; production now serves $SHA"
+            else
+            notify "🔴 hypertasks: production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back, investigate Vercel aliasing"
+            echo "::error::Production still serves $LIVE_BUILD, expected $SHA after READY; not rolling back"
+            exit 1
             fi
           fi
 
@@ -708,6 +745,9 @@ jobs:
   # check caught it). Nothing else notices, so this asks every 30 minutes.
   drift:
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *') }}
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -721,6 +761,8 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -uo pipefail
 
@@ -775,27 +817,108 @@ jobs:
               exit 0
             fi
             BEHIND=$(git rev-list --count "$LIVE..$TIP" 2>/dev/null || echo "?")
-            TIP_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
-              | jq -r --arg sha "$TIP" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')
-            if [ -n "$TIP_UID" ]; then
-              echo "Promoting $TIP_UID so production serves the tip (HTPR-6511)"
-              code=$(curl -s -o "$DRIFT_DIR/promote.json" -w '%{http_code}' -X POST \
-                -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$TIP_UID?teamId=$TEAM_ID")
-              echo "promote -> $code"; cat "$DRIFT_DIR/promote.json"
-              if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
-                sleep 10
-                fetch_live_version
-                if [ "$LIVE" = "$TIP" ]; then
-                  echo "Promoted $TIP_UID; production now serves the tip."
+
+            # Only promote a SHA whose push health/smoke run already passed.
+            # A rolled-back tip stays READY on Vercel; promoting it would undo
+            # the rollback (HTPR-6511 review).
+            sha_passed_health_gate() {
+              local sha="$1"
+              local repo="${GITHUB_REPOSITORY:-hypertask-ai/hypertask}"
+              if [ -z "${GITHUB_TOKEN:-}" ]; then
+                echo "No GITHUB_TOKEN; cannot confirm health gate for $sha"
+                return 1
+              fi
+              local conclusion
+              conclusion=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${repo}/actions/workflows/prod-health.yml/runs?head_sha=${sha}&event=push&per_page=10" \
+                | jq -r '[.workflow_runs[] | select(.status=="completed")] | sort_by(.created_at) | reverse | .[0].conclusion // empty') || conclusion=""
+              [ "$conclusion" = "success" ]
+            }
+
+            ignored_only_to_tip() {
+              local sha="$1"
+              [ -z "$(git diff --name-only "$sha..$TIP" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | head -1)" ]
+            }
+
+            CANDIDATE_UID=""
+            CANDIDATE_SHA=""
+            while IFS=$'\t' read -r uid sha; do
+              [ -n "$uid" ] && [ -n "$sha" ] || continue
+              if [ "$sha" != "$TIP" ]; then
+                git merge-base --is-ancestor "$sha" "$TIP" 2>/dev/null || continue
+                ignored_only_to_tip "$sha" || continue
+              fi
+              if ! sha_passed_health_gate "$sha"; then
+                echo "Skip $uid ($sha): no green prod-health gate"
+                continue
+              fi
+              CANDIDATE_UID=$uid
+              CANDIDATE_SHA=$sha
+              break
+            done < <(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
+              | jq -r '.deployments[] | [.uid, .meta.githubCommitSha] | @tsv')
+
+            if [ -n "$CANDIDATE_UID" ]; then
+              git fetch --depth=50 origin production || true
+              FRESH_HEAD=$(git rev-parse origin/production 2>/dev/null || git rev-parse HEAD)
+              fetch_live_version
+              if [ "$version_code" != "200" ] || [ "${version_challenged:-no}" = "yes" ] || [ -z "$LIVE" ]; then
+                LIVE=$(api "/v9/projects/$PROJECT_ID?teamId=$TEAM_ID" \
+                  | jq -r '.targets.production.meta.githubCommitSha // empty')
+              fi
+              if [ -n "$LIVE" ] && [ "$LIVE" != "$CANDIDATE_SHA" ]; then
+                if ! git cat-file -e "$LIVE^{commit}" 2>/dev/null; then
+                  git fetch --depth=50 origin "$LIVE" || true
+                fi
+                if git merge-base --is-ancestor "$CANDIDATE_SHA" "$LIVE" 2>/dev/null; then
+                  echo "Skip promote: production already serves newer descendant $LIVE"
                   exit 0
                 fi
-                MSG="🔴 hypertasks: promoted $TIP_UID for ${TIP:0:9} but /api/version still reports ${LIVE:-none}. $BEHIND commit(s) still missing from the live app."
+              fi
+              if [ "$FRESH_HEAD" != "$TIP" ] && [ "$FRESH_HEAD" != "$CANDIDATE_SHA" ] && git merge-base --is-ancestor "$CANDIDATE_SHA" "$FRESH_HEAD" 2>/dev/null; then
+                echo "Skip promote: origin/production moved to $FRESH_HEAD"
+                if [ "$LIVE" = "$FRESH_HEAD" ]; then
+                  echo "Live already matches the new production head."
+                  exit 0
+                fi
+                MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Skipped promote of $CANDIDATE_UID because origin/production moved to ${FRESH_HEAD:0:9}."
               else
-                MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Promote of $TIP_UID failed (HTTP $code)."
+              echo "Promoting $CANDIDATE_UID ($CANDIDATE_SHA) so production serves the tip (HTPR-6511)"
+              code=$(curl -s -o "$DRIFT_DIR/promote.json" -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$CANDIDATE_UID?teamId=$TEAM_ID")
+              echo "promote -> $code"; cat "$DRIFT_DIR/promote.json"
+              if [ "$code" = "200" ] || [ "$code" = "201" ] || [ "$code" = "202" ]; then
+                for i in 1 2 3 4 5 6; do
+                  fetch_live_version
+                  echo "[repair $i] live build: ${LIVE:-none} (status $version_code)"
+                  if [ "$LIVE" = "$CANDIDATE_SHA" ] || [ "$LIVE" = "$TIP" ]; then
+                    git fetch --depth=50 origin production || true
+                    FRESH_HEAD=$(git rev-parse origin/production 2>/dev/null || git rev-parse HEAD)
+                    if [ "$FRESH_HEAD" != "$TIP" ] && [ "$FRESH_HEAD" != "$CANDIDATE_SHA" ] && git merge-base --is-ancestor "$CANDIDATE_SHA" "$FRESH_HEAD" 2>/dev/null; then
+                      AFTER_UID=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&state=READY&limit=20" \
+                        | jq -r --arg sha "$FRESH_HEAD" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')
+                      if [ -n "$AFTER_UID" ]; then
+                        echo "Production advanced to $FRESH_HEAD during promote; correcting with $AFTER_UID"
+                        curl -s -o "$DRIFT_DIR/promote-correct.json" -w '%{http_code}' -X POST \
+                          -H "Authorization: Bearer $VERCEL_TOKEN" \
+                          "https://api.vercel.com/v10/projects/$PROJECT_ID/promote/$AFTER_UID?teamId=$TEAM_ID"
+                        echo
+                      fi
+                    fi
+                    echo "Promoted $CANDIDATE_UID; production now serves the tip."
+                    exit 0
+                  fi
+                  [ "$i" -lt 6 ] && sleep 10
+                done
+                MSG="🔴 hypertasks: promoted $CANDIDATE_UID for ${CANDIDATE_SHA:0:9} but /api/version still reports ${LIVE:-none}. $BEHIND commit(s) still missing from the live app."
+              else
+                MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Promote of $CANDIDATE_UID failed (HTTP $code)."
+              fi
               fi
             else
-              MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. No READY deploy for the tip to promote."
+              MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. No READY deploy with a green health gate to promote."
             fi
           else
             MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the production tip ${TIP:0:9}. The live app is on a commit that is not on production at all."

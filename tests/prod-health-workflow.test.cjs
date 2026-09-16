@@ -102,8 +102,17 @@ case "$url" in
   https://app.hypertask.ai/api/version*)
     # After an alias repair promote, subsequent reads must see the SHA the
     # job is checking (HTPR-6511). Until then, HC_VERSION_SHA can lie.
+    # HC_VERSION_RECHECK_SHA is returned after the wait loop (7th+ read)
+    # so the promote-path race check can see a newer descendant.
+    version_file="\$RUNNER_TEMP/hc-version-count"
+    vidx=0
+    if [ -f "\$version_file" ]; then vidx=\$(cat "\$version_file"); fi
+    vidx=\$((vidx + 1))
+    printf '%s' "\$vidx" > "\$version_file"
     if [ -f "\$RUNNER_TEMP/promoted" ]; then
       body=\$(printf '{"buildId":"%s"}' "\$SHA")
+    elif [ "\$vidx" -ge 7 ] && [ -n "\${HC_VERSION_RECHECK_SHA:-}" ]; then
+      body=\$(printf '{"buildId":"%s"}' "\$HC_VERSION_RECHECK_SHA")
     else
       body=\$(printf '{"buildId":"%s"}' "\${HC_VERSION_SHA:-\$SHA}")
     fi
@@ -455,6 +464,9 @@ case "$url" in
     printf '%s' "$url" > "$RUNNER_TEMP/promoted"
     body='{"ok":true}'
     ;;
+  https://api.github.com/repos/*/actions/workflows/prod-health.yml/runs*)
+    body=$(printf '{"workflow_runs":[{"conclusion":"%s","status":"completed","created_at":"2026-09-15T00:00:00Z"}]}' "\${DRIFT_HEALTH_CONCLUSION:-success}")
+    ;;
   https://api.telegram.org/*)
     body='{"ok":true}'
     ;;
@@ -490,7 +502,13 @@ function git(cwd, args, extraEnv = {}) {
   return result.stdout.trim();
 }
 
-async function runDriftCheck({ docsOnly = false, freshTip = false, liveIsTip = false } = {}) {
+async function runDriftCheck({
+  docsOnly = false,
+  freshTip = false,
+  liveIsTip = false,
+  healthConclusion = "success",
+  ignoredTipAfterApp = false,
+} = {}) {
   const directory = await mkdtemp(join(tmpdir(), "prod-health-drift-"));
   const bin = join(directory, "bin");
   const repo = join(directory, "repo");
@@ -522,7 +540,14 @@ async function runDriftCheck({ docsOnly = false, freshTip = false, liveIsTip = f
     git(repo, ["add", "app.js"]);
   }
   git(repo, ["commit", "-m", "tip"], dateEnv);
-  const tipSha = git(repo, ["rev-parse", "HEAD"]);
+  let tipSha = git(repo, ["rev-parse", "HEAD"]);
+  const appSha = tipSha;
+  if (ignoredTipAfterApp) {
+    await writeFile(join(repo, "README.md"), "docs after app\n");
+    git(repo, ["add", "README.md"]);
+    git(repo, ["commit", "-m", "docs tip"], dateEnv);
+    tipSha = git(repo, ["rev-parse", "HEAD"]);
+  }
 
   try {
     const result = spawnSync("bash", ["-c", await driftScript()], {
@@ -537,14 +562,17 @@ async function runDriftCheck({ docsOnly = false, freshTip = false, liveIsTip = f
         PROJECT_ID: "prj_stub",
         TEAM_ID: "team_stub",
         RUNNER_TEMP: runnerTemp,
-        DRIFT_TIP_SHA: tipSha,
+        GITHUB_TOKEN: "stub-github-token",
+        GITHUB_REPOSITORY: "hypertask-ai/hypertask",
+        DRIFT_TIP_SHA: ignoredTipAfterApp ? appSha : tipSha,
         DRIFT_LIVE_SHA: liveIsTip ? tipSha : liveSha,
+        DRIFT_HEALTH_CONCLUSION: healthConclusion,
       },
     });
     const promoted = await readFile(join(runnerTemp, "promoted"), "utf8").catch(
       () => null,
     );
-    return { result, promoted, tipSha, liveSha };
+    return { result, promoted, tipSha, liveSha, appSha };
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -575,5 +603,70 @@ test("drift does not promote a docs-only gap", async () => {
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /non-building commits/);
+  assert.equal(promoted, null);
+});
+
+test("drift does not promote a SHA whose prod-health run failed", async () => {
+  const { result, promoted } = await runDriftCheck({
+    healthConclusion: "failure",
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /no green prod-health gate|No READY deploy with a green health gate/);
+  assert.equal(promoted, null);
+});
+
+test("drift promotes the READY app ancestor when the tip is a docs commit", async () => {
+  const { result, promoted } = await runDriftCheck({ ignoredTipAfterApp: true });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Promoted deploy-tip|production now serves the tip/i);
+  assert.ok(promoted, "drift must promote the app deploy in front of an ignored tip");
+  assert.match(promoted, /\/promote\/deploy-tip/);
+});
+
+test("health skips alias repair when origin/production already moved on", async () => {
+  const older = spawnSync(
+    "git",
+    ["merge-base", "HEAD", "hypertask-ai/production"],
+    { encoding: "utf8" },
+  );
+  assert.equal(older.status, 0, older.stderr);
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    SHA: older.stdout.trim(),
+    HC_VERSION_SHA: "a".repeat(40),
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /origin\/production already moved|Superseded/);
+  assert.equal(promoted, null);
+});
+
+test("health skips alias repair when a later version read is a newer descendant", async () => {
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+  const tree = spawnSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" });
+  assert.equal(head.status, 0, head.stderr);
+  assert.equal(tree.status, 0, tree.stderr);
+  const child = spawnSync(
+    "git",
+    [
+      "commit-tree",
+      tree.stdout.trim(),
+      "-p",
+      head.stdout.trim(),
+      "-m",
+      "htpr-6511-test-descendant",
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(child.status, 0, child.stderr);
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    SHA: head.stdout.trim(),
+    HC_VERSION_SHA: "a".repeat(40),
+    HC_VERSION_RECHECK_SHA: child.stdout.trim(),
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /already serves newer build|Superseded/);
   assert.equal(promoted, null);
 });
