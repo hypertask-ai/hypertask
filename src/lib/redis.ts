@@ -37,7 +37,12 @@ export async function getRedis(): Promise<RedisClient> {
       }
 
       const { default: Redis } = await import("ioredis");
-      const client = new Redis(getRedisUrl());
+      // ioredis 6 opens every connection with HELLO 3. Upstash fronts Redis
+      // with its own TCP proxy, and a proxy that rejects HELLO with anything
+      // other than NOPROTO or an unknown-command error fails the connection
+      // instead of downgrading. protocol: 2 keeps the wire protocol ioredis 5
+      // spoke, and costs one less command per connection on a per-command bill.
+      const client = new Redis(getRedisUrl(), { protocol: 2 });
       globalForRedis.redis = client;
       return client;
     })();
