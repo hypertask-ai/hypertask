@@ -84,7 +84,10 @@ test("fullscreen atom hides shell only while Agent Chat publishes it", () => {
 
 test("flagged Agent Chat also hides the mobile shell by path", () => {
   assert.match(shell, /export const isAgentChatPath/);
-  assert.match(shell, /pathname\?\.startsWith\("\/agents\/chat"\)/);
+  assert.match(
+    shell,
+    /pathname === "\/agents\/chat" \|\| pathname\?\.startsWith\("\/agents\/chat\/"\)/,
+  );
   assert.match(
     providers,
     /agentChatMobileFullscreenFlag && isAgentChatPath\(pathname\)/,

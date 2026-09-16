@@ -11,7 +11,9 @@ const hiddenShellPaths = [
 ];
 
 export const isAgentChatPath = (pathname: string | null) =>
-  Boolean(pathname?.startsWith("/agents/chat"));
+  Boolean(
+    pathname === "/agents/chat" || pathname?.startsWith("/agents/chat/"),
+  );
 
 export const shouldShowMobileTabBar = (pathname: string | null) =>
   Boolean(
