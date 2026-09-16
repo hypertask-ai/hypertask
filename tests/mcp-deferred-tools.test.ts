@@ -1,0 +1,172 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { z } from 'zod'
+import { TOOL_SUMMARIES } from '../src/lib/mcp-server/config/tool-summaries'
+import {
+  describeToolCatalog,
+  estimateTokens,
+  firstSentence,
+  listToolsDeferred,
+  listToolsFull,
+  parseStructuredContent,
+  searchToolCatalog,
+  toolsForConnect,
+} from '../src/lib/mcp-server/deferred-tools'
+import { withSharedDefs } from '../src/lib/mcp-server/schema-defs'
+import {
+  handleStatelessMcpRequest,
+  type PortableTool,
+} from '../src/lib/mcp-server/stateless-http'
+
+const catalog: PortableTool[] = [
+  {
+    name: 'hypertask_list_tasks',
+    description: `${TOOL_SUMMARIES.LIST_TASKS}\n\nLists tasks with filters and pagination.`,
+    parameters: z.object({
+      project_id: z.number().optional(),
+      priority: z.enum(['None', 'Urgent', 'High', 'Medium', 'Low']).optional(),
+      status: z.enum(['Normal', 'Archive', 'Deleted']).optional(),
+    }),
+    execute: async () => JSON.stringify({ tasks: [{ id: 1 }] }),
+  },
+  {
+    name: 'hypertask_create_task',
+    description: `${TOOL_SUMMARIES.CREATE_TASK}\n\nCreates a task. Requires project_id and title.`,
+    parameters: z.object({
+      project_id: z.number(),
+      title: z.string(),
+    }),
+    execute: async () => JSON.stringify({ id: 2, title: 'New' }),
+  },
+]
+
+function rpc(method: string, params: Record<string, unknown> = {}, id: number = 1) {
+  return new Request('https://mcp.hypertask.ai/mcp', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: 'Bearer test-token',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+  })
+}
+
+test('every tool summary is under 100 characters and states what it returns', () => {
+  for (const [key, summary] of Object.entries(TOOL_SUMMARIES)) {
+    assert.ok(summary.length <= 100, `${key} summary is ${summary.length} chars`)
+    assert.match(summary, /Returns /)
+    assert.equal(firstSentence(`${summary}\n\nMore detail.`), summary)
+  }
+})
+
+test('deferred tools/list stays under 1500 tokens for the full catalog', () => {
+  const catalog = Object.entries(TOOL_SUMMARIES)
+    .filter(([key]) => key !== 'SEARCH_TOOLS' && key !== 'DESCRIBE_TOOL')
+    .map(([key, summary]) => ({
+      name: `hypertask_${key.toLowerCase()}`,
+      description: `${summary}\n\nLonger detail for ${key} that clients should not load on connect.`,
+      parameters: z.object({ extra: z.string().optional() }),
+      execute: async () => '{}',
+    }))
+  const listed = listToolsDeferred(toolsForConnect(catalog, true))
+  const tokens = estimateTokens({ tools: listed })
+  const fullTokens = estimateTokens({ tools: listToolsFull(catalog) })
+  assert.ok(listed.length >= catalog.length)
+  assert.ok(listed.some((tool) => tool.name === 'hypertask_search_tools'))
+  assert.ok(listed.some((tool) => tool.name === 'hypertask_describe_tool'))
+  assert.ok(tokens < 1500, `deferred list used ${tokens} tokens`)
+  assert.ok(fullTokens > tokens, `full list ${fullTokens} should exceed deferred ${tokens}`)
+})
+
+test('search_tools matches names first and describe_tool returns shared $defs', () => {
+  const hits = searchToolCatalog(catalog, 'list')
+  assert.equal(hits[0]?.name, 'hypertask_list_tasks')
+  assert.equal(hits[0]?.description, TOOL_SUMMARIES.LIST_TASKS)
+
+  const described = describeToolCatalog(catalog, 'hypertask_list_tasks')
+  assert.ok(described)
+  assert.equal(described.description, catalog[0].description)
+  const schema = described.inputSchema as Record<string, unknown>
+  assert.ok(schema.$defs)
+  const defs = schema.$defs as Record<string, unknown>
+  assert.ok(defs.priorityName)
+  assert.ok(JSON.stringify(schema).includes('#/$defs/priorityName'))
+})
+
+test('shared $defs replace duplicated enums', () => {
+  const schema = withSharedDefs({
+    type: 'object',
+    properties: {
+      priority: { type: 'string', enum: ['None', 'Urgent', 'High', 'Medium', 'Low'] },
+      status: { type: 'string', enum: ['Normal', 'Archive', 'Deleted'] },
+      other: { type: 'string' },
+    },
+  })
+  const properties = schema.properties as Record<string, Record<string, unknown>>
+  assert.deepEqual(properties.priority, { $ref: '#/$defs/priorityName' })
+  assert.deepEqual(properties.status, { $ref: '#/$defs/taskStatus' })
+  assert.equal(properties.other.type, 'string')
+})
+
+test('stateless tools/list and describe_tool honor the deferred flag', async () => {
+  const auth = { token: 'test-token', clientId: '6' }
+  const deferredList = await handleStatelessMcpRequest(
+    rpc('tools/list'),
+    auth,
+    catalog,
+    { deferred: true }
+  )
+  const deferredBody = (await deferredList.json()) as {
+    result: { tools: Array<{ name: string; description: string; inputSchema: { type: string } }> }
+  }
+  const listed = deferredBody.result.tools
+  assert.equal(
+    listed.find((tool) => tool.name === 'hypertask_list_tasks')?.description,
+    TOOL_SUMMARIES.LIST_TASKS
+  )
+  assert.equal(
+    listed.find((tool) => tool.name === 'hypertask_list_tasks')?.inputSchema,
+    undefined
+  )
+
+  const described = await handleStatelessMcpRequest(
+    rpc(
+      'tools/call',
+      { name: 'hypertask_describe_tool', arguments: { name: 'hypertask_list_tasks' } },
+      2
+    ),
+    auth,
+    catalog,
+    { deferred: true }
+  )
+  const describedBody = (await described.json()) as {
+    result: { content: Array<{ text: string }>; structuredContent?: { name: string } }
+  }
+  const payload = JSON.parse(describedBody.result.content[0].text) as {
+    name: string
+    inputSchema: { $defs?: unknown }
+  }
+  assert.equal(payload.name, 'hypertask_list_tasks')
+  assert.ok(payload.inputSchema.$defs)
+  assert.equal(describedBody.result.structuredContent?.name, 'hypertask_list_tasks')
+
+  const flagOff = await handleStatelessMcpRequest(rpc('tools/list'), auth, catalog)
+  const flagOffBody = (await flagOff.json()) as {
+    result: { tools: Array<{ name: string; description: string }> }
+  }
+  assert.ok(
+    flagOffBody.result.tools.find((tool) => tool.name === 'hypertask_list_tasks')
+      ?.description.includes('Lists tasks with filters')
+  )
+  assert.equal(
+    flagOffBody.result.tools.some((tool) => tool.name === 'hypertask_search_tools'),
+    false
+  )
+})
+
+test('parseStructuredContent only accepts JSON objects', () => {
+  assert.deepEqual(parseStructuredContent('{"ok":true}'), { ok: true })
+  assert.equal(parseStructuredContent('not json'), undefined)
+  assert.equal(parseStructuredContent('[1]'), undefined)
+})

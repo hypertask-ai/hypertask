@@ -10,6 +10,7 @@
 
 import { buildToolName, validateToolNames } from './mcp-standards';
 import { REPORT_CAPABILITIES } from '@/utils/controllers/reports/reportService';
+import { TOOL_SUMMARIES } from './tool-summaries';
 
 export interface ToolMetadata {
   name: string;
@@ -21,7 +22,7 @@ export interface ToolMetadata {
  * All tool metadata in one place
  * Tool names are automatically prefixed with service prefix following MCP best practices
  */
-export const TOOL_METADATA = {
+const RAW_TOOL_METADATA = {
   HELLO: {
     name: buildToolName('hello'),
     description:
@@ -468,6 +469,25 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
       'Full CRUD for task drafts (both comment and description drafts). Use action to choose: create (requires task_id/ticket_number + text + optional draft_type), list (requires task_id/ticket_number to see existing drafts), update (requires draft_id + text to edit draft), publish (requires draft_id — creates the actual comment/description from the draft), delete (removes a draft). The text field MUST be in HTML format for create/update (e.g., "<p>Text</p>" for paragraphs, "<br>" for line breaks). A task can have at most one comment draft and one description draft.',
   },
 } as const;
+
+function withSummaries<T extends Record<string, ToolMetadata>>(tools: T): T {
+  const next = { ...tools }
+  const missing = Object.keys(next).filter((key) => !TOOL_SUMMARIES[key])
+  if (missing.length > 0) {
+    throw new Error(`TOOL_SUMMARIES is missing: ${missing.join(', ')}`)
+  }
+  for (const key of Object.keys(next)) {
+    const summary = TOOL_SUMMARIES[key]
+    const meta = next[key]
+    if (!summary || !meta || meta.description.startsWith(summary)) continue
+    next[key] = { ...meta, description: `${summary}\n\n${meta.description}` }
+  }
+  return next
+}
+
+export const TOOL_METADATA = withSummaries(
+  RAW_TOOL_METADATA as Record<string, ToolMetadata>
+) as typeof RAW_TOOL_METADATA;
 
 /**
  * Extract just the names for easy iteration

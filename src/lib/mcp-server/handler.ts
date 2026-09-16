@@ -10,7 +10,11 @@ import {
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from '@/lib/mcp/attachments/constants'
 import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
-import { HTPR_6532_STATELESS_MCP_FLAG, isFeatureEnabled } from '@/lib/flags'
+import {
+  HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
+  HTPR_6532_STATELESS_MCP_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
 import { NextRequest } from 'next/server'
 import {
   handleStatelessMcpRequest,
@@ -154,12 +158,13 @@ export async function mcpHandler(request: Request): Promise<Response> {
   }
 
   const userId = Number(authInfo.clientId)
-  const stateless =
-    Number.isFinite(userId) &&
-    (await isFeatureEnabled(HTPR_6532_STATELESS_MCP_FLAG, userId).catch(() => false))
+  const flagOn = async (key: string) =>
+    Number.isFinite(userId) && (await isFeatureEnabled(key, userId).catch(() => false))
+  const deferred = await flagOn(HTPR_6531_DEFERRED_MCP_TOOLS_FLAG)
+  const stateless = await flagOn(HTPR_6532_STATELESS_MCP_FLAG)
 
-  if (stateless) {
-    return handleStatelessMcpRequest(working, authInfo, portableTools)
+  if (stateless || deferred) {
+    return handleStatelessMcpRequest(working, authInfo, portableTools, { deferred })
   }
 
   return authenticatedMcpHandler(working)

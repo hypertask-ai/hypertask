@@ -1,6 +1,12 @@
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
+import {
+  listToolsDeferred,
+  listToolsFull,
+  parseStructuredContent,
+  toolsForConnect,
+} from './deferred-tools'
 
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
@@ -85,14 +91,8 @@ function protocolVersionFrom(request: Request, requested?: unknown): string {
   return DEFAULT_PROTOCOL_VERSION
 }
 
-function jsonSchemaFor(parameters: z.ZodType): Record<string, unknown> {
-  try {
-    const schema = z.toJSONSchema(parameters, { target: 'draft-7' }) as Record<string, unknown>
-    delete schema.$schema
-    return schema
-  } catch {
-    return { type: 'object', additionalProperties: true }
-  }
+export type StatelessMcpOptions = {
+  deferred?: boolean
 }
 
 function jsonRpcError(id: JsonRpcId, code: number, message: string, data?: unknown) {
@@ -176,11 +176,14 @@ async function dispatchMethod(
   message: JsonRpcMessage,
   request: Request,
   auth: StatelessMcpAuth,
-  tools: readonly PortableTool[]
+  tools: readonly PortableTool[],
+  options: StatelessMcpOptions = {}
 ): Promise<unknown> {
   const id = (message.id ?? null) as JsonRpcId
   const method = typeof message.method === 'string' ? message.method : ''
   const params = objectParams(message.params)
+  const deferred = options.deferred === true
+  const catalog = toolsForConnect(tools, deferred)
 
   switch (method) {
     case 'initialize': {
@@ -197,15 +200,11 @@ async function dispatchMethod(
       return jsonRpcResult(id, {})
     case 'tools/list':
       return jsonRpcResult(id, {
-        tools: tools.map((tool) => ({
-          name: tool.name,
-          description: tool.description,
-          inputSchema: jsonSchemaFor(tool.parameters),
-        })),
+        tools: deferred ? listToolsDeferred(catalog) : listToolsFull(catalog),
       })
     case 'tools/call': {
       const name = typeof params.name === 'string' ? params.name : ''
-      const tool = tools.find((candidate) => candidate.name === name)
+      const tool = catalog.find((candidate) => candidate.name === name)
       if (!tool) {
         return jsonRpcError(id, -32602, `Unknown tool: ${name || '(missing)'}`)
       }
@@ -220,9 +219,14 @@ async function dispatchMethod(
           requestId,
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
         })
-        return jsonRpcResult(id, {
+        const result: Record<string, unknown> = {
           content: [{ type: 'text', text }],
-        })
+        }
+        if (deferred) {
+          const structured = parseStructuredContent(text)
+          if (structured) result.structuredContent = structured
+        }
+        return jsonRpcResult(id, result)
       } catch (error) {
         const messageText = error instanceof Error ? error.message : 'Tool failed'
         return jsonRpcResult(id, {
@@ -249,7 +253,8 @@ async function dispatchMethod(
 export async function handleStatelessMcpRequest(
   request: Request,
   auth: StatelessMcpAuth | AuthInfo | null,
-  tools: readonly PortableTool[]
+  tools: readonly PortableTool[],
+  options: StatelessMcpOptions = {}
 ): Promise<Response> {
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS })
@@ -313,10 +318,10 @@ export async function handleStatelessMcpRequest(
       continue
     }
     if (isNotification(candidate)) {
-      await dispatchMethod(candidate, request, caller, tools)
+      await dispatchMethod(candidate, request, caller, tools, options)
       continue
     }
-    const result = await dispatchMethod(candidate, request, caller, tools)
+    const result = await dispatchMethod(candidate, request, caller, tools, options)
     if (result !== null) responses.push(result)
   }
 
