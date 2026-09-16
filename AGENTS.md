@@ -56,6 +56,7 @@ hypertask capabilities --json
 
 The CLI binaries currently available on the dev machine are:
 - `hypertask` — native Hypertask CLI (Zig, `hypertask 0.2.0 (zig)`); talks to `/api/mcp/*` and reads `~/.hypertask/config.json`.
+- `htbot` — Product Bot wrapper around that CLI (`~/.local/bin/htbot`). It loads the Product Bot token and runs `hypertask --token "$HT_AGENT_TOKEN" ...`. Use it for claim comments and In Progress moves so the write is not in Valentin's name. A session with its own agent token can use `hypertask --token "$AGENT_TOKEN"` the same way.
 - `ht` — low-level MCP helper (`ht METHOD /mcp/path [json-body]`).
 - `openwiki` — repo documentation CLI; use headless `openwiki -p "..."` / `openwiki --update -p "..."`.
 - `zsb` — browser automation/debugging CLI for the active remote browser/tab.
