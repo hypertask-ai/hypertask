@@ -435,13 +435,13 @@ export class TaskService {
       });
 
       // Add pagination metadata following MCP best practices
-      // @ts-expect-error list-query merge widens pagination
       const offset = validatedInput.offset ?? 0;
-      // @ts-expect-error list-query merge widens pagination
       const limit = validatedInput.limit ?? response?.limit ?? normalizedTasks.length;
       const total = response?.total ?? normalizedTasks.length;
       const paginationMetadata = buildPaginationMetadata({
+        // @ts-expect-error list-query merge widens pagination
         offset,
+        // @ts-expect-error list-query merge widens pagination
         limit,
         total,
         itemsCount: normalizedTasks.length,

@@ -340,10 +340,6 @@ function pickPath(row: Record<string, unknown>, field: string): unknown {
   return row[field]
 }
 
-export function projectRows(
-  rows: ReadonlyArray<object>,
-  fields: string[],
-): Array<Record<string, unknown>>
 export function projectRows<T extends Record<string, unknown>>(
   rows: T[],
   fields: string[],
@@ -388,11 +384,6 @@ function compareSortValues(left: unknown, right: unknown): number {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
-export function applyCollectionQuery(
-  items: object[],
-  listQuery: ParsedListQuery,
-  options?: { searchFields: string[]; idField?: string },
-): { items: Array<Record<string, unknown>>; total: number; nextCursor: string | null }
 export function applyCollectionQuery<T extends Record<string, unknown>>(
   items: T[],
   listQuery: ParsedListQuery,

@@ -35,13 +35,6 @@ export function readEnabledListQuery(
   }
 }
 
-export function tryApplyCollectionQuery(
-  items: object[],
-  listQuery: ParsedListQuery,
-  options?: { searchFields: string[]; idField?: string },
-):
-  | { ok: true; value: ReturnType<typeof applyCollectionQuery> }
-  | { ok: false; error: NextResponse }
 export function tryApplyCollectionQuery<T extends Record<string, unknown>>(
   items: T[],
   listQuery: ParsedListQuery,
