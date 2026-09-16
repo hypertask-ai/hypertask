@@ -156,6 +156,23 @@ function fakeDatabase(state: FakeState) {
         const board = state.boards.find((row) => row.teamId === teamOnlyId);
         return board ? { id: board.id } : null;
       }
+      const anyMemberUserId = accessUserId(where);
+      const requiresAccepted = collectOrBranches(where).some((branch) => {
+        const memberFilter = asRecord(asRecord(branch.members)?.some);
+        return memberFilter?.status === "Accepted";
+      });
+      if (anyMemberUserId != null && !requiresAccepted) {
+        const teamId = requestedTeamId(where);
+        const board = state.boards.find((row) => {
+          if (teamId && row.teamId !== teamId) return false;
+          if (row.ownerId === anyMemberUserId) return true;
+          return row.members.some(
+            (member) =>
+              member.userId === anyMemberUserId && member.agentId === null,
+          );
+        });
+        return board ? { id: board.id } : null;
+      }
       const userId = accessUserId(where);
       if (userId == null) return null;
       const board = state.boards.find((row) =>
@@ -347,7 +364,47 @@ test("does not treat an unaccepted board membership as access", async () => {
   assert.equal(state.creates, 1);
 });
 
-test("seeds when the caller is an accepted team member with no board row", async () => {
+test("attaches to the caller's invited board, not another team board", async () => {
+  const state: FakeState = {
+    agents: [],
+    boards: [
+      {
+        id: 99,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [],
+      },
+      {
+        id: BOARD_ID,
+        teamId: TEAM,
+        ownerId: MEMBER,
+        members: [
+          {
+            projectId: BOARD_ID,
+            userId: OWNER,
+            agentId: null,
+            status: "Invited",
+          },
+        ],
+      },
+    ],
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
+    members: [],
+    creates: 0,
+    locks: [],
+  };
+  const result = await ensureDefaultTeamAgent(
+    OWNER,
+    TEAM,
+    fakeDatabase(state) as unknown as PrismaClient,
+  );
+  assert.deepEqual(result, { id: "agent-1", created: true });
+  assert.deepEqual(state.members, [
+    { projectId: BOARD_ID, userId: OWNER, agentId: "agent-1" },
+  ]);
+});
+
+test("does not attach to a board the caller cannot open", async () => {
   const state: FakeState = {
     agents: [],
     boards: [
@@ -368,11 +425,8 @@ test("seeds when the caller is an accepted team member with no board row", async
     TEAM,
     fakeDatabase(state) as unknown as PrismaClient,
   );
-  assert.deepEqual(result, { id: "agent-1", created: true });
-  assert.equal(state.creates, 1);
-  assert.deepEqual(state.members, [
-    { projectId: BOARD_ID, userId: OWNER, agentId: "agent-1" },
-  ]);
+  assert.equal(result, null);
+  assert.equal(state.creates, 0);
 });
 
 test("seeds when the caller is an accepted board member, not the owner", async () => {
@@ -456,10 +510,17 @@ test("covers a team the caller can use without an accepted board row", async () 
         id: BOARD_ID,
         teamId: TEAM,
         ownerId: MEMBER,
-        members: [],
+        members: [
+          {
+            projectId: BOARD_ID,
+            userId: OWNER,
+            agentId: null,
+            status: "Invited",
+          },
+        ],
       },
     ],
-    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [OWNER] }],
+    teams: [{ id: TEAM, ownerUserId: MEMBER, acceptedMemberIds: [] }],
     members: [],
     creates: 0,
     locks: [],

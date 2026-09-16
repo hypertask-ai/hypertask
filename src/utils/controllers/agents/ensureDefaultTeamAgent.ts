@@ -59,7 +59,14 @@ async function findTeamAccessBoard(
   if (!canUseTeam) return null;
 
   return database.project.findFirst({
-    where: { teamId, status: "Normal" },
+    where: {
+      teamId,
+      status: "Normal",
+      OR: [
+        { ownerId: userId },
+        { members: { some: { userId, agentId: null } } },
+      ],
+    },
     select: { id: true },
     orderBy: { id: "desc" },
   });
