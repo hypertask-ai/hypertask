@@ -805,6 +805,7 @@ jobs:
     permissions:
       contents: read
       statuses: read
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -897,12 +898,17 @@ jobs:
               # A later job in the same workflow can fail after health posted
               # success (core-actions). Fail closed on that later conclusion
               # rather than trusting a stale success status.
-              local conclusion
-              conclusion=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+              local runs_code conclusion
+              runs_code=$(curl -sS -o "$DRIFT_DIR/runs.json" -w '%{http_code}' \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${repo}/actions/workflows/prod-health.yml/runs?head_sha=${sha}&event=push&per_page=10" \
-                | jq -r '[.workflow_runs[] | select(.status=="completed")] | sort_by(.updated_at) | reverse | .[0].conclusion // empty') || conclusion=""
-              if [ "$conclusion" = "failure" ] || [ "$conclusion" = "cancelled" ] || [ -z "$conclusion" ]; then
+                "https://api.github.com/repos/${repo}/actions/workflows/prod-health.yml/runs?head_sha=${sha}&event=push&per_page=10") || runs_code=000
+              if [ "$runs_code" != "200" ]; then
+                echo "Skip $sha: cannot read prod-health runs (HTTP $runs_code)"
+                return 1
+              fi
+              conclusion=$(jq -r '[.workflow_runs[] | select(.status=="completed")] | sort_by(.updated_at) | reverse | .[0].conclusion // empty' "$DRIFT_DIR/runs.json") || conclusion=""
+              if [ "$conclusion" != "success" ]; then
                 echo "Skip $sha: latest prod-health run concluded '${conclusion:-missing}'"
                 return 1
               fi
@@ -1115,31 +1121,39 @@ jobs:
             exit 1
           fi
           posted=no
-          for i in 1 2 3; do
-            code=$(curl -sS -o /tmp/core-gate.json -w '%{http_code}' -X POST \
-              -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
-              -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed core-actions"}') || code=000
-            state=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status?per_page=100" \
-              | jq -r '[.statuses[] | select(.context=="prod-health-gate")][0].state // empty') || state=""
-            echo "invalidate prod-health-gate try $i -> http $code state ${state:-missing}"
-            if { [ "$code" = "201" ] || [ "$code" = "200" ]; } && [ "$state" = "failure" ]; then
-              posted=yes
-              break
-            fi
-            [ "$i" -lt 3 ] && sleep 2
-          done
-          if [ "$posted" != "yes" ]; then
-            echo "::error::Failed to invalidate prod-health-gate for $GITHUB_SHA"
-            exit 1
-          fi
+          invalidate_health_gate() {
+            local i code state
+            for i in 1 2 3; do
+              code=$(curl -sS -o /tmp/core-gate.json -w '%{http_code}' -X POST \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+                -d '{"state":"failure","context":"prod-health-gate","description":"Rolled back after failed core-actions"}') || code=000
+              state=$(curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status?per_page=100" \
+                | jq -r '[.statuses[] | select(.context=="prod-health-gate")][0].state // empty') || state=""
+              echo "invalidate prod-health-gate try $i -> http $code state ${state:-missing}"
+              if { [ "$code" = "201" ] || [ "$code" = "200" ]; } && [ "$state" = "failure" ]; then
+                posted=yes
+                return 0
+              fi
+              [ "$i" -lt 3 ] && sleep 2
+            done
+            return 1
+          }
+          invalidate_health_gate || true
           RESULT=$(node .github/scripts/emergency-rollback.mjs "$GITHUB_SHA")
           echo "$RESULT"
           SUMMARY=$(echo "$RESULT" | jq -r '[.action // "failed", .reason // "no reason returned"] | map(tostring | gsub("[\\r\\n]+"; " ")) | join(": ")')
           echo "CORE_SMOKE_ROLLBACK=$SUMMARY" >> "$GITHUB_ENV"
+          if [ "$posted" != "yes" ]; then
+            invalidate_health_gate || true
+          fi
+          if [ "$posted" != "yes" ]; then
+            echo "::error::Rolled back $GITHUB_SHA but failed to invalidate prod-health-gate"
+            exit 1
+          fi
 
       - name: Report a failed or unrunnable check
         if: ${{ !cancelled() && steps.probe.outcome == 'failure' }}

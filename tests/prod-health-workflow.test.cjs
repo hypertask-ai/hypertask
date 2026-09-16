@@ -38,6 +38,15 @@ async function workflowScript() {
     .replaceAll("${{ github.repository }}", "test/repo");
 }
 
+test("drift can read workflow runs for the health-gate check", async () => {
+  const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
+  const start = workflow.indexOf("\n  drift:");
+  const next = workflow.indexOf("\n  core-actions:", start);
+  const block = workflow.slice(start, next);
+  assert.match(block, /actions: read/);
+  assert.match(block, /cannot read prod-health runs/);
+});
+
 test("health and drift jobs cannot overlap", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
   // Push and scheduled triggers share one workflow-level "prod-health" lock;
@@ -632,6 +641,17 @@ test("drift does not promote a SHA whose later prod-health job failed", async ()
   assert.equal(promoted, null);
 });
 
+test("drift does not promote a SHA whose latest prod-health run timed out", async () => {
+  const { result, promoted } = await runDriftCheck({
+    healthGate: "success",
+    healthConclusion: "timed_out",
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /latest prod-health run concluded|No READY deploy with a green health gate/);
+  assert.equal(promoted, null);
+});
+
 test("drift promotes the READY app ancestor when the tip is a docs commit", async () => {
   const { result, promoted } = await runDriftCheck({ ignoredTipAfterApp: true });
 
@@ -752,5 +772,6 @@ test("core-actions rollback invalidates the health gate", async () => {
   const invalidateAt = block.indexOf("invalidate prod-health-gate");
   const emergencyAt = block.indexOf("emergency-rollback.mjs");
   assert.ok(rollbackAt !== -1 && invalidateAt !== -1 && emergencyAt !== -1);
-  assert.ok(invalidateAt < emergencyAt, "gate must be invalidated before rollback");
+  assert.ok(invalidateAt < emergencyAt, "gate invalidation is attempted before rollback");
+  assert.match(block, /Rolled back \$GITHUB_SHA but failed to invalidate/);
 });
