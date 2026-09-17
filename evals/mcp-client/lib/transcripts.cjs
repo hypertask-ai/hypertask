@@ -33,19 +33,22 @@ function indexTranscripts(transcripts) {
 function isIndependentRecording(task, recording, transport) {
   if (!recording?.observation) return false;
   if (recording.provenance !== `${recording.client}:${transport}`) return false;
-  const stdout =
-    transport === "mcp"
-      ? (recording.observation.tools || []).some((tool) => tool.stdout)
-      : (recording.observation.commands || []).some((command) => command.stdout);
-  if (!stdout) return false;
-  if (transport === "mcp") {
-    const copied = JSON.stringify(recording.observation.tools) === JSON.stringify(task.mcp.tools);
-    return !copied;
+  if (!recording.capturedAt || !recording.stdoutSha || !Array.isArray(recording.argv)) {
+    return false;
   }
-  const copied =
-    JSON.stringify((recording.observation.commands || []).map((command) => command.argv)) ===
-    JSON.stringify(task.cli.commands.map((command) => command.argv));
-  return !copied || Boolean(recording.observation.commands?.[0]?.stdout);
+  if (recording.argv.length === 0) return false;
+  if (!/^[a-f0-9]{64}$/.test(recording.stdoutSha)) return false;
+  const copiedPlan =
+    transport === "mcp"
+      ? JSON.stringify(recording.observation.tools) === JSON.stringify(task.mcp.tools)
+      : JSON.stringify((recording.observation.commands || []).map((command) => command.argv)) ===
+        JSON.stringify(task.cli.commands.map((command) => command.argv));
+  return !copiedPlan;
+}
+
+function writeTranscripts(transcripts, dest = transcriptsPath()) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, `${JSON.stringify(transcripts, null, 2)}\n`);
 }
 
 module.exports = {
@@ -54,4 +57,5 @@ module.exports = {
   recordingKey,
   indexTranscripts,
   isIndependentRecording,
+  writeTranscripts,
 };

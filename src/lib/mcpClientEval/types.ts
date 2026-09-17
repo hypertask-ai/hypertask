@@ -62,7 +62,7 @@ export type McpClientEvalReport = {
     tasks: number;
     passed: number;
     failed: number;
-    successRate: number;
+    successRate: number | null;
     surfaceFailed?: number;
     byTransport?: Record<
       McpClientEvalTransport,

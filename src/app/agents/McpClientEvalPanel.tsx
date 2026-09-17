@@ -13,7 +13,8 @@ import type {
 const CLIENTS: McpClientEvalClient[] = ["claude", "cursor", "codex"];
 const TRANSPORTS: McpClientEvalTransport[] = ["mcp", "cli"];
 
-function rate(value: number): string {
+function rate(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
   return `${Math.round(value * 100)}%`;
 }
 
@@ -69,7 +70,11 @@ function McpClientEvalPanel() {
         <>
           <p className="mb-3 text-dense text-text-light-gray">
             {report.label} · {new Date(report.generatedAt).toLocaleString()} ·{" "}
-            {rate(report.summary.successRate)} pass
+            {report.rows.length > 0
+              ? `${rate(report.summary.successRate)} pass`
+              : report.summary.byTransport
+                ? `MCP ${rate(report.summary.byTransport.mcp.successRate)} · CLI ${rate(report.summary.byTransport.cli.successRate)}`
+                : "client measurements unavailable"}
             {report.summary.byTransport && (
               <>
                 {" "}

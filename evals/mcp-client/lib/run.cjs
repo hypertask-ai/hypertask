@@ -6,12 +6,8 @@ const path = require("node:path");
 const { CLIENTS, TRANSPORTS, loadCatalog } = require("./catalog.cjs");
 const { measuredUsage } = require("./tokens.cjs");
 const { gradeObservation } = require("./grade.cjs");
-const {
-  createBoard,
-  startFixtureServer,
-  fixtureBinPath,
-  writeBoardFile,
-} = require("./fixture.cjs");
+const { createBoard, writeBoardFile } = require("./fixture.cjs");
+const { startProductionHarness, resolveHypertaskBin } = require("./production.cjs");
 const {
   clientAvailable,
   runClientAdapter,
@@ -19,11 +15,17 @@ const {
   runMcpSurface,
 } = require("./executors.cjs");
 const {
+  bindTask,
+  liveIsolationFromEnv,
+  missingRequiredClients,
+} = require("./isolation.cjs");
+const {
   indexTranscripts,
   isIndependentRecording,
   loadTranscripts,
   recordingKey,
   transcriptsPath,
+  writeTranscripts,
 } = require("./transcripts.cjs");
 
 function toolCallsFor(task, transport) {
@@ -118,10 +120,14 @@ async function executeSurface(task, transport, ctx) {
     hypertaskBin: ctx.hypertaskBin,
     env: ctx.env,
     board: ctx.board,
+    apiUrl: ctx.env?.EVAL_API_URL,
+    token: ctx.token || ctx.env?.EVAL_TOKEN,
   });
 }
 
 async function runLiveRow(task, client, transport, ctx) {
+  const isolation = liveIsolationFromEnv(ctx.env);
+  const bound = bindTask(task, isolation);
   if (!clientAvailable(client, ctx.env)) {
     return {
       skipped: true,
@@ -132,11 +138,11 @@ async function runLiveRow(task, client, transport, ctx) {
   if (task.mutating && ctx.env.EVAL_LIVE_WRITES !== "1") {
     return { skipped: true, unavailable: true, reason: "mutating live writes are disabled" };
   }
-  if (task.mutating && !ctx.env.EVAL_PROJECT_ID) {
+  if (task.mutating && !isolation) {
     return {
       skipped: false,
       row: rowFromParts({
-        task,
+        task: bound,
         client,
         transport,
         grade: {
@@ -151,17 +157,34 @@ async function runLiveRow(task, client, transport, ctx) {
       }),
     };
   }
-  const live = runClientAdapter(client, task, transport, { env: ctx.env });
+  const live = runClientAdapter(client, bound, transport, {
+    env: ctx.env,
+    isolation,
+    hypertaskBin: ctx.hypertaskBin || resolveHypertaskBin(ctx.env),
+  });
   if (!live.attempted) {
     return { skipped: true, unavailable: true, reason: live.error };
   }
   const grade = live.error
     ? { pass: false, reason: live.error }
-    : gradeObservation(task, transport, live.observation);
+    : gradeObservation(bound, transport, live.observation);
   return {
     skipped: false,
+    recording: {
+      taskId: bound.id,
+      client,
+      transport,
+      provenance: `${client}:${transport}`,
+      capturedAt: new Date().toISOString(),
+      argv: live.argv || [],
+      stdoutSha: live.stdoutSha || null,
+      observation: live.observation,
+      usage: live.usage,
+      wallMs: live.wallMs,
+      wallSource: live.wallSource,
+    },
     row: rowFromParts({
-      task,
+      task: bound,
       client,
       transport,
       grade,
@@ -215,7 +238,7 @@ function summarize(rows) {
     tasks: rows.length,
     passed,
     failed: rows.length - passed,
-    successRate: rows.length === 0 ? 0 : passed / rows.length,
+    successRate: rows.length === 0 ? null : passed / rows.length,
     byClient,
   };
 }
@@ -237,29 +260,26 @@ function summarizeSurfaces(surfaces) {
   return byTransport;
 }
 
-async function withIsolatedFixture(run) {
+async function withIsolatedFixture(run, env = process.env) {
   const board = createBoard();
   const boardFile = path.join(
     os.tmpdir(),
     `mcp-client-eval-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
   writeBoardFile(board, boardFile);
-  const fixture = await startFixtureServer(board);
-  const env = {
-    ...process.env,
-    EVAL_FIXTURE_BOARD: boardFile,
-  };
+  const harness = await startProductionHarness(board, env);
   try {
     return await run({
       board,
       boardFile,
-      mcpUrl: fixture.url,
-      hypertaskBin: fixtureBinPath(),
-      env,
-      close: fixture.close,
+      mcpUrl: harness.mcpUrl,
+      token: harness.token,
+      hypertaskBin: harness.hypertaskBin,
+      env: harness.env,
+      close: harness.close,
     });
   } finally {
-    await fixture.close();
+    await harness.close();
     fs.rmSync(boardFile, { force: true });
   }
 }
@@ -275,11 +295,19 @@ async function runSurfaceCatalog(catalog, options) {
   const surfaces = [];
   const recordings = [];
   await withIsolatedFixture(async (ctx) => {
+    if (!ctx.hypertaskBin) {
+      throw new Error("native hypertask CLI is required for CLI surface measurements");
+    }
     for (const task of catalog.tasks) {
       if (task.mutating && options.allowWrites === false) continue;
       for (const transport of TRANSPORTS) {
         resetBoard(ctx.board, ctx.boardFile);
-        const live = await executeSurface(task, transport, ctx);
+        const live = await executeSurface(task, transport, ctx).catch((error) => ({
+          error: error.message,
+          observation: {},
+          wallMs: 0,
+          executor: transport,
+        }));
         const grade = live.error
           ? { pass: false, reason: live.error }
           : gradeObservation(task, transport, live.observation);
@@ -293,9 +321,20 @@ async function runSurfaceCatalog(catalog, options) {
           toolCalls: toolCallsFor(task, transport),
           executor: live.executor,
         });
+        if (options.record && live.observation) {
+          recordings.push({
+            taskId: task.id,
+            transport,
+            provenance: live.executor,
+            capturedAt: new Date().toISOString(),
+            observation: live.observation,
+            wallMs: live.wallMs,
+            wallSource: "measured",
+          });
+        }
       }
     }
-  });
+  }, options.env);
   return { surfaces, recordings };
 }
 
@@ -311,10 +350,18 @@ async function runEval(options = {}) {
   }
   const byRecording = indexTranscripts(transcripts);
   const rows = [];
+  const liveRecordings = [];
   let surfaces = [];
 
-  if (mode === "fixture") {
-    const executed = await runSurfaceCatalog(catalog, { allowWrites: true });
+  const measureSurfaces =
+    mode === "fixture" ||
+    (mode === "live" && options.surfaces !== false && (options.surfaces === true || env.EVAL_MEASURE_SURFACES === "1"));
+  if (measureSurfaces) {
+    const executed = await runSurfaceCatalog(catalog, {
+      allowWrites: true,
+      env,
+      record: Boolean(options.recordTranscripts),
+    });
     surfaces = executed.surfaces;
   }
 
@@ -326,9 +373,22 @@ async function runEval(options = {}) {
             env,
             hypertaskBin: options.hypertaskBin,
           });
-          if (!live.skipped) rows.push(live.row);
+          if (!live.skipped) {
+            rows.push(live.row);
+            if (live.recording) liveRecordings.push(live.recording);
+          }
         }
       }
+    }
+    const required = String(options.requireClients || env.EVAL_REQUIRE_CLIENTS || "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    const missing = missingRequiredClients(rows, required);
+    if (missing.length) {
+      throw new Error(
+        `required clients did not produce MCP and CLI rows: ${missing.join(", ")}`,
+      );
     }
   } else if (mode === "replay") {
     for (const task of catalog.tasks) {
@@ -342,8 +402,30 @@ async function runEval(options = {}) {
     }
   }
 
-  const surfaceSummary = surfaces.length ? summarizeSurfaces(surfaces) : undefined;
+  if (options.recordTranscripts && liveRecordings.length) {
+    writeTranscripts(
+      {
+        version: catalog.version,
+        recordings: liveRecordings,
+      },
+      options.transcriptsPath || transcriptsPath(),
+    );
+  }
+
+  const surfaceSummary = surfaces.length
+    ? summarizeSurfaces(surfaces)
+    : rows.length
+      ? summarizeSurfaces(
+          rows.map((row) => ({
+            transport: row.transport,
+            pass: row.pass,
+            wallMs: row.wallMs || 0,
+            toolCalls: row.toolCalls,
+          })),
+        )
+      : undefined;
   const failedSurfaces = surfaces.filter((row) => !row.pass).length;
+  const rowSummary = summarize(rows);
 
   return {
     generatedAt: options.now || new Date().toISOString(),
@@ -354,7 +436,7 @@ async function runEval(options = {}) {
     rows,
     surfaces,
     summary: {
-      ...summarize(rows),
+      ...rowSummary,
       ...(surfaceSummary ? { byTransport: surfaceSummary } : {}),
       surfaceFailed: failedSurfaces,
     },

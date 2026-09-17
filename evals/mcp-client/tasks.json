@@ -14,7 +14,7 @@
             "name": "hypertask_list_tasks",
             "args": {
               "project_id": 99,
-              "assignee": "me"
+              "assigned_to": "me"
             }
           }
         ]
@@ -55,7 +55,7 @@
             "name": "hypertask_add_comment_to_task",
             "args": {
               "ticket_number": "EVAL-1",
-              "text": "eval status"
+              "text": "<p>eval status</p>"
             }
           }
         ]
@@ -96,7 +96,7 @@
             "name": "hypertask_update_task",
             "args": {
               "ticket_number": "EVAL-1",
-              "status": "QA"
+              "sectionId": 2
             }
           }
         ]
@@ -360,7 +360,14 @@
               "status"
             ]
           }
-        ]
+        ],
+        "expect": {
+          "stdoutIncludes": [
+            "authenticated"
+          ],
+          "jsonContains": null,
+          "exitCode": 0
+        }
       },
       "expect": {
         "stdoutIncludes": [
@@ -570,7 +577,7 @@
             "name": "hypertask_time",
             "args": {
               "action": "log",
-              "ticket_number": "EVAL-1",
+              "task": "EVAL-1",
               "minutes": 15
             }
           }
@@ -646,7 +653,7 @@
           {
             "name": "hypertask_task_context",
             "args": {
-              "ticket_number": "EVAL-1",
+              "task_id": 1,
               "project_id": 99
             }
           }
@@ -729,7 +736,14 @@
               "capabilities"
             ]
           }
-        ]
+        ],
+        "expect": {
+          "stdoutIncludes": [
+            "hypertask"
+          ],
+          "jsonContains": null,
+          "exitCode": 0
+        }
       },
       "expect": {
         "stdoutIncludes": [

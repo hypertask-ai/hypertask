@@ -32,6 +32,8 @@ const report = await runEval({
   label,
   baseline: label,
   recordTranscripts: args.includes("--write-transcripts"),
+  requireClients: argValue("--require-clients", process.env.EVAL_REQUIRE_CLIENTS || ""),
+  surfaces: mode !== "replay",
 });
 
 writeReport(report, dest);
@@ -40,10 +42,10 @@ if (args.includes("--write-baseline")) {
 }
 
 const { summary } = report;
+const rate =
+  summary.successRate == null ? "no client rows" : `${(summary.successRate * 100).toFixed(1)}%`;
 process.stdout.write(
-  `${report.rows.length} rows · ${summary.passed}/${summary.tasks} passed · ${(
-    summary.successRate * 100
-  ).toFixed(1)}% · surfaces ${summary.surfaceFailed || 0} failed\n`,
+  `${report.rows.length} rows · ${summary.passed}/${summary.tasks} passed · ${rate} · surfaces ${summary.surfaceFailed || 0} failed\n`,
 );
 
 if (summary.failed > 0 || (summary.surfaceFailed || 0) > 0) process.exit(1);

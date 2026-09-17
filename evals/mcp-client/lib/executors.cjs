@@ -1,9 +1,11 @@
 "use strict";
 
-const { spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
+const crypto = require("node:crypto");
 const http = require("node:http");
 const { URL } = require("node:url");
-const { handleMcpTool, readBoardFile, snapshotState } = require("./fixture.cjs");
+const { readBoardFile, snapshotState } = require("./fixture.cjs");
+const { boardStateOrCli, liveIsolationFromEnv } = require("./isolation.cjs");
 
 function which(bin) {
   const result = spawnSync("which", [bin], { encoding: "utf8" });
@@ -65,33 +67,24 @@ async function runMcpSurface(task, { url, token, board } = {}) {
   const started = Date.now();
   const tools = [];
   for (const tool of task.mcp.tools) {
-    if (url) {
-      const response = await postJson(
-        url,
-        {
-          jsonrpc: "2.0",
-          id: tools.length + 1,
-          method: "tools/call",
-          params: { name: tool.name, arguments: tool.args || {} },
-        },
-        token ? { authorization: `Bearer ${token}` } : {},
-      );
-      tools.push({
-        name: tool.name,
-        args: tool.args || {},
-        stdout: extractMcpText(response.raw),
-        status: response.status,
-      });
-      continue;
+    if (!url) {
+      throw new Error("MCP executor needs the production MCP URL");
     }
-    if (!board) {
-      throw new Error("MCP executor needs a fixture board or MCP_EVAL_URL");
-    }
+    const response = await postJson(
+      url,
+      {
+        jsonrpc: "2.0",
+        id: tools.length + 1,
+        method: "tools/call",
+        params: { name: tool.name, arguments: tool.args || {} },
+      },
+      token ? { authorization: `Bearer ${token}` } : {},
+    );
     tools.push({
       name: tool.name,
       args: tool.args || {},
-      stdout: handleMcpTool(board, tool.name, tool.args || {}),
-      status: 200,
+      stdout: extractMcpText(response.raw),
+      status: response.status,
     });
   }
   return {
@@ -116,15 +109,57 @@ function syncBoardFromFile(board, env) {
   return board;
 }
 
-function runCliSurface(task, { hypertaskBin, env, board } = {}) {
+function cliArgv(command, { apiUrl, token } = {}) {
+  const prefix = ["--json"];
+  if (apiUrl) prefix.push("--api-url", apiUrl);
+  if (token) prefix.push("--token", token);
+  return [...prefix, ...command.argv];
+}
+
+function spawnAsync(bin, argv, { env, timeout } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(bin, argv, { env, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+    }, timeout || 8_000);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ status: 1, stdout, stderr: error.message });
+    });
+    child.on("close", (status) => {
+      clearTimeout(timer);
+      resolve({ status, stdout, stderr });
+    });
+  });
+}
+
+async function runCliSurface(task, { hypertaskBin, env, board, apiUrl, token } = {}) {
+  if (!hypertaskBin) {
+    return {
+      observation: { commands: [], state: board ? snapshotState(board) : undefined },
+      wallMs: 0,
+      wallSource: "unavailable",
+      executed: false,
+      executor: "cli",
+      error: "native hypertask CLI is not available",
+    };
+  }
   const started = Date.now();
   const commands = [];
   for (const command of task.cli.commands) {
-    const result = spawnSync(hypertaskBin, command.argv, {
-      encoding: "utf8",
-      env,
-      timeout: 30_000,
+    const argv = cliArgv(command, {
+      apiUrl: apiUrl || env?.EVAL_API_URL,
+      token: token || env?.EVAL_TOKEN,
     });
+    const result = await spawnAsync(hypertaskBin, argv, { env, timeout: 8_000 });
     commands.push({
       argv: [...command.argv],
       status: result.status,
@@ -208,7 +243,7 @@ function usageFromClientJson(payloads) {
   return { tokensIn: null, tokensOut: null, source: "unavailable" };
 }
 
-function observationFromClient(task, transport, stdout) {
+function observationFromClient(task, transport, stdout, state) {
   const payloads = parseJsonBlobs(stdout);
   if (transport === "mcp") {
     const tools = [];
@@ -222,10 +257,7 @@ function observationFromClient(task, transport, stdout) {
         });
       }
     }
-    if (tools.length === 0) {
-      return { tools: [], raw: stdout };
-    }
-    return { tools, raw: stdout };
+    return { tools, raw: stdout, state };
   }
   const commands = [];
   for (const payload of payloads) {
@@ -238,10 +270,7 @@ function observationFromClient(task, transport, stdout) {
       });
     }
   }
-  if (commands.length === 0) {
-    return { commands: [], raw: stdout };
-  }
-  return { commands, raw: stdout };
+  return { commands, raw: stdout, state };
 }
 
 const CLIENT_SPECS = {
@@ -278,7 +307,7 @@ function clientAvailable(client, env = process.env) {
   return Boolean(which(clientBin(client, env)));
 }
 
-function runClientAdapter(client, task, transport, { env } = {}) {
+function runClientAdapter(client, task, transport, { env, isolation, hypertaskBin } = {}) {
   const spec = CLIENT_SPECS[client];
   if (!spec) {
     return { attempted: false, executed: false, error: `unknown client ${client}` };
@@ -291,13 +320,20 @@ function runClientAdapter(client, task, transport, { env } = {}) {
     };
   }
   const started = Date.now();
-  const result = spawnSync(clientBin(client, env), spec.args(task, transport), {
+  const argv = spec.args(task, transport);
+  const result = spawnSync(clientBin(client, env), argv, {
     encoding: "utf8",
     env,
     timeout: 120_000,
   });
   const stdout = result.stdout || "";
-  const observation = observationFromClient(task, transport, stdout);
+  const state = boardStateOrCli(
+    null,
+    env,
+    isolation || liveIsolationFromEnv(env),
+    hypertaskBin,
+  );
+  const observation = observationFromClient(task, transport, stdout, state);
   const usage = usageFromClientJson(parseJsonBlobs(stdout));
   const error =
     result.status === 0
@@ -311,6 +347,8 @@ function runClientAdapter(client, task, transport, { env } = {}) {
     attempted: true,
     executed: true,
     executor: `${client}:${transport}`,
+    argv: [clientBin(client, env), ...argv],
+    stdoutSha: crypto.createHash("sha256").update(stdout).digest("hex"),
     error,
   };
 }

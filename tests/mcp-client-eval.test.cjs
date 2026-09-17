@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, "..");
 const { CLIENTS, loadCatalog } = require(
   path.join(root, "evals/mcp-client/lib/catalog.cjs"),
 );
-const { estimateUsage } = require(path.join(root, "evals/mcp-client/lib/tokens.cjs"));
+const { measuredUsage } = require(path.join(root, "evals/mcp-client/lib/tokens.cjs"));
 const { gradeObservation, gradeMcpPlan } = require(
   path.join(root, "evals/mcp-client/lib/grade.cjs"),
 );
@@ -59,6 +59,7 @@ test("fixture mode measures surfaces and does not fabricate client rows", async 
     mode: "fixture",
   });
   assert.equal(report.rows.length, 0);
+  assert.equal(report.summary.successRate, null);
   assert.equal(report.surfaces.length, 40);
   assert.equal(report.summary.surfaceFailed, 0);
   assert.ok(report.summary.byTransport.mcp.wallMs > 0);
@@ -110,10 +111,23 @@ test("live writes fail closed without an isolated project id", async () => {
   );
 });
 
-test("token estimates are not displayed as measured usage", () => {
+test("unavailable provider usage stays null", () => {
+  const usage = measuredUsage({ tokensIn: 12, source: "unavailable" }, "unavailable");
+  assert.equal(usage.tokensIn, null);
+  assert.equal(usage.source, "unavailable");
+});
+
+test("live writes rewrite catalog targets onto EVAL_PROJECT_ID", () => {
+  const { bindTask } = require(path.join(root, "evals/mcp-client/lib/isolation.cjs"));
   const catalog = loadCatalog();
-  const estimate = estimateUsage(catalog.tasks[0], "claude", "mcp");
-  assert.equal(estimate.source, "estimate");
+  const bound = bindTask(catalog.tasks.find((task) => task.id === "create-task"), {
+    projectId: 4242,
+    ticket: "ISO-1",
+    taskId: 88,
+  });
+  assert.equal(bound.mcp.tools[0].args.project_id, 4242);
+  assert.ok(bound.cli.commands[0].argv.includes("4242"));
+  assert.match(bound.prompt, /project 4242/);
 });
 
 test("a broken fixture CLI fails the surface check", async () => {
@@ -122,7 +136,7 @@ test("a broken fixture CLI fails the surface check", async () => {
   fs.chmodSync(brokenBin, 0o755);
   const { runCliSurface } = require(path.join(root, "evals/mcp-client/lib/executors.cjs"));
   const catalog = loadCatalog();
-  const live = runCliSurface(catalog.tasks[0], { hypertaskBin: brokenBin, env: process.env });
+  const live = await runCliSurface(catalog.tasks[0], { hypertaskBin: brokenBin, env: process.env });
   assert.equal(live.executed, true);
   assert.ok(live.error);
   fs.rmSync(brokenBin, { force: true });
