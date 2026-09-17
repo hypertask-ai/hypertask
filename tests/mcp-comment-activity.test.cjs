@@ -72,6 +72,8 @@ test('comment agent identities are filtered for the task board', () => {
     /mapVisibleMcpAgent\(comment\.agent, userId, projectId\)/
   )
   assert.match(routeSource, /!comment\.agent \? !comment\.agentDisplayName/)
+  assert.match(routeSource, /isFeatureEnabled\(\s*HTPR_6516_AGENT_ATTRIBUTION_FLAG/)
+  assert.match(routeSource, /overlayDurableAgentDisplayName\(/)
   assert.match(
     routeSource,
     /mapCommentToResponse\(comment, user\.id, task\.projectId, includeActivity\)/

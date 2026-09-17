@@ -59,6 +59,7 @@ import {
   MY_TASKS_OVERDUE_BADGES_FLAG,
   HTPR_6427_ROW_SHORTCUTS_FLAG,
   HTPR_6514_COMMENT_LONG_PRESS_FLAG,
+  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6532_STATELESS_MCP_FLAG,
   HTPR_6530_MCP_LIST_QUERY_FLAG,
@@ -87,6 +88,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows the agent that made a comment, move, assignment or label change by the name it acted under, including after that agent is deleted. Without it a retired agent reads as Private agent.",
+  },
   {
     key: HTPR_6530_MCP_LIST_QUERY_FLAG,
     shippedOn: "2026-09-16",
