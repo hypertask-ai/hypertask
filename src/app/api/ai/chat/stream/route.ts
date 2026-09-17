@@ -1918,20 +1918,9 @@ const stripInlineDataUris = (html: string) =>
     ? html.replace(/\bdata:[^;,\s"')]+;base64,[A-Za-z0-9+/=]+/g, "[inline image]")
     : html;
 
-function mapCommentToResponse(
-  comment: any,
-  userId: number,
-  projectId: number,
-  attributionEnabled = false
-) {
+function mapCommentToResponse(comment: any, userId: number, projectId: number) {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId);
   const hasAgentAttribution = Boolean(comment.agent || comment.agentDisplayName);
-  const agentDisplayName = resolvePublicAgentDisplayName({
-    hasAgentRow: Boolean(comment.agent),
-    visibleAgent: agent,
-    storedDisplayName: comment.agentDisplayName,
-    attributionEnabled,
-  });
   const text = stripInlineDataUris(comment.text);
   return {
     id: comment.id,
@@ -1947,11 +1936,7 @@ function mapCommentToResponse(
         }
       : undefined,
     ...(agent ? { agent } : {}),
-    ...(attributionEnabled
-      ? agentDisplayName
-        ? { agent_display_name: agentDisplayName }
-        : {}
-      : hasAgentAttribution
+    ...(hasAgentAttribution
       ? { agent_display_name: agent?.displayName || "Private agent" }
       : {}),
     attachments: (comment.attachments ?? []).map((attachment: any) => ({
@@ -1971,6 +1956,27 @@ function mapCommentToResponse(
       userId: reaction.userId,
     })),
   };
+}
+
+function applyDurableCommentAttribution(
+  mapped: ReturnType<typeof mapCommentToResponse>,
+  comment: any,
+  userId: number,
+  projectId: number,
+  attributionEnabled: boolean
+) {
+  if (!attributionEnabled) return mapped;
+  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId);
+  const agentDisplayName = resolvePublicAgentDisplayName({
+    hasAgentRow: Boolean(comment.agent),
+    visibleAgent: agent,
+    storedDisplayName: comment.agentDisplayName,
+    attributionEnabled: true,
+  });
+  const next = { ...mapped };
+  if (agentDisplayName) next.agent_display_name = agentDisplayName;
+  else delete next.agent_display_name;
+  return next;
 }
 
 function mapDraftToResponse(draft: any) {
@@ -4723,12 +4729,20 @@ function buildTools(
           return {
             id: comment.id,
             author:
-              agentDisplayName ||
               agent?.displayName ||
               (comment.agent || comment.agentDisplayName ? "Private agent" : undefined) ||
               comment.creator?.displayName ||
               comment.creator?.email ||
               "Unknown",
+            ...(attributionEnabled
+              ? {
+                  author:
+                    agentDisplayName ||
+                    comment.creator?.displayName ||
+                    comment.creator?.email ||
+                    "Unknown",
+                }
+              : {}),
             text: stripInlineDataUris(comment.text),
             createdAt: comment.createdAt.toISOString(),
           };
@@ -5225,7 +5239,8 @@ function buildTools(
           comments: comments.map((comment) =>
             input.include_activity
               ? withActivityMetadata(
-                  mapCommentToResponse(
+                  applyDurableCommentAttribution(
+                    mapCommentToResponse(comment, user.id, task.projectId),
                     comment,
                     user.id,
                     task.projectId,
@@ -5233,7 +5248,8 @@ function buildTools(
                   ),
                   comment.activity
                 )
-              : mapCommentToResponse(
+              : applyDurableCommentAttribution(
+                  mapCommentToResponse(comment, user.id, task.projectId),
                   comment,
                   user.id,
                   task.projectId,
@@ -7170,7 +7186,12 @@ function buildTools(
             url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           },
           comment: commentWithAttachments
-            ? mapCommentToResponse(
+            ? applyDurableCommentAttribution(
+                mapCommentToResponse(
+                  commentWithAttachments,
+                  user.id,
+                  taskWithOwner.projectId
+                ),
                 commentWithAttachments,
                 user.id,
                 taskWithOwner.projectId,
@@ -7703,7 +7724,12 @@ function buildTools(
         return sanitizeForJson({
           success: true,
           comment: updatedComment
-            ? mapCommentToResponse(
+            ? applyDurableCommentAttribution(
+                mapCommentToResponse(
+                  updatedComment,
+                  user.id,
+                  comment.task.projectId
+                ),
                 updatedComment,
                 user.id,
                 comment.task.projectId,

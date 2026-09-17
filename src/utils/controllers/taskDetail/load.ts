@@ -66,20 +66,7 @@ const hasAccessibleAgentProject = (
 const hiddenCommentAgent = (
   userId: number,
   projectId: Prisma.Sql,
-  attributionEnabled = false,
-) =>
-  attributionEnabled
-    ? Prisma.sql`
-  (
-    agent.id IS NOT NULL
-    AND agent."userId" <> ${userId}
-    AND NOT (
-      agent.visibility = 'TEAM'::"AgentVisibility"
-      AND (${hasAccessibleAgentProject(userId, projectId)})
-    )
-  )
-`
-    : Prisma.sql`
+) => Prisma.sql`
   (agent.id IS NULL AND c."agentDisplayName" IS NOT NULL)
   OR (
     agent.id IS NOT NULL
@@ -436,12 +423,7 @@ export async function fetchTaskDetail(
   };
 }
 
-function commentsQuery(
-  db: Db,
-  taskId: number,
-  userId: number,
-  attributionEnabled = false,
-) {
+function commentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw<IComment[]>`
     WITH base_comments AS (
       SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
@@ -450,6 +432,8 @@ function commentsQuery(
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
           ELSE c."agentDisplayName" END AS "agentDisplayName",
+        agent.id IS NOT NULL AS "hasLiveAgentRow",
+        c."agentDisplayName" AS "storedAgentDisplayName",
         ${publicCommentCreator} AS creator,
         ${publicCommentAgent} AS agent
       FROM "Comment" c
@@ -457,7 +441,7 @@ function commentsQuery(
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`, attributionEnabled)}) AS hidden
+        SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`)}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
@@ -506,6 +490,7 @@ function commentsQuery(
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
       bc.activity, bc."seen", bc."agentId", bc."agentDisplayName",
+      bc."hasLiveAgentRow", bc."storedAgentDisplayName",
       COALESCE(rbc.reactions, '[]'::jsonb) AS reactions,
       COALESCE(abc.attachments, '[]'::jsonb) AS attachments,
       COALESCE(sbc."savedContent", '[]'::jsonb) AS "savedContent",
@@ -518,6 +503,22 @@ function commentsQuery(
   `;
 }
 
+function applyDurableAgentAttribution(comments: IComment[], attributionEnabled: boolean) {
+  return comments.map((comment) => {
+    const row = comment as IComment & {
+      hasLiveAgentRow?: boolean;
+      storedAgentDisplayName?: string | null;
+    };
+    const stored = row.storedAgentDisplayName?.trim();
+    const agentDisplayName =
+      attributionEnabled && !row.hasLiveAgentRow && stored
+        ? stored
+        : comment.agentDisplayName;
+    const { hasLiveAgentRow: _hasLive, storedAgentDisplayName: _stored, ...rest } = row;
+    return { ...rest, agentDisplayName } as IComment;
+  });
+}
+
 export async function fetchCommentsForTask(
   taskId: number,
   userId: number,
@@ -527,8 +528,10 @@ export async function fetchCommentsForTask(
     HTPR_6516_AGENT_ATTRIBUTION_FLAG,
     userId,
   );
-  const comments = await commentsQuery(db, taskId, userId, attributionEnabled);
-  return sanitizeAgentCredentials(comments) as IComment[];
+  const comments = await commentsQuery(db, taskId, userId);
+  return sanitizeAgentCredentials(
+    applyDurableAgentAttribution(comments, attributionEnabled),
+  ) as IComment[];
 }
 
 export async function fetchDescriptionReactionsWithDb(
@@ -573,6 +576,8 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
         CASE WHEN agent_visibility.hidden THEN NULL ELSE c."agentId" END AS "agentId",
         CASE WHEN agent_visibility.hidden THEN 'Private agent'
           ELSE c."agentDisplayName" END AS "agentDisplayName",
+        agent.id IS NOT NULL AS "hasLiveAgentRow",
+        c."agentDisplayName" AS "storedAgentDisplayName",
         ${publicCommentCreator} AS creator,
         ${publicCommentAgent} AS agent
       FROM "Comment" c
@@ -580,7 +585,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       LEFT JOIN "User" creator ON c."creatorId" = creator."id"
       LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
       LEFT JOIN LATERAL (
-        SELECT (${hiddenCommentAgent(userId, Prisma.sql`ti."projectId"`, attributionEnabled)}) AS hidden
+        SELECT (${hiddenCommentAgent(userId, Prisma.sql`ti."projectId"`)}) AS hidden
       ) agent_visibility ON TRUE
       LEFT JOIN "User" activity_from_user ON activity_from_user.id =
         CASE WHEN c.activity->>'type' = 'TaskAssigned'
@@ -628,6 +633,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
       bc.activity, bc."seen", bc."agentId", bc."agentDisplayName",
+      bc."hasLiveAgentRow", bc."storedAgentDisplayName",
       COALESCE(rbc.reactions, '[]'::jsonb) AS reactions,
       COALESCE(abc.attachments, '[]'::jsonb) AS attachments,
       COALESCE(sbc."savedContent", '[]'::jsonb) AS "savedContent",
@@ -638,17 +644,14 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     LEFT JOIN saved_by_comment sbc ON sbc."commentId" = bc.id
     ORDER BY bc."createdAt" ASC
   `;
-  return sanitizeAgentCredentials(comments) as IComment[];
+  return sanitizeAgentCredentials(
+    applyDurableAgentAttribution(comments, attributionEnabled),
+  ) as IComment[];
 }
 
 // ── Benchmark-only legacy queries ───────────────────────────────────────────
 
-export function legacyCommentsQuery(
-  db: Db,
-  taskId: number,
-  userId: number,
-  attributionEnabled = false,
-) {
+export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw`
     SELECT c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",
       c.activity, c."seen",
@@ -679,7 +682,7 @@ export function legacyCommentsQuery(
     LEFT JOIN "User" creator ON c."creatorId" = creator."id"
     LEFT JOIN "Agent" agent ON c."agentId" = agent."id"
     LEFT JOIN LATERAL (
-      SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`, attributionEnabled)}) AS hidden
+      SELECT (${hiddenCommentAgent(userId, Prisma.sql`comment_task."projectId"`)}) AS hidden
     ) agent_visibility ON TRUE
     WHERE c."taskId" = ${taskId}
     GROUP BY c.id, c.text, c.summary, c."taskId", c."creatorId", c."createdAt",

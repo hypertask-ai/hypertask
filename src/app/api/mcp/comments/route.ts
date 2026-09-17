@@ -162,22 +162,13 @@ function mapCommentToResponse(
   comment: any,
   userId: number,
   projectId: number,
-  includeActivity = false,
-  attributionEnabled = false
+  includeActivity = false
 ): CommentItem {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
   const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
   const agentDisplayName = agentVisible
     ? comment.agentDisplayName
     : 'Private agent'
-  const resolvedDisplayName = attributionEnabled
-    ? resolvePublicAgentDisplayName({
-        hasAgentRow: Boolean(comment.agent),
-        visibleAgent: agent,
-        storedDisplayName: comment.agentDisplayName,
-        attributionEnabled: true,
-      })
-    : agentDisplayName
   const mappedComment: CommentItem = {
     id: comment.id,
     text: comment.text,
@@ -190,8 +181,8 @@ function mapCommentToResponse(
       displayName: comment.creator.displayName || undefined
     } : undefined,
     ...(agent ? { agent } : {}),
-    ...(resolvedDisplayName
-      ? { agent_display_name: resolvedDisplayName }
+    ...(agentDisplayName
+      ? { agent_display_name: agentDisplayName }
       : {}),
     attachments: comment.attachments.map((a: any) => ({
       id: a.id,
@@ -206,6 +197,27 @@ function mapCommentToResponse(
   if (!includeActivity) return mappedComment
 
   return withActivityMetadata(mappedComment, comment.activity)
+}
+
+function applyDurableCommentAttribution(
+  mapped: CommentItem,
+  comment: any,
+  userId: number,
+  projectId: number,
+  attributionEnabled: boolean
+): CommentItem {
+  if (!attributionEnabled) return mapped
+  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
+  const agentDisplayName = resolvePublicAgentDisplayName({
+    hasAgentRow: Boolean(comment.agent),
+    visibleAgent: agent,
+    storedDisplayName: comment.agentDisplayName,
+    attributionEnabled: true,
+  })
+  const next = { ...mapped }
+  if (agentDisplayName) next.agent_display_name = agentDisplayName
+  else delete next.agent_display_name
+  return next
 }
 
 /**
@@ -353,7 +365,13 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
-      mapCommentToResponse(comment, user.id, task.projectId, includeActivity, attributionEnabled)
+      applyDurableCommentAttribution(
+        mapCommentToResponse(comment, user.id, task.projectId, includeActivity),
+        comment,
+        user.id,
+        task.projectId,
+        attributionEnabled
+      )
     )
 
     const response: ListCommentsResponse = {
@@ -870,11 +888,11 @@ export async function POST(request: NextRequest) {
           user.id
         )
         const mappedComment = commentWithAttachments
-          ? mapCommentToResponse(
+          ? applyDurableCommentAttribution(
+              mapCommentToResponse(commentWithAttachments, user.id, task.projectId),
               commentWithAttachments,
               user.id,
               task.projectId,
-              false,
               attributionEnabled
             )
           : null

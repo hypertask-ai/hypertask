@@ -76,7 +76,7 @@ test('comment agent identities are filtered for the task board', () => {
   assert.match(routeSource, /resolvePublicAgentDisplayName\(/)
   assert.match(
     routeSource,
-    /mapCommentToResponse\(comment, user\.id, task\.projectId, includeActivity, attributionEnabled\)/
+    /mapCommentToResponse\(comment, user\.id, task\.projectId, includeActivity\)/
   )
 })
 
