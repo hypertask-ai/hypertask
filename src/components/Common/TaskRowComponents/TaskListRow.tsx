@@ -264,10 +264,12 @@ export const SplitTitle = ({
     project: string;
     length: number;
     hasUnseen: boolean;
+    overdueCount?: number;
   };
   isSelected: boolean;
   onClick: any;
 }) => {
+  const overdueCount = tab.overdueCount ?? 0;
   return (
     <div
       key={tab.project?.toString()}
@@ -277,6 +279,11 @@ export const SplitTitle = ({
                         @md:px-[10px] @lg:px-[15px]
                         text-content  flex  gap-1 `}
       onClick={onClick}
+      aria-label={
+        overdueCount > 0
+          ? `${tab.project}, ${overdueCount} overdue`
+          : undefined
+      }
     >
       <div
         className={`flex items-baseline gap-1 ${
@@ -290,6 +297,14 @@ export const SplitTitle = ({
         {tab.length > 0 && (
           <p className="font-normal footer_tags text-micro ">{tab.length}</p>
         )}
+        {overdueCount > 0 ? (
+          <span
+            data-htpr-6459-my-tasks-overdue-badges=""
+            className="font-semibold footer_tags text-micro text-destructive"
+          >
+            {overdueCount}
+          </span>
+        ) : null}
       </div>
     </div>
   );
