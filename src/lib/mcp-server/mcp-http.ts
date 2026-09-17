@@ -11,7 +11,6 @@ type McpHttpAuth = StatelessMcpAuth | AuthInfo
 
 /** OPTIONS is CORS and has no session. POST/GET/DELETE follow htpr-6532-stateless-mcp. */
 export function usesStatelessMcpTransport(method: string, flagOn: boolean): boolean {
-  if (method === 'POST') return true
   return method === 'OPTIONS' || flagOn
 }
 
