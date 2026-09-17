@@ -26,6 +26,7 @@ A pre-PR gate for any ticket whose change is visible on screen. Run it before `o
 3. **Inspect the screenshot for a meaningful ready or empty state**, not just "a page loaded". An HTTP 200, an unchanged URL, or a fixed sleep before the screenshot proves nothing on its own. If the correct state for this ticket might legitimately look blank or empty, shoot a baseline first and compare, so a genuinely broken blank page is not mistaken for the expected one.
 4. **If the change is behind a feature flag**, the flag must be on for the account in the auth state, or you are photographing the old UI. Turn it on for that account before shooting, and say in the ticket comment which account and flag the shot used.
 5. **Compare against the ticket's acceptance criteria line by line.** If anything does not match, fix it and reshoot. Do not open the PR hoping QA catches it.
+   **Closed or idle surfaces count.** When the ticket asks for a control on a closed, collapsed, or idle bar, screenshot that closed state. A shot of the opened or focused state does not prove the ticket.
 6. **Attach the screenshot to the ticket:**
    ```
    hypertask comment add <ticket> --attach <out.png> --text "<p><strong>Pre-PR phone check at 390x844, local dev server.</strong> QA verifies production after merge.</p>"
