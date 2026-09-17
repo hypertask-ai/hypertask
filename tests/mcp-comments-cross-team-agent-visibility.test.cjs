@@ -54,6 +54,23 @@ function loadRoute(comments) {
           String(visibleAgent.displayName).trim();
         return live || null;
       },
+      overlayDurableAgentDisplayName(mapped, opts) {
+        if (!opts.attributionEnabled) return mapped;
+        const name = (function resolve({ hasAgentRow, visibleAgent, storedDisplayName }) {
+          if (hasAgentRow && !visibleAgent) return "Private agent";
+          const stored = storedDisplayName && String(storedDisplayName).trim();
+          if (stored) return stored;
+          const live =
+            visibleAgent &&
+            visibleAgent.displayName &&
+            String(visibleAgent.displayName).trim();
+          return live || null;
+        })(opts);
+        const next = { ...mapped };
+        if (name) next.agent_display_name = name;
+        else delete next.agent_display_name;
+        return next;
+      },
     },
     "@/utils/controllers/urls/extractUrlsFromContent": {
       buildMcpImageUrls: () => [],

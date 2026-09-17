@@ -93,7 +93,10 @@ import {
   mapVisibleMcpAgent,
   mcpVisibleAgentSelect,
 } from "@/lib/mcp/agents";
-import { resolvePublicAgentDisplayName } from "@/lib/agents/publicAgent";
+import {
+  overlayDurableAgentDisplayName,
+  resolvePublicAgentDisplayName,
+} from "@/lib/agents/publicAgent";
 import {
   listOwnedAgents,
   type AgentManagementDatabase,
@@ -1958,25 +1961,19 @@ function mapCommentToResponse(comment: any, userId: number, projectId: number) {
   };
 }
 
-function applyDurableCommentAttribution(
-  mapped: ReturnType<typeof mapCommentToResponse>,
+function applyDurableCommentAttribution<T extends object>(
+  mapped: T,
   comment: any,
   userId: number,
   projectId: number,
   attributionEnabled: boolean
-) {
-  if (!attributionEnabled) return mapped;
-  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId);
-  const agentDisplayName = resolvePublicAgentDisplayName({
+): T {
+  return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
-    visibleAgent: agent,
+    visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
-    attributionEnabled: true,
+    attributionEnabled,
   });
-  const next = { ...mapped };
-  if (agentDisplayName) next.agent_display_name = agentDisplayName;
-  else delete next.agent_display_name;
-  return next;
 }
 
 function mapDraftToResponse(draft: any) {

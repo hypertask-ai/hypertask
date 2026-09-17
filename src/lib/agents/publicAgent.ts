@@ -50,6 +50,26 @@ export function resolvePublicAgentDisplayName(opts: {
   return live || null;
 }
 
+export function overlayDurableAgentDisplayName<T extends object>(
+  mapped: T,
+  opts: {
+    hasAgentRow: boolean;
+    visibleAgent?: { displayName?: string | null } | null;
+    storedDisplayName?: string | null;
+    attributionEnabled?: boolean;
+  }
+): T {
+  if (!opts.attributionEnabled) return mapped;
+  const agentDisplayName = resolvePublicAgentDisplayName({
+    ...opts,
+    attributionEnabled: true,
+  });
+  const next = { ...mapped } as T & { agent_display_name?: string };
+  if (agentDisplayName) next.agent_display_name = agentDisplayName;
+  else delete next.agent_display_name;
+  return next;
+}
+
 const privateAgentAttribution = {
   displayName: PRIVATE_AGENT_DISPLAY_NAME,
   photoURL: null,

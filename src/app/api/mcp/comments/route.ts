@@ -38,7 +38,7 @@ import {
   mapMcpCommentReaction,
   type McpCommentReaction,
 } from '@/lib/mcp/comments/reactionResponse'
-import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
+import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { HTPR_6530_MCP_LIST_QUERY_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
@@ -119,6 +119,7 @@ export interface AddCommentResponse {
     createdAt: string
     creatorId?: number
     agent?: McpAgentSummary
+    agent_display_name?: string
     attachments?: Array<{
       id: number
       fileName: string
@@ -196,25 +197,19 @@ function mapCommentToResponse(
   return withActivityMetadata(mappedComment, comment.activity)
 }
 
-function applyDurableCommentAttribution(
-  mapped: CommentItem,
+function applyDurableCommentAttribution<T extends object>(
+  mapped: T,
   comment: any,
   userId: number,
   projectId: number,
   attributionEnabled: boolean
-): CommentItem {
-  if (!attributionEnabled) return mapped
-  const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
-  const agentDisplayName = resolvePublicAgentDisplayName({
+): T {
+  return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
-    visibleAgent: agent,
+    visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
-    attributionEnabled: true,
+    attributionEnabled,
   })
-  const next = { ...mapped }
-  if (agentDisplayName) next.agent_display_name = agentDisplayName
-  else delete next.agent_display_name
-  return next
 }
 
 /**
