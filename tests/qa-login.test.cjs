@@ -172,6 +172,11 @@ test("the QA login page and route stay hidden without the secrets", () => {
   assert.doesNotMatch(form, /#4c5362/);
   assert.match(qaLogin, /QA_LOGIN_PASSWORD_MIN_BYTES = 32/);
   assert.match(envExample, /openssl rand -base64 32/);
+  const eslintConfig = fs.readFileSync(
+    path.join(root, "eslint.config.mjs"),
+    "utf8",
+  );
+  assert.match(eslintConfig, /src\/app\/qa\/login\/page\.tsx/);
 });
 
 test("logged-out visitors can reach /qa/login", () => {
