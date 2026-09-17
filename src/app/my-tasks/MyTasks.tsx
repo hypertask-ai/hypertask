@@ -309,14 +309,20 @@ const MyTasks = ({
   }, [liveUpdatesEnabled, reconcileRunner, reconcileScopes.join(",")]);
 
   useEffect(() => {
-    const onSnoozeChanged = () => {
-      reconcileRunner.request();
-      setOverdueCountsVersion((version) => version + 1);
-    };
+    const onSnoozeChanged = () => reconcileRunner.request();
     window.addEventListener("my-tasks-snooze-changed", onSnoozeChanged);
     return () =>
       window.removeEventListener("my-tasks-snooze-changed", onSnoozeChanged);
   }, [reconcileRunner]);
+
+  useEffect(() => {
+    if (!overdueBadgesEnabled) return;
+    const bumpOverdueCounts = () =>
+      setOverdueCountsVersion((version) => version + 1);
+    window.addEventListener("my-tasks-snooze-changed", bumpOverdueCounts);
+    return () =>
+      window.removeEventListener("my-tasks-snooze-changed", bumpOverdueCounts);
+  }, [overdueBadgesEnabled]);
 
   useEffect(() => {
     if (!myTasksSnoozeEnabled) return;
@@ -443,7 +449,14 @@ const MyTasks = ({
   ]);
 
   useEffect(() => {
-    if (!viewsFeatureEnabled && !overdueBadgesEnabled) return;
+    if (!viewsFeatureEnabled) return;
+    const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
+    window.addEventListener("focus", refreshDateFilters);
+    return () => window.removeEventListener("focus", refreshDateFilters);
+  }, [viewsFeatureEnabled]);
+
+  useEffect(() => {
+    if (!overdueBadgesEnabled) return;
     const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
     window.addEventListener("focus", refreshDateFilters);
     let timer: number | undefined;
@@ -458,7 +471,7 @@ const MyTasks = ({
       window.removeEventListener("focus", refreshDateFilters);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [overdueBadgesEnabled, viewsFeatureEnabled]);
+  }, [overdueBadgesEnabled]);
 
   const overdueViewsKey = JSON.stringify(
     views.map((view) => [view.id, view.config]),

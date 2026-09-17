@@ -1,10 +1,8 @@
 import type { ISection } from "@/models/model";
 import { addDays, endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
 import type { IPrioritiesConstants } from "@/lib/constants/constants";
-import {
-  compareMyTasksByDueDate,
-  countMyTasksOverdue,
-} from "@/lib/myTasksGrouping";
+import { compareMyTasksByDueDate } from "@/lib/myTasksGrouping";
+import { countMyTasksOverdue } from "@/lib/myTasksGrouping";
 import type { IProject, ITask } from "@/models/model";
 import {
   hasMigratableFlatFilters,

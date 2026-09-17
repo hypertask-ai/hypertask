@@ -3,7 +3,8 @@
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { MY_TASKS_OVERDUE_BADGES_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal, Plus } from "lucide-react";
 import { useRef, useState } from "react";
