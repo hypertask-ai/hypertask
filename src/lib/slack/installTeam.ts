@@ -1,8 +1,3 @@
-export type SlackInstallTeamAccess = {
-  firstTeamId: (userId: number) => Promise<string | null>;
-  hasAccess: (userId: number, teamId: string) => Promise<boolean>;
-};
-
 export function slackConnectHref(teamId: string | null | undefined): string {
   const id = teamId?.trim();
   return id
@@ -13,11 +8,12 @@ export function slackConnectHref(teamId: string | null | undefined): string {
 export async function resolveSlackInstallTeamId(
   userId: number,
   requestedTeamId: string | null | undefined,
-  access: SlackInstallTeamAccess,
+  hasAccess: (userId: number, teamId: string) => Promise<boolean>,
+  soleTeamId: (userId: number) => Promise<string | null>,
 ): Promise<string | null> {
   const requested = requestedTeamId?.trim() ?? "";
   if (requested) {
-    return (await access.hasAccess(userId, requested)) ? requested : null;
+    return (await hasAccess(userId, requested)) ? requested : null;
   }
-  return access.firstTeamId(userId);
+  return soleTeamId(userId);
 }

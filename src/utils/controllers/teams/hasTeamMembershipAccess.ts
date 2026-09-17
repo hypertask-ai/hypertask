@@ -35,13 +35,13 @@ export async function hasTeamMembershipAccess(
   return Boolean(team);
 }
 
-export async function findFirstAccessibleTeamId(
+export async function findSoleAccessibleTeamId(
   userId: number,
 ): Promise<string | null> {
-  const team = await prisma.team.findFirst({
+  const teams = await prisma.team.findMany({
     where: teamAccessWhere(userId),
     select: { id: true },
-    orderBy: { createdAt: "asc" },
+    take: 2,
   });
-  return team?.id ?? null;
+  return teams.length === 1 ? teams[0].id : null;
 }

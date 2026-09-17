@@ -4,7 +4,7 @@ import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { createSlackOAuthState } from "@/lib/slack/oauthState";
 import {
-  findFirstAccessibleTeamId,
+  findSoleAccessibleTeamId,
   hasTeamMembershipAccess,
 } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
@@ -23,10 +23,12 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedTeamId = request.nextUrl.searchParams.get("teamId");
-  const teamId = await resolveSlackInstallTeamId(user.id, requestedTeamId, {
-    firstTeamId: findFirstAccessibleTeamId,
-    hasAccess: hasTeamMembershipAccess,
-  });
+  const teamId = await resolveSlackInstallTeamId(
+    user.id,
+    requestedTeamId,
+    hasTeamMembershipAccess,
+    findSoleAccessibleTeamId,
+  );
   if (!teamId) {
     return NextResponse.redirect(
       settingsRedirect(
