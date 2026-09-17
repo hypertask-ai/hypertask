@@ -65,6 +65,7 @@ import {
   HTPR_6530_MCP_LIST_QUERY_FLAG,
   HTPR_6531_DEFERRED_MCP_TOOLS_FLAG,
   HTPR_6473_GET_AGENT_FLAG,
+  HTPR_6536_QA_LOGIN_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -88,6 +89,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6536_QA_LOGIN_FLAG,
+    shippedOn: "2026-09-16",
+    description:
+      "Shows a QA-only email and password sign-in page so an outside test robot can open the real app behind login. The page and route exist only when the server has the QA login secrets.",
+  },
   {
     key: HTPR_6516_AGENT_ATTRIBUTION_FLAG,
     shippedOn: "2026-09-16",
