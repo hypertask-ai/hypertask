@@ -117,6 +117,9 @@ const AWAITING_POLL_MS = 4000;
 // The passive activity feed has no realtime channel of its own, so it needs a
 // poll of its own to meet the 10-second freshness the ticket asks for.
 const ACTIVITY_POLL_MS = 5000;
+// Availability changes without a chat event when a runtime heartbeat starts
+// or expires, so idle chats need a low-frequency refresh of their own.
+const CHAT_AVAILABILITY_POLL_MS = 30_000;
 // Realtime still refetches when the reply lands; the interval is only a
 // fallback, so stop it after this long waiting on the same session.
 const AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
@@ -1302,6 +1305,42 @@ const AgentChatClient = (props: IProp) => {
       stop();
     };
   }, [session, activityRowsEnabled, loadMessages]);
+
+  // Poll delivery availability while an idle chat has no faster reply or
+  // activity poll, including a catch-up as soon as a hidden tab returns.
+  useEffect(() => {
+    if (!session || !pollingChatEnabled || awaiting || activityRowsEnabled) return;
+    let id: ReturnType<typeof setInterval> | undefined;
+    const start = () => {
+      if (id === undefined) {
+        id = setInterval(
+          () => void loadMessages(session.id),
+          CHAT_AVAILABILITY_POLL_MS,
+        );
+      }
+    };
+    const stop = () => {
+      if (id !== undefined) clearInterval(id);
+      id = undefined;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return stop();
+      void loadMessages(session.id);
+      start();
+    };
+    if (document.visibilityState === "visible") start();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
+  }, [
+    activityRowsEnabled,
+    awaiting,
+    loadMessages,
+    pollingChatEnabled,
+    session,
+  ]);
 
   // Realtime nudge: the send route broadcasts agent-chat:changed on this
   // user's private channel; refetch instead of waiting for the next poll.

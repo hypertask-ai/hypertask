@@ -239,7 +239,7 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
 test("activity rows keep refreshing without a pending reply, and uncached", () => {
   const polling = chatClientSource.slice(
     chatClientSource.indexOf("// Activity rows arrive without a chat reply"),
-    chatClientSource.indexOf("// Realtime nudge"),
+    chatClientSource.indexOf("// Poll delivery availability"),
   );
 
   // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
@@ -257,4 +257,16 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
   assert.match(polling, /document\.visibilityState !== "visible"/);
   assert.match(polling, /addEventListener\("visibilitychange", onVisibility\)/);
   assert.match(polling, /removeEventListener\("visibilitychange", onVisibility\)/);
+});
+
+test("polling delivery status refreshes while an idle chat stays open", () => {
+  const polling = chatClientSource.slice(
+    chatClientSource.indexOf("// Poll delivery availability"),
+    chatClientSource.indexOf("// Realtime nudge"),
+  );
+
+  assert.match(chatClientSource, /const CHAT_AVAILABILITY_POLL_MS = 30_000/);
+  assert.match(polling, /pollingChatEnabled/);
+  assert.match(polling, /setInterval\([\s\S]*?CHAT_AVAILABILITY_POLL_MS/);
+  assert.match(polling, /document\.visibilityState !== "visible"/);
 });
