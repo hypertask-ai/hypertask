@@ -401,7 +401,8 @@
               "task",
               "assign",
               "EVAL-1",
-              "--self"
+              "--assignee",
+              "1"
             ]
           }
         ]
