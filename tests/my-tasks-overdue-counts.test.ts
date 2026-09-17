@@ -33,7 +33,7 @@ const task = (
     myTasksSection: { id: 11, isDone: false },
     dueDate: new Date("2026-09-13T09:00:00.000Z"),
     ...overrides,
-  }) as MyTasksTask;
+  }) as unknown as MyTasksTask;
 
 const assigned = (id: number, overrides: Record<string, unknown> = {}) =>
   task(id, {
@@ -120,6 +120,72 @@ test("overdueCountsFromAuthorizedTasks uses the supplied time zone day start", (
   );
   assert.equal(utcCounts.all, 0);
   assert.equal(tokyoCounts.all, 1);
+});
+
+test("this_week overdue counts keep Monday in UTC+14", () => {
+  const thursdayOnKiritimati = new Date("2026-09-16T12:00:00.000Z");
+  const mondayMorningOnKiritimati = assigned(6, {
+    dueDate: new Date("2026-09-13T10:30:00.000Z"),
+  });
+  const sections = [
+    {
+      sectionId: 1,
+      projectId: 1,
+      section_title: "Board 1",
+      items: [mondayMorningOnKiritimati],
+    },
+  ] as ISection[];
+  const thisWeek = {
+    ...DEFAULT_MY_TASKS_VIEW_CONFIG,
+    filters: {
+      ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+      dueDate: "this_week" as const,
+    },
+  };
+  assert.equal(
+    overdueCountForMyTasksView(
+      sections,
+      thisWeek,
+      thursdayOnKiritimati,
+      { timeZone: "Pacific/Kiritimati" },
+    ),
+    1,
+  );
+});
+
+test("date-only created ranges use the named timezone day", () => {
+  const now = new Date("2026-09-16T15:30:00.000Z");
+  const createdNearUtcEvening = assigned(7, {
+    createdAt: "2026-09-16T15:30:00.000Z",
+    dueDate: new Date("2026-09-15T00:00:00.000Z"),
+  });
+  const sections = [
+    {
+      sectionId: 1,
+      projectId: 1,
+      section_title: "Board 1",
+      items: [createdNearUtcEvening],
+    },
+  ] as ISection[];
+  const createdOnThe16th = {
+    ...DEFAULT_MY_TASKS_VIEW_CONFIG,
+    filters: {
+      ...DEFAULT_MY_TASKS_VIEW_CONFIG.filters,
+      createdRange: { from: "2026-09-16", to: "2026-09-16" },
+    },
+  };
+  assert.equal(
+    overdueCountForMyTasksView(sections, createdOnThe16th, now, {
+      timeZone: "UTC",
+    }),
+    1,
+  );
+  assert.equal(
+    overdueCountForMyTasksView(sections, createdOnThe16th, now, {
+      timeZone: "Pacific/Kiritimati",
+    }),
+    0,
+  );
 });
 
 test("overdueCountsFromAuthorizedTasks honors running-timer runtime context", () => {

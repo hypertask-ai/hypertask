@@ -38,7 +38,7 @@ const task = (
     subTasks: [],
     myTasksSection: { id: 11, isDone: false },
     ...overrides,
-  }) as MyTasksTask;
+  }) as unknown as MyTasksTask;
 
 const config = (
   overrides: Partial<MyTasksViewConfig> = {},
