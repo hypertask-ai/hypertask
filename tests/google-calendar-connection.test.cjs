@@ -4,6 +4,7 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
+let accountGeneration = new Date("2026-09-08T10:00:00.000Z");
 let row;
 let refreshError;
 let updateCount = 1;
@@ -29,22 +30,30 @@ stub("src/lib/flags.ts", {
   GOOGLE_CALENDAR_FLAG: "htpr-3533-google-calendar",
   isFeatureEnabled: async () => true,
 });
-stub("src/lib/prisma.ts", {
-  default: {
-    googleCalendarConnection: {
-      create: async ({ data }) => {
-        row = data;
-        return row;
-      },
-      findUnique: async () => row,
-      updateMany: async ({ data, where }) => {
-        updateWhere = where;
-        if (updateCount === 1) Object.assign(row, data);
-        return { count: updateCount };
-      },
-    },
+const googleCalendarConnection = {
+  create: async ({ data }) => {
+    row = data;
+    return row;
   },
-});
+  findUnique: async () => row,
+  updateMany: async ({ data, where }) => {
+    updateWhere = where;
+    if (updateCount === 1) Object.assign(row, data);
+    return { count: updateCount };
+  },
+};
+const prisma = {
+  $transaction: async (action) =>
+    action({
+      $queryRaw: async () => [{ joinedAt: accountGeneration }],
+      googleCalendarConnection,
+    }),
+  googleCalendarConnection,
+  user: {
+    findUnique: async () => ({ joinedAt: accountGeneration }),
+  },
+};
+stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/redis.ts", {
   getRedis: async () => ({
     eval: async () => 1,
@@ -52,7 +61,7 @@ stub("src/lib/redis.ts", {
   }),
 });
 stub("src/lib/googleCalendar/client.ts", {
-  createGoogleCalendar: async () => {},
+  createGoogleCalendar: async () => ({ id: "new-calendar", summary: "Hypertask" }),
   googleCalendarExists: async () => true,
   throwAfterGoogleCalendarCleanup: async (_calendarId, _accessToken, error) => {
     throw error;
@@ -117,13 +126,17 @@ test("a stale OAuth callback cannot overwrite a changed connection", async () =>
   };
   updateCount = 0;
   await assert.rejects(
-    connection.connectGoogleCalendarUser(6, {
-      accessToken: "stale-access-token",
-      email: "owner@example.com",
-      expiresAt: new Date("2026-09-08T14:00:00.000Z"),
-      refreshToken: "stale-refresh-token",
-      subject: "google-user",
-    }),
+    connection.connectGoogleCalendarUser(
+      6,
+      {
+        accessToken: "stale-access-token",
+        email: "owner@example.com",
+        expiresAt: new Date("2026-09-08T14:00:00.000Z"),
+        refreshToken: "stale-refresh-token",
+        subject: "google-user",
+      },
+      accountGeneration.getTime(),
+    ),
     /connection changed during setup/,
   );
   assert.equal(row.encryptedAccessToken, "new-access-token");
@@ -132,6 +145,28 @@ test("a stale OAuth callback cannot overwrite a changed connection", async () =>
     updatedAt: new Date("2026-09-08T12:00:00.000Z"),
     userId: 6,
   });
+});
+
+test("account reset invalidates an in-flight first connection", async () => {
+  row = null;
+  updateCount = 1;
+  accountGeneration = new Date("2026-09-08T11:00:00.000Z");
+
+  await assert.rejects(
+    connection.connectGoogleCalendarUser(
+      6,
+      {
+        accessToken: "stale-access-token",
+        email: "owner@example.com",
+        expiresAt: new Date("2026-09-08T14:00:00.000Z"),
+        refreshToken: "stale-refresh-token",
+        subject: "google-user",
+      },
+      new Date("2026-09-08T10:00:00.000Z").getTime(),
+    ),
+    /account changed during setup/,
+  );
+  assert.equal(row, null);
 });
 
 test("an expired lease rejects later calendar writes", async () => {
@@ -163,13 +198,17 @@ test("reconnecting resumes cleanup without turning sync back on", async () => {
     updatedAt: new Date("2026-09-08T12:00:00.000Z"),
   };
   updateCount = 1;
-  const result = await connection.connectGoogleCalendarUser(6, {
-    accessToken: "new-access-token",
-    email: "owner@example.com",
-    expiresAt: new Date("2026-09-08T14:00:00.000Z"),
-    refreshToken: "new-refresh-token",
-    subject: "google-user",
-  });
+  const result = await connection.connectGoogleCalendarUser(
+    6,
+    {
+      accessToken: "new-access-token",
+      email: "owner@example.com",
+      expiresAt: new Date("2026-09-08T14:00:00.000Z"),
+      refreshToken: "new-refresh-token",
+      subject: "google-user",
+    },
+    accountGeneration.getTime(),
+  );
   assert.equal(result.syncEnabled, false);
   assert.equal(row.cleanupPending, true);
   assert.equal(row.syncEnabled, false);

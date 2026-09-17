@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { taskBaseUri } from "@/utils";
 import { GOOGLE_CALENDAR_API_BASE, GOOGLE_CALENDAR_REVOKE_URL } from "./paths";
+import { readBoundedGoogleJson } from "./response";
 
 const REQUEST_TIMEOUT_MS = 8000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -43,39 +44,6 @@ async function throwGoogleCalendarApiError(
   throw new GoogleCalendarApiError(response.status, message);
 }
 
-async function boundedJson(
-  response: Response,
-): Promise<Record<string, unknown>> {
-  const declared = Number(response.headers.get("content-length") || 0);
-  if (declared > MAX_RESPONSE_BYTES || !response.body) {
-    await response.body?.cancel();
-    throw new Error("Google Calendar returned an invalid response");
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.byteLength;
-    if (bytes > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new Error("Google Calendar returned an invalid response");
-    }
-    chunks.push(value);
-  }
-  try {
-    const parsed = JSON.parse(
-      Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"),
-    ) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      throw new Error();
-    return parsed as Record<string, unknown>;
-  } catch {
-    throw new Error("Google Calendar returned an invalid response");
-  }
-}
-
 async function googleRequest(
   path: string,
   accessToken: string,
@@ -106,7 +74,11 @@ export async function createGoogleCalendar(
     fetcher,
   );
   if (!response.ok) return throwGoogleCalendarApiError(response);
-  const data = await boundedJson(response);
+  const data = await readBoundedGoogleJson(
+    response,
+    MAX_RESPONSE_BYTES,
+    "Google Calendar returned an invalid response",
+  );
   const id = typeof data.id === "string" ? data.id.trim() : "";
   const summary =
     typeof data.summary === "string"
@@ -261,7 +233,11 @@ export async function listGoogleCalendarEvents(
       fetcher,
     );
     if (!response.ok) return throwGoogleCalendarApiError(response);
-    const data = await boundedJson(response);
+    const data = await readBoundedGoogleJson(
+    response,
+    MAX_RESPONSE_BYTES,
+    "Google Calendar returned an invalid response",
+  );
     assertContinue();
     const items = Array.isArray(data.items) ? data.items : [];
     for (const item of items) {
@@ -325,7 +301,11 @@ async function writeGoogleCalendarEvent(
       fetcher,
     );
     if (!existing.ok) return throwGoogleCalendarApiError(existing);
-    const event = await boundedJson(existing);
+    const event = await readBoundedGoogleJson(
+      existing,
+      MAX_RESPONSE_BYTES,
+      "Google Calendar returned an invalid response",
+    );
     const cancelled = event.status === "cancelled";
     const extendedProperties = event.extendedProperties;
     const privateProperties =

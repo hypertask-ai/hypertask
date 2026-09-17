@@ -11,6 +11,7 @@ import {
   GOOGLE_CALENDAR_SETTINGS_PATH,
   GOOGLE_CALENDAR_TOKEN_URL,
 } from "./paths";
+import { readBoundedGoogleJson } from "./response";
 
 export const GOOGLE_CALENDAR_OAUTH_ATTEMPT_COOKIE = "ht_google_calendar_oauth";
 export const GOOGLE_CALENDAR_OAUTH_ATTEMPT_MAX_AGE_SECONDS = 10 * 60;
@@ -37,6 +38,7 @@ export type GoogleIdentity = {
 };
 
 type OAuthAttempt = {
+  accountGeneration: number;
   codeVerifier: string;
   expiresAt: number;
   issuedAt: number;
@@ -120,9 +122,11 @@ export function createGoogleCalendarOAuthAttempt(
   userId: number,
   returnTo: string | null | undefined,
   secret: string,
+  accountGeneration: number,
   nowMs = Date.now(),
 ) {
   const attempt: OAuthAttempt = {
+    accountGeneration,
     codeVerifier: randomBytes(32).toString("base64url"),
     expiresAt: nowMs + ATTEMPT_TTL_MS,
     issuedAt: nowMs,
@@ -161,6 +165,7 @@ export function verifyGoogleCalendarOAuthAttempt(
     ) as Partial<OAuthAttempt>;
     if (
       value.version !== 1 ||
+      !Number.isSafeInteger(value.accountGeneration) ||
       !Number.isSafeInteger(value.userId) ||
       typeof value.state !== "string" ||
       !sameValue(value.state, returnedState) ||
@@ -180,39 +185,6 @@ export function verifyGoogleCalendarOAuthAttempt(
     return value as OAuthAttempt;
   } catch {
     return null;
-  }
-}
-
-async function readBoundedJson(
-  response: Response,
-): Promise<Record<string, unknown>> {
-  const declared = Number(response.headers.get("content-length") || 0);
-  if (declared > MAX_RESPONSE_BYTES || !response.body) {
-    await response.body?.cancel();
-    throw new Error("Google OAuth returned an invalid response");
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    bytes += value.byteLength;
-    if (bytes > MAX_RESPONSE_BYTES) {
-      await reader.cancel();
-      throw new Error("Google OAuth returned an invalid response");
-    }
-    chunks.push(value);
-  }
-  try {
-    const parsed = JSON.parse(
-      Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"),
-    ) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-      throw new Error();
-    return parsed as Record<string, unknown>;
-  } catch {
-    throw new Error("Google OAuth returned an invalid response");
   }
 }
 
@@ -257,7 +229,11 @@ async function tokenRequest(
     redirect: "error",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  const data = await readBoundedJson(response);
+  const data = await readBoundedGoogleJson(
+    response,
+    MAX_RESPONSE_BYTES,
+    "Google OAuth returned an invalid response",
+  );
   if (!response.ok) {
     const oauthError =
       typeof data.error === "string" ? data.error.slice(0, 100) : null;

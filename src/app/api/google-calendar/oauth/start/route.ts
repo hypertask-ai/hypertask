@@ -6,6 +6,7 @@ import {
   noStore,
   setOAuthAttemptCookie,
 } from "@/app/api/google-calendar/_lib";
+import { getGoogleCalendarAccountGeneration } from "@/lib/googleCalendar/connection";
 import {
   createGoogleCalendarOAuthAttempt,
   getGoogleCalendarOAuthConfig,
@@ -42,10 +43,17 @@ export async function GET(request: NextRequest) {
     return response;
   }
 
+  const accountGeneration = await getGoogleCalendarAccountGeneration(
+    principal.userId,
+  );
+  if (accountGeneration === null) {
+    return noStore({ error: "Unauthorized" }, 401);
+  }
   const attempt = createGoogleCalendarOAuthAttempt(
     principal.userId,
     request.nextUrl.searchParams.get("returnTo"),
     config.clientSecret,
+    accountGeneration,
   );
   const authorizeUrl = new URL(GOOGLE_CALENDAR_AUTHORIZE_URL);
   authorizeUrl.searchParams.set("access_type", "offline");

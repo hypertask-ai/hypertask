@@ -72,7 +72,11 @@ export async function GET(request: NextRequest) {
       },
       config,
     );
-    await connectGoogleCalendarUser(principal.userId, authorization);
+    await connectGoogleCalendarUser(
+      principal.userId,
+      authorization,
+      attempt.accountGeneration,
+    );
     return finish(request, attempt.returnTo);
   } catch (error) {
     if (authorization) {

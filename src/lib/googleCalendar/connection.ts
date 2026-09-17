@@ -190,9 +190,20 @@ export function getGoogleCalendarConnection(userId: number) {
   });
 }
 
+export async function getGoogleCalendarAccountGeneration(
+  userId: number,
+): Promise<number | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { joinedAt: true },
+  });
+  return user?.joinedAt.getTime() ?? null;
+}
+
 export async function connectGoogleCalendarUser(
   userId: number,
   authorization: GoogleAuthorization,
+  accountGeneration: number,
 ) {
   const result = await withGoogleCalendarUserLock(userId, async (lease) => {
     const existing = await prisma.googleCalendarConnection.findUnique({
@@ -235,31 +246,43 @@ export async function connectGoogleCalendarUser(
         syncEnabled: existing ? !existing.cleanupPending : true,
         syncError: null,
       };
-      if (existing) {
-        const updated = await prisma.googleCalendarConnection.updateMany({
-          where: {
-            userId,
-            googleSubject: existing.googleSubject,
-            updatedAt: existing.updatedAt,
-          },
-          data: connectionData,
-        });
-        if (updated.count !== 1) {
-          throw new Error("Google Calendar connection changed during setup");
+      return await prisma.$transaction(async (tx) => {
+        const [user] = await tx.$queryRaw<Array<{ joinedAt: Date }>>`
+          SELECT "joinedAt"
+          FROM "User"
+          WHERE "id" = ${userId}
+          FOR UPDATE
+        `;
+        lease.assertOwned();
+        if (!user || user.joinedAt.getTime() !== accountGeneration) {
+          throw new Error("Google Calendar account changed during setup");
         }
-      } else {
-        await prisma.googleCalendarConnection.create({
-          data: {
-            ...connectionData,
-            userId,
-          },
-        });
-      }
-      return {
-        calendarSummary: calendar.summary,
-        googleEmail: authorization.email,
-        syncEnabled: connectionData.syncEnabled,
-      };
+        if (existing) {
+          const updated = await tx.googleCalendarConnection.updateMany({
+            where: {
+              userId,
+              googleSubject: existing.googleSubject,
+              updatedAt: existing.updatedAt,
+            },
+            data: connectionData,
+          });
+          if (updated.count !== 1) {
+            throw new Error("Google Calendar connection changed during setup");
+          }
+        } else {
+          await tx.googleCalendarConnection.create({
+            data: {
+              ...connectionData,
+              userId,
+            },
+          });
+        }
+        return {
+          calendarSummary: calendar.summary,
+          googleEmail: authorization.email,
+          syncEnabled: connectionData.syncEnabled,
+        };
+      });
     } catch (error) {
       if (createdCalendar) {
         return throwAfterGoogleCalendarCleanup(

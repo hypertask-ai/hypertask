@@ -17,6 +17,7 @@ test("OAuth attempts bind user, state, nonce, PKCE, expiry, and return path", ()
     42,
     "/settings/calendar?connected=1",
     "client-secret",
+    500,
     1000,
   );
   const verified = oauth.verifyGoogleCalendarOAuthAttempt(
@@ -26,6 +27,7 @@ test("OAuth attempts bind user, state, nonce, PKCE, expiry, and return path", ()
     2000,
   );
   assert.equal(verified.userId, 42);
+  assert.equal(verified.accountGeneration, 500);
   assert.equal(verified.returnTo, "/settings/calendar?connected=1");
   assert.equal(verified.nonce, attempt.nonce);
   assert.match(attempt.codeChallenge, /^[A-Za-z0-9_-]{43}$/);
