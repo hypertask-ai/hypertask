@@ -623,6 +623,7 @@ function RosterRow({
 
 interface IProp {
   currentUser: IUser;
+  roomsEnabled: boolean;
 }
 
 // Stable reference so the "@" mention effect below does not see a new
@@ -630,7 +631,7 @@ interface IProp {
 const EMPTY_PROJECTS: IProject[] = [];
 
 const AgentChatClient = (props: IProp) => {
-  const { currentUser } = props;
+  const { currentUser, roomsEnabled } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
@@ -2143,6 +2144,16 @@ const AgentChatClient = (props: IProp) => {
             <Plus size={16} />
           </button>
         </div>
+        {roomsEnabled && (
+          <button
+            type="button"
+            onClick={() => router.push("/agents/chat?view=rooms")}
+            className="mt-2 flex w-full items-center justify-between rounded-[4px] bg-cardBackground px-3 py-2 text-left text-dense hover:bg-hoverCardBackground"
+          >
+            <span>Board rooms</span>
+            <span className="text-meta text-text-light-gray">All bots</span>
+          </button>
+        )}
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}

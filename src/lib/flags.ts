@@ -70,6 +70,7 @@ import {
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
   HTPR_6555_IDLE_COMMENT_MIC_FLAG,
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+  HTPR_6557_AGENT_ROOMS_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -93,6 +94,12 @@ const FEATURE_FLAG_QA_USER = {
 const RETIRED_FEATURE_FLAG_KEYS = new Set(["hyfa-43-factory-owner-preview"]);
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6557_AGENT_ROOMS_FLAG,
+    shippedOn: "2026-09-18",
+    description:
+      "Adds one shared Agent Chat room per board, with named bot handoffs, a three-turn bot limit, Stop, and a visible daily turn budget.",
+  },
   {
     key: HTPR_6555_IDLE_COMMENT_MIC_FLAG,
     shippedOn: "2026-09-17",
