@@ -1,5 +1,10 @@
 import type { ISection } from "@/models/model";
-import { addDays, endOfDay, endOfWeek, startOfDay, startOfWeek } from "date-fns";
+import { addDays, endOfDay } from "date-fns";
+import {
+  addDaysInTimeZone,
+  endOfDayInTimeZone,
+  myTasksDayBounds,
+} from "@/lib/myTasksTimeZone";
 import type { IPrioritiesConstants } from "@/lib/constants/constants";
 import { compareMyTasksByDueDate } from "@/lib/myTasksGrouping";
 import { countMyTasksOverdue } from "@/lib/myTasksGrouping";
@@ -34,6 +39,8 @@ export type ApplyMyTasksViewOptions = {
   /** When false, ignore filterSettings (flag off). Default true. */
   applyFilterSettings?: boolean;
   runtimeContext?: IFilterRuntimeContext;
+  /** IANA zone for calendar-day filters. Omit to use the process local day. */
+  timeZone?: string;
 };
 
 const taskTime = (value: Date | string | null | undefined): number | null => {
@@ -66,6 +73,7 @@ const matchesDueDate = (
   task: MyTasksTask,
   dueDate: MyTasksViewConfig["filters"]["dueDate"],
   now: Date,
+  timeZone?: string,
 ): boolean => {
   if (!dueDate) return true;
   if (typeof dueDate === "object") return matchesRange(task.dueDate, dueDate);
@@ -73,23 +81,22 @@ const matchesDueDate = (
 
   const dueTime = taskTime(task.dueDate);
   if (dueTime === null) return false;
-  const todayStart = startOfDay(now);
-  const todayEnd = endOfDay(now);
+  const { todayStart, todayEnd, weekStart, weekEnd } = myTasksDayBounds(
+    now,
+    timeZone,
+  );
 
   if (dueDate === "overdue") return dueTime < todayStart.getTime();
   if (dueDate === "today") {
     return dueTime >= todayStart.getTime() && dueTime <= todayEnd.getTime();
   }
   if (dueDate === "this_week") {
-    return (
-      dueTime >= startOfWeek(now, { weekStartsOn: 1 }).getTime() &&
-      dueTime <= endOfWeek(now, { weekStartsOn: 1 }).getTime()
-    );
+    return dueTime >= weekStart.getTime() && dueTime <= weekEnd.getTime();
   }
-  return (
-    dueTime >= todayStart.getTime() &&
-    dueTime <= endOfDay(addDays(todayStart, 6)).getTime()
-  );
+  const rangeEnd = timeZone
+    ? endOfDayInTimeZone(addDaysInTimeZone(todayStart, 6, timeZone), timeZone)
+    : endOfDay(addDays(todayStart, 6));
+  return dueTime >= todayStart.getTime() && dueTime <= rangeEnd.getTime();
 };
 
 const compareOptional = (
@@ -180,6 +187,7 @@ const matchesFlatTaskFilters = (
   task: MyTasksTask,
   filters: MyTasksViewConfig["filters"],
   now: Date,
+  timeZone?: string,
 ): boolean => {
   const priorityIds = new Set(filters.priorityIds);
   const labelIds = new Set(filters.labelIds.map(String));
@@ -199,7 +207,7 @@ const matchesFlatTaskFilters = (
   }
   const starred = Boolean(task.savedContent?.length);
   if (filters.starred !== null && starred !== filters.starred) return false;
-  if (!matchesDueDate(task, filters.dueDate, now)) return false;
+  if (!matchesDueDate(task, filters.dueDate, now, timeZone)) return false;
   if (!matchesRange(task.createdAt, filters.createdRange)) return false;
   if (!matchesRange(task.updatedAt ?? task.createdAt, filters.updatedRange)) {
     return false;
@@ -264,7 +272,7 @@ export function applyMyTasksView(
         }
         return matchesFilterSettings(task, config, options.runtimeContext);
       }
-      return matchesFlatTaskFilters(task, filters, now);
+      return matchesFlatTaskFilters(task, filters, now, options.timeZone);
     })
     .sort(myTasksSortComparator(config, now));
 }
@@ -279,6 +287,7 @@ export function overdueCountForMyTasksTasks(
   return countMyTasksOverdue(
     applyMyTasksView(tasks, rawConfig, now, options),
     now,
+    options.timeZone,
   );
 }
 

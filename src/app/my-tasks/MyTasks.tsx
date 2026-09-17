@@ -51,18 +51,17 @@ import {
   type MyTasksTask,
 } from "@/lib/myTasksFiltering";
 import {
-  countMyTasksOverdue,
-  countMyTasksOverdueByBoard,
   getMyTasksSplitIndex,
   groupMyTasksByTime,
+  splitTabOverdueCounts,
 } from "@/lib/myTasksGrouping";
 import {
   EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
   mergeActiveViewOverdueCounts,
   msUntilNextLocalMidnight,
   parseMyTasksViewOverdueCounts,
-  type MyTasksViewOverdueCounts,
 } from "@/lib/myTasksOverdueCountUtils";
+import { browserTimeZone } from "@/lib/myTasksTimeZone";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import type {
   MyTasksBoardMetadata,
@@ -130,7 +129,6 @@ interface IProps {
   /** Server 6455 check so the first paint is already time-grouped. */
   timeGroupEnabled?: boolean;
   scopesEnabled?: boolean;
-  initialViewOverdueCounts?: MyTasksViewOverdueCounts;
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
@@ -155,7 +153,6 @@ const MyTasks = ({
   viewsEnabled = false,
   timeGroupEnabled = false,
   scopesEnabled = false,
-  initialViewOverdueCounts = EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
@@ -207,7 +204,7 @@ const MyTasks = ({
   const [viewBusy, setViewBusy] = useState(false);
   const [dateFilterVersion, setDateFilterVersion] = useState(0);
   const [remoteOverdueCounts, setRemoteOverdueCounts] = useState(
-    initialViewOverdueCounts,
+    EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
   );
   const [overdueCountsVersion, setOverdueCountsVersion] = useState(0);
   const overdueCountsFetchToken = useRef(0);
@@ -476,16 +473,27 @@ const MyTasks = ({
   const overdueViewsKey = JSON.stringify(
     views.map((view) => [view.id, view.config]),
   );
+  const runningTaskIdsKey = Array.isArray(runningTimerEntries)
+    ? runningTimerEntries
+        .map((timer) => timer.taskId)
+        .sort((a, b) => a - b)
+        .join(",")
+    : "";
   useEffect(() => {
     if (!overdueBadgesEnabled || !viewsFeatureEnabled) return;
+    const timeZone = browserTimeZone();
+    if (!timeZone) return;
     const token = ++overdueCountsFetchToken.current;
     let cancelled = false;
     void (async () => {
       try {
-        const response = await fetch(myTasksOverdueCountsAPIRoute, {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
+        const response = await fetch(
+          `${myTasksOverdueCountsAPIRoute}?timeZone=${encodeURIComponent(timeZone)}`,
+          {
+            cache: "no-store",
+            credentials: "same-origin",
+          },
+        );
         if (!response.ok || cancelled || token !== overdueCountsFetchToken.current) {
           return;
         }
@@ -506,6 +514,7 @@ const MyTasks = ({
     overdueBadgesEnabled,
     overdueCountsVersion,
     overdueViewsKey,
+    runningTaskIdsKey,
     viewsFeatureEnabled,
   ]);
 
@@ -1118,22 +1127,13 @@ const boardTabCounts = useMemo(() => {
 
   const splitOverdueCounts = useMemo(() => {
     if (!overdueBadgesEnabled) return [] as number[];
-    const now = new Date();
-    if (viewsFeatureEnabled && groupBy === "time") {
-      const { total, byBoardId } = countMyTasksOverdueByBoard(
-        allTasksForBoardTabs,
-        now,
-      );
-      return [
-        total,
-        ...availableBoards.map((board) => byBoardId.get(board.id) ?? 0),
-      ];
-    }
-    const sectionCounts = filteredSections.map((section) =>
-      countMyTasksOverdue(section.items, now),
+    return splitTabOverdueCounts(
+      groupBy,
+      allTasksForBoardTabs,
+      availableBoards,
+      filteredSections,
+      new Date(),
     );
-    const total = sectionCounts.reduce((sum, count) => sum + count, 0);
-    return [total, ...sectionCounts];
   }, [
     allTasksForBoardTabs,
     availableBoards,
@@ -1141,7 +1141,6 @@ const boardTabCounts = useMemo(() => {
     filteredSections,
     groupBy,
     overdueBadgesEnabled,
-    viewsFeatureEnabled,
   ]);
 
   const tabOverdue = (index: number) =>

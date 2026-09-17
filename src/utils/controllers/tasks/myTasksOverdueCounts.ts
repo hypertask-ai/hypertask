@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import type { MyTasksTask } from "@/lib/myTasksFiltering";
+import type { ApplyMyTasksViewOptions, MyTasksTask } from "@/lib/myTasksFiltering";
 import {
   overdueCountsFromAuthorizedTasks,
   type MyTasksScopeMembership,
@@ -11,6 +11,8 @@ import {
   DEFAULT_MY_TASKS_SCOPES,
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
+import { listRunning } from "@/lib/timeTracking";
+import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import type { ISection } from "@/models/model";
 import getMyTasks from "./myTasks";
@@ -55,16 +57,20 @@ export async function getMyTasksOverdueCounts(args: {
   snoozeEnabled: boolean;
   applyFilterSettings: boolean;
   now?: Date;
+  timeZone: string;
 }): Promise<MyTasksViewOverdueCounts> {
   const now = args.now ?? new Date();
   const queryScopes = args.scopesEnabled
     ? [...MY_TASKS_SCOPE_VALUES]
     : [...DEFAULT_MY_TASKS_SCOPES];
-  const myTasks = await getMyTasks(args.userId, true, queryScopes, {
-    throwOnError: true,
-    snoozeEnabled: args.snoozeEnabled,
-    showSnoozed: args.snoozeEnabled,
-  });
+  const [myTasks, running] = await Promise.all([
+    getMyTasks(args.userId, true, queryScopes, {
+      throwOnError: true,
+      snoozeEnabled: args.snoozeEnabled,
+      showSnoozed: args.snoozeEnabled,
+    }),
+    listRunning(args.userId),
+  ]);
   const tasks = (myTasks.sections as ISection[]).flatMap(
     (section) => section.items as MyTasksTask[],
   );
@@ -73,12 +79,20 @@ export async function getMyTasksOverdueCounts(args: {
     tasks.map((task) => task.id),
     args.scopesEnabled,
   );
+  const runtimeContext: IFilterRuntimeContext = {
+    runningTaskIds: new Set(running.map((entry) => entry.taskId)),
+  };
+  const options: ApplyMyTasksViewOptions = {
+    applyFilterSettings: args.applyFilterSettings,
+    runtimeContext,
+    timeZone: args.timeZone,
+  };
   return overdueCountsFromAuthorizedTasks(
     tasks,
     args.views,
     membership,
     now,
-    { applyFilterSettings: args.applyFilterSettings },
+    options,
     args.scopesEnabled,
   );
 }

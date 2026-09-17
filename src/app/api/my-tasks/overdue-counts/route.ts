@@ -8,6 +8,7 @@ import {
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
+import { parseIanaTimeZone } from "@/lib/myTasksTimeZone";
 import { getMyTasksOverdueCounts } from "@/utils/controllers/tasks/myTasksOverdueCounts";
 import { getMyTasksViews } from "@/utils/controllers/tasks/myTasksViews";
 
@@ -27,6 +28,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const timeZone = parseIanaTimeZone(
+      request.nextUrl.searchParams.get("timeZone"),
+    );
+    if (!timeZone) {
+      return NextResponse.json(
+        { error: "A valid timeZone is required" },
+        { status: 400 },
+      );
+    }
+
     const [viewsEnabled, scopesEnabled, snoozeEnabled, filterParityEnabled] =
       await Promise.all([
         isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
@@ -41,6 +52,7 @@ export async function GET(request: NextRequest) {
       scopesEnabled,
       snoozeEnabled,
       applyFilterSettings: filterParityEnabled,
+      timeZone,
     });
     return NextResponse.json(counts, {
       headers: { "Cache-Control": "private, no-store" },

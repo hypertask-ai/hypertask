@@ -6,7 +6,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
@@ -14,10 +13,6 @@ import {
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
-import {
-  EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS,
-  type MyTasksViewOverdueCounts,
-} from "@/lib/myTasksOverdueCountUtils";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import { IUser } from "@/models/model";
 import {
@@ -25,7 +20,6 @@ import {
   parseMyTasksViewConfig,
 } from "@/models/MyTasksView";
 import getMyTasks from "@/utils/controllers/tasks/myTasks";
-import { getMyTasksOverdueCounts } from "@/utils/controllers/tasks/myTasksOverdueCounts";
 import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 import { getMyTasksViews } from "@/utils/controllers/tasks/myTasksViews";
 import MyTasks from "./MyTasks";
@@ -59,19 +53,13 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [
-    viewsEnabled,
-    scopesEnabled,
-    timeGroupEnabled,
-    overdueBadgesEnabled,
-    filterParityEnabled,
-  ] = await Promise.all([
-    isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_TIME_GROUP_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_FILTER_PARITY_FLAG, sessionUser.userId),
-  ]);
+  const [viewsEnabled, scopesEnabled, timeGroupEnabled, overdueBadgesEnabled] =
+    await Promise.all([
+      isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
+      isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
+      isFeatureEnabled(MY_TASKS_TIME_GROUP_FLAG, sessionUser.userId),
+      isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, sessionUser.userId),
+    ]);
   const snoozeEnabled = await isFeatureEnabled(
     MY_TASKS_SNOOZE_FLAG,
     sessionUser.userId,
@@ -155,18 +143,6 @@ export default async function Page({
     accessibleProjectIds = projects.map((project) => project.id);
   }
 
-  let initialViewOverdueCounts: MyTasksViewOverdueCounts =
-    EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS;
-  if (overdueBadgesEnabled && viewsEnabled) {
-    initialViewOverdueCounts = await getMyTasksOverdueCounts({
-      userId: sessionUser.userId,
-      views,
-      scopesEnabled,
-      snoozeEnabled,
-      applyFilterSettings: filterParityEnabled,
-    });
-  }
-
   return (
     <Suspense fallback={<>Loading...</>}>
       {snoozeEnabled ? (
@@ -197,7 +173,6 @@ export default async function Page({
           viewsEnabled={viewsEnabled}
           timeGroupEnabled={timeGroupEnabled}
           scopesEnabled
-          initialViewOverdueCounts={initialViewOverdueCounts}
         />
       ) : (
         <MyTasks
@@ -214,7 +189,6 @@ export default async function Page({
           viewsEnabled={viewsEnabled}
           timeGroupEnabled={timeGroupEnabled}
           scopesEnabled={false}
-          initialViewOverdueCounts={initialViewOverdueCounts}
         />
       )}
     </Suspense>

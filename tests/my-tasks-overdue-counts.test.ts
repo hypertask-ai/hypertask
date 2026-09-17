@@ -96,3 +96,64 @@ test("overdueCountsFromAuthorizedTasks does not reuse the active view's dataset"
     1,
   );
 });
+
+test("overdueCountsFromAuthorizedTasks uses the supplied time zone day start", () => {
+  const now = new Date("2026-09-16T15:30:00.000Z");
+  const dueYesterdayInTokyo = assigned(3, {
+    dueDate: new Date("2026-09-16T14:00:00.000Z"),
+  });
+  const utcCounts = overdueCountsFromAuthorizedTasks(
+    [dueYesterdayInTokyo],
+    [],
+    membership,
+    now,
+    { timeZone: "UTC" },
+    false,
+  );
+  const tokyoCounts = overdueCountsFromAuthorizedTasks(
+    [dueYesterdayInTokyo],
+    [],
+    membership,
+    now,
+    { timeZone: "Asia/Tokyo" },
+    false,
+  );
+  assert.equal(utcCounts.all, 0);
+  assert.equal(tokyoCounts.all, 1);
+});
+
+test("overdueCountsFromAuthorizedTasks honors running-timer runtime context", () => {
+  const running = assigned(4, {
+    project: { id: 1, title: "Product", timeTrackingEnabled: true },
+  });
+  const idle = assigned(5, {
+    project: { id: 1, title: "Product", timeTrackingEnabled: true },
+  });
+  const view = savedView(12, {
+    filterSettings: {
+      matchFilters: "ALL",
+      addedFilters: [{ type: "RunningTimer", searchPayload: [{}] }],
+    },
+  });
+  const withoutRuntime = overdueCountsFromAuthorizedTasks(
+    [running, idle],
+    [view],
+    membership,
+    NOW,
+    { applyFilterSettings: true },
+    false,
+  );
+  const withRuntime = overdueCountsFromAuthorizedTasks(
+    [running, idle],
+    [view],
+    membership,
+    NOW,
+    {
+      applyFilterSettings: true,
+      runtimeContext: { runningTaskIds: new Set([4]) },
+    },
+    false,
+  );
+  assert.equal(withoutRuntime.byViewId[12], 0);
+  assert.equal(withRuntime.byViewId[12], 1);
+});

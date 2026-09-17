@@ -7,6 +7,11 @@ import {
   parseMyTasksViewOverdueCounts,
   taskMatchesMyTasksScopes,
 } from "../src/lib/myTasksOverdueCountUtils";
+import {
+  parseIanaTimeZone,
+  startOfDayInTimeZone,
+} from "../src/lib/myTasksTimeZone";
+import { classifyMyTasksTimeBucket } from "../src/lib/myTasksGrouping";
 
 const USER_ID = 6;
 const membership = {
@@ -76,4 +81,20 @@ test("msUntilNextLocalMidnight lands on the next calendar day", () => {
   assert.equal(next.getDate(), 15);
   assert.ok(wait > 0);
   assert.ok(msUntilNextLocalMidnight(new Date(2026, 8, 14, 0, 0, 0, 0)) >= 1);
+});
+
+test("parseIanaTimeZone accepts real zones and rejects junk", () => {
+  assert.equal(parseIanaTimeZone("Asia/Tokyo"), "Asia/Tokyo");
+  assert.equal(parseIanaTimeZone(" UTC "), "UTC");
+  assert.equal(parseIanaTimeZone("not a zone"), null);
+  assert.equal(parseIanaTimeZone(""), null);
+});
+
+test("startOfDayInTimeZone and overdue buckets follow the named zone", () => {
+  const now = new Date("2026-09-16T15:30:00.000Z");
+  const tokyoStart = startOfDayInTimeZone(now, "Asia/Tokyo");
+  assert.equal(tokyoStart.toISOString(), "2026-09-16T15:00:00.000Z");
+  const due = new Date("2026-09-16T14:00:00.000Z");
+  assert.equal(classifyMyTasksTimeBucket(due, now, "UTC"), "Today");
+  assert.equal(classifyMyTasksTimeBucket(due, now, "Asia/Tokyo"), "Overdue");
 });
