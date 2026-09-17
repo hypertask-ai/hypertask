@@ -32,7 +32,8 @@ import SettingsToggle from "./SettingsToggle";
 
 const WEEK_START_OPTIONS = ["monday", "sunday"] as const;
 const CONNECTION_POLL_INTERVAL_MS = 5000;
-const CONNECTION_POLL_LIMIT = 12;
+const CONNECTION_POLL_SLOW_INTERVAL_MS = 30_000;
+const CONNECTION_POLL_FAST_ATTEMPTS = 12;
 
 type GoogleCalendarConnection = {
   calendarSummary: string;
@@ -122,8 +123,14 @@ const CalendarSection = () => {
     const poll = async () => {
       await refreshConnection();
       attempts += 1;
-      if (!cancelled && attempts < CONNECTION_POLL_LIMIT)
-        timer = window.setTimeout(poll, CONNECTION_POLL_INTERVAL_MS);
+      if (!cancelled) {
+        timer = window.setTimeout(
+          poll,
+          attempts < CONNECTION_POLL_FAST_ATTEMPTS
+            ? CONNECTION_POLL_INTERVAL_MS
+            : CONNECTION_POLL_SLOW_INTERVAL_MS,
+        );
+      }
     };
     timer = window.setTimeout(poll, CONNECTION_POLL_INTERVAL_MS);
     return () => {
